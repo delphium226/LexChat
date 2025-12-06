@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 30
+    },
+    "auditLog": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\.84e6895063d2d51db1c57b93323e3553610c894e-audit.json",
+    "files": [
+        {
+            "date": 1764952255319,
+            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\error-2025-12-05.log",
+            "hash": "74ec60c626e4acde7c50a07784630c4c0ffdd7d0bb01562e3dbb703b1bd285c9"
+        }
+    ],
+    "hashType": "sha256"
+}

@@ -1,0 +1,36 @@
+2025-12-05 08:46:45 [agent] ERROR: Ollama Error: Request failed with status code 500
+2025-12-05 08:46:45 [app] ERROR: Chat Error: Request failed with status code 500
+2025-12-05 08:49:32 [agent] ERROR: [Tool Error] get_legislation_text: Request failed with status code 404
+2025-12-05 08:49:32 [agent] ERROR: Data: {"detail":"Legislation not found: ukpga/1998/29/section/6"}
+2025-12-05 08:53:35 [agent] ERROR: Ollama Error: socket hang up
+2025-12-05 08:53:35 [app] ERROR: Chat Error: socket hang up
+2025-12-05 09:08:07 [agent] ERROR: [Tool Error] get_legislation_text: Request failed with status code 404
+2025-12-05 09:08:07 [agent] ERROR: Data: {"detail":"Legislation not found: http://www.legislation.gov.uk/ukpga/1978/16"}
+2025-12-05 09:13:07 [agent] ERROR: Ollama Error: Request failed with status code 500
+2025-12-05 09:13:07 [app] ERROR: Chat Error: Request failed with status code 500
+2025-12-05 09:29:22 [agent] ERROR: Ollama Error: Request failed with status code 429
+2025-12-05 09:29:22 [app] ERROR: Chat Error: Request failed with status code 429
+2025-12-05 09:29:33 [agent] ERROR: Ollama Error: Request failed with status code 429
+2025-12-05 09:29:33 [app] ERROR: Chat Error: Request failed with status code 429
+2025-12-05 09:30:48 [agent] ERROR: Ollama Error: Request failed with status code 429
+2025-12-05 09:30:48 [app] ERROR: Chat Error: Request failed with status code 429
+2025-12-05 09:31:03 [agent] ERROR: Ollama Error: Request failed with status code 429
+2025-12-05 09:31:03 [app] ERROR: Chat Error: Request failed with status code 429
+2025-12-05 09:32:38 [agent] ERROR: Ollama Error: Request failed with status code 429
+2025-12-05 09:32:38 [app] ERROR: Chat Error: Request failed with status code 429
+2025-12-05 09:36:28 [agent] ERROR: Ollama Error: Request failed with status code 429
+2025-12-05 09:36:28 [app] ERROR: Chat Error: Request failed with status code 429
+2025-12-05 09:37:13 [agent] ERROR: Ollama Error: Request failed with status code 429
+2025-12-05 09:37:13 [app] ERROR: Chat Error: Request failed with status code 429
+2025-12-05 09:39:03 [agent] ERROR: Ollama Error: Request failed with status code 429
+2025-12-05 09:39:03 [app] ERROR: Chat Error: Request failed with status code 429
+2025-12-05 09:39:16 [agent] ERROR: Ollama Error: Request failed with status code 429
+2025-12-05 09:39:16 [app] ERROR: Chat Error: Request failed with status code 429
+2025-12-05 09:39:28 [agent] ERROR: Ollama Error: Request failed with status code 429
+2025-12-05 09:39:28 [app] ERROR: Chat Error: Request failed with status code 429
+2025-12-05 10:14:41 [agent] ERROR: [Tool Error] get_legislation_text: Request failed with status code 404
+2025-12-05 10:14:41 [agent] ERROR: Data: {"detail":"Legislation not found: http://www.legislation.gov.uk/asp/2015/1"}
+2025-12-05 10:16:46 [agent] ERROR: [Tool Error] get_legislation_text: Request failed with status code 404
+2025-12-05 10:16:46 [agent] ERROR: Data: {"detail":"Legislation not found: http://www.legislation.gov.uk/id/ukpga/1998/46/schedule/5"}
+2025-12-05 10:21:37 [agent] ERROR: Ollama Error: Request failed with status code 400
+2025-12-05 10:21:37 [app] ERROR: Chat Error: Request failed with status code 400
