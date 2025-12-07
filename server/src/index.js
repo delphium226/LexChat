@@ -28,7 +28,6 @@ app.get('/api/models', async (req, res) => {
 });
 
 // Endpoint for chat
-// Endpoint for chat
 app.post('/api/chat', async (req, res) => {
     const { messages, model } = req.body;
 
@@ -41,22 +40,42 @@ app.post('/api/chat', async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
+    const controller = new AbortController();
+
+    // Abort processing if client disconnects
+    res.on('close', () => {
+        if (!res.writableEnded) {
+            logger.info('Client closed connection early (res.close)');
+            controller.abort();
+        }
+    });
+
     try {
         const responseMessage = await chatWithOllama([...messages], model, (status) => {
             if (status.type !== 'token') {
                 logger.info(`Tool Status: ${JSON.stringify(status)}`);
             }
             // Stream status updates to client
-            res.write(`data: ${JSON.stringify(status)}\n\n`);
-        });
+            if (!controller.signal.aborted) {
+                res.write(`data: ${JSON.stringify(status)}\n\n`);
+            }
+        }, controller.signal);
 
         // Send final result
-        res.write(`data: ${JSON.stringify({ type: 'result', message: responseMessage })}\n\n`);
-        res.end();
+        if (!controller.signal.aborted) {
+            res.write(`data: ${JSON.stringify({ type: 'result', message: responseMessage })}\n\n`);
+            res.end();
+        }
     } catch (error) {
-        logger.error(`Chat Error: ${error.message}`);
-        // Send error event
-        res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+        if (error.message === 'Aborted' || error.message === 'canceled' || error.name === 'AbortError' || error.name === 'CanceledError' || error.code === 'ECONNABORTED') {
+            logger.info('Client closed connection, aborted processing.');
+        } else {
+            logger.error(`Chat Error: ${error.message}`);
+            // Send error event if channel is still open
+            if (!res.writableEnded && !res.finished) {
+                res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+            }
+        }
         res.end();
     }
 });

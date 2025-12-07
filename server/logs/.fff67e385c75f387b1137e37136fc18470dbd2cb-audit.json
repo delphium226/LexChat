@@ -6,9 +6,9 @@
     "auditLog": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\.fff67e385c75f387b1137e37136fc18470dbd2cb-audit.json",
     "files": [
         {
-            "date": 1764952255317,
-            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\app-2025-12-05.log",
-            "hash": "78c07c2bb654b43b20bdaea55f93b870ff0e394886e434bcc20948f65d23adae"
+            "date": 1765117391831,
+            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\app-2025-12-07.log",
+            "hash": "bde8cfdc8b93391dde02eda88c774f642d74e6f3522c2a95360ae383e746372a"
         }
     ],
     "hashType": "sha256"

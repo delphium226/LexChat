@@ -14,8 +14,12 @@ const getHeaders = () => {
     return headers;
 };
 
-async function chatWithOllama(messages, model, onChunk) {
+async function chatWithOllama(messages, model, onChunk, signal) {
     try {
+        if (signal && signal.aborted) {
+            throw new Error('Aborted');
+        }
+
         // 0. Prepend System Prompt if not present
         const systemMessage = {
             role: 'system',
@@ -43,13 +47,19 @@ When you cite legislation or case law, you MUST provide the source URL if availa
 
         const response = await axios.post(`${OLLAMA_BASE_URL}/api/chat`, payload, {
             responseType: 'stream',
-            headers: getHeaders()
+            headers: getHeaders(),
+            signal: signal
         });
 
         let fullContent = '';
         let toolCalls = [];
 
         for await (const chunk of response.data) {
+            if (signal && signal.aborted) {
+                response.data.destroy(); // Stop reading stream
+                throw new Error('Aborted');
+            }
+
             const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
             for (const line of lines) {
                 try {
@@ -90,6 +100,8 @@ When you cite legislation or case law, you MUST provide the source URL if availa
 
             // Execute each tool
             for (const toolCall of message.tool_calls) {
+                if (signal && signal.aborted) throw new Error('Aborted');
+
                 const functionName = toolCall.function.name;
                 const args = toolCall.function.arguments;
 
@@ -108,13 +120,17 @@ When you cite legislation or case law, you MUST provide the source URL if availa
             }
 
             // 3. Follow-up Call to Ollama (Recursion)
-            return chatWithOllama(nextMessages, model, onChunk);
+            return chatWithOllama(nextMessages, model, onChunk, signal);
         }
 
         // No tool calls, just return the text response
         return message;
 
     } catch (error) {
+        if (error.message === 'Aborted' || axios.isCancel(error)) {
+            agentLogger.info('Ollama request aborted');
+            throw error;
+        }
         agentLogger.error(`Ollama Error: ${error.message}`);
         throw error;
     }
