@@ -29,7 +29,7 @@ app.get('/api/models', async (req, res) => {
 
 // Endpoint for chat
 app.post('/api/chat', async (req, res) => {
-    const { messages, model } = req.body;
+    const { messages, model, num_ctx } = req.body;
 
     if (!messages || !model) {
         return res.status(400).json({ error: 'Missing messages or model' });
@@ -59,7 +59,7 @@ app.post('/api/chat', async (req, res) => {
             if (!controller.signal.aborted) {
                 res.write(`data: ${JSON.stringify(status)}\n\n`);
             }
-        }, controller.signal);
+        }, controller.signal, num_ctx);
 
         // Send final result
         if (!controller.signal.aborted) {

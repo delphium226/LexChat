@@ -23,10 +23,11 @@ function App() {
   useEffect(() => {
     // Fetch models on load
     getModels().then((data) => {
-      setModels(data);
-      if (data.length > 0) {
-        const preferredModel = data.find(m => m.name === 'gpt-oss:120b-cloud');
-        setSelectedModel(preferredModel ? preferredModel.name : data[0].name);
+      const filteredModels = data.filter(m => m.name.toLowerCase().includes('cloud'));
+      setModels(filteredModels);
+      if (filteredModels.length > 0) {
+        const preferredModel = filteredModels.find(m => m.name === 'gpt-oss:120b-cloud');
+        setSelectedModel(preferredModel ? preferredModel.name : filteredModels[0].name);
       }
     });
   }, []);
@@ -79,7 +80,10 @@ function App() {
       // The `userMsg` is explicitly added to `messagesToSend`.
       const messagesToSend = [...messages, userMsg];
 
-      const response = await sendMessage(messagesToSend, selectedModel, (status) => {
+      const currentModelObj = models.find(m => m.name === selectedModel);
+      const contextLength = currentModelObj ? currentModelObj.context_length : null;
+
+      const response = await sendMessage(messagesToSend, selectedModel, contextLength, (status) => {
         if (status.type === 'tool_start') {
           const toolMessages = {
             'search_legislation': 'Searching UK legislation...',
@@ -112,7 +116,19 @@ function App() {
 
       // Final update to ensure consistency
       if (response.stats) {
-        setContextUsage(response.stats);
+        setContextUsage(prev => {
+          const prevTotal = prev ? (prev.total_usage || (prev.prompt_eval_count + prev.eval_count)) : 0;
+          const currentTotal = response.stats.prompt_eval_count + response.stats.eval_count;
+
+          let validTotal = currentTotal;
+          // If the reported total is significantly less than previous, it's likely a cache hit delta.
+          // We accumulate to approximate the true context.
+          if (currentTotal < prevTotal) {
+            validTotal = prevTotal + currentTotal;
+          }
+
+          return { ...response.stats, total_usage: validTotal }; // Store our calculated total
+        });
       }
 
       setMessages(prev => {
@@ -168,9 +184,19 @@ function App() {
 
   // Helper to calculate usage percentage
   const getUsagePercentage = () => {
-    if (!contextUsage) return 0;
-    const total = (contextUsage.prompt_eval_count || 0) + (contextUsage.eval_count || 0);
-    return Math.min((total / 131072) * 100, 100);
+    const currentModelObj = models.find(m => m.name === selectedModel);
+    const maxContext = currentModelObj?.context_length || 131072;
+    // Use our calculated total_usage if available
+    const total = contextUsage ? (contextUsage.total_usage || ((contextUsage.prompt_eval_count || 0) + (contextUsage.eval_count || 0))) : 0;
+    return Math.min((total / maxContext) * 100, 100);
+  };
+
+  const formatContextLength = (length) => {
+    if (!length) return 'Unknown';
+    if (length >= 1024) {
+      return (length / 1024) + 'k';
+    }
+    return length;
   };
 
   return (
@@ -192,9 +218,10 @@ function App() {
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Model</label>
           <select
-            className="w-full p-2 border rounded-md"
+            className="w-full p-2 border rounded-md disabled:bg-gray-100 disabled:text-gray-500"
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
+            disabled={messages.length > 0}
           >
             {models.map((m) => (
               <option key={m.name} value={m.name}>{m.name}</option>
@@ -203,22 +230,33 @@ function App() {
         </div>
 
         {/* Context Usage Graph */}
-        {contextUsage && (
+        {/* Context Usage Graph */}
+        {selectedModel && (
           <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Context Usage</h3>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Chat Memory</h3>
             <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
               <div
-                className="bg-legal-blue h-2.5 rounded-full transition-all duration-500"
-                style={{ width: `${getUsagePercentage()}%` }}
+                className={`h-2.5 rounded-full transition-all duration-500 ${getUsagePercentage() >= 90 ? 'bg-red-500' :
+                  getUsagePercentage() >= 75 ? 'bg-orange-500' : 'bg-legal-blue'
+                  }`}
+                style={{
+                  width: `${getUsagePercentage()}%`
+                }}
               ></div>
             </div>
             <div className="flex justify-between text-xs text-gray-600">
-              <span>{(contextUsage.prompt_eval_count || 0) + (contextUsage.eval_count || 0)} tokens</span>
-              <span>131k limit</span>
+              <span>{contextUsage ? (contextUsage.total_usage || ((contextUsage.prompt_eval_count || 0) + (contextUsage.eval_count || 0))) : 0} tokens</span>
+              <span>{(() => {
+                const currentModelObj = models.find(m => m.name === selectedModel);
+                const maxContext = currentModelObj?.context_length || 131072;
+                return formatContextLength(maxContext);
+              })()} limit</span>
             </div>
-            <div className="mt-2 text-xs text-gray-400">
-              Load: {Math.round(contextUsage.load_duration / 1000000)}ms | Gen: {Math.round(contextUsage.total_duration / 1000000)}ms
-            </div>
+            {contextUsage && (
+              <div className="mt-2 text-xs text-gray-400">
+                Load: {(contextUsage.load_duration / 1000000000).toFixed(2)}s | Gen: {(contextUsage.total_duration / 1000000000).toFixed(2)}s
+              </div>
+            )}
           </div>
         )}
 
