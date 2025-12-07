@@ -311,7 +311,7 @@ function App() {
       {/* About Modal */}
       {showAbout && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full shadow-xl">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-legal-blue">About LexChat</h2>
               <button
@@ -342,6 +342,13 @@ function App() {
                   <li><strong>The National Archives</strong> (legislation.gov.uk) for UK Legislation.</li>
                   <li><strong>The National Archives</strong> (caselaw.nationalarchives.gov.uk) for Case Law.</li>
                 </ul>
+              </div>
+
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-1">AI Approach</h3>
+                <p>
+                  LexChat utilizes an <strong>Agentic RAG</strong> architecture powered by the <strong>Model Context Protocol (MCP)</strong>. It intelligently queries external legal databases to retrieve relevant legislation and case law, which are then analyzed by a Large Language Model to provide accurate, context-aware answers.
+                </p>
               </div>
             </div>
 

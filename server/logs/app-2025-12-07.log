@@ -7608,3 +7608,2284 @@
 2025-12-07 07:29:52 [app] INFO: Tool Status: {"type":"content","content":" disproportion"}
 2025-12-07 07:29:52 [app] INFO: Tool Status: {"type":"content","content":"ate"}
 2025-12-07 07:29:52 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:36:29 [app] INFO: Server running on http://localhost:3000
+2025-12-07 07:37:05 [app] INFO: Tool Status: {"type":"tool_start","tool":"search_legislation"}
+2025-12-07 07:37:07 [app] INFO: Tool Status: {"type":"tool_end","tool":"search_legislation","result":"Done"}
+2025-12-07 07:37:08 [app] INFO: Tool Status: {"type":"tool_start","tool":"search_caselaw"}
+2025-12-07 07:37:08 [app] INFO: Tool Status: {"type":"tool_end","tool":"search_caselaw","result":"Done"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":"Here"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":"’s"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" concise"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" overview"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" key"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" points"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" from"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" cases"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" and"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" statutes"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" that"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" are"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" most"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" relevant"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" question"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":"whether"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" professions"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" falls"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" within"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" legislative"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" competence"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":".\n\n"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":"Source"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:12 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"Key"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" Pro"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"visions"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" /"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" Holdings"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"Re"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"levance"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" Health"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"Profession"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" Regulation"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" |\n"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"------------"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"----------------"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"--------------"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"--------------------------------"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"-------------"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"|\n"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"Sc"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"otland"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" Act"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"199"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"8"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" –"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" s"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"29"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"("}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"2"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":")("}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"b"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" &"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" s"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"29"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"("}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"3"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":")**"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" –"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" A"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" provision"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" outside"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" competence"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" *if it"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" “"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"rel"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"ates"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"”"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" matter"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"para"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"1"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"(b"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" S"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"ched"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"5"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":")."}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"<br"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":">"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"–"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" “"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"Rel"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"ates"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"”"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" means"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" more"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" than"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" loose"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" consequential"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" connection"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":";"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" purpose"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" &"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" effect"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" must"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" be"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" examined"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"see"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" *"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"Imper"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"ial"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" Tobacco"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"*"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"["}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"201"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"2"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"]"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"UK"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"SC"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"61"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" para"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"16"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":")."}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" Determines"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" whether"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" any"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" part"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"profession"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"e"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":".g"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":".,"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" licensing"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" standards"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" data"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"sharing"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" falls"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" within"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"reserved"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" matter"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" such"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" as"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" “"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"the"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" Union"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"”,"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" “"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"the"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" UK"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:37:13 [app] INFO: Tool Status: {"type":"content","content":"”,"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" “"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"product"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" safety"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"”."}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" |\n"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"Schedule"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"5"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" Part"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"II"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"Reserved"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" Matters"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":")**"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" –"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" Includes"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"i"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"the"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" Union"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" Kingdom"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"s"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" Scotland"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" and"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" England"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"**,"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"ii"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"the"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" United"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" Kingdom"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"**,"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"iii"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"consumer"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" protection"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"**,"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"iv"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"product"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" safety"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"**,"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"v"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"data"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" protection"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"via"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" Data"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" Protection"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" Act"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"199"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"8"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" incorporated"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" by"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" reference"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":")."}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" Health"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"profession"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" may"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" touch"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"product"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" safety"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"medical"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" devices"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"data"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" protection"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"patient"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" records"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":")."}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" If"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" merely"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" sets"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" professional"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" standards"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" it"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" likely"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"not"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" matter"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" |\n"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"Medical"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" Act"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"198"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"3"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" –"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" s"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"1"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"("}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"1"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"A"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"–"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"("}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"1"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"B"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" &"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" s"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"35"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" –"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" GMC"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"’s"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" statutory"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" objective"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":":"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"“"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"the"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" protection"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" public"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"”"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"incl"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" &"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" safety"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" public"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" confidence"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" professional"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" standards"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":")."}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":"<br"}
+2025-12-07 07:37:14 [app] INFO: Tool Status: {"type":"content","content":">"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":"–"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" Power"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" issue"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" guidance"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" on"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":"professional"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" conduct"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" &"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" ethics"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" Shows"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" that"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" **UK‑wide professional regulation**"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" can be"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" exercised"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" by"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" UK"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" regulator"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":"G"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":"MC"}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":")."}
+2025-12-07 07:37:15 [app] INFO: Tool Status: {"type":"content","content":" A"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" devol"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":"ved"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" body"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" could"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" have"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" similar"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":"public"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":"pro"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":"tection"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" remit"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" for"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" professions"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" |\n"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":"Data"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" Protection"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" Act"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":"199"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":"8"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":"as"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" amended"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":")**"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" –"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" Defines"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" “"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":"personal"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" data"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":"”,"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" “"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":"s"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":"ensitive"}
+2025-12-07 07:37:16 [app] INFO: Tool Status: {"type":"content","content":" data"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"”"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" and"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" sets"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"princip"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"les"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" for"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" processing"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"<br"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":">"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"–"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" §"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"35"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"("}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"1"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" allows"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"ex"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"empt"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"ions"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" where"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" disclosure"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"required"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" by"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" under"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" any"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" enact"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"ment"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"including"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" Acts"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":")."}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" Any"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" that"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" requires"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" sharing"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" patient"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" data"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" must"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" respect"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"UK"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" data"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"pro"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"tection"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" law"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":";"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" this"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"reserved"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" matter"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" but"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" principle"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"based"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" framework"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" can"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" be"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"mir"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"rored"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" in"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" law"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" |\n"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"Imper"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"ial"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" Tobacco"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" Ltd"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" v"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"Lord"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" Advocate"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"["}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"201"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"2"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"]"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"UK"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"SC"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"61"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" –"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" Clar"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"ified"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" that"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" “"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"rel"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"ates"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"”"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" requires"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"sub"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"stant"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"ive"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" connection"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"** to the"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" matter"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" not"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" merely"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"con"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"se"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"quential"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" one"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"<br"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":">"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"–"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" Em"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"phas"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"ised"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" purpos"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"ive"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" analysis"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" under"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" s"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"29"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"("}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"3"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":")."}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" Provides"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"anal"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"ytical"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" template"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" for"}
+2025-12-07 07:37:17 [app] INFO: Tool Status: {"type":"content","content":" assessing"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" whether"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"profession"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" “"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"rel"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"ates"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"”"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" matter"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"e"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":".g"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":".,"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" does"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" licensing"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" scheme"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" affect"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" Union"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" UK"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"?)."}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" |\n"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"Christian"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" Institute"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" v"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"Lord"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" Advocate"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"["}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"201"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"6"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"]"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"UK"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"SC"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"51"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" –"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" Discuss"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"ed"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"“"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"in"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" accordance"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" with"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" law"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"”"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" under"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" E"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"CHR"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" Art"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"8"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"<br"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":">"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"–"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" Highlight"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"ed"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" that"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" statutes"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" must"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" be"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" clear"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":", accessible &"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" foreseeable"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" Useful"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" if"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" professions"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" raises"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"human"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"rights"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" issues"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"privacy"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" data"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" sharing"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":")."}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" |\n"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"R"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"on"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" application"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"M"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"iller"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"("}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"UK"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"["}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"201"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"7"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"]"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"UK"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"SC"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"5"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" –"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" Clar"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"ified"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" that"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"par"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"liament"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"ary"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" sovereignty"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" means"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" UK"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" can"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" legis"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"late"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" on"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" any"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" matter"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" but"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" *"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"de"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"volution"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"*"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" limits"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" competence"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" Rein"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"forces"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" that"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"reserved"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" matters"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"including"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" those"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" affecting"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" Union"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" remain"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"UK"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"par"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"liament"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"ary"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":" competence"}
+2025-12-07 07:37:18 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" |\n"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"R"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"on"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" application"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"Ke"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"ating"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"v"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"Adv"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"ocate"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" General"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" for"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" Scotland"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"["}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"202"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"2"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"]"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"UK"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"SC"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"31"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"reference"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" on"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"ind"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"epend"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"ence"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" referendum"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":")**"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" –"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" Demonstr"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"ated"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" approach"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" “"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"rel"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"ates"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"”"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" analysis"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" for"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"constitutional"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" questions"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" Illustr"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"ates"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"method"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"ology"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" for"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" assessing"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" whether"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"pro"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"posed"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"profession"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" touches"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" matter"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"e"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":".g"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":".,"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" Union"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":")."}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" |\n\n### Bottom"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"Line"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" Take"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"aways"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"\n\n"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"1"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"Leg"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"isl"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"ative"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" competence"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" defined"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" by"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" Scotland"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" Act"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"199"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"8"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"  \n"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"  "}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" -"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" If"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"“"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"rel"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"ates"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"”"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" matter"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"Union"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" UK"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" product"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" safety"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" data"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" protection"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" etc"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":".),"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"it"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" outside"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" competence"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"s"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"29"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":")."}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"  \n"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"  "}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" -"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" The"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" test"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" purpos"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"ive"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":":"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" provision"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" must"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" have"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"sub"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"stant"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"ive"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" connection"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" matter"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" not"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" merely"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:19 [app] INFO: Tool Status: {"type":"content","content":" loose"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" consequential"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" one"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"see"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" *"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"Imper"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"ial"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" Tobacco"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"*"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":").\n\n"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"2"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"Most"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" aspects"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"profession"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"lic"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"ensing"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" professional"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" standards"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" disciplinary"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" procedures"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" are"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"not"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"  \n"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"  "}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" -"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" They"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" are"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"policy"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" matters"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" concerning"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"pro"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"tection"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" public"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" and"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"professional"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" conduct"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"**,"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" which"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" fall"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" within"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"de"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"volved"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" competence"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"s"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"29"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"("}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"2"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":")("}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"a"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"))."}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"  \n\n"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"3"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"Where"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" touches"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" domains"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"e"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":".g"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":".,"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" data"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"pro"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"tection"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" obligations"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" product"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"s"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"afety"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" standards"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" for"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" medical"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" devices"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" any"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" matter"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" that"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" would"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" affect"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"Union"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"UK"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"Par"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"liament"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"ary"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" authority"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"),"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" it"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" must"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" either"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":":"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"  \n"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"  "}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" -"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"Leave"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" matter"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" untouched"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"i"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":".e"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":".,"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" not"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" legis"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"late"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" on"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" it"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"),"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"  \n"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"  "}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" -"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"Operate"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" within"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" limits"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" set"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" by"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" UK"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"wide"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" legislation"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"e"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":".g"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":".,"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" data"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"pro"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"tection"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" exemptions"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" under"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" §"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"35"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" D"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"PA"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":").\n\n"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"4"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"Human"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"rights"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" considerations"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:20 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"Art"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"8"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" E"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"CHR"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" require"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" any"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" be"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"clear"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" accessible"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" and"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" proportion"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"ate"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":";"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" see"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" *"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"Christian"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" Institute"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"*"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" for"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" guidance"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" on"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" “"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"in"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" accordance"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" with"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" law"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"”.\n\n"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"5"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"Pr"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"actical"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" implication"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" for"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"profession"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" in"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" Scotland"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":":**"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"  \n"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"  "}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" -"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"Scott"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"ish"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" legislation"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" can"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" establish"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" registers"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" fitness"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"to"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"practice"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" regimes"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" and"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" professional"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" standards"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" for"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" doctors"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" nurses"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" pharmacists"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" etc"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":".,"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"provided"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" it"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" does"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" not"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" enc"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"roach"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" on"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"**:  \n"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"    "}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" -"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"UK"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"wide"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" product"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"s"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"afety"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" regimes"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"e"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":".g"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":".,"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" medical"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"device"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"  \n"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"    "}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" -"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"UK"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" data"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"pro"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"tection"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" law"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"which"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" remains"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":")."}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"  \n"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"  "}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" -"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"Co"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"ordination"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" with"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" UK"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" regulators"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"e"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":".g"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":".,"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" GMC"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" MH"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"RA"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" may"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" be"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" required"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" where"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"reserved"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" matters"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" intersect"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":".\n\n"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"###"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" Quick"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" Reference"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" Checklist"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"\n\n"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" Question"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" Yes"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"/"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"No"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"?"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" Reason"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"ing"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" |\n"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"----------"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"----------"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"-----------"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"|\n"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" Does"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"create"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" new"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" criminal"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":" offences"}
+2025-12-07 07:37:21 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"alter"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" criminal"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" law"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" concerning"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"profession"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" practice"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"?"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"No"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"unless"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" it"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" modifies"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" offenses"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" defined"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" in"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" matters"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":")."}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" |\n"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" Does"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" it"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"set"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" professional"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" standards"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" registration"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" disciplinary"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" procedures"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"?"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"Yes"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" –"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" Within"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" competence"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"de"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"volved"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":")."}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" |\n"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" Does"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" it"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"im"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"pose"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" product"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"s"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"afety"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" requirements"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" for"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" medical"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" devices"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"?"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"Probably"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"product"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" safety"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" ="}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" S"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"ched"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"5"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"C"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"8"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":")."}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" |\n"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" Does"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" it"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"mand"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"ate"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" data"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"‑"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"sharing"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" patient"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" records"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" beyond"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" what"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" D"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"PA"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" permits"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"?"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"Reserved"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"data"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" protection"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" ="}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" S"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"ched"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"5"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"B"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"2"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":")."}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" |\n"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"|"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" Does"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" it"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" affect"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"the"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" structure"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" powers"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" UK"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"Union"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"?"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" |"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" **"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"Reserved"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"**"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"Union"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" ="}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" S"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"ched"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"5"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"B"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"1"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":")."}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" |\n\n"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"Feel"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" free"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" let"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" me"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" know"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" if"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" you"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" need"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" deeper"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" dive"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" into"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" any"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" specific"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" provision"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":" case"}
+2025-12-07 07:37:22 [app] INFO: Tool Status: {"type":"content","content":"!"}
+2025-12-07 07:49:35 [app] INFO: Tool Status: {"type":"content","content":"<think>"}
+2025-12-07 07:49:35 [app] INFO: Tool Status: {"type":"content","content":"\n"}
+2025-12-07 07:49:35 [app] INFO: Tool Status: {"type":"content","content":"Okay"}
+2025-12-07 07:49:35 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:49:35 [app] INFO: Tool Status: {"type":"content","content":" so"}
+2025-12-07 07:49:35 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:35 [app] INFO: Tool Status: {"type":"content","content":" user"}
+2025-12-07 07:49:35 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:49:35 [app] INFO: Tool Status: {"type":"content","content":" asking"}
+2025-12-07 07:49:35 [app] INFO: Tool Status: {"type":"content","content":" about"}
+2025-12-07 07:49:35 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:35 [app] INFO: Tool Status: {"type":"content","content":" extent"}
+2025-12-07 07:49:35 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:49:35 [app] INFO: Tool Status: {"type":"content","content":" which"}
+2025-12-07 07:49:36 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:36 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:49:36 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:49:36 [app] INFO: Tool Status: {"type":"content","content":" can"}
+2025-12-07 07:49:36 [app] INFO: Tool Status: {"type":"content","content":" regulate"}
+2025-12-07 07:49:36 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:49:36 [app] INFO: Tool Status: {"type":"content","content":" professions"}
+2025-12-07 07:49:36 [app] INFO: Tool Status: {"type":"content","content":" through"}
+2025-12-07 07:49:36 [app] INFO: Tool Status: {"type":"content","content":" legislation"}
+2025-12-07 07:49:36 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:49:36 [app] INFO: Tool Status: {"type":"content","content":" Let"}
+2025-12-07 07:49:36 [app] INFO: Tool Status: {"type":"content","content":" me"}
+2025-12-07 07:49:37 [app] INFO: Tool Status: {"type":"content","content":" break"}
+2025-12-07 07:49:37 [app] INFO: Tool Status: {"type":"content","content":" this"}
+2025-12-07 07:49:37 [app] INFO: Tool Status: {"type":"content","content":" down"}
+2025-12-07 07:49:37 [app] INFO: Tool Status: {"type":"content","content":".\n\n"}
+2025-12-07 07:49:37 [app] INFO: Tool Status: {"type":"content","content":"First"}
+2025-12-07 07:49:37 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:49:37 [app] INFO: Tool Status: {"type":"content","content":" I"}
+2025-12-07 07:49:37 [app] INFO: Tool Status: {"type":"content","content":" need"}
+2025-12-07 07:49:37 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:49:37 [app] INFO: Tool Status: {"type":"content","content":" recall"}
+2025-12-07 07:49:37 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:37 [app] INFO: Tool Status: {"type":"content","content":" legislative"}
+2025-12-07 07:49:37 [app] INFO: Tool Status: {"type":"content","content":" competence"}
+2025-12-07 07:49:37 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:49:37 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:38 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:49:38 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:49:38 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:49:38 [app] INFO: Tool Status: {"type":"content","content":" Under"}
+2025-12-07 07:49:38 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:38 [app] INFO: Tool Status: {"type":"content","content":" Scotland"}
+2025-12-07 07:49:38 [app] INFO: Tool Status: {"type":"content","content":" Act"}
+2025-12-07 07:49:38 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:49:38 [app] INFO: Tool Status: {"type":"content","content":"1"}
+2025-12-07 07:49:38 [app] INFO: Tool Status: {"type":"content","content":"9"}
+2025-12-07 07:49:38 [app] INFO: Tool Status: {"type":"content","content":"9"}
+2025-12-07 07:49:38 [app] INFO: Tool Status: {"type":"content","content":"8"}
+2025-12-07 07:49:38 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:49:38 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:38 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:49:39 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:49:39 [app] INFO: Tool Status: {"type":"content","content":" has"}
+2025-12-07 07:49:39 [app] INFO: Tool Status: {"type":"content","content":" dev"}
+2025-12-07 07:49:39 [app] INFO: Tool Status: {"type":"content","content":"olved"}
+2025-12-07 07:49:39 [app] INFO: Tool Status: {"type":"content","content":" powers"}
+2025-12-07 07:49:39 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:49:39 [app] INFO: Tool Status: {"type":"content","content":" but"}
+2025-12-07 07:49:39 [app] INFO: Tool Status: {"type":"content","content":" there"}
+2025-12-07 07:49:39 [app] INFO: Tool Status: {"type":"content","content":" are"}
+2025-12-07 07:49:39 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:49:39 [app] INFO: Tool Status: {"type":"content","content":" matters"}
+2025-12-07 07:49:39 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:49:39 [app] INFO: Tool Status: {"type":"content","content":" Health"}
+2025-12-07 07:49:39 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:49:40 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:49:40 [app] INFO: Tool Status: {"type":"content","content":" dev"}
+2025-12-07 07:49:40 [app] INFO: Tool Status: {"type":"content","content":"olved"}
+2025-12-07 07:49:40 [app] INFO: Tool Status: {"type":"content","content":" matter"}
+2025-12-07 07:49:40 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:49:40 [app] INFO: Tool Status: {"type":"content","content":" so"}
+2025-12-07 07:49:40 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:40 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:49:40 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:49:40 [app] INFO: Tool Status: {"type":"content","content":" can"}
+2025-12-07 07:49:40 [app] INFO: Tool Status: {"type":"content","content":" legis"}
+2025-12-07 07:49:40 [app] INFO: Tool Status: {"type":"content","content":"late"}
+2025-12-07 07:49:40 [app] INFO: Tool Status: {"type":"content","content":" on"}
+2025-12-07 07:49:40 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:49:40 [app] INFO: Tool Status: {"type":"content","content":"-related"}
+2025-12-07 07:49:41 [app] INFO: Tool Status: {"type":"content","content":" issues"}
+2025-12-07 07:49:41 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:49:41 [app] INFO: Tool Status: {"type":"content","content":" However"}
+2025-12-07 07:49:41 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:49:41 [app] INFO: Tool Status: {"type":"content","content":" there"}
+2025-12-07 07:49:41 [app] INFO: Tool Status: {"type":"content","content":" might"}
+2025-12-07 07:49:41 [app] INFO: Tool Status: {"type":"content","content":" be"}
+2025-12-07 07:49:41 [app] INFO: Tool Status: {"type":"content","content":" specific"}
+2025-12-07 07:49:41 [app] INFO: Tool Status: {"type":"content","content":" areas"}
+2025-12-07 07:49:41 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:49:41 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:49:41 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:41 [app] INFO: Tool Status: {"type":"content","content":" UK"}
+2025-12-07 07:49:41 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:49:41 [app] INFO: Tool Status: {"type":"content","content":".\n\n"}
+2025-12-07 07:49:42 [app] INFO: Tool Status: {"type":"content","content":"Wait"}
+2025-12-07 07:49:42 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:49:42 [app] INFO: Tool Status: {"type":"content","content":" but"}
+2025-12-07 07:49:42 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:42 [app] INFO: Tool Status: {"type":"content","content":" user"}
+2025-12-07 07:49:42 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:49:42 [app] INFO: Tool Status: {"type":"content","content":" specifically"}
+2025-12-07 07:49:42 [app] INFO: Tool Status: {"type":"content","content":" asking"}
+2025-12-07 07:49:42 [app] INFO: Tool Status: {"type":"content","content":" about"}
+2025-12-07 07:49:42 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:49:42 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:49:42 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:49:42 [app] INFO: Tool Status: {"type":"content","content":" professions"}
+2025-12-07 07:49:42 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:49:43 [app] INFO: Tool Status: {"type":"content","content":" That"}
+2025-12-07 07:49:43 [app] INFO: Tool Status: {"type":"content","content":" could"}
+2025-12-07 07:49:43 [app] INFO: Tool Status: {"type":"content","content":" include"}
+2025-12-07 07:49:43 [app] INFO: Tool Status: {"type":"content","content":" things"}
+2025-12-07 07:49:43 [app] INFO: Tool Status: {"type":"content","content":" like"}
+2025-12-07 07:49:43 [app] INFO: Tool Status: {"type":"content","content":" licensing"}
+2025-12-07 07:49:43 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:49:43 [app] INFO: Tool Status: {"type":"content","content":" standards"}
+2025-12-07 07:49:43 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:49:43 [app] INFO: Tool Status: {"type":"content","content":" practice"}
+2025-12-07 07:49:43 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:49:43 [app] INFO: Tool Status: {"type":"content","content":" and"}
+2025-12-07 07:49:43 [app] INFO: Tool Status: {"type":"content","content":" disciplinary"}
+2025-12-07 07:49:43 [app] INFO: Tool Status: {"type":"content","content":" actions"}
+2025-12-07 07:49:43 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:49:44 [app] INFO: Tool Status: {"type":"content","content":" I"}
+2025-12-07 07:49:44 [app] INFO: Tool Status: {"type":"content","content":" need"}
+2025-12-07 07:49:44 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:49:44 [app] INFO: Tool Status: {"type":"content","content":" check"}
+2025-12-07 07:49:44 [app] INFO: Tool Status: {"type":"content","content":" if"}
+2025-12-07 07:49:44 [app] INFO: Tool Status: {"type":"content","content":" there"}
+2025-12-07 07:49:44 [app] INFO: Tool Status: {"type":"content","content":" are"}
+2025-12-07 07:49:44 [app] INFO: Tool Status: {"type":"content","content":" any"}
+2025-12-07 07:49:44 [app] INFO: Tool Status: {"type":"content","content":" specific"}
+2025-12-07 07:49:44 [app] INFO: Tool Status: {"type":"content","content":" acts"}
+2025-12-07 07:49:44 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:49:44 [app] INFO: Tool Status: {"type":"content","content":" statutory"}
+2025-12-07 07:49:44 [app] INFO: Tool Status: {"type":"content","content":" instruments"}
+2025-12-07 07:49:44 [app] INFO: Tool Status: {"type":"content","content":" that"}
+2025-12-07 07:49:44 [app] INFO: Tool Status: {"type":"content","content":" outline"}
+2025-12-07 07:49:45 [app] INFO: Tool Status: {"type":"content","content":" this"}
+2025-12-07 07:49:45 [app] INFO: Tool Status: {"type":"content","content":".\n\n"}
+2025-12-07 07:49:45 [app] INFO: Tool Status: {"type":"content","content":"I"}
+2025-12-07 07:49:45 [app] INFO: Tool Status: {"type":"content","content":" remember"}
+2025-12-07 07:49:45 [app] INFO: Tool Status: {"type":"content","content":" that"}
+2025-12-07 07:49:45 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:45 [app] INFO: Tool Status: {"type":"content","content":" Health"}
+2025-12-07 07:49:45 [app] INFO: Tool Status: {"type":"content","content":" and"}
+2025-12-07 07:49:45 [app] INFO: Tool Status: {"type":"content","content":" Care"}
+2025-12-07 07:49:45 [app] INFO: Tool Status: {"type":"content","content":" Prof"}
+2025-12-07 07:49:45 [app] INFO: Tool Status: {"type":"content","content":"essions"}
+2025-12-07 07:49:45 [app] INFO: Tool Status: {"type":"content","content":" Act"}
+2025-12-07 07:49:45 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:49:45 [app] INFO: Tool Status: {"type":"content","content":"2"}
+2025-12-07 07:49:46 [app] INFO: Tool Status: {"type":"content","content":"0"}
+2025-12-07 07:49:46 [app] INFO: Tool Status: {"type":"content","content":"0"}
+2025-12-07 07:49:46 [app] INFO: Tool Status: {"type":"content","content":"9"}
+2025-12-07 07:49:46 [app] INFO: Tool Status: {"type":"content","content":" might"}
+2025-12-07 07:49:46 [app] INFO: Tool Status: {"type":"content","content":" be"}
+2025-12-07 07:49:46 [app] INFO: Tool Status: {"type":"content","content":" relevant"}
+2025-12-07 07:49:46 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:49:46 [app] INFO: Tool Status: {"type":"content","content":" That"}
+2025-12-07 07:49:46 [app] INFO: Tool Status: {"type":"content","content":" act"}
+2025-12-07 07:49:46 [app] INFO: Tool Status: {"type":"content","content":" established"}
+2025-12-07 07:49:46 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:46 [app] INFO: Tool Status: {"type":"content","content":" Health"}
+2025-12-07 07:49:46 [app] INFO: Tool Status: {"type":"content","content":" and"}
+2025-12-07 07:49:46 [app] INFO: Tool Status: {"type":"content","content":" Care"}
+2025-12-07 07:49:46 [app] INFO: Tool Status: {"type":"content","content":" Prof"}
+2025-12-07 07:49:47 [app] INFO: Tool Status: {"type":"content","content":"essions"}
+2025-12-07 07:49:47 [app] INFO: Tool Status: {"type":"content","content":" Council"}
+2025-12-07 07:49:47 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:49:47 [app] INFO: Tool Status: {"type":"content","content":"HC"}
+2025-12-07 07:49:47 [app] INFO: Tool Status: {"type":"content","content":"PC"}
+2025-12-07 07:49:47 [app] INFO: Tool Status: {"type":"content","content":"),"}
+2025-12-07 07:49:47 [app] INFO: Tool Status: {"type":"content","content":" which"}
+2025-12-07 07:49:47 [app] INFO: Tool Status: {"type":"content","content":" regulates"}
+2025-12-07 07:49:47 [app] INFO: Tool Status: {"type":"content","content":" various"}
+2025-12-07 07:49:47 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:49:47 [app] INFO: Tool Status: {"type":"content","content":" professions"}
+2025-12-07 07:49:47 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:49:47 [app] INFO: Tool Status: {"type":"content","content":" But"}
+2025-12-07 07:49:47 [app] INFO: Tool Status: {"type":"content","content":" I"}
+2025-12-07 07:49:48 [app] INFO: Tool Status: {"type":"content","content":" should"}
+2025-12-07 07:49:48 [app] INFO: Tool Status: {"type":"content","content":" confirm"}
+2025-12-07 07:49:48 [app] INFO: Tool Status: {"type":"content","content":" if"}
+2025-12-07 07:49:48 [app] INFO: Tool Status: {"type":"content","content":" this"}
+2025-12-07 07:49:48 [app] INFO: Tool Status: {"type":"content","content":" act"}
+2025-12-07 07:49:48 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:49:48 [app] INFO: Tool Status: {"type":"content","content":" within"}
+2025-12-07 07:49:48 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:48 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:49:48 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:49:48 [app] INFO: Tool Status: {"type":"content","content":"'s"}
+2025-12-07 07:49:48 [app] INFO: Tool Status: {"type":"content","content":" competence"}
+2025-12-07 07:49:48 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:49:48 [app] INFO: Tool Status: {"type":"content","content":" Since"}
+2025-12-07 07:49:48 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:49 [app] INFO: Tool Status: {"type":"content","content":" HC"}
+2025-12-07 07:49:49 [app] INFO: Tool Status: {"type":"content","content":"PC"}
+2025-12-07 07:49:49 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:49:49 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:49:49 [app] INFO: Tool Status: {"type":"content","content":" UK"}
+2025-12-07 07:49:49 [app] INFO: Tool Status: {"type":"content","content":"-wide"}
+2025-12-07 07:49:49 [app] INFO: Tool Status: {"type":"content","content":" body"}
+2025-12-07 07:49:49 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:49:49 [app] INFO: Tool Status: {"type":"content","content":" maybe"}
+2025-12-07 07:49:49 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:49 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:49:49 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:49:49 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:49:49 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:49:50 [app] INFO: Tool Status: {"type":"content","content":" However"}
+2025-12-07 07:49:50 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:49:50 [app] INFO: Tool Status: {"type":"content","content":" Scotland"}
+2025-12-07 07:49:50 [app] INFO: Tool Status: {"type":"content","content":" might"}
+2025-12-07 07:49:50 [app] INFO: Tool Status: {"type":"content","content":" have"}
+2025-12-07 07:49:50 [app] INFO: Tool Status: {"type":"content","content":" its"}
+2025-12-07 07:49:50 [app] INFO: Tool Status: {"type":"content","content":" own"}
+2025-12-07 07:49:50 [app] INFO: Tool Status: {"type":"content","content":" regulatory"}
+2025-12-07 07:49:50 [app] INFO: Tool Status: {"type":"content","content":" bodies"}
+2025-12-07 07:49:50 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:49:50 [app] INFO: Tool Status: {"type":"content","content":" For"}
+2025-12-07 07:49:50 [app] INFO: Tool Status: {"type":"content","content":" example"}
+2025-12-07 07:49:50 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:49:50 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:50 [app] INFO: Tool Status: {"type":"content","content":" Nursing"}
+2025-12-07 07:49:51 [app] INFO: Tool Status: {"type":"content","content":" and"}
+2025-12-07 07:49:51 [app] INFO: Tool Status: {"type":"content","content":" Mid"}
+2025-12-07 07:49:51 [app] INFO: Tool Status: {"type":"content","content":"w"}
+2025-12-07 07:49:51 [app] INFO: Tool Status: {"type":"content","content":"if"}
+2025-12-07 07:49:51 [app] INFO: Tool Status: {"type":"content","content":"ery"}
+2025-12-07 07:49:51 [app] INFO: Tool Status: {"type":"content","content":" Council"}
+2025-12-07 07:49:51 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:49:51 [app] INFO: Tool Status: {"type":"content","content":"N"}
+2025-12-07 07:49:51 [app] INFO: Tool Status: {"type":"content","content":"MC"}
+2025-12-07 07:49:51 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:49:51 [app] INFO: Tool Status: {"type":"content","content":" operates"}
+2025-12-07 07:49:51 [app] INFO: Tool Status: {"type":"content","content":" in"}
+2025-12-07 07:49:51 [app] INFO: Tool Status: {"type":"content","content":" Scotland"}
+2025-12-07 07:49:51 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:49:52 [app] INFO: Tool Status: {"type":"content","content":" but"}
+2025-12-07 07:49:52 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:49:52 [app] INFO: Tool Status: {"type":"content","content":" that"}
+2025-12-07 07:49:52 [app] INFO: Tool Status: {"type":"content","content":" under"}
+2025-12-07 07:49:52 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:49:52 [app] INFO: Tool Status: {"type":"content","content":" legislation"}
+2025-12-07 07:49:52 [app] INFO: Tool Status: {"type":"content","content":"?\n\n"}
+2025-12-07 07:49:52 [app] INFO: Tool Status: {"type":"content","content":"Wait"}
+2025-12-07 07:49:52 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:49:52 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:52 [app] INFO: Tool Status: {"type":"content","content":" N"}
+2025-12-07 07:49:52 [app] INFO: Tool Status: {"type":"content","content":"MC"}
+2025-12-07 07:49:52 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:49:52 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:49:52 [app] INFO: Tool Status: {"type":"content","content":" UK"}
+2025-12-07 07:49:53 [app] INFO: Tool Status: {"type":"content","content":"-wide"}
+2025-12-07 07:49:53 [app] INFO: Tool Status: {"type":"content","content":" regulatory"}
+2025-12-07 07:49:53 [app] INFO: Tool Status: {"type":"content","content":" body"}
+2025-12-07 07:49:53 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:49:53 [app] INFO: Tool Status: {"type":"content","content":" so"}
+2025-12-07 07:49:53 [app] INFO: Tool Status: {"type":"content","content":" its"}
+2025-12-07 07:49:53 [app] INFO: Tool Status: {"type":"content","content":" establishment"}
+2025-12-07 07:49:53 [app] INFO: Tool Status: {"type":"content","content":" would"}
+2025-12-07 07:49:53 [app] INFO: Tool Status: {"type":"content","content":" be"}
+2025-12-07 07:49:53 [app] INFO: Tool Status: {"type":"content","content":" under"}
+2025-12-07 07:49:53 [app] INFO: Tool Status: {"type":"content","content":" UK"}
+2025-12-07 07:49:53 [app] INFO: Tool Status: {"type":"content","content":" legislation"}
+2025-12-07 07:49:53 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:49:53 [app] INFO: Tool Status: {"type":"content","content":" But"}
+2025-12-07 07:49:53 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:54 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:49:54 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:49:54 [app] INFO: Tool Status: {"type":"content","content":" might"}
+2025-12-07 07:49:54 [app] INFO: Tool Status: {"type":"content","content":" have"}
+2025-12-07 07:49:54 [app] INFO: Tool Status: {"type":"content","content":" powers"}
+2025-12-07 07:49:54 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:49:54 [app] INFO: Tool Status: {"type":"content","content":" legis"}
+2025-12-07 07:49:54 [app] INFO: Tool Status: {"type":"content","content":"late"}
+2025-12-07 07:49:54 [app] INFO: Tool Status: {"type":"content","content":" on"}
+2025-12-07 07:49:54 [app] INFO: Tool Status: {"type":"content","content":" aspects"}
+2025-12-07 07:49:54 [app] INFO: Tool Status: {"type":"content","content":" like"}
+2025-12-07 07:49:54 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:54 [app] INFO: Tool Status: {"type":"content","content":" scope"}
+2025-12-07 07:49:54 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:49:55 [app] INFO: Tool Status: {"type":"content","content":" practice"}
+2025-12-07 07:49:55 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:49:55 [app] INFO: Tool Status: {"type":"content","content":" education"}
+2025-12-07 07:49:55 [app] INFO: Tool Status: {"type":"content","content":" standards"}
+2025-12-07 07:49:55 [app] INFO: Tool Status: {"type":"content","content":" for"}
+2025-12-07 07:49:55 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:49:55 [app] INFO: Tool Status: {"type":"content","content":" professionals"}
+2025-12-07 07:49:55 [app] INFO: Tool Status: {"type":"content","content":" within"}
+2025-12-07 07:49:55 [app] INFO: Tool Status: {"type":"content","content":" Scotland"}
+2025-12-07 07:49:55 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:49:55 [app] INFO: Tool Status: {"type":"content","content":" \n\n"}
+2025-12-07 07:49:55 [app] INFO: Tool Status: {"type":"content","content":"I"}
+2025-12-07 07:49:55 [app] INFO: Tool Status: {"type":"content","content":" should"}
+2025-12-07 07:49:55 [app] INFO: Tool Status: {"type":"content","content":" check"}
+2025-12-07 07:49:56 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:56 [app] INFO: Tool Status: {"type":"content","content":" Scotland"}
+2025-12-07 07:49:56 [app] INFO: Tool Status: {"type":"content","content":" Act"}
+2025-12-07 07:49:56 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:49:56 [app] INFO: Tool Status: {"type":"content","content":"1"}
+2025-12-07 07:49:56 [app] INFO: Tool Status: {"type":"content","content":"9"}
+2025-12-07 07:49:56 [app] INFO: Tool Status: {"type":"content","content":"9"}
+2025-12-07 07:49:56 [app] INFO: Tool Status: {"type":"content","content":"8"}
+2025-12-07 07:49:56 [app] INFO: Tool Status: {"type":"content","content":" and"}
+2025-12-07 07:49:56 [app] INFO: Tool Status: {"type":"content","content":" any"}
+2025-12-07 07:49:56 [app] INFO: Tool Status: {"type":"content","content":" subsequent"}
+2025-12-07 07:49:56 [app] INFO: Tool Status: {"type":"content","content":" legislation"}
+2025-12-07 07:49:56 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:49:56 [app] INFO: Tool Status: {"type":"content","content":" The"}
+2025-12-07 07:49:56 [app] INFO: Tool Status: {"type":"content","content":" Scotland"}
+2025-12-07 07:49:57 [app] INFO: Tool Status: {"type":"content","content":" Act"}
+2025-12-07 07:49:57 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:49:57 [app] INFO: Tool Status: {"type":"content","content":"1"}
+2025-12-07 07:49:57 [app] INFO: Tool Status: {"type":"content","content":"9"}
+2025-12-07 07:49:57 [app] INFO: Tool Status: {"type":"content","content":"9"}
+2025-12-07 07:49:57 [app] INFO: Tool Status: {"type":"content","content":"8"}
+2025-12-07 07:49:57 [app] INFO: Tool Status: {"type":"content","content":" lists"}
+2025-12-07 07:49:57 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:49:57 [app] INFO: Tool Status: {"type":"content","content":" matters"}
+2025-12-07 07:49:57 [app] INFO: Tool Status: {"type":"content","content":" in"}
+2025-12-07 07:49:57 [app] INFO: Tool Status: {"type":"content","content":" Schedule"}
+2025-12-07 07:49:57 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:49:57 [app] INFO: Tool Status: {"type":"content","content":"5"}
+2025-12-07 07:49:57 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:49:58 [app] INFO: Tool Status: {"type":"content","content":" Let"}
+2025-12-07 07:49:58 [app] INFO: Tool Status: {"type":"content","content":" me"}
+2025-12-07 07:49:58 [app] INFO: Tool Status: {"type":"content","content":" think"}
+2025-12-07 07:49:58 [app] INFO: Tool Status: {"type":"content","content":":"}
+2025-12-07 07:49:58 [app] INFO: Tool Status: {"type":"content","content":" healthcare"}
+2025-12-07 07:49:58 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:49:58 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:49:58 [app] INFO: Tool Status: {"type":"content","content":" dev"}
+2025-12-07 07:49:58 [app] INFO: Tool Status: {"type":"content","content":"olved"}
+2025-12-07 07:49:58 [app] INFO: Tool Status: {"type":"content","content":" matter"}
+2025-12-07 07:49:58 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:49:58 [app] INFO: Tool Status: {"type":"content","content":" but"}
+2025-12-07 07:49:58 [app] INFO: Tool Status: {"type":"content","content":" some"}
+2025-12-07 07:49:58 [app] INFO: Tool Status: {"type":"content","content":" aspects"}
+2025-12-07 07:49:59 [app] INFO: Tool Status: {"type":"content","content":" like"}
+2025-12-07 07:49:59 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:59 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:49:59 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:49:59 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:49:59 [app] INFO: Tool Status: {"type":"content","content":" professionals"}
+2025-12-07 07:49:59 [app] INFO: Tool Status: {"type":"content","content":" might"}
+2025-12-07 07:49:59 [app] INFO: Tool Status: {"type":"content","content":" be"}
+2025-12-07 07:49:59 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:49:59 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:49:59 [app] INFO: Tool Status: {"type":"content","content":" Alternatively"}
+2025-12-07 07:49:59 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:49:59 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:49:59 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:49:59 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:50:00 [app] INFO: Tool Status: {"type":"content","content":" might"}
+2025-12-07 07:50:00 [app] INFO: Tool Status: {"type":"content","content":" have"}
+2025-12-07 07:50:00 [app] INFO: Tool Status: {"type":"content","content":" competence"}
+2025-12-07 07:50:00 [app] INFO: Tool Status: {"type":"content","content":" through"}
+2025-12-07 07:50:00 [app] INFO: Tool Status: {"type":"content","content":" other"}
+2025-12-07 07:50:00 [app] INFO: Tool Status: {"type":"content","content":" legislation"}
+2025-12-07 07:50:00 [app] INFO: Tool Status: {"type":"content","content":".\n\n"}
+2025-12-07 07:50:00 [app] INFO: Tool Status: {"type":"content","content":"Alternatively"}
+2025-12-07 07:50:00 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:50:00 [app] INFO: Tool Status: {"type":"content","content":" there"}
+2025-12-07 07:50:00 [app] INFO: Tool Status: {"type":"content","content":" might"}
+2025-12-07 07:50:00 [app] INFO: Tool Status: {"type":"content","content":" be"}
+2025-12-07 07:50:00 [app] INFO: Tool Status: {"type":"content","content":" specific"}
+2025-12-07 07:50:00 [app] INFO: Tool Status: {"type":"content","content":" acts"}
+2025-12-07 07:50:01 [app] INFO: Tool Status: {"type":"content","content":" passed"}
+2025-12-07 07:50:01 [app] INFO: Tool Status: {"type":"content","content":" by"}
+2025-12-07 07:50:01 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:01 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:50:01 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:50:01 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:50:01 [app] INFO: Tool Status: {"type":"content","content":" such"}
+2025-12-07 07:50:01 [app] INFO: Tool Status: {"type":"content","content":" as"}
+2025-12-07 07:50:01 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:01 [app] INFO: Tool Status: {"type":"content","content":" Healthcare"}
+2025-12-07 07:50:01 [app] INFO: Tool Status: {"type":"content","content":" Professionals"}
+2025-12-07 07:50:01 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:50:01 [app] INFO: Tool Status: {"type":"content","content":"Scotland"}
+2025-12-07 07:50:01 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:50:01 [app] INFO: Tool Status: {"type":"content","content":" Act"}
+2025-12-07 07:50:02 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:50:02 [app] INFO: Tool Status: {"type":"content","content":"2"}
+2025-12-07 07:50:02 [app] INFO: Tool Status: {"type":"content","content":"0"}
+2025-12-07 07:50:02 [app] INFO: Tool Status: {"type":"content","content":"0"}
+2025-12-07 07:50:02 [app] INFO: Tool Status: {"type":"content","content":"1"}
+2025-12-07 07:50:02 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:50:02 [app] INFO: Tool Status: {"type":"content","content":" That"}
+2025-12-07 07:50:02 [app] INFO: Tool Status: {"type":"content","content":" act"}
+2025-12-07 07:50:02 [app] INFO: Tool Status: {"type":"content","content":" might"}
+2025-12-07 07:50:02 [app] INFO: Tool Status: {"type":"content","content":" deal"}
+2025-12-07 07:50:02 [app] INFO: Tool Status: {"type":"content","content":" with"}
+2025-12-07 07:50:02 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:02 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:50:02 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:50:03 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:50:03 [app] INFO: Tool Status: {"type":"content","content":" professionals"}
+2025-12-07 07:50:03 [app] INFO: Tool Status: {"type":"content","content":" in"}
+2025-12-07 07:50:03 [app] INFO: Tool Status: {"type":"content","content":" Scotland"}
+2025-12-07 07:50:03 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:50:03 [app] INFO: Tool Status: {"type":"content","content":" If"}
+2025-12-07 07:50:03 [app] INFO: Tool Status: {"type":"content","content":" that"}
+2025-12-07 07:50:03 [app] INFO: Tool Status: {"type":"content","content":"'s"}
+2025-12-07 07:50:03 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:03 [app] INFO: Tool Status: {"type":"content","content":" case"}
+2025-12-07 07:50:03 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:50:03 [app] INFO: Tool Status: {"type":"content","content":" then"}
+2025-12-07 07:50:03 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:03 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:50:04 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:50:04 [app] INFO: Tool Status: {"type":"content","content":" does"}
+2025-12-07 07:50:04 [app] INFO: Tool Status: {"type":"content","content":" have"}
+2025-12-07 07:50:04 [app] INFO: Tool Status: {"type":"content","content":" legislative"}
+2025-12-07 07:50:04 [app] INFO: Tool Status: {"type":"content","content":" competence"}
+2025-12-07 07:50:04 [app] INFO: Tool Status: {"type":"content","content":" in"}
+2025-12-07 07:50:04 [app] INFO: Tool Status: {"type":"content","content":" this"}
+2025-12-07 07:50:04 [app] INFO: Tool Status: {"type":"content","content":" area"}
+2025-12-07 07:50:04 [app] INFO: Tool Status: {"type":"content","content":".\n\n"}
+2025-12-07 07:50:04 [app] INFO: Tool Status: {"type":"content","content":"I"}
+2025-12-07 07:50:04 [app] INFO: Tool Status: {"type":"content","content":" need"}
+2025-12-07 07:50:04 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:50:04 [app] INFO: Tool Status: {"type":"content","content":" verify"}
+2025-12-07 07:50:04 [app] INFO: Tool Status: {"type":"content","content":" this"}
+2025-12-07 07:50:04 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:50:05 [app] INFO: Tool Status: {"type":"content","content":" Let"}
+2025-12-07 07:50:05 [app] INFO: Tool Status: {"type":"content","content":" me"}
+2025-12-07 07:50:05 [app] INFO: Tool Status: {"type":"content","content":" use"}
+2025-12-07 07:50:05 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:05 [app] INFO: Tool Status: {"type":"content","content":" search"}
+2025-12-07 07:50:05 [app] INFO: Tool Status: {"type":"content","content":"_leg"}
+2025-12-07 07:50:05 [app] INFO: Tool Status: {"type":"content","content":"islation"}
+2025-12-07 07:50:05 [app] INFO: Tool Status: {"type":"content","content":" function"}
+2025-12-07 07:50:05 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:50:05 [app] INFO: Tool Status: {"type":"content","content":" look"}
+2025-12-07 07:50:05 [app] INFO: Tool Status: {"type":"content","content":" for"}
+2025-12-07 07:50:05 [app] INFO: Tool Status: {"type":"content","content":" acts"}
+2025-12-07 07:50:05 [app] INFO: Tool Status: {"type":"content","content":" related"}
+2025-12-07 07:50:05 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:50:06 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:50:06 [app] INFO: Tool Status: {"type":"content","content":" professions"}
+2025-12-07 07:50:06 [app] INFO: Tool Status: {"type":"content","content":" in"}
+2025-12-07 07:50:06 [app] INFO: Tool Status: {"type":"content","content":" Scotland"}
+2025-12-07 07:50:06 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:50:06 [app] INFO: Tool Status: {"type":"content","content":" Maybe"}
+2025-12-07 07:50:06 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:06 [app] INFO: Tool Status: {"type":"content","content":" Healthcare"}
+2025-12-07 07:50:06 [app] INFO: Tool Status: {"type":"content","content":" Professionals"}
+2025-12-07 07:50:06 [app] INFO: Tool Status: {"type":"content","content":" ("}
+2025-12-07 07:50:06 [app] INFO: Tool Status: {"type":"content","content":"Scotland"}
+2025-12-07 07:50:06 [app] INFO: Tool Status: {"type":"content","content":")"}
+2025-12-07 07:50:06 [app] INFO: Tool Status: {"type":"content","content":" Act"}
+2025-12-07 07:50:06 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:50:07 [app] INFO: Tool Status: {"type":"content","content":"2"}
+2025-12-07 07:50:07 [app] INFO: Tool Status: {"type":"content","content":"0"}
+2025-12-07 07:50:07 [app] INFO: Tool Status: {"type":"content","content":"0"}
+2025-12-07 07:50:07 [app] INFO: Tool Status: {"type":"content","content":"1"}
+2025-12-07 07:50:07 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:50:07 [app] INFO: Tool Status: {"type":"content","content":" relevant"}
+2025-12-07 07:50:07 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:50:07 [app] INFO: Tool Status: {"type":"content","content":" Also"}
+2025-12-07 07:50:07 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:50:07 [app] INFO: Tool Status: {"type":"content","content":" check"}
+2025-12-07 07:50:07 [app] INFO: Tool Status: {"type":"content","content":" if"}
+2025-12-07 07:50:07 [app] INFO: Tool Status: {"type":"content","content":" there"}
+2025-12-07 07:50:07 [app] INFO: Tool Status: {"type":"content","content":" are"}
+2025-12-07 07:50:07 [app] INFO: Tool Status: {"type":"content","content":" any"}
+2025-12-07 07:50:08 [app] INFO: Tool Status: {"type":"content","content":" statutory"}
+2025-12-07 07:50:08 [app] INFO: Tool Status: {"type":"content","content":" instruments"}
+2025-12-07 07:50:08 [app] INFO: Tool Status: {"type":"content","content":" from"}
+2025-12-07 07:50:08 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:08 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:50:08 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:50:08 [app] INFO: Tool Status: {"type":"content","content":" regarding"}
+2025-12-07 07:50:08 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:50:08 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:50:08 [app] INFO: Tool Status: {"type":"content","content":".\n\n"}
+2025-12-07 07:50:08 [app] INFO: Tool Status: {"type":"content","content":"Another"}
+2025-12-07 07:50:08 [app] INFO: Tool Status: {"type":"content","content":" angle"}
+2025-12-07 07:50:08 [app] INFO: Tool Status: {"type":"content","content":":"}
+2025-12-07 07:50:08 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:08 [app] INFO: Tool Status: {"type":"content","content":" UK"}
+2025-12-07 07:50:09 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:50:09 [app] INFO: Tool Status: {"type":"content","content":" might"}
+2025-12-07 07:50:09 [app] INFO: Tool Status: {"type":"content","content":" have"}
+2025-12-07 07:50:09 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:50:09 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:09 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:50:09 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:50:09 [app] INFO: Tool Status: {"type":"content","content":" certain"}
+2025-12-07 07:50:09 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:50:09 [app] INFO: Tool Status: {"type":"content","content":" professions"}
+2025-12-07 07:50:09 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:50:09 [app] INFO: Tool Status: {"type":"content","content":" but"}
+2025-12-07 07:50:09 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:09 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:50:10 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:50:10 [app] INFO: Tool Status: {"type":"content","content":" could"}
+2025-12-07 07:50:10 [app] INFO: Tool Status: {"type":"content","content":" have"}
+2025-12-07 07:50:10 [app] INFO: Tool Status: {"type":"content","content":" competence"}
+2025-12-07 07:50:10 [app] INFO: Tool Status: {"type":"content","content":" in"}
+2025-12-07 07:50:10 [app] INFO: Tool Status: {"type":"content","content":" others"}
+2025-12-07 07:50:10 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:50:10 [app] INFO: Tool Status: {"type":"content","content":" For"}
+2025-12-07 07:50:10 [app] INFO: Tool Status: {"type":"content","content":" example"}
+2025-12-07 07:50:10 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:50:10 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:10 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:50:10 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:50:10 [app] INFO: Tool Status: {"type":"content","content":" might"}
+2025-12-07 07:50:11 [app] INFO: Tool Status: {"type":"content","content":" regulate"}
+2025-12-07 07:50:11 [app] INFO: Tool Status: {"type":"content","content":" certain"}
+2025-12-07 07:50:11 [app] INFO: Tool Status: {"type":"content","content":" professions"}
+2025-12-07 07:50:11 [app] INFO: Tool Status: {"type":"content","content":" while"}
+2025-12-07 07:50:11 [app] INFO: Tool Status: {"type":"content","content":" others"}
+2025-12-07 07:50:11 [app] INFO: Tool Status: {"type":"content","content":" are"}
+2025-12-07 07:50:11 [app] INFO: Tool Status: {"type":"content","content":" regulated"}
+2025-12-07 07:50:11 [app] INFO: Tool Status: {"type":"content","content":" at"}
+2025-12-07 07:50:11 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:11 [app] INFO: Tool Status: {"type":"content","content":" UK"}
+2025-12-07 07:50:11 [app] INFO: Tool Status: {"type":"content","content":" level"}
+2025-12-07 07:50:11 [app] INFO: Tool Status: {"type":"content","content":".\n\n"}
+2025-12-07 07:50:11 [app] INFO: Tool Status: {"type":"content","content":"I"}
+2025-12-07 07:50:11 [app] INFO: Tool Status: {"type":"content","content":" should"}
+2025-12-07 07:50:12 [app] INFO: Tool Status: {"type":"content","content":" also"}
+2025-12-07 07:50:12 [app] INFO: Tool Status: {"type":"content","content":" consider"}
+2025-12-07 07:50:12 [app] INFO: Tool Status: {"type":"content","content":" case"}
+2025-12-07 07:50:12 [app] INFO: Tool Status: {"type":"content","content":" law"}
+2025-12-07 07:50:12 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:50:12 [app] INFO: Tool Status: {"type":"content","content":" Are"}
+2025-12-07 07:50:12 [app] INFO: Tool Status: {"type":"content","content":" there"}
+2025-12-07 07:50:12 [app] INFO: Tool Status: {"type":"content","content":" any"}
+2025-12-07 07:50:12 [app] INFO: Tool Status: {"type":"content","content":" cases"}
+2025-12-07 07:50:12 [app] INFO: Tool Status: {"type":"content","content":" that"}
+2025-12-07 07:50:12 [app] INFO: Tool Status: {"type":"content","content":" have"}
+2025-12-07 07:50:12 [app] INFO: Tool Status: {"type":"content","content":" addressed"}
+2025-12-07 07:50:12 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:12 [app] INFO: Tool Status: {"type":"content","content":" legislative"}
+2025-12-07 07:50:12 [app] INFO: Tool Status: {"type":"content","content":" competence"}
+2025-12-07 07:50:13 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:50:13 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:13 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:50:13 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:50:13 [app] INFO: Tool Status: {"type":"content","content":" regarding"}
+2025-12-07 07:50:13 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:50:13 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:50:13 [app] INFO: Tool Status: {"type":"content","content":"?"}
+2025-12-07 07:50:13 [app] INFO: Tool Status: {"type":"content","content":" Maybe"}
+2025-12-07 07:50:13 [app] INFO: Tool Status: {"type":"content","content":" cases"}
+2025-12-07 07:50:13 [app] INFO: Tool Status: {"type":"content","content":" related"}
+2025-12-07 07:50:13 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:50:13 [app] INFO: Tool Status: {"type":"content","content":" dev"}
+2025-12-07 07:50:13 [app] INFO: Tool Status: {"type":"content","content":"olution"}
+2025-12-07 07:50:14 [app] INFO: Tool Status: {"type":"content","content":" and"}
+2025-12-07 07:50:14 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:14 [app] INFO: Tool Status: {"type":"content","content":" boundaries"}
+2025-12-07 07:50:14 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:50:14 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:50:14 [app] INFO: Tool Status: {"type":"content","content":" matters"}
+2025-12-07 07:50:14 [app] INFO: Tool Status: {"type":"content","content":".\n\n"}
+2025-12-07 07:50:14 [app] INFO: Tool Status: {"type":"content","content":"In"}
+2025-12-07 07:50:14 [app] INFO: Tool Status: {"type":"content","content":" summary"}
+2025-12-07 07:50:14 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:50:14 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:14 [app] INFO: Tool Status: {"type":"content","content":" steps"}
+2025-12-07 07:50:14 [app] INFO: Tool Status: {"type":"content","content":" are"}
+2025-12-07 07:50:14 [app] INFO: Tool Status: {"type":"content","content":":\n\n"}
+2025-12-07 07:50:15 [app] INFO: Tool Status: {"type":"content","content":"1"}
+2025-12-07 07:50:15 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:50:15 [app] INFO: Tool Status: {"type":"content","content":" Check"}
+2025-12-07 07:50:15 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:15 [app] INFO: Tool Status: {"type":"content","content":" Scotland"}
+2025-12-07 07:50:15 [app] INFO: Tool Status: {"type":"content","content":" Act"}
+2025-12-07 07:50:15 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:50:15 [app] INFO: Tool Status: {"type":"content","content":"1"}
+2025-12-07 07:50:15 [app] INFO: Tool Status: {"type":"content","content":"9"}
+2025-12-07 07:50:15 [app] INFO: Tool Status: {"type":"content","content":"9"}
+2025-12-07 07:50:15 [app] INFO: Tool Status: {"type":"content","content":"8"}
+2025-12-07 07:50:15 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:50:15 [app] INFO: Tool Status: {"type":"content","content":" determine"}
+2025-12-07 07:50:15 [app] INFO: Tool Status: {"type":"content","content":" if"}
+2025-12-07 07:50:15 [app] INFO: Tool Status: {"type":"content","content":" regulation"}
+2025-12-07 07:50:16 [app] INFO: Tool Status: {"type":"content","content":" of"}
+2025-12-07 07:50:16 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:50:16 [app] INFO: Tool Status: {"type":"content","content":" professions"}
+2025-12-07 07:50:16 [app] INFO: Tool Status: {"type":"content","content":" is"}
+2025-12-07 07:50:16 [app] INFO: Tool Status: {"type":"content","content":" a"}
+2025-12-07 07:50:16 [app] INFO: Tool Status: {"type":"content","content":" dev"}
+2025-12-07 07:50:16 [app] INFO: Tool Status: {"type":"content","content":"olved"}
+2025-12-07 07:50:16 [app] INFO: Tool Status: {"type":"content","content":" or"}
+2025-12-07 07:50:16 [app] INFO: Tool Status: {"type":"content","content":" reserved"}
+2025-12-07 07:50:16 [app] INFO: Tool Status: {"type":"content","content":" matter"}
+2025-12-07 07:50:16 [app] INFO: Tool Status: {"type":"content","content":".\n"}
+2025-12-07 07:50:16 [app] INFO: Tool Status: {"type":"content","content":"2"}
+2025-12-07 07:50:16 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:50:16 [app] INFO: Tool Status: {"type":"content","content":" Search"}
+2025-12-07 07:50:17 [app] INFO: Tool Status: {"type":"content","content":" for"}
+2025-12-07 07:50:17 [app] INFO: Tool Status: {"type":"content","content":" legislation"}
+2025-12-07 07:50:17 [app] INFO: Tool Status: {"type":"content","content":" passed"}
+2025-12-07 07:50:17 [app] INFO: Tool Status: {"type":"content","content":" by"}
+2025-12-07 07:50:17 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:17 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:50:17 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:50:17 [app] INFO: Tool Status: {"type":"content","content":" related"}
+2025-12-07 07:50:17 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:50:17 [app] INFO: Tool Status: {"type":"content","content":" health"}
+2025-12-07 07:50:17 [app] INFO: Tool Status: {"type":"content","content":" professions"}
+2025-12-07 07:50:17 [app] INFO: Tool Status: {"type":"content","content":".\n"}
+2025-12-07 07:50:17 [app] INFO: Tool Status: {"type":"content","content":"3"}
+2025-12-07 07:50:17 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:50:18 [app] INFO: Tool Status: {"type":"content","content":" Look"}
+2025-12-07 07:50:18 [app] INFO: Tool Status: {"type":"content","content":" for"}
+2025-12-07 07:50:18 [app] INFO: Tool Status: {"type":"content","content":" relevant"}
+2025-12-07 07:50:18 [app] INFO: Tool Status: {"type":"content","content":" case"}
+2025-12-07 07:50:18 [app] INFO: Tool Status: {"type":"content","content":" law"}
+2025-12-07 07:50:18 [app] INFO: Tool Status: {"type":"content","content":" that"}
+2025-12-07 07:50:18 [app] INFO: Tool Status: {"type":"content","content":" might"}
+2025-12-07 07:50:18 [app] INFO: Tool Status: {"type":"content","content":" have"}
+2025-12-07 07:50:18 [app] INFO: Tool Status: {"type":"content","content":" addressed"}
+2025-12-07 07:50:18 [app] INFO: Tool Status: {"type":"content","content":" this"}
+2025-12-07 07:50:18 [app] INFO: Tool Status: {"type":"content","content":" issue"}
+2025-12-07 07:50:18 [app] INFO: Tool Status: {"type":"content","content":".\n"}
+2025-12-07 07:50:18 [app] INFO: Tool Status: {"type":"content","content":"4"}
+2025-12-07 07:50:18 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:50:18 [app] INFO: Tool Status: {"type":"content","content":" Determine"}
+2025-12-07 07:50:19 [app] INFO: Tool Status: {"type":"content","content":" if"}
+2025-12-07 07:50:19 [app] INFO: Tool Status: {"type":"content","content":" there"}
+2025-12-07 07:50:19 [app] INFO: Tool Status: {"type":"content","content":" are"}
+2025-12-07 07:50:19 [app] INFO: Tool Status: {"type":"content","content":" any"}
+2025-12-07 07:50:19 [app] INFO: Tool Status: {"type":"content","content":" UK"}
+2025-12-07 07:50:19 [app] INFO: Tool Status: {"type":"content","content":"-wide"}
+2025-12-07 07:50:19 [app] INFO: Tool Status: {"type":"content","content":" regulations"}
+2025-12-07 07:50:19 [app] INFO: Tool Status: {"type":"content","content":" that"}
+2025-12-07 07:50:19 [app] INFO: Tool Status: {"type":"content","content":" affect"}
+2025-12-07 07:50:19 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:19 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:50:19 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:50:19 [app] INFO: Tool Status: {"type":"content","content":"'s"}
+2025-12-07 07:50:19 [app] INFO: Tool Status: {"type":"content","content":" ability"}
+2025-12-07 07:50:20 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:50:20 [app] INFO: Tool Status: {"type":"content","content":" legis"}
+2025-12-07 07:50:20 [app] INFO: Tool Status: {"type":"content","content":"late"}
+2025-12-07 07:50:20 [app] INFO: Tool Status: {"type":"content","content":" on"}
+2025-12-07 07:50:20 [app] INFO: Tool Status: {"type":"content","content":" this"}
+2025-12-07 07:50:20 [app] INFO: Tool Status: {"type":"content","content":" matter"}
+2025-12-07 07:50:20 [app] INFO: Tool Status: {"type":"content","content":".\n\n"}
+2025-12-07 07:50:20 [app] INFO: Tool Status: {"type":"content","content":"I"}
+2025-12-07 07:50:20 [app] INFO: Tool Status: {"type":"content","content":"'ll"}
+2025-12-07 07:50:20 [app] INFO: Tool Status: {"type":"content","content":" start"}
+2025-12-07 07:50:20 [app] INFO: Tool Status: {"type":"content","content":" by"}
+2025-12-07 07:50:20 [app] INFO: Tool Status: {"type":"content","content":" using"}
+2025-12-07 07:50:20 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:20 [app] INFO: Tool Status: {"type":"content","content":" search"}
+2025-12-07 07:50:21 [app] INFO: Tool Status: {"type":"content","content":"_leg"}
+2025-12-07 07:50:21 [app] INFO: Tool Status: {"type":"content","content":"islation"}
+2025-12-07 07:50:21 [app] INFO: Tool Status: {"type":"content","content":" function"}
+2025-12-07 07:50:21 [app] INFO: Tool Status: {"type":"content","content":" to"}
+2025-12-07 07:50:21 [app] INFO: Tool Status: {"type":"content","content":" find"}
+2025-12-07 07:50:21 [app] INFO: Tool Status: {"type":"content","content":" relevant"}
+2025-12-07 07:50:21 [app] INFO: Tool Status: {"type":"content","content":" acts"}
+2025-12-07 07:50:21 [app] INFO: Tool Status: {"type":"content","content":" and"}
+2025-12-07 07:50:21 [app] INFO: Tool Status: {"type":"content","content":" statutory"}
+2025-12-07 07:50:21 [app] INFO: Tool Status: {"type":"content","content":" instruments"}
+2025-12-07 07:50:21 [app] INFO: Tool Status: {"type":"content","content":" from"}
+2025-12-07 07:50:21 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:21 [app] INFO: Tool Status: {"type":"content","content":" Scottish"}
+2025-12-07 07:50:21 [app] INFO: Tool Status: {"type":"content","content":" Parliament"}
+2025-12-07 07:50:22 [app] INFO: Tool Status: {"type":"content","content":"."}
+2025-12-07 07:50:22 [app] INFO: Tool Status: {"type":"content","content":" Then"}
+2025-12-07 07:50:22 [app] INFO: Tool Status: {"type":"content","content":","}
+2025-12-07 07:50:22 [app] INFO: Tool Status: {"type":"content","content":" check"}
+2025-12-07 07:50:22 [app] INFO: Tool Status: {"type":"content","content":" the"}
+2025-12-07 07:50:22 [app] INFO: Tool Status: {"type":"content","content":" Scotland"}
+2025-12-07 07:50:22 [app] INFO: Tool Status: {"type":"content","content":" Act"}
+2025-12-07 07:50:22 [app] INFO: Tool Status: {"type":"content","content":" "}
+2025-12-07 07:50:22 [app] INFO: Tool Status: {"type":"content","content":"1"}
+2025-12-07 07:50:22 [app] INFO: Tool Status: {"type":"content","content":"9"}
+2025-12-07 07:50:22 [app] INFO: Tool Status: {"type":"content","content":"9"}
+2025-12-07 07:50:22 [app] INFO: Tool Status: {"type":"content","content":"8"}
+2025-12-07 07:50:22 [app] INFO: Tool Status: {"type":"content","content":" and"}
+2025-12-07 07:50:22 [app] INFO: Tool Status: {"type":"content","content":" any"}
+2025-12-07 07:50:23 [app] INFO: Tool Status: {"type":"content","content":" related"}
+2025-12-07 07:50:23 [app] INFO: Tool Status: {"type":"content","content":" case"}
+2025-12-07 07:50:23 [app] INFO: Tool Status: {"type":"content","content":" law"}
+2025-12-07 07:50:23 [app] INFO: Tool Status: {"type":"content","content":".\n"}
+2025-12-07 07:50:23 [app] INFO: Tool Status: {"type":"content","content":"</think>"}
+2025-12-07 07:50:23 [app] INFO: Tool Status: {"type":"content","content":"\n\n"}
+2025-12-07 07:50:37 [app] INFO: Tool Status: {"type":"tool_start","tool":"search_legislation"}
+2025-12-07 07:50:54 [app] INFO: Tool Status: {"type":"tool_end","tool":"search_legislation","result":"Done"}
+2025-12-07 07:50:54 [app] INFO: Tool Status: {"type":"tool_start","tool":"search_legislation"}
+2025-12-07 07:50:59 [app] INFO: Tool Status: {"type":"tool_end","tool":"search_legislation","result":"Done"}
+2025-12-07 07:50:59 [app] INFO: Tool Status: {"type":"tool_start","tool":"search_legislation"}
+2025-12-07 07:51:00 [app] INFO: Tool Status: {"type":"tool_end","tool":"search_legislation","result":"Done"}
+2025-12-07 07:51:00 [app] INFO: Tool Status: {"type":"tool_start","tool":"search_caselaw"}
+2025-12-07 07:51:10 [app] INFO: Tool Status: {"type":"tool_end","tool":"search_caselaw","result":"Done"}
+2025-12-07 07:53:15 [app] INFO: Client closed connection early (res.close)
+2025-12-07 07:53:15 [app] INFO: Client closed connection, aborted processing.
