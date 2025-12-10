@@ -8,7 +8,7 @@ start "LexChat Backend" cmd /k "cd server && npm start"
 timeout /t 3 /nobreak >nul
 
 :: Start Frontend in a new window
-start "LexChat Frontend" cmd /k "cd client && npm run dev"
+start "LexChat Frontend" cmd /k "cd client && npm run dev -- --host"
 
 echo.
 echo Application started!

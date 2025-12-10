@@ -9,6 +9,16 @@
             "date": 1765117391831,
             "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\app-2025-12-07.log",
             "hash": "bde8cfdc8b93391dde02eda88c774f642d74e6f3522c2a95360ae383e746372a"
+        },
+        {
+            "date": 1765226933005,
+            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\app-2025-12-08.log",
+            "hash": "99b4b0806b1f9561575df148effa0282b2ac99880afcd4dd2af268029fcd2a34"
+        },
+        {
+            "date": 1765387402817,
+            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\app-2025-12-10.log",
+            "hash": "36f0a4834b3d6793fe3ccf70146a6a8a5c29d23ee10c7cc23e7c18f0c8062364"
         }
     ],
     "hashType": "sha256"
