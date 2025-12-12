@@ -3,10 +3,11 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const { chatWithOllama, listModels } = require('./agent/ollama');
 const { logger, httpLogger } = require('./utils/logger');
-require('dotenv').config();
+const path = require('path');
+const config = require('./config');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = config.server.port;
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -20,6 +21,9 @@ app.use((req, res, next) => {
     });
     next();
 });
+
+// Serve static files from the React client build
+app.use(express.static(path.join(__dirname, '../../client/dist')));
 
 // Endpoint to list available models
 app.get('/api/models', async (req, res) => {
@@ -78,6 +82,11 @@ app.post('/api/chat', async (req, res) => {
         }
         res.end();
     }
+});
+
+// Catch-all handler to invoke the React app for any other request (SPA support)
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
 });
 
 app.listen(PORT, () => {

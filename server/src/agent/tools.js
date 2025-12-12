@@ -1,8 +1,8 @@
 const axios = require('axios');
 const { agentLogger } = require('../utils/logger');
-require('dotenv').config();
+const config = require('../config');
 
-const LEX_API_URL = process.env.LEX_API_URL || 'https://lex-api.victoriousdesert-f8e685e0.uksouth.azurecontainerapps.io';
+const LEX_API_URL = config.lexApi.url;
 
 const tools = [
   {

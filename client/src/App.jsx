@@ -13,7 +13,13 @@ function App() {
   const [agentStatus, setAgentStatus] = useState('');
   const [contextUsage, setContextUsage] = useState(null);
   const [showAbout, setShowAbout] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  // Initialize sidebar based on window width (if browser)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 768; // 768px is tailwind 'md' breakpoint
+    }
+    return false;
+  });
   const messagesEndRef = useRef(null);
 
   const abortControllerRef = useRef(null);
@@ -200,11 +206,24 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-[#b4b5b8]">
+    <div className="flex h-dvh bg-[#b4b5b8] overflow-hidden">
+      {/* Mobile Backdrop */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-20 md:hidden transition-opacity"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <div
-        className={`bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ${isSidebarOpen ? 'w-64 p-4' : 'w-0 overflow-hidden'
-          }`}
+        className={`bg-white border-r border-gray-200 flex flex-col transition-all duration-300 
+          fixed md:relative inset-y-0 left-0 z-30 h-full
+          ${isSidebarOpen
+            ? 'translate-x-0 w-64 p-4'
+            : '-translate-x-full md:translate-x-0 md:w-0 md:p-0 md:overflow-hidden w-64'
+          }
+        `}
       >
         <img src={logoSmall} alt="LexChat" className="mb-6 self-start" />
 
@@ -277,11 +296,11 @@ function App() {
         {/* Sidebar Toggle Button */}
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="absolute top-4 left-4 z-10 p-1 bg-gray-200 rounded-md hover:bg-gray-300 transition-all duration-300"
+          className="absolute top-4 left-4 z-10 p-2 bg-gray-200 rounded-md hover:bg-gray-300 transition-all duration-300 shadow-sm"
           title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
         >
           {isSidebarOpen ? (
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" />
             </svg>
           ) : (
@@ -303,9 +322,9 @@ function App() {
           ))}
           {loading && (
             <div className="flex justify-start mb-4">
-              <div className="bg-white p-3 rounded-lg shadow-md flex items-center gap-2">
-                <img src={loadingGif} alt="Processing..." className="w-6 h-6" />
-                <span className="text-xs text-gray-500">{agentStatus || 'Agent is thinking & researching...'}</span>
+              <div className="bg-white p-3 rounded-lg shadow-md flex items-center gap-2 max-w-[85%]">
+                <img src={loadingGif} alt="Processing..." className="w-6 h-6 flex-shrink-0" />
+                <span className="text-xs text-gray-500 truncate">{agentStatus || 'Agent is thinking...'}</span>
               </div>
             </div>
           )}
@@ -313,19 +332,25 @@ function App() {
         </div>
 
         {/* Input Area */}
-        <div className="p-4 bg-[#8c8e91] border-t border-gray-200">
-          <div className="max-w-4xl mx-auto flex space-x-4">
+        <div className="p-4 bg-[#8c8e91] border-t border-gray-200 z-40 relative">
+          <form
+            className="max-w-4xl mx-auto flex space-x-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!loading) handleSend();
+            }}
+          >
             <input
               type="text"
               className="flex-1 p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-legal-blue"
               placeholder="Ask about UK legislation or case law..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !loading && handleSend()}
               disabled={loading}
             />
             {loading ? (
               <button
+                type="button"
                 onClick={handleStop}
                 className="bg-red-500 text-white px-6 py-3 rounded-lg hover:bg-red-600 transition-colors flex items-center gap-2"
               >
@@ -336,14 +361,14 @@ function App() {
               </button>
             ) : (
               <button
-                onClick={() => handleSend()}
+                type="submit"
                 disabled={!input.trim()}
                 className="bg-legal-blue text-white px-6 py-3 rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-colors"
               >
                 Send
               </button>
             )}
-          </div>
+          </form>
         </div>
       </div>
       {/* About Modal */}

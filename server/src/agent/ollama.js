@@ -1,10 +1,10 @@
 const axios = require('axios');
 const { tools, executeTool } = require('./tools');
 const { agentLogger } = require('../utils/logger');
-require('dotenv').config();
+const config = require('../config');
 
-const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-const OLLAMA_API_KEY = process.env.OLLAMA_API_KEY;
+const OLLAMA_BASE_URL = config.ollama.baseUrl;
+const OLLAMA_API_KEY = config.ollama.apiKey;
 
 const getHeaders = () => {
     const headers = {};
@@ -23,10 +23,7 @@ async function chatWithOllama(messages, model, onChunk, signal, num_ctx) {
         // 0. Prepend System Prompt if not present
         const systemMessage = {
             role: 'system',
-            content: `You are a helpful legal research assistant for UK law.
-When you cite legislation or case law, you MUST provide the source URL if available.
-- For Legislation: The tools return a 'uri' field (e.g., http://www.legislation.gov.uk/id/...). Use this to create a Markdown link: [Title](uri).
-- For Case Law: If a URL is provided, use it. If not, cite the case name and citation clearly.`
+            content: config.ollama.systemMessage
         };
 
         // Only add system message if the first message isn't already a system message
@@ -35,13 +32,16 @@ When you cite legislation or case law, you MUST provide the source URL if availa
             : [systemMessage, ...messages];
 
         // 1. Initial Call to Ollama
+        const configuredModel = config.models.find(m => m.name === model);
+        const defaultModelContext = configuredModel ? (configuredModel.contextLengthKB * 1024) : config.ollama.defaultContext;
+
         const payload = {
             model: model,
             messages: finalMessages,
             tools: tools,
             stream: true,
             options: {
-                num_ctx: num_ctx || 131072
+                num_ctx: num_ctx || defaultModelContext
             }
         };
 
@@ -152,52 +152,10 @@ When you cite legislation or case law, you MUST provide the source URL if availa
 }
 
 async function listModels() {
-    try {
-        const response = await axios.get(`${OLLAMA_BASE_URL}/api/tags`, {
-            headers: getHeaders()
-        });
-
-        const models = response.data.models;
-
-        // Enhance with details
-        const detailedModels = await Promise.all(models.map(async (model) => {
-            try {
-                const details = await axios.post(`${OLLAMA_BASE_URL}/api/show`, {
-                    name: model.name
-                }, { headers: getHeaders() });
-
-                let contextLength = null;
-
-                // 1. Try to find context length in model_info (e.g. "llama.context_length", "gemma.context_length")
-                if (details.data.model_info) {
-                    for (const key in details.data.model_info) {
-                        if (key.endsWith('.context_length')) {
-                            contextLength = details.data.model_info[key];
-                            break;
-                        }
-                    }
-                }
-
-                // 2. If not found, try to parse from parameters (e.g. "num_ctx 4096")
-                if (!contextLength && details.data.parameters) {
-                    const match = details.data.parameters.match(/num_ctx\s+(\d+)/);
-                    if (match) {
-                        contextLength = parseInt(match[1]);
-                    }
-                }
-
-                return { ...model, context_length: contextLength };
-            } catch (e) {
-                // If detail fetch fails, just return original model
-                return model;
-            }
-        }));
-
-        return detailedModels;
-    } catch (error) {
-        agentLogger.error(`Failed to list models: ${error.message}`);
-        return [];
-    }
+    return config.models.map(model => ({
+        name: model.name,
+        context_length: model.contextLengthKB * 1024
+    }));
 }
 
 module.exports = { chatWithOllama, listModels };

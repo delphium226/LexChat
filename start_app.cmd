@@ -1,20 +1,27 @@
 @echo off
-echo Starting LexChat UK...
+echo Starting LexChat UK (Production Mode)...
 
-:: Start Backend in a new window
-start "LexChat Backend" cmd /k "cd server && npm start"
+:: Build Frontend
+echo Building Frontend...
+cd client
+call npm run build
+if %errorlevel% neq 0 (
+    echo Frontend build failed!
+    pause
+    exit /b %errorlevel%
+)
+cd ..
 
-:: Wait a moment for backend to initialize
-timeout /t 3 /nobreak >nul
+:: Start Backend
+echo Starting Server...
+start "LexChat Server" cmd /k "cd server && npm start"
 
-:: Start Frontend in a new window
-start "LexChat Frontend" cmd /k "cd client && npm run dev -- --host"
+:: Wait for init
+timeout /t 5 /nobreak >nul
 
+:: Open browser
+echo Application started at http://localhost:3000
+echo (Access via port 80 on mobile if firewall forwarding is configured)
 echo.
-echo Application started!
-echo Backend: http://localhost:3000
-echo Frontend: http://localhost:5173
-echo.
-echo Opening browser...
-timeout /t 2 /nobreak >nul
-start http://localhost:5173
+echo Opening local browser...
+start http://localhost:3000
