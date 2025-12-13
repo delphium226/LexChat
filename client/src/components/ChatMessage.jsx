@@ -1,19 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { marked } from 'marked';
 
-const ChatMessage = ({ message, onResend }) => {
+const ChatMessage = ({ message, onResend, showThinking }) => {
     const isUser = message.role === 'user';
     const isTool = message.role === 'tool';
     const [copied, setCopied] = useState(false);
 
+    const processedContent = useMemo(() => {
+        let content = message.content;
+        if (!content) return '';
+
+        // Regex for complete thinking blocks
+        const thinkBlockRegex = /<(think|thinking)>([\s\S]*?)<\/\1>/gi;
+
+        // Regex for unclosed thinking block (usually at the start or during streaming)
+        const unclosedThinkRegex = /<(think|thinking)>([\s\S]*)$/i;
+
+        if (showThinking) {
+            // Replace complete blocks with * content * (italics)
+            content = content.replace(thinkBlockRegex, (match, tag, innerContent) => `\n*${innerContent.trim()}*\n`);
+
+            // Replace unclosed block
+            content = content.replace(unclosedThinkRegex, (match, tag, innerContent) => `\n*${innerContent.trim()}*`);
+
+            return content;
+        } else {
+            // Remove complete blocks
+            content = content.replace(thinkBlockRegex, '');
+
+            // Remove unclosed block
+            content = content.replace(unclosedThinkRegex, '');
+
+            return content.trim();
+        }
+    }, [message.content, showThinking]);
+
     const handleCopy = async () => {
         try {
-            const htmlContent = await marked(message.content);
+            const htmlContent = await marked(processedContent);
             const blobHtml = new Blob([htmlContent], { type: 'text/html' });
-            const blobText = new Blob([message.content], { type: 'text/plain' });
+            const blobText = new Blob([processedContent], { type: 'text/plain' });
 
             const data = [new ClipboardItem({
                 ['text/html']: blobHtml,
@@ -26,7 +55,7 @@ const ChatMessage = ({ message, onResend }) => {
         } catch (err) {
             console.error('Failed to copy: ', err);
             // Fallback to simple text copy if rich copy fails
-            navigator.clipboard.writeText(message.content);
+            navigator.clipboard.writeText(processedContent);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }
@@ -58,7 +87,7 @@ const ChatMessage = ({ message, onResend }) => {
                             a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" />
                         }}
                     >
-                        {message.content}
+                        {processedContent}
                     </ReactMarkdown>
                 </div>
                 {message.tool_calls && (

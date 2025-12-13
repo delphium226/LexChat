@@ -24,6 +24,11 @@
             "date": 1765534254098,
             "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\http-2025-12-12.log",
             "hash": "8aeeef4e47e7c617535ff163b56e2fa3f19cffa6df3053cb674a0c652f723d90"
+        },
+        {
+            "date": 1765651764133,
+            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\http-2025-12-13.log",
+            "hash": "3b3120639e74e81b7aec2f244b35afa4de9b8da0c598328377de1ff8e292577e"
         }
     ],
     "hashType": "sha256"

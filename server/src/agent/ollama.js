@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { tools, executeTool } = require('./tools');
+const { managerTools, workerTools, executeWorkerTool } = require('./tools');
 const { agentLogger } = require('../utils/logger');
 const config = require('../config');
 
@@ -14,36 +14,85 @@ const getHeaders = () => {
     return headers;
 };
 
-async function chatWithOllama(messages, model, onChunk, signal, num_ctx) {
-    try {
-        if (signal && signal.aborted) {
-            throw new Error('Aborted');
+// ----------------------------------------------------------------------
+// WORKER LOOP (Research Agent)
+// ----------------------------------------------------------------------
+
+async function runWorkerAgent(query, model, signal, num_ctx, parentOnChunk) {
+    agentLogger.info(`[Worker] Starting research on: ${query}`);
+
+    // Worker starts with a fresh context
+    const messages = [
+        { role: 'system', content: config.ollama.systemMessage.worker },
+        { role: 'user', content: query }
+    ];
+
+    // Pass null for onChunk to suppress worker token streaming
+    return chatLoop(messages, model, signal, num_ctx, workerTools, async (toolName, toolArgs) => {
+        // executeWorkerTool wrapper
+        if (parentOnChunk) parentOnChunk({ type: 'tool_start', tool: `Worker: ${toolName}` });
+        const result = await executeWorkerTool(toolName, toolArgs);
+        if (parentOnChunk) parentOnChunk({ type: 'tool_end', tool: `Worker: ${toolName}`, result: 'Done' });
+        return result;
+    }, null);
+}
+
+
+// ----------------------------------------------------------------------
+// MANAGER LOOP (Chat Interface)
+// ----------------------------------------------------------------------
+
+async function processUserRequest(messages, model, onChunk, signal, num_ctx) {
+    // Ensure system prompt is set for Manager
+    const systemMessage = {
+        role: 'system',
+        content: config.ollama.systemMessage.manager
+    };
+
+    let finalMessages = [...messages];
+    if (finalMessages.length === 0 || finalMessages[0].role !== 'system') {
+        finalMessages = [systemMessage, ...finalMessages];
+    }
+
+    // Pass onChunk to allow Manager to stream tokens
+    return chatLoop(finalMessages, model, signal, num_ctx, managerTools, async (toolName, toolArgs) => {
+        // Manager Tools Execution
+        if (toolName === 'delegate_research') {
+            if (onChunk) onChunk({ type: 'tool_start', tool: 'Research Agent' });
+
+            // Call the Worker!
+            const researchResult = await runWorkerAgent(toolArgs.query, model, signal, num_ctx, onChunk);
+
+            if (onChunk) onChunk({ type: 'tool_end', tool: 'Research Agent', result: 'Research Complete' });
+
+            return `[Research Agent Result]\n${researchResult.content}`;
         }
+        return `Error: Unknown manager tool ${toolName}`;
+    }, onChunk);
+}
 
-        // 0. Prepend System Prompt if not present
-        const systemMessage = {
-            role: 'system',
-            content: config.ollama.systemMessage
-        };
 
-        // Only add system message if the first message isn't already a system message
-        const finalMessages = messages.length > 0 && messages[0].role === 'system'
-            ? messages
-            : [systemMessage, ...messages];
+// ----------------------------------------------------------------------
+// GENERIC CHAT LOOP (Used by both Manager and Worker)
+// ----------------------------------------------------------------------
 
-        // 1. Initial Call to Ollama
+async function chatLoop(messages, model, signal, num_ctx, tools, toolExecutor, onChunk) {
+    try {
+        if (signal && signal.aborted) throw new Error('Aborted');
+
+        // Prepare Payload
         const configuredModel = config.models.find(m => m.name === model);
         const defaultModelContext = configuredModel ? (configuredModel.contextLengthKB * 1024) : config.ollama.defaultContext;
 
         const payload = {
             model: model,
-            messages: finalMessages,
+            messages: messages,
             tools: tools,
             stream: true,
-            options: {
-                num_ctx: num_ctx || defaultModelContext
-            }
+            options: { num_ctx: num_ctx || defaultModelContext }
         };
+
+        agentLogger.info(`[ChatLoop] Sending request to Ollama (Tools: ${tools.length})...`);
 
         const response = await axios.post(`${OLLAMA_BASE_URL}/api/chat`, payload, {
             responseType: 'stream',
@@ -57,7 +106,7 @@ async function chatWithOllama(messages, model, onChunk, signal, num_ctx) {
 
         for await (const chunk of response.data) {
             if (signal && signal.aborted) {
-                response.data.destroy(); // Stop reading stream
+                response.data.destroy();
                 throw new Error('Aborted');
             }
 
@@ -80,74 +129,48 @@ async function chatWithOllama(messages, model, onChunk, signal, num_ctx) {
                         fullContent += content;
 
                         if (content && onChunk) {
-                            onChunk({ type: 'content', content: content });
+                            onChunk({ type: 'token', content: content });
                         }
 
                         if (json.message.tool_calls) {
-                            json.message.tool_calls.forEach(tc => {
-                                toolCalls.push(tc);
-                            });
+                            json.message.tool_calls.forEach(tc => toolCalls.push(tc));
                         }
                     }
-                } catch (e) {
-                    // ignore
-                }
+                } catch (e) { /* ignore */ }
             }
         }
 
-        const message = {
-            role: 'assistant',
-            content: fullContent,
-        };
-
-        if (stats) {
-            message.stats = stats;
-        }
-
-        if (toolCalls.length > 0) {
-            message.tool_calls = toolCalls;
-        }
+        const message = { role: 'assistant', content: fullContent };
+        if (stats) message.stats = stats;
+        if (toolCalls.length > 0) message.tool_calls = toolCalls;
 
         if (message.tool_calls && message.tool_calls.length > 0) {
-            agentLogger.info(`Tool calls requested: ${message.tool_calls.length}`);
+            agentLogger.info(`Tool calls: ${message.tool_calls.length}`);
+            const nextMessages = [...messages, message];
 
-            const nextMessages = [...finalMessages, message];
-
-            // Execute each tool
             for (const toolCall of message.tool_calls) {
                 if (signal && signal.aborted) throw new Error('Aborted');
-
                 const functionName = toolCall.function.name;
                 const args = toolCall.function.arguments;
 
-                if (onChunk) onChunk({ type: 'tool_start', tool: functionName });
+                // Execute via the provided executor (Manager or Worker logic)
+                const toolResult = await toolExecutor(functionName, args);
 
-                const toolResult = await executeTool(functionName, args);
-
-                // Add result to history
                 nextMessages.push({
                     role: 'tool',
                     content: toolResult,
                     name: functionName,
                 });
-
-                if (onChunk) onChunk({ type: 'tool_end', tool: functionName, result: 'Done' });
             }
-
-            // 3. Follow-up Call to Ollama (Recursion)
-            return chatWithOllama(nextMessages, model, onChunk, signal, num_ctx);
+            // Recursion
+            return chatLoop(nextMessages, model, signal, num_ctx, tools, toolExecutor, onChunk);
         }
 
-        // No tool calls, just return the text response
         return message;
 
-    } catch (error) {
-        if (error.message === 'Aborted' || axios.isCancel(error)) {
-            agentLogger.info('Ollama request aborted');
-            throw error;
-        }
-        agentLogger.error(`Ollama Error: ${error.message}`);
-        throw error;
+    } catch (e) {
+        agentLogger.error(`ChatLoop Error Stack: ${e.stack}`);
+        throw e;
     }
 }
 
@@ -158,4 +181,7 @@ async function listModels() {
     }));
 }
 
-module.exports = { chatWithOllama, listModels };
+module.exports = {
+    chatWithOllama: processUserRequest,
+    listModels
+};

@@ -13,11 +13,10 @@ The application follows a modern client-server architecture designed to keep sen
 
 ### Backend (Server)
 - **Runtime**: Node.js with Express
-- **Role**: Acts as the orchestrator between the user, the LLM (Ollama), and external data sources.
+- **Role**: Orchestrates the **Manager-Worker** agent architecture.
 - **Agentic Logic**:
-  - Receives user messages.
-  - Forwards them to the local **Ollama** instance.
-  - If the LLM requests it, the server executes "tools" to fetch real-world legal data.
+  - **Manager Context**: Maintains the main conversation. Delegates complex queries to a specialized agent.
+  - **Worker Context**: An ephemeral agent that performs deep research (searching/reading legislation) in a temporary context, returning only summarized answers to the Manager. This prevents context window overflow.
 
 ### Integrations
 - **Ollama (Local)**: Runs the Local Large Language Model (LLM) that powers the reasoning and conversation. All prompt processing happens here.
@@ -55,3 +54,4 @@ Open your browser to the URL shown (usually `http://localhost:5173`).
 - **Case Law Search**: Finds relevant court judgments.
 - **Full Text**: Retrieves full text of legislation for the AI to analyze.
 - **Privacy**: All AI processing happens on your local/network Ollama instance.
+- **Dual-Context Architecture**: Uses a Manager-Worker split to handle large legal documents without confusing the main chat.

@@ -4,7 +4,29 @@ const config = require('../config');
 
 const LEX_API_URL = config.lexApi.url;
 
-const tools = [
+// Tools available to the Manager (Chat) Context
+const managerTools = [
+  {
+    type: 'function',
+    function: {
+      name: 'delegate_research',
+      description: 'Delegates a complex legal research task to a specialized agent. Use this for any question about UK legislation, case law, or legal concepts.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'The detailed research question to ask the specialized agent.',
+          },
+        },
+        required: ['query'],
+      },
+    },
+  }
+];
+
+// Tools available to the Worker (Agent) Context
+const workerTools = [
   {
     type: 'function',
     function: {
@@ -74,8 +96,10 @@ const tools = [
   },
 ];
 
-async function executeTool(name, args) {
-  agentLogger.info(`[Tool Exec] ${name} with args: ${JSON.stringify(args)}`);
+// This function only executes "Leaf" tools (Worker tools)
+// The Manager's 'delegate_research' meta-tool is handled by the Agent Controller (ollama.js)
+async function executeWorkerTool(name, args) {
+  agentLogger.info(`[Worker Tool Exec] ${name} with args: ${JSON.stringify(args)}`);
   try {
     switch (name) {
       case 'search_legislation':
@@ -83,8 +107,8 @@ async function executeTool(name, args) {
           query: args.query,
           year_from: args.year_from,
           year_to: args.year_to,
-          limit: 5, // Limit to avoid context overflow
-          include_text: false // Metadata only for search to save tokens
+          limit: 5,
+          include_text: false
         });
         return JSON.stringify(legRes.data);
 
@@ -92,8 +116,6 @@ async function executeTool(name, args) {
         const textRes = await axios.post(`${LEX_API_URL}/legislation/text`, {
           legislation_id: args.legislation_id,
         });
-        // Truncate if too long? For now let's hope it fits or the model handles it.
-        // The API returns { legislation: {...}, full_text: "..." }
         return JSON.stringify(textRes.data);
 
       case 'search_caselaw':
@@ -106,7 +128,7 @@ async function executeTool(name, args) {
         return JSON.stringify(caseRes.data);
 
       default:
-        return `Error: Tool ${name} not found.`;
+        return `Error: Tool ${name} not found in worker toolset.`;
     }
   } catch (error) {
     agentLogger.error(`[Tool Error] ${name}: ${error.message}`);
@@ -118,4 +140,4 @@ async function executeTool(name, args) {
   }
 }
 
-module.exports = { tools, executeTool };
+module.exports = { managerTools, workerTools, executeWorkerTool };

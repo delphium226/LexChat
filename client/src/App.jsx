@@ -13,6 +13,7 @@ function App() {
   const [agentStatus, setAgentStatus] = useState('');
   const [contextUsage, setContextUsage] = useState(null);
   const [showAbout, setShowAbout] = useState(false);
+  const [showThinking, setShowThinking] = useState(false);
   // Initialize sidebar based on window width (if browser)
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -92,11 +93,15 @@ function App() {
       const response = await sendMessage(messagesToSend, selectedModel, contextLength, (status) => {
         if (status.type === 'tool_start') {
           const toolMessages = {
-            'search_legislation': 'Searching UK legislation...',
-            'get_legislation_text': 'Reading legislation text...',
-            'search_caselaw': 'Searching case law...'
+            'Research Agent': 'Delegating to research agent...',
+            'Worker: search_legislation': 'Querying National Legislation Archives...',
+            'Worker: get_legislation_text': 'Reviewing statutory text in detail...',
+            'Worker: search_caselaw': 'Analyzing Case Law precedents...',
+            'search_legislation': 'Querying National Legislation Archives...',
+            'get_legislation_text': 'Reviewing statutory text in detail...',
+            'search_caselaw': 'Analyzing Case Law precedents...'
           };
-          setAgentStatus(toolMessages[status.tool] || `Consulting external tool (${status.tool})...`);
+          setAgentStatus(toolMessages[status.tool] || `Conducting research (${status.tool})...`);
         } else if (status.type === 'tool_end') {
           setAgentStatus('Analyzing findings...');
         } else if (status.type === 'token') {
@@ -279,6 +284,8 @@ function App() {
           </div>
         )}
 
+
+
         {/* About Link */}
         <div className="mt-auto">
           <button
@@ -318,13 +325,13 @@ function App() {
           )}
           {messages.map((msg, idx) => (
             // Filter out tool messages from main view if desired, or let ChatMessage handle them
-            (msg.role !== 'tool') && <ChatMessage key={idx} message={msg} onResend={() => handleSend(msg.content)} />
+            (msg.role !== 'tool') && <ChatMessage key={idx} message={msg} onResend={() => handleSend(msg.content)} showThinking={showThinking} />
           ))}
           {loading && (
             <div className="flex justify-start mb-4">
-              <div className="bg-white p-3 rounded-lg shadow-md flex items-center gap-2 max-w-[85%]">
+              <div className="bg-black border border-legal-blue p-3 rounded-lg shadow-md flex items-center gap-2 max-w-[85%]">
                 <img src={loadingGif} alt="Processing..." className="w-6 h-6 flex-shrink-0" />
-                <span className="text-xs text-gray-500 truncate">{agentStatus || 'Agent is thinking...'}</span>
+                <span className="text-xs text-white truncate">{agentStatus || 'Agent is thinking...'}</span>
               </div>
             </div>
           )}
