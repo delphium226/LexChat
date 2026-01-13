@@ -14,6 +14,7 @@ function App() {
   const [contextUsage, setContextUsage] = useState(null);
   const [showAbout, setShowAbout] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
+  const [deepResearchEnabled, setDeepResearchEnabled] = useState(false);
   // Initialize sidebar based on window width (if browser)
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -123,7 +124,7 @@ function App() {
             }
           });
         }
-      }, controller.signal);
+      }, controller.signal, deepResearchEnabled);
 
       // Final update to ensure consistency
       if (response.stats) {
@@ -161,10 +162,35 @@ function App() {
         // setMessages(prev => [...prev, { role: 'assistant', content: "🛑 [Stopped]" }]);
       } else {
         console.error("Error sending message:", error);
+
+        const getUserFriendlyError = (err) => {
+          const match = err.message.match(/status code (\d{3})/);
+          if (match) {
+            const code = parseInt(match[1]);
+            const statusText = {
+              400: 'Bad Request',
+              401: 'Unauthorized',
+              403: 'Forbidden',
+              404: 'Not Found',
+              408: 'Request Timeout',
+              429: 'Too Many Requests',
+              500: 'Internal Server Error',
+              502: 'Bad Gateway',
+              503: 'Service Unavailable',
+              504: 'Gateway Timeout'
+            }[code] || 'Unknown Error';
+
+            return `Error: ${statusText} (${code})`;
+          }
+          return `Error: ${err.message}`;
+        };
+
+        const formattedErrorMsg = getUserFriendlyError(error);
+
         setMessages(prev => {
           const updated = [...prev];
           const lastMsg = updated[updated.length - 1];
-          const errorMsg = { role: 'assistant', content: "Error: Could not connect to the agent." };
+          const errorMsg = { role: 'assistant', content: formattedErrorMsg };
 
           if (lastMsg.role === 'assistant') {
             updated[updated.length - 1] = errorMsg;
@@ -251,6 +277,26 @@ function App() {
               <option key={m.name} value={m.name}>{m.name}</option>
             ))}
           </select>
+        </div>
+
+        {/* Deep Research Toggle */}
+        <div className="mb-6">
+          <label className="flex items-center cursor-pointer">
+            <div className="relative">
+              <input
+                type="checkbox"
+                className="sr-only"
+                checked={deepResearchEnabled}
+                onChange={() => setDeepResearchEnabled(!deepResearchEnabled)}
+                disabled={messages.length > 0}
+              />
+              <div className={`block w-10 h-6 rounded-full transition-colors ${deepResearchEnabled ? 'bg-legal-blue' : 'bg-gray-300'}`}></div>
+              <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${deepResearchEnabled ? 'transform translate-x-4' : ''}`}></div>
+            </div>
+            <div className="ml-3 text-sm font-medium text-gray-700">
+              Deep Research
+            </div>
+          </label>
         </div>
 
         {/* Context Usage Graph */}

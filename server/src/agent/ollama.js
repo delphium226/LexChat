@@ -183,5 +183,6 @@ async function listModels() {
 
 module.exports = {
     chatWithOllama: processUserRequest,
-    listModels
+    listModels,
+    chatLoop
 };

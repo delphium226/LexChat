@@ -6,29 +6,24 @@
     "auditLog": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\.84e6895063d2d51db1c57b93323e3553610c894e-audit.json",
     "files": [
         {
-            "date": 1765117391833,
-            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\error-2025-12-07.log",
-            "hash": "0a0ecebcf6e12d2634edf3bb8a21ccd4cd3287a6e9eecd69335523eec4e70d50"
+            "date": 1766074381071,
+            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\error-2025-12-18.log",
+            "hash": "121a47f06ed323fcfe8cd6e5c6f67bab44122d4cc6ebccc209ed34aea4b7c09c"
         },
         {
-            "date": 1765226933007,
-            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\error-2025-12-08.log",
-            "hash": "4c70fd1034a7b528bbe07068f95a4cd3d75df4e314eb927f00923165bc47eef5"
+            "date": 1767525924291,
+            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\error-2026-01-04.log",
+            "hash": "a445d74aff0ff0c21e807e1339a71ce399037a919287be2556b6b20716409816"
         },
         {
-            "date": 1765387402819,
-            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\error-2025-12-10.log",
-            "hash": "d0ac99499a40819e1289a3e611b53f39a4a6866acc091ac8ffa9935e0479ef7d"
+            "date": 1767611619846,
+            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\error-2026-01-05.log",
+            "hash": "16274735b6dd8866b5d09cfd91d72f76675aada0ec181ea05077e518f9eb111d"
         },
         {
-            "date": 1765538011679,
-            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\error-2025-12-12.log",
-            "hash": "18c3cb94a527de965d723d8b58902ceb31839bf7fbbe0b27f714f39947f2279c"
-        },
-        {
-            "date": 1765651764131,
-            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\error-2025-12-13.log",
-            "hash": "fa20410926391f8696d50688415ef9ec0366524fb72297d6d2143211dbac23cc"
+            "date": 1768223364900,
+            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\error-2026-01-12.log",
+            "hash": "ccea5d82cc164a70e40af193766ef97dde499831bf97aa36d626ad9255f483b8"
         }
     ],
     "hashType": "sha256"

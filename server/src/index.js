@@ -55,15 +55,31 @@ app.post('/api/chat', async (req, res) => {
     });
 
     try {
-        const responseMessage = await chatWithOllama([...messages], model, (status) => {
-            if (status.type !== 'token') {
-                logger.info(`Tool Status: ${JSON.stringify(status)}`);
-            }
-            // Stream status updates to client
-            if (!controller.signal.aborted) {
-                res.write(`data: ${JSON.stringify(status)}\n\n`);
-            }
-        }, controller.signal, num_ctx);
+        const { deep_research } = req.body;
+
+        let responseMessage;
+        if (deep_research) {
+            const { chatWithDeepResearch } = require('./agent/deepResearch');
+            responseMessage = await chatWithDeepResearch([...messages], model, (status) => {
+                if (status.type !== 'token') {
+                    logger.info(`Tool Status: ${JSON.stringify(status)}`);
+                }
+                // Stream status updates to client
+                if (!controller.signal.aborted) {
+                    res.write(`data: ${JSON.stringify(status)}\n\n`);
+                }
+            }, controller.signal, num_ctx);
+        } else {
+            responseMessage = await chatWithOllama([...messages], model, (status) => {
+                if (status.type !== 'token') {
+                    logger.info(`Tool Status: ${JSON.stringify(status)}`);
+                }
+                // Stream status updates to client
+                if (!controller.signal.aborted) {
+                    res.write(`data: ${JSON.stringify(status)}\n\n`);
+                }
+            }, controller.signal, num_ctx);
+        }
 
         // Send final result
         if (!controller.signal.aborted) {
@@ -75,9 +91,16 @@ app.post('/api/chat', async (req, res) => {
             logger.info('Client closed connection, aborted processing.');
         } else {
             logger.error(`Chat Error: ${error.message}`);
+
+            let userMessage = error.message;
+            // Check for connection refused (Ollama down) or other common connection issues
+            if (error.code === 'ECONNREFUSED' || (error.cause && error.cause.code === 'ECONNREFUSED') || error.message.includes('ECONNREFUSED')) {
+                userMessage = "Agent Service (Ollama) is not reachable. Please ensure it is running on your machine.";
+            }
+
             // Send error event if channel is still open
             if (!res.writableEnded && !res.finished) {
-                res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+                res.write(`data: ${JSON.stringify({ type: 'error', error: userMessage })}\n\n`);
             }
         }
         res.end();
