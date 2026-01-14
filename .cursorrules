@@ -1,0 +1,7 @@
+# You can add custom instructions for Antigravity here.
+# These rules will be included in the system prompt for every request in this workspace.
+
+# Example:
+# - Always use TypeScript instead of JavaScript.
+# - Prefer functional programming patterns.
+# - When writing tests, use Jest.
