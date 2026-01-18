@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getModels, sendMessage } from './services/api';
+import { getModels, sendMessage, createChat, getChatMessages, saveMessage, updatePreferences } from './services/api';
 import ChatMessage from './components/ChatMessage';
 import loadingGif from './assets/load-35_128.gif';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginModal from './components/LoginModal';
 import AdminPortal from './pages/AdminPortal';
 import Settings from './pages/Settings';
+import HistoryModal from './components/HistoryModal';
 
 function AppContent() {
   const { user, logout } = useAuth();
@@ -18,7 +19,6 @@ function AppContent() {
   const [contextUsage, setContextUsage] = useState(null);
   const [showAbout, setShowAbout] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
-  const [deepResearchEnabled, setDeepResearchEnabled] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window !== 'undefined') {
       return window.innerWidth >= 768; // 768px is tailwind 'md' breakpoint
@@ -27,22 +27,34 @@ function AppContent() {
   });
 
   const [currentView, setCurrentView] = useState('chat'); // 'chat', 'admin', 'settings'
+  const [currentChatId, setCurrentChatId] = useState(null);
 
   // Modals State
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   // Dark Mode State
   const [darkMode, setDarkMode] = useState(() => {
+    // If user is loaded, use their preference, otherwise localstorage, otherwise system/false
+    if (user && user.dark_mode !== undefined) {
+      return user.dark_mode;
+    }
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('darkMode');
       if (saved !== null) {
         return saved === 'true';
       }
-      return false; // Default to light mode
     }
     return false;
   });
+
+  // Sync dark mode when user logs in
+  useEffect(() => {
+    if (user && user.dark_mode !== undefined) {
+      setDarkMode(user.dark_mode);
+    }
+  }, [user]);
 
   const [showSettings, setShowSettings] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
@@ -92,6 +104,22 @@ function AppContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, agentStatus]); // Scroll on status update too
 
+  // Reset state when user logs out or changes
+  useEffect(() => {
+    if (!user) {
+      setMessages([]);
+      setInput('');
+      setCurrentChatId(null);
+      setContextUsage(null);
+      setAgentStatus('');
+      setLoading(false);
+      setShowSettingsMenu(false);
+      setShowHistoryModal(false);
+      setShowAdminModal(false);
+      setShowSettingsModal(false);
+    }
+  }, [user]);
+
   const handleStop = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -130,7 +158,32 @@ function AppContent() {
     setLoading(true);
     setAgentStatus('Thinking...');
 
+    let activeChatId = currentChatId;
+
     try {
+      // 1. Create chat if doesn't exist
+      if (!activeChatId) {
+        try {
+          const title = contentToSend.slice(0, 30) + (contentToSend.length > 30 ? '...' : '');
+          const newChat = await createChat(title, selectedModel);
+          activeChatId = newChat.id;
+          setCurrentChatId(activeChatId);
+        } catch (err) {
+          console.error('Failed to create chat:', err);
+          // Proceed without history if DB fails? 
+          // Ideally we should alert but for now let's just log.
+        }
+      }
+
+      // 2. Persist User Message
+      if (activeChatId) {
+        try {
+          await saveMessage(activeChatId, 'user', contentToSend);
+        } catch (err) {
+          console.error('Failed to save user message:', err);
+        }
+      }
+
       // Send the message history including the new user message
       // Note: `messages` here refers to the state *before* the current userMsg was added to the UI.
       // The `userMsg` is explicitly added to `messagesToSend`.
@@ -172,7 +225,7 @@ function AppContent() {
             }
           });
         }
-      }, controller.signal, deepResearchEnabled);
+      }, controller.signal);
 
       // Final update to ensure consistency
       if (response.stats) {
@@ -202,6 +255,28 @@ function AppContent() {
           return [...updated, response];
         }
       });
+
+      // 3. Persist Assistant Message
+      if (activeChatId) {
+        try {
+          const savedMsg = await saveMessage(activeChatId, 'assistant', response.content);
+          // Update state with the saved message (which has ID) to enable ratings
+          setMessages(prev => {
+            const updated = [...prev];
+            // Find the last assistant message and replace it
+            for (let i = updated.length - 1; i >= 0; i--) {
+              if (updated[i].role === 'assistant' && !updated[i].id) {
+                updated[i] = savedMsg;
+                break;
+              }
+            }
+            return updated;
+          });
+
+        } catch (err) {
+          console.error('Failed to save assistant message:', err);
+        }
+      }
 
     } catch (error) {
       if (error.name === 'AbortError' || error.message.includes('aborted') || error.message.includes('canceled')) {
@@ -265,6 +340,28 @@ function AppContent() {
     setMessages([]);
     setInput('');
     setContextUsage(null);
+    setCurrentChatId(null);
+  };
+
+  const loadChat = async (chatId, model) => {
+    try {
+      setLoading(true);
+      const msgs = await getChatMessages(chatId);
+      // Convert DB messages to UI format if needed (DB: role, content. UI: same)
+      // DB messages might have extra fields like created_at, id.
+      // The UI expects { role, content, ... }
+      setMessages(msgs);
+      setCurrentChatId(chatId);
+      if (model) {
+        setSelectedModel(model);
+      }
+      setShowHistoryModal(false);
+      setContextUsage(null); // Reset usage context as we don't store it yet
+    } catch (error) {
+      console.error("Failed to load chat", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Helper to calculate usage percentage
@@ -320,6 +417,13 @@ function AppContent() {
           New chat
         </button>
 
+        <button
+          onClick={() => setShowHistoryModal(true)}
+          className="w-full text-center p-2 rounded-md mb-6 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors font-medium text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600"
+        >
+          History
+        </button>
+
 
 
 
@@ -337,32 +441,14 @@ function AppContent() {
           </select>
         </div>
 
-        {/* Deep Research Toggle */}
-        <div className="mb-6">
-          <label className="flex items-center cursor-pointer">
-            <div className="relative">
-              <input
-                type="checkbox"
-                className="sr-only"
-                checked={deepResearchEnabled}
-                onChange={() => setDeepResearchEnabled(!deepResearchEnabled)}
-                disabled={messages.length > 0}
-              />
-              <div className={`block w-10 h-6 rounded-full transition-colors ${deepResearchEnabled ? 'bg-legal-blue' : 'bg-gray-300'}`}></div>
-              <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${deepResearchEnabled ? 'transform translate-x-4' : ''}`}></div>
-            </div>
-            <div className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">
-              Deep Research
-            </div>
-          </label>
-        </div>
+
 
         {/* Context Usage Graph */}
         {
           selectedModel && (
-            <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Chat Memory</h3>
-              <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+              <h3 className="text-xs font-semibold text-gray-500 dark:text-white uppercase tracking-wider mb-2">Chat Memory</h3>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mb-2">
                 <div
                   className={`h-2.5 rounded-full transition-all duration-500 ${getUsagePercentage() >= 90 ? 'bg-red-500' :
                     getUsagePercentage() >= 75 ? 'bg-orange-500' : 'bg-legal-blue'
@@ -397,7 +483,7 @@ function AppContent() {
               {/* Account Settings */}
               <button
                 onClick={() => { setShowSettingsModal(true); setShowSettingsMenu(false); }}
-                className="w-full text-left px-4 py-3 hover:bg-blue-50 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
+                className="w-full text-left px-4 py-3 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white text-sm text-gray-700 dark:text-gray-200 transition-colors"
               >
                 ⚙️ Account Settings
               </button>
@@ -406,7 +492,7 @@ function AppContent() {
               {user.role === 'admin' && (
                 <button
                   onClick={() => { setShowAdminModal(true); setShowSettingsMenu(false); }}
-                  className="w-full text-left px-4 py-3 hover:bg-blue-50 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
+                  className="w-full text-left px-4 py-3 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white text-sm text-gray-700 dark:text-gray-200 transition-colors"
                 >
                   👥 Admin Portal
                 </button>
@@ -415,8 +501,20 @@ function AppContent() {
               <div className="border-t border-gray-100 dark:border-gray-700 my-1"></div>
 
               {/* Dark Mode Toggle */}
-              <div className="flex items-center justify-between px-4 py-3 hover:bg-blue-50 dark:hover:bg-gray-700 cursor-pointer" onClick={() => setDarkMode(!darkMode)}>
-                <span className="text-sm text-gray-700 dark:text-gray-200">Dark Mode</span>
+              <div
+                className="flex items-center justify-between px-4 py-3 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white cursor-pointer transition-colors group"
+                onClick={async () => {
+                  const newMode = !darkMode;
+                  setDarkMode(newMode);
+                  // Persist to DB
+                  try {
+                    await updatePreferences({ dark_mode: newMode });
+                  } catch (e) {
+                    console.error("Failed to save preference", e);
+                  }
+                }}
+              >
+                <span className="text-sm text-gray-700 dark:text-gray-200 group-hover:text-white">Dark Mode</span>
                 <div
                   className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${darkMode ? 'bg-legal-blue' : 'bg-gray-400'}`}
                 >
@@ -429,7 +527,7 @@ function AppContent() {
               {/* About */}
               <button
                 onClick={() => { setShowAbout(true); setShowSettingsMenu(false); }}
-                className="w-full text-left px-4 py-3 hover:bg-blue-50 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
+                className="w-full text-left px-4 py-3 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white text-sm text-gray-700 dark:text-gray-200 transition-colors"
               >
                 ℹ️ About LexChat
               </button>
@@ -448,7 +546,7 @@ function AppContent() {
 
           <button
             onClick={() => setShowSettingsMenu(!showSettingsMenu)}
-            className={`flex items-center w-full text-left p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors font-medium ${showSettingsMenu ? 'bg-gray-100 dark:bg-gray-700 text-legal-blue' : 'text-gray-700 dark:text-gray-300'}`}
+            className={`flex items-center w-full text-left p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors font-medium ${showSettingsMenu ? 'bg-gray-200 dark:bg-gray-700 text-legal-blue' : 'text-gray-700 dark:text-gray-300'}`}
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-3">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
@@ -638,6 +736,20 @@ function AppContent() {
                 </svg>
               </button>
               <Settings />
+            </div>
+          </div>
+        )
+      }
+
+      {/* History Modal */}
+      {
+        showHistoryModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full h-[80vh] shadow-xl relative overflow-hidden">
+              <HistoryModal
+                onClose={() => setShowHistoryModal(false)}
+                onSelectChat={loadChat}
+              />
             </div>
           </div>
         )

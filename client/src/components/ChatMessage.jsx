@@ -3,11 +3,45 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { marked } from 'marked';
+import { rateMessage } from '../services/api';
+
+import CommentModal from './CommentModal';
 
 const ChatMessage = ({ message, onResend, showThinking }) => {
     const isUser = message.role === 'user';
     const isTool = message.role === 'tool';
     const [copied, setCopied] = useState(false);
+    const [rating, setRating] = useState(message.rating || 0);
+    const [isRating, setIsRating] = useState(false);
+    const [comment, setComment] = useState(message.feedback_comment || '');
+    const [showCommentModal, setShowCommentModal] = useState(false);
+
+    const handleRate = async (value) => {
+        if (!message.id) return;
+        setIsRating(true);
+        try {
+            await rateMessage(message.id, value, comment); // Send existing comment if any
+            setRating(value);
+        } catch (error) {
+            console.error('Failed to rate message', error);
+        } finally {
+            setIsRating(false);
+        }
+    };
+
+    const handleCommentSubmit = async (newComment) => {
+        if (!message.id) return;
+        setIsRating(true);
+        try {
+            await rateMessage(message.id, rating, newComment);
+            setComment(newComment);
+            setShowCommentModal(false);
+        } catch (error) {
+            console.error('Failed to save comment', error);
+        } finally {
+            setIsRating(false);
+        }
+    };
 
     const processedContent = useMemo(() => {
         let content = message.content;
@@ -75,12 +109,12 @@ const ChatMessage = ({ message, onResend, showThinking }) => {
     return (
         <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
             <div
-                className={`p-4 rounded-lg max-w-3xl shadow-md ${isUser
+                className={`rounded-lg max-w-3xl shadow-md overflow-hidden ${isUser
                     ? 'bg-legal-blue text-white'
-                    : 'bg-white text-gray-800 border border-gray-200'
+                    : 'bg-white text-gray-800 border border-gray-200 dark:bg-black dark:text-white dark:border-gray-700'
                     }`}
             >
-                <div className={`prose prose-sm max-w-none ${isUser ? 'prose-invert text-white' : ''}`}>
+                <div className={`p-4 prose prose-sm max-w-none ${isUser ? 'prose-invert text-white' : 'dark:prose-invert dark:text-white'}`}>
                     <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
@@ -101,7 +135,39 @@ const ChatMessage = ({ message, onResend, showThinking }) => {
                     </div>
                 )}
                 {!isUser && (
-                    <div className="mt-3 flex justify-end border-t border-gray-100 pt-2">
+                    <div className="bg-gray-50 dark:bg-gray-900/50 p-2 px-4 flex justify-between items-center border-t border-gray-100 dark:border-gray-800">
+                        {/* Rating Widget */}
+                        <div className="flex items-center space-x-2">
+                            <div className="flex items-center space-x-1">
+                                <span className="text-xs text-gray-500 dark:text-gray-400 mr-1">Rate:</span>
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                    <button
+                                        key={star}
+                                        onClick={() => handleRate(star)}
+                                        disabled={!message.id || isRating}
+                                        className={`focus:outline-none transition-colors ${star <= rating ? 'text-yellow-400' : 'text-gray-300 dark:text-gray-600 hover:text-yellow-200'
+                                            }`}
+                                        title={`Rate ${star} star${star > 1 ? 's' : ''}`}
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                                            <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" />
+                                        </svg>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Comment Icon Button */}
+                            <button
+                                onClick={() => setShowCommentModal(true)}
+                                className={`ml-2 p-1 rounded-full transition-colors ${comment ? 'text-blue-500 hover:text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                                title={comment ? "Edit comment" : "Add comment"}
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                                </svg>
+                            </button>
+                        </div>
+
                         <button
                             onClick={handleCopy}
                             className="text-xs text-gray-500 hover:text-legal-blue transition-colors flex items-center gap-1"
@@ -148,6 +214,13 @@ const ChatMessage = ({ message, onResend, showThinking }) => {
                     </div>
                 )}
             </div>
+
+            <CommentModal
+                isOpen={showCommentModal}
+                onClose={() => setShowCommentModal(false)}
+                onSubmit={handleCommentSubmit}
+                initialComment={comment}
+            />
         </div>
     );
 };

@@ -66,21 +66,52 @@ async function runTests() {
             console.log('   Access Control Passed ✅');
         }
 
+        // 4.5. Test Edit User (as Admin)
+        console.log('4.5. Testing Edit User (Admin)...');
+        const updatedUsername = testUsername + '_updated';
+        const editRes = await axios.put(`${BASE_URL}/users/${userId}`, {
+            username: updatedUsername,
+            role: 'user', // keep as user
+            email: `updated_${Date.now()}@example.com`
+        }, {
+            headers: { Cookie: adminCookie }
+        });
+        assert.strictEqual(editRes.status, 200);
+        assert.strictEqual(editRes.data.username, updatedUsername);
+        console.log('   Edit User Passed ✅');
+
+        // Update testUsername for subsequent login tests
+        // Note: The variable testUsername is const in the scope above, but we need it for login. 
+        // We generally can't reassign const. Let's rely on the new username string for step 6.
+        const currentUsername = updatedUsername;
+
         // 5. Test Change Password
         console.log('5. Testing Change Password...');
         const changePassRes = await axios.post(`${BASE_URL}/auth/change-password`, {
             currentPassword: 'password123',
             newPassword: 'newpassword456'
         }, {
+            // We need to re-login as the user because the username changed? 
+            // The token contains the username. If we changed the username in DB, the old token might still be valid for ID but have old username claim.
+            // However, usually ID is the subject. 
+            // BUT, if we want to be safe, let's re-login the user to get a fresh token, 
+            // OR just use the existing cookie if the backend relies on ID.
+            // Let's TRY with existing cookie.
             headers: { Cookie: userCookie }
         });
+        // Wait, if we changed the username, the old token (if it has username payload) might be mismatch? 
+        // The auth middleware verifies signature. req.user comes from token.
+        // If the backend uses req.user.id to find user for password change, it should work.
+        // Let's see authRoutes.js... it uses req.user.id. So it should work.
         assert.strictEqual(changePassRes.status, 200);
         console.log('   Change Password Passed ✅');
+
+        // 6. Test Login with New Password logic adjustment below...
 
         // 6. Test Login with New Password
         console.log('6. Testing Login with New Password...');
         const newPassLoginRes = await axios.post(`${BASE_URL}/auth/login`, {
-            username: testUsername,
+            username: currentUsername, // Use the updated username
             password: 'newpassword456'
         });
         assert.strictEqual(newPassLoginRes.status, 200);

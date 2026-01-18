@@ -31,7 +31,7 @@ router.post('/login', async (req, res) => {
             maxAge: rememberMe ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000 // 30 days or 1 day
         });
 
-        res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+        res.json({ token, user: { id: user.id, username: user.username, role: user.role, dark_mode: user.dark_mode } });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server error' });
@@ -89,8 +89,29 @@ router.post('/change-password', authenticateToken, async (req, res) => {
 });
 
 // Endpoint to check current session
-router.get('/me', authenticateToken, (req, res) => {
-    res.json({ user: req.user });
+router.get('/me', authenticateToken, async (req, res) => {
+    try {
+        const result = await query('SELECT id, username, role, dark_mode FROM users WHERE id = $1', [req.user.id]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        res.json({ user: result.rows[0] });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Update user preferences
+router.put('/preferences', authenticateToken, async (req, res) => {
+    const { dark_mode } = req.body;
+    try {
+        await query('UPDATE users SET dark_mode = $1 WHERE id = $2', [dark_mode, req.user.id]);
+        res.json({ message: 'Preferences updated' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
 });
 
 module.exports = router;

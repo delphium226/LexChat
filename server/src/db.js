@@ -21,8 +21,31 @@ const initializeDB = async () => {
         email VARCHAR(255) UNIQUE,
         role VARCHAR(50) DEFAULT 'user',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS chats (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        title TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS messages (
+        id SERIAL PRIMARY KEY,
+        chat_id INTEGER REFERENCES chats(id) ON DELETE CASCADE,
+        role VARCHAR(50) NOT NULL, -- 'user' or 'assistant'
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+        // Add new columns if they don't exist (Migration)
+        await query(`
+            ALTER TABLE messages ADD COLUMN IF NOT EXISTS rating INTEGER CHECK (rating >= 1 AND rating <= 5);
+            ALTER TABLE chats ADD COLUMN IF NOT EXISTS model VARCHAR(255);
+            ALTER TABLE messages ADD COLUMN IF NOT EXISTS feedback_comment TEXT;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS dark_mode BOOLEAN DEFAULT FALSE;
+        `);
 
         // Check if admin exists
         const adminCheck = await query("SELECT * FROM users WHERE username = 'admin'");

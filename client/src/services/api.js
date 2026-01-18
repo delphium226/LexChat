@@ -58,3 +58,42 @@ export const sendMessage = (messages, model, num_ctx, onUpdate, signal, deep_res
         }
     });
 };
+
+export const getChats = async () => {
+    const response = await axios.get(`${API_URL}/chats`);
+    return response.data;
+};
+
+export const createChat = async (title, model) => {
+    const response = await axios.post(`${API_URL}/chats`, { title, model });
+    return response.data;
+};
+
+export const deleteChat = async (chatId) => {
+    await axios.delete(`${API_URL}/chats/${chatId}`);
+};
+
+export const getChatMessages = async (chatId) => {
+    const response = await axios.get(`${API_URL}/chats/${chatId}/messages`);
+    return response.data;
+};
+
+export const saveMessage = async (chatId, role, content) => {
+    const response = await axios.post(`${API_URL}/chats/${chatId}/messages`, { role, content });
+    return response.data;
+};
+
+export const updateChatTitle = async (chatId, title) => {
+    const response = await axios.put(`${API_URL}/chats/${chatId}`, { title });
+    return response.data;
+};
+
+export const rateMessage = async (messageId, rating, comment = null) => {
+    const response = await axios.put(`${API_URL}/chats/messages/${messageId}/rating`, { rating, comment });
+    return response.data;
+};
+
+export const updatePreferences = async (preferences) => {
+    const response = await axios.put(`${API_URL}/auth/preferences`, preferences);
+    return response.data;
+};

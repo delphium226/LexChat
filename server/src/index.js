@@ -23,6 +23,8 @@ initializeDB();
 // Auth Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+const chatRoutes = require('./routes/chatRoutes');
+app.use('/api/chats', chatRoutes);
 
 // HTTP Request Logging Middleware
 app.use((req, res, next) => {
