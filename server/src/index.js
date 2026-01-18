@@ -5,12 +5,24 @@ const { chatWithOllama, listModels } = require('./agent/ollama');
 const { logger, httpLogger } = require('./utils/logger');
 const path = require('path');
 const config = require('./config');
+const cookieParser = require('cookie-parser');
+const { initializeDB } = require('./db');
+const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
 
 const app = express();
 const PORT = config.server.port;
 
 app.use(cors());
 app.use(bodyParser.json());
+app.use(cookieParser());
+
+// Initialize Database
+initializeDB();
+
+// Auth Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 
 // HTTP Request Logging Middleware
 app.use((req, res, next) => {

@@ -2,9 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { getModels, sendMessage } from './services/api';
 import ChatMessage from './components/ChatMessage';
 import loadingGif from './assets/load-35_128.gif';
-import logoSmall from './assets/logo_small.png';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import LoginModal from './components/LoginModal';
+import AdminPortal from './pages/AdminPortal';
+import Settings from './pages/Settings';
 
-function App() {
+function AppContent() {
+  const { user, logout } = useAuth();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [models, setModels] = useState([]);
@@ -15,13 +19,57 @@ function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
   const [deepResearchEnabled, setDeepResearchEnabled] = useState(false);
-  // Initialize sidebar based on window width (if browser)
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window !== 'undefined') {
       return window.innerWidth >= 768; // 768px is tailwind 'md' breakpoint
     }
     return false;
   });
+
+  const [currentView, setCurrentView] = useState('chat'); // 'chat', 'admin', 'settings'
+
+  // Modals State
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
+
+  // Dark Mode State
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('darkMode');
+      if (saved !== null) {
+        return saved === 'true';
+      }
+      return false; // Default to light mode
+    }
+    return false;
+  });
+
+  const [showSettings, setShowSettings] = useState(false);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const settingsMenuRef = useRef(null);
+
+  // Close server menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target)) {
+        setShowSettingsMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Apply Dark Mode effect
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('darkMode', darkMode);
+  }, [darkMode]);
   const messagesEndRef = useRef(null);
 
   const abortControllerRef = useRef(null);
@@ -236,8 +284,12 @@ function App() {
     return length;
   };
 
+  if (!user) {
+    return <LoginModal />;
+  }
+
   return (
-    <div className="flex h-dvh bg-[#b4b5b8] overflow-hidden">
+    <div className="flex h-dvh bg-[#b4b5b8] dark:bg-gray-900 overflow-hidden transition-colors duration-200">
       {/* Mobile Backdrop */}
       {isSidebarOpen && (
         <div
@@ -248,7 +300,7 @@ function App() {
 
       {/* Sidebar */}
       <div
-        className={`bg-white border-r border-gray-200 flex flex-col transition-all duration-300 
+        className={`bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 
           fixed md:relative inset-y-0 left-0 z-30 h-full
           ${isSidebarOpen
             ? 'translate-x-0 w-64 p-4'
@@ -256,19 +308,25 @@ function App() {
           }
         `}
       >
-        <img src={logoSmall} alt="LexChat" className="mb-6 self-start" />
+        <h1 className="text-3xl font-bold text-blue-600 mb-2 self-center">LexChat</h1>
+        <div className="mb-4 text-center text-sm text-gray-500 text-ellipsis overflow-hidden">
+          Welcome, {user.username}
+        </div>
 
         <button
-          onClick={handleNewChat}
-          className="w-full bg-legal-blue text-white p-2 rounded-md mb-6 hover:bg-blue-800 transition-colors font-medium"
+          onClick={() => { handleNewChat(); }}
+          className="w-full text-center p-2 rounded-md mb-2 hover:bg-blue-700 transition-colors font-medium bg-blue-600 text-white text-lg"
         >
-          + New Chat
+          New chat
         </button>
 
+
+
+
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Model</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Model</label>
           <select
-            className="w-full p-2 border rounded-md disabled:bg-gray-100 disabled:text-gray-500"
+            className="w-full p-2 border rounded-md disabled:bg-gray-100 disabled:text-gray-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:disabled:bg-gray-800 dark:disabled:text-gray-600"
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
             disabled={messages.length > 0}
@@ -293,79 +351,142 @@ function App() {
               <div className={`block w-10 h-6 rounded-full transition-colors ${deepResearchEnabled ? 'bg-legal-blue' : 'bg-gray-300'}`}></div>
               <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${deepResearchEnabled ? 'transform translate-x-4' : ''}`}></div>
             </div>
-            <div className="ml-3 text-sm font-medium text-gray-700">
+            <div className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">
               Deep Research
             </div>
           </label>
         </div>
 
         {/* Context Usage Graph */}
-        {/* Context Usage Graph */}
-        {selectedModel && (
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Chat Memory</h3>
-            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
-              <div
-                className={`h-2.5 rounded-full transition-all duration-500 ${getUsagePercentage() >= 90 ? 'bg-red-500' :
-                  getUsagePercentage() >= 75 ? 'bg-orange-500' : 'bg-legal-blue'
-                  }`}
-                style={{
-                  width: `${getUsagePercentage()}%`
-                }}
-              ></div>
-            </div>
-            <div className="flex justify-between text-xs text-gray-600">
-              <span>{contextUsage ? (contextUsage.total_usage || ((contextUsage.prompt_eval_count || 0) + (contextUsage.eval_count || 0))) : 0} tokens</span>
-              <span>{(() => {
-                const currentModelObj = models.find(m => m.name === selectedModel);
-                const maxContext = currentModelObj?.context_length || 131072;
-                return formatContextLength(maxContext);
-              })()} limit</span>
-            </div>
-            {contextUsage && (
-              <div className="mt-2 text-xs text-gray-400">
-                Load: {(contextUsage.load_duration / 1000000000).toFixed(2)}s | Gen: {(contextUsage.total_duration / 1000000000).toFixed(2)}s
+        {
+          selectedModel && (
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Chat Memory</h3>
+              <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+                <div
+                  className={`h-2.5 rounded-full transition-all duration-500 ${getUsagePercentage() >= 90 ? 'bg-red-500' :
+                    getUsagePercentage() >= 75 ? 'bg-orange-500' : 'bg-legal-blue'
+                    }`}
+                  style={{
+                    width: `${getUsagePercentage()}%`
+                  }}
+                ></div>
               </div>
-            )}
-          </div>
-        )}
+              <div className="flex justify-between text-xs text-gray-600">
+                <span>{contextUsage ? (contextUsage.total_usage || ((contextUsage.prompt_eval_count || 0) + (contextUsage.eval_count || 0))) : 0} tokens</span>
+                <span>{(() => {
+                  const currentModelObj = models.find(m => m.name === selectedModel);
+                  const maxContext = currentModelObj?.context_length || 131072;
+                  return formatContextLength(maxContext);
+                })()} limit</span>
+              </div>
+              {contextUsage && (
+                <div className="mt-2 text-xs text-gray-400">
+                  Load: {(contextUsage.load_duration / 1000000000).toFixed(2)}s | Gen: {(contextUsage.total_duration / 1000000000).toFixed(2)}s
+                </div>
+              )}
+            </div>
+          )
+        }
 
 
+        {/* Global Sidebar Footer Items */}
+        <div className="mt-auto relative" ref={settingsMenuRef}>
+          {showSettingsMenu && (
+            <div className="absolute bottom-full left-0 mb-2 w-60 bg-gray-50 dark:bg-gray-700 rounded-lg shadow-2xl border border-gray-300 dark:border-gray-600 overflow-hidden z-50">
+              {/* Account Settings */}
+              <button
+                onClick={() => { setShowSettingsModal(true); setShowSettingsMenu(false); }}
+                className="w-full text-left px-4 py-3 hover:bg-blue-50 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
+              >
+                ⚙️ Account Settings
+              </button>
 
-        {/* About Link */}
-        <div className="mt-auto">
+              {/* Admin Portal (Conditional) */}
+              {user.role === 'admin' && (
+                <button
+                  onClick={() => { setShowAdminModal(true); setShowSettingsMenu(false); }}
+                  className="w-full text-left px-4 py-3 hover:bg-blue-50 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
+                >
+                  👥 Admin Portal
+                </button>
+              )}
+
+              <div className="border-t border-gray-100 dark:border-gray-700 my-1"></div>
+
+              {/* Dark Mode Toggle */}
+              <div className="flex items-center justify-between px-4 py-3 hover:bg-blue-50 dark:hover:bg-gray-700 cursor-pointer" onClick={() => setDarkMode(!darkMode)}>
+                <span className="text-sm text-gray-700 dark:text-gray-200">Dark Mode</span>
+                <div
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${darkMode ? 'bg-legal-blue' : 'bg-gray-400'}`}
+                >
+                  <span
+                    className={`${darkMode ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`}
+                  />
+                </div>
+              </div>
+
+              {/* About */}
+              <button
+                onClick={() => { setShowAbout(true); setShowSettingsMenu(false); }}
+                className="w-full text-left px-4 py-3 hover:bg-blue-50 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
+              >
+                ℹ️ About LexChat
+              </button>
+
+              <div className="border-t border-gray-100 dark:border-gray-700 my-1"></div>
+
+              {/* Logout */}
+              <button
+                onClick={logout}
+                className="w-full text-left px-4 py-3 hover:bg-red-50 dark:hover:bg-red-900/20 text-sm text-red-600 dark:text-red-400"
+              >
+                🚪 Log Out
+              </button>
+            </div>
+          )}
+
           <button
-            onClick={() => setShowAbout(true)}
-            className="text-sm text-gray-500 hover:text-legal-blue underline"
+            onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+            className={`flex items-center w-full text-left p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors font-medium ${showSettingsMenu ? 'bg-gray-100 dark:bg-gray-700 text-legal-blue' : 'text-gray-700 dark:text-gray-300'}`}
           >
-            About LexChat
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-3">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Settings
           </button>
         </div>
 
-      </div>
+      </div >
 
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col relative w-full">
+      {/* Main Content Area */}
+      < div className="flex-1 flex flex-col relative w-full overflow-hidden" >
         {/* Sidebar Toggle Button */}
-        <button
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="absolute top-4 left-4 z-10 p-2 bg-gray-200 rounded-md hover:bg-gray-300 transition-all duration-300 shadow-sm"
+        < button
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)
+          }
+          className="absolute top-4 left-4 z-10 p-2 bg-gray-200 dark:bg-gray-700 dark:text-white rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-300 shadow-sm"
           title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
         >
-          {isSidebarOpen ? (
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" />
-            </svg>
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 4.5l7.5 7.5-7.5 7.5m-6-15l7.5 7.5-7.5 7.5" />
-            </svg>
-          )}
-        </button>
+          {
+            isSidebarOpen ? (
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5" >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 4.5l7.5 7.5-7.5 7.5m-6-15l7.5 7.5-7.5 7.5" />
+              </svg>
+            )}
+        </button >
+
+
+        {/* VIEWS */}
 
         <div className="flex-1 overflow-y-auto p-6 pt-16">
           {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-gray-400">
+            <div className="flex flex-col items-center justify-center h-full text-gray-400 dark:text-gray-500">
               <p className="text-lg">Select a model and start researching.</p>
             </div>
           )}
@@ -375,9 +496,9 @@ function App() {
           ))}
           {loading && (
             <div className="flex justify-start mb-4">
-              <div className="bg-black border border-legal-blue p-3 rounded-lg shadow-md flex items-center gap-2 max-w-[85%]">
+              <div className="bg-black dark:bg-gray-800 border border-legal-blue p-3 rounded-lg shadow-md flex items-center gap-2 max-w-[85%]">
                 <img src={loadingGif} alt="Processing..." className="w-6 h-6 flex-shrink-0" />
-                <span className="text-xs text-white truncate">{agentStatus || 'Agent is thinking...'}</span>
+                <span className="text-xs text-white dark:text-gray-200 truncate">{agentStatus || 'Agent is thinking...'}</span>
               </div>
             </div>
           )}
@@ -385,7 +506,7 @@ function App() {
         </div>
 
         {/* Input Area */}
-        <div className="p-4 bg-[#8c8e91] border-t border-gray-200 z-40 relative">
+        <div className="p-4 bg-[#8c8e91] dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-40 relative">
           <form
             className="max-w-4xl mx-auto flex space-x-4"
             onSubmit={(e) => {
@@ -395,7 +516,7 @@ function App() {
           >
             <input
               type="text"
-              className="flex-1 p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-legal-blue"
+              className="flex-1 p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-legal-blue dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
               placeholder="Ask about UK legislation or case law..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -423,65 +544,113 @@ function App() {
             )}
           </form>
         </div>
-      </div>
+
+
+      </div >
       {/* About Modal */}
-      {showAbout && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full shadow-xl">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-legal-blue">About LexChat</h2>
+      {
+        showAbout && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full shadow-xl">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-legal-blue dark:text-legal-gold">About LexChat</h2>
+                <button
+                  onClick={() => setShowAbout(false)}
+                  className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-4 text-gray-700 dark:text-gray-300 text-sm">
+                <p>
+                  <strong>LexChat</strong> is an intelligent legal research assistant designed to help legal professionals and researchers quickly access UK legislation and related case law.
+                </p>
+
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Purpose</h3>
+                  <p>
+                    To simplify the process of legal research by allowing natural language queries to retrieve specific sections of legislation and relevant case precedents.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Data Sources</h3>
+                  <ul className="list-disc list-inside">
+                    <li><strong>The National Archives</strong> (legislation.gov.uk) for UK Legislation.</li>
+                    <li><strong>The National Archives</strong> (caselaw.nationalarchives.gov.uk) for Case Law.</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-white mb-1">AI Approach</h3>
+                  <p>
+                    LexChat utilizes an <strong>Agentic RAG</strong> architecture powered by the <strong>Model Context Protocol (MCP)</strong>. It intelligently queries external legal databases to retrieve relevant legislation and case law, which are then analyzed by a Large Language Model to provide accurate, context-aware answers.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowAbout(false)}
+                  className="bg-legal-blue text-white px-4 py-2 rounded-md hover:bg-blue-800 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {/* Admin Portal Modal */}
+      {
+        showAdminModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl w-full h-[90vh] overflow-y-auto shadow-xl relative">
               <button
-                onClick={() => setShowAbout(false)}
-                className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                onClick={() => setShowAdminModal(false)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 focus:outline-none"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
-            </div>
-
-            <div className="space-y-4 text-gray-700 text-sm">
-              <p>
-                <strong>LexChat</strong> is an intelligent legal research assistant designed to help legal professionals and researchers quickly access UK legislation and related case law.
-              </p>
-
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1">Purpose</h3>
-                <p>
-                  To simplify the process of legal research by allowing natural language queries to retrieve specific sections of legislation and relevant case precedents.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1">Data Sources</h3>
-                <ul className="list-disc list-inside">
-                  <li><strong>The National Archives</strong> (legislation.gov.uk) for UK Legislation.</li>
-                  <li><strong>The National Archives</strong> (caselaw.nationalarchives.gov.uk) for Case Law.</li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1">AI Approach</h3>
-                <p>
-                  LexChat utilizes an <strong>Agentic RAG</strong> architecture powered by the <strong>Model Context Protocol (MCP)</strong>. It intelligently queries external legal databases to retrieve relevant legislation and case law, which are then analyzed by a Large Language Model to provide accurate, context-aware answers.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={() => setShowAbout(false)}
-                className="bg-legal-blue text-white px-4 py-2 rounded-md hover:bg-blue-800 transition-colors"
-              >
-                Close
-              </button>
+              <AdminPortal />
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
-    </div>
+      {/* Settings Modal */}
+      {
+        showSettingsModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full shadow-xl relative">
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 focus:outline-none"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <Settings />
+            </div>
+          </div>
+        )
+      }
+
+    </div >
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}

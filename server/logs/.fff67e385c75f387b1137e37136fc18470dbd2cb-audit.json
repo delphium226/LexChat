@@ -6,11 +6,6 @@
     "auditLog": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\.fff67e385c75f387b1137e37136fc18470dbd2cb-audit.json",
     "files": [
         {
-            "date": 1767525924290,
-            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\app-2026-01-04.log",
-            "hash": "804652490c22c0f6791ccd79bda5aeea6196631581a25a007485c001001b2701"
-        },
-        {
             "date": 1767611619844,
             "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\app-2026-01-05.log",
             "hash": "5ec4873cce404da2047105695f483397c7e7207e9d3f3866da9e2073685fa758"
@@ -24,6 +19,21 @@
             "date": 1768223364898,
             "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\app-2026-01-12.log",
             "hash": "eacfbdb86e2559695d39ced1398b4d3581ff6e611c0f5379430c22d584ef3a3e"
+        },
+        {
+            "date": 1768574835662,
+            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\app-2026-01-16.log",
+            "hash": "f0093f412a0c3e0c0d3499cf906b44e0e20f9241ff418e10827849929e3a6cf0"
+        },
+        {
+            "date": 1768645447722,
+            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\app-2026-01-17.log",
+            "hash": "8a3573097bcbc23e6daca89acc8adca023b82493fc6bee855758ae83b6e5f584"
+        },
+        {
+            "date": 1768746160452,
+            "name": "C:\\Users\\User\\Documents\\LexAPITest\\server\\logs\\app-2026-01-18.log",
+            "hash": "e3583ca269a699471baf33a478a292c12438f6a843b69a8459c70aa41af6e97d"
         }
     ],
     "hashType": "sha256"

@@ -2,16 +2,23 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 module.exports = {
-    server: {
-        port: process.env.PORT || 3000
-    },
-    ollama: {
-        baseUrl: process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
-        apiKey: process.env.OLLAMA_API_KEY,
-        defaultContext: 131072,
-        systemMessage: {
+  server: {
+    port: process.env.PORT || 3000
+  },
+  database: {
+    connectionString: process.env.DATABASE_URL || 'postgresql://myuser:mypassword@192.168.1.221:5432/postgres'
+  },
+  email: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  },
+  ollama: {
+    baseUrl: process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
+    apiKey: process.env.OLLAMA_API_KEY,
+    defaultContext: 131072,
+    systemMessage: {
 
-            manager: `You are the Senior Legal Interface for a UK government legal department.
+      manager: `You are the Senior Legal Interface for a UK government legal department.
 Your users are qualified lawyers. Your demeanor must be professional, concise, and objective.
 
 YOUR RESPONSIBILITIES:
@@ -30,7 +37,7 @@ TONE:
 - Do not use flowery language (e.g., avoid "I would be happy to help").
 - Be direct (e.g., "Here is the relevant legislation regarding...").`,
 
-            worker: `You are a specialized Legal Research Support Agent for UK Law.
+      worker: `You are a specialized Legal Research Support Agent for UK Law.
 Your output will be reviewed by government lawyers who require absolute precision.
 
 YOUR MANDATE:
@@ -57,19 +64,19 @@ CITATION PROTOCOL:
   - If no URI is provided, use bold text citations.
 
 Review your answer before responding: Does every claim have a corresponding source from the API? If yes, proceed.`
-        }
-    },
-    lexApi: {
-        url: process.env.LEX_API_URL || 'https://lex-api.victoriousdesert-f8e685e0.uksouth.azurecontainerapps.io'
-    },
-    models: [
-        { name: 'mistral-large-3:675b-cloud', contextLengthKB: 256 },
-        { name: 'cogito-2.1:671b-cloud', contextLengthKB: 160 },
-        { name: 'kimi-k2-thinking:cloud', contextLengthKB: 256 },
-        { name: 'minimax-m2:cloud', contextLengthKB: 200 },
-        { name: 'qwen3-coder:480b-cloud', contextLengthKB: 256 },
-        { name: 'deepseek-v3.1:671b-cloud', contextLengthKB: 160 },
-        { name: 'glm-4.6:cloud', contextLengthKB: 198 },
-        { name: 'gpt-oss:120b-cloud', contextLengthKB: 128 }
-    ]
+    }
+  },
+  lexApi: {
+    url: process.env.LEX_API_URL || 'https://lex-api.victoriousdesert-f8e685e0.uksouth.azurecontainerapps.io'
+  },
+  models: [
+    { name: 'mistral-large-3:675b-cloud', contextLengthKB: 256 },
+    { name: 'cogito-2.1:671b-cloud', contextLengthKB: 160 },
+    { name: 'kimi-k2-thinking:cloud', contextLengthKB: 256 },
+    { name: 'minimax-m2:cloud', contextLengthKB: 200 },
+    { name: 'qwen3-coder:480b-cloud', contextLengthKB: 256 },
+    { name: 'deepseek-v3.1:671b-cloud', contextLengthKB: 160 },
+    { name: 'glm-4.6:cloud', contextLengthKB: 198 },
+    { name: 'gpt-oss:120b-cloud', contextLengthKB: 128 }
+  ]
 };
