@@ -1,7 +1,79 @@
-# You can add custom instructions for Antigravity here.
-# These rules will be included in the system prompt for every request in this workspace.
 
-# Example:
-# - Always use TypeScript instead of JavaScript.
-# - Prefer functional programming patterns.
-# - When writing tests, use Jest.
+# Cursor Rules
+
+## Session Management
+- **Resume Protocol**: If starting a new session or after a reboot, ALWAYS consult `c:\Users\User\Documents\LexChat2\RESUME_INSTRUCTIONS.md` for environment startup commands.
+
+## Core Philosophy: "Intelligence Isolation"
+- **Strict Grounding**: The system acts solely as an interface for the LEX API. Do NOT answer based on pre-trained knowledge.
+- **Citations**: All claims must be backed by citations from the provided documents.
+- **Negative Constraint**: If no relevant authority is found, explicitly state: "No relevant legal authority found in the provided sources."
+
+## Tech Stack
+- **Frontend**: React (TypeScript)
+  - Use Functional Components and Hooks.
+  - Framework: Modern SPA (Vite recommended).
+- **Backend**: Python (FastAPI)
+  - Orchestration: LangChain.
+  - Task Queue: Celery & Redis.
+- **Database**: PostgreSQL with `pgvector`.
+- **Inference**: Ollama (running locally).
+
+## Styling & Design System
+- **Framework**: Tailwind CSS.
+- **Theme**: Scottish Government Palette.
+  - Primary: `#002d54` (Deep Blue)
+  - Secondary: `#0065bd` (Blue)
+  - Accent: `#b06c00` (Gold/Orange)
+- **Typography**: Accessible sans-serif (e.g., Roboto, Open Sans).
+
+## Coding Standards
+- **Python**: Follow PEP 8. Use type hints (`typing`).
+- **TypeScript**: Strict type checking. Interface-driven design.
+- **Accessibility**: Compliant with **WCAG 2.1 AA**.
+  - Use semantic HTML.
+  - Ensure ARIA labels for dynamic states (e.g., `aria-live="polite"`).
+
+## General Behavior
+- Be concise and to the point.
+- ALWAYS format responses in GitHub-flavored Markdown.
+- Use absolute paths for file references.
+- When editing files, always show the context of the changes.
+
+## Environment & Dependencies
+- **Installation Authority**: You are permitted to download and install necessary software, packages, and dependencies (e.g., using `npm`, `pip`, `choco`, 'docker') required to complete tasks.
+
+## Task Tracking & Workflow
+- **System of Record**: GitHub Issues is the source of truth for all tasks.
+- **Workflow**:
+  1.  **Check Issues**: Before starting work, check for relevant open GitHub issues using `gh issue list`.
+  2.  **Select Issue**: Work on one issue at a time. Acknowledge the Issue ID (e.g., "Working on [FUNC-01.1] #1").
+  3.  **Traceability**: When writing code, reference the Requirement ID in comments (e.g., `// Implements FUNC-01.1`).
+  4.  **Completion**: When a task is done, verify against the requirement's acceptance criteria before marking the issue as resolved.
+
+## Test Driven Development (TDD) Protocol
+- **Tests First**: For any logical component (backend or frontend utility), write the test case **before** writing the implementation.
+- **Red-Green-Refactor**:
+  1.  Create a failing test (Red).
+  2.  Write minimum code to pass (Green).
+  3.  Optimize and clean up (Refactor).
+- **Coverage**: Aim for high coverage on critical paths (Search Logic, Strict Grounding Enforcers).
+
+## Code Review & Quality Checklist
+Before requesting user review or marking a task complete, verify:
+- **Security Check**: Are inputs sanitized? Is PII protected? Are API keys hidden?
+- **Error Handling**: No silent failures. Frontend must display user-friendly error toasts. Backend must log stack traces (but not expose them to client).
+- **Logging**: Ensure structured logging is in place for debugging (e.g., `logger.info("Function X called with params Y")`).
+- **Complexity**: Is the code readable? Can it be simplified?
+
+## Configuration & Secrets
+- **Environment Variables**: store ALL configuration (URLs, Ports, Model Names) and Secrets (API Keys, Passwords) in `.env`.
+- **No Hardcoding**: Never hardcode these values in Python or TypeScript files.
+- **Loading**: Ensure `python-dotenv` is installed and `load_dotenv()` is called at the application entry point.
+- **Containerization**: Ensure `docker-compose` files map these environment variables correctly.
+
+## Deployment & Docker Standards
+- **Containerization**: All services must be Dockerized.
+- **Multi-Stage Builds**: Use multi-stage builds to keep production images small (e.g., build in a `node` image, serve with `nginx`).
+- **Non-Root User**: Ensure containers run as a non-root user for security.
+- **Orchestration**: Use `docker-compose.yml` for local development orchestration.

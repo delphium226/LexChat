@@ -75,8 +75,8 @@ Review your answer before responding: Does every claim have a corresponding sour
     { name: 'kimi-k2-thinking:cloud', contextLengthKB: 256 },
     { name: 'minimax-m2:cloud', contextLengthKB: 200 },
     { name: 'qwen3-coder:480b-cloud', contextLengthKB: 256 },
+    { name: 'deepseek-v3.2:cloud', contextLengthKB: 160 },
     { name: 'deepseek-v3.1:671b-cloud', contextLengthKB: 160 },
-    { name: 'glm-4.6:cloud', contextLengthKB: 198 },
-    { name: 'gpt-oss:120b-cloud', contextLengthKB: 128 }
+    { name: 'glm-4.6:cloud', contextLengthKB: 198 }
   ]
 };
