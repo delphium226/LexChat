@@ -13,7 +13,7 @@ A locally hosted AI chatbot for UK legislation and case law research, powered by
 -   **🔐 Authentication**: Secure signup and login functionality using JWT and bcrypt.
 -   **📧 Email Integration**: Configured to send system notifications (requires SMTP credentials).
 -   **🌓 Dark Mode**: Fully supported UI with a toggle for user preference.
--   **📝 Feedback System**: Users can rate and comment on AI responses to improve system performance over time.
+-   **📝 Self-Improvement Loop**: A feedback mechanism where user ratings and comments (1-5 stars) are used to train the system via Few-Shot Learning (RAG), checking for past "Gold Standard" answers or "Critiques" before responding.
 
 ## Architecture
 
@@ -36,6 +36,24 @@ The application follows a modern client-server architecture:
     -   Agent Orchestration (Manager/Worker logic)
     -   Authentication & Session Management
     -   Prompt Engineering & Context Management
+
+    -   Prompt Engineering & Context Management
+    -   **Learning Module**: Retrieval of relevant past examples/critiques for context injection.
+
+## Self-Improvement Loop
+
+The application implements a unique **"Learning"** mechanism to get smarter over time without fine-tuning:
+
+1.  **Data Collection**: Users rate responses (1-5 stars) and optionally leave comments.
+2.  **Positive Reinforcement**: When a new query arrives, the system searches for past **similar queries** with **High Ratings (≥4)**. It injects these Q&A pairs into the context as "Gold Standard" examples.
+3.  **Negative Reinforcement**: If past similar queries had **Low Ratings (≤3)** and comments, the system injects the *comment* as a "Warning/Critique" to prevent repeating the mistake.
+
+## Admin Dashboard
+
+The Admin Portal (`/admin`) has been enhanced with a **Learning Monitor**:
+
+-   **feedback Table**: View all user ratings and comments in real-time.
+-   **Retrieval Playground**: Test the "Learning" logic by typing a query (e.g., "Duty of Care") to see exactly what "Memories" (Examples or Critiques) the agent retrieves for that topic.
 
 ## Docker Setup (Recommended)
 

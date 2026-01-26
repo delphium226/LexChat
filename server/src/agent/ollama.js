@@ -49,6 +49,27 @@ async function processUserRequest(messages, model, onChunk, signal, num_ctx) {
         content: config.ollama.systemMessage.manager
     };
 
+    // ------------------------------------------------------------------
+    // LEARNING MECHANISM INJECTION
+    // ------------------------------------------------------------------
+    try {
+        // Only trigger learning if there is a user query (last message)
+        const lastMsg = messages[messages.length - 1];
+        if (lastMsg && lastMsg.role === 'user') {
+            const learningData = await getRelevantExamples(lastMsg.content);
+            const contextInjection = formatLearningContext(learningData);
+
+            if (contextInjection) {
+                agentLogger.info('[Learning] Injecting feedback context into System Prompt.');
+                // Append to the system message content
+                systemMessage.content += `\n\n${contextInjection}`;
+            }
+        }
+    } catch (err) {
+        agentLogger.error(`[Learning] Failed to inject context: ${err.message}`);
+    }
+    // ------------------------------------------------------------------
+
     let finalMessages = [...messages];
     if (finalMessages.length === 0 || finalMessages[0].role !== 'system') {
         finalMessages = [systemMessage, ...finalMessages];
@@ -181,8 +202,12 @@ async function listModels() {
     }));
 }
 
+const { getRelevantExamples, formatLearningContext } = require('./learning');
+
 module.exports = {
     chatWithOllama: processUserRequest,
     listModels,
-    chatLoop
+    chatLoop,
+    getRelevantExamples, // Exported for testing/admin purposes if needed
+    formatLearningContext
 };

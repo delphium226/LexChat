@@ -97,3 +97,13 @@ export const updatePreferences = async (preferences) => {
     const response = await axios.put(`${API_URL}/auth/preferences`, preferences);
     return response.data;
 };
+
+export const getFeedbackStats = async () => {
+    const response = await axios.get(`${API_URL}/learning/feedback`);
+    return response.data;
+};
+
+export const testLearningRetrieval = async (query) => {
+    const response = await axios.post(`${API_URL}/learning/test`, { query });
+    return response.data;
+};

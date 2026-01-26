@@ -26,6 +26,9 @@ app.use('/api/users', userRoutes);
 const chatRoutes = require('./routes/chatRoutes');
 app.use('/api/chats', chatRoutes);
 
+const learningRoutes = require('./routes/learningRoutes');
+app.use('/api/learning', learningRoutes);
+
 // HTTP Request Logging Middleware
 app.use((req, res, next) => {
     const start = Date.now();

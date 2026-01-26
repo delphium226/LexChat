@@ -7,6 +7,7 @@ import LoginModal from './components/LoginModal';
 import AdminPortal from './pages/AdminPortal';
 import Settings from './pages/Settings';
 import HistoryModal from './components/HistoryModal';
+import SettingsMenuModal from './components/SettingsMenuModal';
 
 function AppContent() {
   const { user, logout } = useAuth();
@@ -58,20 +59,7 @@ function AppContent() {
 
   const [showSettings, setShowSettings] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
-  const settingsMenuRef = useRef(null);
 
-  // Close server menu when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target)) {
-        setShowSettingsMenu(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
 
   // Apply Dark Mode effect
   useEffect(() => {
@@ -466,83 +454,15 @@ function AppContent() {
                   return formatContextLength(maxContext);
                 })()} limit</span>
               </div>
-              {contextUsage && (
-                <div className="mt-2 text-xs text-gray-400">
-                  Load: {(contextUsage.load_duration / 1000000000).toFixed(2)}s | Gen: {(contextUsage.total_duration / 1000000000).toFixed(2)}s
-                </div>
-              )}
+
             </div>
           )
         }
 
 
         {/* Global Sidebar Footer Items */}
-        <div className="mt-auto relative" ref={settingsMenuRef}>
-          {showSettingsMenu && (
-            <div className="absolute bottom-full left-0 mb-2 w-60 bg-gray-50 dark:bg-gray-700 rounded-lg shadow-2xl border border-gray-300 dark:border-gray-600 overflow-hidden z-50">
-              {/* Account Settings */}
-              <button
-                onClick={() => { setShowSettingsModal(true); setShowSettingsMenu(false); }}
-                className="w-full text-left px-4 py-3 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white text-sm text-gray-700 dark:text-gray-200 transition-colors"
-              >
-                ⚙️ Account Settings
-              </button>
+        <div className="mt-auto">
 
-              {/* Admin Portal (Conditional) */}
-              {user.role === 'admin' && (
-                <button
-                  onClick={() => { setShowAdminModal(true); setShowSettingsMenu(false); }}
-                  className="w-full text-left px-4 py-3 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white text-sm text-gray-700 dark:text-gray-200 transition-colors"
-                >
-                  👥 Admin Portal
-                </button>
-              )}
-
-              <div className="border-t border-gray-100 dark:border-gray-700 my-1"></div>
-
-              {/* Dark Mode Toggle */}
-              <div
-                className="flex items-center justify-between px-4 py-3 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white cursor-pointer transition-colors group"
-                onClick={async () => {
-                  const newMode = !darkMode;
-                  setDarkMode(newMode);
-                  // Persist to DB
-                  try {
-                    await updatePreferences({ dark_mode: newMode });
-                  } catch (e) {
-                    console.error("Failed to save preference", e);
-                  }
-                }}
-              >
-                <span className="text-sm text-gray-700 dark:text-gray-200 group-hover:text-white">Dark Mode</span>
-                <div
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${darkMode ? 'bg-legal-blue' : 'bg-gray-400'}`}
-                >
-                  <span
-                    className={`${darkMode ? 'translate-x-5' : 'translate-x-1'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`}
-                  />
-                </div>
-              </div>
-
-              {/* About */}
-              <button
-                onClick={() => { setShowAbout(true); setShowSettingsMenu(false); }}
-                className="w-full text-left px-4 py-3 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white text-sm text-gray-700 dark:text-gray-200 transition-colors"
-              >
-                ℹ️ About LexChat
-              </button>
-
-              <div className="border-t border-gray-100 dark:border-gray-700 my-1"></div>
-
-              {/* Logout */}
-              <button
-                onClick={logout}
-                className="w-full text-left px-4 py-3 hover:bg-red-50 dark:hover:bg-red-900/20 text-sm text-red-600 dark:text-red-400"
-              >
-                🚪 Log Out
-              </button>
-            </div>
-          )}
 
           <button
             onClick={() => setShowSettingsMenu(!showSettingsMenu)}
@@ -555,8 +475,9 @@ function AppContent() {
             Settings
           </button>
         </div>
+      </div>
 
-      </div >
+
 
       {/* Main Content Area */}
       < div className="flex-1 flex flex-col relative w-full overflow-hidden" >
@@ -755,6 +676,26 @@ function AppContent() {
         )
       }
 
+      {/* Settings Menu Modal */}
+      <SettingsMenuModal
+        isOpen={showSettingsMenu}
+        onClose={() => setShowSettingsMenu(false)}
+        user={user}
+        darkMode={darkMode}
+        onToggleDarkMode={async () => {
+          const newMode = !darkMode;
+          setDarkMode(newMode);
+          try {
+            await updatePreferences({ dark_mode: newMode });
+          } catch (e) {
+            console.error("Failed to save preference", e);
+          }
+        }}
+        onOpenAccountSettings={() => setShowSettingsModal(true)}
+        onOpenAdminPortal={() => setShowAdminModal(true)}
+        onOpenAbout={() => setShowAbout(true)}
+        onLogout={logout}
+      />
     </div >
   );
 }

@@ -73,7 +73,11 @@ Before requesting user review or marking a task complete, verify:
 - **Containerization**: Ensure `docker-compose` files map these environment variables correctly.
 
 ## Deployment & Docker Standards
-- **Containerization**: All services must be Dockerized.
-- **Multi-Stage Builds**: Use multi-stage builds to keep production images small (e.g., build in a `node` image, serve with `nginx`).
-- **Non-Root User**: Ensure containers run as a non-root user for security.
-- **Orchestration**: Use `docker-compose.yml` for local development orchestration.
+-   **Primary Environment**: The project has shifted entirely to Docker containers. All development and testing should ideally reflect this environment.
+-   **Execution**:
+    -   Use `rebuild_docker.ps1` (PowerShell) to tear down and rebuild the entire stack.
+    -   Use `start_app.cmd` (Command Prompt) for standard production-mode startup.
+    -   Avoid `npm start` or `npm run dev` for full-stack verification; use the Docker scripts instead.
+-   **Containerization**: All services must be Dockerized.
+-   **Multi-Stage Builds**: Use multi-stage builds to keep production images small.
+-   **Orchestration**: Use `docker-compose.yml` as the source of truth for service configuration.
