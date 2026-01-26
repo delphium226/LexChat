@@ -37,9 +37,48 @@ The application follows a modern client-server architecture:
     -   Authentication & Session Management
     -   Prompt Engineering & Context Management
 
-## Prerequisites
+## Docker Setup (Recommended)
 
-Before running the application, ensure you have the following installed:
+You can run the entire application stack (Frontend, Backend, Database, and Ollama) using Docker.
+
+### Prerequisites
+- Docker Desktop installed and running.
+
+### Quick Start
+1. Run the automated setup script (PowerShell):
+   ```powershell
+   .\rebuild_docker.ps1
+   ```
+   This script will:
+   - Tear down any existing containers.
+   - Build the application images.
+   - Start the database, Ollama, and the application.
+   - Automatically trigger the download of required LLM models.
+
+2. Access the application at `http://localhost:80` (or just `http://localhost`).
+
+### Cloud Models & Authentication
+If you are using cloud-hosted Ollama models (ending in `:cloud`), authentication is required.
+The `docker-compose.yml` is configured to:
+1.  Mount your local Ollama keys (`~/.ollama/id_ed25519`) into the container.
+2.  Set the `OLLAMA_API_KEY` environment variable.
+
+**Ensure you have authenticated locally first** if you regenerate your keys:
+1. Run the key generation script:
+   ```cmd
+   .\gen_keys.cmd
+   ```
+2. Add the new public key (found in `ollama_auth/id_ed25519.pub`) to your [Ollama Dashboard](https://ollama.com/settings/keys).
+
+### Manual Docker Commands
+If you prefer running commands manually:
+```bash
+docker-compose up --build -d
+```
+
+## Prerequisites (Local Development)
+
+Before running the application locally (without Docker), ensure you have the following installed:
 
 1.  **Node.js** (v18 or higher)
 2.  **PostgreSQL** (v14 or higher)
@@ -47,7 +86,7 @@ Before running the application, ensure you have the following installed:
     -   Ensure your Ollama instance is running.
     -   Pull the required models (e.g., `mistral-large`, `deepseek-v3`).
 
-## Installation & Setup
+## Installation & Setup (Local Development)
 
 ### 1. Clone the Repository
 ```bash
@@ -103,7 +142,7 @@ cd ../client
 npm install
 ```
 
-## Running the Application
+## Running the Application (Local Development)
 
 ### Start the Backend
 ```bash
@@ -121,7 +160,7 @@ npm run dev
 
 ## Usage
 
-1.  **Login/Signup**: Create a new account or log in with the default `admin` credentials.
+1.  **Login/Signup**: Create a new account or log in with the default `admin` credentials (admin/admin).
 2.  **Select Model**: Choose your preferred local LLM from the dropdown.
 3.  **Ask a Question**: Type a legal query (e.g., *"What are the requirements for a Section 21 notice?"*).
 4.  **Deep Research**: For complex topics, the system will automatically delegate to the Worker Agent to perform deep research steps.
