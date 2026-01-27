@@ -70,10 +70,9 @@ Review your answer before responding: Does every claim have a corresponding sour
     url: process.env.LEX_API_URL || 'https://lex-api.victoriousdesert-f8e685e0.uksouth.azurecontainerapps.io'
   },
   models: [
-    { name: 'mistral-large-3:675b-cloud', contextLengthKB: 256 },
-    { name: 'cogito-2.1:671b-cloud', contextLengthKB: 160 },
-    { name: 'kimi-k2-thinking:cloud', contextLengthKB: 256 },
-    { name: 'minimax-m2:cloud', contextLengthKB: 200 },
     { name: 'deepseek-v3.2:cloud', contextLengthKB: 160 },
+    { name: 'mistral-large-3:675b-cloud', contextLengthKB: 256 },
+    { name: 'kimi-k2-thinking:cloud', contextLengthKB: 256 }
+
   ]
 };

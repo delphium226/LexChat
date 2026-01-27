@@ -9,7 +9,7 @@ A locally hosted AI chatbot for UK legislation and case law research, powered by
     -   **Worker Agent**: Performs deep, iterative research in an ephemeral context to prevent context window overflow and hallucinations.
 -   **🔍 Deep Research**: Capable of performing iterative web searches (using `google-sr` and `cheerio`) to find specific legislation and case law.
 -   **⚖️ LEX API Integration**: Connects to a specialized legal data API for authoritative UK statute and case law text.
--   **👮 Admin Portal**: Built-in user management system allowing admins to view users via a secure dashboard.
+-   **👮 Admin Portal**: Built-in system for managing users and viewing detailed **Usage Statistics** (token consumption, query counts) with interactive graphs and time-frame filtering.
 -   **🔐 Authentication**: Secure signup and login functionality using JWT and bcrypt.
 -   **📧 Email Integration**: Configured to send system notifications (requires SMTP credentials).
 -   **🌓 Dark Mode**: Fully supported UI with a toggle for user preference.
@@ -50,9 +50,15 @@ The application implements a unique **"Learning"** mechanism to get smarter over
 
 ## Admin Dashboard
 
-The Admin Portal (`/admin`) has been enhanced with a **Learning Monitor**:
+The Admin Portal (`/admin`) provides comprehensive oversight of the application:
 
--   **feedback Table**: View all user ratings and comments in real-time.
+### 📊 Usage Analytics
+-   **Interactive Graphs**: Visualise daily token usage and query volume using Recharts.
+-   **Time-frame Filtering**: Filter data by last 7, 30, or 90 days (or all time) to spot trends.
+-   **Cost Monitoring**: Track total input/output tokens to estimate LLM costs.
+
+### 🧠 Learning Monitor
+-   **Feedback Table**: View all user ratings and comments in real-time.
 -   **Retrieval Playground**: Test the "Learning" logic by typing a query (e.g., "Duty of Care") to see exactly what "Memories" (Examples or Critiques) the agent retrieves for that topic.
 
 ## Docker Setup (Recommended)
@@ -92,6 +98,26 @@ The `docker-compose.yml` is configured to:
 If you prefer running commands manually:
 ```bash
 docker-compose up --build -d
+```
+
+## Deployment to Windows Server 2022 (Automated)
+
+We provide automated scripts to deploy LexChat to a fresh Windows Server 2022 instance.
+
+### One-Click Setup
+1.  **RDP into your server** and open **PowerShell as Administrator**.
+2.  Copy the `deployment/setup_server.ps1` script to your server.
+3.  Run the script:
+    ```powershell
+    .\setup_server.ps1 -RepoUrl "https://github.com/delphium226/LexChat.git"
+    ```
+    *The script will install Chocolatey, Git, Docker Desktop, clonet the repo, and start the app.*
+
+### Updating the App
+To pull the latest changes and rebuild:
+```powershell
+cd C:\Users\YourUser\Documents\LexChat\deployment
+.\deploy_update.ps1
 ```
 
 ## Prerequisites (Local Development)
