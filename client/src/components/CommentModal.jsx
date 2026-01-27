@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const CommentModal = ({ isOpen, onClose, onSubmit, initialComment = '' }) => {
+const CommentModal = ({ isOpen, onClose, onSubmit, initialComment = '', rating = 0, onRate }) => {
     const [comment, setComment] = useState(initialComment);
 
     useEffect(() => {
@@ -13,12 +13,32 @@ const CommentModal = ({ isOpen, onClose, onSubmit, initialComment = '' }) => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
             <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full shadow-xl relative animate-fadeIn">
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Provide Feedback</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Rate & Feedback</h3>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600 focus:outline-none">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
+                </div>
+
+                {/* Star Rating Section */}
+                <div className="flex justify-center mb-6 items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Rating -</span>
+                    <div className="flex space-x-2">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                                key={star}
+                                onClick={() => onRate(star)}
+                                className={`focus:outline-none transition-colors transform hover:scale-110 ${star <= rating ? 'text-yellow-400' : 'text-gray-300 dark:text-gray-600 hover:text-yellow-200'
+                                    }`}
+                                title={`Rate ${star} star${star > 1 ? 's' : ''}`}
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8">
+                                    <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" />
+                                </svg>
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 <textarea
@@ -40,7 +60,7 @@ const CommentModal = ({ isOpen, onClose, onSubmit, initialComment = '' }) => {
                         onClick={() => onSubmit(comment)}
                         className="px-4 py-2 text-sm bg-legal-blue text-white rounded-md hover:bg-blue-700 transition-colors"
                     >
-                        Save Comment
+                        Submit Feedback
                     </button>
                 </div>
             </div>

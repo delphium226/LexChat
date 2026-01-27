@@ -59,6 +59,12 @@ router.delete('/:id', async (req, res) => {
             return res.status(400).json({ message: 'Cannot delete your own account' });
         }
 
+        // Check if target is admin
+        const targetUser = await query('SELECT username FROM users WHERE id = $1', [id]);
+        if (targetUser.rows.length > 0 && targetUser.rows[0].username === 'admin') {
+            return res.status(403).json({ message: 'Cannot delete the main admin account' });
+        }
+
         await query('DELETE FROM users WHERE id = $1', [id]);
         res.json({ message: 'User deleted' });
     } catch (error) {

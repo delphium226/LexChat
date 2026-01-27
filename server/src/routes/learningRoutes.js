@@ -35,6 +35,30 @@ router.get('/feedback', async (req, res) => {
     }
 });
 
+// GET /api/learning/stats
+// Aggregate ratings by day for performance monitoring
+router.get('/stats', async (req, res) => {
+    try {
+        const result = await query(`
+            SELECT 
+                DATE(created_at) as date, 
+                AVG(rating) as avg_rating, 
+                COUNT(*) as feedback_count 
+            FROM messages 
+            WHERE rating IS NOT NULL 
+            GROUP BY DATE(created_at) 
+            ORDER BY date ASC
+            LIMIT 30
+        `);
+        // Note: Postgres DATE returns a Date object. Formatting might be needed on client or server.
+        // We'll return it as is and handle in frontend.
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error fetching stats' });
+    }
+});
+
 // POST /api/learning/test
 // Test the retrieval logic with a hypothetical query
 router.post('/test', async (req, res) => {

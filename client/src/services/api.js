@@ -103,7 +103,17 @@ export const getFeedbackStats = async () => {
     return response.data;
 };
 
+export const getPerformanceStats = async () => {
+    const response = await axios.get(`${API_URL}/learning/stats`);
+    return response.data;
+};
+
 export const testLearningRetrieval = async (query) => {
     const response = await axios.post(`${API_URL}/learning/test`, { query });
+    return response.data;
+};
+
+export const generateSyntheticData = async () => {
+    const response = await axios.post(`${API_URL}/developer/seed`);
     return response.data;
 };

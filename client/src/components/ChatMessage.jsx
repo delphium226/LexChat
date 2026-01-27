@@ -136,35 +136,25 @@ const ChatMessage = ({ message, onResend, showThinking }) => {
                 )}
                 {!isUser && (
                     <div className="bg-gray-50 dark:bg-gray-900/50 p-2 px-4 flex justify-between items-center border-t border-gray-100 dark:border-gray-800">
-                        {/* Rating Widget */}
-                        <div className="flex items-center space-x-2">
-                            <div className="flex items-center space-x-1">
-                                <span className="text-xs text-gray-500 dark:text-gray-400 mr-1">Rate:</span>
-                                {[1, 2, 3, 4, 5].map((star) => (
-                                    <button
-                                        key={star}
-                                        onClick={() => handleRate(star)}
-                                        disabled={!message.id || isRating}
-                                        className={`focus:outline-none transition-colors ${star <= rating ? 'text-yellow-400' : 'text-gray-300 dark:text-gray-600 hover:text-yellow-200'
-                                            }`}
-                                        title={`Rate ${star} star${star > 1 ? 's' : ''}`}
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                                            <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" />
-                                        </svg>
-                                    </button>
-                                ))}
-                            </div>
-
-                            {/* Comment Icon Button */}
+                        {/* Rating/Feedback Button */}
+                        <div className="flex items-center">
                             <button
                                 onClick={() => setShowCommentModal(true)}
-                                className={`ml-2 p-1 rounded-full transition-colors ${comment ? 'text-blue-500 hover:text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
-                                title={comment ? "Edit comment" : "Add comment"}
+                                className={`text-xs px-2 py-1 rounded transition-colors flex items-center gap-1 ${rating > 0
+                                    ? 'text-yellow-600 bg-yellow-50 dark:text-yellow-400 dark:bg-yellow-900/30'
+                                    : 'text-gray-500 hover:text-legal-blue hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+                                    }`}
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-                                </svg>
+                                {rating > 0 ? (
+                                    <>
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                                            <path fillRule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401z" clipRule="evenodd" />
+                                        </svg>
+                                        <span>{rating} Stars</span>
+                                    </>
+                                ) : (
+                                    <span>Rate this answer</span>
+                                )}
                             </button>
                         </div>
 
@@ -220,6 +210,8 @@ const ChatMessage = ({ message, onResend, showThinking }) => {
                 onClose={() => setShowCommentModal(false)}
                 onSubmit={handleCommentSubmit}
                 initialComment={comment}
+                rating={rating}
+                onRate={handleRate}
             />
         </div>
     );
