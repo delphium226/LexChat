@@ -34,11 +34,12 @@ $ErrorActionPreference = "Stop"
 # 2. Install Chocolatey
 if (-not (Get-Command "choco" -ErrorAction SilentlyContinue)) {
     Write-Host "Installing Chocolatey..." -ForegroundColor Cyan
-    Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+    Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
     
     # Reload environment variables so 'choco' is available immediately
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-} else {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+}
+else {
     Write-Host "Chocolatey is already installed." -ForegroundColor Green
 }
 
@@ -48,8 +49,9 @@ if (-not (Get-Command "git" -ErrorAction SilentlyContinue)) {
     Write-Host "Installing Git..."
     choco install git -y --params "/GitAndUnixToolsOnPath"
     # Refreshenv equivalent (simple path reload often not enough for git, but we try)
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-} else {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+}
+else {
     Write-Host "Git is already installed." -ForegroundColor Green
 }
 
@@ -67,7 +69,8 @@ if (-not (Get-Command "docker" -ErrorAction SilentlyContinue)) {
         Restart-Computer
     }
     exit
-} else {
+}
+else {
     Write-Host "Docker is already installed." -ForegroundColor Green
 }
 
@@ -86,7 +89,8 @@ if (-not (Test-Path $RepoPath)) {
 
     Write-Host "Cloning repository to $RepoPath..." -ForegroundColor Cyan
     git clone $RepoUrl $RepoPath
-} else {
+}
+else {
     Write-Host "Repository already exists at $RepoPath. Skipping clone." -ForegroundColor Green
 }
 
@@ -97,7 +101,8 @@ Write-Host "Starting deployment at $RepoPath..." -ForegroundColor Cyan
 # Check if rebuild_docker.ps1 exists
 if (Test-Path "rebuild_docker.ps1") {
     .\rebuild_docker.ps1
-} else {
+}
+else {
     Write-Error "rebuild_docker.ps1 not found in repository root!"
 }
 
