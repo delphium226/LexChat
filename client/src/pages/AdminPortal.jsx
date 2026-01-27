@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData } from '../services/api';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData, getUsageStats, resetDatabase } from '../services/api';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const AdminPortal = () => {
     const [activeTab, setActiveTab] = useState('users');
@@ -16,8 +16,13 @@ const AdminPortal = () => {
     // --- LEARNING DASHBOARD STATE ---
     const [feedback, setFeedback] = useState([]);
     const [stats, setStats] = useState([]);
+    const [learningTimeframe, setLearningTimeframe] = useState('30');
     const [testQuery, setTestQuery] = useState('');
     const [testResults, setTestResults] = useState(null);
+
+    // --- USAGE STATS STATE ---
+    const [usageStats, setUsageStats] = useState(null);
+    const [timeframe, setTimeframe] = useState('30');
 
     // --- INITIAL FETCH ---
     useEffect(() => {
@@ -25,9 +30,11 @@ const AdminPortal = () => {
             fetchUsers();
         } else if (activeTab === 'learning') {
             fetchFeedback();
-            fetchStats();
+            fetchStats(learningTimeframe);
+        } else if (activeTab === 'usage') {
+            fetchUsageStats(timeframe);
         }
-    }, [activeTab]);
+    }, [activeTab, timeframe, learningTimeframe]);
 
     // ==========================================
     // USER MANAGEMENT LOGIC
@@ -99,16 +106,32 @@ const AdminPortal = () => {
         }
     };
 
-    const fetchStats = async () => {
+    const fetchStats = async (days) => {
         try {
-            const data = await getPerformanceStats();
-            // Format dates for display
-            const formattedData = data.map(item => ({
-                ...item,
-                avg_rating: parseFloat(item.avg_rating).toFixed(1), // Ensure float
-                date: new Date(item.date).toLocaleDateString()
-            }));
-            setStats(formattedData);
+            const rawData = await getPerformanceStats(days);
+
+            // Transform Data for Recharts: Group by Date
+            // Expected: [{ date: '...', 'llama3': 4.5, 'gpt4': 4.8 }, ...]
+            const processedMap = {};
+            const modelSet = new Set();
+
+            rawData.forEach(item => {
+                const dateStr = new Date(item.date).toLocaleDateString();
+                if (!processedMap[dateStr]) {
+                    processedMap[dateStr] = { date: dateStr, rawDate: item.date }; // Keep rawDate for sorting if needed
+                }
+                const rating = parseFloat(item.avg_rating).toFixed(1);
+                const modelName = item.model || 'Unknown';
+                processedMap[dateStr][modelName] = rating;
+                modelSet.add(modelName);
+            });
+
+            // Convert to array
+            const chartData = Object.values(processedMap);
+            // Sort by date just in case
+            chartData.sort((a, b) => new Date(a.rawDate) - new Date(b.rawDate));
+
+            setStats({ data: chartData, models: Array.from(modelSet) });
         } catch (err) {
             console.error(err);
         }
@@ -123,6 +146,15 @@ const AdminPortal = () => {
         } catch (err) {
             console.error(err);
             alert('Failed to test retrieval');
+        }
+    };
+
+    const fetchUsageStats = async (days) => {
+        try {
+            const data = await getUsageStats(days);
+            setUsageStats(data);
+        } catch (err) {
+            console.error(err);
         }
     };
 
@@ -142,6 +174,15 @@ const AdminPortal = () => {
                             }`}
                     >
                         User Management
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('usage')}
+                        className={`px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'usage'
+                            ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                            }`}
+                    >
+                        Usage Stats
                     </button>
                     <button
                         onClick={() => setActiveTab('learning')}
@@ -263,17 +304,152 @@ const AdminPortal = () => {
                     </div>
                 )}
 
+                {/* USAGE STATS TAB */}
+                {activeTab === 'usage' && usageStats && (
+                    <div className="space-y-6">
+                        {/* HEADER WITH FILTER */}
+                        <div className="flex justify-between items-center bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
+                            <h2 className="text-lg font-bold dark:text-white">Usage Overview</h2>
+                            <div className="flex items-center space-x-2">
+                                <label className="text-sm text-gray-500 dark:text-gray-400 font-medium">Timeframe:</label>
+                                <select
+                                    value={timeframe}
+                                    onChange={(e) => setTimeframe(e.target.value)}
+                                    className="p-2 border rounded-md text-sm dark:bg-zinc-700 dark:border-zinc-600 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="7">Last 7 Days</option>
+                                    <option value="30">Last 30 Days</option>
+                                    <option value="90">Last 90 Days</option>
+                                    <option value="all">All Time</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* KPI CARDS */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
+                                <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Total Users (Global)</h3>
+                                <p className="text-2xl font-bold dark:text-white">{usageStats.kpi.users}</p>
+                            </div>
+                            <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
+                                <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Active Users {timeframe === 'all' ? '(All Time)' : `(${timeframe}d)`}</h3>
+                                <p className="text-2xl font-bold text-green-600">{usageStats.kpi.activeUsers}</p>
+                            </div>
+                            <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
+                                <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Total Chats</h3>
+                                <p className="text-2xl font-bold dark:text-white">{usageStats.kpi.chats}</p>
+                            </div>
+                            <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
+                                <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Total Messages</h3>
+                                <p className="text-2xl font-bold dark:text-white">{usageStats.kpi.messages}</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* ACTIVITY CHART */}
+                            <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+                                <h2 className="text-lg font-bold mb-4 dark:text-white">Daily Chats {timeframe === 'all' ? '(All Time)' : `(Last ${timeframe} Days)`}</h2>
+                                <div className="h-64">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={usageStats.activity}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                            <XAxis
+                                                dataKey="date"
+                                                stroke="#9ca3af"
+                                                tick={{ fontSize: 10 }}
+                                                tickFormatter={(str) => new Date(str).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}
+                                            />
+                                            <YAxis stroke="#9ca3af" tick={{ fontSize: 12 }} />
+                                            <Tooltip
+                                                contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '12px' }}
+                                                itemStyle={{ color: '#374151' }}
+                                            />
+                                            <Bar dataKey="count" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+
+                            {/* POWER USERS & MODELS */}
+                            <div className="space-y-6">
+                                {/* MODELS */}
+                                <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow h-fit">
+                                    <h2 className="text-lg font-bold mb-4 dark:text-white">Model Distribution</h2>
+                                    <div className="h-40 flex items-center justify-center">
+                                        {/* Simple Pie Chart Placeholder or Real Implementation if easy */}
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                                <Pie
+                                                    data={usageStats.models}
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    innerRadius={40}
+                                                    outerRadius={70}
+                                                    fill="#8884d8"
+                                                    paddingAngle={5}
+                                                    dataKey="count"
+                                                    nameKey="model"
+                                                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                                    labelLine={false}
+                                                >
+                                                    {usageStats.models.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042'][index % 4]} />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+
+                                {/* TOP USERS */}
+                                <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+                                    <h2 className="text-lg font-bold mb-4 dark:text-white">Top 5 Power Users</h2>
+                                    <ul className="space-y-3">
+                                        {usageStats.topUsers.map((u, i) => (
+                                            <li key={i} className="flex justify-between items-center text-sm border-b dark:border-zinc-700 pb-2 last:border-0 last:pb-0">
+                                                <span className="font-medium dark:text-gray-200">
+                                                    {i + 1}. {u.username}
+                                                </span>
+                                                <span className="bg-gray-100 dark:bg-zinc-700 text-gray-800 dark:text-gray-300 px-2 py-1 rounded text-xs font-bold">
+                                                    {u.msg_count} msgs
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* LEARNING DASHBOARD TAB */}
                 {activeTab === 'learning' && (
                     <div className="space-y-6">
                         {/* 0. PERFORMANCE TRENDS CHART */}
                         <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
-                            <h2 className="text-lg font-bold mb-4 dark:text-white">Performance Trends (Avg Rating over Time)</h2>
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-lg font-bold dark:text-white">Performance Trends (Avg Rating)</h2>
+                                <div className="flex items-center space-x-2">
+                                    <label className="text-sm text-gray-500 dark:text-gray-400 font-medium">Timeframe:</label>
+                                    <select
+                                        value={learningTimeframe}
+                                        onChange={(e) => setLearningTimeframe(e.target.value)}
+                                        className="p-2 border rounded-md text-sm dark:bg-zinc-700 dark:border-zinc-600 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                    >
+                                        <option value="7">Last 7 Days</option>
+                                        <option value="30">Last 30 Days</option>
+                                        <option value="90">Last 90 Days</option>
+                                        <option value="all">All Time</option>
+                                    </select>
+                                </div>
+                            </div>
+
                             <div className="h-64 w-full">
-                                {stats.length > 0 ? (
+                                {stats?.data && stats.data.length > 0 ? (
                                     <ResponsiveContainer width="100%" height="100%">
                                         <LineChart
-                                            data={stats}
+                                            data={stats.data}
                                             margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                                         >
                                             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -291,13 +467,19 @@ const AdminPortal = () => {
                                                 contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}
                                                 itemStyle={{ color: '#374151' }}
                                             />
-                                            <Line
-                                                type="monotone"
-                                                dataKey="avg_rating"
-                                                stroke="#2563eb"
-                                                strokeWidth={2}
-                                                activeDot={{ r: 8 }}
-                                            />
+                                            <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                                            {stats.models.map((model, index) => (
+                                                <Line
+                                                    key={model}
+                                                    type="monotone"
+                                                    dataKey={model}
+                                                    name={model}
+                                                    stroke={['#2563eb', '#db2777', '#ca8a04', '#16a34a', '#9333ea'][index % 5]}
+                                                    strokeWidth={2}
+                                                    activeDot={{ r: 8 }}
+                                                    connectNulls
+                                                />
+                                            ))}
                                         </LineChart>
                                     </ResponsiveContainer>
                                 ) : (
@@ -459,6 +641,35 @@ const AdminPortal = () => {
                                 className={`bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors text-sm ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
                                 {isLoading ? 'Generating Data...' : 'Generate 100 Synthetic Users (6 Months History)'}
+                            </button>
+                        </div>
+
+                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow border border-red-200 dark:border-red-900">
+                            <h2 className="text-lg font-bold mb-4 text-red-600 dark:text-red-400">Danger Zone</h2>
+                            <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                                This action will delete all users (except 'admin'), all chats, and all messages.
+                                <strong> This action is irreversible.</strong>
+                            </p>
+                            <button
+                                onClick={async () => {
+                                    if (!window.confirm('WARNING: This will delete ALL data (users, chats, messages). Only the admin account will be preserved.\n\nAre you sure you want to proceed?')) return;
+                                    setIsLoading(true);
+                                    try {
+                                        const res = await resetDatabase();
+                                        setMessage(res.message);
+                                        // Refresh other tabs if needed
+                                        fetchStats();
+                                        fetchUsers();
+                                    } catch (err) {
+                                        setMessage('Error resetting database: ' + err.message);
+                                    } finally {
+                                        setIsLoading(false);
+                                    }
+                                }}
+                                disabled={isLoading}
+                                className={`bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors text-sm ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                                {isLoading ? 'Processing...' : 'Reset Database'}
                             </button>
                         </div>
                     </div>

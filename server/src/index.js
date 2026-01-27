@@ -32,6 +32,9 @@ app.use('/api/learning', learningRoutes);
 const developerRoutes = require('./routes/developerRoutes');
 app.use('/api/developer', developerRoutes);
 
+const statsRoutes = require('./routes/statsRoutes');
+app.use('/api/stats', statsRoutes);
+
 // HTTP Request Logging Middleware
 app.use((req, res, next) => {
     const start = Date.now();

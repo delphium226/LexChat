@@ -3,6 +3,7 @@ const router = express.Router();
 const { query } = require('../db');
 const { faker } = require('@faker-js/faker');
 const bcrypt = require('bcryptjs');
+const config = require('../config');
 
 // Helper to hash password once
 const getHashedPassword = async () => {
@@ -73,10 +74,14 @@ router.post('/seed', async (req, res) => {
                         const topic = legalTopics[Math.floor(Math.random() * legalTopics.length)];
                         const title = `${topic} Inquiry`;
 
+                        // Random Model
+                        const models = config.models.map(m => m.name);
+                        const randomModel = models[Math.floor(Math.random() * models.length)];
+
                         // Create Chat
                         const chatRes = await query(
                             'INSERT INTO chats (user_id, title, model, created_at) VALUES ($1, $2, $3, $4) RETURNING id',
-                            [userId, title, 'llama3', chatDate]
+                            [userId, title, randomModel, chatDate]
                         );
                         const chatId = chatRes.rows[0].id;
                         totalChats++;
@@ -134,6 +139,30 @@ router.post('/seed', async (req, res) => {
     } catch (err) {
         console.error('Seed error:', err);
         res.status(500).json({ error: 'Failed to generate synthetic data' });
+    }
+});
+
+// POST /api/developer/reset
+router.post('/reset', async (req, res) => {
+    try {
+        console.log('Resetting database...');
+        // Delete all users except admin. 
+        // Cascading foreign keys should handle chats and messages.
+        // If not using cascade, we'd need to delete messages and chats first.
+        // Assuming standard setup:
+        // 1. messages (ref chats)
+        // 2. chats (ref users)
+        // 3. users 
+
+        // Safest approach: delete from children up
+        await query('DELETE FROM messages');
+        await query('DELETE FROM chats');
+        await query("DELETE FROM users WHERE username != 'admin'");
+
+        res.json({ success: true, message: 'Database reset successfully. Only admin user remains.' });
+    } catch (err) {
+        console.error('Reset error:', err);
+        res.status(500).json({ error: 'Failed to reset database' });
     }
 });
 

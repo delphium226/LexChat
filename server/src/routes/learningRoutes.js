@@ -37,21 +37,33 @@ router.get('/feedback', async (req, res) => {
 
 // GET /api/learning/stats
 // Aggregate ratings by day for performance monitoring
+// GET /api/learning/stats
+// Aggregate ratings by day and model for performance monitoring
 router.get('/stats', async (req, res) => {
     try {
+        const { days = '30' } = req.query;
+        let dateFilter = '';
+
+        if (days !== 'all') {
+            const daysNum = parseInt(days) || 30;
+            // Filter on messages created_at
+            dateFilter = `AND m.created_at > NOW() - INTERVAL '${daysNum} days'`;
+        }
+
         const result = await query(`
             SELECT 
-                DATE(created_at) as date, 
-                AVG(rating) as avg_rating, 
+                DATE(m.created_at) as date, 
+                c.model,
+                AVG(m.rating) as avg_rating, 
                 COUNT(*) as feedback_count 
-            FROM messages 
-            WHERE rating IS NOT NULL 
-            GROUP BY DATE(created_at) 
+            FROM messages m
+            JOIN chats c ON m.chat_id = c.id
+            WHERE m.rating IS NOT NULL 
+            ${dateFilter}
+            GROUP BY DATE(m.created_at), c.model
             ORDER BY date ASC
-            LIMIT 30
         `);
-        // Note: Postgres DATE returns a Date object. Formatting might be needed on client or server.
-        // We'll return it as is and handle in frontend.
+
         res.json(result.rows);
     } catch (err) {
         console.error(err);
