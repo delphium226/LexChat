@@ -67,7 +67,8 @@ Review your answer before responding: Does every claim have a corresponding sour
     }
   },
   lexApi: {
-    url: process.env.LEX_API_URL || 'https://lex-api.victoriousdesert-f8e685e0.uksouth.azurecontainerapps.io'
+    // url: process.env.LEX_API_URL || 'https://lex-api.victoriousdesert-f8e685e0.uksouth.azurecontainerapps.io'
+    url: process.env.LEX_API_URL || 'https://lex.lab.i.ai.gov.uk/'
   },
   models: [
     { name: 'deepseek-v3.2:cloud', contextLengthKB: 160 },
