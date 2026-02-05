@@ -15,5 +15,5 @@ docker-compose down --rmi local --volumes
 Write-Host "Building and starting Docker containers..."
 docker-compose up --build -d
 
-Write-Host "Application is starting at http://localhost:80"
+Write-Host "Application is starting at http://localhost:3000"
 Write-Host "Ollama models are being pulled in the background. Check logs for 'ollama-puller' if needed."

@@ -10,8 +10,10 @@ services:
       POSTGRES_DB: lexchat
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lexuser -d lexchat"]
+      test: [ "CMD-SHELL", "pg_isready -U lexuser -d lexchat" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -25,7 +27,7 @@ services:
       - ollama_data:/root/.ollama
       - ./ollama_auth/id_ed25519:/tmp/ollama_id_ed25519:ro
       - ./ollama_auth/id_ed25519.pub:/tmp/ollama_id_ed25519.pub:ro
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint: [ "/bin/sh", "-c" ]
     command:
       - |
         mkdir -p /root/.ollama
@@ -41,7 +43,7 @@ services:
     restart: "no"
     depends_on:
       - ollama
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint: [ "/bin/sh", "-c" ]
     command:
       - |
         echo "Waiting for Ollama..."
@@ -55,23 +57,38 @@ services:
         curl -X POST http://ollama:11434/api/pull -d '{"name": "glm-4.6:cloud"}'
         echo "All models pull requests initiated."
 
-  app:
-    build: .
+  backend:
+    build:
+      context: .
+      dockerfile: server_py/Dockerfile
     restart: always
-    ports:
-      - "80:3000"
+    expose:
+      - "8000"
     environment:
-      - PORT=3000
+      - PORT=8000
       - DATABASE_URL=postgresql://lexuser:lexpassword@db:5432/lexchat
       - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_API_KEY= # Unset to allow Ollama container to handle auth via SSH keys
       - JWT_SECRET=docker_default_jwt_secret
-      # LEX_API_URL is picked up from .env if present, or defaults.
+      - LEX_API_URL=https://lex.lab.i.ai.gov.uk
+      - EMAIL_USER=
+      - EMAIL_PASS=
     depends_on:
       db:
         condition: service_healthy
       ollama:
         condition: service_started
+
+  frontend:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:
