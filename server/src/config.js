@@ -6,7 +6,11 @@ module.exports = {
     port: process.env.PORT || 3000
   },
   database: {
-    connectionString: process.env.DATABASE_URL || 'postgresql://myuser:mypassword@192.168.1.221:5432/postgres'
+    connectionString: process.env.DATABASE_URL || 'postgresql://myuser:mypassword@192.168.1.221:5432/postgres',
+    maxConnections: parseInt(process.env.DB_MAX_CONNECTIONS || '20', 10)
+  },
+  concurrency: {
+    maxConcurrentRequests: parseInt(process.env.MAX_CONCURRENT_REQUESTS || '5', 10)
   },
   email: {
     user: process.env.EMAIL_USER,

@@ -212,6 +212,10 @@ function AppContent() {
               return [...updated, { role: 'assistant', content: status.content }];
             }
           });
+        } else if (status.type === 'queue') {
+          setAgentStatus(status.message);
+        } else if (status.type === 'warning') {
+          setAgentStatus(status.message);
         }
       }, controller.signal);
 

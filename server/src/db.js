@@ -4,6 +4,7 @@ const config = require('./config');
 
 const pool = new Pool({
     connectionString: config.database.connectionString,
+    max: config.database.maxConnections
 });
 
 const query = (text, params) => pool.query(text, params);

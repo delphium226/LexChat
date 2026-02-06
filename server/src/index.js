@@ -9,6 +9,12 @@ const cookieParser = require('cookie-parser');
 const { initializeDB } = require('./db');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
+const RequestQueue = require('./utils/queue');
+
+// Initialize Request Queue
+const requestQueue = new RequestQueue(config.concurrency.maxConcurrentRequests);
+const { chatWithDeepResearch } = require('./agent/deepResearch'); // Move require up here
+
 
 const app = express();
 const PORT = config.server.port;
@@ -80,29 +86,50 @@ app.post('/api/chat', async (req, res) => {
     try {
         const { deep_research } = req.body;
 
-        let responseMessage;
-        if (deep_research) {
-            const { chatWithDeepResearch } = require('./agent/deepResearch');
-            responseMessage = await chatWithDeepResearch([...messages], model, (status) => {
-                if (status.type !== 'token') {
-                    logger.info(`Tool Status: ${JSON.stringify(status)}`);
-                }
-                // Stream status updates to client
+        // Wrap AI execution in the Queue
+        const responseMessage = await requestQueue.enqueue(async () => {
+            // Timeout to notify user of long processing
+            const PROCESS_TIMEOUT_MS = 120000; // 2 minutes
+            let timeoutId = setTimeout(() => {
+                logger.info('Process timeout triggered - sending warning to client');
                 if (!controller.signal.aborted) {
-                    res.write(`data: ${JSON.stringify(status)}\n\n`);
+                    res.write(`data: ${JSON.stringify({ type: 'warning', message: 'The request is taking longer than usual. Please be patient, it is being worked on...' })}\n\n`);
+                } else {
+                    logger.info('Process timeout triggered but signal aborted');
                 }
-            }, controller.signal, num_ctx);
-        } else {
-            responseMessage = await chatWithOllama([...messages], model, (status) => {
-                if (status.type !== 'token') {
-                    logger.info(`Tool Status: ${JSON.stringify(status)}`);
+            }, PROCESS_TIMEOUT_MS);
+
+            try {
+                if (deep_research) {
+                    return await chatWithDeepResearch([...messages], model, (status) => {
+                        if (status.type !== 'token') {
+                            logger.info(`Tool Status: ${JSON.stringify(status)}`);
+                        }
+                        // Stream status updates to client
+                        if (!controller.signal.aborted) {
+                            res.write(`data: ${JSON.stringify(status)}\n\n`);
+                        }
+                    }, controller.signal, num_ctx);
+                } else {
+                    return await chatWithOllama([...messages], model, (status) => {
+                        if (status.type !== 'token') {
+                            logger.info(`Tool Status: ${JSON.stringify(status)}`);
+                        }
+                        // Stream status updates to client
+                        if (!controller.signal.aborted) {
+                            res.write(`data: ${JSON.stringify(status)}\n\n`);
+                        }
+                    }, controller.signal, num_ctx);
                 }
-                // Stream status updates to client
-                if (!controller.signal.aborted) {
-                    res.write(`data: ${JSON.stringify(status)}\n\n`);
-                }
-            }, controller.signal, num_ctx);
-        }
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        }, (position) => {
+            // onWaiting callback: Notify user of their position
+            if (!controller.signal.aborted) {
+                res.write(`data: ${JSON.stringify({ type: 'queue', message: `You are #${position} in the queue...` })}\n\n`);
+            }
+        });
 
         // Send final result
         if (!controller.signal.aborted) {
