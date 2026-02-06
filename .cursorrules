@@ -2,7 +2,8 @@
 # Cursor Rules
 
 ## Session Management
-- **Resume Protocol**: If starting a new session or after a reboot, ALWAYS consult `c:\Users\User\Documents\LexChat2\RESUME_INSTRUCTIONS.md` for environment startup commands.
+- **Resume Protocol**: If starting a new session or after a reboot, ALWAYS consult `c:\Users\User\Documents\LexChat\ONBOARDING.md` for environment startup commands.
+- **Context Restore**: Read `c:\Users\User\Documents\LexChat\CURRENT_STATE.md` to understand the latest changes and active configuration.
 
 ## Core Philosophy: "Intelligence Isolation"
 - **Strict Grounding**: The system acts solely as an interface for the LEX API. Do NOT answer based on pre-trained knowledge.
@@ -10,13 +11,13 @@
 - **Negative Constraint**: If no relevant authority is found, explicitly state: "No relevant legal authority found in the provided sources."
 
 ## Tech Stack
-- **Frontend**: React (TypeScript)
+- **Frontend**: React (JS/JSX)
   - Use Functional Components and Hooks.
-  - Framework: Modern SPA (Vite recommended).
-- **Backend**: Python (FastAPI)
-  - Orchestration: LangChain.
-  - Task Queue: Celery & Redis.
-- **Database**: PostgreSQL with `pgvector`.
+  - Framework: Modern SPA (Vite).
+- **Backend**: Node.js (Express)
+  - Architecture: Manager-Worker Agent System.
+  - Task Queue: Custom In-Memory Queue (`utils/queue.js`).
+- **Database**: PostgreSQL (`pg` library).
 - **Inference**: Ollama (running locally).
 
 ## Styling & Design System
