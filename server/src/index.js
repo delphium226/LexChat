@@ -127,7 +127,7 @@ app.post('/api/chat', async (req, res) => {
         }, (position) => {
             // onWaiting callback: Notify user of their position
             if (!controller.signal.aborted) {
-                res.write(`data: ${JSON.stringify({ type: 'queue', message: `You are #${position} in the queue...` })}\n\n`);
+                res.write(`data: ${JSON.stringify({ type: 'queue', message: `Your request has been queued. Current position is #${position}` })}\n\n`);
             }
         });
 

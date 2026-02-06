@@ -6,3 +6,13 @@ body {
   background-color: #f3f4f6;
   font-family: 'Inter', sans-serif;
 }
+
+@keyframes hourglass-flip {
+  0% { transform: rotate(0deg); }
+  50% { transform: rotate(180deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.animate-hourglass {
+  animation: hourglass-flip 2s infinite ease-in-out;
+}

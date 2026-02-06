@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { getModels, sendMessage, createChat, getChatMessages, saveMessage, updatePreferences } from './services/api';
 import ChatMessage from './components/ChatMessage';
 import loadingGif from './assets/load-35_128.gif';
+import Hourglass from './components/Hourglass';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginModal from './components/LoginModal';
 import AdminPortal from './pages/AdminPortal';
@@ -520,7 +521,11 @@ function AppContent() {
           {loading && (
             <div className="flex justify-start mb-4">
               <div className="bg-black dark:bg-gray-800 border border-legal-blue p-3 rounded-lg shadow-md flex items-center gap-2 max-w-[85%]">
-                <img src={loadingGif} alt="Processing..." className="w-6 h-6 flex-shrink-0" />
+                {agentStatus && agentStatus.toLowerCase().includes('queue') ? (
+                  <Hourglass />
+                ) : (
+                  <img src={loadingGif} alt="Processing..." className="w-6 h-6 flex-shrink-0" />
+                )}
                 <span className="text-xs text-white dark:text-gray-200 truncate">{agentStatus || 'Agent is thinking...'}</span>
               </div>
             </div>

@@ -11,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lexuser -d lexchat"]
+      test: [ "CMD-SHELL", "pg_isready -U lexuser -d lexchat" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -25,7 +25,7 @@ services:
       - ollama_data:/root/.ollama
       - ./ollama_auth/id_ed25519:/tmp/ollama_id_ed25519:ro
       - ./ollama_auth/id_ed25519.pub:/tmp/ollama_id_ed25519.pub:ro
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint: [ "/bin/sh", "-c" ]
     command:
       - |
         mkdir -p /root/.ollama
@@ -41,7 +41,7 @@ services:
     restart: "no"
     depends_on:
       - ollama
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint: [ "/bin/sh", "-c" ]
     command:
       - |
         echo "Waiting for Ollama..."
@@ -66,6 +66,7 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - OLLAMA_API_KEY= # Unset to allow Ollama container to handle auth via SSH keys
       - JWT_SECRET=docker_default_jwt_secret
+      - MAX_CONCURRENT_REQUESTS=1
       # LEX_API_URL is picked up from .env if present, or defaults.
     depends_on:
       db:
