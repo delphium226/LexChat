@@ -69,31 +69,7 @@ const workerTools = [
       },
     },
   },
-  {
-    type: 'function',
-    function: {
-      name: 'search_caselaw',
-      description: 'Search for UK court cases and judgments.',
-      parameters: {
-        type: 'object',
-        properties: {
-          query: {
-            type: 'string',
-            description: 'The search query (e.g., "Donoghue v Stevenson", "negligence duty of care").',
-          },
-          year_from: {
-            type: 'integer',
-            description: 'Optional start year filter.',
-          },
-          year_to: {
-            type: 'integer',
-            description: 'Optional end year filter.',
-          },
-        },
-        required: ['query'],
-      },
-    },
-  },
+
 ];
 
 // This function only executes "Leaf" tools (Worker tools)
@@ -118,14 +94,7 @@ async function executeWorkerTool(name, args) {
         });
         return JSON.stringify(textRes.data);
 
-      case 'search_caselaw':
-        const caseRes = await axios.post(`${LEX_API_URL}/caselaw/search`, {
-          query: args.query,
-          year_from: args.year_from,
-          year_to: args.year_to,
-          size: 5
-        });
-        return JSON.stringify(caseRes.data);
+
 
       default:
         return `Error: Tool ${name} not found in worker toolset.`;

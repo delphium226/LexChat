@@ -187,10 +187,10 @@ function AppContent() {
             'Research Agent': 'Delegating to research agent...',
             'Worker: search_legislation': 'Querying National Legislation Archives...',
             'Worker: get_legislation_text': 'Reviewing statutory text in detail...',
-            'Worker: search_caselaw': 'Analyzing Case Law precedents...',
+
             'search_legislation': 'Querying National Legislation Archives...',
             'get_legislation_text': 'Reviewing statutory text in detail...',
-            'search_caselaw': 'Analyzing Case Law precedents...'
+
           };
           setAgentStatus(toolMessages[status.tool] || `Conducting research (${status.tool})...`);
         } else if (status.type === 'tool_end') {
@@ -594,13 +594,13 @@ function AppContent() {
 
               <div className="space-y-4 text-gray-700 dark:text-gray-300 text-sm">
                 <p>
-                  <strong>LexChat</strong> is an intelligent legal research assistant designed to help legal professionals and researchers quickly access UK legislation and related case law.
+                  <strong>LexChat</strong> is an intelligent legal research assistant designed to help legal professionals and researchers quickly access UK legislation.
                 </p>
 
                 <div>
                   <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Purpose</h3>
                   <p>
-                    To simplify the process of legal research by allowing natural language queries to retrieve specific sections of legislation and relevant case precedents.
+                    To simplify the process of legal research by allowing natural language queries to retrieve specific sections of legislation.
                   </p>
                 </div>
 
@@ -608,14 +608,14 @@ function AppContent() {
                   <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Data Sources</h3>
                   <ul className="list-disc list-inside">
                     <li><strong>The National Archives</strong> (legislation.gov.uk) for UK Legislation.</li>
-                    <li><strong>The National Archives</strong> (caselaw.nationalarchives.gov.uk) for Case Law.</li>
+
                   </ul>
                 </div>
 
                 <div>
                   <h3 className="font-semibold text-gray-900 dark:text-white mb-1">AI Approach</h3>
                   <p>
-                    LexChat utilizes an <strong>Agentic RAG</strong> architecture powered by the <strong>Model Context Protocol (MCP)</strong>. It intelligently queries external legal databases to retrieve relevant legislation and case law, which are then analyzed by a Large Language Model to provide accurate, context-aware answers.
+                    LexChat utilizes an <strong>Agentic RAG</strong> architecture powered by the <strong>Model Context Protocol (MCP)</strong>. It intelligently queries external legal databases to retrieve relevant legislation, which are then analyzed by a Large Language Model to provide accurate, context-aware answers.
                   </p>
                 </div>
               </div>
