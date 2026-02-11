@@ -6,11 +6,11 @@ LexChat UK is a specialized, locally-hosted AI coding assistant designed for UK 
 ## 2. Core Architecture
 
 ### 2.1 Technology Stack
--   **Frontend**: React 19 (Vite), Tailwind CSS to a modern responsive interface.
--   **Backend**: Node.js (Express), PostgreSQL (Data persistence).
+-   **Frontend**: React 19 (Vite), served via Nginx (Alpine).
+-   **Backend**: Python (FastAPI), PostgreSQL (Data persistence).
 -   **AI Core**: Ollama (Local LLM inference), `google-sr` (Web Search).
 -   **External Data**: LEX API (Authoritative legal text).
--   **Deployment**: Docker Compose, Windows Server 2022 compatibility.
+-   **Deployment**: Docker Compose (Split Container Architecture).
 
 ### 2.2 Manager-Worker Agent System
 Most legal queries require a multi-step approach. LexChat separates concerns:

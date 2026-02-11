@@ -115,3 +115,36 @@ The backend implements a **Manager-Worker** pattern to handle complex queries.
 -   **Styling**: `tailwindcss`.
 -   **Markdown**: `react-markdown` + `remark-gfm` (for tables/citations).
 -   **Charts**: `recharts` (for Admin visuals).
+
+---
+
+## 5. Deployment Architecture
+
+The application is deployed as a set of Docker containers orchestrated by Docker Compose.
+
+### 5.1 Services
+1.  **Frontend (`lexchat-frontend`)**:
+    -   **Base Image**: `nginx:alpine`
+    -   **Role**: Serves the static React application build (`/usr/share/nginx/html`) and proxies API requests.
+    -   **Configuration**: `nginx.conf` defines routing rules.
+    -   **Port**: Exposed on host port 80.
+
+2.  **Backend (`lexchat-backend`)**:
+    -   **Base Image**: `python:3.11-slim`
+    -   **Role**: Hosts the FastAPI application.
+    -   **Port**: Exposed on host port 8000 (for direct API access/Swagger UI).
+    -   **Dependencies**: Connects to `db` and `ollama`.
+
+3.  **Database (`lexchat-db`)**:
+    -   **Image**: `postgres:15`
+    -   **Role**: Persistent data storage.
+
+4.  **AI Inference (`lexchat-ollama`)**:
+    -   **Image**: `ollama/ollama`
+    -   **Role**: Local LLM inference engine.
+
+### 5.2 Traffic Flow
+1.  **User Request** -> Host Port 80 -> **Nginx (Frontend)**.
+2.  **Static Asset** -> Nginx serves file from local volume.
+3.  **API Request (`/api/*`)** -> Nginx proxies to `http://backend:8000`.
+4.  **Backend Processing** -> FastAPI handles request, queries DB/Ollama.

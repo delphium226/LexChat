@@ -60,8 +60,8 @@ services:
       context: .
       dockerfile: server_py/Dockerfile
     restart: always
-    expose:
-      - "8000"
+    ports:
+      - "8000:8000"
     environment:
       - PORT=8000
       - DATABASE_URL=postgresql://lexuser:lexpassword@db:5432/lexchat

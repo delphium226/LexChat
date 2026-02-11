@@ -3,11 +3,11 @@
 ## Last Updated: 2026-02-10
 
 ## Active Configuration
-- **Backend**: FastAPI (Python) at `server_py/` — migration from Node.js Express complete
-- **Frontend**: React (Vite) at `client/`
+- **Backend**: FastAPI (Python) at `server_py/`
+- **Frontend**: React (Vite) at `client/` served via Nginx
 - **Database**: PostgreSQL 15 via Docker
 - **AI**: Ollama with Manager/Worker agent architecture
-- **Deployment**: Docker Compose (`docker-compose.yml` → `server_py/Dockerfile`)
+- **Deployment**: Docker Compose (Split containers: `frontend` + `backend`)
 
 ## Migration Status: COMPLETE (Phases 1-10)
 
@@ -40,6 +40,8 @@ All 10 phases of the Express → FastAPI migration have been implemented:
 ## Key Files Created/Modified
 
 ### New files:
+- `nginx.conf` — Nginx configuration for frontend/proxy
+- `client/Dockerfile` — Frontend Dockerfile
 - `server_py/src/models.py` — User, Chat, Message ORM models
 - `server_py/src/agent/tools.py` — LEX API tool definitions + execution
 - `server_py/src/agent/deep_research.py` — Deep research agent

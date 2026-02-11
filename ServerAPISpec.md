@@ -1,9 +1,14 @@
 # Server API Specification
 
 ## Overview
-This document outlines the API endpoints for the LexChat server. The server uses Express.js and communicates with a PostgreSQL database.
+This document outlines the API endpoints for the LexChat server. The server uses **FastAPI (Python)** and communicates with a PostgreSQL database.
 
 **Base URL**: `/api` (implicitly relative to the server root)
+
+### Interactive Documentation
+The API provides auto-generated interactive documentation, accessible when running locally with the backend port exposed:
+*   **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
+*   **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
 ## Authentication
 Authentication is handled via JWT (JSON Web Tokens).
@@ -283,3 +288,15 @@ Authentication is handled via JWT (JSON Web Tokens).
     ```
 *   **Response**: `200 OK` (Streamed SSE)
     *   Events: `data: { "type": "token", "content": "..." }`, `data: { "type": "result", "message": "..." }`
+
+---
+
+## 8. System Health (`/api/health`)
+
+### Health Check
+*   **Endpoint**: `GET /api/health`
+*   **Public**: Yes
+*   **Response**: `200 OK`
+    ```json
+    { "status": "healthy" }
+    ```
