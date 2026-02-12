@@ -68,7 +68,7 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - OLLAMA_API_KEY= # Unset to allow Ollama container to handle auth via SSH keys
       - JWT_SECRET=docker_default_jwt_secret
-      - MAX_CONCURRENT_REQUESTS=1
+      - MAX_CONCURRENT_REQUESTS=2
     depends_on:
       db:
         condition: service_healthy

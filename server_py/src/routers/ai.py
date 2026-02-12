@@ -10,10 +10,17 @@ from pydantic import BaseModel
 from ..agent.deep_research import chat_with_deep_research
 from ..agent.ollama_client import list_models, process_user_request
 from ..database import async_session_maker
+from ..utils.queue import RequestQueue
 
 logger = logging.getLogger("app")
 
 router = APIRouter(tags=["AI"])
+
+from ..config import settings
+
+# Global Request Queue
+# This limits the number of simultaneous AI generations to prevent crashing the server/Ollama.
+request_queue = RequestQueue(concurrency=settings.max_concurrent_requests)
 
 
 @router.get("/api/models")
@@ -47,18 +54,6 @@ async def chat_endpoint(body: ChatRequest, request: Request):
         # 2-minute timeout warning
         warning_sent = False
 
-        async def send_warning():
-            nonlocal warning_sent
-            await asyncio.sleep(120)
-            if not cancel_event.is_set() and not warning_sent:
-                warning_sent = True
-                yield_data = json.dumps({
-                    "type": "warning",
-                    "message": "The request is taking longer than usual. Please be patient, it is being worked on...",
-                })
-                # We can't yield from a nested coroutine, so we use the flag
-                # and handle it in the main loop below
-
         try:
             # Collect SSE events via callback
             events = asyncio.Queue()
@@ -66,21 +61,19 @@ async def chat_endpoint(body: ChatRequest, request: Request):
             def on_chunk(data):
                 events.put_nowait(data)
 
-            # Get a DB session for learning injection
-            async with async_session_maker() as db_session:
-                if body.deep_research:
-                    agent_task = asyncio.create_task(
-                        chat_with_deep_research(
+            async def run_agent_task():
+                # Get a DB session for learning injection
+                async with async_session_maker() as db_session:
+                    if body.deep_research:
+                        return await chat_with_deep_research(
                             list(body.messages),
                             body.model,
                             on_chunk,
                             cancel_event,
                             body.num_ctx or 0,
                         )
-                    )
-                else:
-                    agent_task = asyncio.create_task(
-                        process_user_request(
+                    else:
+                        return await process_user_request(
                             list(body.messages),
                             body.model,
                             on_chunk,
@@ -88,29 +81,22 @@ async def chat_endpoint(body: ChatRequest, request: Request):
                             body.num_ctx or 0,
                             db_session=db_session,
                         )
-                    )
 
-                # Timeout warning task
-                timeout_task = asyncio.create_task(asyncio.sleep(120))
+            # Callback for queue updates
+            def on_queue_waiting(position):
+                events.put_nowait({"type": "queue", "position": position})
 
-                while not agent_task.done():
-                    # Drain event queue
-                    while not events.empty():
-                        try:
-                            event = events.get_nowait()
-                            yield f"data: {json.dumps(event)}\n\n"
-                        except asyncio.QueueEmpty:
-                            break
+            # EXECUTE THROUGH QUEUE
+            # This will block until a slot is available
+            agent_task = asyncio.create_task(
+                request_queue.enqueue(run_agent_task, on_waiting=on_queue_waiting)
+            )
 
-                    # Check timeout
-                    if timeout_task.done() and not warning_sent:
-                        warning_sent = True
-                        yield f"data: {json.dumps({'type': 'warning', 'message': 'The request is taking longer than usual. Please be patient...'})}\n\n"
+            # Timeout warning task
+            timeout_task = asyncio.create_task(asyncio.sleep(120))
 
-                    # Small sleep to avoid busy loop
-                    await asyncio.sleep(0.05)
-
-                # Drain remaining events
+            while not agent_task.done():
+                # Drain event queue
                 while not events.empty():
                     try:
                         event = events.get_nowait()
@@ -118,8 +104,25 @@ async def chat_endpoint(body: ChatRequest, request: Request):
                     except asyncio.QueueEmpty:
                         break
 
-                # Get final result
-                result_message = agent_task.result()
+                # Check timeout
+                if timeout_task.done() and not warning_sent:
+                    warning_sent = True
+                    yield f"data: {json.dumps({'type': 'warning', 'message': 'The request is taking longer than usual. Please be patient...'})}\n\n"
+
+                # Small sleep to avoid busy loop
+                await asyncio.sleep(0.05)
+
+            # Drain remaining events
+            while not events.empty():
+                try:
+                    event = events.get_nowait()
+                    yield f"data: {json.dumps(event)}\n\n"
+                except asyncio.QueueEmpty:
+                    break
+
+            # Get final result
+            result_message = agent_task.result()
+            if result_message:
                 yield f"data: {json.dumps({'type': 'result', 'message': result_message})}\n\n"
 
         except asyncio.CancelledError:

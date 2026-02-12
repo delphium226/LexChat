@@ -76,6 +76,7 @@ async def chat_loop(
 
     full_content = ""
     tool_calls = []
+    final_stats = {}
 
     try:
         async with httpx.AsyncClient(timeout=None) as client:
@@ -110,6 +111,14 @@ async def chat_loop(
                     if msg.get("tool_calls"):
                         tool_calls.extend(msg["tool_calls"])
 
+                    if data.get("done"):
+                        final_stats = {
+                            "prompt_eval_count": data.get("prompt_eval_count", 0),
+                            "eval_count": data.get("eval_count", 0),
+                            "total_duration": data.get("total_duration", 0),
+                            "load_duration": data.get("load_duration", 0),
+                        }
+
     except httpx.ConnectError:
         raise ConnectionError(
             "Agent Service (Ollama) is not reachable. "
@@ -118,6 +127,8 @@ async def chat_loop(
 
     # Build assistant message
     message = {"role": "assistant", "content": full_content}
+    if final_stats:
+        message["stats"] = final_stats
     if tool_calls:
         message["tool_calls"] = tool_calls
 

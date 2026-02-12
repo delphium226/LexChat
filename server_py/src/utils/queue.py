@@ -38,7 +38,8 @@ class RequestQueue:
         task_id = str(uuid.uuid4())
 
         # If semaphore is locked, notify the caller of their position
-        if self._semaphore._value == 0 and on_waiting:
+        if self._semaphore.locked() and on_waiting:
+            logger.info(f"[Queue] Semaphore locked! Enqueuing task {task_id}")
             async with self._lock:
                 position = len(self._queue) + 1
                 self._queue.append({"id": task_id, "on_waiting": on_waiting})
