@@ -109,7 +109,7 @@ const ChatMessage = ({ message, onResend, showThinking }) => {
     return (
         <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
             <div
-                className={`rounded-lg max-w-3xl shadow-md overflow-hidden min-w-[150px] ${isUser
+                className={`rounded-lg max-w-[90%] shadow-md overflow-hidden min-w-[150px] ${isUser
                     ? 'bg-legal-blue text-white'
                     : 'bg-white text-gray-800 border border-gray-200 dark:bg-black dark:text-white dark:border-gray-700'
                     }`}
