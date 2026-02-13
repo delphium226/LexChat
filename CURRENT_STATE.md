@@ -7,7 +7,9 @@
 - **Frontend**: React (Vite) at `client/` served via Nginx
 - **Database**: PostgreSQL 15 via Docker
 - **AI**: Ollama with Manager/Worker agent architecture
-- **Deployment**: Docker Compose (Split containers: `frontend` + `backend`)
+- **Deployment**:
+  - **Docker**: Docker Compose (Split containers)
+  - **Native**: Windows Server automated scripts (`deployment/install_native.ps1`)
 
 ## Migration Status: COMPLETE (Phases 1-10)
 

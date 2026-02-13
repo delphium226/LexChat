@@ -120,6 +120,25 @@ cd C:\Users\YourUser\Documents\LexChat\deployment
 .\deploy_update.ps1
 ```
 
+
+## Native Windows Deployment (No Docker/WSL)
+
+For environments where Docker or WSL are not available, you can run the application natively on Windows Server.
+
+### Automated Setup
+1.  Open PowerShell as Administrator.
+2.  Run the installer:
+    ```powershell
+    cd deployment
+    .\install_native.ps1
+    ```
+3.  Start the application:
+    ```cmd
+    deployment\start_native.cmd
+    ```
+
+See [deployment/NATIVE_DEPLOYMENT.md](deployment/NATIVE_DEPLOYMENT.md) for full details.
+
 ## Prerequisites (Local Development)
 
 Before running the application locally (without Docker), ensure you have the following installed:
