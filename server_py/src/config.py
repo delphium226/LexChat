@@ -88,6 +88,7 @@ class Settings(BaseSettings):
     ollama_default_context: int = 131072
     max_concurrent_requests: int = 5
     enable_deep_research: bool = True
+    ollama_temperature: float = 0.1
 
     # LEX API
     lex_api_url: str = "https://lex.lab.i.ai.gov.uk/"

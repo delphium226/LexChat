@@ -322,4 +322,6 @@ Authentication is handled via JWT (JSON Web Tokens).
         *   `data: { "type": "tool_start", "tool": "..." }` - Emitted when a tool execution begins.
         *   `data: { "type": "tool_end", "tool": "...", "result": "..." }` - Emitted when a tool execution finishes.
         *   `data: { "type": "tool_result", "tool": "...", "result": "..." }` - Emitted with the final output of the tool call (e.g. the research report).
+        *   `data: { "type": "api_call_start", "id": "...", "url": "...", "method": "...", "payload": {...} }` - Emitted when an external API call is made.
+        *   `data: { "type": "api_call_end", "id": "...", "url": "...", "status": int, "response": {...} }` - Emitted when an external API call completes.
         *   `data: { "type": "result", "message": "..." }` - Final assistant response.

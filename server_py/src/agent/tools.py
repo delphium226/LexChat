@@ -2,6 +2,7 @@ import asyncio
 from typing import Optional, Callable
 import json
 import logging
+import uuid
 
 import httpx
 
@@ -98,6 +99,8 @@ async def _emit(on_chunk: Optional[Callable], data: dict):
 async def execute_worker_tool(name: str, args: dict, on_chunk: Optional[Callable] = None) -> str:
     """Execute a worker tool (LEX API call) and return JSON string result."""
     logger.info(f"[Worker Tool Exec] {name} with args: {json.dumps(args)}")
+    
+    call_id = str(uuid.uuid4())
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -113,6 +116,7 @@ async def execute_worker_tool(name: str, args: dict, on_chunk: Optional[Callable
                 
                 await _emit(on_chunk, {
                     "type": "api_call_start",
+                    "id": call_id,
                     "url": url,
                     "method": "POST",
                     "payload": payload
@@ -128,6 +132,7 @@ async def execute_worker_tool(name: str, args: dict, on_chunk: Optional[Callable
 
                 await _emit(on_chunk, {
                     "type": "api_call_end",
+                    "id": call_id,
                     "url": url,
                     "status": resp.status_code,
                     "response": resp_json
@@ -142,6 +147,7 @@ async def execute_worker_tool(name: str, args: dict, on_chunk: Optional[Callable
 
                 await _emit(on_chunk, {
                     "type": "api_call_start",
+                    "id": call_id,
                     "url": url,
                     "method": "POST",
                     "payload": payload
@@ -156,6 +162,7 @@ async def execute_worker_tool(name: str, args: dict, on_chunk: Optional[Callable
 
                 await _emit(on_chunk, {
                     "type": "api_call_end",
+                    "id": call_id,
                     "url": url,
                     "status": resp.status_code,
                     "response": resp_json

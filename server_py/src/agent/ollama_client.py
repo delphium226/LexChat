@@ -71,7 +71,10 @@ async def chat_loop(
         "messages": messages,
         "tools": tools,
         "stream": True,
-        "options": {"num_ctx": num_ctx or default_ctx},
+        "options": {
+            "num_ctx": num_ctx or default_ctx,
+            "temperature": settings.ollama_temperature,
+        },
     }
 
     logger.info(f"[ChatLoop] Sending request to Ollama (Tools: {len(tools)})...")
@@ -324,7 +327,12 @@ async def list_models() -> list:
 
 async def stream_chat(messages: list, model: str) -> AsyncGenerator[str, None]:
     """Basic streaming chat without tool calling (fallback)."""
-    payload = {"model": model, "messages": messages, "stream": True}
+    payload = {
+        "model": model,
+        "messages": messages,
+        "stream": True,
+        "options": {"temperature": settings.ollama_temperature},
+    }
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:

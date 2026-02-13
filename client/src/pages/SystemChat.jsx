@@ -71,6 +71,27 @@ export default function SystemChat() {
                                 // New token stream
                                 currentTurn.events = [...currentTurn.events, { type: 'token_stream', content: event.content }];
                             }
+                        } else if (event.type === 'api_call_end') {
+                            // Find the corresponding start event and update it
+                            const startEventIndex = currentTurn.events.findIndex(e => e.type === 'api_call_start' && e.id === event.id);
+                            if (startEventIndex !== -1) {
+                                const startEvent = { ...currentTurn.events[startEventIndex] };
+                                startEvent.response = event.response;
+                                startEvent.status = event.status;
+                                startEvent.endTime = Date.now(); // Optional: could track duration
+                                // Create new array to trigger re-render
+                                const newEvents = [...currentTurn.events];
+                                newEvents[startEventIndex] = startEvent;
+                                currentTurn.events = newEvents;
+
+                                // We also append the end event strictly for logging/debugging if needed, 
+                                // BUT the render logic hides it. 
+                                // Actually, better to NOT append it to avoid duplication in state if we're merging.
+                                // However, keeping it in state but hidden in UI is safer for history preservation.
+                                currentTurn.events = [...currentTurn.events, event];
+                            } else {
+                                currentTurn.events = [...currentTurn.events, event];
+                            }
                         } else {
                             currentTurn.events = [...currentTurn.events, event];
                         }
@@ -88,11 +109,28 @@ export default function SystemChat() {
             abortControllerRef.current = null;
         }
     };
+    const handleNewChat = () => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+        setMessages([]);
+        setLoading(false);
+        setInput('');
+    };
 
     return (
         <div className="flex flex-col h-screen bg-gray-900 text-green-400 font-mono p-4">
             <header className="mb-4 border-b border-green-700 pb-2 flex justify-between items-center">
-                <h1 className="text-xl font-bold">System Chat Terminal</h1>
+                <div className="flex items-center gap-4">
+                    <h1 className="text-xl font-bold">System Chat Terminal</h1>
+                    <button
+                        onClick={handleNewChat}
+                        className="bg-green-800 hover:bg-green-700 text-white text-xs px-3 py-1 rounded"
+                    >
+                        NEW CHAT
+                    </button>
+                </div>
                 <select
                     className="bg-gray-800 border border-green-700 text-green-400 p-1 rounded"
                     value={selectedModel}
@@ -116,6 +154,33 @@ export default function SystemChat() {
                                                     <span className="text-xs text-gray-500 uppercase mr-2">[STREAM]</span>
                                                     {event.content}
                                                 </span>
+                                            ) : event.type === 'api_call_start' ? (
+                                                <div className="bg-gray-900 border border-purple-500/30 rounded p-2 my-2">
+                                                    <div className="flex justify-between items-center text-purple-400 text-xs font-bold mb-1">
+                                                        <span>API CALL: {event.method} {event.url}</span>
+                                                        {event.status && (
+                                                            <span className={event.status === 200 ? 'text-green-400' : 'text-red-400'}>
+                                                                Status: {event.status}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-gray-400 text-xs">
+                                                        <div>Request:</div>
+                                                        <pre className="overflow-x-auto bg-black/30 p-1 rounded mb-1">
+                                                            {JSON.stringify(event.payload, null, 2)}
+                                                        </pre>
+                                                        {event.response && (
+                                                            <>
+                                                                <div>Response:</div>
+                                                                <pre className="overflow-x-auto bg-black/30 p-1 rounded max-h-40">
+                                                                    {JSON.stringify(omitLargeFields({ result: event.response }).result, null, 2)}
+                                                                </pre>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ) : event.type === 'api_call_end' ? (
+                                                null // Hidden, merged into start
                                             ) : (
                                                 <div className="bg-gray-900 p-2 rounded overflow-x-auto">
                                                     <span className={`text-xs uppercase font-bold mr-2 ${getEventColor(event.type)}`}>
