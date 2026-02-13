@@ -298,5 +298,28 @@ Authentication is handled via JWT (JSON Web Tokens).
 *   **Public**: Yes
 *   **Response**: `200 OK`
     ```json
-    { "status": "healthy" }
+
+---
+
+## 9. System-to-System Chat (`/api/system`)
+
+### System Chat
+*   **Endpoint**: `POST /api/system/chat`
+*   **Description**: A chat endpoint tailored for machine-to-machine communication. It relays all LLM events including detailed tool calls and results, allowing the connecting system to "see" the agent's thought process and actions.
+*   **Public**: Yes (currently, similar to `/api/chat`)
+*   **Body**:
+    ```json
+    {
+      "messages": [{"role": "user", "content": "..."}],
+      "model": "string",
+      "num_ctx": "integer (optional)"
+    }
     ```
+*   **Response**: `200 OK` (Streamed SSE)
+    *   **Events**:
+        *   `data: { "type": "token", "content": "..." }` - Standard token stream.
+        *   `data: { "type": "tool_call", "tool_calls": [...] }` - Emitted when the model decides to call a tool. Contains the full tool call payload (name, arguments).
+        *   `data: { "type": "tool_start", "tool": "..." }` - Emitted when a tool execution begins.
+        *   `data: { "type": "tool_end", "tool": "...", "result": "..." }` - Emitted when a tool execution finishes.
+        *   `data: { "type": "tool_result", "tool": "...", "result": "..." }` - Emitted with the final output of the tool call (e.g. the research report).
+        *   `data: { "type": "result", "message": "..." }` - Final assistant response.

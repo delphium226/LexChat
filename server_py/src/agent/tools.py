@@ -1,3 +1,5 @@
+import asyncio
+from typing import Optional, Callable
 import json
 import logging
 
@@ -13,8 +15,9 @@ LEX_API_URL = settings.lex_api_url.rstrip("/")
 # Tool schemas (Ollama function-calling format)
 # -----------------------------------------------------------------------
 
-MANAGER_TOOLS = [
-    {
+MANAGER_TOOLS = []
+if settings.enable_deep_research:
+    MANAGER_TOOLS.append({
         "type": "function",
         "function": {
             "name": "delegate_research",
@@ -33,8 +36,7 @@ MANAGER_TOOLS = [
                 "required": ["query"],
             },
         },
-    }
-]
+    })
 
 WORKER_TOOLS = [
     {
@@ -86,31 +88,79 @@ WORKER_TOOLS = [
 # Tool execution (LEX API client)
 # -----------------------------------------------------------------------
 
-async def execute_worker_tool(name: str, args: dict) -> str:
+async def _emit(on_chunk: Optional[Callable], data: dict):
+    """Helper to emit events if callback is provided."""
+    if on_chunk:
+        res = on_chunk(data)
+        if asyncio.iscoroutine(res):
+            await res
+
+async def execute_worker_tool(name: str, args: dict, on_chunk: Optional[Callable] = None) -> str:
     """Execute a worker tool (LEX API call) and return JSON string result."""
     logger.info(f"[Worker Tool Exec] {name} with args: {json.dumps(args)}")
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             if name == "search_legislation":
-                resp = await client.post(
-                    f"{LEX_API_URL}/legislation/search",
-                    json={
-                        "query": args["query"],
-                        "year_from": args.get("year_from"),
-                        "year_to": args.get("year_to"),
-                        "limit": 5,
-                        "include_text": False,
-                    },
-                )
+                url = f"{LEX_API_URL}/legislation/search"
+                payload = {
+                    "query": args["query"],
+                    "year_from": args.get("year_from"),
+                    "year_to": args.get("year_to"),
+                    "limit": 5,
+                    "include_text": False,
+                }
+                
+                await _emit(on_chunk, {
+                    "type": "api_call_start",
+                    "url": url,
+                    "method": "POST",
+                    "payload": payload
+                })
+
+                resp = await client.post(url, json=payload)
+                
+                # Emit result before raising error, to see what happened
+                try:
+                    resp_json = resp.json()
+                except:
+                    resp_json = {"text": resp.text}
+
+                await _emit(on_chunk, {
+                    "type": "api_call_end",
+                    "url": url,
+                    "status": resp.status_code,
+                    "response": resp_json
+                })
+                
                 resp.raise_for_status()
                 return json.dumps(resp.json())
 
             elif name == "get_legislation_text":
-                resp = await client.post(
-                    f"{LEX_API_URL}/legislation/text",
-                    json={"legislation_id": args["legislation_id"]},
-                )
+                url = f"{LEX_API_URL}/legislation/text"
+                payload = {"legislation_id": args["legislation_id"]}
+
+                await _emit(on_chunk, {
+                    "type": "api_call_start",
+                    "url": url,
+                    "method": "POST",
+                    "payload": payload
+                })
+
+                resp = await client.post(url, json=payload)
+
+                try:
+                    resp_json = resp.json()
+                except:
+                    resp_json = {"text": resp.text}
+
+                await _emit(on_chunk, {
+                    "type": "api_call_end",
+                    "url": url,
+                    "status": resp.status_code,
+                    "response": resp_json
+                })
+
                 resp.raise_for_status()
                 return json.dumps(resp.json())
 

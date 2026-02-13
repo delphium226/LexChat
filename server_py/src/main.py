@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .database import init_db
-from .routers import auth, users, chats, ai, learning, stats, developer
+from .routers import auth, users, chats, ai, learning, stats, developer, system
 from .utils.logger import setup_logging
 
 # Initialise structured logging before anything else
@@ -67,6 +67,7 @@ app.include_router(ai.router)
 app.include_router(learning.router)
 app.include_router(stats.router)
 app.include_router(developer.router)
+app.include_router(system.router)
 
 
 @app.get("/api/health")

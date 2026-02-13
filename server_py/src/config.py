@@ -87,6 +87,7 @@ class Settings(BaseSettings):
     ollama_api_key: Optional[str] = None
     ollama_default_context: int = 131072
     max_concurrent_requests: int = 5
+    enable_deep_research: bool = True
 
     # LEX API
     lex_api_url: str = "https://lex.lab.i.ai.gov.uk/"
