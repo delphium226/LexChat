@@ -56,15 +56,15 @@ must be able to reach. Access is only required during setup, not at runtime
 | Git (via Chocolatey) | community.chocolatey.org | git | `.nupkg` |
 | Docker Desktop (via Chocolatey) | community.chocolatey.org | docker-desktop | `.nupkg` |
 | Ollama Windows installer | ollama.com | OllamaSetup | `.exe` |
-| Docker image: `postgres:15` | Docker Hub | postgres:15 | `.tar.gz` (layers), `.json` (manifest) |
-| Docker image: `ollama/ollama` | Docker Hub | ollama/ollama | `.tar.gz` (layers), `.json` (manifest) |
-| Docker image: `curlimages/curl` | Docker Hub | curlimages/curl | `.tar.gz` (layers), `.json` (manifest) |
-| Docker image: `python:3.11-slim` | Docker Hub | python:3.11-slim | `.tar.gz` (layers), `.json` (manifest) |
-| Docker image: `node:20-slim` | Docker Hub | node:20-slim | `.tar.gz` (layers), `.json` (manifest) |
-| Docker image: `nginx:alpine` | Docker Hub | nginx:alpine | `.tar.gz` (layers), `.json` (manifest) |
+| Docker image: `postgres:15` | registry-1.docker.io | postgres:15 | `.tar.gz` (layers), `.json` (manifest) |
+| Docker image: `ollama/ollama` | registry-1.docker.io | ollama/ollama | `.tar.gz` (layers), `.json` (manifest) |
+| Docker image: `curlimages/curl` | registry-1.docker.io | curlimages/curl | `.tar.gz` (layers), `.json` (manifest) |
+| Docker image: `python:3.11-slim` | registry-1.docker.io | python:3.11-slim | `.tar.gz` (layers), `.json` (manifest) |
+| Docker image: `node:20-slim` | registry-1.docker.io | node:20-slim | `.tar.gz` (layers), `.json` (manifest) |
+| Docker image: `nginx:alpine` | registry-1.docker.io | nginx:alpine | `.tar.gz` (layers), `.json` (manifest) |
 | Debian apt packages | deb.debian.org | build-essential, libpq-dev, curl | `.deb` |
-| Python pip packages | PyPI | (per requirements.txt) | `.whl` / `.tar.gz` |
-| Node.js npm packages | npm registry | (per package.json) | `.tgz` |
+| Python pip packages | pypi.org | (per requirements.txt) | `.whl` / `.tar.gz` |
+| Node.js npm packages | registry.npmjs.org | (per package.json) | `.tgz` |
 | Ollama cloud model registrations | registry.ollama.ai | (model manifests) | `.json` (manifest) |
 
 ---
