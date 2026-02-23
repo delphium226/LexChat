@@ -40,10 +40,15 @@ Write-Host "Found $($TarFiles.Count) Docker images to load offline." -Foreground
 
 foreach ($file in $TarFiles) {
     Write-Host "Loading image: $($file.Name)..." -ForegroundColor Cyan
-    docker load -i $file.FullName
+    # Use AsByteStream to bypass raw SMB read bottlenecks on Windows Hyper-V
+    if ($PSVersionTable.PSVersion.Major -ge 7) {
+        Get-Content -Path $file.FullName -AsByteStream -ReadCount 0 | docker load
+    }
+    else {
+        Get-Content -Path $file.FullName -Encoding Byte -ReadCount 0 | docker load
+    }
 }
 
 Write-Host "=== All Images Successfully Loaded! ===" -ForegroundColor Green
 Write-Host "You can now start the application tightly offline by running:"
-Write-Host "docker-compose pull   <-- (Should utilize your local loaded cache)"
 Write-Host "docker-compose up -d  <-- (Starts the application)"

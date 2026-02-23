@@ -143,10 +143,12 @@ See [deployment/NATIVE_DEPLOYMENT.md](deployment/NATIVE_DEPLOYMENT.md) for full 
 
 If deploying to a secure, internet-disconnected environment, you can use our offline Docker bundle.
 
-1. **Prepare Binaries (Online)**: Run `deployment\download_offline_dependencies.ps1` to download required Docker images. Then, run `deployment\compress_and_chunk.ps1` to zip and chunk them into `<100MB` parts for GitHub upload.
-2. **Reconstruct (Offline)**: Move the `.part*` files to the target server and run `deployment\reconstruct_binaries.ps1` to quickly stitch them back together and extract the images into `binaries\raw\docker`.
-3. **Load Images**: Run `deployment\load_docker_offline.ps1` to load all extracted `.tar` images into your local Docker daemon's cache.
-4. **Start Application**: Run `docker-compose up -d` completely offline!
+1. **Pre-build Images (Online)**: Run `deployment\build_offline_images.ps1` to compile the Frontend/Backend and package them into `.tar` files. 
+2. **Download Dependencies (Online)**: Run `deployment\download_offline_dependencies.ps1` to download the required Postgres/Ollama images. 
+3. **Package & Chunk (Online)**: Run `deployment\compress_and_chunk.ps1` to zip all `.tar` files and chunk them into `<50MB` parts for GitHub upload. The script will output `offline_dependencies.zip.part*` chunks.
+4. **Reconstruct (Offline)**: Move the `.part*` chunks to the target server and run `deployment\reconstruct_binaries.ps1` to stitch them back together and extract the images into `binaries\raw\docker`.
+5. **Load Images**: Run `deployment\load_docker_offline.ps1` to securely import all base and application images into Docker Desktop, bypassing Hyper-V mount bottlenecks.
+6. **Start Application**: Run `docker-compose up -d` completely offline!
 
 ## Prerequisites (Local Development)
 

@@ -60,7 +60,8 @@ $PartNumber = 1
 
 while ($FileStream.Position -lt $FileStream.Length) {
     $BytesRead = $FileStream.Read($Buffer, 0, $ChunkSize)
-    $PartFileName = "$ZipPath.part$PartNumber"
+    $PartNumberPadded = $PartNumber.ToString("000")
+    $PartFileName = "$ZipPath.part$PartNumberPadded"
     $PartFileStream = [System.IO.File]::Create($PartFileName)
     $PartFileStream.Write($Buffer, 0, $BytesRead)
     $PartFileStream.Close()
