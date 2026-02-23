@@ -139,6 +139,15 @@ For environments where Docker or WSL are not available, you can run the applicat
 
 See [deployment/NATIVE_DEPLOYMENT.md](deployment/NATIVE_DEPLOYMENT.md) for full details.
 
+## Offline (Air-Gapped) Windows Deployment
+
+If deploying to a secure, internet-disconnected environment, you can use our offline Docker bundle.
+
+1. **Prepare Binaries (Online)**: Run `deployment\download_offline_dependencies.ps1` to download required Docker images. Then, run `deployment\compress_and_chunk.ps1` to zip and chunk them into `<100MB` parts for GitHub upload.
+2. **Reconstruct (Offline)**: Move the `.part*` files to the target server and run `deployment\reconstruct_binaries.ps1` to quickly stitch them back together and extract the images into `binaries\raw\docker`.
+3. **Load Images**: Run `deployment\load_docker_offline.ps1` to load all extracted `.tar` images into your local Docker daemon's cache.
+4. **Start Application**: Run `docker-compose up -d` completely offline!
+
 ## Prerequisites (Local Development)
 
 Before running the application locally (without Docker), ensure you have the following installed:

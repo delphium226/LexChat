@@ -7,6 +7,9 @@ This guide explains how to run LexChat natively on Windows Server 2022 without u
 We provide automated scripts to handle the entire process.
 
 ### 1. Installation
+> [!WARNING]
+> This native installer requires an **active internet connection** to download dependencies (Chocolatey, Node, Python, Postgres). If you are deploying to a secure, air-gapped environment without internet access, you **must use the Docker Offline Setup** instead (see `deployment\load_docker_offline.ps1`).
+
 Run the installer script as Administrator. This will install Python, Node.js, PostgreSQL, Ollama, and set up the application.
 
 ```powershell
