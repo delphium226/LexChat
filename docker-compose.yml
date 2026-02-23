@@ -56,9 +56,7 @@ services:
         echo "All models pull requests initiated."
 
   backend:
-    build:
-      context: .
-      dockerfile: server_py/Dockerfile
+    image: lexchat-backend:latest
     restart: always
     ports:
       - "8000:8000"
@@ -76,9 +74,7 @@ services:
         condition: service_started
 
   frontend:
-    build:
-      context: ./client
-      dockerfile: Dockerfile
+    image: lexchat-frontend:latest
     restart: always
     ports:
       - "80:80"
