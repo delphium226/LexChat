@@ -1,0 +1,47 @@
+# requires admin privileges
+# This script installs the pre-packaged standalone dependencies and application on an air-gapped machine
+
+$ErrorActionPreference = "Stop"
+
+$BINARIES_DIR = "..\binaries\raw"
+$INSTALLERS_DIR = "$BINARIES_DIR\installers"
+$WHEELS_DIR = "$BINARIES_DIR\python_wheels"
+$OLLAMA_MODELS_DIR = "$BINARIES_DIR\ollama_models"
+
+if (!(Test-Path $BINARIES_DIR)) {
+    Write-Error "Binaries directory not found. Please ensure the chunks have been reconstructed into $BINARIES_DIR."
+    exit 1
+}
+
+# 1. Install System Dependencies
+Write-Host "Installing Python silently..."
+Start-Process -FilePath "$INSTALLERS_DIR\python-3.11.9-amd64.exe" -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait -NoNewWindow
+
+Write-Host "Installing PostgreSQL silently (Superuser: postgres, Password: lexpassword)..."
+Start-Process -FilePath "$INSTALLERS_DIR\postgresql-15.7-1-windows-x64.exe" -ArgumentList "--mode unattended --superpassword lexpassword --serverport 5432" -Wait -NoNewWindow
+
+Write-Host "Installing Ollama silently..."
+Start-Process -FilePath "$INSTALLERS_DIR\OllamaSetup.exe" -ArgumentList "/S" -Wait -NoNewWindow
+
+# 2. Install Python Dependencies Offline
+Write-Host "Installing Python dependencies from local wheels..."
+# Need to reload path to ensure pip from new Python install is available
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+python -m pip install --no-index --find-links=$WHEELS_DIR -r ..\server_py\requirements.txt
+
+# 3. Restore AI Models
+Write-Host "Restoring Ollama Models..."
+$OLLAMA_TARGET_DIR = $env:OLLAMA_MODELS
+if (-not $OLLAMA_TARGET_DIR) {
+    $OLLAMA_TARGET_DIR = "$env:USERPROFILE\.ollama\models"
+}
+
+if (!(Test-Path $OLLAMA_TARGET_DIR)) {
+    New-Item -ItemType Directory -Force -Path $OLLAMA_TARGET_DIR | Out-Null
+}
+Write-Host "Copying models to $OLLAMA_TARGET_DIR..."
+Copy-Item -Path "$OLLAMA_MODELS_DIR\*" -Destination $OLLAMA_TARGET_DIR -Recurse -Force
+
+# 4. Configure FastAPI to serve the frontend
+Write-Host "Please ensure your .env.native file is configured and you have added code to server_py/src/main.py to serve the client/dist folder as static files."
+Write-Host "Offline Installation Complete. You can start the server using deployment\start_native_offline.cmd"

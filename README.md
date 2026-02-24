@@ -61,65 +61,6 @@ The Admin Portal (`/admin`) provides comprehensive oversight of the application:
 -   **Feedback Table**: View all user ratings and comments in real-time.
 -   **Retrieval Playground**: Test the "Learning" logic by typing a query (e.g., "Duty of Care") to see exactly what "Memories" (Examples or Critiques) the agent retrieves for that topic.
 
-## Docker Setup (Recommended)
-
-You can run the entire application stack (Frontend, Backend, Database, and Ollama) using Docker.
-
-### Prerequisites
-- Docker Desktop installed and running.
-
-### Quick Start
-1. Run the automated setup script (PowerShell):
-   ```powershell
-   .\rebuild_docker.ps1
-   ```
-   This script will:
-   - Tear down any existing containers.
-   - Build the application images.
-   - Start the database, Ollama, and the application.
-   - Automatically trigger the download of required LLM models.
-
-2. Access the application at `http://localhost:80` (or just `http://localhost`).
-
-### Cloud Models & Authentication
-If you are using cloud-hosted Ollama models (ending in `:cloud`), authentication is required.
-The `docker-compose.yml` is configured to:
-1.  Mount your local Ollama keys (`~/.ollama/id_ed25519`) into the container.
-2.  Set the `OLLAMA_API_KEY` environment variable.
-
-**Ensure you have authenticated locally first** if you regenerate your keys:
-1. Run the key generation script:
-   ```cmd
-   .\gen_keys.cmd
-   ```
-2. Add the new public key (found in `ollama_auth/id_ed25519.pub`) to your [Ollama Dashboard](https://ollama.com/settings/keys).
-
-### Manual Docker Commands
-If you prefer running commands manually:
-```bash
-docker-compose up --build -d
-```
-
-## Deployment to Windows Server 2022 (Automated)
-
-We provide automated scripts to deploy LexChat to a fresh Windows Server 2022 instance.
-
-### One-Click Setup
-1.  **RDP into your server** and open **PowerShell as Administrator**.
-2.  Copy the `deployment/setup_server.ps1` script to your server.
-3.  Run the script:
-    ```powershell
-    .\setup_server.ps1 -RepoUrl "https://github.com/delphium226/LexChat.git"
-    ```
-    *The script will install Chocolatey, Git, Docker Desktop, clonet the repo, and start the app.*
-
-### Updating the App
-To pull the latest changes and rebuild:
-```powershell
-cd C:\Users\YourUser\Documents\LexChat\deployment
-.\deploy_update.ps1
-```
-
 
 ## Native Windows Deployment (No Docker/WSL)
 
@@ -141,14 +82,13 @@ See [deployment/NATIVE_DEPLOYMENT.md](deployment/NATIVE_DEPLOYMENT.md) for full 
 
 ## Offline (Air-Gapped) Windows Deployment
 
-If deploying to a secure, internet-disconnected environment, you can use our offline Docker bundle.
+If deploying to a secure, internet-disconnected environment, use our offline native deployment scripts.
 
-1. **Pre-build Images (Online)**: Run `deployment\build_offline_images.ps1` to compile the Frontend/Backend and package them into `.tar` files. 
-2. **Download Dependencies (Online)**: Run `deployment\download_offline_dependencies.ps1` to download the required Postgres/Ollama images. 
-3. **Package & Chunk (Online)**: Run `deployment\compress_and_chunk.ps1` to zip all `.tar` files and chunk them into `<50MB` parts for GitHub upload. The script will output `offline_dependencies.zip.part*` chunks.
-4. **Reconstruct (Offline)**: Move the `.part*` chunks to the target server and run `deployment\reconstruct_binaries.ps1` to stitch them back together and extract the images into `binaries\raw\docker`.
-5. **Load Images**: Run `deployment\load_docker_offline.ps1` to securely import all base and application images into Docker Desktop, bypassing Hyper-V mount bottlenecks.
-6. **Start Application**: Run `docker-compose up -d` completely offline!
+1. **Package Assets (Online)**: On an internet-connected machine, run `deployment\package_offline_native.ps1`. This downloads installers (Python, Postgres, Ollama), wheels, and pre-builds the frontend into `binaries\raw`.
+2. **Chunk (Online)**: Run `deployment\compress_and_chunk.ps1` to zip all files and chunk them into `<50MB` parts for transfer.
+3. **Reconstruct (Offline)**: Move the chunks to the target server and run `deployment\reconstruct_binaries.ps1` to stitch them back together into `binaries\raw`.
+4. **Install (Offline)**: Run `deployment\install_native_offline.ps1` as Administrator to silently install all dependencies from the packaged binaries.
+5. **Start Application**: Run `deployment\start_native_offline.cmd` completely offline!
 
 ## Prerequisites (Local Development)
 

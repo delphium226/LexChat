@@ -10,7 +10,7 @@ LexChat UK is a specialized, locally-hosted AI coding assistant designed for UK 
 -   **Backend**: Python (FastAPI), PostgreSQL (Data persistence).
 -   **AI Core**: Ollama (Local LLM inference), `google-sr` (Web Search).
 -   **External Data**: LEX API (Authoritative legal text).
--   **Deployment**: Docker Compose (Split Container Architecture).
+-   **Deployment**: Native Windows Installation.
 
 ### 2.2 Manager-Worker Agent System
 Most legal queries require a multi-step approach. LexChat separates concerns:
@@ -45,7 +45,7 @@ Most legal queries require a multi-step approach. LexChat separates concerns:
 
 ## 4. Deployment & Infrastructure
 -   **Target Environment**: Windows Server 2022 (Air-gapped or restricted internet access).
--   **Automation**: PowerShell scripts (`setup_server.ps1`) for one-click deployment (Git + Docker + App).
+-   **Automation**: PowerShell scripts (`install_native.ps1`) for one-click deployment.
 
 ## 5. Future Roadmap
 -   **Local RAG ingestion**: Ability to upload internal PDFs/Docs.

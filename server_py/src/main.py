@@ -70,9 +70,35 @@ app.include_router(developer.router)
 app.include_router(system.router)
 
 
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
+
+# ... earlier imports remain ...
+
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy"}
 
+# Serve Frontend static files if the directory exists
+frontend_dist = os.path.join(os.path.dirname(__file__), "..", "..", "client", "dist")
 
-
+if os.path.isdir(frontend_dist):
+    # Serve assets like JS/CSS directly
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
+    
+    # Catch-all route to serve React index.html for unknown paths (SPA routing)
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        # Prevent catching /api routes
+        if full_path.startswith("api/"):
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
+            
+        file_path = os.path.join(frontend_dist, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        
+        # Fall back to index.html for SPA
+        return FileResponse(os.path.join(frontend_dist, "index.html"))
+else:
+    logger.warning(f"Frontend static directory not found at {frontend_dist}. UI will not be available.")
