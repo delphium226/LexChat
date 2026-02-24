@@ -40,9 +40,9 @@ Write-Host "Downloading Ollama..."
 curl.exe -L -o "$INSTALLERS_DIR\OllamaSetup.exe" $OLLAMA_URL
 
 # 3. Download Python Wheels
-Write-Host "Downloading Python wheels for offline installation..."
-# We use the current system's Python to download the wheels specified in requirements.txt
-pip download -r ..\server_py\requirements.txt -d $WHEELS_DIR
+Write-Host "Downloading Python wheels for offline installation (Python 3.11 win_amd64)..."
+# We must explicitly force Python 3.11 cp311 win_amd64 wheels to match our standalone installer!
+pip download --platform win_amd64 --python-version 3.11 --implementation cp --only-binary=:all: -r ..\server_py\requirements.txt -d $WHEELS_DIR
 
 # 4. Pre-build Frontend
 Write-Host "Pre-building the React frontend locally..."
