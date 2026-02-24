@@ -81,7 +81,7 @@ async def health_check():
     return {"status": "healthy"}
 
 # Serve Frontend static files if the directory exists
-frontend_dist = os.path.join(os.path.dirname(__file__), "..", "..", "client", "dist")
+frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "client", "dist"))
 
 if os.path.isdir(frontend_dist):
     # Serve assets like JS/CSS directly
