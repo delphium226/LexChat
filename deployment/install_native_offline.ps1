@@ -26,6 +26,11 @@ Start-Process -FilePath "$INSTALLERS_DIR\python-3.11.9-amd64.exe" -ArgumentList 
 
 Write-Host "Installing PostgreSQL silently (Superuser: postgres, Password: lexpassword)..."
 Start-Process -FilePath "$INSTALLERS_DIR\postgresql-15.7-1-windows-x64.exe" -ArgumentList "--mode unattended --superpassword lexpassword --serverport 5432" -Wait -NoNewWindow
+# Reload path just in case Postgres modified it, and add common pg path
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User") + ";C:\Program Files\PostgreSQL\15\bin"
+Write-Host "Initializing lexchat database..."
+$env:PGPASSWORD="lexpassword"
+`"C:\Program Files\PostgreSQL\15\bin\psql.exe`" -U postgres -c `"CREATE DATABASE lexchat;`"
 
 Write-Host "Installing Ollama silently..."
 Start-Process -FilePath "$INSTALLERS_DIR\OllamaSetup.exe" -ArgumentList "/S" -Wait -NoNewWindow
