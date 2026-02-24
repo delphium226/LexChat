@@ -55,4 +55,4 @@ Set-Location $BinariesDir
 tar.exe -x -f offline_dependencies.zip
 
 Write-Host "Extraction complete!" -ForegroundColor Green
-Write-Host "You can now run install_native.ps1 or the docker setup." -ForegroundColor Green
+Write-Host "You can now run deployment\install_native_offline.ps1 to configure the server." -ForegroundColor Green
