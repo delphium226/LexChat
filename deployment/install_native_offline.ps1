@@ -1,3 +1,8 @@
+[CmdletBinding()]
+param(
+    [switch]$SkipSystemInstall
+)
+
 # requires admin privileges
 # This script installs the pre-packaged standalone dependencies and application on an air-gapped machine
 
@@ -6,7 +11,11 @@ $ErrorActionPreference = "Stop"
 # Auto-elevate to Administrator explicitly so that the standalone EXE installers can run
 if (-Not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Warning "Administrator permissions are required to run the Postgres and Python installers. Prompting for elevation..."
-    Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+    $argList = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    if ($SkipSystemInstall) {
+        $argList += " -SkipSystemInstall"
+    }
+    Start-Process powershell.exe $argList -Verb RunAs
     exit
 }
 
@@ -21,19 +30,23 @@ if (!(Test-Path $BINARIES_DIR)) {
 }
 
 # 1. Install System Dependencies
-Write-Host "Installing Python silently..."
-Start-Process -FilePath "$INSTALLERS_DIR\python-3.11.9-amd64.exe" -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait -NoNewWindow
+if (-not $SkipSystemInstall) {
+    Write-Host "Installing Python silently..."
+    Start-Process -FilePath "$INSTALLERS_DIR\python-3.11.9-amd64.exe" -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait -NoNewWindow
 
-Write-Host "Installing PostgreSQL silently (Superuser: postgres, Password: lexpassword)..."
-Start-Process -FilePath "$INSTALLERS_DIR\postgresql-15.7-1-windows-x64.exe" -ArgumentList "--mode unattended --superpassword lexpassword --serverport 5432" -Wait -NoNewWindow
-# Reload path just in case Postgres modified it, and add common pg path
-$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User") + ";C:\Program Files\PostgreSQL\15\bin"
-Write-Host "Initializing lexchat database..."
-$env:PGPASSWORD="lexpassword"
-`"C:\Program Files\PostgreSQL\15\bin\psql.exe`" -U postgres -c `"CREATE DATABASE lexchat;`"
+    Write-Host "Installing PostgreSQL silently (Superuser: postgres, Password: lexpassword)..."
+    Start-Process -FilePath "$INSTALLERS_DIR\postgresql-15.7-1-windows-x64.exe" -ArgumentList "--mode unattended --superpassword lexpassword --serverport 5432" -Wait -NoNewWindow
+    # Reload path just in case Postgres modified it, and add common pg path
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User") + ";C:\Program Files\PostgreSQL\15\bin"
+    Write-Host "Initializing lexchat database..."
+    $env:PGPASSWORD="lexpassword"
+    `"C:\Program Files\PostgreSQL\15\bin\psql.exe`" -U postgres -c `"CREATE DATABASE lexchat;`"
 
-Write-Host "Installing Ollama silently..."
-Start-Process -FilePath "$INSTALLERS_DIR\OllamaSetup.exe" -ArgumentList "/S" -Wait -NoNewWindow
+    Write-Host "Installing Ollama silently..."
+    Start-Process -FilePath "$INSTALLERS_DIR\OllamaSetup.exe" -ArgumentList "/S" -Wait -NoNewWindow
+} else {
+    Write-Host "Skipping system dependencies installation (-SkipSystemInstall flag provided)."
+}
 
 # 2. Install Python Dependencies Offline
 Write-Host "Installing Python dependencies from local wheels..."
