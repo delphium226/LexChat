@@ -54,6 +54,20 @@ if (!(Test-Path $OLLAMA_TARGET_DIR)) {
 Write-Host "Copying models to $OLLAMA_TARGET_DIR..."
 Copy-Item -Path "$OLLAMA_MODELS_DIR\*" -Destination $OLLAMA_TARGET_DIR -Recurse -Force
 
-# 4. Configure FastAPI to serve the frontend
+# 4. Extract Frontend
+Write-Host "Extracting pre-built frontend..."
+$FRONTEND_TARGET_DIR = "..\client\dist"
+if (Test-Path $FRONTEND_TARGET_DIR) {
+    Remove-Item -Recurse -Force $FRONTEND_TARGET_DIR
+}
+New-Item -ItemType Directory -Force -Path $FRONTEND_TARGET_DIR | Out-Null
+$FRONTEND_SRC_DIR = "$BINARIES_DIR\frontend_dist"
+if (Test-Path $FRONTEND_SRC_DIR) {
+    Copy-Item -Path "$FRONTEND_SRC_DIR\*" -Destination $FRONTEND_TARGET_DIR -Recurse -Force
+} else {
+    Write-Warning "No frontend_dist found in the offline package."
+}
+
+# 5. Configure FastAPI to serve the frontend
 Write-Host "Please ensure your .env.native file is configured and you have added code to server_py/src/main.py to serve the client/dist folder as static files."
 Write-Host "Offline Installation Complete. You can start the server using deployment\start_native_offline.cmd"

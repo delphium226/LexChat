@@ -51,7 +51,15 @@ Push-Location ..\client
 npm install
 npm run build
 Pop-Location
-# The build output is already in client\dist, which we will copy during the deployment phase.
+
+# Copy the built frontend into the offline package
+$FRONTEND_BUILD_DIR = "$BINARIES_DIR\frontend_dist"
+if (Test-Path $FRONTEND_BUILD_DIR) {
+    Remove-Item -Recurse -Force $FRONTEND_BUILD_DIR
+}
+New-Item -ItemType Directory -Force -Path $FRONTEND_BUILD_DIR | Out-Null
+Write-Host "Copying built frontend to $FRONTEND_BUILD_DIR..."
+Copy-Item -Path "..\client\dist\*" -Destination $FRONTEND_BUILD_DIR -Recurse -Force
 
 # 5. Export Ollama Models (Assumes Ollama is installed and running locally)
 Write-Host "Exporting Ollama models according to config.py..."
