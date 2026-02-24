@@ -3,6 +3,13 @@
 
 $ErrorActionPreference = "Stop"
 
+# Auto-elevate to Administrator explicitly so that the standalone EXE installers can run
+if (-Not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Warning "Administrator permissions are required to run the Postgres and Python installers. Prompting for elevation..."
+    Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+    exit
+}
+
 $BINARIES_DIR = "..\binaries\raw"
 $INSTALLERS_DIR = "$BINARIES_DIR\installers"
 $WHEELS_DIR = "$BINARIES_DIR\python_wheels"
