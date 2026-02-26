@@ -45,7 +45,7 @@ Most legal queries require a multi-step approach. LexChat separates concerns:
 
 ## 4. Deployment & Infrastructure
 -   **Target Environment**: Windows Server 2022 (Air-gapped or restricted internet access).
--   **Automation**: PowerShell scripts (`install_native.ps1`) for one-click deployment.
+-   **Automation**: PowerShell scripts (`install_native_offline.ps1`) for one-click deployment.
 
 ## 5. Future Roadmap
 -   **Local RAG ingestion**: Ability to upload internal PDFs/Docs.

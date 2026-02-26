@@ -71,11 +71,11 @@ For environments where Docker or WSL are not available, you can run the applicat
 2.  Run the installer:
     ```powershell
     cd deployment
-    .\install_native.ps1
+    .\install_native_offline.ps1
     ```
 3.  Start the application:
     ```cmd
-    deployment\start_native.cmd
+    deployment\start_native_offline.cmd
     ```
 
 See [deployment/NATIVE_DEPLOYMENT.md](deployment/NATIVE_DEPLOYMENT.md) for full details.
@@ -87,8 +87,8 @@ If deploying to a secure, internet-disconnected environment, use our offline nat
 1. **Package Assets (Online)**: On an internet-connected machine, run `deployment\package_offline_native.ps1`. This downloads installers (Python, Postgres, Ollama), wheels, and pre-builds the frontend into `binaries\raw`.
 2. **Chunk (Online)**: Run `deployment\compress_and_chunk.ps1` to zip all files and chunk them into `<50MB` parts for transfer.
 3. **Reconstruct (Offline)**: Move the chunks to the target server and run `deployment\reconstruct_binaries.ps1` to stitch them back together into `binaries\raw`.
-4. **Install (Offline)**: Run `deployment\install_native_offline.ps1` as Administrator to silently install all dependencies from the packaged binaries.
-5. **Start Application**: Run `deployment\start_native_offline.cmd` completely offline!
+4. **Install (Offline)**: Run `deployment\install_native_offline.ps1` as Administrator to silently install all dependencies from the packaged binaries. You can append the `-SkipSystemInstall` flag to bypass reinstalling Python, Postgres, and Ollama.
+5. **Start Application**: Run `deployment\start_native_offline.cmd` completely offline! The application will automatically open in your browser at `http://localhost:8080/`.
 
 ## Prerequisites (Local Development)
 
