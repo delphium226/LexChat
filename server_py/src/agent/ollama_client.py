@@ -84,7 +84,7 @@ async def chat_loop(
     final_stats = {}
 
     try:
-        async with httpx.AsyncClient(timeout=None) as client:
+        async with httpx.AsyncClient(timeout=None, verify=False) as client:
             async with client.stream(
                 "POST",
                 f"{OLLAMA_BASE_URL}/api/chat",
@@ -335,7 +335,7 @@ async def stream_chat(messages: list, model: str) -> AsyncGenerator[str, None]:
     }
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=60.0, verify=False) as client:
             async with client.stream(
                 "POST",
                 f"{OLLAMA_BASE_URL}/api/chat",

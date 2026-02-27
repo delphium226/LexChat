@@ -16,7 +16,7 @@ async def search_web(query: str) -> str:
     try:
         # Use Google's public search and parse results
         # This is a lightweight alternative to google-sr (Node.js)
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
             resp = await client.get(
                 "https://www.google.com/search",
                 params={"q": query, "num": 5},

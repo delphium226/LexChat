@@ -103,7 +103,8 @@ async def execute_worker_tool(name: str, args: dict, on_chunk: Optional[Callable
     call_id = str(uuid.uuid4())
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        # Disable SSL verification to support internal deployments with self-signed certs or SSL inspection
+        async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
             if name == "search_legislation":
                 url = f"{LEX_API_URL}/legislation/search"
                 payload = {
