@@ -74,7 +74,7 @@ async def _get_owned_chat(
 
 # --- Endpoints ---
 
-@router.get("/", response_model=List[ChatOut])
+@router.get("", response_model=List[ChatOut])
 async def list_chats(
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -87,7 +87,7 @@ async def list_chats(
     return result.scalars().all()
 
 
-@router.post("/", response_model=ChatOut)
+@router.post("", response_model=ChatOut)
 async def create_chat(
     body: ChatCreate,
     user: dict = Depends(get_current_user),

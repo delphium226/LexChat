@@ -45,7 +45,7 @@ class UserOut(BaseModel):
 
 # --- Endpoints ---
 
-@router.get("/", response_model=List[UserOut])
+@router.get("", response_model=List[UserOut])
 async def list_users(
     admin: dict = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
@@ -66,7 +66,7 @@ async def list_users(
     ]
 
 
-@router.post("/", response_model=UserOut, status_code=201)
+@router.post("", response_model=UserOut, status_code=201)
 async def create_user(
     body: UserCreate,
     admin: dict = Depends(get_admin_user),
