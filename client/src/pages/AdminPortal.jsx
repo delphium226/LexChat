@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData, getUsageStats, resetDatabase } from '../services/api';
+import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData, getUsageStats, resetDatabase, getLatestHealthStatus, getHealthHistory, triggerHealthCheck } from '../services/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const AdminPortal = () => {
@@ -24,6 +24,10 @@ const AdminPortal = () => {
     const [usageStats, setUsageStats] = useState(null);
     const [timeframe, setTimeframe] = useState('30');
 
+    // --- SERVICE HEALTH STATE ---
+    const [healthStatus, setHealthStatus] = useState(null);
+    const [isTriggeringHealth, setIsTriggeringHealth] = useState(false);
+
     // --- INITIAL FETCH ---
     useEffect(() => {
         if (activeTab === 'users') {
@@ -33,6 +37,8 @@ const AdminPortal = () => {
             fetchStats(learningTimeframe);
         } else if (activeTab === 'usage') {
             fetchUsageStats(timeframe);
+        } else if (activeTab === 'health') {
+            fetchHealthStatus();
         }
     }, [activeTab, timeframe, learningTimeframe]);
 
@@ -158,6 +164,50 @@ const AdminPortal = () => {
         }
     };
 
+    // ==========================================
+    // SERVICE HEALTH LOGIC
+    // ==========================================
+    const fetchHealthStatus = async () => {
+        // Only set loading on initial fetch so background polling is seamless
+        if (!healthStatus) setIsLoading(true);
+        try {
+            const data = await getLatestHealthStatus();
+            setHealthStatus(data);
+        } catch (err) {
+            console.error('Failed to fetch health status', err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleTriggerHealthCheck = async () => {
+        setIsTriggeringHealth(true);
+        try {
+            const data = await triggerHealthCheck();
+            setHealthStatus(data);
+            setMessage('Health check triggered and updated successfully');
+            setTimeout(() => setMessage(''), 3000);
+        } catch (err) {
+            console.error('Failed to trigger health check', err);
+            setMessage(err.message || 'Error triggering health check');
+        } finally {
+            setIsTriggeringHealth(false);
+        }
+    };
+
+    // Poll health status
+    useEffect(() => {
+        let intervalId;
+        if (activeTab === 'health') {
+            intervalId = setInterval(() => {
+                fetchHealthStatus();
+            }, 60000); // 60s
+        }
+        return () => {
+            if (intervalId) clearInterval(intervalId);
+        };
+    }, [activeTab]);
+
 
     return (
         <div className="p-6 h-full flex flex-col">
@@ -201,6 +251,15 @@ const AdminPortal = () => {
                             }`}
                     >
                         Developer
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('health')}
+                        className={`px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'health'
+                            ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                            }`}
+                    >
+                        Service Health
                     </button>
                 </div>
             </div>
@@ -300,6 +359,86 @@ const AdminPortal = () => {
                                     </tbody>
                                 </table>
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* SERVICE HEALTH TAB */}
+                {activeTab === 'health' && (
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
+                            <h2 className="text-lg font-bold dark:text-white">System Service Health</h2>
+                            <button
+                                onClick={handleTriggerHealthCheck}
+                                disabled={isTriggeringHealth}
+                                className={`bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 transition-colors ${isTriggeringHealth ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                                {isTriggeringHealth ? 'Checking...' : 'Run Health Check Now'}
+                            </button>
+                        </div>
+
+                        {healthStatus ? (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                {/* Database Card */}
+                                <div className={`p-6 rounded-lg shadow border-l-4 ${healthStatus?.database?.is_healthy ? 'border-green-500 bg-white dark:bg-zinc-800' : 'border-red-500 bg-red-50 dark:bg-red-900/20'}`}>
+                                    <h3 className="text-lg font-bold mb-2 dark:text-white flex items-center justify-between">
+                                        PostgreSQL Database
+                                        <span className={`inline-block w-3 h-3 rounded-full ${healthStatus?.database?.is_healthy ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                    </h3>
+                                    <div className="text-sm space-y-2 dark:text-gray-300">
+                                        <p><strong>Status:</strong> {healthStatus?.database?.is_healthy ? 'Healthy' : 'Degraded'}</p>
+                                        <p><strong>Latency:</strong> {healthStatus?.database?.latency_ms !== null ? `${healthStatus.database.latency_ms}ms` : 'N/A'}</p>
+                                        {!healthStatus?.database?.is_healthy && healthStatus?.database?.error_message && (
+                                            <p className="text-red-600 dark:text-red-400 text-xs mt-2 mt-2 p-2 bg-red-100 dark:bg-red-900/40 rounded">
+                                                <strong>Error:</strong> {healthStatus.database.error_message}
+                                            </p>
+                                        )}
+                                        <p className="text-xs text-gray-500 mt-4">Last checked: {healthStatus?.database?.checked_at ? new Date(healthStatus.database.checked_at).toLocaleString() : 'Never'}</p>
+                                    </div>
+                                </div>
+                                {/* Ollama Card */}
+                                <div className={`p-6 rounded-lg shadow border-l-4 ${healthStatus?.ollama?.is_healthy ? 'border-green-500 bg-white dark:bg-zinc-800' : 'border-red-500 bg-red-50 dark:bg-red-900/20'}`}>
+                                    <h3 className="text-lg font-bold mb-2 dark:text-white flex items-center justify-between">
+                                        Ollama Reasoning Engine
+                                        <span className={`inline-block w-3 h-3 rounded-full ${healthStatus?.ollama?.is_healthy ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></span>
+                                    </h3>
+                                    <div className="text-sm space-y-2 dark:text-gray-300">
+                                        <p><strong>Status:</strong> {healthStatus?.ollama?.is_healthy ? 'Healthy' : 'Disconnected / Refused'}</p>
+                                        <p><strong>Latency:</strong> {healthStatus?.ollama?.latency_ms !== null ? `${healthStatus.ollama.latency_ms}ms` : 'N/A'}</p>
+                                        {!healthStatus?.ollama?.is_healthy && healthStatus?.ollama?.error_message && (
+                                            <p className="text-red-600 dark:text-red-400 text-xs mt-2 p-2 bg-red-100 dark:bg-red-900/40 rounded">
+                                                <strong>Error:</strong> {healthStatus.ollama.error_message}
+                                            </p>
+                                        )}
+                                        <p className="text-xs text-gray-500 mt-4">Last checked: {healthStatus?.ollama?.checked_at ? new Date(healthStatus.ollama.checked_at).toLocaleString() : 'Never'}</p>
+                                    </div>
+                                </div>
+                                {/* LEX API Card */}
+                                <div className={`p-6 rounded-lg shadow border-l-4 ${healthStatus?.lex_api?.is_healthy ? 'border-green-500 bg-white dark:bg-zinc-800' : 'border-red-500 bg-red-50 dark:bg-red-900/20'}`}>
+                                    <h3 className="text-lg font-bold mb-2 dark:text-white flex items-center justify-between">
+                                        External LEX Data API
+                                        <span className={`inline-block w-3 h-3 rounded-full ${healthStatus?.lex_api?.is_healthy ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                    </h3>
+                                    <div className="text-sm space-y-2 dark:text-gray-300">
+                                        <p><strong>Status:</strong> {healthStatus?.lex_api?.is_healthy ? 'Reachable' : 'Unreachable'}</p>
+                                        <p><strong>Latency:</strong> {healthStatus?.lex_api?.latency_ms !== null ? `${healthStatus.lex_api.latency_ms}ms` : 'N/A'}</p>
+                                        {!healthStatus?.lex_api?.is_healthy && healthStatus?.lex_api?.error_message && (
+                                            <p className="text-red-600 dark:text-red-400 text-xs mt-2 p-2 bg-red-100 dark:bg-red-900/40 rounded">
+                                                <strong>Error:</strong> {healthStatus.lex_api.error_message}
+                                            </p>
+                                        )}
+                                        <p className="text-xs text-gray-500 mt-4">Last checked: {healthStatus?.lex_api?.checked_at ? new Date(healthStatus.lex_api.checked_at).toLocaleString() : 'Never'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex justify-center items-center h-40">
+                                <span className="text-gray-500 dark:text-gray-400">Loading health data...</span>
+                            </div>
+                        )}
+                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow mt-6">
+                            <h3 className="text-md font-bold mb-2 dark:text-white">Note regarding Service Health</h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">Health checks execute automatically in the background every 60 seconds starting from server boot. If a component goes down, LexChat will isolate the fault to its container to make proxy or downtime troubleshooting instantaneous.</p>
                         </div>
                     </div>
                 )}

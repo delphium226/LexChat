@@ -75,6 +75,7 @@ async def _get_owned_chat(
 # --- Endpoints ---
 
 @router.get("", response_model=List[ChatOut])
+@router.get("/", response_model=List[ChatOut], include_in_schema=False)
 async def list_chats(
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -84,10 +85,16 @@ async def list_chats(
         .where(Chat.user_id == user["id"])
         .order_by(Chat.created_at.desc())
     )
-    return result.scalars().all()
+    chats = result.scalars().all()
+    return [
+        ChatOut(
+            id=c.id, user_id=c.user_id, title=c.title, model=c.model, created_at=c.created_at
+        ) for c in chats
+    ]
 
 
 @router.post("", response_model=ChatOut)
+@router.post("/", response_model=ChatOut, include_in_schema=False)
 async def create_chat(
     body: ChatCreate,
     user: dict = Depends(get_current_user),
@@ -101,7 +108,9 @@ async def create_chat(
     db.add(new_chat)
     await db.commit()
     await db.refresh(new_chat)
-    return new_chat
+    return ChatOut(
+        id=new_chat.id, user_id=new_chat.user_id, title=new_chat.title, model=new_chat.model, created_at=new_chat.created_at
+    )
 
 
 @router.put("/{chat_id}", response_model=ChatOut)
@@ -115,7 +124,9 @@ async def update_chat(
     chat.title = body.title
     await db.commit()
     await db.refresh(chat)
-    return chat
+    return ChatOut(
+        id=chat.id, user_id=chat.user_id, title=chat.title, model=chat.model, created_at=chat.created_at
+    )
 
 
 @router.delete("/{chat_id}")
@@ -142,7 +153,13 @@ async def get_messages(
         .where(Message.chat_id == chat_id)
         .order_by(Message.created_at.asc())
     )
-    return result.scalars().all()
+    msgs = result.scalars().all()
+    return [
+        MessageOut(
+            id=m.id, chat_id=m.chat_id, role=m.role, content=m.content,
+            rating=m.rating, feedback_comment=m.feedback_comment, created_at=m.created_at
+        ) for m in msgs
+    ]
 
 
 @router.post("/{chat_id}/messages", response_model=MessageOut)
@@ -161,7 +178,10 @@ async def add_message(
     db.add(new_msg)
     await db.commit()
     await db.refresh(new_msg)
-    return new_msg
+    return MessageOut(
+        id=new_msg.id, chat_id=new_msg.chat_id, role=new_msg.role, content=new_msg.content,
+        rating=new_msg.rating, feedback_comment=new_msg.feedback_comment, created_at=new_msg.created_at
+    )
 
 
 @router.put("/messages/{message_id}/rating", response_model=MessageOut)
@@ -188,4 +208,7 @@ async def rate_message(
     msg.feedback_comment = body.comment
     await db.commit()
     await db.refresh(msg)
-    return msg
+    return MessageOut(
+        id=msg.id, chat_id=msg.chat_id, role=msg.role, content=msg.content,
+        rating=msg.rating, feedback_comment=msg.feedback_comment, created_at=msg.created_at
+    )

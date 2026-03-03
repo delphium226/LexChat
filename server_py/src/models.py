@@ -60,3 +60,13 @@ class Message(Base):
     __table_args__ = (
         CheckConstraint("rating >= 1 AND rating <= 5", name="valid_rating"),
     )
+
+class ServiceHealthStatus(Base):
+    __tablename__ = "service_health_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    is_healthy: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    checked_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

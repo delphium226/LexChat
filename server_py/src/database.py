@@ -35,27 +35,30 @@ async def init_db() -> None:
     """Create tables and seed default admin user."""
     logger.info("Initialising database...")
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
-    # Seed default admin user
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(User).where(User.username == "admin")
-        )
-        admin = result.scalar_one_or_none()
-
-        if admin is None:
-            hashed = bcrypt.using(rounds=10).hash("admin")
-            admin_user = User(
-                username="admin",
-                password_hash=hashed,
-                role="admin",
+        # Seed default admin user
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(User).where(User.username == "admin")
             )
-            session.add(admin_user)
-            await session.commit()
-            logger.info("Default admin user created.")
-        else:
-            logger.info("Admin user already exists.")
+            admin = result.scalar_one_or_none()
 
-    logger.info("Database initialised successfully.")
+            if admin is None:
+                hashed = bcrypt.using(rounds=10).hash("admin")
+                admin_user = User(
+                    username="admin",
+                    password_hash=hashed,
+                    role="admin",
+                )
+                session.add(admin_user)
+                await session.commit()
+                logger.info("Default admin user created.")
+            else:
+                logger.info("Admin user already exists.")
+
+        logger.info("Database initialised successfully.")
+    except Exception as e:
+        logger.error(f"Failed to initialise database: {e}. The server will start, but database-dependent features will fail.")

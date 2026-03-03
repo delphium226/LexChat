@@ -181,3 +181,19 @@ export const resetDatabase = async () => {
     const response = await axios.post(`${API_URL}/developer/reset`);
     return response.data;
 };
+
+// --- HEALTH STATUS APIS ---
+export const getLatestHealthStatus = async () => {
+    const response = await axios.get(`${API_URL}/health/status`);
+    return response.data;
+};
+
+export const getHealthHistory = async (serviceName, limit = 100) => {
+    const response = await axios.get(`${API_URL}/health/history`, { params: { service: serviceName, limit } });
+    return response.data;
+};
+
+export const triggerHealthCheck = async () => {
+    const response = await axios.post(`${API_URL}/health/trigger`);
+    return response.data;
+};

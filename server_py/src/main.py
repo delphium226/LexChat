@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -9,7 +10,8 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .database import init_db
-from .routers import auth, users, chats, ai, learning, stats, developer, system
+from .routers import auth, users, chats, ai, learning, stats, developer, system, health
+from .services.health_service import background_health_loop
 from .utils.logger import setup_logging
 
 # Initialise structured logging before anything else
@@ -23,9 +25,11 @@ http_logger = logging.getLogger("http")
 async def lifespan(app: FastAPI):
     # Startup
     await init_db()
+    health_task = asyncio.create_task(background_health_loop(60))
     logger.info(f"Server running on http://{settings.host}:{settings.port}")
     yield
     # Shutdown
+    health_task.cancel()
 
 
 app = FastAPI(
@@ -68,6 +72,7 @@ app.include_router(learning.router)
 app.include_router(stats.router)
 app.include_router(developer.router)
 app.include_router(system.router)
+app.include_router(health.router)
 
 
 import os
