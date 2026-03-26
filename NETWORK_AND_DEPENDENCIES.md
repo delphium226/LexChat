@@ -79,7 +79,7 @@ and serving users.
 | Port | Protocol | Service | Description |
 |---|---|---|---|
 | **80** | HTTP | Nginx (Docker) | Frontend web server. Serves the React SPA and proxies `/api` requests to the backend. |
-| **8080** | HTTP | FastAPI (Native) | Backend API server and static frontend file server in native Windows deployment. |
+| **443** | HTTPS | FastAPI (Native) | Backend API server and static frontend file server in native Windows deployment. |
 | **8000** | HTTP | FastAPI (Docker) | Backend API server. Handles authentication, chat, user management, and agent orchestration. |
 | **11434** | HTTP | Ollama | AI model inference server. Exposed on `11434` in Docker; `localhost:11434` in native. |
 | **5432** | TCP | PostgreSQL | Database. Only accessible within the Docker network or on `localhost` in native deployment. |
@@ -153,7 +153,7 @@ All domains required during installation and build. All traffic is HTTPS on port
 
 | Rule | Port | Required? |
 |---|---|---|
-| HTTP (Frontend) | 80 (Docker) or 8080 (Native) | **Yes** — User access to the web application. |
+| HTTP(S) (Frontend) | 80 (Docker) or 443 (Native) | **Yes** — User access to the web application. |
 | Backend API | 8000 (Docker) | Only if accessed directly (normally proxied via Nginx on port 80). |
 
 ---
