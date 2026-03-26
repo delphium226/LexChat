@@ -24,14 +24,13 @@ To run the native environment over HTTPS, place your organizational security cer
 *   **Private key file**: Save as `deployment\certs\lexchat.key`.
 
 ### 3. Running the App
-Use the launcher script to start both the Backend and Frontend.
+Use the launcher script to start the application natively.
 
 ```cmd
 deployment\start_native.cmd
 ```
-*   **Frontend**: https://localhost:3000
-*   **Backend**: https://localhost:8000
-*   *Note: If testing on an internal network, access the app via your machine's hostname domain (e.g. `https://your-server-name:3000`), matching the certificate.*
+*   **Application URL**: https://localhost
+*   *Note: If testing on an internal network, access the app via your machine's FQDN or hostname (e.g. `https://your-server-name`), matching the certificate.*
 
 ### 4. Updating
 To pull the latest code and update dependencies:
