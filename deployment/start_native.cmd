@@ -18,12 +18,12 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-where npm >nul 2>nul
-if %errorlevel% neq 0 (
-    echo [ERROR] Node.js not found. Please install Node.js 20+.
-    pause
-    exit /b
-)
+:: where npm >nul 2>nul
+:: if %errorlevel% neq 0 (
+::     echo [ERROR] Node.js not found. Please install Node.js 20+.
+::     pause
+::     exit /b
+:: )
 
 :: 2. Start Backend
 echo.
