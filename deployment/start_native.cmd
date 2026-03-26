@@ -38,7 +38,10 @@ if exist venv\Scripts\activate.bat (
 )
 
 :: Run in a new separate window
-start "LexChat Backend" cmd /k "python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --env-file .env.native"
+:: Expects organizational certificates in deployment/certs relative to root
+set CERT_PATH=..\deployment\certs\lexchat.crt
+set KEY_PATH=..\deployment\certs\lexchat.key
+start "LexChat Backend" cmd /k "python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --ssl-keyfile !KEY_PATH! --ssl-certfile !CERT_PATH! --env-file .env.native"
 
 :: 3. Serve Frontend
 echo.
@@ -50,15 +53,17 @@ if not exist dist (
     call npm run build
 )
 
-:: serve the 'dist' folder on port 3000
+:: serve the 'dist' folder on port 3000 with SSL
 echo [INFO] Starting Frontend Server on port 3000...
-start "LexChat Frontend" cmd /k "npx -y serve -s dist -l 3000"
+set CERT_PATH=..\deployment\certs\lexchat.crt
+set KEY_PATH=..\deployment\certs\lexchat.key
+start "LexChat Frontend" cmd /k "npx -y serve -s dist -l 3000 --ssl-cert !CERT_PATH! --ssl-key !KEY_PATH!"
 
 echo.
 echo ===================================================
 echo   LexChat is running!
-echo   Frontend: http://localhost:3000
-echo   Backend:  http://localhost:8000
+echo   Frontend: https://localhost:3000
+echo   Backend:  https://localhost:8000
 echo ===================================================
 echo.
 echo Close to exit launcher (servers will keep running).

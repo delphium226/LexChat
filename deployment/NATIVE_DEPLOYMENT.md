@@ -18,16 +18,22 @@ cd deployment
 .\install_native.ps1
 ```
 
-### 2. Running the App
+### 2. Configure SSL Certificates
+To run the native environment over HTTPS, place your organizational security certificate files inside a `certs` directory within the `deployment` folder.
+*   **Certificate file**: Save as `deployment\certs\lexchat.crt` (or `.pem`).
+*   **Private key file**: Save as `deployment\certs\lexchat.key`.
+
+### 3. Running the App
 Use the launcher script to start both the Backend and Frontend.
 
 ```cmd
 deployment\start_native.cmd
 ```
-*   **Frontend**: http://localhost:3000
-*   **Backend**: http://localhost:8000
+*   **Frontend**: https://localhost:3000
+*   **Backend**: https://localhost:8000
+*   *Note: If testing on an internal network, access the app via your machine's hostname domain (e.g. `https://your-server-name:3000`), matching the certificate.*
 
-### 3. Updating
+### 4. Updating
 To pull the latest code and update dependencies:
 
 ```powershell
