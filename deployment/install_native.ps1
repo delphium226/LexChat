@@ -129,6 +129,10 @@ Set-Location "$RepoRoot\client"
 npm install
 npm run build
 
+# 7. Configure Windows Firewall
+Write-Host "Configuring Windows Firewall to allow port 443 for remote access..."
+New-NetFirewallRule -DisplayName "LexChat HTTPS (Port 443)" -Direction Inbound -LocalPort 443 -Protocol TCP -Action Allow -ErrorAction SilentlyContinue | Out-Null
+
 Write-Host "=== Installation Complete! ===" -ForegroundColor Green
 Write-Host "Run 'deployment\start_native.cmd' to launch the app."
 Pause

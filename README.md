@@ -29,7 +29,7 @@ The application follows a modern client-server architecture:
     -   Settings & Profile Management
 
 ### Backend (Server)
--   **Runtime**: Node.js with Express
+-   **Runtime**: Python with FastAPI
 -   **Database**: PostgreSQL
 -   **AI Engine**: Ollama (Running locally)
 -   **Responsibilities**:
@@ -75,8 +75,9 @@ For environments where Docker or WSL are not available, you can run the applicat
     ```
 3.  Start the application:
     ```cmd
-    deployment\start_native_offline.cmd
+    deployment\start_native.cmd
     ```
+    *The application will be served securely over HTTPS on **port 443** (e.g., `https://localhost`).*
 
 See [deployment/NATIVE_DEPLOYMENT.md](deployment/NATIVE_DEPLOYMENT.md) for full details.
 
@@ -121,11 +122,11 @@ The application is designed to **automatically initialize** the database schema 
     -   **Password**: `admin`
 
 ### 3. Environment Configuration
-Create a `.env` file in the `server` directory with the following variables:
+Create a `.env` file in the `server_py` directory with the following variables:
 
 ```env
 # Server Configuration
-PORT=3000
+PORT=8000
 DATABASE_URL=postgresql://user:password@localhost:5432/lexchat_db
 
 # Security
@@ -146,8 +147,8 @@ EMAIL_PASS=your_app_password
 
 **Server:**
 ```bash
-cd server
-npm install
+cd server_py
+pip install -r requirements.txt
 ```
 
 **Client:**
@@ -160,10 +161,10 @@ npm install
 
 ### Start the Backend
 ```bash
-cd server
-npm start
+cd server_py
+uvicorn src.main:app --reload --port 8000
 ```
-*The server runs on `http://localhost:3000`.*
+*The server runs on `http://localhost:8000`.*
 
 ### Start the Frontend
 ```bash

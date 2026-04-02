@@ -83,4 +83,8 @@ if (Test-Path $FRONTEND_SRC_DIR) {
 
 # 5. Configure FastAPI to serve the frontend
 Write-Host "Please ensure your .env.native file is configured and you have added code to server_py/src/main.py to serve the client/dist folder as static files."
+# 6. Configure Windows Firewall
+Write-Host "Configuring Windows Firewall to allow port 443 for remote access..."
+New-NetFirewallRule -DisplayName "LexChat HTTPS (Port 443)" -Direction Inbound -LocalPort 443 -Protocol TCP -Action Allow -ErrorAction SilentlyContinue | Out-Null
+
 Write-Host "Offline Installation Complete. You can start the server using deployment\start_native_offline.cmd"
