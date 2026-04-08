@@ -4,7 +4,16 @@ REM Assumes Python is installed and the frontend is pre-built in client\dist
 
 cd /d "%~dp0\.."
 
-echo [1/2] Starting Ollama...
+echo [1/3] Starting PostgreSQL...
+sc query postgresql-x64-15 | find "RUNNING" >nul
+if %errorlevel% neq 0 (
+    net start postgresql-x64-15
+    echo    PostgreSQL started.
+) else (
+    echo    PostgreSQL already running.
+)
+
+echo [2/3] Starting Ollama...
 tasklist /FI "IMAGENAME eq ollama.exe" 2>nul | find /I "ollama.exe" >nul
 if %errorlevel% neq 0 (
     start "LexChat Ollama" /MIN cmd /k "ollama serve"
@@ -13,7 +22,7 @@ if %errorlevel% neq 0 (
     echo    Ollama already running.
 )
 
-echo [2/2] Starting FastAPI Server...
+echo [3/3] Starting FastAPI Server...
 cd server_py
 REM Ensure we are using .env.native
 copy /Y .env.native .env
