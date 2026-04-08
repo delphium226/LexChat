@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getModels, sendMessage, createChat, getChatMessages, saveMessage, updatePreferences } from './services/api';
+import { sendMessage, createChat, getChatMessages, saveMessage, updatePreferences } from './services/api';
 import ChatMessage from './components/ChatMessage';
 import loadingGif from './assets/load-35_128.gif';
 import Hourglass from './components/Hourglass';
@@ -14,7 +14,7 @@ function AppContent() {
   const { user, logout } = useAuth();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const [models, setModels] = useState([]);
+
   const [selectedModel, setSelectedModel] = useState('');
   const [loading, setLoading] = useState(false);
   const [agentStatus, setAgentStatus] = useState('');
@@ -77,21 +77,24 @@ function AppContent() {
 
   const sendingRef = useRef(false);
 
+  const FIXED_MODEL = 'mistral-large-3:675b-cloud';
+  const FIXED_MODEL_CONTEXT = 256 * 1024;
+
   useEffect(() => {
-    // Fetch models on load
-    getModels().then((data) => {
-      const filteredModels = data.filter(m => m.name.toLowerCase().includes('cloud'));
-      setModels(filteredModels);
-      if (filteredModels.length > 0) {
-        const preferredModel = filteredModels.find(m => m.name === 'mistral-large-3:675b-cloud');
-        setSelectedModel(preferredModel ? preferredModel.name : filteredModels[0].name);
-      }
-    });
+    setSelectedModel(FIXED_MODEL);
   }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, agentStatus]); // Scroll on status update too
+
+  // Swap favicon to animated GIF while loading
+  useEffect(() => {
+    const favicon = document.querySelector("link[rel='icon']");
+    if (favicon) {
+      favicon.href = loading ? '/favicon-loading.gif' : '/favicon.png';
+    }
+  }, [loading]);
 
   // Reset state when user logs out or changes
   useEffect(() => {
@@ -178,8 +181,7 @@ function AppContent() {
       // The `userMsg` is explicitly added to `messagesToSend`.
       const messagesToSend = [...messages, userMsg];
 
-      const currentModelObj = models.find(m => m.name === selectedModel);
-      const contextLength = currentModelObj ? currentModelObj.context_length : null;
+      const contextLength = FIXED_MODEL_CONTEXT;
 
       const response = await sendMessage(messagesToSend, selectedModel, contextLength, (status) => {
         if (status.type === 'tool_start') {
@@ -359,8 +361,7 @@ function AppContent() {
 
   // Helper to calculate usage percentage
   const getUsagePercentage = () => {
-    const currentModelObj = models.find(m => m.name === selectedModel);
-    const maxContext = currentModelObj?.context_length || 131072;
+    const maxContext = FIXED_MODEL_CONTEXT;
     // Use our calculated total_usage if available
     const total = contextUsage ? (contextUsage.total_usage || ((contextUsage.prompt_eval_count || 0) + (contextUsage.eval_count || 0))) : 0;
     return Math.min((total / maxContext) * 100, 100);
@@ -399,9 +400,6 @@ function AppContent() {
         `}
       >
         <h1 className="text-3xl font-bold text-blue-600 mb-2 self-center">LexChat</h1>
-        <div className="mb-4 text-center text-sm text-gray-500 text-ellipsis overflow-hidden">
-          Welcome, {user.username}
-        </div>
 
         <button
           onClick={() => { handleNewChat(); }}
@@ -420,19 +418,6 @@ function AppContent() {
 
 
 
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Model</label>
-          <select
-            className="w-full p-2 border rounded-md disabled:bg-gray-100 disabled:text-gray-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:disabled:bg-gray-800 dark:disabled:text-gray-600"
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            disabled={messages.length > 0}
-          >
-            {models.map((m) => (
-              <option key={m.name} value={m.name}>{m.name}</option>
-            ))}
-          </select>
-        </div>
 
 
 
@@ -453,11 +438,7 @@ function AppContent() {
               </div>
               <div className="flex justify-between text-xs text-gray-600">
                 <span>{contextUsage ? (contextUsage.total_usage || ((contextUsage.prompt_eval_count || 0) + (contextUsage.eval_count || 0))) : 0} tokens</span>
-                <span>{(() => {
-                  const currentModelObj = models.find(m => m.name === selectedModel);
-                  const maxContext = currentModelObj?.context_length || 131072;
-                  return formatContextLength(maxContext);
-                })()} limit</span>
+                <span>{formatContextLength(FIXED_MODEL_CONTEXT)} limit</span>
               </div>
 
             </div>
@@ -473,11 +454,10 @@ function AppContent() {
             onClick={() => setShowSettingsMenu(!showSettingsMenu)}
             className={`flex items-center w-full text-left p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors font-medium ${showSettingsMenu ? 'bg-gray-200 dark:bg-gray-700 text-legal-blue' : 'text-gray-700 dark:text-gray-300'}`}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-3">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-3 flex-shrink-0">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
             </svg>
-            Settings
+            {user.username}
           </button>
         </div>
       </div>
@@ -571,6 +551,7 @@ function AppContent() {
               </button>
             )}
           </form>
+          <p className="text-center text-xs text-gray-300 dark:text-gray-500 mt-2">LexChat is AI and can make mistakes. Please verify information before using.</p>
         </div>
 
 
