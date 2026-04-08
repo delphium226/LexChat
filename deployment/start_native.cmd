@@ -25,9 +25,25 @@ if %errorlevel% neq 0 (
 ::     exit /b
 :: )
 
-:: 2. Start Backend
+:: 2. Start Ollama
 echo.
-echo [1/3] Starting Backend Server...
+echo [1/3] Starting Ollama...
+where ollama >nul 2>nul
+if %errorlevel% neq 0 (
+    echo [WARN] Ollama not found in PATH. Skipping.
+) else (
+    tasklist /FI "IMAGENAME eq ollama.exe" 2>nul | find /I "ollama.exe" >nul
+    if %errorlevel% neq 0 (
+        start "LexChat Ollama" /MIN cmd /k "ollama serve"
+        echo    Ollama started.
+    ) else (
+        echo    Ollama already running.
+    )
+)
+
+:: 3. Start Backend
+echo.
+echo [2/3] Starting Backend Server...
 cd server_py
 
 :: Activate venv if it exists
@@ -43,9 +59,9 @@ set CERT_PATH=..\deployment\certs\lexchat.crt
 set KEY_PATH=..\deployment\certs\lexchat.key
 start "LexChat Backend" cmd /k "python -m uvicorn src.main:app --host 0.0.0.0 --port 443 --ssl-keyfile !KEY_PATH! --ssl-certfile !CERT_PATH! --env-file .env.native"
 
-:: 3. Build Frontend (if missing)
+:: 4. Build Frontend (if missing)
 echo.
-echo [2/2] Checking Frontend...
+echo [3/3] Checking Frontend...
 cd ..\client
 
 if not exist dist (
