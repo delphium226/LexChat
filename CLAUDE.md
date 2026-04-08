@@ -30,13 +30,16 @@ All deployment work happens on **`experiment/native-deployment`**. Main branch i
 - Add to PATH before running npm: `export PATH="/c/Users/rhett/node_portable/node-v22.15.0-win-x64:$PATH"`
 - Use bash (Git Bash) for shell commands — not PowerShell or cmd — as the Claude Code shell
 
-## Frontend Update Workflow (Air-Gapped)
+## Deployment Workflow
+The **only** way to deploy to the target server is via GitHub — the target does a `git pull` from `origin/experiment/native-deployment`. There is no direct file transfer or zip-based deployment.
+
 1. Make changes to `client/src/`
 2. Build: `npm run build` (in `client/`)
-3. Package: `deployment\package_frontend_update.ps1` → produces `frontend_update.zip`
-4. Transfer zip to target server repo root
-5. Apply: `deployment\apply_frontend_update.ps1` on target
-6. Restart: `stop_native.cmd` then `start_native_offline.cmd`
+3. Commit **including** `client/dist/` (force-add — it is gitignored): `git add -f client/dist/`
+4. Push to `origin experiment/native-deployment`
+5. On the target: `git pull`, then restart with `stop_native.cmd` and `start_native_offline.cmd`
+
+Always commit and push together in the same step — uncommitted or unpushed changes are invisible to the target.
 
 ## Start / Stop
 | Action | Script |
