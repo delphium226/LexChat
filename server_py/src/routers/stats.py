@@ -8,6 +8,15 @@ from ..dependencies import get_admin_user
 router = APIRouter(prefix="/api/stats", tags=["Statistics"])
 
 
+def _build_date_filter(days: str, table_alias: str = "") -> str:
+    """Return a WHERE clause string for the given days parameter."""
+    col = f"{table_alias}.created_at" if table_alias else "created_at"
+    if days == "all":
+        return ""
+    days_num = int(days) if days.isdigit() else 30
+    return f"WHERE {col} > NOW() - INTERVAL '{days_num} days'"
+
+
 @router.get("/usage")
 async def get_usage_stats(
     days: str = "30",
@@ -82,5 +91,121 @@ async def get_usage_stats(
         "topUsers": [
             {"username": row.username, "msg_count": int(row.msg_count)}
             for row in power_users
+        ],
+    }
+
+
+@router.get("/performance")
+async def get_performance_stats(
+    days: str = "30",
+    admin: dict = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return query timing statistics for the Performance dashboard."""
+    date_filter = _build_date_filter(days)
+
+    # --- KPI aggregates ---
+    kpi_result = await db.execute(text(f"""
+        SELECT
+            COUNT(*)                                                    AS total_requests,
+            COALESCE(AVG(total_ms), 0)                                  AS avg_total_ms,
+            COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP
+                     (ORDER BY total_ms), 0)                            AS p95_total_ms,
+            COALESCE(AVG(llm_calls), 0)                                 AS avg_llm_calls,
+            COALESCE(AVG(lex_api_calls), 0)                             AS avg_lex_calls,
+            COALESCE(AVG(llm_total_ms), 0)                              AS avg_llm_ms,
+            COALESCE(AVG(lex_api_total_ms), 0)                          AS avg_lex_ms,
+            COALESCE(AVG(llm_ttft_first_ms), 0)                         AS avg_ttft_ms,
+            COALESCE(AVG(queue_wait_ms), 0)                             AS avg_queue_ms
+        FROM request_timings
+        {date_filter}
+    """))
+    kpi_row = kpi_result.mappings().first()
+
+    # --- Daily breakdown for charts ---
+    daily_result = await db.execute(text(f"""
+        SELECT
+            DATE(created_at)                                AS date,
+            ROUND(AVG(total_ms)::numeric, 0)               AS avg_total_ms,
+            ROUND(AVG(llm_total_ms)::numeric, 0)           AS avg_llm_ms,
+            ROUND(AVG(lex_api_total_ms)::numeric, 0)       AS avg_lex_ms,
+            ROUND(AVG(queue_wait_ms)::numeric, 0)          AS avg_queue_ms,
+            ROUND(AVG(llm_ttft_first_ms)::numeric, 0)      AS avg_ttft_ms,
+            COUNT(*)                                        AS request_count
+        FROM request_timings
+        {date_filter}
+        GROUP BY DATE(created_at)
+        ORDER BY DATE(created_at) ASC
+    """))
+
+    # --- LLM calls distribution ---
+    dist_result = await db.execute(text(f"""
+        SELECT llm_calls, COUNT(*) AS count
+        FROM request_timings
+        {date_filter}
+        GROUP BY llm_calls
+        ORDER BY llm_calls ASC
+    """))
+
+    # --- Slowest 10 requests ---
+    slowest_result = await db.execute(text(f"""
+        SELECT
+            request_id,
+            ROUND(total_ms::numeric, 0)         AS total_ms,
+            llm_calls,
+            ROUND(llm_total_ms::numeric, 0)     AS llm_ms,
+            lex_api_calls,
+            ROUND(lex_api_total_ms::numeric, 0) AS lex_ms,
+            ROUND(llm_ttft_first_ms::numeric, 0) AS ttft_ms,
+            created_at
+        FROM request_timings
+        {date_filter}
+        ORDER BY total_ms DESC
+        LIMIT 10
+    """))
+
+    def _round_ms(val):
+        return round(float(val)) if val is not None else 0
+
+    return {
+        "kpi": {
+            "totalRequests": int(kpi_row["total_requests"]),
+            "avgTotalMs": _round_ms(kpi_row["avg_total_ms"]),
+            "p95TotalMs": _round_ms(kpi_row["p95_total_ms"]),
+            "avgLlmCalls": round(float(kpi_row["avg_llm_calls"]), 1),
+            "avgLexCalls": round(float(kpi_row["avg_lex_calls"]), 1),
+            "avgLlmMs": _round_ms(kpi_row["avg_llm_ms"]),
+            "avgLexMs": _round_ms(kpi_row["avg_lex_ms"]),
+            "avgTtftMs": _round_ms(kpi_row["avg_ttft_ms"]),
+            "avgQueueMs": _round_ms(kpi_row["avg_queue_ms"]),
+        },
+        "daily": [
+            {
+                "date": row["date"].isoformat(),
+                "avgTotalMs": _round_ms(row["avg_total_ms"]),
+                "avgLlmMs": _round_ms(row["avg_llm_ms"]),
+                "avgLexMs": _round_ms(row["avg_lex_ms"]),
+                "avgQueueMs": _round_ms(row["avg_queue_ms"]),
+                "avgTtftMs": _round_ms(row["avg_ttft_ms"]),
+                "requestCount": int(row["request_count"]),
+            }
+            for row in daily_result.mappings()
+        ],
+        "llmDistribution": [
+            {"llmCalls": int(row["llm_calls"]), "count": int(row["count"])}
+            for row in dist_result.mappings()
+        ],
+        "slowest": [
+            {
+                "requestId": row["request_id"],
+                "totalMs": _round_ms(row["total_ms"]),
+                "llmCalls": int(row["llm_calls"]),
+                "llmMs": _round_ms(row["llm_ms"]),
+                "lexCalls": int(row["lex_api_calls"]),
+                "lexMs": _round_ms(row["lex_ms"]),
+                "ttftMs": _round_ms(row["ttft_ms"]),
+                "createdAt": row["created_at"].isoformat(),
+            }
+            for row in slowest_result.mappings()
         ],
     }

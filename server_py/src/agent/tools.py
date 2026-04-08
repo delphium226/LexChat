@@ -2,6 +2,7 @@ import asyncio
 from typing import Optional, Callable
 import json
 import logging
+import time
 import uuid
 
 import httpx
@@ -96,10 +97,15 @@ async def _emit(on_chunk: Optional[Callable], data: dict):
         if asyncio.iscoroutine(res):
             await res
 
-async def execute_worker_tool(name: str, args: dict, on_chunk: Optional[Callable] = None) -> str:
+async def execute_worker_tool(
+    name: str,
+    args: dict,
+    on_chunk: Optional[Callable] = None,
+    timing_collector=None,
+) -> str:
     """Execute a worker tool (LEX API call) and return JSON string result."""
     logger.info(f"[Worker Tool Exec] {name} with args: {json.dumps(args)}")
-    
+
     call_id = str(uuid.uuid4())
 
     try:
@@ -114,7 +120,7 @@ async def execute_worker_tool(name: str, args: dict, on_chunk: Optional[Callable
                     "limit": 5,
                     "include_text": False,
                 }
-                
+
                 await _emit(on_chunk, {
                     "type": "api_call_start",
                     "id": call_id,
@@ -123,8 +129,13 @@ async def execute_worker_tool(name: str, args: dict, on_chunk: Optional[Callable
                     "payload": payload
                 })
 
+                t0 = time.perf_counter()
                 resp = await client.post(url, json=payload)
-                
+                elapsed_ms = (time.perf_counter() - t0) * 1000
+
+                if timing_collector:
+                    timing_collector.record_lex_api_call(name, elapsed_ms)
+
                 # Emit result before raising error, to see what happened
                 try:
                     resp_json = resp.json()
@@ -136,11 +147,12 @@ async def execute_worker_tool(name: str, args: dict, on_chunk: Optional[Callable
                     "id": call_id,
                     "url": url,
                     "status": resp.status_code,
-                    "response": resp_json
+                    "response": resp_json,
+                    "elapsed_ms": round(elapsed_ms),
                 })
-                
+
                 resp.raise_for_status()
-                return json.dumps(resp.json())
+                return json.dumps(resp_json)
 
             elif name == "get_legislation_text":
                 url = f"{LEX_API_URL}/legislation/text"
@@ -154,7 +166,12 @@ async def execute_worker_tool(name: str, args: dict, on_chunk: Optional[Callable
                     "payload": payload
                 })
 
+                t0 = time.perf_counter()
                 resp = await client.post(url, json=payload)
+                elapsed_ms = (time.perf_counter() - t0) * 1000
+
+                if timing_collector:
+                    timing_collector.record_lex_api_call(name, elapsed_ms)
 
                 try:
                     resp_json = resp.json()
@@ -166,11 +183,12 @@ async def execute_worker_tool(name: str, args: dict, on_chunk: Optional[Callable
                     "id": call_id,
                     "url": url,
                     "status": resp.status_code,
-                    "response": resp_json
+                    "response": resp_json,
+                    "elapsed_ms": round(elapsed_ms),
                 })
 
                 resp.raise_for_status()
-                return json.dumps(resp.json())
+                return json.dumps(resp_json)
 
             else:
                 return f"Error: Tool {name} not found in worker toolset."

@@ -177,6 +177,11 @@ export const getUsageStats = async (days = 30) => {
     return response.data;
 };
 
+export const getQueryPerformanceStats = async (days = 30) => {
+    const response = await axios.get(`${API_URL}/stats/performance`, { params: { days } });
+    return response.data;
+};
+
 export const resetDatabase = async () => {
     const response = await axios.post(`${API_URL}/developer/reset`);
     return response.data;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData, getUsageStats, resetDatabase, getLatestHealthStatus, getHealthHistory, triggerHealthCheck } from '../services/api';
+import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData, getUsageStats, resetDatabase, getLatestHealthStatus, getHealthHistory, triggerHealthCheck, getQueryPerformanceStats } from '../services/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const Spinner = ({ size = 'md' }) => {
@@ -12,6 +12,239 @@ const Spinner = ({ size = 'md' }) => {
         </svg>
     );
 };
+
+// -----------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------
+
+const fmtMs = (ms) => {
+    if (ms == null || ms === 0) return '—';
+    if (ms >= 60000) return `${(ms / 60000).toFixed(1)}m`;
+    if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
+    return `${Math.round(ms)}ms`;
+};
+
+const PERF_COLORS = {
+    llm: '#6366f1',    // indigo
+    lex: '#f59e0b',    // amber
+    other: '#94a3b8',  // slate
+    total: '#2563eb',  // blue
+    ttft: '#10b981',   // emerald
+};
+
+// -----------------------------------------------------------------------
+// Performance Tab Component
+// -----------------------------------------------------------------------
+
+const PerformanceTab = ({ perfStats, perfTimeframe, setPerfTimeframe }) => {
+    const { kpi, daily, llmDistribution, slowest } = perfStats;
+
+    // Compute "other" ms = total - llm - lex (queue wait + overhead)
+    const dailyWithOther = daily.map(d => ({
+        ...d,
+        otherMs: Math.max(0, d.avgTotalMs - d.avgLlmMs - d.avgLexMs),
+        label: new Date(d.date).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' }),
+    }));
+
+    const timeframeLabel = perfTimeframe === 'all' ? 'All Time' : `Last ${perfTimeframe} Days`;
+
+    return (
+        <div className="space-y-6">
+            {/* HEADER WITH FILTER */}
+            <div className="flex justify-between items-center bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
+                <h2 className="text-lg font-bold dark:text-white">Query Performance</h2>
+                <div className="flex items-center space-x-2">
+                    <label className="text-sm text-gray-500 dark:text-gray-400 font-medium">Timeframe:</label>
+                    <select
+                        value={perfTimeframe}
+                        onChange={(e) => setPerfTimeframe(e.target.value)}
+                        className="p-2 border rounded-md text-sm dark:bg-zinc-700 dark:border-zinc-600 dark:text-white focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="7">Last 7 Days</option>
+                        <option value="30">Last 30 Days</option>
+                        <option value="90">Last 90 Days</option>
+                        <option value="all">All Time</option>
+                    </select>
+                </div>
+            </div>
+
+            {/* KPI CARDS */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
+                    <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Total Queries</h3>
+                    <p className="text-2xl font-bold dark:text-white">{kpi.totalRequests}</p>
+                    <p className="text-xs text-gray-400 mt-1">{timeframeLabel}</p>
+                </div>
+                <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
+                    <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Avg Response Time</h3>
+                    <p className="text-2xl font-bold text-blue-600">{fmtMs(kpi.avgTotalMs)}</p>
+                    <p className="text-xs text-gray-400 mt-1">P95: {fmtMs(kpi.p95TotalMs)}</p>
+                </div>
+                <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
+                    <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Avg LLM Calls</h3>
+                    <p className="text-2xl font-bold text-indigo-600">{kpi.avgLlmCalls}</p>
+                    <p className="text-xs text-gray-400 mt-1">Avg TTFT: {fmtMs(kpi.avgTtftMs)}</p>
+                </div>
+                <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
+                    <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Avg LEX API Calls</h3>
+                    <p className="text-2xl font-bold text-amber-600">{kpi.avgLexCalls}</p>
+                    <p className="text-xs text-gray-400 mt-1">Avg LEX time: {fmtMs(kpi.avgLexMs)}</p>
+                </div>
+            </div>
+
+            {/* CHARTS ROW */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Response Time Trend */}
+                <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+                    <h2 className="text-sm font-bold mb-4 dark:text-white">Daily Avg Response Time ({timeframeLabel})</h2>
+                    {dailyWithOther.length > 0 ? (
+                        <div className="h-56">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={dailyWithOther} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                    <XAxis dataKey="label" stroke="#9ca3af" tick={{ fontSize: 10 }} />
+                                    <YAxis stroke="#9ca3af" tick={{ fontSize: 10 }} tickFormatter={v => fmtMs(v)} />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '11px' }}
+                                        formatter={(v, name) => [fmtMs(v), name]}
+                                    />
+                                    <Legend wrapperStyle={{ fontSize: '11px' }} />
+                                    <Line type="monotone" dataKey="avgTotalMs" name="Total" stroke={PERF_COLORS.total} strokeWidth={2} dot={false} />
+                                    <Line type="monotone" dataKey="avgLlmMs" name="LLM" stroke={PERF_COLORS.llm} strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                                    <Line type="monotone" dataKey="avgLexMs" name="LEX API" stroke={PERF_COLORS.lex} strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+                    ) : (
+                        <div className="h-56 flex items-center justify-center text-gray-400 text-sm">No data for this period.</div>
+                    )}
+                </div>
+
+                {/* Stacked Time Breakdown */}
+                <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+                    <h2 className="text-sm font-bold mb-4 dark:text-white">Daily Time Breakdown ({timeframeLabel})</h2>
+                    {dailyWithOther.length > 0 ? (
+                        <div className="h-56">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={dailyWithOther} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                    <XAxis dataKey="label" stroke="#9ca3af" tick={{ fontSize: 10 }} />
+                                    <YAxis stroke="#9ca3af" tick={{ fontSize: 10 }} tickFormatter={v => fmtMs(v)} />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '11px' }}
+                                        formatter={(v, name) => [fmtMs(v), name]}
+                                    />
+                                    <Legend wrapperStyle={{ fontSize: '11px' }} />
+                                    <Bar dataKey="avgLlmMs" name="LLM" stackId="a" fill={PERF_COLORS.llm} />
+                                    <Bar dataKey="avgLexMs" name="LEX API" stackId="a" fill={PERF_COLORS.lex} />
+                                    <Bar dataKey="otherMs" name="Other" stackId="a" fill={PERF_COLORS.other} radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    ) : (
+                        <div className="h-56 flex items-center justify-center text-gray-400 text-sm">No data for this period.</div>
+                    )}
+                </div>
+            </div>
+
+            {/* LLM Calls Distribution + Avg breakdown summary */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* LLM calls distribution */}
+                <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+                    <h2 className="text-sm font-bold mb-1 dark:text-white">LLM Round-Trips per Query</h2>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Each round-trip = one Ollama call. More calls = the agent needed more tool use loops.</p>
+                    {llmDistribution.length > 0 ? (
+                        <div className="h-48">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={llmDistribution} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                    <XAxis dataKey="llmCalls" stroke="#9ca3af" tick={{ fontSize: 11 }} label={{ value: 'LLM calls', position: 'insideBottom', offset: -2, fontSize: 10, fill: '#9ca3af' }} />
+                                    <YAxis stroke="#9ca3af" tick={{ fontSize: 11 }} allowDecimals={false} />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '11px' }}
+                                        formatter={(v) => [v, 'queries']}
+                                    />
+                                    <Bar dataKey="count" name="Queries" fill={PERF_COLORS.llm} radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    ) : (
+                        <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No data.</div>
+                    )}
+                </div>
+
+                {/* Time breakdown summary card */}
+                <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+                    <h2 className="text-sm font-bold mb-4 dark:text-white">Avg Time Budget per Query</h2>
+                    {kpi.avgTotalMs > 0 ? (
+                        <div className="space-y-4">
+                            {[
+                                { label: 'LLM Inference', ms: kpi.avgLlmMs, color: PERF_COLORS.llm },
+                                { label: 'LEX API Calls', ms: kpi.avgLexMs, color: PERF_COLORS.lex },
+                                { label: 'Queue Wait', ms: kpi.avgQueueMs, color: '#64748b' },
+                                { label: 'Other / Overhead', ms: Math.max(0, kpi.avgTotalMs - kpi.avgLlmMs - kpi.avgLexMs - kpi.avgQueueMs), color: PERF_COLORS.other },
+                            ].map(({ label, ms, color }) => {
+                                const pct = kpi.avgTotalMs > 0 ? Math.round((ms / kpi.avgTotalMs) * 100) : 0;
+                                return (
+                                    <div key={label}>
+                                        <div className="flex justify-between text-xs mb-1">
+                                            <span className="font-medium dark:text-gray-300" style={{ color }}>{label}</span>
+                                            <span className="text-gray-500 dark:text-gray-400">{fmtMs(ms)} ({pct}%)</span>
+                                        </div>
+                                        <div className="w-full bg-gray-100 dark:bg-zinc-700 rounded-full h-2">
+                                            <div className="h-2 rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            <div className="pt-2 border-t dark:border-zinc-700 flex justify-between text-xs font-bold dark:text-white">
+                                <span>Total</span>
+                                <span>{fmtMs(kpi.avgTotalMs)}</span>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No data.</div>
+                    )}
+                </div>
+            </div>
+
+            {/* Slowest Queries Table */}
+            <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+                <h2 className="text-sm font-bold mb-4 dark:text-white">10 Slowest Queries ({timeframeLabel})</h2>
+                {slowest.length > 0 ? (
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full text-xs">
+                            <thead>
+                                <tr>
+                                    {['Request ID', 'Time', 'Total', 'LLM Calls', 'LLM Time', 'LEX Calls', 'LEX Time', 'TTFT'].map(h => (
+                                        <th key={h} className="px-3 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-left font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {slowest.map((row) => (
+                                    <tr key={row.requestId} className="border-b border-zinc-100 dark:border-zinc-700">
+                                        <td className="px-3 py-3 font-mono dark:text-gray-300">{row.requestId}</td>
+                                        <td className="px-3 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(row.createdAt).toLocaleString()}</td>
+                                        <td className="px-3 py-3 font-bold text-red-600 dark:text-red-400 whitespace-nowrap">{fmtMs(row.totalMs)}</td>
+                                        <td className="px-3 py-3 dark:text-gray-300">{row.llmCalls}</td>
+                                        <td className="px-3 py-3 text-indigo-600 dark:text-indigo-400 whitespace-nowrap">{fmtMs(row.llmMs)}</td>
+                                        <td className="px-3 py-3 dark:text-gray-300">{row.lexCalls}</td>
+                                        <td className="px-3 py-3 text-amber-600 dark:text-amber-400 whitespace-nowrap">{fmtMs(row.lexMs)}</td>
+                                        <td className="px-3 py-3 text-emerald-600 dark:text-emerald-400 whitespace-nowrap">{fmtMs(row.ttftMs)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : (
+                    <p className="text-gray-400 text-sm">No slow queries recorded yet.</p>
+                )}
+            </div>
+        </div>
+    );
+};
+
 
 const AdminPortal = () => {
     const [activeTab, setActiveTab] = useState('users');
@@ -36,6 +269,11 @@ const AdminPortal = () => {
     const [usageStats, setUsageStats] = useState(null);
     const [timeframe, setTimeframe] = useState('30');
 
+    // --- PERFORMANCE STATS STATE ---
+    const [perfStats, setPerfStats] = useState(null);
+    const [perfTimeframe, setPerfTimeframe] = useState('30');
+    const [isPerfLoading, setIsPerfLoading] = useState(false);
+
     // --- SERVICE HEALTH STATE ---
     const [healthStatus, setHealthStatus] = useState(null);
     const [isTriggeringHealth, setIsTriggeringHealth] = useState(false);
@@ -49,10 +287,12 @@ const AdminPortal = () => {
             fetchStats(learningTimeframe);
         } else if (activeTab === 'usage') {
             fetchUsageStats(timeframe);
+        } else if (activeTab === 'performance') {
+            fetchPerfStats(perfTimeframe);
         } else if (activeTab === 'health') {
             fetchHealthStatus();
         }
-    }, [activeTab, timeframe, learningTimeframe]);
+    }, [activeTab, timeframe, learningTimeframe, perfTimeframe]);
 
     // ==========================================
     // USER MANAGEMENT LOGIC
@@ -185,6 +425,18 @@ const AdminPortal = () => {
         }
     };
 
+    const fetchPerfStats = async (days) => {
+        setIsPerfLoading(true);
+        try {
+            const data = await getQueryPerformanceStats(days);
+            setPerfStats(data);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsPerfLoading(false);
+        }
+    };
+
     // ==========================================
     // SERVICE HEALTH LOGIC
     // ==========================================
@@ -254,6 +506,15 @@ const AdminPortal = () => {
                             }`}
                     >
                         Usage Stats
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('performance')}
+                        className={`flex-1 px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'performance'
+                            ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                            }`}
+                    >
+                        Performance
                     </button>
                     <button
                         onClick={() => setActiveTab('learning')}
@@ -591,6 +852,25 @@ const AdminPortal = () => {
                                 </div>
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {/* PERFORMANCE TAB */}
+                {activeTab === 'performance' && isPerfLoading && (
+                    <div className="flex justify-center items-center h-64">
+                        <Spinner />
+                    </div>
+                )}
+                {activeTab === 'performance' && !isPerfLoading && perfStats && (
+                    <PerformanceTab
+                        perfStats={perfStats}
+                        perfTimeframe={perfTimeframe}
+                        setPerfTimeframe={setPerfTimeframe}
+                    />
+                )}
+                {activeTab === 'performance' && !isPerfLoading && !perfStats && (
+                    <div className="flex justify-center items-center h-64 text-gray-500 text-sm">
+                        No performance data recorded yet. Run some queries to start collecting timings.
                     </div>
                 )}
 

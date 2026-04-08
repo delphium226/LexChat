@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy import (
-    Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text
+    Boolean, CheckConstraint, DateTime, Float, ForeignKey, Integer, String, Text
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -60,6 +60,22 @@ class Message(Base):
     __table_args__ = (
         CheckConstraint("rating >= 1 AND rating <= 5", name="valid_rating"),
     )
+
+class RequestTiming(Base):
+    __tablename__ = "request_timings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    request_id: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    total_ms: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    queue_wait_ms: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    learning_db_ms: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    llm_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    llm_total_ms: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    llm_ttft_first_ms: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    lex_api_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    lex_api_total_ms: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
 
 class ServiceHealthStatus(Base):
     __tablename__ = "service_health_logs"

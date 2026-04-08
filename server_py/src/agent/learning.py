@@ -1,4 +1,5 @@
 import logging
+import time
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,13 +30,14 @@ def extract_keywords(user_text: str) -> str:
 
 
 async def get_relevant_examples(
-    user_query: str, db: AsyncSession
+    user_query: str, db: AsyncSession, timing_collector=None
 ) -> dict:
     """Retrieve positive examples and critiques via PostgreSQL full-text search.
 
     Returns:
         {"examples": [...], "critiques": [...]}
     """
+    t0 = time.perf_counter()
     try:
         keywords = extract_keywords(user_query)
         if not keywords:
@@ -91,6 +93,9 @@ async def get_relevant_examples(
         """)
         neg_result = await db.execute(negative_sql, {"keywords": keywords})
         critiques = [dict(row._mapping) for row in neg_result]
+
+        if timing_collector:
+            timing_collector.record_learning_db((time.perf_counter() - t0) * 1000)
 
         return {"examples": examples, "critiques": critiques}
 

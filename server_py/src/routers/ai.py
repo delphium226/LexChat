@@ -1,6 +1,8 @@
 import asyncio
 import json
 import logging
+import time
+import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Request
@@ -10,7 +12,9 @@ from pydantic import BaseModel
 from ..agent.deep_research import chat_with_deep_research
 from ..agent.ollama_client import list_models, process_user_request
 from ..database import async_session_maker
+from ..models import RequestTiming
 from ..utils.queue import RequestQueue
+from ..utils.stopwatch import TimingCollector
 
 logger = logging.getLogger("app")
 
@@ -46,6 +50,9 @@ async def chat_endpoint(body: ChatRequest, request: Request):
         )
 
     cancel_event = asyncio.Event()
+    t_request = time.perf_counter()
+    request_id = uuid.uuid4().hex[:8]
+    timing = TimingCollector(request_id)
 
     async def event_stream():
         # Detect client disconnect
@@ -61,7 +68,12 @@ async def chat_endpoint(body: ChatRequest, request: Request):
             def on_chunk(data):
                 events.put_nowait(data)
 
+            # Record queue entry time — queue wait = time until task_factory() is called
+            t_queue_entry = time.perf_counter()
+
             async def run_agent_task():
+                timing.record_queue_wait((time.perf_counter() - t_queue_entry) * 1000)
+
                 # Get a DB session for learning injection
                 async with async_session_maker() as db_session:
                     if body.deep_research:
@@ -80,6 +92,7 @@ async def chat_endpoint(body: ChatRequest, request: Request):
                             cancel_event,
                             body.num_ctx or 0,
                             db_session=db_session,
+                            timing_collector=timing,
                         )
 
             # Callback for queue updates
@@ -122,6 +135,11 @@ async def chat_endpoint(body: ChatRequest, request: Request):
 
             # Get final result
             result_message = agent_task.result()
+
+            # Record total and emit timing summary before result
+            timing.record_total((time.perf_counter() - t_request) * 1000)
+            yield f"data: {json.dumps({'type': 'timing', **timing.to_dict()})}\n\n"
+
             if result_message:
                 yield f"data: {json.dumps({'type': 'result', 'message': result_message})}\n\n"
 
@@ -138,6 +156,20 @@ async def chat_endpoint(body: ChatRequest, request: Request):
         finally:
             cancel_event.set()
             disconnect_task.cancel()
+
+            # Ensure total_ms is recorded even if an exception cut us short
+            if timing.total_ms == 0:
+                timing.record_total((time.perf_counter() - t_request) * 1000)
+
+            # Persist timing to DB if we got at least as far as queue entry
+            if timing.queue_wait_ms > 0 or timing.llm_calls > 0:
+                try:
+                    async with async_session_maker() as db_save:
+                        row = RequestTiming(**timing.to_dict())
+                        db_save.add(row)
+                        await db_save.commit()
+                except Exception as save_err:
+                    logger.error(f"[Timing] Failed to persist request timing: {save_err}")
 
     return StreamingResponse(
         event_stream(),

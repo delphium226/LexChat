@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 from typing import AsyncGenerator, Callable, Optional
 
 import httpx
@@ -39,6 +40,7 @@ async def chat_loop(
     tool_executor: Callable,
     on_chunk: Optional[Callable] = None,
     emit_tool_details: bool = False,
+    timing_collector=None,
 ) -> dict:
     """Core ReAct loop: stream from Ollama, handle tool calls, recurse.
 
@@ -83,6 +85,9 @@ async def chat_loop(
     tool_calls = []
     final_stats = {}
 
+    t_send = time.perf_counter()
+    first_content_time: Optional[float] = None
+
     try:
         async with httpx.AsyncClient(timeout=None, verify=False) as client:
             async with client.stream(
@@ -109,6 +114,8 @@ async def chat_loop(
                     content = msg.get("content", "")
 
                     if content:
+                        if first_content_time is None:
+                            first_content_time = time.perf_counter()
                         full_content += content
                         if on_chunk:
                             await _call_chunk(on_chunk, {"type": "token", "content": content})
@@ -129,6 +136,13 @@ async def chat_loop(
             "Agent Service (Ollama) is not reachable. "
             "Please ensure it is running on your machine."
         )
+
+    # Record LLM call timing (ttft = time to first content token)
+    if timing_collector:
+        t_done = time.perf_counter()
+        ttft_ms = ((first_content_time or t_done) - t_send) * 1000
+        total_stream_ms = (t_done - t_send) * 1000
+        timing_collector.record_llm_call(ttft_ms, total_stream_ms)
 
     # Build assistant message
     message = {"role": "assistant", "content": full_content}
@@ -178,6 +192,7 @@ async def chat_loop(
             next_messages, model, cancel_event, num_ctx,
             tools, tool_executor, on_chunk,
             emit_tool_details=emit_tool_details,
+            timing_collector=timing_collector,
         )
 
     return message
@@ -194,6 +209,7 @@ async def run_worker_agent(
     num_ctx: int,
     parent_on_chunk: Optional[Callable] = None,
     emit_tool_details: bool = False,
+    timing_collector=None,
 ) -> dict:
     """Run the Worker agent with a fresh context for legal research."""
     logger.info(f"[Worker] Starting research on: {query}")
@@ -206,37 +222,20 @@ async def run_worker_agent(
     async def worker_tool_executor(name: str, args: dict) -> str:
         if parent_on_chunk:
             await _call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}"})
-        
-        result = await execute_worker_tool(name, args, on_chunk=parent_on_chunk)
-        
+
+        result = await execute_worker_tool(
+            name, args, on_chunk=parent_on_chunk, timing_collector=timing_collector
+        )
+
         if parent_on_chunk:
             await _call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "result": "Done"})
         return result
 
-    # Suppress token streaming for worker (pass on_chunk=None) unless we want full details
-    # But currently worker tokens are not streamed to main chat usually.
-    # However, if emit_tool_details is True, we might want to know what the worker is doing?
-    # For now, we follow existing logic: on_chunk=None for chat_loop of worker. 
-    # But wait, if we want detailed tool calls from worker to be seen by system, we might need a callback.
-    # The requirement is "relay all information on thinking, tool calling... from the llm to the connecting system".
-    # If the manager delegates to worker, the worker's tool calls are also "LLM output".
-    # So we should probably pass parent_on_chunk to worker if emit_tool_details is True.
-    # But the UI doesn't handle worker tokens. 
-    # Let's keep existing behavior for normal chat, but for system chat (emit_tool_details=True), 
-    # arguably we might want everything. 
-    # However, to be safe and stick to "relay tool calling", we will just pass the flag.
-    # If we pass on_chunk=None, then even if flag is True, chat_loop won't emit because `if emit_tool_details and on_chunk`.
-    # So if we want worker tool calls to be emitted, we must pass a callback.
-    
-    # Let's stick to the current plan: update signatures. 
-    # The requirement says "relay all information...".
-    # If the manager tool "delegate_research" is called, that is a tool call.
-    # Inside that, the worker runs.
-    
     return await chat_loop(
         messages, model, cancel_event, num_ctx,
         WORKER_TOOLS, worker_tool_executor, None,  # on_chunk=None for worker to avoid mixing tokens
-        emit_tool_details=emit_tool_details
+        emit_tool_details=emit_tool_details,
+        timing_collector=timing_collector,
     )
 
 
@@ -252,6 +251,7 @@ async def process_user_request(
     num_ctx: int,
     db_session=None,
     emit_tool_details: bool = False,
+    timing_collector=None,
 ) -> dict:
     """Main entry point: Manager agent with learning injection.
 
@@ -271,7 +271,9 @@ async def process_user_request(
         try:
             last_msg = messages[-1] if messages else None
             if last_msg and last_msg.get("role") == "user":
-                learning_data = await get_relevant_examples(last_msg["content"], db_session)
+                learning_data = await get_relevant_examples(
+                    last_msg["content"], db_session, timing_collector=timing_collector
+                )
                 context_injection = format_learning_context(learning_data)
                 if context_injection:
                     logger.info("[Learning] Injecting feedback context into System Prompt.")
@@ -292,7 +294,8 @@ async def process_user_request(
 
             result = await run_worker_agent(
                 args["query"], model, cancel_event, num_ctx, on_chunk,
-                emit_tool_details=emit_tool_details
+                emit_tool_details=emit_tool_details,
+                timing_collector=timing_collector,
             )
 
             if on_chunk:
@@ -305,7 +308,8 @@ async def process_user_request(
     return await chat_loop(
         final_messages, model, cancel_event, num_ctx,
         MANAGER_TOOLS, manager_tool_executor, on_chunk,
-        emit_tool_details=emit_tool_details
+        emit_tool_details=emit_tool_details,
+        timing_collector=timing_collector,
     )
 
 
