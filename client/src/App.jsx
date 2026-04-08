@@ -399,7 +399,12 @@ function AppContent() {
           }
         `}
       >
-        <h1 className="text-3xl font-bold text-blue-600 mb-2 self-center">LexChat</h1>
+        <div className="flex flex-col items-center mb-2">
+          <img src="/favicon.png" alt="LexChat" className="w-12 h-12 mb-2" />
+          <h1 className="text-3xl font-bold text-blue-600">LexChat</h1>
+        </div>
+
+        <div className="h-10" />
 
         <button
           onClick={() => { handleNewChat(); }}

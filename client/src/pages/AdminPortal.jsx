@@ -3,9 +3,21 @@ import axios from 'axios';
 import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData, getUsageStats, resetDatabase, getLatestHealthStatus, getHealthHistory, triggerHealthCheck } from '../services/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
+const Spinner = ({ size = 'md' }) => {
+    const cls = size === 'sm' ? 'h-4 w-4' : 'h-8 w-8';
+    return (
+        <svg className={`animate-spin ${cls} text-blue-600`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 22 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
+    );
+};
+
 const AdminPortal = () => {
     const [activeTab, setActiveTab] = useState('users');
     const [isLoading, setIsLoading] = useState(false);
+    const [isStatsLoading, setIsStatsLoading] = useState(false);
+    const [isTestLoading, setIsTestLoading] = useState(false);
 
     // --- USER MANAGEMENT STATE ---
     const [users, setUsers] = useState([]);
@@ -113,6 +125,7 @@ const AdminPortal = () => {
     };
 
     const fetchStats = async (days) => {
+        setIsStatsLoading(true);
         try {
             const rawData = await getPerformanceStats(days);
 
@@ -140,27 +153,35 @@ const AdminPortal = () => {
             setStats({ data: chartData, models: Array.from(modelSet) });
         } catch (err) {
             console.error(err);
+        } finally {
+            setIsStatsLoading(false);
         }
     };
 
     const handleTestRetrieval = async (e) => {
         e.preventDefault();
         if (!testQuery.trim()) return;
+        setIsTestLoading(true);
         try {
             const results = await testLearningRetrieval(testQuery);
             setTestResults(results);
         } catch (err) {
             console.error(err);
             alert('Failed to test retrieval');
+        } finally {
+            setIsTestLoading(false);
         }
     };
 
     const fetchUsageStats = async (days) => {
+        setIsLoading(true);
         try {
             const data = await getUsageStats(days);
             setUsageStats(data);
         } catch (err) {
             console.error(err);
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -211,14 +232,14 @@ const AdminPortal = () => {
 
     return (
         <div className="p-6 h-full flex flex-col">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-bold dark:text-white">Admin Portal</h1>
+            <div className="mb-6">
+                <h1 className="text-lg font-bold dark:text-white mb-3">Admin Portal</h1>
 
                 {/* TABS */}
-                <div className="flex space-x-1 bg-gray-200 dark:bg-gray-700 p-1 rounded-lg">
+                <div className="flex space-x-1 bg-gray-200 dark:bg-gray-700 p-1 rounded-lg w-full">
                     <button
                         onClick={() => setActiveTab('users')}
-                        className={`px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'users'
+                        className={`flex-1 px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'users'
                             ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white'
                             : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                             }`}
@@ -227,7 +248,7 @@ const AdminPortal = () => {
                     </button>
                     <button
                         onClick={() => setActiveTab('usage')}
-                        className={`px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'usage'
+                        className={`flex-1 px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'usage'
                             ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white'
                             : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                             }`}
@@ -236,7 +257,7 @@ const AdminPortal = () => {
                     </button>
                     <button
                         onClick={() => setActiveTab('learning')}
-                        className={`px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'learning'
+                        className={`flex-1 px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'learning'
                             ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white'
                             : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                             }`}
@@ -245,7 +266,7 @@ const AdminPortal = () => {
                     </button>
                     <button
                         onClick={() => setActiveTab('developer')}
-                        className={`px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'developer'
+                        className={`flex-1 px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'developer'
                             ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white'
                             : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                             }`}
@@ -254,7 +275,7 @@ const AdminPortal = () => {
                     </button>
                     <button
                         onClick={() => setActiveTab('health')}
-                        className={`px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'health'
+                        className={`flex-1 px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'health'
                             ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white'
                             : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                             }`}
@@ -332,6 +353,11 @@ const AdminPortal = () => {
                         {/* RIGHT COLUMN: LIST */}
                         <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow lg:col-span-2">
                             <h2 className="text-lg font-bold mb-4 dark:text-white">Existing Users</h2>
+                            {isLoading ? (
+                                <div className="flex justify-center items-center h-40">
+                                    <Spinner />
+                                </div>
+                            ) : (
                             <div className="overflow-x-auto">
                                 <table className="min-w-full leading-normal">
                                     <thead>
@@ -359,6 +385,7 @@ const AdminPortal = () => {
                                     </tbody>
                                 </table>
                             </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -433,7 +460,7 @@ const AdminPortal = () => {
                             </div>
                         ) : (
                             <div className="flex justify-center items-center h-40">
-                                <span className="text-gray-500 dark:text-gray-400">Loading health data...</span>
+                                <Spinner />
                             </div>
                         )}
                         <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow mt-6">
@@ -444,7 +471,12 @@ const AdminPortal = () => {
                 )}
 
                 {/* USAGE STATS TAB */}
-                {activeTab === 'usage' && usageStats && (
+                {activeTab === 'usage' && isLoading && (
+                    <div className="flex justify-center items-center h-64">
+                        <Spinner />
+                    </div>
+                )}
+                {activeTab === 'usage' && !isLoading && usageStats && (
                     <div className="space-y-6">
                         {/* HEADER WITH FILTER */}
                         <div className="flex justify-between items-center bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
@@ -585,7 +617,11 @@ const AdminPortal = () => {
                             </div>
 
                             <div className="h-64 w-full">
-                                {stats?.data && stats.data.length > 0 ? (
+                                {isStatsLoading ? (
+                                    <div className="h-full flex items-center justify-center">
+                                        <Spinner />
+                                    </div>
+                                ) : stats?.data && stats.data.length > 0 ? (
                                     <ResponsiveContainer width="100%" height="100%">
                                         <LineChart
                                             data={stats.data}
@@ -635,6 +671,11 @@ const AdminPortal = () => {
                                 <span>Recent User Feedback</span>
                                 <button onClick={fetchFeedback} className="text-xs text-blue-500 hover:underline">Refresh</button>
                             </h2>
+                            {isLoading ? (
+                                <div className="flex justify-center items-center h-40">
+                                    <Spinner />
+                                </div>
+                            ) : (
                             <div className="overflow-x-auto max-h-96">
                                 <table className="min-w-full leading-normal">
                                     <thead>
@@ -676,6 +717,7 @@ const AdminPortal = () => {
                                     </tbody>
                                 </table>
                             </div>
+                            )}
                         </div>
 
                         {/* 2. KNOWLEDGE BASE PLAYGROUND */}
@@ -694,9 +736,11 @@ const AdminPortal = () => {
                                 />
                                 <button
                                     type="submit"
-                                    className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                                    disabled={isTestLoading}
+                                    className={`bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors text-sm flex items-center gap-2 ${isTestLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 >
-                                    Test
+                                    {isTestLoading && <Spinner size="sm" />}
+                                    {isTestLoading ? 'Testing...' : 'Test'}
                                 </button>
                             </form>
 
@@ -777,8 +821,9 @@ const AdminPortal = () => {
                                     }
                                 }}
                                 disabled={isLoading}
-                                className={`bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors text-sm ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                className={`bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors text-sm flex items-center gap-2 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
+                                {isLoading && <Spinner size="sm" />}
                                 {isLoading ? 'Generating Data...' : 'Generate 100 Synthetic Users (6 Months History)'}
                             </button>
                         </div>
@@ -806,8 +851,9 @@ const AdminPortal = () => {
                                     }
                                 }}
                                 disabled={isLoading}
-                                className={`bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors text-sm ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                className={`bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors text-sm flex items-center gap-2 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
+                                {isLoading && <Spinner size="sm" />}
                                 {isLoading ? 'Processing...' : 'Reset Database'}
                             </button>
                         </div>
