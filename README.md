@@ -66,30 +66,36 @@ The Admin Portal (`/admin`) provides comprehensive oversight of the application:
 
 For environments where Docker or WSL are not available, you can run the application natively on Windows Server.
 
-### Automated Setup
-1.  Open PowerShell as Administrator.
-2.  Run the installer:
+### Internet-Connected
+1.  Open PowerShell as Administrator and run the installer:
     ```powershell
     cd deployment
-    .\install_native_offline.ps1
+    .\install_native.ps1
     ```
-3.  Start the application:
+2.  Start the application:
     ```cmd
     deployment\start_native.cmd
     ```
-    *The application will be served securely over HTTPS on **port 443** (e.g., `https://localhost`).*
+3.  Stop the application:
+    ```cmd
+    deployment\stop_native.cmd
+    ```
+
+*The application is served over HTTPS on **port 443** (e.g., `https://localhost`).*
+
+### Air-Gapped (No Internet)
+
+1. **Package (Online)**: Run `deployment\package_offline_native.ps1` on the dev machine.
+2. **Chunk (Online)**: Run `deployment\compress_and_chunk.ps1` to split into <50MB parts.
+3. **Transfer**: Move the chunks to the target server.
+4. **Reconstruct (Offline)**: Run `deployment\reconstruct_binaries.ps1` on the target.
+5. **Install (Offline)**: Run `deployment\install_native_offline.ps1` as Administrator.
+6. **Start**: Run `deployment\start_native_offline.cmd`.
+7. **Stop**: Run `deployment\stop_native.cmd`.
+
+For **frontend-only updates** on an air-gapped machine, use `deployment\package_frontend_update.ps1` (online) and `deployment\apply_frontend_update.ps1` (offline) — no need to repackage everything.
 
 See [deployment/NATIVE_DEPLOYMENT.md](deployment/NATIVE_DEPLOYMENT.md) for full details.
-
-## Offline (Air-Gapped) Windows Deployment
-
-If deploying to a secure, internet-disconnected environment, use our offline native deployment scripts.
-
-1. **Package Assets (Online)**: On an internet-connected machine, run `deployment\package_offline_native.ps1`. This downloads installers (Python, Postgres, Ollama), wheels, and pre-builds the frontend into `binaries\raw`.
-2. **Chunk (Online)**: Run `deployment\compress_and_chunk.ps1` to zip all files and chunk them into `<50MB` parts for transfer.
-3. **Reconstruct (Offline)**: Move the chunks to the target server and run `deployment\reconstruct_binaries.ps1` to stitch them back together into `binaries\raw`.
-4. **Install (Offline)**: Run `deployment\install_native_offline.ps1` as Administrator to silently install all dependencies from the packaged binaries. You can append the `-SkipSystemInstall` flag to bypass reinstalling Python, Postgres, and Ollama.
-5. **Start Application**: Run `deployment\start_native_offline.cmd` completely offline! The application will automatically open in your browser at `http://localhost:8080/`.
 
 ## Prerequisites (Local Development)
 
@@ -176,7 +182,6 @@ npm run dev
 ## Usage
 
 1.  **Login/Signup**: Create a new account or log in with the default `admin` credentials (admin/admin).
-2.  **Select Model**: Choose your preferred local LLM from the dropdown.
-3.  **Ask a Question**: Type a legal query (e.g., *"What are the requirements for a Section 21 notice?"*).
-4.  **Deep Research**: For complex topics, the system will automatically delegate to the Worker Agent to perform deep research steps.
-5.  **Admin Portal**: Log in as `admin` and navigate to the Admin Portal to manage users.
+2.  **Ask a Question**: Type a legal query (e.g., *"What are the requirements for a Section 21 notice?"*).
+3.  **Deep Research**: For complex topics, the system will automatically delegate to the Worker Agent to perform deep research steps.
+4.  **Admin Portal**: Log in as `admin` and navigate to the Admin Portal to manage users.

@@ -8,9 +8,9 @@ We provide automated scripts to handle the entire process.
 
 ### 1. Installation
 > [!WARNING]
-> This native installer requires an **active internet connection** to download dependencies (Chocolatey, Node, Python, Postgres). If you are deploying to a secure, air-gapped environment without internet access, you **must use the Docker Offline Setup** instead (see `deployment\load_docker_offline.ps1`).
+> This native installer requires an **active internet connection** to download dependencies (Python, Node.js, PostgreSQL, Ollama). If you are deploying to a secure, air-gapped environment without internet access, follow the **Air-Gapped Deployment** section below instead.
 
-Run the installer script as Administrator. This will install Python, Node.js, PostgreSQL, Ollama, and set up the application.
+Run the installer script as Administrator. This will install Python, Node.js, PostgreSQL, and Ollama, and set up the application.
 
 ```powershell
 # Open PowerShell as Administrator
@@ -19,21 +19,29 @@ cd deployment
 ```
 
 ### 2. Configure SSL Certificates
-To run the native environment over HTTPS, place your organizational security certificate files inside a `certs` directory within the `deployment` folder.
-*   **Certificate file**: Save as `deployment\certs\lexchat.crt` (or `.pem`).
-*   **Private key file**: Save as `deployment\certs\lexchat.key`.
+To run over HTTPS, place your organisational certificate files in the `deployment\certs` folder:
+*   **Certificate file**: `deployment\certs\lexchat.crt` (or `.pem`)
+*   **Private key file**: `deployment\certs\lexchat.key`
 
-### 3. Running the App
-Use the launcher script to start the application natively.
-
+### 3. Start the App
 ```cmd
 deployment\start_native.cmd
 ```
-*   **Application URL**: https://localhost
-*   *Note: If testing on an internal network, access the app via your machine's FQDN or hostname (e.g. `https://your-server-name`), matching the certificate.*
+This script will automatically:
+1. Start **Ollama** (skips if already running)
+2. Start the **FastAPI backend** (uvicorn) on port 443 with HTTPS
 
-### 4. Updating
-To pull the latest code and update dependencies:
+*   **Application URL**: https://localhost
+*   *On an internal network, access via your machine's FQDN (e.g. `https://your-server-name`), matching your certificate.*
+
+### 4. Stop the App
+```cmd
+deployment\stop_native.cmd
+```
+This gracefully stops the FastAPI backend, Ollama, and the PostgreSQL service.
+
+### 5. Updating (Internet-Connected)
+To pull the latest code and rebuild:
 
 ```powershell
 cd deployment
@@ -42,19 +50,116 @@ cd deployment
 
 ---
 
+## Air-Gapped Deployment
+
+For secure environments with no internet access. All steps are split between an **online dev machine** and the **offline target server**.
+
+### Initial Installation
+
+**On the online dev machine:**
+
+1. Package all dependencies and pre-build the frontend:
+    ```powershell
+    cd deployment
+    .\package_offline_native.ps1
+    ```
+2. Chunk the output for transfer:
+    ```powershell
+    .\compress_and_chunk.ps1
+    ```
+3. Transfer the chunked files in `binaries\` to the target server.
+
+**On the offline target server (as Administrator):**
+
+4. Reconstruct the binaries:
+    ```powershell
+    cd deployment
+    .\reconstruct_binaries.ps1
+    ```
+5. Run the offline installer:
+    ```powershell
+    .\install_native_offline.ps1
+    ```
+    > Append `-SkipSystemInstall` to skip reinstalling Python, PostgreSQL, and Ollama if they are already installed.
+
+6. Start the application:
+    ```cmd
+    deployment\start_native_offline.cmd
+    ```
+
+### Applying Frontend Updates (Air-Gapped)
+
+When only the frontend (UI) has changed, use the lightweight update scripts instead of repackaging everything.
+
+**On the online dev machine:**
+
+1. Ensure Node.js is available. If not, run:
+    ```powershell
+    .\install_node.ps1
+    ```
+2. Build the frontend:
+    ```powershell
+    cd client
+    npm install
+    npm run build
+    ```
+3. Package the built frontend:
+    ```powershell
+    cd deployment
+    .\package_frontend_update.ps1
+    ```
+4. Transfer `frontend_update.zip` to the repo root on the target server.
+
+**On the offline target server:**
+
+5. Apply the update:
+    ```powershell
+    cd deployment
+    .\apply_frontend_update.ps1
+    ```
+6. Restart the application:
+    ```cmd
+    deployment\stop_native.cmd
+    deployment\start_native_offline.cmd
+    ```
+
+---
+
+## Script Reference
+
+| Script | Description |
+|---|---|
+| `install_native.ps1` | Full installation (internet-connected) |
+| `install_native_offline.ps1` | Full installation (air-gapped) |
+| `install_node.ps1` | Install portable Node.js v22 on dev machine |
+| `package_offline_native.ps1` | Package all deps + pre-build frontend for air-gap transfer |
+| `package_frontend_update.ps1` | Package only the built frontend for a lightweight update |
+| `apply_frontend_update.ps1` | Apply a frontend update zip on the target server |
+| `compress_and_chunk.ps1` | Chunk binaries into <50MB parts for transfer |
+| `reconstruct_binaries.ps1` | Reconstruct chunks back into binaries on target |
+| `update_native.ps1` | Pull latest code and rebuild (internet-connected) |
+| `start_native.cmd` | Start Ollama + backend (internet-connected) |
+| `start_native_offline.cmd` | Start Ollama + backend (air-gapped) |
+| `stop_native.cmd` | Gracefully stop all services |
+
+---
+
 ## Manual Setup Details
 
-If you cannot use the automated scripts, here is what they do:
+If you cannot use the automated scripts:
 
 1.  **Dependencies**:
     *   Python 3.11+
-    *   Node.js 20+ (LTS)
+    *   Node.js 22+ (for building frontend on dev machine only)
     *   PostgreSQL 15+ (User: `lexuser`, Pass: `lexpassword`, DB: `lexchat`)
-    *   Ollama (Model: `mistral-large`)
+    *   Ollama
 
-2.  **Configuration**:
-    *   The app uses a `.env.native` file in `server_py/` to configure `localhost` connections instead of Docker container names.
+2.  **Model**:
+    *   The application uses `mistral-large-3:675b-cloud` (cloud-routed via Ollama).
 
-3.  **Build**:
-    *   Backend: Standard `pip install -r requirements.txt` in a venv.
-    *   Frontend: `npm run build` to generate static files.
+3.  **Configuration**:
+    *   The app uses a `.env.native` file in `server_py/` to configure `localhost` connections.
+
+4.  **Build**:
+    *   Backend: `pip install -r requirements.txt` in `server_py/`
+    *   Frontend: `npm run build` in `client/` — generates static files served by the backend.
