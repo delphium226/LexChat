@@ -37,18 +37,17 @@ The **only** way to deploy to the target server is via GitHub — the target doe
 2. Build: `npm run build` (in `client/`)
 3. Commit **including** `client/dist/` (force-add — it is gitignored): `git add -f client/dist/`
 4. Push to `origin experiment/native-deployment`
-5. On the target: `git pull`, then restart with `stop_native.cmd` and `start_native_offline.cmd`
+5. On the target: `git pull`, then restart with `stop_native.cmd` and `start_native.cmd`
 
 Always commit and push together in the same step — uncommitted or unpushed changes are invisible to the target.
 
 ## Start / Stop
 | Action | Script |
 |---|---|
-| Start (air-gapped) | `deployment\start_native_offline.cmd` |
-| Start (internet) | `deployment\start_native.cmd` |
-| Stop (both) | `deployment\stop_native.cmd` |
+| Start | `deployment\start_native.cmd` |
+| Stop | `deployment\stop_native.cmd` |
 
-Start scripts launch **Ollama first**, then the FastAPI backend. Stop script kills uvicorn, Ollama, and the PostgreSQL Windows service.
+Start script launches PostgreSQL, then Ollama, then the FastAPI backend. Stop script kills uvicorn, Ollama, and the PostgreSQL Windows service.
 
 ## Key Files
 | File | Purpose |
