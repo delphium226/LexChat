@@ -79,7 +79,11 @@ async def chat_loop(
         },
     }
 
-    logger.info(f"[ChatLoop] Sending request to Ollama (Tools: {len(tools)})...")
+    total_chars = sum(len(str(m.get("content", ""))) for m in messages)
+    logger.info(
+        f"[ChatLoop] Sending request to Ollama (Tools: {len(tools)}, "
+        f"msgs: {len(messages)}, ~{total_chars} chars, num_ctx: {num_ctx or default_ctx})..."
+    )
 
     full_content = ""
     tool_calls = []
@@ -136,6 +140,14 @@ async def chat_loop(
             "Agent Service (Ollama) is not reachable. "
             "Please ensure it is running on your machine."
         )
+    except httpx.HTTPStatusError as e:
+        try:
+            await e.response.aread()
+            body = e.response.text[:500]
+        except Exception:
+            body = "(body unreadable)"
+        logger.error(f"[ChatLoop] Ollama HTTP {e.response.status_code}: {body}")
+        raise
 
     # Record LLM call timing (ttft = time to first content token)
     if timing_collector:
@@ -164,15 +176,33 @@ async def chat_loop(
 
         next_messages = [*messages, message]
 
-        for tc in tool_calls:
+        # Cap each tool result to avoid blowing the context window.
+        # Full legislation texts can be very large; 20 000 chars ≈ 5 000 tokens.
+        MAX_TOOL_RESULT_CHARS = 20_000
+
+        # Execute all tool calls concurrently — they are independent of each
+        # other so there is no reason to serialise them.  Results are reordered
+        # back to the original sequence before appending to the message history.
+        async def _run_tool(tc):
             if cancel_event and cancel_event.is_set():
                 raise asyncio.CancelledError("Aborted")
-
             func_name = tc["function"]["name"]
             func_args = tc["function"]["arguments"]
+            result = await tool_executor(func_name, func_args)
+            if len(result) > MAX_TOOL_RESULT_CHARS:
+                logger.warning(
+                    f"[ChatLoop] Tool result from '{func_name}' truncated "
+                    f"({len(result)} -> {MAX_TOOL_RESULT_CHARS} chars)"
+                )
+                result = (
+                    result[:MAX_TOOL_RESULT_CHARS]
+                    + "\n\n[Content truncated — result exceeded context limit]"
+                )
+            return func_name, result
 
-            tool_result = await tool_executor(func_name, func_args)
-            
+        tool_results = await asyncio.gather(*[_run_tool(tc) for tc in tool_calls])
+
+        for (func_name, tool_result) in tool_results:
             # Emit detailed tool result event if requested
             if emit_tool_details and on_chunk:
                 await _call_chunk(on_chunk, {
@@ -196,6 +226,133 @@ async def chat_loop(
         )
 
     return message
+
+
+# -----------------------------------------------------------------------
+# Legislation summarisation helper
+# -----------------------------------------------------------------------
+
+# Results larger than this are summarised before being fed back to the model.
+# Below this threshold the raw text is used as-is.
+_SUMMARISE_THRESHOLD_CHARS = 8_000
+
+# Maximum chars sent to Ollama in a single summarisation call.
+# At ~4 chars/token this is ~37K tokens — well within the 256K context and
+# avoids ReadTimeout / HTTP 500 on the cloud-routed endpoint for large acts.
+_SUMMARISE_CHUNK_CHARS = 150_000
+
+# Fallback: if a chunk summarisation fails, include only this many chars of the
+# raw chunk so the Worker still gets some content without blowing the context.
+_SUMMARISE_CHUNK_FALLBACK_CHARS = 5_000
+
+# Serialise summarisation calls so concurrent requests don't overwhelm the
+# cloud Ollama endpoint with multiple large-context inference jobs at once.
+_summarise_semaphore: Optional[asyncio.Semaphore] = None
+
+
+def _get_summarise_semaphore() -> asyncio.Semaphore:
+    global _summarise_semaphore
+    if _summarise_semaphore is None:
+        _summarise_semaphore = asyncio.Semaphore(settings.max_concurrent_requests)
+    return _summarise_semaphore
+
+
+def _summarise_prompt(text: str, query: str) -> str:
+    return (
+        f"You are summarising a piece of UK legislation to assist with a legal research question.\n\n"
+        f"Research question: {query}\n\n"
+        f"Summarise the legislation text below. Retain only the sections, provisions, "
+        f"definitions, and legal thresholds directly relevant to the research question. "
+        f"Preserve exact section numbers, citations, and statutory references. "
+        f"Discard preamble, unrelated schedules, and provisions that do not bear on the question.\n\n"
+        f"Legislation text:\n{text}\n\nSummary:"
+    )
+
+
+async def _summarise_chunk(text: str, query: str, model: str) -> Optional[str]:
+    """Summarise a single chunk via Ollama. Returns None on any error."""
+    configured = next((m for m in MODEL_LIST if m["name"] == model), None)
+    ctx = configured["contextLengthKB"] * 1024 if configured else 131072
+
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": _summarise_prompt(text, query)}],
+        "stream": False,
+        "options": {
+            "num_ctx": ctx,
+            "temperature": 0,
+        },
+    }
+
+    try:
+        async with _get_summarise_semaphore():
+            async with httpx.AsyncClient(timeout=600.0, verify=False) as client:
+                resp = await client.post(
+                    f"{OLLAMA_BASE_URL}/api/chat",
+                    json=payload,
+                    headers=_get_headers(),
+                )
+                resp.raise_for_status()
+                content = resp.json().get("message", {}).get("content")
+                return content if content else None
+    except Exception as e:
+        logger.warning(f"[Summarise] Chunk failed ({type(e).__name__}: {e!r})")
+        return None
+
+
+async def _summarise_for_query(text: str, query: str, model: str) -> str:
+    """Produce a query-focused summary of a legislation text.
+
+    Texts larger than _SUMMARISE_CHUNK_CHARS are split into chunks, each
+    summarised independently, then the partial summaries are combined and
+    optionally consolidated in a final pass.  Falls back gracefully when
+    individual chunk calls fail.
+    """
+    if len(text) <= _SUMMARISE_CHUNK_CHARS:
+        result = await _summarise_chunk(text, query, model)
+        if result is None:
+            logger.warning("[Summarise] Single-chunk summarisation failed, returning original text")
+            return text
+        return result
+
+    # Split into chunks and summarise each.
+    chunks = [
+        text[i : i + _SUMMARISE_CHUNK_CHARS]
+        for i in range(0, len(text), _SUMMARISE_CHUNK_CHARS)
+    ]
+    n = len(chunks)
+    logger.info(
+        f"[Summarise] {len(text)} chars exceeds chunk limit — splitting into {n} chunks"
+    )
+
+    partial_summaries: list[str] = []
+    for i, chunk in enumerate(chunks):
+        logger.info(f"[Summarise] Chunk {i + 1}/{n} ({len(chunk)} chars)...")
+        summary = await _summarise_chunk(chunk, query, model)
+        if summary is None:
+            logger.warning(
+                f"[Summarise] Chunk {i + 1}/{n} failed — using first "
+                f"{_SUMMARISE_CHUNK_FALLBACK_CHARS} chars of chunk"
+            )
+            summary = chunk[:_SUMMARISE_CHUNK_FALLBACK_CHARS]
+        partial_summaries.append(summary)
+
+    combined = "\n\n---\n\n".join(partial_summaries)
+    logger.info(
+        f"[Summarise] Combined {n} partial summaries into {len(combined)} chars"
+    )
+
+    # If the combined summaries are still large, do one final consolidation pass.
+    if len(combined) > _SUMMARISE_CHUNK_CHARS:
+        logger.info("[Summarise] Running final consolidation pass")
+        final = await _summarise_chunk(combined, query, model)
+        if final is None:
+            logger.warning("[Summarise] Final consolidation failed — returning combined partials")
+            return combined
+        logger.info(f"[Summarise] Consolidated to {len(final)} chars")
+        return final
+
+    return combined
 
 
 # -----------------------------------------------------------------------
@@ -226,6 +383,17 @@ async def run_worker_agent(
         result = await execute_worker_tool(
             name, args, on_chunk=parent_on_chunk, timing_collector=timing_collector
         )
+
+        if len(result) > _SUMMARISE_THRESHOLD_CHARS:
+            logger.info(
+                f"[Worker] Result from '{name}' is {len(result)} chars — summarising for query focus"
+            )
+            if parent_on_chunk:
+                await _call_chunk(parent_on_chunk, {"type": "tool_start", "tool": "Extracting the relevant sections from a large document"})
+            result = await _summarise_for_query(result, query, model)
+            logger.info(f"[Worker] Summarised to {len(result)} chars")
+            if parent_on_chunk:
+                await _call_chunk(parent_on_chunk, {"type": "tool_end", "tool": "Extracting the relevant sections from a large document", "result": "Done"})
 
         if parent_on_chunk:
             await _call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "result": "Done"})
