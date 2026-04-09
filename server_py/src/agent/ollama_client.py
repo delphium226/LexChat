@@ -177,8 +177,8 @@ async def chat_loop(
         next_messages = [*messages, message]
 
         # Cap each tool result to avoid blowing the context window.
-        # Full legislation texts can be very large; 20 000 chars ≈ 5 000 tokens.
-        MAX_TOOL_RESULT_CHARS = 20_000
+        # Chunked summaries of large acts land at 15K-45K chars; 40 000 chars ≈ 10 000 tokens.
+        MAX_TOOL_RESULT_CHARS = 40_000
 
         # Execute all tool calls concurrently — they are independent of each
         # other so there is no reason to serialise them.  Results are reordered
@@ -300,13 +300,20 @@ async def _summarise_chunk(text: str, query: str, model: str) -> Optional[str]:
         return None
 
 
-async def _summarise_for_query(text: str, query: str, model: str) -> str:
+async def _summarise_for_query(
+    text: str,
+    query: str,
+    model: str,
+    on_progress: Optional[Callable] = None,
+) -> str:
     """Produce a query-focused summary of a legislation text.
 
     Texts larger than _SUMMARISE_CHUNK_CHARS are split into chunks, each
     summarised independently, then the partial summaries are combined and
     optionally consolidated in a final pass.  Falls back gracefully when
     individual chunk calls fail.
+
+    on_progress(msg) is called before each chunk so the UI can show progress.
     """
     if len(text) <= _SUMMARISE_CHUNK_CHARS:
         result = await _summarise_chunk(text, query, model)
@@ -327,6 +334,10 @@ async def _summarise_for_query(text: str, query: str, model: str) -> str:
 
     partial_summaries: list[str] = []
     for i, chunk in enumerate(chunks):
+        if on_progress:
+            await on_progress(
+                f"Extracting relevant sections from a large document (part {i + 1} of {n})"
+            )
         logger.info(f"[Summarise] Chunk {i + 1}/{n} ({len(chunk)} chars)...")
         summary = await _summarise_chunk(chunk, query, model)
         if summary is None:
@@ -344,6 +355,8 @@ async def _summarise_for_query(text: str, query: str, model: str) -> str:
 
     # If the combined summaries are still large, do one final consolidation pass.
     if len(combined) > _SUMMARISE_CHUNK_CHARS:
+        if on_progress:
+            await on_progress("Consolidating extracted sections")
         logger.info("[Summarise] Running final consolidation pass")
         final = await _summarise_chunk(combined, query, model)
         if final is None:
@@ -390,7 +403,12 @@ async def run_worker_agent(
             )
             if parent_on_chunk:
                 await _call_chunk(parent_on_chunk, {"type": "tool_start", "tool": "Extracting the relevant sections from a large document"})
-            result = await _summarise_for_query(result, query, model)
+
+            async def _emit_progress(msg: str) -> None:
+                if parent_on_chunk:
+                    await _call_chunk(parent_on_chunk, {"type": "tool_start", "tool": msg})
+
+            result = await _summarise_for_query(result, query, model, on_progress=_emit_progress)
             logger.info(f"[Worker] Summarised to {len(result)} chars")
             if parent_on_chunk:
                 await _call_chunk(parent_on_chunk, {"type": "tool_end", "tool": "Extracting the relevant sections from a large document", "result": "Done"})
