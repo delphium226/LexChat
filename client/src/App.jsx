@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { sendMessage, createChat, getChatMessages, saveMessage, updatePreferences } from './services/api';
+import { sendMessage, createChat, getChatMessages, saveMessage, updatePreferences, submitFeedback } from './services/api';
 import ChatMessage from './components/ChatMessage';
 import loadingGif from './assets/load-35_128.gif';
 import Hourglass from './components/Hourglass';
@@ -9,6 +9,72 @@ import AdminPortal from './pages/AdminPortal';
 import Settings from './pages/Settings';
 import HistoryModal from './components/HistoryModal';
 import SettingsMenuModal from './components/SettingsMenuModal';
+
+// ---------------------------------------------------------------------------
+// Feedback Modal
+// ---------------------------------------------------------------------------
+const FeedbackModal = ({ onClose }) => {
+  const [text, setText] = React.useState('');
+  const [status, setStatus] = React.useState('idle'); // idle | submitting | success | error
+
+  const handleSubmit = async () => {
+    if (!text.trim()) return;
+    setStatus('submitting');
+    try {
+      await submitFeedback(text.trim());
+      setStatus('success');
+    } catch {
+      setStatus('error');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full shadow-xl">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Give Feedback</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 focus:outline-none text-xl leading-none">&times;</button>
+        </div>
+
+        {status === 'success' ? (
+          <div className="text-center py-6">
+            <p className="text-green-600 dark:text-green-400 font-medium text-lg mb-2">Thank you for your feedback!</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">Your response has been recorded and will be reviewed by the team.</p>
+            <button onClick={onClose} className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium">Close</button>
+          </div>
+        ) : (
+          <>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Share any thoughts, suggestions, or issues you've encountered with LexChat. Your feedback helps improve the system for everyone.
+            </p>
+            <textarea
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-md p-3 text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              rows={6}
+              placeholder="Describe your experience, suggest a feature, or report a problem..."
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              disabled={status === 'submitting'}
+              autoFocus
+            />
+            {status === 'error' && (
+              <p className="text-red-500 text-xs mt-2">Something went wrong. Please try again.</p>
+            )}
+            <div className="flex justify-end gap-3 mt-4">
+              <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors">Cancel</button>
+              <button
+                onClick={handleSubmit}
+                disabled={!text.trim() || status === 'submitting'}
+                className="px-5 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {status === 'submitting' ? 'Submitting…' : 'Submit Feedback'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
 
 function AppContent() {
   const { user, logout } = useAuth();
@@ -35,6 +101,7 @@ function AppContent() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   // Dark Mode State
   const [darkMode, setDarkMode] = useState(() => {
@@ -88,12 +155,54 @@ function AppContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, agentStatus]); // Scroll on status update too
 
-  // Swap favicon to animated GIF while loading
+  // Animate favicon while loading — GIFs don't animate in Chrome/Edge,
+  // so we drive a canvas spinner via requestAnimationFrame instead.
   useEffect(() => {
     const favicon = document.querySelector("link[rel='icon']");
-    if (favicon) {
-      favicon.href = loading ? '/favicon-loading.gif' : '/favicon.png';
+    if (!favicon) return;
+
+    if (!loading) {
+      favicon.href = '/favicon.png';
+      return;
     }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    let animationId;
+    let startTime = null;
+
+    const draw = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const angle = ((timestamp - startTime) / 700) * Math.PI * 2;
+
+      ctx.clearRect(0, 0, 32, 32);
+
+      // Track ring
+      ctx.beginPath();
+      ctx.arc(16, 16, 12, 0, Math.PI * 2);
+      ctx.strokeStyle = '#dbeafe';
+      ctx.lineWidth = 3.5;
+      ctx.stroke();
+
+      // Spinning arc
+      ctx.beginPath();
+      ctx.arc(16, 16, 12, angle, angle + Math.PI * 1.25);
+      ctx.strokeStyle = '#2563eb';
+      ctx.lineWidth = 3.5;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      favicon.href = canvas.toDataURL('image/png');
+      animationId = requestAnimationFrame(draw);
+    };
+
+    animationId = requestAnimationFrame(draw);
+    return () => {
+      cancelAnimationFrame(animationId);
+      favicon.href = '/favicon.png';
+    };
   }, [loading]);
 
   // Reset state when user logs out or changes
@@ -399,8 +508,8 @@ function AppContent() {
           }
         `}
       >
-        <div className="flex flex-col items-center mb-2">
-          <img src="/favicon.png" alt="LexChat" className="w-12 h-12 mb-2" />
+        <div className="flex items-center justify-center gap-3 mb-2">
+          <img src="/favicon.png" alt="LexChat" className="w-10 h-10" />
           <h1 className="text-3xl font-bold text-blue-600">LexChat</h1>
         </div>
 
@@ -415,9 +524,16 @@ function AppContent() {
 
         <button
           onClick={() => setShowHistoryModal(true)}
-          className="w-full text-center p-2 rounded-md mb-6 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors font-medium text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600"
+          className="w-full text-center p-2 rounded-md mb-2 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors font-medium text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600"
         >
           History
+        </button>
+
+        <button
+          onClick={() => setShowFeedbackModal(true)}
+          className="w-full text-center p-2 rounded-md mb-6 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors font-medium text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600"
+        >
+          Give Feedback
         </button>
 
 
@@ -457,9 +573,9 @@ function AppContent() {
 
           <button
             onClick={() => setShowSettingsMenu(!showSettingsMenu)}
-            className={`flex items-center w-full text-left p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors font-medium ${showSettingsMenu ? 'bg-gray-200 dark:bg-gray-700 text-legal-blue' : 'text-gray-700 dark:text-gray-300'}`}
+            className={`flex items-center justify-center w-full p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors font-medium ${showSettingsMenu ? 'bg-gray-200 dark:bg-gray-700 text-legal-blue' : 'text-gray-700 dark:text-gray-300'}`}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-3 flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-2 flex-shrink-0">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
             </svg>
             {user.username}
@@ -475,7 +591,8 @@ function AppContent() {
         < button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)
           }
-          className="absolute top-4 left-4 z-10 p-2 bg-gray-200 dark:bg-gray-700 dark:text-white rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-300 shadow-sm"
+          style={{ left: isSidebarOpen ? 'calc(16rem - 2.25rem)' : '0' }}
+          className="fixed top-4 z-40 p-2 bg-gray-200 dark:bg-gray-700 dark:text-white rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-[left] duration-300 shadow-sm"
           title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
         >
           {
@@ -561,6 +678,11 @@ function AppContent() {
 
 
       </div >
+      {/* Feedback Modal */}
+      {showFeedbackModal && (
+        <FeedbackModal onClose={() => setShowFeedbackModal(false)} />
+      )}
+
       {/* About Modal */}
       {
         showAbout && (
@@ -632,7 +754,7 @@ function AppContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
-              <AdminPortal />
+              <AdminPortal currentUser={user} />
             </div>
           </div>
         )

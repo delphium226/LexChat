@@ -202,3 +202,14 @@ export const triggerHealthCheck = async () => {
     const response = await axios.post(`${API_URL}/health/trigger`);
     return response.data;
 };
+
+// --- PRODUCT FEEDBACK ---
+export const submitFeedback = async (message) => {
+    const response = await axios.post(`${API_URL}/feedback`, { message });
+    return response.data;
+};
+
+export const getProductFeedback = async () => {
+    const response = await axios.get(`${API_URL}/feedback`);
+    return response.data;
+};

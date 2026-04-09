@@ -39,6 +39,22 @@ async def init_db() -> None:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
+        # Apply indexes to existing tables (create_all only indexes new tables)
+        index_statements = [
+            "CREATE INDEX IF NOT EXISTS idx_chats_user_created ON chats (user_id, created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_chats_created_at ON chats (created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_messages_chat_created ON messages (chat_id, created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages (created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_messages_rated ON messages (chat_id, created_at) WHERE rating IS NOT NULL",
+            "CREATE INDEX IF NOT EXISTS idx_messages_content_fts ON messages USING GIN (to_tsvector('english', content))",
+            "CREATE INDEX IF NOT EXISTS idx_health_service_checked ON service_health_logs (service_name, checked_at)",
+            "CREATE INDEX IF NOT EXISTS idx_request_timings_created_at ON request_timings (created_at)",
+        ]
+        async with engine.begin() as conn:
+            for stmt in index_statements:
+                await conn.execute(text(stmt))
+        logger.info("Database indexes applied.")
+
         # Seed default admin user
         async with async_session_maker() as session:
             result = await session.execute(

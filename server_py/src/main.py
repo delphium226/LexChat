@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .database import init_db
-from .routers import auth, users, chats, ai, learning, stats, developer, system, health
+from .routers import auth, users, chats, ai, learning, stats, developer, system, health, feedback
 from .services.health_service import background_health_loop
 from .utils.logger import setup_logging
 
@@ -73,6 +73,7 @@ app.include_router(stats.router)
 app.include_router(developer.router)
 app.include_router(system.router)
 app.include_router(health.router)
+app.include_router(feedback.router)
 
 
 import os
