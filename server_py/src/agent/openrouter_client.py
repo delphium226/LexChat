@@ -8,7 +8,7 @@ import httpx
 
 from ..config import (
     MANAGER_SYSTEM_PROMPT,
-    MODEL_LIST,
+    OPENROUTER_MODEL_LIST,
     WORKER_SYSTEM_PROMPT,
     settings,
 )
@@ -17,18 +17,54 @@ from .tools import MANAGER_TOOLS, WORKER_TOOLS, execute_worker_tool
 
 logger = logging.getLogger("agent")
 
-OLLAMA_BASE_URL = settings.ollama_base_url.rstrip("/")
-
 
 def _get_headers() -> dict:
-    headers = {}
-    if settings.ollama_api_key:
-        headers["Authorization"] = f"Bearer {settings.ollama_api_key}"
+    headers = {"Content-Type": "application/json"}
+    if settings.openrouter_api_key:
+        headers["Authorization"] = f"Bearer {settings.openrouter_api_key}"
     return headers
 
 
+def _get_base_url() -> str:
+    return settings.openrouter_base_url.rstrip("/")
+
+
+def _convert_tools_to_openai(tools: list) -> list:
+    """Convert Ollama-style tool schemas to OpenAI tool format (they are identical)."""
+    return tools
+
+
+def _convert_messages_to_openai(messages: list) -> list:
+    """Convert Ollama-style messages to OpenAI format.
+
+    Key difference: Ollama tool results use {"role":"tool","content":"...","name":"func"}
+    OpenAI tool results use {"role":"tool","content":"...","tool_call_id":"call_xxx"}
+
+    We carry tool_call_ids in messages that have them already; for legacy messages
+    without tool_call_id we fall back to a placeholder so the API still accepts them.
+    """
+    converted = []
+    for msg in messages:
+        if msg.get("role") == "tool":
+            converted.append({
+                "role": "tool",
+                "content": msg.get("content", ""),
+                "tool_call_id": msg.get("tool_call_id", "call_unknown"),
+            })
+        elif msg.get("role") == "assistant" and msg.get("tool_calls"):
+            # Keep tool_calls in OpenAI format; strip Ollama-only fields
+            converted.append({
+                "role": "assistant",
+                "content": msg.get("content") or None,
+                "tool_calls": msg["tool_calls"],
+            })
+        else:
+            converted.append({k: v for k, v in msg.items() if k not in ("stats",)})
+    return converted
+
+
 # -----------------------------------------------------------------------
-# Generic Chat Loop (ReAct pattern — used by Manager and Worker)
+# Generic Chat Loop (ReAct pattern — OpenAI/OpenRouter format)
 # -----------------------------------------------------------------------
 
 async def chat_loop(
@@ -42,52 +78,33 @@ async def chat_loop(
     emit_tool_details: bool = False,
     timing_collector=None,
 ) -> dict:
-    """Core ReAct loop: stream from Ollama, handle tool calls, recurse.
-
-    Args:
-        messages: Conversation history.
-        model: Ollama model name.
-        cancel_event: If set, abort processing.
-        num_ctx: Context window size.
-        tools: Tool schemas for Ollama.
-        tool_executor: async (name, args) -> str.
-        on_chunk: Optional callback for SSE events.
-        emit_tool_details: Whether to emit detailed tool call/result events.
-
-    Returns:
-        Final assistant message dict {role, content}.
-    """
+    """Core ReAct loop using OpenRouter's OpenAI-compatible streaming API."""
     if cancel_event and cancel_event.is_set():
         raise asyncio.CancelledError("Aborted")
 
-    # Determine context size from model config
-    configured = next((m for m in MODEL_LIST if m["name"] == model), None)
-    default_ctx = (
-        configured["contextLengthKB"] * 1024
-        if configured
-        else settings.ollama_default_context
-    )
+    openai_messages = _convert_messages_to_openai(messages)
+    openai_tools = _convert_tools_to_openai(tools)
 
     payload = {
         "model": model,
-        "messages": messages,
-        "tools": tools,
+        "messages": openai_messages,
         "stream": True,
-        "options": {
-            "num_ctx": num_ctx or default_ctx,
-            "temperature": settings.ollama_temperature,
-        },
+        "temperature": settings.ollama_temperature,
     }
+    if openai_tools:
+        payload["tools"] = openai_tools
+        payload["tool_choice"] = "auto"
 
-    total_chars = sum(len(str(m.get("content", ""))) for m in messages)
+    total_chars = sum(len(str(m.get("content", "") or "")) for m in messages)
     logger.info(
-        f"[ChatLoop] Sending request to Ollama (Tools: {len(tools)}, "
-        f"msgs: {len(messages)}, ~{total_chars} chars, num_ctx: {num_ctx or default_ctx})..."
+        f"[OpenRouter] Sending request (model={model}, tools={len(tools)}, "
+        f"msgs={len(messages)}, ~{total_chars} chars)..."
     )
 
     full_content = ""
-    tool_calls = []
-    final_stats = {}
+    # tool_calls_map: index -> {"id", "type", "function": {"name", "arguments"}}
+    tool_calls_map: dict[int, dict] = {}
+    usage_stats: dict = {}
 
     t_send = time.perf_counter()
     first_content_time: Optional[float] = None
@@ -96,7 +113,7 @@ async def chat_loop(
         async with httpx.AsyncClient(timeout=None, verify=False) as client:
             async with client.stream(
                 "POST",
-                f"{OLLAMA_BASE_URL}/api/chat",
+                f"{_get_base_url()}/chat/completions",
                 json=payload,
                 headers=_get_headers(),
             ) as response:
@@ -106,17 +123,30 @@ async def chat_loop(
                     if cancel_event and cancel_event.is_set():
                         raise asyncio.CancelledError("Aborted")
 
-                    if not line.strip():
+                    if not line.startswith("data: "):
                         continue
 
+                    raw = line[6:].strip()
+                    if raw == "[DONE]":
+                        break
+
                     try:
-                        data = json.loads(line)
+                        data = json.loads(raw)
                     except json.JSONDecodeError:
                         continue
 
-                    msg = data.get("message", {})
-                    content = msg.get("content", "")
+                    # Capture usage if present (OpenRouter sends it in the last chunk)
+                    if data.get("usage"):
+                        usage_stats = data["usage"]
 
+                    choices = data.get("choices", [])
+                    if not choices:
+                        continue
+
+                    delta = choices[0].get("delta", {})
+
+                    # Accumulate content tokens
+                    content = delta.get("content") or ""
                     if content:
                         if first_content_time is None:
                             first_content_time = time.perf_counter()
@@ -124,21 +154,28 @@ async def chat_loop(
                         if on_chunk:
                             await _call_chunk(on_chunk, {"type": "token", "content": content})
 
-                    if msg.get("tool_calls"):
-                        tool_calls.extend(msg["tool_calls"])
-
-                    if data.get("done"):
-                        final_stats = {
-                            "prompt_eval_count": data.get("prompt_eval_count", 0),
-                            "eval_count": data.get("eval_count", 0),
-                            "total_duration": data.get("total_duration", 0),
-                            "load_duration": data.get("load_duration", 0),
-                        }
+                    # Accumulate tool call deltas
+                    for tc_delta in delta.get("tool_calls", []):
+                        idx = tc_delta.get("index", 0)
+                        if idx not in tool_calls_map:
+                            tool_calls_map[idx] = {
+                                "id": tc_delta.get("id", ""),
+                                "type": "function",
+                                "function": {"name": "", "arguments": ""},
+                            }
+                        entry = tool_calls_map[idx]
+                        if tc_delta.get("id"):
+                            entry["id"] = tc_delta["id"]
+                        func = tc_delta.get("function", {})
+                        if func.get("name"):
+                            entry["function"]["name"] += func["name"]
+                        if func.get("arguments"):
+                            entry["function"]["arguments"] += func["arguments"]
 
     except httpx.ConnectError:
         raise ConnectionError(
-            "Agent Service (Ollama) is not reachable. "
-            "Please ensure it is running on your machine."
+            "OpenRouter is not reachable. "
+            "Check your internet connection and OPENROUTER_API_KEY."
         )
     except httpx.HTTPStatusError as e:
         try:
@@ -146,78 +183,79 @@ async def chat_loop(
             body = e.response.text[:500]
         except Exception:
             body = "(body unreadable)"
-        logger.error(f"[ChatLoop] Ollama HTTP {e.response.status_code}: {body}")
+        logger.error(f"[OpenRouter] HTTP {e.response.status_code}: {body}")
         raise
 
-    # Record LLM call timing (ttft = time to first content token)
+    # Record timing
     if timing_collector:
         t_done = time.perf_counter()
         ttft_ms = ((first_content_time or t_done) - t_send) * 1000
         total_stream_ms = (t_done - t_send) * 1000
         timing_collector.record_llm_call(ttft_ms, total_stream_ms)
 
-    # Build assistant message
-    message = {"role": "assistant", "content": full_content}
-    if final_stats:
-        message["stats"] = final_stats
-    if tool_calls:
-        message["tool_calls"] = tool_calls
+    # Convert accumulated tool calls to a list in index order
+    tool_calls = [tool_calls_map[i] for i in sorted(tool_calls_map.keys())]
 
-    # If tool calls, execute and recurse
+    # Build assistant message (OpenAI format, carried forward)
+    assistant_message: dict = {"role": "assistant", "content": full_content}
+    if usage_stats:
+        # Map to Ollama-compatible stats field so the UI context bar still works
+        assistant_message["stats"] = {
+            "prompt_eval_count": usage_stats.get("prompt_tokens", 0),
+            "eval_count": usage_stats.get("completion_tokens", 0),
+        }
     if tool_calls:
-        logger.info(f"Tool calls: {len(tool_calls)}")
-        
-        # Emit detailed tool call event if requested
+        assistant_message["tool_calls"] = tool_calls
+
+    # If tool calls — execute and recurse
+    if tool_calls:
+        logger.info(f"[OpenRouter] Tool calls: {len(tool_calls)}")
+
         if emit_tool_details and on_chunk:
-            await _call_chunk(on_chunk, {
-                "type": "tool_call", 
-                "tool_calls": tool_calls
-            })
+            await _call_chunk(on_chunk, {"type": "tool_call", "tool_calls": tool_calls})
 
-        next_messages = [*messages, message]
+        next_messages = [*messages, assistant_message]
 
-        # Cap each tool result to avoid blowing the context window.
-        # Chunked summaries of large acts land at 15K-45K chars; 40 000 chars ≈ 10 000 tokens.
         MAX_TOOL_RESULT_CHARS = 40_000
 
-        # Execute all tool calls concurrently — they are independent of each
-        # other so there is no reason to serialise them.  Results are reordered
-        # back to the original sequence before appending to the message history.
         async def _run_tool(tc):
             if cancel_event and cancel_event.is_set():
                 raise asyncio.CancelledError("Aborted")
             func_name = tc["function"]["name"]
-            func_args = tc["function"]["arguments"]
+            # OpenAI format: arguments is a JSON string
+            raw_args = tc["function"]["arguments"]
+            try:
+                func_args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+            except json.JSONDecodeError:
+                func_args = {}
             result = await tool_executor(func_name, func_args)
             if len(result) > MAX_TOOL_RESULT_CHARS:
                 logger.warning(
-                    f"[ChatLoop] Tool result from '{func_name}' truncated "
+                    f"[OpenRouter] Tool result from '{func_name}' truncated "
                     f"({len(result)} -> {MAX_TOOL_RESULT_CHARS} chars)"
                 )
                 result = (
                     result[:MAX_TOOL_RESULT_CHARS]
                     + "\n\n[Content truncated — result exceeded context limit]"
                 )
-            return func_name, result
+            return tc["id"], func_name, result
 
         tool_results = await asyncio.gather(*[_run_tool(tc) for tc in tool_calls])
 
-        for (func_name, tool_result) in tool_results:
-            # Emit detailed tool result event if requested
+        for (call_id, func_name, tool_result) in tool_results:
             if emit_tool_details and on_chunk:
                 await _call_chunk(on_chunk, {
                     "type": "tool_result",
                     "tool": func_name,
-                    "result": tool_result
+                    "result": tool_result,
                 })
-
             next_messages.append({
                 "role": "tool",
                 "content": tool_result,
+                "tool_call_id": call_id,
                 "name": func_name,
             })
 
-        # Recurse
         return await chat_loop(
             next_messages, model, cancel_event, num_ctx,
             tools, tool_executor, on_chunk,
@@ -225,28 +263,16 @@ async def chat_loop(
             timing_collector=timing_collector,
         )
 
-    return message
+    return assistant_message
 
 
 # -----------------------------------------------------------------------
 # Legislation summarisation helper
 # -----------------------------------------------------------------------
 
-# Results larger than this are summarised before being fed back to the model.
-# Below this threshold the raw text is used as-is.
 _SUMMARISE_THRESHOLD_CHARS = 8_000
-
-# Maximum chars sent to Ollama in a single summarisation call.
-# At ~4 chars/token this is ~37K tokens — well within the 256K context and
-# avoids ReadTimeout / HTTP 500 on the cloud-routed endpoint for large acts.
 _SUMMARISE_CHUNK_CHARS = 150_000
-
-# Fallback: if a chunk summarisation fails, include only this many chars of the
-# raw chunk so the Worker still gets some content without blowing the context.
 _SUMMARISE_CHUNK_FALLBACK_CHARS = 5_000
-
-# Serialise summarisation calls so concurrent requests don't overwhelm the
-# cloud Ollama endpoint with multiple large-context inference jobs at once.
 _summarise_semaphore: Optional[asyncio.Semaphore] = None
 
 
@@ -270,18 +296,12 @@ def _summarise_prompt(text: str, query: str) -> str:
 
 
 async def _summarise_chunk(text: str, query: str, model: str, timing_collector=None) -> Optional[str]:
-    """Summarise a single chunk via Ollama. Returns None on any error."""
-    configured = next((m for m in MODEL_LIST if m["name"] == model), None)
-    ctx = configured["contextLengthKB"] * 1024 if configured else 131072
-
+    """Summarise a single chunk via OpenRouter. Returns None on any error."""
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": _summarise_prompt(text, query)}],
         "stream": False,
-        "options": {
-            "num_ctx": ctx,
-            "temperature": 0,
-        },
+        "temperature": 0,
     }
 
     try:
@@ -289,18 +309,23 @@ async def _summarise_chunk(text: str, query: str, model: str, timing_collector=N
             async with httpx.AsyncClient(timeout=600.0, verify=False) as client:
                 t_send = time.perf_counter()
                 resp = await client.post(
-                    f"{OLLAMA_BASE_URL}/api/chat",
+                    f"{_get_base_url()}/chat/completions",
                     json=payload,
                     headers=_get_headers(),
                 )
                 elapsed_ms = (time.perf_counter() - t_send) * 1000
                 resp.raise_for_status()
-                content = resp.json().get("message", {}).get("content")
+                content = (
+                    resp.json()
+                    .get("choices", [{}])[0]
+                    .get("message", {})
+                    .get("content")
+                )
                 if timing_collector:
                     timing_collector.record_llm_call(elapsed_ms, elapsed_ms)
                 return content if content else None
     except Exception as e:
-        logger.warning(f"[Summarise] Chunk failed ({type(e).__name__}: {e!r})")
+        logger.warning(f"[OpenRouter Summarise] Chunk failed ({type(e).__name__}: {e!r})")
         return None
 
 
@@ -312,70 +337,42 @@ async def _summarise_for_query(
     timing_collector=None,
     doc_name: str = "document",
 ) -> str:
-    """Produce a query-focused summary of a legislation text.
-
-    Texts larger than _SUMMARISE_CHUNK_CHARS are split into chunks, each
-    summarised independently, then the partial summaries are combined and
-    optionally consolidated in a final pass.  Falls back gracefully when
-    individual chunk calls fail.
-
-    on_progress(msg) is called before each chunk so the UI can show progress.
-    """
     if len(text) <= _SUMMARISE_CHUNK_CHARS:
         result = await _summarise_chunk(text, query, model, timing_collector=timing_collector)
         if result is None:
-            logger.warning("[Summarise] Single-chunk summarisation failed, returning original text")
             return text
         return result
 
-    # Split into chunks and summarise each.
     chunks = [
-        text[i : i + _SUMMARISE_CHUNK_CHARS]
+        text[i: i + _SUMMARISE_CHUNK_CHARS]
         for i in range(0, len(text), _SUMMARISE_CHUNK_CHARS)
     ]
     n = len(chunks)
-    logger.info(
-        f"[Summarise] {len(text)} chars exceeds chunk limit — splitting into {n} chunks"
-    )
 
     partial_summaries: list[str] = []
     for i, chunk in enumerate(chunks):
         if on_progress:
-            await on_progress(
-                f"Searching through large document ({doc_name}) - part {i + 1} of {n}"
-            )
-        logger.info(f"[Summarise] Chunk {i + 1}/{n} ({len(chunk)} chars)...")
+            await on_progress(f"Searching through large document ({doc_name}) - part {i + 1} of {n}")
         summary = await _summarise_chunk(chunk, query, model, timing_collector=timing_collector)
         if summary is None:
-            logger.warning(
-                f"[Summarise] Chunk {i + 1}/{n} failed — using first "
-                f"{_SUMMARISE_CHUNK_FALLBACK_CHARS} chars of chunk"
-            )
             summary = chunk[:_SUMMARISE_CHUNK_FALLBACK_CHARS]
         partial_summaries.append(summary)
 
     combined = "\n\n---\n\n".join(partial_summaries)
-    logger.info(
-        f"[Summarise] Combined {n} partial summaries into {len(combined)} chars"
-    )
 
-    # If the combined summaries are still large, do one final consolidation pass.
     if len(combined) > _SUMMARISE_CHUNK_CHARS:
         if on_progress:
             await on_progress("Consolidating extracted sections")
-        logger.info("[Summarise] Running final consolidation pass")
         final = await _summarise_chunk(combined, query, model, timing_collector=timing_collector)
         if final is None:
-            logger.warning("[Summarise] Final consolidation failed — returning combined partials")
             return combined
-        logger.info(f"[Summarise] Consolidated to {len(final)} chars")
         return final
 
     return combined
 
 
 # -----------------------------------------------------------------------
-# Worker Agent (Legal Research Specialist)
+# Worker Agent
 # -----------------------------------------------------------------------
 
 async def run_worker_agent(
@@ -387,8 +384,7 @@ async def run_worker_agent(
     emit_tool_details: bool = False,
     timing_collector=None,
 ) -> dict:
-    """Run the Worker agent with a fresh context for legal research."""
-    logger.info(f"[Worker] Starting research on: {query}")
+    logger.info(f"[OpenRouter Worker] Starting research on: {query}")
 
     messages = [
         {"role": "system", "content": WORKER_SYSTEM_PROMPT},
@@ -404,11 +400,8 @@ async def run_worker_agent(
         )
 
         if len(result) > _SUMMARISE_THRESHOLD_CHARS:
-            logger.info(
-                f"[Worker] Result from '{name}' is {len(result)} chars — summarising for query focus"
-            )
+            logger.info(f"[OpenRouter Worker] Result from '{name}' is {len(result)} chars — summarising")
 
-            # Extract a human-readable document title from the result JSON
             doc_name = name
             try:
                 result_data = json.loads(result)
@@ -429,7 +422,6 @@ async def run_worker_agent(
                     await _call_chunk(parent_on_chunk, {"type": "tool_start", "tool": msg})
 
             result = await _summarise_for_query(result, query, model, on_progress=_emit_progress, timing_collector=timing_collector, doc_name=doc_name)
-            logger.info(f"[Worker] Summarised to {len(result)} chars")
             if parent_on_chunk:
                 await _call_chunk(parent_on_chunk, {"type": "tool_end", "tool": "Extracting the relevant sections from a large document", "result": "Done"})
 
@@ -439,14 +431,14 @@ async def run_worker_agent(
 
     return await chat_loop(
         messages, model, cancel_event, num_ctx,
-        WORKER_TOOLS, worker_tool_executor, None,  # on_chunk=None for worker to avoid mixing tokens
+        WORKER_TOOLS, worker_tool_executor, None,
         emit_tool_details=emit_tool_details,
         timing_collector=timing_collector,
     )
 
 
 # -----------------------------------------------------------------------
-# Manager Agent (Main Chat Interface)
+# Manager Agent
 # -----------------------------------------------------------------------
 
 async def process_user_request(
@@ -459,20 +451,8 @@ async def process_user_request(
     emit_tool_details: bool = False,
     timing_collector=None,
 ) -> dict:
-    """Main entry point: Manager agent with learning injection.
-
-    Args:
-        messages: User conversation history.
-        model: Model name.
-        on_chunk: SSE streaming callback.
-        cancel_event: Cancellation signal.
-        num_ctx: Context window.
-        db_session: Optional async DB session for learning retrieval.
-        emit_tool_details: Whether to emit detailed tool events.
-    """
     system_content = MANAGER_SYSTEM_PROMPT
 
-    # Learning mechanism injection
     if db_session:
         try:
             last_msg = messages[-1] if messages else None
@@ -482,13 +462,12 @@ async def process_user_request(
                 )
                 context_injection = format_learning_context(learning_data)
                 if context_injection:
-                    logger.info("[Learning] Injecting feedback context into System Prompt.")
+                    logger.info("[OpenRouter Learning] Injecting feedback context.")
                     system_content += f"\n\n{context_injection}"
         except Exception as e:
-            logger.error(f"[Learning] Failed to inject context: {e}")
+            logger.error(f"[OpenRouter Learning] Failed to inject context: {e}")
 
     system_message = {"role": "system", "content": system_content}
-
     final_messages = list(messages)
     if not final_messages or final_messages[0].get("role") != "system":
         final_messages = [system_message, *final_messages]
@@ -524,55 +503,10 @@ async def process_user_request(
 # -----------------------------------------------------------------------
 
 async def list_models() -> list:
-    """Return the configured model list with context lengths."""
     return [
-        {"name": m["name"], "context_length": m["contextLengthKB"] * 1024, "provider": "ollama"}
-        for m in MODEL_LIST
+        {"name": m["name"], "context_length": m["contextLengthKB"] * 1024, "provider": "openrouter"}
+        for m in OPENROUTER_MODEL_LIST
     ]
-
-
-# -----------------------------------------------------------------------
-# Simple streaming (kept for basic fallback without agent loop)
-# -----------------------------------------------------------------------
-
-async def stream_chat(messages: list, model: str) -> AsyncGenerator[str, None]:
-    """Basic streaming chat without tool calling (fallback)."""
-    payload = {
-        "model": model,
-        "messages": messages,
-        "stream": True,
-        "options": {"temperature": settings.ollama_temperature},
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=60.0, verify=False) as client:
-            async with client.stream(
-                "POST",
-                f"{OLLAMA_BASE_URL}/api/chat",
-                json=payload,
-                headers=_get_headers(),
-            ) as response:
-                response.raise_for_status()
-                accumulated = ""
-
-                async for line in response.aiter_lines():
-                    if not line.strip():
-                        continue
-                    try:
-                        data = json.loads(line)
-                        content = data.get("message", {}).get("content", "")
-                        if content:
-                            accumulated += content
-                            yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
-                    except json.JSONDecodeError:
-                        continue
-
-                yield f"data: {json.dumps({'type': 'result', 'message': accumulated})}\n\n"
-
-    except httpx.ConnectError:
-        yield f"data: {json.dumps({'type': 'error', 'error': 'Agent Service (Ollama) is not reachable.'})}\n\n"
-    except Exception as e:
-        yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
 
 
 # -----------------------------------------------------------------------
@@ -580,7 +514,6 @@ async def stream_chat(messages: list, model: str) -> AsyncGenerator[str, None]:
 # -----------------------------------------------------------------------
 
 async def _call_chunk(on_chunk: Callable, data: dict):
-    """Call on_chunk callback, handling both sync and async callables."""
     result = on_chunk(data)
     if asyncio.iscoroutine(result):
         await result

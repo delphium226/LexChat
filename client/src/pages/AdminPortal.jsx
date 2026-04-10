@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData, getUsageStats, resetDatabase, getLatestHealthStatus, getHealthHistory, triggerHealthCheck, getQueryPerformanceStats, getProductFeedback } from '../services/api';
+import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData, getUsageStats, resetDatabase, getLatestHealthStatus, getHealthHistory, triggerHealthCheck, getQueryPerformanceStats, getProductFeedback, getProviderConfig, setProviderConfig } from '../services/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const Spinner = ({ size = 'md' }) => {
@@ -298,6 +298,125 @@ const PerformanceTab = ({ perfStats, perfTimeframe, setPerfTimeframe }) => {
                     </div>
                 ) : (
                     <p className="text-gray-400 text-sm">No slow queries recorded yet.</p>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
+// -----------------------------------------------------------------------
+// Provider Configuration Panel (Developer Tab)
+// -----------------------------------------------------------------------
+
+const ProviderConfigPanel = () => {
+    const [config, setConfig] = React.useState(null);
+    const [selected, setSelected] = React.useState(null);
+    const [saving, setSaving] = React.useState(false);
+    const [statusMsg, setStatusMsg] = React.useState(null); // {type: 'success'|'error', text}
+
+    React.useEffect(() => {
+        getProviderConfig().then((data) => {
+            setConfig(data);
+            setSelected(data.active_provider);
+        }).catch(() => setStatusMsg({ type: 'error', text: 'Failed to load provider config.' }));
+    }, []);
+
+    const handleSave = async () => {
+        if (!selected || selected === config?.active_provider) return;
+        setSaving(true);
+        setStatusMsg(null);
+        try {
+            await setProviderConfig(selected);
+            setConfig((prev) => ({ ...prev, active_provider: selected }));
+            setStatusMsg({ type: 'success', text: `Provider switched to ${selected}.` });
+        } catch {
+            setStatusMsg({ type: 'error', text: 'Failed to save provider config.' });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (!config) {
+        return (
+            <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow flex items-center gap-3">
+                <Spinner size="sm" />
+                <span className="text-sm text-gray-500 dark:text-gray-400">Loading provider config…</span>
+            </div>
+        );
+    }
+
+    const activeProviderInfo = config.providers.find(p => p.id === config.active_provider);
+
+    return (
+        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+            <div className="flex items-center justify-between mb-1">
+                <h2 className="text-lg font-bold dark:text-white">LLM Provider</h2>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300">
+                    <span className="w-2 h-2 rounded-full bg-green-500 inline-block"></span>
+                    Active: {activeProviderInfo?.name ?? config.active_provider}
+                </span>
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
+                Switch the LLM provider used for all new requests. Takes effect immediately for all users.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+                {config.providers.map((provider) => {
+                    const isSelected = selected === provider.id;
+                    const isUnconfigured = !provider.configured;
+                    return (
+                        <button
+                            key={provider.id}
+                            onClick={() => setSelected(provider.id)}
+                            className={`text-left p-4 rounded-lg border-2 transition-colors ${
+                                isSelected
+                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                                    : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                            }`}
+                        >
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="font-semibold text-sm dark:text-white">{provider.name}</span>
+                                {isSelected && (
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-blue-500">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
+                                    </svg>
+                                )}
+                            </div>
+                            <ul className="text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
+                                {provider.models.map((m) => (
+                                    <li key={m.name} className="truncate">
+                                        {m.name}
+                                        <span className="ml-1 text-gray-400 dark:text-gray-500">({m.context_kb}K ctx)</span>
+                                    </li>
+                                ))}
+                            </ul>
+                            {isUnconfigured && (
+                                <div className="mt-2 flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 flex-shrink-0">
+                                        <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                                    </svg>
+                                    API key not configured in .env
+                                </div>
+                            )}
+                        </button>
+                    );
+                })}
+            </div>
+
+            <div className="flex items-center gap-3">
+                <button
+                    onClick={handleSave}
+                    disabled={saving || !selected || selected === config.active_provider}
+                    className="px-5 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                    {saving && <Spinner size="sm" />}
+                    {saving ? 'Saving…' : 'Save'}
+                </button>
+                {statusMsg && (
+                    <span className={`text-sm font-medium ${statusMsg.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {statusMsg.text}
+                    </span>
                 )}
             </div>
         </div>
@@ -1167,6 +1286,10 @@ const AdminPortal = ({ currentUser }) => {
                 {/* DEVELOPER TAB */}
                 {activeTab === 'developer' && (
                     <div className="space-y-6">
+
+                        {/* LLM Provider Configuration */}
+                        <ProviderConfigPanel />
+
                         <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
                             <h2 className="text-lg font-bold mb-4 dark:text-white">Synthetic Data Generation</h2>
                             <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">

@@ -18,6 +18,7 @@ router = APIRouter(prefix="/api/chats", tags=["Chats"])
 class ChatCreate(BaseModel):
     model: str
     title: Optional[str] = None
+    provider: Optional[str] = None
 
 
 class ChatUpdate(BaseModel):
@@ -29,6 +30,7 @@ class ChatOut(BaseModel):
     user_id: int
     title: Optional[str]
     model: Optional[str]
+    provider: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -88,7 +90,8 @@ async def list_chats(
     chats = result.scalars().all()
     return [
         ChatOut(
-            id=c.id, user_id=c.user_id, title=c.title, model=c.model, created_at=c.created_at
+            id=c.id, user_id=c.user_id, title=c.title, model=c.model,
+            provider=c.provider, created_at=c.created_at
         ) for c in chats
     ]
 
@@ -104,12 +107,14 @@ async def create_chat(
         user_id=user["id"],
         title=body.title or "New Chat",
         model=body.model,
+        provider=body.provider,
     )
     db.add(new_chat)
     await db.commit()
     await db.refresh(new_chat)
     return ChatOut(
-        id=new_chat.id, user_id=new_chat.user_id, title=new_chat.title, model=new_chat.model, created_at=new_chat.created_at
+        id=new_chat.id, user_id=new_chat.user_id, title=new_chat.title,
+        model=new_chat.model, provider=new_chat.provider, created_at=new_chat.created_at
     )
 
 

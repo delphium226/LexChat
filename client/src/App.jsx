@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { sendMessage, createChat, getChatMessages, saveMessage, updatePreferences, submitFeedback } from './services/api';
+import { sendMessage, createChat, getChatMessages, saveMessage, updatePreferences, submitFeedback, getModels } from './services/api';
 import ChatMessage from './components/ChatMessage';
 import loadingGif from './assets/load-35_128.gif';
 import Hourglass from './components/Hourglass';
@@ -82,6 +82,8 @@ function AppContent() {
   const [input, setInput] = useState('');
 
   const [selectedModel, setSelectedModel] = useState('');
+  const [selectedModelContext, setSelectedModelContext] = useState(256 * 1024);
+  const [activeProvider, setActiveProvider] = useState('ollama');
   const [loading, setLoading] = useState(false);
   const [agentStatus, setAgentStatus] = useState('');
   const [contextUsage, setContextUsage] = useState(null);
@@ -144,11 +146,18 @@ function AppContent() {
 
   const sendingRef = useRef(false);
 
-  const FIXED_MODEL = 'mistral-large-3:675b-cloud';
-  const FIXED_MODEL_CONTEXT = 256 * 1024;
-
   useEffect(() => {
-    setSelectedModel(FIXED_MODEL);
+    getModels().then((models) => {
+      if (models && models.length > 0) {
+        setSelectedModel(models[0].name);
+        setSelectedModelContext(models[0].context_length || 256 * 1024);
+        setActiveProvider(models[0].provider || 'ollama');
+      }
+    }).catch(() => {
+      // Fallback if models endpoint fails
+      setSelectedModel('mistral-large-3:675b-cloud');
+      setSelectedModelContext(256 * 1024);
+    });
   }, []);
 
   useEffect(() => {
@@ -266,7 +275,7 @@ function AppContent() {
       if (!activeChatId) {
         try {
           const title = contentToSend.slice(0, 30) + (contentToSend.length > 30 ? '...' : '');
-          const newChat = await createChat(title, selectedModel);
+          const newChat = await createChat(title, selectedModel, activeProvider);
           activeChatId = newChat.id;
           setCurrentChatId(activeChatId);
         } catch (err) {
@@ -290,7 +299,7 @@ function AppContent() {
       // The `userMsg` is explicitly added to `messagesToSend`.
       const messagesToSend = [...messages, userMsg];
 
-      const contextLength = FIXED_MODEL_CONTEXT;
+      const contextLength = selectedModelContext;
 
       const response = await sendMessage(messagesToSend, selectedModel, contextLength, (status) => {
         if (status.type === 'tool_start') {
@@ -303,7 +312,7 @@ function AppContent() {
             'get_legislation_text': 'Reviewing statutory text in detail...',
 
           };
-          setAgentStatus(toolMessages[status.tool] || `Conducting research (${status.tool})...`);
+          setAgentStatus(toolMessages[status.tool] || `${status.tool}...`);
         } else if (status.type === 'tool_end') {
           setAgentStatus('Analyzing findings...');
         } else if (status.type === 'token') {
@@ -333,19 +342,7 @@ function AppContent() {
 
       // Final update to ensure consistency
       if (response.stats) {
-        setContextUsage(prev => {
-          const prevTotal = prev ? (prev.total_usage || (prev.prompt_eval_count + prev.eval_count)) : 0;
-          const currentTotal = response.stats.prompt_eval_count + response.stats.eval_count;
-
-          let validTotal = currentTotal;
-          // If the reported total is significantly less than previous, it's likely a cache hit delta.
-          // We accumulate to approximate the true context.
-          if (currentTotal < prevTotal) {
-            validTotal = prevTotal + currentTotal;
-          }
-
-          return { ...response.stats, total_usage: validTotal }; // Store our calculated total
-        });
+        setContextUsage(response.stats);
       }
 
       setMessages(prev => {
@@ -470,10 +467,8 @@ function AppContent() {
 
   // Helper to calculate usage percentage
   const getUsagePercentage = () => {
-    const maxContext = FIXED_MODEL_CONTEXT;
-    // Use our calculated total_usage if available
-    const total = contextUsage ? (contextUsage.total_usage || ((contextUsage.prompt_eval_count || 0) + (contextUsage.eval_count || 0))) : 0;
-    return Math.min((total / maxContext) * 100, 100);
+    const total = contextUsage ? (contextUsage.prompt_eval_count || 0) : 0;
+    return Math.min((total / selectedModelContext) * 100, 100);
   };
 
   const formatContextLength = (length) => {
@@ -508,9 +503,9 @@ function AppContent() {
           }
         `}
       >
-        <div className="flex items-center justify-center gap-3 mb-2">
+        <div className="flex items-center justify-center gap-1.5 mb-2">
           <img src="/favicon.png" alt="LexChat" className="w-10 h-10" />
-          <h1 className="text-3xl font-bold text-blue-600">LexChat</h1>
+          <h1 className="text-3xl font-bold text-blue-600 tracking-tight">LexChat</h1>
         </div>
 
         <div className="h-10" />
@@ -524,16 +519,16 @@ function AppContent() {
 
         <button
           onClick={() => setShowHistoryModal(true)}
-          className="w-full text-center p-2 rounded-md mb-2 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors font-medium text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600"
+          className="w-full text-center p-2 rounded-md mb-2 hover:bg-blue-700 transition-colors font-medium bg-blue-600 text-white text-lg"
         >
           History
         </button>
 
         <button
           onClick={() => setShowFeedbackModal(true)}
-          className="w-full text-center p-2 rounded-md mb-6 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors font-medium text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600"
+          className="w-full text-center p-2 rounded-md mb-6 hover:bg-blue-700 transition-colors font-medium bg-blue-600 text-white text-lg"
         >
-          Give Feedback
+          Give feedback
         </button>
 
 
@@ -558,8 +553,8 @@ function AppContent() {
                 ></div>
               </div>
               <div className="flex justify-between text-xs text-gray-600">
-                <span>{contextUsage ? (contextUsage.total_usage || ((contextUsage.prompt_eval_count || 0) + (contextUsage.eval_count || 0))) : 0} tokens</span>
-                <span>{formatContextLength(FIXED_MODEL_CONTEXT)} limit</span>
+                <span>{contextUsage ? (contextUsage.prompt_eval_count || 0) : 0} tokens</span>
+                <span>{formatContextLength(selectedModelContext)} limit</span>
               </div>
 
             </div>
@@ -591,17 +586,17 @@ function AppContent() {
         < button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)
           }
-          style={{ left: isSidebarOpen ? 'calc(16rem - 2.25rem)' : '0' }}
-          className="fixed top-4 z-40 p-2 bg-gray-200 dark:bg-gray-700 dark:text-white rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-[left] duration-300 shadow-sm"
+          style={{ left: isSidebarOpen ? 'calc(16rem - 15.5px)' : '15.5px' }}
+          className="fixed top-[47px] z-40 p-[7px] bg-gray-200 dark:bg-gray-700 dark:text-white rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-[left] duration-300 shadow-sm"
           title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
         >
           {
             isSidebarOpen ? (
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5" >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-[17px] h-[17px]" >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" />
               </svg>
             ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-[12px] h-[12px]">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 4.5l7.5 7.5-7.5 7.5m-6-15l7.5 7.5-7.5 7.5" />
               </svg>
             )}
@@ -638,7 +633,7 @@ function AppContent() {
         {/* Input Area */}
         <div className="p-4 bg-[#8c8e91] dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-40 relative">
           <form
-            className="max-w-4xl mx-auto flex space-x-4"
+            className="flex space-x-4"
             onSubmit={(e) => {
               e.preventDefault();
               if (!loading) handleSend();

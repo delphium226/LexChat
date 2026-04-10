@@ -2,18 +2,66 @@ import random
 from datetime import datetime, timedelta
 
 from faker import Faker
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from passlib.hash import bcrypt
+from pydantic import BaseModel
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..config import MODEL_LIST
+from ..agent.provider_factory import get_active_provider, set_active_provider
+from ..config import MODEL_LIST, OPENROUTER_MODEL_LIST, settings
 from ..database import get_db
 from ..models import Chat, Message, User
 
 fake = Faker()
 
 router = APIRouter(prefix="/api/developer", tags=["Developer"])
+
+
+# -----------------------------------------------------------------------
+# Provider configuration
+# -----------------------------------------------------------------------
+
+class ProviderConfigUpdate(BaseModel):
+    active_provider: str
+
+
+@router.get("/provider-config")
+async def get_provider_config(db: AsyncSession = Depends(get_db)):
+    """Return the active provider and available provider details."""
+    active = await get_active_provider(db)
+    openrouter_configured = bool(settings.openrouter_api_key)
+
+    return {
+        "active_provider": active,
+        "providers": [
+            {
+                "id": "ollama",
+                "name": "Ollama (Local)",
+                "models": [{"name": m["name"], "context_kb": m["contextLengthKB"]} for m in MODEL_LIST],
+                "configured": True,
+            },
+            {
+                "id": "openrouter",
+                "name": "OpenRouter",
+                "models": [{"name": m["name"], "context_kb": m["contextLengthKB"]} for m in OPENROUTER_MODEL_LIST],
+                "configured": openrouter_configured,
+            },
+        ],
+    }
+
+
+@router.post("/provider-config")
+async def set_provider_config(
+    body: ProviderConfigUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Switch the active LLM provider (takes effect immediately for all users)."""
+    try:
+        await set_active_provider(db, body.active_provider)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"success": True, "active_provider": body.active_provider}
 
 
 @router.post("/seed")

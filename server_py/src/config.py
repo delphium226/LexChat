@@ -67,6 +67,15 @@ MODEL_LIST = [
     {"name": "kimi-k2-thinking:cloud", "contextLengthKB": 256},
 ]
 
+OPENROUTER_MODEL_LIST = [
+    {"name": "anthropic/claude-sonnet-4-5", "contextLengthKB": 200},
+    {"name": "anthropic/claude-opus-4-5", "contextLengthKB": 200},
+    {"name": "google/gemini-2.5-pro", "contextLengthKB": 1000},
+    {"name": "openai/gpt-4o", "contextLengthKB": 128},
+    {"name": "mistralai/mistral-large-2411", "contextLengthKB": 128},
+    {"name": "deepseek/deepseek-r1", "contextLengthKB": 128},
+]
+
 
 class Settings(BaseSettings):
     # Core
@@ -89,6 +98,10 @@ class Settings(BaseSettings):
     max_concurrent_requests: int = 5
     enable_deep_research: bool = True
     ollama_temperature: float = 0.1
+
+    # Agent / OpenRouter
+    openrouter_api_key: Optional[str] = None
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
     # LEX API
     lex_api_url: str = "https://lex.lab.i.ai.gov.uk/"

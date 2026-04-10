@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from ..agent.deep_research import chat_with_deep_research
-from ..agent.ollama_client import list_models, process_user_request
+from ..agent.provider_factory import get_active_provider, get_list_models, get_process_user_request
 from ..database import async_session_maker
 from ..models import RequestTiming
 from ..utils.queue import RequestQueue
@@ -29,6 +29,8 @@ request_queue = RequestQueue(concurrency=settings.max_concurrent_requests)
 
 @router.get("/api/models")
 async def get_models():
+    async with async_session_maker() as db:
+        list_models = await get_list_models(db)
     return await list_models()
 
 
@@ -74,10 +76,13 @@ async def chat_endpoint(body: ChatRequest, request: Request):
             async def run_agent_task():
                 timing.record_queue_wait((time.perf_counter() - t_queue_entry) * 1000)
 
-                # Get a DB session for learning injection
+                # Get a DB session for provider resolution and learning injection
                 async with async_session_maker() as db_session:
+                    active_provider = await get_active_provider(db_session)
+                    process_user_request = await get_process_user_request(db_session)
+
                     if body.deep_research:
-                        return await chat_with_deep_research(
+                        result = await chat_with_deep_research(
                             list(body.messages),
                             body.model,
                             on_chunk,
@@ -85,7 +90,7 @@ async def chat_endpoint(body: ChatRequest, request: Request):
                             body.num_ctx or 0,
                         )
                     else:
-                        return await process_user_request(
+                        result = await process_user_request(
                             list(body.messages),
                             body.model,
                             on_chunk,
@@ -94,6 +99,10 @@ async def chat_endpoint(body: ChatRequest, request: Request):
                             db_session=db_session,
                             timing_collector=timing,
                         )
+
+                    if isinstance(result, dict):
+                        result["provider"] = active_provider
+                    return result
 
             # Callback for queue updates
             def on_queue_waiting(position):
@@ -106,7 +115,7 @@ async def chat_endpoint(body: ChatRequest, request: Request):
             )
 
             # Timeout warning task
-            timeout_task = asyncio.create_task(asyncio.sleep(120))
+            timeout_task = asyncio.create_task(asyncio.sleep(300))
 
             while not agent_task.done():
                 # Drain event queue

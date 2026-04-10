@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from .config import settings
-from .models import Base, User
+from .models import AppSetting, Base, User
 
 logger = logging.getLogger("app")
 
@@ -38,6 +38,15 @@ async def init_db() -> None:
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+
+        # Migrate existing tables — add columns that may not exist yet
+        migration_statements = [
+            "ALTER TABLE chats ADD COLUMN IF NOT EXISTS provider VARCHAR(50)",
+        ]
+        async with engine.begin() as conn:
+            for stmt in migration_statements:
+                await conn.execute(text(stmt))
+        logger.info("Column migrations applied.")
 
         # Apply indexes to existing tables (create_all only indexes new tables)
         index_statements = [
@@ -74,6 +83,16 @@ async def init_db() -> None:
                 logger.info("Default admin user created.")
             else:
                 logger.info("Admin user already exists.")
+
+        # Seed default active_provider setting
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(AppSetting).where(AppSetting.key == "active_provider")
+            )
+            if result.scalar_one_or_none() is None:
+                session.add(AppSetting(key="active_provider", value="ollama"))
+                await session.commit()
+                logger.info("Default active_provider seeded.")
 
         logger.info("Database initialised successfully.")
     except Exception as e:

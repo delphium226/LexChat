@@ -118,8 +118,8 @@ export const getChats = async () => {
     return response.data;
 };
 
-export const createChat = async (title, model) => {
-    const response = await axios.post(`${API_URL}/chats`, { title, model });
+export const createChat = async (title, model, provider = null) => {
+    const response = await axios.post(`${API_URL}/chats`, { title, model, provider });
     return response.data;
 };
 
@@ -211,5 +211,18 @@ export const submitFeedback = async (message) => {
 
 export const getProductFeedback = async () => {
     const response = await axios.get(`${API_URL}/feedback`);
+    return response.data;
+};
+
+// --- PROVIDER CONFIG ---
+export const getProviderConfig = async () => {
+    const response = await axios.get(`${API_URL}/developer/provider-config`);
+    return response.data;
+};
+
+export const setProviderConfig = async (activeProvider) => {
+    const response = await axios.post(`${API_URL}/developer/provider-config`, {
+        active_provider: activeProvider,
+    });
     return response.data;
 };
