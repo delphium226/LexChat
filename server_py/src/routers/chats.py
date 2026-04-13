@@ -40,6 +40,8 @@ class ChatOut(BaseModel):
 class MessageCreate(BaseModel):
     role: str
     content: str
+    model: Optional[str] = None
+    provider: Optional[str] = None
 
 
 class RatingUpdate(BaseModel):
@@ -52,6 +54,8 @@ class MessageOut(BaseModel):
     chat_id: int
     role: str
     content: str
+    model: Optional[str] = None
+    provider: Optional[str] = None
     rating: Optional[int] = None
     feedback_comment: Optional[str] = None
     created_at: datetime
@@ -162,6 +166,7 @@ async def get_messages(
     return [
         MessageOut(
             id=m.id, chat_id=m.chat_id, role=m.role, content=m.content,
+            model=m.model, provider=m.provider,
             rating=m.rating, feedback_comment=m.feedback_comment, created_at=m.created_at
         ) for m in msgs
     ]
@@ -179,12 +184,15 @@ async def add_message(
         chat_id=chat_id,
         role=body.role,
         content=body.content,
+        model=body.model,
+        provider=body.provider,
     )
     db.add(new_msg)
     await db.commit()
     await db.refresh(new_msg)
     return MessageOut(
         id=new_msg.id, chat_id=new_msg.chat_id, role=new_msg.role, content=new_msg.content,
+        model=new_msg.model, provider=new_msg.provider,
         rating=new_msg.rating, feedback_comment=new_msg.feedback_comment, created_at=new_msg.created_at
     )
 

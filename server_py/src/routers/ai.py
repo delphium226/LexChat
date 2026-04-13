@@ -121,6 +121,7 @@ async def chat_endpoint(body: ChatRequest, request: Request):
 
                     if isinstance(result, dict):
                         result["provider"] = active_provider
+                        result["model"] = body.model
                     return result
 
             # Callback for queue updates

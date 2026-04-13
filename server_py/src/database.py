@@ -42,6 +42,8 @@ async def init_db() -> None:
         # Migrate existing tables — add columns that may not exist yet
         migration_statements = [
             "ALTER TABLE chats ADD COLUMN IF NOT EXISTS provider VARCHAR(50)",
+            "ALTER TABLE messages ADD COLUMN IF NOT EXISTS model VARCHAR(255)",
+            "ALTER TABLE messages ADD COLUMN IF NOT EXISTS provider VARCHAR(50)",
         ]
         async with engine.begin() as conn:
             for stmt in migration_statements:

@@ -132,8 +132,8 @@ export const getChatMessages = async (chatId) => {
     return response.data;
 };
 
-export const saveMessage = async (chatId, role, content) => {
-    const response = await axios.post(`${API_URL}/chats/${chatId}/messages`, { role, content });
+export const saveMessage = async (chatId, role, content, model = null, provider = null) => {
+    const response = await axios.post(`${API_URL}/chats/${chatId}/messages`, { role, content, model, provider });
     return response.data;
 };
 

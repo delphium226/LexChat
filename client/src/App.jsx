@@ -360,7 +360,7 @@ function AppContent() {
       // 3. Persist Assistant Message
       if (activeChatId) {
         try {
-          const savedMsg = await saveMessage(activeChatId, 'assistant', response.content);
+          const savedMsg = await saveMessage(activeChatId, 'assistant', response.content, response.model, response.provider);
           // Update state with the saved message (which has ID) to enable ratings
           setMessages(prev => {
             const updated = [...prev];

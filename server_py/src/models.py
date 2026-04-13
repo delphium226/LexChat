@@ -64,6 +64,8 @@ class Message(Base):
     )
     role: Mapped[str] = mapped_column(String(50), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
     rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
     feedback_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
