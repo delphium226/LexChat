@@ -17,14 +17,22 @@ from .tools import MANAGER_TOOLS, WORKER_TOOLS, execute_worker_tool
 
 logger = logging.getLogger("agent")
 
-OLLAMA_BASE_URL = settings.ollama_base_url.rstrip("/")
+
+def _get_cfg() -> dict:
+    """Return the current request's provider config (set by provider_factory)."""
+    from .provider_factory import get_request_provider_config
+    return get_request_provider_config()
+
+
+def _base_url() -> str:
+    return _get_cfg().get("base_url", settings.ollama_base_url).rstrip("/")
 
 
 def _get_headers() -> dict:
-    headers = {}
-    if settings.ollama_api_key:
-        headers["Authorization"] = f"Bearer {settings.ollama_api_key}"
-    return headers
+    api_key = _get_cfg().get("api_key") or settings.ollama_api_key
+    if api_key:
+        return {"Authorization": f"Bearer {api_key}"}
+    return {}
 
 
 # -----------------------------------------------------------------------
@@ -68,6 +76,8 @@ async def chat_loop(
         else settings.ollama_default_context
     )
 
+    temperature = _get_cfg().get("temperature", settings.ollama_temperature)
+
     payload = {
         "model": model,
         "messages": messages,
@@ -75,7 +85,7 @@ async def chat_loop(
         "stream": True,
         "options": {
             "num_ctx": num_ctx or default_ctx,
-            "temperature": settings.ollama_temperature,
+            "temperature": temperature,
         },
     }
 
@@ -96,7 +106,7 @@ async def chat_loop(
         async with httpx.AsyncClient(timeout=None, verify=False) as client:
             async with client.stream(
                 "POST",
-                f"{OLLAMA_BASE_URL}/api/chat",
+                f"{_base_url()}/api/chat",
                 json=payload,
                 headers=_get_headers(),
             ) as response:
@@ -247,14 +257,12 @@ _SUMMARISE_CHUNK_FALLBACK_CHARS = 5_000
 
 # Serialise summarisation calls so concurrent requests don't overwhelm the
 # cloud Ollama endpoint with multiple large-context inference jobs at once.
-_summarise_semaphore: Optional[asyncio.Semaphore] = None
-
-
 def _get_summarise_semaphore() -> asyncio.Semaphore:
-    global _summarise_semaphore
-    if _summarise_semaphore is None:
-        _summarise_semaphore = asyncio.Semaphore(settings.max_concurrent_requests)
-    return _summarise_semaphore
+    from .provider_factory import get_summarise_semaphore
+    cfg = _get_cfg()
+    provider = cfg.get("_provider", "ollama")
+    concurrency = int(cfg.get("max_summarise_concurrency", 1))
+    return get_summarise_semaphore(provider, concurrency)
 
 
 def _summarise_prompt(text: str, query: str) -> str:
@@ -289,7 +297,7 @@ async def _summarise_chunk(text: str, query: str, model: str, timing_collector=N
             async with httpx.AsyncClient(timeout=600.0, verify=False) as client:
                 t_send = time.perf_counter()
                 resp = await client.post(
-                    f"{OLLAMA_BASE_URL}/api/chat",
+                    f"{_base_url()}/api/chat",
                     json=payload,
                     headers=_get_headers(),
                 )
@@ -548,7 +556,7 @@ async def stream_chat(messages: list, model: str) -> AsyncGenerator[str, None]:
         async with httpx.AsyncClient(timeout=60.0, verify=False) as client:
             async with client.stream(
                 "POST",
-                f"{OLLAMA_BASE_URL}/api/chat",
+                f"{_base_url()}/api/chat",
                 json=payload,
                 headers=_get_headers(),
             ) as response:

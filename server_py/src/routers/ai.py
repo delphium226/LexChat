@@ -10,28 +10,39 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from ..agent.deep_research import chat_with_deep_research
-from ..agent.provider_factory import get_active_provider, get_list_models, get_process_user_request
+from ..agent.provider_factory import (
+    get_active_provider,
+    get_list_models,
+    get_process_user_request,
+    get_provider_config,
+    get_request_queue,
+    set_request_provider_config,
+)
 from ..database import async_session_maker
 from ..models import RequestTiming
-from ..utils.queue import RequestQueue
 from ..utils.stopwatch import TimingCollector
 
 logger = logging.getLogger("app")
 
 router = APIRouter(tags=["AI"])
 
-from ..config import settings
-
-# Global Request Queue
-# This limits the number of simultaneous AI generations to prevent crashing the server/Ollama.
-request_queue = RequestQueue(concurrency=settings.max_concurrent_requests)
-
 
 @router.get("/api/models")
 async def get_models():
     async with async_session_maker() as db:
+        active_provider = await get_active_provider(db)
+        provider_config = await get_provider_config(db, active_provider)
         list_models = await get_list_models(db)
-    return await list_models()
+    models = await list_models()
+    active_model = provider_config.get("model")
+    marked = False
+    for m in models:
+        m["active"] = (m["name"] == active_model)
+        if m["active"]:
+            marked = True
+    if models and not marked:
+        models[0]["active"] = True
+    return models
 
 
 class ChatRequest(BaseModel):
@@ -57,6 +68,16 @@ async def chat_endpoint(body: ChatRequest, request: Request):
     timing = TimingCollector(request_id)
 
     async def event_stream():
+        # Resolve provider config once — set context var for the full call chain
+        async with async_session_maker() as _cfg_db:
+            active_provider = await get_active_provider(_cfg_db)
+            provider_config = await get_provider_config(_cfg_db, active_provider)
+
+        set_request_provider_config({**provider_config, "_provider": active_provider})
+        request_queue = get_request_queue(
+            active_provider, provider_config["max_concurrent_requests"]
+        )
+
         # Detect client disconnect
         disconnect_task = asyncio.create_task(_watch_disconnect(request, cancel_event))
 
@@ -76,9 +97,7 @@ async def chat_endpoint(body: ChatRequest, request: Request):
             async def run_agent_task():
                 timing.record_queue_wait((time.perf_counter() - t_queue_entry) * 1000)
 
-                # Get a DB session for provider resolution and learning injection
                 async with async_session_maker() as db_session:
-                    active_provider = await get_active_provider(db_session)
                     process_user_request = await get_process_user_request(db_session)
 
                     if body.deep_research:

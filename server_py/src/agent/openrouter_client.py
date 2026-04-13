@@ -18,15 +18,21 @@ from .tools import MANAGER_TOOLS, WORKER_TOOLS, execute_worker_tool
 logger = logging.getLogger("agent")
 
 
+def _get_cfg() -> dict:
+    from .provider_factory import get_request_provider_config
+    return get_request_provider_config()
+
+
+def _base_url() -> str:
+    return _get_cfg().get("base_url", settings.openrouter_base_url).rstrip("/")
+
+
 def _get_headers() -> dict:
+    api_key = _get_cfg().get("api_key") or settings.openrouter_api_key
     headers = {"Content-Type": "application/json"}
-    if settings.openrouter_api_key:
-        headers["Authorization"] = f"Bearer {settings.openrouter_api_key}"
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     return headers
-
-
-def _get_base_url() -> str:
-    return settings.openrouter_base_url.rstrip("/")
 
 
 def _convert_tools_to_openai(tools: list) -> list:
@@ -89,7 +95,7 @@ async def chat_loop(
         "model": model,
         "messages": openai_messages,
         "stream": True,
-        "temperature": settings.ollama_temperature,
+        "temperature": _get_cfg().get("temperature", settings.ollama_temperature),
     }
     if openai_tools:
         payload["tools"] = openai_tools
@@ -113,7 +119,7 @@ async def chat_loop(
         async with httpx.AsyncClient(timeout=None, verify=False) as client:
             async with client.stream(
                 "POST",
-                f"{_get_base_url()}/chat/completions",
+                f"{_base_url()}/chat/completions",
                 json=payload,
                 headers=_get_headers(),
             ) as response:
@@ -273,14 +279,12 @@ async def chat_loop(
 _SUMMARISE_THRESHOLD_CHARS = 8_000
 _SUMMARISE_CHUNK_CHARS = 150_000
 _SUMMARISE_CHUNK_FALLBACK_CHARS = 5_000
-_summarise_semaphore: Optional[asyncio.Semaphore] = None
-
-
 def _get_summarise_semaphore() -> asyncio.Semaphore:
-    global _summarise_semaphore
-    if _summarise_semaphore is None:
-        _summarise_semaphore = asyncio.Semaphore(settings.max_concurrent_requests)
-    return _summarise_semaphore
+    from .provider_factory import get_summarise_semaphore
+    cfg = _get_cfg()
+    provider = cfg.get("_provider", "openrouter")
+    concurrency = int(cfg.get("max_summarise_concurrency", 5))
+    return get_summarise_semaphore(provider, concurrency)
 
 
 def _summarise_prompt(text: str, query: str) -> str:
@@ -301,7 +305,7 @@ async def _summarise_chunk(text: str, query: str, model: str, timing_collector=N
         "model": model,
         "messages": [{"role": "user", "content": _summarise_prompt(text, query)}],
         "stream": False,
-        "temperature": 0,
+        "temperature": 0,  # Always 0 for summarisation — deterministic output
     }
 
     try:
@@ -309,7 +313,7 @@ async def _summarise_chunk(text: str, query: str, model: str, timing_collector=N
             async with httpx.AsyncClient(timeout=600.0, verify=False) as client:
                 t_send = time.perf_counter()
                 resp = await client.post(
-                    f"{_get_base_url()}/chat/completions",
+                    f"{_base_url()}/chat/completions",
                     json=payload,
                     headers=_get_headers(),
                 )

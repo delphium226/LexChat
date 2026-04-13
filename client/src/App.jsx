@@ -149,12 +149,12 @@ function AppContent() {
   useEffect(() => {
     getModels().then((models) => {
       if (models && models.length > 0) {
-        setSelectedModel(models[0].name);
-        setSelectedModelContext(models[0].context_length || 256 * 1024);
-        setActiveProvider(models[0].provider || 'ollama');
+        const active = models.find(m => m.active) || models[0];
+        setSelectedModel(active.name);
+        setSelectedModelContext(active.context_length || 256 * 1024);
+        setActiveProvider(active.provider || 'ollama');
       }
     }).catch(() => {
-      // Fallback if models endpoint fails
       setSelectedModel('mistral-large-3:675b-cloud');
       setSelectedModelContext(256 * 1024);
     });

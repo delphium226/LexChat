@@ -8,7 +8,12 @@ from pydantic import BaseModel
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..agent.provider_factory import get_active_provider, set_active_provider
+from ..agent.provider_factory import (
+    get_active_provider,
+    get_provider_config,
+    save_provider_config,
+    set_active_provider,
+)
 from ..config import MODEL_LIST, OPENROUTER_MODEL_LIST, settings
 from ..database import get_db
 from ..models import Chat, Message, User
@@ -22,38 +27,61 @@ router = APIRouter(prefix="/api/developer", tags=["Developer"])
 # Provider configuration
 # -----------------------------------------------------------------------
 
-class ProviderConfigUpdate(BaseModel):
+_PROVIDER_META = {
+    "ollama": {
+        "name": "Ollama (Local)",
+        "model_list": [{"name": m["name"], "context_kb": m["contextLengthKB"]} for m in MODEL_LIST],
+    },
+    "openrouter": {
+        "name": "OpenRouter",
+        "model_list": [{"name": m["name"], "context_kb": m["contextLengthKB"]} for m in OPENROUTER_MODEL_LIST],
+    },
+}
+
+
+class ProviderConfigSave(BaseModel):
+    provider: str
+    config: dict
+
+
+class ActiveProviderUpdate(BaseModel):
     active_provider: str
 
 
 @router.get("/provider-config")
-async def get_provider_config(db: AsyncSession = Depends(get_db)):
-    """Return the active provider and available provider details."""
+async def get_provider_config_endpoint(db: AsyncSession = Depends(get_db)):
+    """Return active provider and full config for all providers."""
     active = await get_active_provider(db)
-    openrouter_configured = bool(settings.openrouter_api_key)
 
-    return {
-        "active_provider": active,
-        "providers": [
-            {
-                "id": "ollama",
-                "name": "Ollama (Local)",
-                "models": [{"name": m["name"], "context_kb": m["contextLengthKB"]} for m in MODEL_LIST],
-                "configured": True,
-            },
-            {
-                "id": "openrouter",
-                "name": "OpenRouter",
-                "models": [{"name": m["name"], "context_kb": m["contextLengthKB"]} for m in OPENROUTER_MODEL_LIST],
-                "configured": openrouter_configured,
-            },
-        ],
-    }
+    providers = []
+    for pid, meta in _PROVIDER_META.items():
+        cfg = await get_provider_config(db, pid)
+        providers.append({
+            "id": pid,
+            "name": meta["name"],
+            "model_list": meta["model_list"],
+            "config": cfg,
+        })
+
+    return {"active_provider": active, "providers": providers}
 
 
 @router.post("/provider-config")
-async def set_provider_config(
-    body: ProviderConfigUpdate,
+async def save_provider_config_endpoint(
+    body: ProviderConfigSave,
+    db: AsyncSession = Depends(get_db),
+):
+    """Save settings for a specific provider."""
+    try:
+        await save_provider_config(db, body.provider, body.config)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"success": True}
+
+
+@router.post("/active-provider")
+async def set_active_provider_endpoint(
+    body: ActiveProviderUpdate,
     db: AsyncSession = Depends(get_db),
 ):
     """Switch the active LLM provider (takes effect immediately for all users)."""

@@ -220,8 +220,16 @@ export const getProviderConfig = async () => {
     return response.data;
 };
 
-export const setProviderConfig = async (activeProvider) => {
+export const saveProviderConfig = async (provider, config) => {
     const response = await axios.post(`${API_URL}/developer/provider-config`, {
+        provider,
+        config,
+    });
+    return response.data;
+};
+
+export const setActiveProvider = async (activeProvider) => {
+    const response = await axios.post(`${API_URL}/developer/active-provider`, {
         active_provider: activeProvider,
     });
     return response.data;

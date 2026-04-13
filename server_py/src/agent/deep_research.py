@@ -3,7 +3,8 @@ import logging
 from typing import Callable, Optional
 
 from ..config import DEEP_RESEARCH_SYSTEM_PROMPT
-from .ollama_client import _call_chunk, chat_loop
+from .ollama_client import _call_chunk
+from .provider_factory import get_active_chat_loop
 from .tools import WORKER_TOOLS, execute_worker_tool
 from .web_search import search_web
 
@@ -80,6 +81,7 @@ async def chat_with_deep_research(
 
         return result
 
+    chat_loop = get_active_chat_loop()
     return await chat_loop(
         final_messages, model, cancel_event, num_ctx,
         DEEP_RESEARCH_TOOLS, deep_research_tool_executor, on_status_update,
