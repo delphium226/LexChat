@@ -154,11 +154,14 @@ If you cannot use the automated scripts:
     *   PostgreSQL 15+ (User: `lexuser`, Pass: `lexpassword`, DB: `lexchat`)
     *   Ollama
 
-2.  **Model**:
-    *   The application uses `mistral-large-3:675b-cloud` (cloud-routed via Ollama).
+2.  **LLM Provider**:
+    *   Default provider is **Ollama** using `mistral-large-3:675b-cloud` (cloud-routed).
+    *   **OpenRouter** is also supported as an alternative provider. Requires `OPENROUTER_API_KEY` in `.env.native` and internet access (not available on air-gapped deployments).
+    *   The active provider and all per-provider settings (model, temperature, concurrency limits, base URL, API key) are configurable at runtime via **Admin Portal → Developer tab** — no restart required.
 
 3.  **Configuration**:
     *   The app uses a `.env.native` file in `server_py/` to configure `localhost` connections.
+    *   Add `OPENROUTER_API_KEY=sk-or-...` to `.env.native` to enable OpenRouter as a provider option.
 
 4.  **Build**:
     *   Backend: `pip install -r requirements.txt` in `server_py/`
