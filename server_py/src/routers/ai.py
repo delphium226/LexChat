@@ -13,7 +13,7 @@ from ..agent.deep_research import chat_with_deep_research
 from ..agent.provider_factory import (
     get_active_provider,
     get_list_models,
-    get_process_user_request,
+    get_process_user_request_from_context,
     get_provider_config,
     get_request_queue,
     set_request_provider_config,
@@ -74,6 +74,9 @@ async def chat_endpoint(body: ChatRequest, request: Request):
             provider_config = await get_provider_config(_cfg_db, active_provider)
 
         set_request_provider_config({**provider_config, "_provider": active_provider})
+        # Always use the server-side configured model — the frontend may be stale
+        # (e.g. user switched provider via Dev tab without refreshing the page).
+        resolved_model = provider_config.get("model") or body.model
         request_queue = get_request_queue(
             active_provider, provider_config["max_concurrent_requests"]
         )
@@ -97,21 +100,25 @@ async def chat_endpoint(body: ChatRequest, request: Request):
             async def run_agent_task():
                 timing.record_queue_wait((time.perf_counter() - t_queue_entry) * 1000)
 
-                async with async_session_maker() as db_session:
-                    process_user_request = await get_process_user_request(db_session)
+                # Resolve the provider function from the ContextVar set above — this
+                # avoids a second DB read and eliminates the TOCTOU race where the
+                # active provider could be switched between config resolution and dispatch.
+                process_user_request = get_process_user_request_from_context()
 
+                async with async_session_maker() as db_session:
                     if body.deep_research:
                         result = await chat_with_deep_research(
                             list(body.messages),
-                            body.model,
+                            resolved_model,
                             on_chunk,
                             cancel_event,
                             body.num_ctx or 0,
+                            timing_collector=timing,
                         )
                     else:
                         result = await process_user_request(
                             list(body.messages),
-                            body.model,
+                            resolved_model,
                             on_chunk,
                             cancel_event,
                             body.num_ctx or 0,
@@ -121,7 +128,7 @@ async def chat_endpoint(body: ChatRequest, request: Request):
 
                     if isinstance(result, dict):
                         result["provider"] = active_provider
-                        result["model"] = body.model
+                        result["model"] = resolved_model
                     return result
 
             # Callback for queue updates
@@ -173,11 +180,11 @@ async def chat_endpoint(body: ChatRequest, request: Request):
                 yield f"data: {json.dumps({'type': 'result', 'message': result_message})}\n\n"
 
         except asyncio.CancelledError:
-            logger.info("Client closed connection, aborted processing.")
+            logger.info("[AI] Client closed connection, aborted processing.")
         except ConnectionError as e:
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
         except Exception as e:
-            logger.error(f"Chat Error: {e}")
+            logger.error(f"[AI] Chat error: {e}")
             error_msg = str(e)
             if "ECONNREFUSED" in error_msg or "ConnectError" in error_msg:
                 error_msg = "Agent Service (Ollama) is not reachable. Please ensure it is running."
@@ -198,7 +205,7 @@ async def chat_endpoint(body: ChatRequest, request: Request):
                         db_save.add(row)
                         await db_save.commit()
                 except Exception as save_err:
-                    logger.error(f"[Timing] Failed to persist request timing: {save_err}")
+                    logger.error(f"[AI] Failed to persist request timing: {save_err}")
 
     return StreamingResponse(
         event_stream(),
@@ -215,7 +222,7 @@ async def _watch_disconnect(request: Request, cancel_event: asyncio.Event):
     try:
         while not cancel_event.is_set():
             if await request.is_disconnected():
-                logger.info("Client disconnected, cancelling processing.")
+                logger.info("[AI] Client disconnected, cancelling processing.")
                 cancel_event.set()
                 return
             await asyncio.sleep(0.5)

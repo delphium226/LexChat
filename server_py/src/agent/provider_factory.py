@@ -185,7 +185,18 @@ def get_summarise_semaphore(provider: str, concurrency: int) -> asyncio.Semaphor
 
 
 # ---------------------------------------------------------------------------
-# Client function accessors
+# Shared async helper
+# ---------------------------------------------------------------------------
+
+async def call_chunk(on_chunk: Callable, data: dict) -> None:
+    """Call on_chunk callback, handling both sync and async callables."""
+    result = on_chunk(data)
+    if asyncio.iscoroutine(result):
+        await result
+
+
+# ---------------------------------------------------------------------------
+# Client function accessors (DB-based)
 # ---------------------------------------------------------------------------
 
 async def get_process_user_request(db: AsyncSession) -> Callable:
@@ -206,6 +217,10 @@ async def get_list_models(db: AsyncSession) -> Callable:
     return list_models
 
 
+# ---------------------------------------------------------------------------
+# Context-based function accessors (no DB session — read from ContextVar)
+# ---------------------------------------------------------------------------
+
 def get_active_chat_loop() -> Callable:
     """Return the chat_loop for the active provider from the current request context.
     Used by deep_research.py which doesn't have a DB session.
@@ -216,3 +231,30 @@ def get_active_chat_loop() -> Callable:
     else:
         from .ollama_client import chat_loop
     return chat_loop
+
+
+def get_process_user_request_from_context() -> Callable:
+    """Return process_user_request for the active provider from the current request context.
+
+    Reads the provider from the ContextVar set at request start — avoids a second
+    DB round-trip inside run_agent_task and eliminates the TOCTOU race where the
+    active provider could change between config resolution and function dispatch.
+    """
+    provider = _provider_config_ctx.get({}).get("_provider", "ollama")
+    if provider == "openrouter":
+        from .openrouter_client import process_user_request
+    else:
+        from .ollama_client import process_user_request
+    return process_user_request
+
+
+def get_active_summarise_for_query() -> Callable:
+    """Return _summarise_for_query for the active provider from the current request context.
+    Used by deep_research.py to apply the same summarisation pipeline as the Worker agent.
+    """
+    provider = _provider_config_ctx.get({}).get("_provider", "ollama")
+    if provider == "openrouter":
+        from .openrouter_client import _summarise_for_query
+    else:
+        from .ollama_client import _summarise_for_query
+    return _summarise_for_query

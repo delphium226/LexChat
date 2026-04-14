@@ -104,6 +104,11 @@ async def get_relevant_examples(
         return {"examples": [], "critiques": []}
 
 
+_MAX_EXAMPLE_ANSWER_CHARS = 2_000   # per injected answer — prevents large acts from bloating context
+_MAX_EXAMPLE_QUESTION_CHARS = 300   # per injected question
+_MAX_CRITIQUE_COMMENT_CHARS = 500   # per critique comment
+
+
 def format_learning_context(learning_data: dict) -> str:
     """Format retrieved examples/critiques into a system prompt injection string."""
     context = ""
@@ -114,7 +119,7 @@ def format_learning_context(learning_data: dict) -> str:
         context += "Users have previously critiqued responses on this topic. AVOID these mistakes:\n"
         for c in critiques:
             question_preview = str(c.get("question", ""))[:50]
-            comment = c.get("feedback_comment", "")
+            comment = str(c.get("feedback_comment", ""))[:_MAX_CRITIQUE_COMMENT_CHARS]
             context += f'- User Critique: "{comment}" (for query: "{question_preview}...")\n'
         context += "\n"
 
@@ -123,9 +128,15 @@ def format_learning_context(learning_data: dict) -> str:
         context += "\n### SUCCESSFUL EXAMPLES (Few-Shot Learning)\n"
         context += "Here are examples of responses that users rated highly for similar queries. Emulate their style and depth:\n\n"
         for i, ex in enumerate(examples):
+            question = str(ex.get("question", ""))[:_MAX_EXAMPLE_QUESTION_CHARS]
+            answer = str(ex.get("answer", ""))[:_MAX_EXAMPLE_ANSWER_CHARS]
+            truncated = len(str(ex.get("answer", ""))) > _MAX_EXAMPLE_ANSWER_CHARS
             context += f"Example {i + 1}:\n"
-            context += f"User: {ex.get('question', '')}\n"
-            context += f"Assistant: {ex.get('answer', '')}\n"
+            context += f"User: {question}\n"
+            context += f"Assistant: {answer}"
+            if truncated:
+                context += " [...]"
+            context += "\n"
             if ex.get("feedback_comment"):
                 context += f'(User Note: "{ex["feedback_comment"]}")\n'
             context += "\n---\n"

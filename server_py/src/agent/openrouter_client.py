@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from typing import AsyncGenerator, Callable, Optional
 
 import httpx
@@ -55,7 +56,7 @@ def _convert_messages_to_openai(messages: list) -> list:
             converted.append({
                 "role": "tool",
                 "content": msg.get("content", ""),
-                "tool_call_id": msg.get("tool_call_id", "call_unknown"),
+                "tool_call_id": msg.get("tool_call_id") or f"call_{uuid.uuid4().hex[:8]}",
             })
         elif msg.get("role") == "assistant" and msg.get("tool_calls"):
             # Keep tool_calls in OpenAI format; strip Ollama-only fields
@@ -83,10 +84,16 @@ async def chat_loop(
     on_chunk: Optional[Callable] = None,
     emit_tool_details: bool = False,
     timing_collector=None,
+    _turn: int = 0,
+    max_turns: int = 20,
 ) -> dict:
     """Core ReAct loop using OpenRouter's OpenAI-compatible streaming API."""
     if cancel_event and cancel_event.is_set():
         raise asyncio.CancelledError("Aborted")
+
+    if _turn >= max_turns:
+        logger.warning(f"[OpenRouter] Max turns ({max_turns}) reached — halting tool calls")
+        return {"role": "assistant", "content": f"[Research halted: exceeded {max_turns} tool-call steps]"}
 
     openai_messages = _convert_messages_to_openai(messages)
     openai_tools = _convert_tools_to_openai(tools)
@@ -246,7 +253,16 @@ async def chat_loop(
                 )
             return tc["id"], func_name, result
 
-        tool_results = await asyncio.gather(*[_run_tool(tc) for tc in tool_calls])
+        tool_tasks = [asyncio.create_task(_run_tool(tc)) for tc in tool_calls]
+        try:
+            tool_results = await asyncio.gather(*tool_tasks)
+        except BaseException:
+            for t in tool_tasks:
+                if not t.done():
+                    t.cancel()
+            raise
+        if cancel_event and cancel_event.is_set():
+            raise asyncio.CancelledError("Aborted")
 
         for (call_id, func_name, tool_result) in tool_results:
             if emit_tool_details and on_chunk:
@@ -267,6 +283,8 @@ async def chat_loop(
             tools, tool_executor, on_chunk,
             emit_tool_details=emit_tool_details,
             timing_collector=timing_collector,
+            _turn=_turn + 1,
+            max_turns=max_turns,
         )
 
     return assistant_message
@@ -353,14 +371,16 @@ async def _summarise_for_query(
     ]
     n = len(chunks)
 
-    partial_summaries: list[str] = []
-    for i, chunk in enumerate(chunks):
-        if on_progress:
-            await on_progress(f"Searching through large document ({doc_name}) - part {i + 1} of {n}")
-        summary = await _summarise_chunk(chunk, query, model, timing_collector=timing_collector)
-        if summary is None:
-            summary = chunk[:_SUMMARISE_CHUNK_FALLBACK_CHARS]
-        partial_summaries.append(summary)
+    if on_progress:
+        await on_progress(f"Searching through large document ({doc_name}) - {n} parts")
+
+    raw_summaries = await asyncio.gather(
+        *[_summarise_chunk(chunk, query, model, timing_collector=timing_collector) for chunk in chunks]
+    )
+    partial_summaries = [
+        s if s is not None else chunk[:_SUMMARISE_CHUNK_FALLBACK_CHARS]
+        for s, chunk in zip(raw_summaries, chunks)
+    ]
 
     combined = "\n\n---\n\n".join(partial_summaries)
 
@@ -473,7 +493,9 @@ async def process_user_request(
 
     system_message = {"role": "system", "content": system_content}
     final_messages = list(messages)
-    if not final_messages or final_messages[0].get("role") != "system":
+    if final_messages and final_messages[0].get("role") == "system":
+        final_messages[0] = system_message
+    else:
         final_messages = [system_message, *final_messages]
 
     async def manager_tool_executor(name: str, args: dict) -> str:

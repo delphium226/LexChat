@@ -37,18 +37,24 @@ class RequestQueue:
         """
         task_id = str(uuid.uuid4())
 
-        # If semaphore is locked, notify the caller of their position
+        # Always register in the queue before touching the semaphore so that
+        # position notifications from _notify_positions() are never missed.
+        # Without this, a task that arrives while the semaphore is free can
+        # enter the wait list between the locked() check and the actual
+        # acquisition, then block without ever receiving a position update.
+        async with self._lock:
+            self._queue.append({"id": task_id, "on_waiting": on_waiting})
+
+        # Notify position only if there is already contention; otherwise the
+        # task will acquire the semaphore immediately and the queue entry will
+        # be silently removed below before anyone notices.
         if self._semaphore.locked() and on_waiting:
             logger.info(f"[Queue] Semaphore locked! Enqueuing task {task_id}")
-            async with self._lock:
-                position = len(self._queue) + 1
-                self._queue.append({"id": task_id, "on_waiting": on_waiting})
-            on_waiting(position)
-            # Notify all queued tasks of updated positions
+            on_waiting(len(self._queue))
             await self._notify_positions()
 
         async with self._semaphore:
-            # Remove from queue if present
+            # Remove from queue now that we have a slot
             async with self._lock:
                 self._queue = [t for t in self._queue if t["id"] != task_id]
                 self._active += 1

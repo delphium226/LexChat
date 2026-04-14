@@ -49,6 +49,8 @@ async def chat_loop(
     on_chunk: Optional[Callable] = None,
     emit_tool_details: bool = False,
     timing_collector=None,
+    _turn: int = 0,
+    max_turns: int = 20,
 ) -> dict:
     """Core ReAct loop: stream from Ollama, handle tool calls, recurse.
 
@@ -67,6 +69,10 @@ async def chat_loop(
     """
     if cancel_event and cancel_event.is_set():
         raise asyncio.CancelledError("Aborted")
+
+    if _turn >= max_turns:
+        logger.warning(f"[ChatLoop] Max turns ({max_turns}) reached — halting tool calls")
+        return {"role": "assistant", "content": f"[Research halted: exceeded {max_turns} tool-call steps]"}
 
     # Determine context size from model config
     configured = next((m for m in MODEL_LIST if m["name"] == model), None)
@@ -175,7 +181,7 @@ async def chat_loop(
 
     # If tool calls, execute and recurse
     if tool_calls:
-        logger.info(f"Tool calls: {len(tool_calls)}")
+        logger.info(f"[ChatLoop] Tool calls: {len(tool_calls)}")
         
         # Emit detailed tool call event if requested
         if emit_tool_details and on_chunk:
@@ -210,7 +216,16 @@ async def chat_loop(
                 )
             return func_name, result
 
-        tool_results = await asyncio.gather(*[_run_tool(tc) for tc in tool_calls])
+        tool_tasks = [asyncio.create_task(_run_tool(tc)) for tc in tool_calls]
+        try:
+            tool_results = await asyncio.gather(*tool_tasks)
+        except BaseException:
+            for t in tool_tasks:
+                if not t.done():
+                    t.cancel()
+            raise
+        if cancel_event and cancel_event.is_set():
+            raise asyncio.CancelledError("Aborted")
 
         for (func_name, tool_result) in tool_results:
             # Emit detailed tool result event if requested
@@ -233,6 +248,8 @@ async def chat_loop(
             tools, tool_executor, on_chunk,
             emit_tool_details=emit_tool_details,
             timing_collector=timing_collector,
+            _turn=_turn + 1,
+            max_turns=max_turns,
         )
 
     return message
@@ -346,21 +363,23 @@ async def _summarise_for_query(
         f"[Summarise] {len(text)} chars exceeds chunk limit — splitting into {n} chunks"
     )
 
-    partial_summaries: list[str] = []
-    for i, chunk in enumerate(chunks):
-        if on_progress:
-            await on_progress(
-                f"Searching through large document ({doc_name}) - part {i + 1} of {n}"
-            )
-        logger.info(f"[Summarise] Chunk {i + 1}/{n} ({len(chunk)} chars)...")
-        summary = await _summarise_chunk(chunk, query, model, timing_collector=timing_collector)
+    if on_progress:
+        await on_progress(f"Searching through large document ({doc_name}) - {n} parts")
+
+    logger.info(f"[Summarise] Summarising {n} chunks concurrently...")
+    raw_summaries = await asyncio.gather(
+        *[_summarise_chunk(chunk, query, model, timing_collector=timing_collector) for chunk in chunks]
+    )
+    partial_summaries = []
+    for i, (summary, chunk) in enumerate(zip(raw_summaries, chunks)):
         if summary is None:
             logger.warning(
                 f"[Summarise] Chunk {i + 1}/{n} failed — using first "
                 f"{_SUMMARISE_CHUNK_FALLBACK_CHARS} chars of chunk"
             )
-            summary = chunk[:_SUMMARISE_CHUNK_FALLBACK_CHARS]
-        partial_summaries.append(summary)
+            partial_summaries.append(chunk[:_SUMMARISE_CHUNK_FALLBACK_CHARS])
+        else:
+            partial_summaries.append(summary)
 
     combined = "\n\n---\n\n".join(partial_summaries)
     logger.info(
@@ -498,7 +517,9 @@ async def process_user_request(
     system_message = {"role": "system", "content": system_content}
 
     final_messages = list(messages)
-    if not final_messages or final_messages[0].get("role") != "system":
+    if final_messages and final_messages[0].get("role") == "system":
+        final_messages[0] = system_message
+    else:
         final_messages = [system_message, *final_messages]
 
     async def manager_tool_executor(name: str, args: dict) -> str:
