@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData, getUsageStats, resetDatabase, getLatestHealthStatus, getHealthHistory, triggerHealthCheck, getQueryPerformanceStats, getProductFeedback, getProviderConfig, saveProviderConfig, setActiveProvider } from '../services/api';
+import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData, getUsageStats, resetDatabase, getLatestHealthStatus, getHealthHistory, triggerHealthCheck, getQueryPerformanceStats, getProductFeedback, getProviderConfig, saveProviderConfig, setActiveProvider, getOpenRouterModels } from '../services/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const Spinner = ({ size = 'md' }) => {
@@ -322,6 +322,76 @@ const Field = ({ label, children, hint }) => (
     </div>
 );
 
+// Type-ahead combobox for selecting a model from a large list.
+const ModelCombobox = ({ value, onChange, models, loading, error }) => {
+    const [query, setQuery] = React.useState('');
+    const [open, setOpen] = React.useState(false);
+    const containerRef = React.useRef(null);
+
+    const filtered = React.useMemo(() => {
+        if (!query) return models;
+        const q = query.toLowerCase();
+        return models.filter(m => m.name.toLowerCase().includes(q));
+    }, [models, query]);
+
+    const handleSelect = (name) => {
+        onChange(name);
+        setQuery('');
+        setOpen(false);
+    };
+
+    const handleBlur = (e) => {
+        // Close only when focus leaves the whole container
+        if (!containerRef.current?.contains(e.relatedTarget)) {
+            setOpen(false);
+            setQuery('');
+        }
+    };
+
+    return (
+        <div ref={containerRef} className="relative" onBlur={handleBlur}>
+            <input
+                type="text"
+                value={open ? query : (value || '')}
+                onChange={e => { setQuery(e.target.value); setOpen(true); }}
+                onFocus={() => setOpen(true)}
+                placeholder={loading ? 'Loading models…' : open ? 'Search models…' : (value || 'Select a model')}
+                disabled={loading}
+                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            />
+            {loading && (
+                <div className="absolute right-2.5 top-1/2 -translate-y-1/2"><Spinner size="sm" /></div>
+            )}
+            {open && !loading && (
+                <ul
+                    tabIndex={-1}
+                    className="absolute z-20 mt-1 w-full max-h-64 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-md shadow-lg text-sm"
+                >
+                    {error && (
+                        <li className="px-3 py-2 text-red-500 dark:text-red-400">{error}</li>
+                    )}
+                    {!error && filtered.length === 0 && (
+                        <li className="px-3 py-2 text-gray-400 dark:text-gray-500">No models match</li>
+                    )}
+                    {!error && filtered.map(m => (
+                        <li
+                            key={m.name}
+                            tabIndex={-1}
+                            onMouseDown={() => handleSelect(m.name)}
+                            className={`flex items-center justify-between px-3 py-1.5 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 ${m.name === value ? 'bg-blue-50 dark:bg-blue-900/20 font-medium' : ''}`}
+                        >
+                            <span className="text-gray-900 dark:text-white truncate">{m.name}</span>
+                            {m.context_kb != null && (
+                                <span className="ml-3 flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">{m.context_kb}K ctx</span>
+                            )}
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+};
+
 const ProviderConfigPanel = () => {
     const [data, setData] = React.useState(null);           // full GET response
     const [selectedId, setSelectedId] = React.useState(null); // which provider card is selected for editing
@@ -330,6 +400,9 @@ const ProviderConfigPanel = () => {
     const [savingConfig, setSavingConfig] = React.useState(false);
     const [switchingActive, setSwitchingActive] = React.useState(false);
     const [statusMsg, setStatusMsg] = React.useState(null);
+    const [orModels, setOrModels] = React.useState([]);
+    const [orModelsLoading, setOrModelsLoading] = React.useState(false);
+    const [orModelsError, setOrModelsError] = React.useState(null);
 
     const flash = (type, text) => {
         setStatusMsg({ type, text });
@@ -346,6 +419,20 @@ const ProviderConfigPanel = () => {
             setDrafts(d);
         }).catch(() => flash('error', 'Failed to load provider config.'));
     }, []);
+
+    React.useEffect(() => {
+        if (selectedId !== 'openrouter') return;
+        if (orModels.length > 0) return; // already loaded
+        setOrModelsLoading(true);
+        setOrModelsError(null);
+        getOpenRouterModels()
+            .then(res => setOrModels(res.models))
+            .catch(err => {
+                const detail = err?.response?.data?.detail || 'Failed to load OpenRouter models.';
+                setOrModelsError(detail);
+            })
+            .finally(() => setOrModelsLoading(false));
+    }, [selectedId]);
 
     const updateDraft = (providerId, key, value) => {
         setDrafts(prev => ({
@@ -440,7 +527,10 @@ const ProviderConfigPanel = () => {
                                 </div>
                             </div>
                             <p className="text-xs text-gray-400 dark:text-gray-500">
-                                {provider.model_list.length} model{provider.model_list.length !== 1 ? 's' : ''} · {drafts[provider.id]?.model || provider.config.model}
+                                {provider.id === 'openrouter'
+                                    ? 'Dynamic models'
+                                    : `${provider.model_list.length} model${provider.model_list.length !== 1 ? 's' : ''}`
+                                } · {drafts[provider.id]?.model || provider.config.model}
                             </p>
                         </button>
                     );
@@ -487,15 +577,25 @@ const ProviderConfigPanel = () => {
 
                         {/* Active Model */}
                         <Field label="Active Model" hint="Model used for all new conversations">
-                            <select
-                                value={draft.model || ''}
-                                onChange={e => updateDraft(selectedId, 'model', e.target.value)}
-                                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                                {selectedProvider.model_list.map(m => (
-                                    <option key={m.name} value={m.name}>{m.name} ({m.context_kb}K ctx)</option>
-                                ))}
-                            </select>
+                            {selectedId === 'openrouter' ? (
+                                <ModelCombobox
+                                    value={draft.model || ''}
+                                    onChange={v => updateDraft(selectedId, 'model', v)}
+                                    models={orModels}
+                                    loading={orModelsLoading}
+                                    error={orModelsError}
+                                />
+                            ) : (
+                                <select
+                                    value={draft.model || ''}
+                                    onChange={e => updateDraft(selectedId, 'model', e.target.value)}
+                                    className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    {selectedProvider.model_list.map(m => (
+                                        <option key={m.name} value={m.name}>{m.name} ({m.context_kb}K ctx)</option>
+                                    ))}
+                                </select>
+                            )}
                         </Field>
 
                         {/* Temperature */}

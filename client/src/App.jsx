@@ -267,6 +267,7 @@ function AppContent() {
 
     setLoading(true);
     setAgentStatus('Thinking...');
+    const requestStartTime = Date.now();
 
     let activeChatId = currentChatId;
 
@@ -345,15 +346,16 @@ function AppContent() {
         setContextUsage(response.stats);
       }
 
+      const responseWithTiming = { ...response, responseTimeMs: Date.now() - requestStartTime };
       setMessages(prev => {
         const updated = [...prev];
         const lastMsg = updated[updated.length - 1];
 
         if (lastMsg.role === 'assistant') {
-          updated[updated.length - 1] = response;
+          updated[updated.length - 1] = responseWithTiming;
           return updated;
         } else {
-          return [...updated, response];
+          return [...updated, responseWithTiming];
         }
       });
 
@@ -367,7 +369,7 @@ function AppContent() {
             // Find the last assistant message and replace it
             for (let i = updated.length - 1; i >= 0; i--) {
               if (updated[i].role === 'assistant' && !updated[i].id) {
-                updated[i] = savedMsg;
+                updated[i] = { ...savedMsg, responseTimeMs: updated[i].responseTimeMs };
                 break;
               }
             }
@@ -453,9 +455,6 @@ function AppContent() {
       // The UI expects { role, content, ... }
       setMessages(msgs);
       setCurrentChatId(chatId);
-      if (model) {
-        setSelectedModel(model);
-      }
       setShowHistoryModal(false);
       setContextUsage(null); // Reset usage context as we don't store it yet
     } catch (error) {

@@ -234,3 +234,8 @@ export const setActiveProvider = async (activeProvider) => {
     });
     return response.data;
 };
+
+export const getOpenRouterModels = async () => {
+    const response = await axios.get(`${API_URL}/developer/openrouter-models`);
+    return response.data;
+};

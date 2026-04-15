@@ -136,8 +136,15 @@ const ChatMessage = ({ message, onResend, showThinking }) => {
                 )}
                 {!isUser && (
                     <div className="bg-gray-50 dark:bg-gray-900/50 p-2 px-4 flex justify-between items-center border-t border-gray-100 dark:border-gray-800">
-                        {/* Rating/Feedback Button */}
-                        <div className="flex items-center">
+                        {/* Response time + Rating/Feedback */}
+                        <div className="flex items-center gap-3">
+                            {message.responseTimeMs != null && (
+                                <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">
+                                    {message.responseTimeMs >= 60000
+                                        ? `${Math.floor(message.responseTimeMs / 60000)}m ${Math.round((message.responseTimeMs % 60000) / 1000)}s`
+                                        : `${(message.responseTimeMs / 1000).toFixed(1)}s`}
+                                </span>
+                            )}
                             <button
                                 onClick={() => setShowCommentModal(true)}
                                 className={`text-xs px-2 py-1 rounded transition-colors flex items-center gap-1 ${rating > 0

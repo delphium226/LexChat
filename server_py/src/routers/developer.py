@@ -1,6 +1,9 @@
+import logging
 import random
+import time
 from datetime import datetime, timedelta
 
+import httpx
 from faker import Faker
 from fastapi import APIRouter, Depends, HTTPException
 from passlib.hash import bcrypt
@@ -14,9 +17,11 @@ from ..agent.provider_factory import (
     save_provider_config,
     set_active_provider,
 )
-from ..config import MODEL_LIST, OPENROUTER_MODEL_LIST, settings
+from ..config import MODEL_LIST, settings
 from ..database import get_db
 from ..models import Chat, Message, User
+
+logger = logging.getLogger("app")
 
 fake = Faker()
 
@@ -34,9 +39,13 @@ _PROVIDER_META = {
     },
     "openrouter": {
         "name": "OpenRouter",
-        "model_list": [{"name": m["name"], "context_kb": m["contextLengthKB"]} for m in OPENROUTER_MODEL_LIST],
+        "model_list": [],  # fetched dynamically via /openrouter-models
     },
 }
+
+# Simple in-process cache for OpenRouter model list: (base_url, api_key) -> (timestamp, models)
+_or_models_cache: dict = {}
+_OR_CACHE_TTL = 300  # seconds
 
 
 class ProviderConfigSave(BaseModel):
@@ -76,6 +85,7 @@ async def save_provider_config_endpoint(
         await save_provider_config(db, body.provider, body.config)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    logger.info(f"[Developer] Provider config saved for {body.provider!r}")
     return {"success": True}
 
 
@@ -89,7 +99,50 @@ async def set_active_provider_endpoint(
         await set_active_provider(db, body.active_provider)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    logger.info(f"[Developer] Active provider switched to {body.active_provider!r}")
     return {"success": True, "active_provider": body.active_provider}
+
+
+@router.get("/openrouter-models")
+async def get_openrouter_models(db: AsyncSession = Depends(get_db)):
+    """Fetch available models from OpenRouter dynamically (5-minute cache)."""
+    cfg = await get_provider_config(db, "openrouter")
+    base_url = (cfg.get("base_url") or settings.openrouter_base_url).rstrip("/")
+    api_key = cfg.get("api_key") or settings.openrouter_api_key
+
+    if not api_key:
+        raise HTTPException(status_code=400, detail="OpenRouter API key not configured.")
+
+    cache_key = (base_url, api_key)
+    now = time.time()
+    cached = _or_models_cache.get(cache_key)
+    if cached and now - cached[0] < _OR_CACHE_TTL:
+        return {"models": cached[1]}
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                f"{base_url}/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=f"OpenRouter returned {e.response.status_code}.")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to reach OpenRouter: {e}")
+
+    models = []
+    for m in data.get("data", []):
+        ctx_length = m.get("context_length")
+        models.append({
+            "name": m["id"],
+            "context_kb": (ctx_length // 1000) if ctx_length else None,
+        })
+    models.sort(key=lambda m: m["name"])
+
+    _or_models_cache[cache_key] = (now, models)
+    return {"models": models}
 
 
 @router.post("/seed")
@@ -217,6 +270,7 @@ async def seed_data(db: AsyncSession = Depends(get_db)):
 
     await db.commit()
 
+    logger.info(f"[Developer] Seed complete: {len(user_ids)} users, {total_chats} chats, {total_messages} messages")
     return {
         "success": True,
         "message": "Synthetic data generated successfully.",
@@ -236,6 +290,7 @@ async def reset_database(db: AsyncSession = Depends(get_db)):
     await db.execute(text("DELETE FROM users WHERE username != 'admin'"))
     await db.commit()
 
+    logger.warning("[Developer] Database reset: all messages, chats, and non-admin users deleted")
     return {
         "success": True,
         "message": "Database reset successfully. Only admin user remains.",
