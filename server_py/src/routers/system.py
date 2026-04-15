@@ -95,9 +95,9 @@ async def system_chat_endpoint(body: SystemChatRequest, request: Request):
                 yield f"data: {json.dumps({'type': 'result', 'message': result_message})}\n\n"
 
         except asyncio.CancelledError:
-            logger.info("System client disconnected.")
+            logger.info("[System] Client disconnected.")
         except Exception as e:
-            logger.error(f"System Chat Error: {e}")
+            logger.error(f"[System] Chat error: {e}")
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
         finally:
             cancel_event.set()

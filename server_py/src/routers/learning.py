@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -6,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..agent.learning import get_relevant_examples
 from ..database import get_db
 from ..dependencies import get_admin_user
+
+logger = logging.getLogger("app")
 
 router = APIRouter(prefix="/api/learning", tags=["Learning"])
 
@@ -95,4 +99,5 @@ async def test_retrieval(
         raise HTTPException(status_code=400, detail="Query required")
 
     results = await get_relevant_examples(body.query, db)
+    logger.info(f"[Learning] Test retrieval for query {body.query!r}: {len(results)} examples returned")
     return results

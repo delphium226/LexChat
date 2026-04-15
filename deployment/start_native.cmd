@@ -60,10 +60,23 @@ if exist venv\Scripts\activate.bat (
     echo [WARN] Virtual environment not found. Using system python.
 )
 
-:: Expects organisational certificates in deployment/certs relative to root
+:: Use SSL if certs are present, otherwise run on HTTP port 8000
 set CERT_PATH=..\deployment\certs\lexchat.crt
 set KEY_PATH=..\deployment\certs\lexchat.key
-start "LexChat Backend" cmd /k "python -m uvicorn src.main:app --host 0.0.0.0 --port 443 --ssl-keyfile !KEY_PATH! --ssl-certfile !CERT_PATH!"
+set USE_SSL=0
+if exist !CERT_PATH! if exist !KEY_PATH! set USE_SSL=1
+
+if !USE_SSL!==1 (
+    set SSL_ARGS=--port 443 --ssl-keyfile !KEY_PATH! --ssl-certfile !CERT_PATH!
+    set APP_URL=https://localhost
+    echo    SSL certificates found. Running on HTTPS port 443.
+) else (
+    set SSL_ARGS=--port 8000
+    set APP_URL=http://localhost:8000
+    echo    No SSL certificates found. Running on HTTP port 8000.
+)
+
+start "LexChat Backend" cmd /k "python -m uvicorn src.main:app --host 0.0.0.0 !SSL_ARGS!"
 
 :: 5. Check Frontend
 echo.
@@ -74,15 +87,15 @@ if not exist dist (
     echo [INFO] Build directory not found. Building frontend...
     call npm run build
 ) else (
-    echo [INFO] Frontend build found. Served by backend on port 443.
+    echo [INFO] Frontend build found. Served by backend on !APP_URL!.
 )
 
 echo.
 echo ===================================================
 echo   LexChat is running natively!
-echo   Application: https://localhost (Port 443)
+echo   Application: !APP_URL!
 echo ===================================================
 echo.
-start https://localhost/
+start !APP_URL!
 echo Close to exit launcher (servers will keep running).
 pause

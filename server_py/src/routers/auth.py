@@ -53,11 +53,13 @@ async def login(
     user = result.scalar_one_or_none()
 
     if user is None or not bcrypt.verify(creds.password, user.password_hash):
+        logger.warning(f"[Auth] Failed login attempt for username: {creds.username!r}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
 
+    logger.info(f"[Auth] Successful login: {user.username!r} (role={user.role})")
     token_data = {"sub": user.username, "id": user.id, "role": user.role}
     expires = timedelta(days=30) if creds.rememberMe else timedelta(days=1)
     access_token = create_access_token(data=token_data, expires_delta=expires)
@@ -120,10 +122,7 @@ async def reset_password_request(
 
     if user and user.email:
         # Email service will be wired in Phase 7
-        logger.info(
-            f"[EMAIL] Password reset email would be sent to {user.email} "
-            f"for user {user.username}"
-        )
+        logger.info(f"[Auth] Password reset requested for user {user.username!r} — email: {user.email}")
 
     # Always return success to avoid user enumeration
     return {"message": "If user exists, a password reset email has been sent."}
@@ -139,10 +138,12 @@ async def change_password(
     db_user = result.scalar_one_or_none()
 
     if not bcrypt.verify(body.currentPassword, db_user.password_hash):
+        logger.warning(f"[Auth] Failed password change attempt for user id={user['id']}")
         raise HTTPException(status_code=400, detail="Incorrect current password")
 
     db_user.password_hash = bcrypt.using(rounds=10).hash(body.newPassword)
     await db.commit()
+    logger.info(f"[Auth] Password changed for user id={user['id']}")
 
     return {"message": "Password updated successfully"}
 

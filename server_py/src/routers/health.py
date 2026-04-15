@@ -40,7 +40,7 @@ async def get_latest_health_status(db: AsyncSession = Depends(get_db)):
                     "checked_at": None
                 }
     except Exception as e:
-        logger.error(f"Cannot query health history from DB (down?), falling back to live check: {e}")
+        logger.error(f"[Health] Cannot query status from DB (down?), falling back to live check: {e}")
         from datetime import datetime
         live_results = await perform_health_checks()
         for r in live_results:
@@ -71,7 +71,7 @@ async def get_health_history(service: str, limit: int = 100, db: AsyncSession = 
             } for r in reversed(records)
         ]
     except Exception as e:
-        logger.error(f"Cannot query health history from DB: {e}")
+        logger.error(f"[Health] Cannot query history from DB: {e}")
         return []
 
 @router.post("/api/health/trigger")
@@ -94,7 +94,7 @@ async def trigger_immediate_health_check(db: AsyncSession = Depends(get_db)):
         return await get_latest_health_status(db)
     
     except Exception as e:
-        logger.error(f"Failed manual health trigger: {e}")
+        logger.error(f"[Health] Failed manual health trigger: {e}")
         # Even if DB fails, the live check completed and we have `formatted` data
         # Let's return the `formatted` live data instead of failing out
         if 'formatted' in locals():

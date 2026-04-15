@@ -9,6 +9,29 @@ os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
+# ANSI colour codes — applied per level, reset after the line
+_RESET  = "\033[0m"
+_GREY   = "\033[90m"
+_WHITE  = "\033[97m"
+_YELLOW = "\033[33m"
+_RED    = "\033[31m"
+_BOLD_RED = "\033[1;31m"
+
+_LEVEL_COLOURS = {
+    logging.DEBUG:    _GREY,
+    logging.INFO:     _WHITE,
+    logging.WARNING:  _YELLOW,
+    logging.ERROR:    _RED,
+    logging.CRITICAL: _BOLD_RED,
+}
+
+
+class _ColourFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        colour = _LEVEL_COLOURS.get(record.levelno, "")
+        line = super().format(record)
+        return f"{colour}{line}{_RESET}" if colour else line
+
 
 def _create_file_handler(filename: str, level=logging.INFO) -> TimedRotatingFileHandler:
     handler = TimedRotatingFileHandler(
@@ -27,7 +50,7 @@ def _create_file_handler(filename: str, level=logging.INFO) -> TimedRotatingFile
 def _create_console_handler(level=logging.INFO) -> logging.StreamHandler:
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(level)
-    handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT))
+    handler.setFormatter(_ColourFormatter(LOG_FORMAT, datefmt=DATE_FORMAT))
     return handler
 
 

@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
     # Startup
     await init_db()
     health_task = asyncio.create_task(background_health_loop(60))
-    logger.info(f"Server running on http://{settings.host}:{settings.port}")
+    logger.info(f"[Main] Server running on http://{settings.host}:{settings.port}")
     yield
     # Shutdown
     health_task.cancel()
@@ -57,9 +57,8 @@ async def log_requests(request: Request, call_next):
     start = time.time()
     response = await call_next(request)
     duration_ms = int((time.time() - start) * 1000)
-    http_logger.info(
-        f"{request.method} {request.url.path} {response.status_code} {duration_ms}ms"
-    )
+    log = http_logger.warning if response.status_code >= 400 else http_logger.info
+    log(f"{request.method} {request.url.path} {response.status_code} {duration_ms}ms")
     return response
 
 
@@ -107,4 +106,4 @@ if os.path.isdir(frontend_dist):
         # Fall back to index.html for SPA
         return FileResponse(os.path.join(frontend_dist, "index.html"))
 else:
-    logger.warning(f"Frontend static directory not found at {frontend_dist}. UI will not be available.")
+    logger.warning(f"[Main] Frontend static directory not found at {frontend_dist}. UI will not be available.")

@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select, desc
@@ -6,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..dependencies import get_current_user
 from ..models import ProductFeedback, User
+
+logger = logging.getLogger("app")
 
 router = APIRouter(prefix="/api/feedback", tags=["Feedback"])
 
@@ -32,6 +36,7 @@ async def submit_feedback(
     entry = ProductFeedback(user_id=user["id"], message=body.message.strip())
     db.add(entry)
     await db.commit()
+    logger.info(f"[Feedback] Submitted by user id={user['id']}")
     return {"status": "ok"}
 
 

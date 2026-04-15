@@ -71,15 +71,15 @@ async def perform_health_checks():
                 session.add(status)
             await session.commit()
     except Exception as db_err:
-        logger.error(f"Failed to write health checks to DB: {db_err}")
+        logger.error(f"[Health] Failed to write health checks to DB: {db_err}")
 
     return results
 
 async def background_health_loop(interval_seconds: int = 60):
-    logger.info(f"Background health check loop started (interval: {interval_seconds}s)")
+    logger.info(f"[Health] Background check loop started (interval: {interval_seconds}s)")
     try:
         while True:
             await perform_health_checks()
             await asyncio.sleep(interval_seconds)
     except asyncio.CancelledError:
-        logger.info("Background health check loop stopped.")
+        logger.info("[Health] Background check loop stopped.")

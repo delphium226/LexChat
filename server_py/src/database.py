@@ -33,7 +33,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 async def init_db() -> None:
     """Create tables and seed default admin user."""
-    logger.info("Initialising database...")
+    logger.info("[Database] Initialising...")
 
     try:
         async with engine.begin() as conn:
@@ -48,7 +48,7 @@ async def init_db() -> None:
         async with engine.begin() as conn:
             for stmt in migration_statements:
                 await conn.execute(text(stmt))
-        logger.info("Column migrations applied.")
+        logger.info("[Database] Column migrations applied.")
 
         # Apply indexes to existing tables (create_all only indexes new tables)
         index_statements = [
@@ -64,7 +64,7 @@ async def init_db() -> None:
         async with engine.begin() as conn:
             for stmt in index_statements:
                 await conn.execute(text(stmt))
-        logger.info("Database indexes applied.")
+        logger.info("[Database] Indexes applied.")
 
         # Seed default admin user
         async with async_session_maker() as session:
@@ -82,9 +82,9 @@ async def init_db() -> None:
                 )
                 session.add(admin_user)
                 await session.commit()
-                logger.info("Default admin user created.")
+                logger.info("[Database] Default admin user created.")
             else:
-                logger.info("Admin user already exists.")
+                logger.info("[Database] Admin user already exists.")
 
         # Seed default active_provider setting
         async with async_session_maker() as session:
@@ -94,8 +94,8 @@ async def init_db() -> None:
             if result.scalar_one_or_none() is None:
                 session.add(AppSetting(key="active_provider", value="ollama"))
                 await session.commit()
-                logger.info("Default active_provider seeded.")
+                logger.info("[Database] Default active_provider seeded.")
 
-        logger.info("Database initialised successfully.")
+        logger.info("[Database] Initialised successfully.")
     except Exception as e:
-        logger.error(f"Failed to initialise database: {e}. The server will start, but database-dependent features will fail.")
+        logger.error(f"[Database] Initialisation failed: {e}. The server will start, but database-dependent features will fail.")

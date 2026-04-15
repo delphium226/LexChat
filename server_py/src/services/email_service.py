@@ -19,7 +19,7 @@ async def send_welcome_email(to: str, username: str, password: str) -> None:
     """Send a welcome email to a newly created user."""
     creds = _get_transport()
     if not creds:
-        logger.warning("Email credentials not configured. Skipping welcome email.")
+        logger.warning("[Email] Credentials not configured. Skipping welcome email.")
         return
 
     email_user, email_pass = creds
@@ -44,16 +44,16 @@ async def send_welcome_email(to: str, username: str, password: str) -> None:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(email_user, email_pass)
             server.sendmail(email_user, to, msg.as_string())
-        logger.info(f"Welcome email sent to {to}")
+        logger.info(f"[Email] Welcome email sent to {to}")
     except Exception as e:
-        logger.error(f"Error sending welcome email: {e}")
+        logger.error(f"[Email] Failed to send welcome email to {to}: {e}")
 
 
 async def send_password_reset_email(to: str, username: str, reset_token: str) -> None:
     """Send a password reset email."""
     creds = _get_transport()
     if not creds:
-        logger.warning("Email credentials not configured. Skipping reset email.")
+        logger.warning("[Email] Credentials not configured. Skipping reset email.")
         return
 
     email_user, email_pass = creds
@@ -79,6 +79,6 @@ async def send_password_reset_email(to: str, username: str, reset_token: str) ->
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(email_user, email_pass)
             server.sendmail(email_user, to, msg.as_string())
-        logger.info(f"Password reset email sent to {to}")
+        logger.info(f"[Email] Password reset email sent to {to}")
     except Exception as e:
-        logger.error(f"Error sending reset email: {e}")
+        logger.error(f"[Email] Failed to send reset email to {to}: {e}")

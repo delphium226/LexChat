@@ -1,8 +1,3 @@
-import logging
-
-logger = logging.getLogger("agent")
-
-
 class TimingCollector:
     """Collects per-request timing data across the agent call stack.
 
@@ -23,36 +18,22 @@ class TimingCollector:
 
     def record_queue_wait(self, ms: float) -> None:
         self.queue_wait_ms = ms
-        logger.info("[TIMING] [%s] queue_wait: %.0fms", self.request_id, ms)
 
     def record_learning_db(self, ms: float) -> None:
         self.learning_db_ms = ms
-        logger.info("[TIMING] [%s] learning_db_query: %.0fms", self.request_id, ms)
 
     def record_llm_call(self, ttft_ms: float, total_ms: float) -> None:
         self.llm_calls += 1
         self.llm_total_ms += total_ms
         if self.llm_ttft_first_ms == 0.0:
             self.llm_ttft_first_ms = ttft_ms
-        logger.info(
-            "[TIMING] [%s] ollama_call #%d — ttft: %.0fms, stream_total: %.0fms",
-            self.request_id, self.llm_calls, ttft_ms, total_ms,
-        )
 
     def record_lex_api_call(self, tool_name: str, ms: float) -> None:
         self.lex_api_calls += 1
         self.lex_api_total_ms += ms
-        logger.info("[TIMING] [%s] lex_api_%s: %.0fms", self.request_id, tool_name, ms)
 
     def record_total(self, ms: float) -> None:
         self.total_ms = ms
-        logger.info(
-            "[TIMING] [%s] TOTAL: %.0fms | LLM calls: %d (%.0fms total, %.0fms ttft) "
-            "| LEX calls: %d (%.0fms total)",
-            self.request_id, ms,
-            self.llm_calls, self.llm_total_ms, self.llm_ttft_first_ms,
-            self.lex_api_calls, self.lex_api_total_ms,
-        )
 
     def to_dict(self) -> dict:
         return {

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import List, Optional
 
@@ -9,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..dependencies import get_current_user
 from ..models import Chat, Message
+
+logger = logging.getLogger("app")
 
 router = APIRouter(prefix="/api/chats", tags=["Chats"])
 
@@ -116,6 +119,7 @@ async def create_chat(
     db.add(new_chat)
     await db.commit()
     await db.refresh(new_chat)
+    logger.info(f"[Chats] Created chat id={new_chat.id} for user id={user['id']} model={new_chat.model!r}")
     return ChatOut(
         id=new_chat.id, user_id=new_chat.user_id, title=new_chat.title,
         model=new_chat.model, provider=new_chat.provider, created_at=new_chat.created_at
@@ -147,6 +151,7 @@ async def delete_chat(
     chat = await _get_owned_chat(chat_id, user["id"], db)
     await db.delete(chat)
     await db.commit()
+    logger.info(f"[Chats] Deleted chat id={chat_id} for user id={user['id']}")
     return {"message": "Chat deleted"}
 
 
@@ -221,6 +226,7 @@ async def rate_message(
     msg.feedback_comment = body.comment
     await db.commit()
     await db.refresh(msg)
+    logger.info(f"[Chats] Message id={message_id} rated {body.rating}/5 by user id={user['id']}")
     return MessageOut(
         id=msg.id, chat_id=msg.chat_id, role=msg.role, content=msg.content,
         rating=msg.rating, feedback_comment=msg.feedback_comment, created_at=msg.created_at
