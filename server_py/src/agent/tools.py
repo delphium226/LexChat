@@ -24,15 +24,23 @@ if settings.enable_deep_research:
         "function": {
             "name": "delegate_research",
             "description": (
-                "Delegates a complex legal research task to a specialized agent. "
-                "Use this for any question about UK legislation, case law, or legal concepts."
+                "Delegates a legal research task to a specialized agent that searches the UK legislation database. "
+                "Use this for any question about UK Acts or Statutory Instruments."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "The detailed research question to ask the specialized agent.",
+                        "description": (
+                            "A self-contained research brief for the agent. "
+                            "The agent has no access to the conversation history, so this must include: "
+                            "(1) the precise legal question; "
+                            "(2) any specific Act names, SI numbers, or years mentioned in the conversation; "
+                            "(3) any jurisdiction constraints (e.g. England and Wales, Scotland); "
+                            "(4) relevant context from prior turns that would help narrow the search. "
+                            "Do not forward the user's raw message if additional context exists."
+                        ),
                     },
                 },
                 "required": ["query"],
@@ -69,14 +77,45 @@ WORKER_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "search_legislation_sections",
+            "description": (
+                "Search for specific sections within a known piece of legislation. "
+                "Use this INSTEAD of get_legislation_text when you already have a legislation_id "
+                "and need to find particular provisions, definitions, or duties within it. "
+                "Returns only the matching sections — avoids downloading the entire Act."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The provision or topic to search for within the Act (e.g. \"public sector equality duty\", \"penalty\", \"definition of employee\").",
+                    },
+                    "legislation_id": {
+                        "type": "string",
+                        "description": "The legislation ID to search within (e.g. \"ukpga/2010/15\"). Must be obtained from a prior search_legislation call.",
+                    },
+                },
+                "required": ["query", "legislation_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_legislation_text",
-            "description": "Get the full text of a specific piece of legislation using its ID.",
+            "description": (
+                "Get the FULL text of a piece of legislation. "
+                "Only use this when search_legislation_sections returns insufficient results, "
+                "or when the question requires understanding the overall structure of the Act. "
+                "For targeted questions about specific provisions, prefer search_legislation_sections."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "legislation_id": {
                         "type": "string",
-                        "description": 'The legislation ID (e.g., "ukpga/1990/18").',
+                        "description": 'The legislation ID (e.g., "ukpga/1990/18"). Must be obtained from a prior search_legislation call.',
                     },
                 },
                 "required": ["legislation_id"],
@@ -117,7 +156,7 @@ async def execute_worker_tool(
                     "query": args["query"],
                     "year_from": args.get("year_from"),
                     "year_to": args.get("year_to"),
-                    "limit": 5,
+                    "limit": 10,
                     "include_text": False,
                 }
 
@@ -140,6 +179,46 @@ async def execute_worker_tool(
                 try:
                     resp_json = resp.json()
                 except:
+                    resp_json = {"text": resp.text}
+
+                await _emit(on_chunk, {
+                    "type": "api_call_end",
+                    "id": call_id,
+                    "url": url,
+                    "status": resp.status_code,
+                    "response": resp_json,
+                    "elapsed_ms": round(elapsed_ms),
+                })
+
+                resp.raise_for_status()
+                return json.dumps(resp_json)
+
+            elif name == "search_legislation_sections":
+                url = f"{LEX_API_URL}/legislation/section/search"
+                payload = {
+                    "query": args["query"],
+                    "legislation_id": args["legislation_id"],
+                    "limit": 10,
+                }
+
+                await _emit(on_chunk, {
+                    "type": "api_call_start",
+                    "id": call_id,
+                    "url": url,
+                    "method": "POST",
+                    "payload": payload,
+                })
+
+                t0 = time.perf_counter()
+                resp = await client.post(url, json=payload)
+                elapsed_ms = (time.perf_counter() - t0) * 1000
+
+                if timing_collector:
+                    timing_collector.record_lex_api_call(name, elapsed_ms)
+
+                try:
+                    resp_json = resp.json()
+                except Exception:
                     resp_json = {"text": resp.text}
 
                 await _emit(on_chunk, {

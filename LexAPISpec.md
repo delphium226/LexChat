@@ -11,9 +11,11 @@ Currently, the API appears to be public or uses IP-based whitelisting (no specif
 
 ## Endpoints
 
+Endpoints marked **[ACTIVE]** are called by the Worker Agent. Others are available but not yet wired up as agent tools.
+
 ### Legislation
 
-#### Search Legislation
+#### Search Legislation — **[ACTIVE]**
 `POST /legislation/search`
 
 Search for Acts and Statutory Instruments.
@@ -44,7 +46,7 @@ Look up specific legislation by type, year, and number.
 }
 ```
 
-#### Get Legislation Text
+#### Get Legislation Text — **[ACTIVE, fallback]**
 `POST /legislation/text`
 
 Retrieve the full text of a piece of legislation using its ID.
@@ -56,7 +58,7 @@ Retrieve the full text of a piece of legislation using its ID.
 }
 ```
 
-#### Search Legislation Sections
+#### Search Legislation Sections — **[ACTIVE]**
 `POST /legislation/section/search`
 
 Search within specific sections of legislation.

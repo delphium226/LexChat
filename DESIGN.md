@@ -70,26 +70,29 @@ All API routes (except `/auth`) require a valid JWT in the `Authorization` heade
 The backend implements a **Manager-Worker** pattern to handle complex queries.
 
 ### 3.1 Manager Agent
--   **System Prompt**: Defined in `config.js`.
+-   **System Prompt**: Defined in `server_py/src/config.py` (`MANAGER_SYSTEM_PROMPT`).
 -   **Tools**:
-    -   `delegate_research(query)`: Hand off legal queries to the Worker.
+    -   `delegate_research(query)`: Hand off legal queries to the Worker. The `query` parameter must be a self-contained research brief including Act names, years, jurisdiction constraints, and any relevant conversational context — the Worker has no access to conversation history.
 -   **Flow**:
-    1.  Receives User Message.
-    2.  Checks "Memory" (RAG) for similar past Q&A.
-    3.  Decides: Answer directly (chat) OR Delegate (research).
-    4.  If Delegate: Calls `delegate_research`.
-    5.  Formats final response.
+    1.  Receives user message.
+    2.  Injects relevant RAG feedback from prior rated interactions (learning loop).
+    3.  Triages: general conversation (answer directly) vs. legal query (delegate).
+    4.  If delegating: formulates a context-enriched research brief and calls `delegate_research`.
+    5.  Presents the Worker's findings verbatim, preserving all citations.
 
 ### 3.2 Worker Agent
--   **System Prompt**: Strict legal citation rules.
--   **Tools**:
-    -   `lex_api_search`: Semantic search on legislation/case law.
-    -   `web_search`: Google search for broader context.
-    -   `read_url`: Scrape content for reading.
+-   **System Prompt**: Defined in `server_py/src/config.py` (`WORKER_SYSTEM_PROMPT`). Strict citation and source-grounding rules; ephemeral context (no conversation history).
+-   **Tools** (defined in `server_py/src/agent/tools.py`):
+    -   `search_legislation(query, year_from?, year_to?)`: Search UK Acts and SIs by title or keyword. Returns metadata and short excerpts; does **not** download full text.
+    -   `search_legislation_sections(query, legislation_id)`: Search for specific sections within a known Act. **Preferred over `get_legislation_text`** for targeted questions — avoids downloading the entire Act.
+    -   `get_legislation_text(legislation_id)`: Retrieve the full text of an Act. Fallback only — used when section search returns insufficient results, or when the full structure of an Act is required.
 -   **Flow**:
-    1.  Receives query from Manager.
-    2.  Loops: Plan -> Search -> Read -> Analyze.
-    3.  Returns: Cited, markdown answer.
+    1.  Receives the research brief from the Manager (isolated context — no chat history).
+    2.  Calls `search_legislation` to identify candidate Acts and obtain `legislation_id`s.
+    3.  Calls `search_legislation_sections` scoped to each relevant Act to retrieve matching provisions directly.
+    4.  Falls back to `get_legislation_text` only if section search yields nothing useful.
+    5.  Iterates with alternative search terms if results are sparse.
+    6.  Returns a structured, cited markdown answer (BLUF → Analysis → Jurisdiction → References).
 
 ### 3.3 Learning Loop (RAG)
 -   **Ingest**: When a user rates a message (4-5 stars), it becomes a "Positive Example".
