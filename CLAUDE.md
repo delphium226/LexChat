@@ -42,6 +42,15 @@ All deployment work happens on **`experiment/native-deployment`**. Main branch i
 - `Chat.model` and `Chat.provider` — set at chat creation (frontend state at time of first message)
 - `Message.model` and `Message.provider` — set on every **assistant** message from the backend result; authoritative record of what was actually used at inference time
 
+### Worker Agent Optimisations
+The Worker's research pipeline has been tuned to minimise unnecessary LLM calls and summarisation overhead. Key decisions:
+
+- **`search_legislation` response slimming** — `_slim_search_results` in `tools.py` strips the API response to `legislation_id`, `title`, `url`, `status`, `year`, and `extent` only. The `description` field is intentionally excluded — it is verbose and redundant once Phase 2 retrieves actual section text. This keeps Phase 1 results under the summarisation threshold (~1–2K per result vs 10–16K with description), eliminating Phase 1 summarisation entirely.
+- **One call per `legislation_id` in Phase 2** — The Worker system prompt instructs the model to make exactly one `search_legislation_sections` call per `legislation_id`, combining all aspects into a single query (e.g. `"procedure, confirmation, compensation, definition of acquiring authority"`). This prevents duplicate calls to the same Act, which were previously the dominant source of unnecessary summarisation.
+- **Summarisation concurrency** — Controlled per-provider via `max_summarise_concurrency` in the Admin Portal. Ollama (cloud-routed) should be set to **1** — concurrent calls cause HTTP 500 errors. OpenRouter can handle **5+** without errors and processes summaries in parallel significantly faster. The right value depends on the model and endpoint capacity.
+- **Model quality is the dominant variable** — A capable instruction-following model (e.g. Gemini Flash on OpenRouter) will correctly batch Phase 2 calls, use combined queries, and complete an 8-Act research query in ~90 seconds. A weaker model (e.g. free-tier Nemotron) ignores batching instructions, makes sequential single calls with duplicate `legislation_id`s, and produces bloated context — with the same infrastructure but ~10× worse performance.
+- **Phase 2 nudge** — After each `search_legislation` result is processed, a `[NEXT STEP: Call search_legislation_sections...]` instruction with extracted `legislation_id`s is appended to the tool result. This ensures the model proceeds to Phase 2 even if the system prompt instruction is not followed precisely.
+
 ### Other
 - Python deps are installed **globally** (no venv) on the target — the offline installer uses `pip install` directly
 - The frontend is **pre-built on the dev machine** and committed including `client/dist/` — the target has no Node.js
@@ -93,6 +102,7 @@ Start script launches PostgreSQL, then Ollama, then the FastAPI backend. Stop sc
 | `client/src/App.jsx` | Main frontend app — chat UI, favicon swap, dynamic model fetch |
 | `client/src/pages/AdminPortal.jsx` | Admin portal including Developer tab with provider config panel |
 | `server_py/src/config.py` | `MODEL_LIST`, `OPENROUTER_MODEL_LIST`, system prompts, app settings |
+| `server_py/src/agent/tools.py` | LEX API tool schemas, `_slim_search_results`, `execute_worker_tool` |
 | `server_py/src/agent/ollama_client.py` | Ollama agent implementation (chat_loop, worker, summarisation) |
 | `server_py/src/agent/openrouter_client.py` | OpenRouter agent implementation (OpenAI-compatible) |
 | `server_py/src/agent/provider_factory.py` | Provider resolution, ContextVar config, queue/semaphore caches |

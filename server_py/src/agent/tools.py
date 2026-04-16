@@ -1,5 +1,6 @@
 import asyncio
 from typing import Optional, Callable
+from urllib.parse import urlparse
 import json
 import logging
 import time
@@ -10,6 +11,51 @@ import httpx
 from ..config import settings
 
 logger = logging.getLogger("agent")
+
+
+def _slim_search_results(resp_json: dict) -> dict:
+    """Strip the search_legislation response down to only the fields the model needs.
+
+    The raw API response includes provenance metadata, timestamps, descriptions,
+    and a ranked sections array that the model never uses. Stripping these keeps
+    a typical 5-result payload well under the summarisation threshold (~1-2k chars)
+    and gives the model a clean, readable result.
+
+    description is intentionally excluded — it is verbose and redundant once Phase 2
+    retrieves actual section text via search_legislation_sections.
+
+    legislation_id is derived from the URI and included explicitly so the model
+    can pass it directly to search_legislation_sections.
+    """
+    slimmed = []
+    for item in resp_json.get("results", []):
+        uri = item.get("uri", "")
+        legislation_id = urlparse(uri).path.lstrip("/") if uri else ""
+        # Some API responses include /id/ in the URI path — strip it so the
+        # legislation_id can be passed directly to search_legislation_sections.
+        if legislation_id.startswith("id/"):
+            legislation_id = legislation_id[3:]
+        slimmed.append({
+            "legislation_id": legislation_id,
+            "title": item.get("title", ""),
+            "url": uri,
+            "status": item.get("status", ""),
+            "year": item.get("year"),
+            "extent": item.get("extent", []),
+        })
+    return {
+        "results": slimmed,
+        "total": resp_json.get("total", len(slimmed)),
+    }
+
+
+def extract_legislation_ids_from_search(resp_json: dict) -> list[tuple[str, str]]:
+    """Extract (legislation_id, title) pairs from a slimmed search_legislation response."""
+    return [
+        (item["legislation_id"], item.get("title", ""))
+        for item in resp_json.get("results", [])
+        if item.get("legislation_id")
+    ]
 
 LEX_API_URL = settings.lex_api_url.rstrip("/")
 
@@ -156,7 +202,7 @@ async def execute_worker_tool(
                     "query": args["query"],
                     "year_from": args.get("year_from"),
                     "year_to": args.get("year_to"),
-                    "limit": 10,
+                    "limit": 5,
                     "include_text": False,
                 }
 
@@ -191,7 +237,11 @@ async def execute_worker_tool(
                 })
 
                 resp.raise_for_status()
-                return json.dumps(resp_json)
+                # Slim the response before returning — strips provenance metadata,
+                # timestamps, and ranked section arrays the model never uses.
+                # Reduces a typical 5-result payload from ~10k to ~1.5k chars,
+                # keeping it under the summarisation threshold.
+                return json.dumps(_slim_search_results(resp_json))
 
             elif name == "search_legislation_sections":
                 url = f"{LEX_API_URL}/legislation/section/search"

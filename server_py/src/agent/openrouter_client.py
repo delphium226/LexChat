@@ -14,7 +14,7 @@ from ..config import (
     settings,
 )
 from .learning import format_learning_context, get_relevant_examples
-from .tools import MANAGER_TOOLS, WORKER_TOOLS, execute_worker_tool
+from .tools import MANAGER_TOOLS, WORKER_TOOLS, execute_worker_tool, extract_legislation_ids_from_search
 
 logger = logging.getLogger("agent")
 
@@ -423,6 +423,30 @@ async def run_worker_agent(
             name, args, on_chunk=parent_on_chunk, timing_collector=timing_collector
         )
 
+        # For search_legislation: capture legislation_ids from the raw response
+        # before any summarisation strips them, so we can inject a Phase 2
+        # instruction into the final result the model actually sees.
+        phase2_note = ""
+        if name == "search_legislation":
+            try:
+                raw_data = json.loads(result)
+                id_pairs = extract_legislation_ids_from_search(raw_data)
+                if id_pairs:
+                    id_lines = "\n".join(
+                        f'  - legislation_id: "{lid}"  ({title})'
+                        for lid, title in id_pairs[:5]
+                    )
+                    phase2_note = (
+                        f"\n\n[NEXT STEP: Call search_legislation_sections with the relevant "
+                        f"legislation_id(s) below to retrieve the actual legal text before "
+                        f"composing your answer:\n{id_lines}]"
+                    )
+            except Exception:
+                phase2_note = (
+                    "\n\n[NEXT STEP: Call search_legislation_sections with the legislation_id "
+                    "from this result to retrieve the actual legal text.]"
+                )
+
         if len(result) > _SUMMARISE_THRESHOLD_CHARS:
             logger.info(f"[OpenRouter Worker] Result from '{name}' is {len(result)} chars — summarising")
 
@@ -448,6 +472,10 @@ async def run_worker_agent(
             result = await _summarise_for_query(result, query, model, on_progress=_emit_progress, timing_collector=timing_collector, doc_name=doc_name)
             if parent_on_chunk:
                 await _call_chunk(parent_on_chunk, {"type": "tool_end", "tool": "Extracting the relevant sections from a large document", "result": "Done"})
+
+        # Append Phase 2 instruction after summarisation (so it is not discarded
+        # by the summariser and is visible in the message the model receives).
+        result += phase2_note
 
         if parent_on_chunk:
             await _call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "result": "Done"})
