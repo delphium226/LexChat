@@ -185,14 +185,10 @@ def get_summarise_semaphore(provider: str, concurrency: int) -> asyncio.Semaphor
 
 
 # ---------------------------------------------------------------------------
-# Shared async helper
+# Shared async helper (single definition lives in summarisation.py)
 # ---------------------------------------------------------------------------
 
-async def call_chunk(on_chunk: Callable, data: dict) -> None:
-    """Call on_chunk callback, handling both sync and async callables."""
-    result = on_chunk(data)
-    if asyncio.iscoroutine(result):
-        await result
+from .summarisation import call_chunk  # noqa: F401 — re-exported for deep_research.py
 
 
 # ---------------------------------------------------------------------------
@@ -249,12 +245,17 @@ def get_process_user_request_from_context() -> Callable:
 
 
 def get_active_summarise_for_query() -> Callable:
-    """Return _summarise_for_query for the active provider from the current request context.
-    Used by deep_research.py to apply the same summarisation pipeline as the Worker agent.
+    """Return a bound summarise_for_query for the active provider.
+
+    Used by deep_research.py to apply the same summarisation pipeline as the
+    Worker agent.  Returns summarise_for_query with the provider-specific
+    chunk_fn pre-bound so callers don't need to know about it.
     """
+    import functools
+    from .summarisation import summarise_for_query
     provider = _provider_config_ctx.get({}).get("_provider", "ollama")
     if provider == "openrouter":
-        from .openrouter_client import _summarise_for_query
+        from .openrouter_client import _summarise_chunk
     else:
-        from .ollama_client import _summarise_for_query
-    return _summarise_for_query
+        from .ollama_client import _summarise_chunk
+    return functools.partial(summarise_for_query, chunk_fn=_summarise_chunk)

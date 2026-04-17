@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import time
 import uuid
 from typing import AsyncGenerator, Callable, Optional
@@ -14,6 +15,12 @@ from ..config import (
     settings,
 )
 from .learning import format_learning_context, get_relevant_examples
+from .summarisation import (
+    SUMMARISE_THRESHOLD_CHARS,
+    call_chunk,
+    summarise_prompt,
+    summarise_for_query,
+)
 from .tools import MANAGER_TOOLS, WORKER_TOOLS, execute_worker_tool, extract_legislation_ids_from_search
 
 logger = logging.getLogger("agent")
@@ -26,6 +33,10 @@ def _get_cfg() -> dict:
 
 def _base_url() -> str:
     return _get_cfg().get("base_url", settings.openrouter_base_url).rstrip("/")
+
+
+def _get_proxy() -> Optional[str]:
+    return os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy") or None
 
 
 def _get_headers() -> dict:
@@ -123,7 +134,7 @@ async def chat_loop(
     first_content_time: Optional[float] = None
 
     try:
-        async with httpx.AsyncClient(timeout=None, verify=False) as client:
+        async with httpx.AsyncClient(timeout=None, verify=False, proxy=_get_proxy()) as client:
             async with client.stream(
                 "POST",
                 f"{_base_url()}/chat/completions",
@@ -165,7 +176,7 @@ async def chat_loop(
                             first_content_time = time.perf_counter()
                         full_content += content
                         if on_chunk:
-                            await _call_chunk(on_chunk, {"type": "token", "content": content})
+                            await call_chunk(on_chunk, {"type": "token", "content": content})
 
                     # Accumulate tool call deltas
                     for tc_delta in delta.get("tool_calls", []):
@@ -225,7 +236,7 @@ async def chat_loop(
         logger.info(f"[OpenRouter] Tool calls: {len(tool_calls)}")
 
         if emit_tool_details and on_chunk:
-            await _call_chunk(on_chunk, {"type": "tool_call", "tool_calls": tool_calls})
+            await call_chunk(on_chunk, {"type": "tool_call", "tool_calls": tool_calls})
 
         next_messages = [*messages, assistant_message]
 
@@ -266,7 +277,7 @@ async def chat_loop(
 
         for (call_id, func_name, tool_result) in tool_results:
             if emit_tool_details and on_chunk:
-                await _call_chunk(on_chunk, {
+                await call_chunk(on_chunk, {
                     "type": "tool_result",
                     "tool": func_name,
                     "result": tool_result,
@@ -294,9 +305,6 @@ async def chat_loop(
 # Legislation summarisation helper
 # -----------------------------------------------------------------------
 
-_SUMMARISE_THRESHOLD_CHARS = 8_000
-_SUMMARISE_CHUNK_CHARS = 150_000
-_SUMMARISE_CHUNK_FALLBACK_CHARS = 5_000
 def _get_summarise_semaphore() -> asyncio.Semaphore:
     from .provider_factory import get_summarise_semaphore
     cfg = _get_cfg()
@@ -305,30 +313,18 @@ def _get_summarise_semaphore() -> asyncio.Semaphore:
     return get_summarise_semaphore(provider, concurrency)
 
 
-def _summarise_prompt(text: str, query: str) -> str:
-    return (
-        f"You are summarising a piece of UK legislation to assist with a legal research question.\n\n"
-        f"Research question: {query}\n\n"
-        f"Summarise the legislation text below. Retain only the sections, provisions, "
-        f"definitions, and legal thresholds directly relevant to the research question. "
-        f"Preserve exact section numbers, citations, and statutory references. "
-        f"Discard preamble, unrelated schedules, and provisions that do not bear on the question.\n\n"
-        f"Legislation text:\n{text}\n\nSummary:"
-    )
-
-
 async def _summarise_chunk(text: str, query: str, model: str, timing_collector=None) -> Optional[str]:
     """Summarise a single chunk via OpenRouter. Returns None on any error."""
     payload = {
         "model": model,
-        "messages": [{"role": "user", "content": _summarise_prompt(text, query)}],
+        "messages": [{"role": "user", "content": summarise_prompt(text, query)}],
         "stream": False,
         "temperature": 0,  # Always 0 for summarisation — deterministic output
     }
 
     try:
         async with _get_summarise_semaphore():
-            async with httpx.AsyncClient(timeout=600.0, verify=False) as client:
+            async with httpx.AsyncClient(timeout=600.0, verify=False, proxy=_get_proxy()) as client:
                 t_send = time.perf_counter()
                 resp = await client.post(
                     f"{_base_url()}/chat/completions",
@@ -350,49 +346,6 @@ async def _summarise_chunk(text: str, query: str, model: str, timing_collector=N
         logger.warning(f"[OpenRouter Summarise] Chunk failed ({type(e).__name__}: {e!r})")
         return None
 
-
-async def _summarise_for_query(
-    text: str,
-    query: str,
-    model: str,
-    on_progress: Optional[Callable] = None,
-    timing_collector=None,
-    doc_name: str = "document",
-) -> str:
-    if len(text) <= _SUMMARISE_CHUNK_CHARS:
-        result = await _summarise_chunk(text, query, model, timing_collector=timing_collector)
-        if result is None:
-            return text
-        return result
-
-    chunks = [
-        text[i: i + _SUMMARISE_CHUNK_CHARS]
-        for i in range(0, len(text), _SUMMARISE_CHUNK_CHARS)
-    ]
-    n = len(chunks)
-
-    if on_progress:
-        await on_progress(f"Searching through large document ({doc_name}) - {n} parts")
-
-    raw_summaries = await asyncio.gather(
-        *[_summarise_chunk(chunk, query, model, timing_collector=timing_collector) for chunk in chunks]
-    )
-    partial_summaries = [
-        s if s is not None else chunk[:_SUMMARISE_CHUNK_FALLBACK_CHARS]
-        for s, chunk in zip(raw_summaries, chunks)
-    ]
-
-    combined = "\n\n---\n\n".join(partial_summaries)
-
-    if len(combined) > _SUMMARISE_CHUNK_CHARS:
-        if on_progress:
-            await on_progress("Consolidating extracted sections")
-        final = await _summarise_chunk(combined, query, model, timing_collector=timing_collector)
-        if final is None:
-            return combined
-        return final
-
-    return combined
 
 
 # -----------------------------------------------------------------------
@@ -417,7 +370,7 @@ async def run_worker_agent(
 
     async def worker_tool_executor(name: str, args: dict) -> str:
         if parent_on_chunk:
-            await _call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}"})
+            await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}"})
 
         result = await execute_worker_tool(
             name, args, on_chunk=parent_on_chunk, timing_collector=timing_collector
@@ -447,7 +400,7 @@ async def run_worker_agent(
                     "from this result to retrieve the actual legal text.]"
                 )
 
-        if len(result) > _SUMMARISE_THRESHOLD_CHARS:
+        if len(result) > SUMMARISE_THRESHOLD_CHARS:
             logger.info(f"[OpenRouter Worker] Result from '{name}' is {len(result)} chars — summarising")
 
             doc_name = name
@@ -463,22 +416,22 @@ async def run_worker_agent(
                 doc_name = args.get("legislation_id") or name
 
             if parent_on_chunk:
-                await _call_chunk(parent_on_chunk, {"type": "tool_start", "tool": "Extracting the relevant sections from a large document"})
+                await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": "Extracting the relevant sections from a large document"})
 
             async def _emit_progress(msg: str) -> None:
                 if parent_on_chunk:
-                    await _call_chunk(parent_on_chunk, {"type": "tool_start", "tool": msg})
+                    await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": msg})
 
-            result = await _summarise_for_query(result, query, model, on_progress=_emit_progress, timing_collector=timing_collector, doc_name=doc_name)
+            result = await summarise_for_query(result, query, model, chunk_fn=_summarise_chunk, on_progress=_emit_progress, timing_collector=timing_collector, doc_name=doc_name)
             if parent_on_chunk:
-                await _call_chunk(parent_on_chunk, {"type": "tool_end", "tool": "Extracting the relevant sections from a large document", "result": "Done"})
+                await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": "Extracting the relevant sections from a large document", "result": "Done"})
 
         # Append Phase 2 instruction after summarisation (so it is not discarded
         # by the summariser and is visible in the message the model receives).
         result += phase2_note
 
         if parent_on_chunk:
-            await _call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "result": "Done"})
+            await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "result": "Done"})
         return result
 
     return await chat_loop(
@@ -529,7 +482,7 @@ async def process_user_request(
     async def manager_tool_executor(name: str, args: dict) -> str:
         if name == "delegate_research":
             if on_chunk:
-                await _call_chunk(on_chunk, {"type": "tool_start", "tool": "Research Agent"})
+                await call_chunk(on_chunk, {"type": "tool_start", "tool": "Research Agent"})
 
             result = await run_worker_agent(
                 args["query"], model, cancel_event, num_ctx, on_chunk,
@@ -538,7 +491,7 @@ async def process_user_request(
             )
 
             if on_chunk:
-                await _call_chunk(on_chunk, {"type": "tool_end", "tool": "Research Agent", "result": "Research Complete"})
+                await call_chunk(on_chunk, {"type": "tool_end", "tool": "Research Agent", "result": "Research Complete"})
 
             return f"[Research Agent Result]\n{result['content']}"
 
@@ -563,11 +516,3 @@ async def list_models() -> list:
     ]
 
 
-# -----------------------------------------------------------------------
-# Helper
-# -----------------------------------------------------------------------
-
-async def _call_chunk(on_chunk: Callable, data: dict):
-    result = on_chunk(data)
-    if asyncio.iscoroutine(result):
-        await result

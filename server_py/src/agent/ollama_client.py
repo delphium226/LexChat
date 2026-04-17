@@ -13,6 +13,12 @@ from ..config import (
     settings,
 )
 from .learning import format_learning_context, get_relevant_examples
+from .summarisation import (
+    SUMMARISE_THRESHOLD_CHARS,
+    call_chunk,
+    summarise_prompt,
+    summarise_for_query,
+)
 from .tools import MANAGER_TOOLS, WORKER_TOOLS, execute_worker_tool, extract_legislation_ids_from_search
 
 logger = logging.getLogger("agent")
@@ -138,7 +144,7 @@ async def chat_loop(
                             first_content_time = time.perf_counter()
                         full_content += content
                         if on_chunk:
-                            await _call_chunk(on_chunk, {"type": "token", "content": content})
+                            await call_chunk(on_chunk, {"type": "token", "content": content})
 
                     if msg.get("tool_calls"):
                         tool_calls.extend(msg["tool_calls"])
@@ -185,7 +191,7 @@ async def chat_loop(
         
         # Emit detailed tool call event if requested
         if emit_tool_details and on_chunk:
-            await _call_chunk(on_chunk, {
+            await call_chunk(on_chunk, {
                 "type": "tool_call", 
                 "tool_calls": tool_calls
             })
@@ -230,7 +236,7 @@ async def chat_loop(
         for (func_name, tool_result) in tool_results:
             # Emit detailed tool result event if requested
             if emit_tool_details and on_chunk:
-                await _call_chunk(on_chunk, {
+                await call_chunk(on_chunk, {
                     "type": "tool_result",
                     "tool": func_name,
                     "result": tool_result
@@ -259,19 +265,6 @@ async def chat_loop(
 # Legislation summarisation helper
 # -----------------------------------------------------------------------
 
-# Results larger than this are summarised before being fed back to the model.
-# Below this threshold the raw text is used as-is.
-_SUMMARISE_THRESHOLD_CHARS = 8_000
-
-# Maximum chars sent to Ollama in a single summarisation call.
-# At ~4 chars/token this is ~37K tokens — well within the 256K context and
-# avoids ReadTimeout / HTTP 500 on the cloud-routed endpoint for large acts.
-_SUMMARISE_CHUNK_CHARS = 150_000
-
-# Fallback: if a chunk summarisation fails, include only this many chars of the
-# raw chunk so the Worker still gets some content without blowing the context.
-_SUMMARISE_CHUNK_FALLBACK_CHARS = 5_000
-
 # Serialise summarisation calls so concurrent requests don't overwhelm the
 # cloud Ollama endpoint with multiple large-context inference jobs at once.
 def _get_summarise_semaphore() -> asyncio.Semaphore:
@@ -282,18 +275,6 @@ def _get_summarise_semaphore() -> asyncio.Semaphore:
     return get_summarise_semaphore(provider, concurrency)
 
 
-def _summarise_prompt(text: str, query: str) -> str:
-    return (
-        f"You are summarising a piece of UK legislation to assist with a legal research question.\n\n"
-        f"Research question: {query}\n\n"
-        f"Summarise the legislation text below. Retain only the sections, provisions, "
-        f"definitions, and legal thresholds directly relevant to the research question. "
-        f"Preserve exact section numbers, citations, and statutory references. "
-        f"Discard preamble, unrelated schedules, and provisions that do not bear on the question.\n\n"
-        f"Legislation text:\n{text}\n\nSummary:"
-    )
-
-
 async def _summarise_chunk(text: str, query: str, model: str, timing_collector=None) -> Optional[str]:
     """Summarise a single chunk via Ollama. Returns None on any error."""
     configured = next((m for m in MODEL_LIST if m["name"] == model), None)
@@ -301,7 +282,7 @@ async def _summarise_chunk(text: str, query: str, model: str, timing_collector=N
 
     payload = {
         "model": model,
-        "messages": [{"role": "user", "content": _summarise_prompt(text, query)}],
+        "messages": [{"role": "user", "content": summarise_prompt(text, query)}],
         "stream": False,
         "options": {
             "num_ctx": ctx,
@@ -329,77 +310,6 @@ async def _summarise_chunk(text: str, query: str, model: str, timing_collector=N
         return None
 
 
-async def _summarise_for_query(
-    text: str,
-    query: str,
-    model: str,
-    on_progress: Optional[Callable] = None,
-    timing_collector=None,
-    doc_name: str = "document",
-) -> str:
-    """Produce a query-focused summary of a legislation text.
-
-    Texts larger than _SUMMARISE_CHUNK_CHARS are split into chunks, each
-    summarised independently, then the partial summaries are combined and
-    optionally consolidated in a final pass.  Falls back gracefully when
-    individual chunk calls fail.
-
-    on_progress(msg) is called before each chunk so the UI can show progress.
-    """
-    if len(text) <= _SUMMARISE_CHUNK_CHARS:
-        result = await _summarise_chunk(text, query, model, timing_collector=timing_collector)
-        if result is None:
-            logger.warning("[Summarise] Single-chunk summarisation failed, returning original text")
-            return text
-        return result
-
-    # Split into chunks and summarise each.
-    chunks = [
-        text[i : i + _SUMMARISE_CHUNK_CHARS]
-        for i in range(0, len(text), _SUMMARISE_CHUNK_CHARS)
-    ]
-    n = len(chunks)
-    logger.info(
-        f"[Summarise] {len(text)} chars exceeds chunk limit — splitting into {n} chunks"
-    )
-
-    if on_progress:
-        await on_progress(f"Searching through large document ({doc_name}) - {n} parts")
-
-    logger.info(f"[Summarise] Summarising {n} chunks concurrently...")
-    raw_summaries = await asyncio.gather(
-        *[_summarise_chunk(chunk, query, model, timing_collector=timing_collector) for chunk in chunks]
-    )
-    partial_summaries = []
-    for i, (summary, chunk) in enumerate(zip(raw_summaries, chunks)):
-        if summary is None:
-            logger.warning(
-                f"[Summarise] Chunk {i + 1}/{n} failed — using first "
-                f"{_SUMMARISE_CHUNK_FALLBACK_CHARS} chars of chunk"
-            )
-            partial_summaries.append(chunk[:_SUMMARISE_CHUNK_FALLBACK_CHARS])
-        else:
-            partial_summaries.append(summary)
-
-    combined = "\n\n---\n\n".join(partial_summaries)
-    logger.info(
-        f"[Summarise] Combined {n} partial summaries into {len(combined)} chars"
-    )
-
-    # If the combined summaries are still large, do one final consolidation pass.
-    if len(combined) > _SUMMARISE_CHUNK_CHARS:
-        if on_progress:
-            await on_progress("Consolidating extracted sections")
-        logger.info("[Summarise] Running final consolidation pass")
-        final = await _summarise_chunk(combined, query, model, timing_collector=timing_collector)
-        if final is None:
-            logger.warning("[Summarise] Final consolidation failed — returning combined partials")
-            return combined
-        logger.info(f"[Summarise] Consolidated to {len(final)} chars")
-        return final
-
-    return combined
-
 
 # -----------------------------------------------------------------------
 # Worker Agent (Legal Research Specialist)
@@ -424,7 +334,7 @@ async def run_worker_agent(
 
     async def worker_tool_executor(name: str, args: dict) -> str:
         if parent_on_chunk:
-            await _call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}"})
+            await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}"})
 
         result = await execute_worker_tool(
             name, args, on_chunk=parent_on_chunk, timing_collector=timing_collector
@@ -454,7 +364,7 @@ async def run_worker_agent(
                     "from this result to retrieve the actual legal text.]"
                 )
 
-        if len(result) > _SUMMARISE_THRESHOLD_CHARS:
+        if len(result) > SUMMARISE_THRESHOLD_CHARS:
             logger.info(
                 f"[Worker] Result from '{name}' is {len(result)} chars — summarising for query focus"
             )
@@ -473,23 +383,23 @@ async def run_worker_agent(
                 doc_name = args.get("legislation_id") or name
 
             if parent_on_chunk:
-                await _call_chunk(parent_on_chunk, {"type": "tool_start", "tool": "Extracting the relevant sections from a large document"})
+                await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": "Extracting the relevant sections from a large document"})
 
             async def _emit_progress(msg: str) -> None:
                 if parent_on_chunk:
-                    await _call_chunk(parent_on_chunk, {"type": "tool_start", "tool": msg})
+                    await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": msg})
 
-            result = await _summarise_for_query(result, query, model, on_progress=_emit_progress, timing_collector=timing_collector, doc_name=doc_name)
+            result = await summarise_for_query(result, query, model, chunk_fn=_summarise_chunk, on_progress=_emit_progress, timing_collector=timing_collector, doc_name=doc_name)
             logger.info(f"[Worker] Summarised to {len(result)} chars")
             if parent_on_chunk:
-                await _call_chunk(parent_on_chunk, {"type": "tool_end", "tool": "Extracting the relevant sections from a large document", "result": "Done"})
+                await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": "Extracting the relevant sections from a large document", "result": "Done"})
 
         # Append Phase 2 instruction after summarisation (so it is not discarded
         # by the summariser and is visible in the message the model receives).
         result += phase2_note
 
         if parent_on_chunk:
-            await _call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "result": "Done"})
+            await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "result": "Done"})
         return result
 
     return await chat_loop(
@@ -553,7 +463,7 @@ async def process_user_request(
     async def manager_tool_executor(name: str, args: dict) -> str:
         if name == "delegate_research":
             if on_chunk:
-                await _call_chunk(on_chunk, {"type": "tool_start", "tool": "Research Agent"})
+                await call_chunk(on_chunk, {"type": "tool_start", "tool": "Research Agent"})
 
             result = await run_worker_agent(
                 args["query"], model, cancel_event, num_ctx, on_chunk,
@@ -562,7 +472,7 @@ async def process_user_request(
             )
 
             if on_chunk:
-                await _call_chunk(on_chunk, {"type": "tool_end", "tool": "Research Agent", "result": "Research Complete"})
+                await call_chunk(on_chunk, {"type": "tool_end", "tool": "Research Agent", "result": "Research Complete"})
 
             return f"[Research Agent Result]\n{result['content']}"
 
@@ -632,12 +542,3 @@ async def stream_chat(messages: list, model: str) -> AsyncGenerator[str, None]:
         yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
 
 
-# -----------------------------------------------------------------------
-# Helper
-# -----------------------------------------------------------------------
-
-async def _call_chunk(on_chunk: Callable, data: dict):
-    """Call on_chunk callback, handling both sync and async callables."""
-    result = on_chunk(data)
-    if asyncio.iscoroutine(result):
-        await result

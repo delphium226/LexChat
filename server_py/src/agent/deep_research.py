@@ -9,12 +9,11 @@ from .provider_factory import (
     get_active_chat_loop,
     get_active_summarise_for_query,
 )
+from .summarisation import SUMMARISE_THRESHOLD_CHARS
 from .tools import WORKER_TOOLS, execute_worker_tool
 from .web_search import search_web
 
 logger = logging.getLogger("agent")
-
-_SUMMARISE_THRESHOLD_CHARS = 8_000
 
 # Deep research tools = worker tools + web search
 DEEP_RESEARCH_TOOLS = [
@@ -89,7 +88,7 @@ async def chat_with_deep_research(
         result = await _execute_deep_research_tool(name, args)
 
         # Summarise large results — same threshold/pipeline as the Worker agent
-        if len(result) > _SUMMARISE_THRESHOLD_CHARS:
+        if len(result) > SUMMARISE_THRESHOLD_CHARS:
             logger.info(
                 f"[Deep Research] Result from '{name}' is {len(result)} chars — summarising"
             )
