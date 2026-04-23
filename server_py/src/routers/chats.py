@@ -45,6 +45,7 @@ class MessageCreate(BaseModel):
     content: str
     model: Optional[str] = None
     provider: Optional[str] = None
+    cost_usd: Optional[float] = None
 
 
 class RatingUpdate(BaseModel):
@@ -61,6 +62,7 @@ class MessageOut(BaseModel):
     provider: Optional[str] = None
     rating: Optional[int] = None
     feedback_comment: Optional[str] = None
+    cost_usd: Optional[float] = None
     created_at: datetime
 
     class Config:
@@ -172,7 +174,8 @@ async def get_messages(
         MessageOut(
             id=m.id, chat_id=m.chat_id, role=m.role, content=m.content,
             model=m.model, provider=m.provider,
-            rating=m.rating, feedback_comment=m.feedback_comment, created_at=m.created_at
+            rating=m.rating, feedback_comment=m.feedback_comment,
+            cost_usd=m.cost_usd, created_at=m.created_at
         ) for m in msgs
     ]
 
@@ -191,6 +194,7 @@ async def add_message(
         content=body.content,
         model=body.model,
         provider=body.provider,
+        cost_usd=body.cost_usd,
     )
     db.add(new_msg)
     await db.commit()
@@ -198,7 +202,8 @@ async def add_message(
     return MessageOut(
         id=new_msg.id, chat_id=new_msg.chat_id, role=new_msg.role, content=new_msg.content,
         model=new_msg.model, provider=new_msg.provider,
-        rating=new_msg.rating, feedback_comment=new_msg.feedback_comment, created_at=new_msg.created_at
+        rating=new_msg.rating, feedback_comment=new_msg.feedback_comment,
+        cost_usd=new_msg.cost_usd, created_at=new_msg.created_at
     )
 
 

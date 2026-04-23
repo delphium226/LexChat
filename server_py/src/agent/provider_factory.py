@@ -54,6 +54,7 @@ def _build_defaults(provider: str) -> dict:
             "base_url": settings.ollama_base_url,
             "api_key": settings.ollama_api_key or "",
             "model": MODEL_LIST[0]["name"] if MODEL_LIST else "",
+            "summarisation_model": "",
             "temperature": settings.ollama_temperature,
             "max_summarise_concurrency": 1,
             "max_concurrent_requests": 3,
@@ -63,6 +64,7 @@ def _build_defaults(provider: str) -> dict:
             "base_url": settings.openrouter_base_url,
             "api_key": settings.openrouter_api_key or "",
             "model": OPENROUTER_MODEL_LIST[0]["name"] if OPENROUTER_MODEL_LIST else "",
+            "summarisation_model": "",
             "temperature": settings.ollama_temperature,
             "max_summarise_concurrency": 5,
             "max_concurrent_requests": 10,
@@ -126,7 +128,7 @@ async def save_provider_config(db: AsyncSession, provider: str, data: dict) -> N
     if provider not in _SUPPORTED_PROVIDERS:
         raise ValueError(f"Unsupported provider: {provider}")
 
-    allowed_keys = {"base_url", "api_key", "model", "temperature",
+    allowed_keys = {"base_url", "api_key", "model", "summarisation_model", "temperature",
                     "max_summarise_concurrency", "max_concurrent_requests"}
     clean = {k: v for k, v in data.items() if k in allowed_keys}
 
@@ -207,9 +209,10 @@ async def get_process_user_request(db: AsyncSession) -> Callable:
 async def get_list_models(db: AsyncSession) -> Callable:
     provider = await get_active_provider(db)
     if provider == "openrouter":
-        from .openrouter_client import list_models
-    else:
-        from .ollama_client import list_models
+        cfg = await get_provider_config(db, "openrouter")
+        from .openrouter_client import make_list_models
+        return make_list_models(cfg)
+    from .ollama_client import list_models
     return list_models
 
 
@@ -242,6 +245,46 @@ def get_process_user_request_from_context() -> Callable:
     else:
         from .ollama_client import process_user_request
     return process_user_request
+
+
+def get_summarise_threshold() -> int:
+    """Return the char threshold above which a tool result is summarised.
+
+    Scales with the active model's context window: 10% of total context chars,
+    clamped to [10_000, 200_000].  Falls back to SUMMARISE_THRESHOLD_CHARS if
+    the model is not found in the configured model list (e.g. dynamic OR models).
+
+    The threshold is based on the main model's context (the Worker accumulates
+    results in that context), not the summarisation model.
+    """
+    from ..config import MODEL_LIST, OPENROUTER_MODEL_LIST
+    from .summarisation import SUMMARISE_THRESHOLD_CHARS
+
+    cfg = _provider_config_ctx.get({})
+    if not cfg:
+        return SUMMARISE_THRESHOLD_CHARS
+
+    provider = cfg.get("_provider", "ollama")
+    model_name = cfg.get("model", "")
+    model_list = OPENROUTER_MODEL_LIST if provider == "openrouter" else MODEL_LIST
+    entry = next((m for m in model_list if m["name"] == model_name), None)
+
+    if entry is None:
+        return SUMMARISE_THRESHOLD_CHARS
+
+    # contextLengthKB is in thousands of tokens; convert to chars at ~4 chars/token
+    context_chars = entry["contextLengthKB"] * 1024 * 4
+    return max(10_000, min(int(context_chars * 0.10), 200_000))
+
+
+def get_summarise_model() -> str:
+    """Return the configured summarisation model, falling back to the main model.
+
+    Used wherever summarisation calls need to resolve the correct model without
+    knowing whether a separate summarisation_model has been configured.
+    """
+    cfg = _provider_config_ctx.get({})
+    return cfg.get("summarisation_model") or cfg.get("model", "")
 
 
 def get_active_summarise_for_query() -> Callable:

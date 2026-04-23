@@ -58,7 +58,7 @@ const CommentModal = ({ isOpen, onClose, onSubmit, initialComment = '', rating =
                     </button>
                     <button
                         onClick={() => onSubmit(comment)}
-                        className="px-4 py-2 text-sm bg-legal-blue text-white rounded-md hover:bg-blue-700 transition-colors"
+                        className="px-4 py-2 text-sm bg-brand-navy text-white rounded-md hover:bg-brand-navy-dark transition-colors"
                     >
                         Submit Feedback
                     </button>

@@ -27,6 +27,7 @@ export const sendMessage = (messages, model, num_ctx, onUpdate, signal, deep_res
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
+            let capturedTiming = null;
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -40,8 +41,10 @@ export const sendMessage = (messages, model, num_ctx, onUpdate, signal, deep_res
                     if (line.startsWith('data: ')) {
                         try {
                             const data = JSON.parse(line.slice(6));
-                            if (data.type === 'result') {
-                                resolve(data.message);
+                            if (data.type === 'timing') {
+                                capturedTiming = data;
+                            } else if (data.type === 'result') {
+                                resolve({ ...data.message, timing: capturedTiming });
                             } else if (data.type === 'error') {
                                 reject(new Error(data.error));
                             } else {
@@ -132,8 +135,8 @@ export const getChatMessages = async (chatId) => {
     return response.data;
 };
 
-export const saveMessage = async (chatId, role, content, model = null, provider = null) => {
-    const response = await axios.post(`${API_URL}/chats/${chatId}/messages`, { role, content, model, provider });
+export const saveMessage = async (chatId, role, content, model = null, provider = null, cost_usd = null) => {
+    const response = await axios.post(`${API_URL}/chats/${chatId}/messages`, { role, content, model, provider, cost_usd });
     return response.data;
 };
 
@@ -182,8 +185,23 @@ export const getQueryPerformanceStats = async (days = 30) => {
     return response.data;
 };
 
+export const getCostStats = async (days = 30) => {
+    const response = await axios.get(`${API_URL}/stats/cost`, { params: { days } });
+    return response.data;
+};
+
 export const resetDatabase = async () => {
     const response = await axios.post(`${API_URL}/developer/reset`);
+    return response.data;
+};
+
+export const clearUsageData = async () => {
+    const response = await axios.post(`${API_URL}/developer/clear-usage`);
+    return response.data;
+};
+
+export const clearPerformanceData = async () => {
+    const response = await axios.post(`${API_URL}/developer/clear-performance`);
     return response.data;
 };
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData, getUsageStats, resetDatabase, getLatestHealthStatus, getHealthHistory, triggerHealthCheck, getQueryPerformanceStats, getProductFeedback, getProviderConfig, saveProviderConfig, setActiveProvider, getOpenRouterModels } from '../services/api';
+import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData, getUsageStats, resetDatabase, clearUsageData, clearPerformanceData, getLatestHealthStatus, getHealthHistory, triggerHealthCheck, getQueryPerformanceStats, getProductFeedback, getProviderConfig, saveProviderConfig, setActiveProvider, getOpenRouterModels, getCostStats } from '../services/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const Spinner = ({ size = 'md' }) => {
@@ -72,6 +72,8 @@ const PerformanceTab = ({ perfStats, perfTimeframe, setPerfTimeframe }) => {
                         onChange={(e) => setPerfTimeframe(e.target.value)}
                         className="p-2 border rounded-md text-sm dark:bg-zinc-700 dark:border-zinc-600 dark:text-white focus:ring-2 focus:ring-blue-500"
                     >
+                        <option value="1">Last 1 Day</option>
+                        <option value="3">Last 3 Days</option>
                         <option value="7">Last 7 Days</option>
                         <option value="30">Last 30 Days</option>
                         <option value="90">Last 90 Days</option>
@@ -306,6 +308,171 @@ const PerformanceTab = ({ perfStats, perfTimeframe, setPerfTimeframe }) => {
 
 
 // -----------------------------------------------------------------------
+// Cost Tab Component
+// -----------------------------------------------------------------------
+
+const fmtUsd = (v) => {
+    if (!v || v <= 0) return '$0.00';
+    if (v < 0.01) return '<$0.01';
+    return `$${v.toFixed(2)}`;
+};
+
+const COST_COLORS = {
+    spend: '#10b981',   // emerald
+    user: '#6366f1',    // indigo
+};
+
+const CostTab = ({ costStats, costTimeframe, setCostTimeframe }) => {
+    const { kpi, daily, perUser, priciest } = costStats;
+    const timeframeLabel = costTimeframe === 'all' ? 'All Time' : `Last ${costTimeframe} Days`;
+    const hasData = kpi.paidRequests > 0;
+
+    return (
+        <div className="space-y-6">
+            {/* HEADER WITH FILTER */}
+            <div className="flex justify-between items-center bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
+                <h2 className="text-lg font-bold dark:text-white">OpenRouter Spend</h2>
+                <div className="flex items-center space-x-2">
+                    <label className="text-sm text-gray-500 dark:text-gray-400 font-medium">Timeframe:</label>
+                    <select
+                        value={costTimeframe}
+                        onChange={(e) => setCostTimeframe(e.target.value)}
+                        className="p-2 border rounded-md text-sm dark:bg-zinc-700 dark:border-zinc-600 dark:text-white focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="1">Last 1 Day</option>
+                        <option value="3">Last 3 Days</option>
+                        <option value="7">Last 7 Days</option>
+                        <option value="30">Last 30 Days</option>
+                        <option value="90">Last 90 Days</option>
+                        <option value="all">All Time</option>
+                    </select>
+                </div>
+            </div>
+
+            {!hasData && (
+                <div className="bg-white dark:bg-zinc-800 p-8 rounded-lg shadow text-center text-gray-400 dark:text-gray-500 text-sm">
+                    No cost data for this period. Cost tracking is only recorded for OpenRouter queries.
+                </div>
+            )}
+
+            {hasData && (
+                <>
+                    {/* KPI CARDS */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
+                            <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Total Spend</h3>
+                            <p className="text-2xl font-bold text-emerald-600">{fmtUsd(kpi.totalCost)}</p>
+                            <p className="text-xs text-gray-400 mt-1">{timeframeLabel}</p>
+                        </div>
+                        <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
+                            <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Avg Cost / Query</h3>
+                            <p className="text-2xl font-bold text-emerald-600">{fmtUsd(kpi.avgCost)}</p>
+                            <p className="text-xs text-gray-400 mt-1">{kpi.paidRequests} paid queries</p>
+                        </div>
+                        <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
+                            <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Most Expensive Query</h3>
+                            <p className="text-2xl font-bold text-amber-600">{fmtUsd(kpi.maxCost)}</p>
+                            <p className="text-xs text-gray-400 mt-1">single request peak</p>
+                        </div>
+                        <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
+                            <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">OpenRouter Queries</h3>
+                            <p className="text-2xl font-bold dark:text-white">{kpi.paidRequests}</p>
+                            <p className="text-xs text-gray-400 mt-1">{timeframeLabel}</p>
+                        </div>
+                    </div>
+
+                    {/* CHARTS ROW */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Daily Spend */}
+                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+                            <h2 className="text-sm font-bold mb-4 dark:text-white">Daily Spend ({timeframeLabel})</h2>
+                            {daily.length > 0 ? (
+                                <div className="h-56">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={daily} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                            <XAxis dataKey="label" stroke="#9ca3af" tick={{ fontSize: 10 }} />
+                                            <YAxis stroke="#9ca3af" tick={{ fontSize: 10 }} tickFormatter={v => `$${v.toFixed(2)}`} />
+                                            <Tooltip
+                                                contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '11px' }}
+                                                formatter={(v) => [fmtUsd(v), 'Spend']}
+                                            />
+                                            <Line type="monotone" dataKey="dailyCost" name="Daily Spend" stroke={COST_COLORS.spend} strokeWidth={2} dot={false} />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            ) : (
+                                <div className="h-56 flex items-center justify-center text-gray-400 text-sm">No data for this period.</div>
+                            )}
+                        </div>
+
+                        {/* Cost by User */}
+                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+                            <h2 className="text-sm font-bold mb-4 dark:text-white">Top Users by Spend ({timeframeLabel})</h2>
+                            {perUser.length > 0 ? (
+                                <div className="h-56">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart
+                                            data={perUser}
+                                            layout="vertical"
+                                            margin={{ top: 4, right: 40, left: 0, bottom: 0 }}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
+                                            <XAxis type="number" stroke="#9ca3af" tick={{ fontSize: 10 }} tickFormatter={v => `$${v.toFixed(2)}`} />
+                                            <YAxis type="category" dataKey="username" stroke="#9ca3af" tick={{ fontSize: 10 }} width={72} />
+                                            <Tooltip
+                                                contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '11px' }}
+                                                formatter={(v, _name, props) => [
+                                                    `${fmtUsd(v)} (${props.payload.queryCount} queries)`,
+                                                    'Spend',
+                                                ]}
+                                            />
+                                            <Bar dataKey="totalCost" name="Total Spend" fill={COST_COLORS.user} radius={[0, 4, 4, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            ) : (
+                                <div className="h-56 flex items-center justify-center text-gray-400 text-sm">No data for this period.</div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* PRICIEST QUERIES TABLE */}
+                    <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+                        <h2 className="text-sm font-bold mb-4 dark:text-white">10 Most Expensive Queries ({timeframeLabel})</h2>
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full text-xs">
+                                <thead>
+                                    <tr>
+                                        {['Request ID', 'Timestamp', 'Cost', 'AI Calls', 'Total Duration'].map(label => (
+                                            <th key={label} className="px-3 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-left font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap">
+                                                {label}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {priciest.map((row) => (
+                                        <tr key={row.requestId} className="border-b border-zinc-100 dark:border-zinc-700">
+                                            <td className="px-3 py-3 font-mono dark:text-gray-300">{row.requestId}</td>
+                                            <td className="px-3 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(row.createdAt).toLocaleString()}</td>
+                                            <td className="px-3 py-3 font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">{fmtUsd(row.costUsd)}</td>
+                                            <td className="px-3 py-3 dark:text-gray-300">{row.llmCalls}</td>
+                                            <td className="px-3 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap">{fmtMs(row.totalMs)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+};
+
+
+// -----------------------------------------------------------------------
 // Provider Configuration Panel (Developer Tab)
 // -----------------------------------------------------------------------
 
@@ -375,12 +542,14 @@ const ModelCombobox = ({ value, onChange, models, loading, error }) => {
                     )}
                     {!error && filtered.map(m => (
                         <li
-                            key={m.name}
+                            key={m.name || '__blank__'}
                             tabIndex={-1}
                             onMouseDown={() => handleSelect(m.name)}
                             className={`flex items-center justify-between px-3 py-1.5 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 ${m.name === value ? 'bg-blue-50 dark:bg-blue-900/20 font-medium' : ''}`}
                         >
-                            <span className="text-gray-900 dark:text-white truncate">{m.name}</span>
+                            <span className={`truncate ${m.name ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500 italic'}`}>
+                                {m.name || '— Same as Active Model —'}
+                            </span>
                             {m.context_kb != null && (
                                 <span className="ml-3 flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">{m.context_kb}K ctx</span>
                             )}
@@ -576,7 +745,7 @@ const ProviderConfigPanel = () => {
                         </Field>
 
                         {/* Active Model */}
-                        <Field label="Active Model" hint="Model used for all new conversations">
+                        <Field label="Active Model" hint="Model used for Manager and Worker agents">
                             {selectedId === 'openrouter' ? (
                                 <ModelCombobox
                                     value={draft.model || ''}
@@ -591,6 +760,30 @@ const ProviderConfigPanel = () => {
                                     onChange={e => updateDraft(selectedId, 'model', e.target.value)}
                                     className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 >
+                                    {selectedProvider.model_list.map(m => (
+                                        <option key={m.name} value={m.name}>{m.name} ({m.context_kb}K ctx)</option>
+                                    ))}
+                                </select>
+                            )}
+                        </Field>
+
+                        {/* Summarisation Model */}
+                        <Field label="Summarisation Model" hint="Faster/cheaper model for document summarisation. Leave blank to use the Active Model.">
+                            {selectedId === 'openrouter' ? (
+                                <ModelCombobox
+                                    value={draft.summarisation_model || ''}
+                                    onChange={v => updateDraft(selectedId, 'summarisation_model', v)}
+                                    models={[{ name: '', context_kb: null }, ...orModels]}
+                                    loading={orModelsLoading}
+                                    error={orModelsError}
+                                />
+                            ) : (
+                                <select
+                                    value={draft.summarisation_model || ''}
+                                    onChange={e => updateDraft(selectedId, 'summarisation_model', e.target.value)}
+                                    className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="">— Same as Active Model —</option>
                                     {selectedProvider.model_list.map(m => (
                                         <option key={m.name} value={m.name}>{m.name} ({m.context_kb}K ctx)</option>
                                     ))}
@@ -637,7 +830,7 @@ const ProviderConfigPanel = () => {
                         <button
                             onClick={handleSaveConfig}
                             disabled={savingConfig}
-                            className="px-5 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            className="px-5 py-2 bg-brand-navy text-white rounded-md hover:bg-brand-navy-dark transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         >
                             {savingConfig && <Spinner size="sm" />}
                             {savingConfig ? 'Saving…' : 'Save Settings'}
@@ -695,6 +888,11 @@ const AdminPortal = ({ currentUser }) => {
     const [perfTimeframe, setPerfTimeframe] = useState('30');
     const [isPerfLoading, setIsPerfLoading] = useState(false);
 
+    // --- COST STATS STATE ---
+    const [costStats, setCostStats] = useState(null);
+    const [costTimeframe, setCostTimeframe] = useState('30');
+    const [isCostLoading, setIsCostLoading] = useState(false);
+
     // --- SERVICE HEALTH STATE ---
     const [healthStatus, setHealthStatus] = useState(null);
     const [isTriggeringHealth, setIsTriggeringHealth] = useState(false);
@@ -714,12 +912,14 @@ const AdminPortal = ({ currentUser }) => {
             fetchUsageStats(timeframe);
         } else if (activeTab === 'performance') {
             fetchPerfStats(perfTimeframe);
+        } else if (activeTab === 'cost') {
+            fetchCostStats(costTimeframe);
         } else if (activeTab === 'health') {
             fetchHealthStatus();
         } else if (activeTab === 'product-feedback') {
             fetchProductFeedback();
         }
-    }, [activeTab, timeframe, learningTimeframe, perfTimeframe]);
+    }, [activeTab, timeframe, learningTimeframe, perfTimeframe, costTimeframe]);
 
     const fetchProductFeedback = async () => {
         setIsProductFeedbackLoading(true);
@@ -876,6 +1076,18 @@ const AdminPortal = ({ currentUser }) => {
         }
     };
 
+    const fetchCostStats = async (days) => {
+        setIsCostLoading(true);
+        try {
+            const data = await getCostStats(days);
+            setCostStats(data);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsCostLoading(false);
+        }
+    };
+
     // ==========================================
     // SERVICE HEALTH LOGIC
     // ==========================================
@@ -954,6 +1166,15 @@ const AdminPortal = ({ currentUser }) => {
                             }`}
                     >
                         Performance
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('cost')}
+                        className={`flex-1 px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'cost'
+                            ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                            }`}
+                    >
+                        Cost
                     </button>
                     <button
                         onClick={() => setActiveTab('learning')}
@@ -1045,7 +1266,7 @@ const AdminPortal = ({ currentUser }) => {
                                 </select>
                                 <button
                                     type="submit"
-                                    className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded text-sm w-full"
+                                    className="bg-brand-navy hover:bg-brand-navy-dark text-white font-bold py-2 px-4 rounded text-sm w-full"
                                 >
                                     {editingUser ? 'Update User' : 'Create User'}
                                 </button>
@@ -1109,7 +1330,7 @@ const AdminPortal = ({ currentUser }) => {
                             <button
                                 onClick={handleTriggerHealthCheck}
                                 disabled={isTriggeringHealth}
-                                className={`bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 transition-colors ${isTriggeringHealth ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                className={`bg-brand-navy text-white px-4 py-2 rounded text-sm hover:bg-brand-navy-dark transition-colors ${isTriggeringHealth ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
                                 {isTriggeringHealth ? 'Checking...' : 'Run Health Check Now'}
                             </button>
@@ -1199,6 +1420,8 @@ const AdminPortal = ({ currentUser }) => {
                                     onChange={(e) => setTimeframe(e.target.value)}
                                     className="p-2 border rounded-md text-sm dark:bg-zinc-700 dark:border-zinc-600 dark:text-white focus:ring-2 focus:ring-blue-500"
                                 >
+                                    <option value="1">Last 1 Day</option>
+                                    <option value="3">Last 3 Days</option>
                                     <option value="7">Last 7 Days</option>
                                     <option value="30">Last 30 Days</option>
                                     <option value="90">Last 90 Days</option>
@@ -1324,6 +1547,25 @@ const AdminPortal = ({ currentUser }) => {
                     </div>
                 )}
 
+                {/* COST TAB */}
+                {activeTab === 'cost' && isCostLoading && (
+                    <div className="flex justify-center items-center h-64">
+                        <Spinner />
+                    </div>
+                )}
+                {activeTab === 'cost' && !isCostLoading && costStats && (
+                    <CostTab
+                        costStats={costStats}
+                        costTimeframe={costTimeframe}
+                        setCostTimeframe={setCostTimeframe}
+                    />
+                )}
+                {activeTab === 'cost' && !isCostLoading && !costStats && (
+                    <div className="flex justify-center items-center h-64 text-gray-500 text-sm">
+                        No cost data available yet.
+                    </div>
+                )}
+
                 {/* LEARNING DASHBOARD TAB */}
                 {activeTab === 'learning' && (
                     <div className="space-y-6">
@@ -1338,6 +1580,8 @@ const AdminPortal = ({ currentUser }) => {
                                         onChange={(e) => setLearningTimeframe(e.target.value)}
                                         className="p-2 border rounded-md text-sm dark:bg-zinc-700 dark:border-zinc-600 dark:text-white focus:ring-2 focus:ring-blue-500"
                                     >
+                                        <option value="1">Last 1 Day</option>
+                                        <option value="3">Last 3 Days</option>
                                         <option value="7">Last 7 Days</option>
                                         <option value="30">Last 30 Days</option>
                                         <option value="90">Last 90 Days</option>
@@ -1467,7 +1711,7 @@ const AdminPortal = ({ currentUser }) => {
                                 <button
                                     type="submit"
                                     disabled={isTestLoading}
-                                    className={`bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors text-sm flex items-center gap-2 ${isTestLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    className={`bg-brand-navy text-white px-6 py-3 rounded-lg hover:bg-brand-navy-dark transition-colors text-sm flex items-center gap-2 ${isTestLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 >
                                     {isTestLoading && <Spinner size="sm" />}
                                     {isTestLoading ? 'Testing...' : 'Test'}
@@ -1564,9 +1808,52 @@ const AdminPortal = ({ currentUser }) => {
 
                         <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow border border-red-200 dark:border-red-900">
                             <h2 className="text-lg font-bold mb-4 text-red-600 dark:text-red-400">Danger Zone</h2>
-                            <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-                                This action will delete all users (except 'admin'), all chats, and all messages.
-                                <strong> This action is irreversible.</strong>
+                            <p className="mb-2 text-sm text-gray-600 dark:text-gray-400">
+                                These actions permanently delete data and <strong>cannot be undone.</strong>
+                            </p>
+                            <div className="flex flex-wrap gap-3 mb-6">
+                                <button
+                                    onClick={async () => {
+                                        if (!window.confirm('This will delete all chats and messages. User accounts will be kept.\n\nAre you sure?')) return;
+                                        setIsLoading(true);
+                                        try {
+                                            const res = await clearUsageData();
+                                            setMessage(res.message);
+                                            fetchStats();
+                                        } catch (err) {
+                                            setMessage('Error clearing usage data: ' + err.message);
+                                        } finally {
+                                            setIsLoading(false);
+                                        }
+                                    }}
+                                    disabled={isLoading}
+                                    className={`bg-orange-600 text-white px-5 py-2.5 rounded-lg hover:bg-orange-700 transition-colors text-sm flex items-center gap-2 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                    {isLoading && <Spinner size="sm" />}
+                                    Clear All Usage Data
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        if (!window.confirm('This will delete all performance timing records.\n\nAre you sure?')) return;
+                                        setIsLoading(true);
+                                        try {
+                                            const res = await clearPerformanceData();
+                                            setMessage(res.message);
+                                        } catch (err) {
+                                            setMessage('Error clearing performance data: ' + err.message);
+                                        } finally {
+                                            setIsLoading(false);
+                                        }
+                                    }}
+                                    disabled={isLoading}
+                                    className={`bg-orange-600 text-white px-5 py-2.5 rounded-lg hover:bg-orange-700 transition-colors text-sm flex items-center gap-2 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                    {isLoading && <Spinner size="sm" />}
+                                    Clear All Performance Data
+                                </button>
+                            </div>
+                            <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">
+                                Full reset: deletes all users (except 'admin'), all chats, and all messages.
                             </p>
                             <button
                                 onClick={async () => {
@@ -1575,7 +1862,6 @@ const AdminPortal = ({ currentUser }) => {
                                     try {
                                         const res = await resetDatabase();
                                         setMessage(res.message);
-                                        // Refresh other tabs if needed
                                         fetchStats();
                                         fetchUsers();
                                     } catch (err) {

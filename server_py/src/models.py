@@ -68,6 +68,7 @@ class Message(Base):
     provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
     rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
     feedback_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     chat: Mapped["Chat"] = relationship(back_populates="messages")
@@ -93,6 +94,7 @@ class RequestTiming(Base):
     llm_ttft_first_ms: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     lex_api_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     lex_api_total_ms: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    total_cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (

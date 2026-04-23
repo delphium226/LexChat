@@ -8,8 +8,9 @@ from .provider_factory import (
     call_chunk,
     get_active_chat_loop,
     get_active_summarise_for_query,
+    get_summarise_model,
+    get_summarise_threshold,
 )
-from .summarisation import SUMMARISE_THRESHOLD_CHARS
 from .tools import WORKER_TOOLS, execute_worker_tool
 from .web_search import search_web
 
@@ -88,7 +89,7 @@ async def chat_with_deep_research(
         result = await _execute_deep_research_tool(name, args)
 
         # Summarise large results — same threshold/pipeline as the Worker agent
-        if len(result) > SUMMARISE_THRESHOLD_CHARS:
+        if len(result) > get_summarise_threshold():
             logger.info(
                 f"[Deep Research] Result from '{name}' is {len(result)} chars — summarising"
             )
@@ -117,7 +118,7 @@ async def chat_with_deep_research(
             result = await summarise_for_query(
                 result,
                 user_query,
-                model,
+                get_summarise_model(),
                 on_progress=_emit_progress,
                 timing_collector=timing_collector,
                 doc_name=doc_name,

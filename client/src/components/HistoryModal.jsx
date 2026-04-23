@@ -62,7 +62,7 @@ const HistoryModal = ({ onClose, onSelectChat }) => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-white dark:bg-gray-800 rounded-lg overflow-hidden relative">
+        <div className="flex flex-col h-full w-full bg-white dark:bg-gray-800 rounded-lg overflow-hidden relative">
             <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white">Chat History</h2>
                 <button
@@ -87,9 +87,10 @@ const HistoryModal = ({ onClose, onSelectChat }) => {
                             <div
                                 key={chat.id}
                                 onClick={() => onSelectChat(chat.id, chat.model)}
-                                className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors group"
+                                title={chat.title}
+                                className="relative flex items-center p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors group w-full"
                             >
-                                <div className="flex-1 min-w-0 mr-4">
+                                <div className="flex-1 min-w-0 pr-2">
                                     {editingId === chat.id ? (
                                         <input
                                             type="text"
@@ -103,7 +104,7 @@ const HistoryModal = ({ onClose, onSelectChat }) => {
                                         />
                                     ) : (
                                         <div>
-                                            <div className="font-medium text-gray-900 dark:text-white truncate max-w-[400px]" title={chat.title}>
+                                            <div className="font-medium text-gray-900 dark:text-white truncate">
                                                 {chat.title}
                                             </div>
                                             <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -113,7 +114,7 @@ const HistoryModal = ({ onClose, onSelectChat }) => {
                                     )}
                                 </div>
 
-                                <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center opacity-0 group-hover:opacity-100 transition-opacity bg-gray-50 dark:bg-gray-700 rounded pl-1">
                                     <button
                                         onClick={(e) => startEditing(e, chat)}
                                         className="p-1 mr-1 text-gray-400 hover:text-blue-500 transition-colors"

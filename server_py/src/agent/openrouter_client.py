@@ -16,12 +16,11 @@ from ..config import (
 )
 from .learning import format_learning_context, get_relevant_examples
 from .summarisation import (
-    SUMMARISE_THRESHOLD_CHARS,
     call_chunk,
     summarise_prompt,
-    summarise_for_query,
 )
-from .tools import MANAGER_TOOLS, WORKER_TOOLS, execute_worker_tool, extract_legislation_ids_from_search
+from .tools import MANAGER_TOOLS, WORKER_TOOLS
+from .agent_shared import run_worker_tool
 
 logger = logging.getLogger("agent")
 
@@ -216,6 +215,9 @@ async def chat_loop(
         ttft_ms = ((first_content_time or t_done) - t_send) * 1000
         total_stream_ms = (t_done - t_send) * 1000
         timing_collector.record_llm_call(ttft_ms, total_stream_ms)
+        cost = (usage_stats.get("cost") or 0) if usage_stats else 0
+        if cost:
+            timing_collector.record_cost(float(cost))
 
     # Convert accumulated tool calls to a list in index order
     tool_calls = [tool_calls_map[i] for i in sorted(tool_calls_map.keys())]
@@ -333,14 +335,18 @@ async def _summarise_chunk(text: str, query: str, model: str, timing_collector=N
                 )
                 elapsed_ms = (time.perf_counter() - t_send) * 1000
                 resp.raise_for_status()
+                resp_json = resp.json()
                 content = (
-                    resp.json()
+                    resp_json
                     .get("choices", [{}])[0]
                     .get("message", {})
                     .get("content")
                 )
                 if timing_collector:
                     timing_collector.record_llm_call(elapsed_ms, elapsed_ms)
+                    cost = (resp_json.get("usage") or {}).get("cost") or 0
+                    if cost:
+                        timing_collector.record_cost(float(cost))
                 return content if content else None
     except Exception as e:
         logger.warning(f"[OpenRouter Summarise] Chunk failed ({type(e).__name__}: {e!r})")
@@ -363,76 +369,19 @@ async def run_worker_agent(
 ) -> dict:
     logger.info(f"[OpenRouter Worker] Starting research on: {query}")
 
+    summarise_model = _get_cfg().get("summarisation_model") or model
+
     messages = [
         {"role": "system", "content": WORKER_SYSTEM_PROMPT},
         {"role": "user", "content": query},
     ]
 
     async def worker_tool_executor(name: str, args: dict) -> str:
-        if parent_on_chunk:
-            await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}"})
-
-        result = await execute_worker_tool(
-            name, args, on_chunk=parent_on_chunk, timing_collector=timing_collector
+        return await run_worker_tool(
+            name, args, query, _summarise_chunk, summarise_model,
+            parent_on_chunk=parent_on_chunk,
+            timing_collector=timing_collector,
         )
-
-        # For search_legislation: capture legislation_ids from the raw response
-        # before any summarisation strips them, so we can inject a Phase 2
-        # instruction into the final result the model actually sees.
-        phase2_note = ""
-        if name == "search_legislation":
-            try:
-                raw_data = json.loads(result)
-                id_pairs = extract_legislation_ids_from_search(raw_data)
-                if id_pairs:
-                    id_lines = "\n".join(
-                        f'  - legislation_id: "{lid}"  ({title})'
-                        for lid, title in id_pairs[:5]
-                    )
-                    phase2_note = (
-                        f"\n\n[NEXT STEP: Call search_legislation_sections with the relevant "
-                        f"legislation_id(s) below to retrieve the actual legal text before "
-                        f"composing your answer:\n{id_lines}]"
-                    )
-            except Exception:
-                phase2_note = (
-                    "\n\n[NEXT STEP: Call search_legislation_sections with the legislation_id "
-                    "from this result to retrieve the actual legal text.]"
-                )
-
-        if len(result) > SUMMARISE_THRESHOLD_CHARS:
-            logger.info(f"[OpenRouter Worker] Result from '{name}' is {len(result)} chars — summarising")
-
-            doc_name = name
-            try:
-                result_data = json.loads(result)
-                doc_name = (
-                    result_data.get("title")
-                    or result_data.get("name")
-                    or args.get("legislation_id")
-                    or name
-                )
-            except Exception:
-                doc_name = args.get("legislation_id") or name
-
-            if parent_on_chunk:
-                await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": "Extracting the relevant sections from a large document"})
-
-            async def _emit_progress(msg: str) -> None:
-                if parent_on_chunk:
-                    await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": msg})
-
-            result = await summarise_for_query(result, query, model, chunk_fn=_summarise_chunk, on_progress=_emit_progress, timing_collector=timing_collector, doc_name=doc_name)
-            if parent_on_chunk:
-                await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": "Extracting the relevant sections from a large document", "result": "Done"})
-
-        # Append Phase 2 instruction after summarisation (so it is not discarded
-        # by the summariser and is visible in the message the model receives).
-        result += phase2_note
-
-        if parent_on_chunk:
-            await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "result": "Done"})
-        return result
 
     return await chat_loop(
         messages, model, cancel_event, num_ctx,
@@ -509,10 +458,54 @@ async def process_user_request(
 # Model Listing
 # -----------------------------------------------------------------------
 
-async def list_models() -> list:
-    return [
-        {"name": m["name"], "context_length": m["contextLengthKB"] * 1024, "provider": "openrouter"}
-        for m in OPENROUTER_MODEL_LIST
-    ]
+_model_list_cache: dict = {}
+_MODEL_LIST_CACHE_TTL = 300  # seconds
+
+
+def make_list_models(cfg: dict):
+    """Return a list_models() coroutine bound to the given provider config."""
+    async def list_models() -> list:
+        base_url = (cfg.get("base_url") or settings.openrouter_base_url).rstrip("/")
+        api_key = cfg.get("api_key") or settings.openrouter_api_key
+
+        cache_key = (base_url, api_key)
+        now = time.time()
+        cached = _model_list_cache.get(cache_key)
+        if cached and now - cached[0] < _MODEL_LIST_CACHE_TTL:
+            return cached[1]
+
+        if api_key:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        f"{base_url}/models",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                result = sorted(
+                    [
+                        {
+                            "name": m["id"],
+                            "context_length": m.get("context_length") or 128000,
+                            "provider": "openrouter",
+                        }
+                        for m in data.get("data", [])
+                        if m.get("id")
+                    ],
+                    key=lambda m: m["name"],
+                )
+                _model_list_cache[cache_key] = (now, result)
+                return result
+            except Exception:
+                pass  # fall through to static list
+
+        static = [
+            {"name": m["name"], "context_length": m["contextLengthKB"] * 1024, "provider": "openrouter"}
+            for m in OPENROUTER_MODEL_LIST
+        ]
+        return static
+
+    return list_models
 
 

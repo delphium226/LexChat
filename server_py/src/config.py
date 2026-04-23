@@ -109,9 +109,10 @@ MODEL_LIST = [
 ]
 
 OPENROUTER_MODEL_LIST = [
-    {"name": "anthropic/claude-sonnet-4-5", "contextLengthKB": 200},
-    {"name": "anthropic/claude-opus-4-5", "contextLengthKB": 200},
+    {"name": "anthropic/claude-sonnet-4-6", "contextLengthKB": 200},
+    {"name": "anthropic/claude-opus-4-7", "contextLengthKB": 200},
     {"name": "google/gemini-2.5-pro", "contextLengthKB": 1000},
+    {"name": "google/gemini-2.0-flash", "contextLengthKB": 1000},
     {"name": "openai/gpt-4o", "contextLengthKB": 128},
     {"name": "mistralai/mistral-large-2411", "contextLengthKB": 128},
     {"name": "deepseek/deepseek-r1", "contextLengthKB": 128},

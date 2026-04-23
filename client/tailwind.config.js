@@ -12,6 +12,8 @@ export default {
             colors: {
                 'legal-blue': '#1e3a8a',
                 'legal-gold': '#c2a355',
+                'brand-navy': 'rgb(0, 60, 130)',
+                'brand-navy-dark': 'rgb(0, 45, 105)',
             }
         },
     },

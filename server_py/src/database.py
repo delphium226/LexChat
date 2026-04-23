@@ -44,6 +44,8 @@ async def init_db() -> None:
             "ALTER TABLE chats ADD COLUMN IF NOT EXISTS provider VARCHAR(50)",
             "ALTER TABLE messages ADD COLUMN IF NOT EXISTS model VARCHAR(255)",
             "ALTER TABLE messages ADD COLUMN IF NOT EXISTS provider VARCHAR(50)",
+            "ALTER TABLE messages ADD COLUMN IF NOT EXISTS cost_usd FLOAT",
+            "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS total_cost_usd FLOAT NOT NULL DEFAULT 0.0",
         ]
         async with engine.begin() as conn:
             for stmt in migration_statements:

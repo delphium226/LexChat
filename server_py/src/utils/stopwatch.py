@@ -15,6 +15,7 @@ class TimingCollector:
         self.lex_api_calls: int = 0
         self.lex_api_total_ms: float = 0.0
         self.total_ms: float = 0.0
+        self.total_cost_usd: float = 0.0
 
     def record_queue_wait(self, ms: float) -> None:
         self.queue_wait_ms = ms
@@ -35,6 +36,9 @@ class TimingCollector:
     def record_total(self, ms: float) -> None:
         self.total_ms = ms
 
+    def record_cost(self, usd: float) -> None:
+        self.total_cost_usd += usd
+
     def to_dict(self) -> dict:
         return {
             "request_id": self.request_id,
@@ -46,4 +50,5 @@ class TimingCollector:
             "llm_ttft_first_ms": round(self.llm_ttft_first_ms),
             "lex_api_calls": self.lex_api_calls,
             "lex_api_total_ms": round(self.lex_api_total_ms),
+            "total_cost_usd": self.total_cost_usd,
         }

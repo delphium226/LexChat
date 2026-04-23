@@ -19,7 +19,7 @@ from ..agent.provider_factory import (
 )
 from ..config import MODEL_LIST, settings
 from ..database import get_db
-from ..models import Chat, Message, User
+from ..models import Chat, Message, RequestTiming, User
 
 logger = logging.getLogger("app")
 
@@ -294,4 +294,31 @@ async def reset_database(db: AsyncSession = Depends(get_db)):
     return {
         "success": True,
         "message": "Database reset successfully. Only admin user remains.",
+    }
+
+
+@router.post("/clear-usage")
+async def clear_usage_data(db: AsyncSession = Depends(get_db)):
+    """Delete all chats and messages, keeping all user accounts."""
+    await db.execute(delete(Message))
+    await db.execute(delete(Chat))
+    await db.commit()
+
+    logger.warning("[Developer] Usage data cleared: all chats and messages deleted")
+    return {
+        "success": True,
+        "message": "Usage data cleared. All chats and messages have been deleted.",
+    }
+
+
+@router.post("/clear-performance")
+async def clear_performance_data(db: AsyncSession = Depends(get_db)):
+    """Delete all request timing records."""
+    await db.execute(delete(RequestTiming))
+    await db.commit()
+
+    logger.warning("[Developer] Performance data cleared: all request_timings deleted")
+    return {
+        "success": True,
+        "message": "Performance data cleared. All timing records have been deleted.",
     }

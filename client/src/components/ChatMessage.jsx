@@ -7,6 +7,12 @@ import { rateMessage } from '../services/api';
 
 import CommentModal from './CommentModal';
 
+const formatCost = (usd) => {
+    if (!usd || usd <= 0) return null;
+    if (usd < 0.01) return '<$0.01';
+    return `$${usd.toFixed(2)}`;
+};
+
 const ChatMessage = ({ message, onResend, showThinking }) => {
     const isUser = message.role === 'user';
     const isTool = message.role === 'tool';
@@ -143,6 +149,11 @@ const ChatMessage = ({ message, onResend, showThinking }) => {
                                     {message.responseTimeMs >= 60000
                                         ? `${Math.floor(message.responseTimeMs / 60000)}m ${Math.round((message.responseTimeMs % 60000) / 1000)}s`
                                         : `${(message.responseTimeMs / 1000).toFixed(1)}s`}
+                                </span>
+                            )}
+                            {formatCost(message.costUsd ?? message.cost_usd) && (
+                                <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums" title="Estimated OpenRouter cost">
+                                    {formatCost(message.costUsd ?? message.cost_usd)}
                                 </span>
                             )}
                             <button

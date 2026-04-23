@@ -40,7 +40,7 @@ const FeedbackModal = ({ onClose }) => {
           <div className="text-center py-6">
             <p className="text-green-600 dark:text-green-400 font-medium text-lg mb-2">Thank you for your feedback!</p>
             <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">Your response has been recorded and will be reviewed by the team.</p>
-            <button onClick={onClose} className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium">Close</button>
+            <button onClick={onClose} className="px-6 py-2 bg-brand-navy text-white rounded-md hover:bg-brand-navy-dark transition-colors text-sm font-medium">Close</button>
           </div>
         ) : (
           <>
@@ -64,7 +64,7 @@ const FeedbackModal = ({ onClose }) => {
               <button
                 onClick={handleSubmit}
                 disabled={!text.trim() || status === 'submitting'}
-                className="px-5 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-5 py-2 bg-brand-navy text-white rounded-md hover:bg-brand-navy-dark transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {status === 'submitting' ? 'Submitting…' : 'Submit Feedback'}
               </button>
@@ -275,7 +275,7 @@ function AppContent() {
       // 1. Create chat if doesn't exist
       if (!activeChatId) {
         try {
-          const title = contentToSend.slice(0, 30) + (contentToSend.length > 30 ? '...' : '');
+          const title = contentToSend.slice(0, 80) + (contentToSend.length > 80 ? '...' : '');
           const newChat = await createChat(title, selectedModel, activeProvider);
           activeChatId = newChat.id;
           setCurrentChatId(activeChatId);
@@ -346,7 +346,7 @@ function AppContent() {
         setContextUsage(response.stats);
       }
 
-      const responseWithTiming = { ...response, responseTimeMs: Date.now() - requestStartTime };
+      const responseWithTiming = { ...response, responseTimeMs: Date.now() - requestStartTime, costUsd: response.timing?.total_cost_usd || null };
       setMessages(prev => {
         const updated = [...prev];
         const lastMsg = updated[updated.length - 1];
@@ -362,14 +362,14 @@ function AppContent() {
       // 3. Persist Assistant Message
       if (activeChatId) {
         try {
-          const savedMsg = await saveMessage(activeChatId, 'assistant', response.content, response.model, response.provider);
+          const savedMsg = await saveMessage(activeChatId, 'assistant', response.content, response.model, response.provider, response.timing?.total_cost_usd ?? null);
           // Update state with the saved message (which has ID) to enable ratings
           setMessages(prev => {
             const updated = [...prev];
             // Find the last assistant message and replace it
             for (let i = updated.length - 1; i >= 0; i--) {
               if (updated[i].role === 'assistant' && !updated[i].id) {
-                updated[i] = { ...savedMsg, responseTimeMs: updated[i].responseTimeMs };
+                updated[i] = { ...savedMsg, responseTimeMs: updated[i].responseTimeMs, costUsd: updated[i].costUsd };
                 break;
               }
             }
@@ -502,7 +502,7 @@ function AppContent() {
           }
         `}
       >
-        <div className="flex items-center justify-center gap-1.5 mb-2">
+        <div className="flex items-center justify-center gap-0 mt-[1.125rem] mb-2">
           <img src="/favicon.png" alt="LexChat" className="w-10 h-10" />
           <h1 className="text-3xl font-bold text-blue-600 tracking-tight">LexChat</h1>
         </div>
@@ -511,21 +511,21 @@ function AppContent() {
 
         <button
           onClick={() => { handleNewChat(); }}
-          className="w-full text-center p-2 rounded-md mb-2 hover:bg-blue-700 transition-colors font-medium bg-blue-600 text-white text-lg"
+          className="w-full text-center p-2 rounded-md mb-2 hover:bg-brand-navy-dark transition-colors font-medium bg-brand-navy text-white text-lg"
         >
           New chat
         </button>
 
         <button
           onClick={() => setShowHistoryModal(true)}
-          className="w-full text-center p-2 rounded-md mb-2 hover:bg-blue-700 transition-colors font-medium bg-blue-600 text-white text-lg"
+          className="w-full text-center p-2 rounded-md mb-2 hover:bg-brand-navy-dark transition-colors font-medium bg-brand-navy text-white text-lg"
         >
           History
         </button>
 
         <button
           onClick={() => setShowFeedbackModal(true)}
-          className="w-full text-center p-2 rounded-md mb-6 hover:bg-blue-700 transition-colors font-medium bg-blue-600 text-white text-lg"
+          className="w-full text-center p-2 rounded-md mb-6 hover:bg-brand-navy-dark transition-colors font-medium bg-brand-navy text-white text-lg"
         >
           Give feedback
         </button>
@@ -586,7 +586,7 @@ function AppContent() {
           onClick={() => setIsSidebarOpen(!isSidebarOpen)
           }
           style={{ left: isSidebarOpen ? 'calc(16rem - 15.5px)' : '15.5px' }}
-          className="fixed top-[47px] z-40 p-[7px] bg-gray-200 dark:bg-gray-700 dark:text-white rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-[left] duration-300 shadow-sm"
+          className="fixed top-2 z-40 p-[7px] bg-gray-200 dark:bg-gray-700 dark:text-white rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-[left] duration-300 shadow-sm"
           title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
         >
           {
@@ -661,7 +661,7 @@ function AppContent() {
               <button
                 type="submit"
                 disabled={!input.trim()}
-                className="bg-legal-blue text-white px-6 py-3 rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-colors"
+                className="bg-brand-navy text-white px-6 py-3 rounded-lg hover:bg-brand-navy-dark disabled:opacity-50 transition-colors"
               >
                 Send
               </button>
@@ -682,6 +682,10 @@ function AppContent() {
         showAbout && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full shadow-xl">
+              <div className="flex items-center justify-center gap-0 mb-2">
+                <img src="/favicon.png" alt="LexChat" className="w-10 h-10" />
+                <h1 className="text-3xl font-bold text-blue-600 tracking-tight">LexChat</h1>
+              </div>
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold text-legal-blue dark:text-legal-gold">About LexChat</h2>
                 <button
@@ -725,7 +729,7 @@ function AppContent() {
               <div className="mt-6 flex justify-end">
                 <button
                   onClick={() => setShowAbout(false)}
-                  className="bg-legal-blue text-white px-4 py-2 rounded-md hover:bg-blue-800 transition-colors"
+                  className="bg-brand-navy text-white px-4 py-2 rounded-md hover:bg-brand-navy-dark transition-colors"
                 >
                   Close
                 </button>
@@ -777,7 +781,7 @@ function AppContent() {
       {
         showHistoryModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full h-[80vh] shadow-xl relative overflow-hidden">
+            <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full h-[80vh] shadow-xl relative overflow-hidden">
               <HistoryModal
                 onClose={() => setShowHistoryModal(false)}
                 onSelectChat={loadChat}

@@ -31,7 +31,11 @@ const LoginModal = () => {
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white dark:bg-zinc-800 p-8 rounded-lg shadow-xl w-96">
-                <h2 className="text-2xl font-bold mb-6 text-zinc-900 dark:text-white">
+                <div className="flex items-center justify-center gap-0 mb-6">
+                    <img src="/favicon.png" alt="LexChat" className="w-10 h-10" />
+                    <h1 className="text-3xl font-bold text-blue-600 tracking-tight">LexChat</h1>
+                </div>
+                <h2 className="text-2xl font-bold mb-6 text-zinc-900 dark:text-white text-center">
                     {isForgotPassword ? 'Reset Password' : 'Login'}
                 </h2>
 
@@ -103,7 +107,7 @@ const LoginModal = () => {
                         )}
                         <button
                             type="submit"
-                            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full ml-2"
+                            className="bg-brand-navy hover:bg-brand-navy-dark text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full ml-2"
                         >
                             {isForgotPassword ? 'Send Reset email' : 'Sign In'}
                         </button>

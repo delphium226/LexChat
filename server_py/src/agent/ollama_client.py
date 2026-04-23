@@ -14,12 +14,11 @@ from ..config import (
 )
 from .learning import format_learning_context, get_relevant_examples
 from .summarisation import (
-    SUMMARISE_THRESHOLD_CHARS,
     call_chunk,
     summarise_prompt,
-    summarise_for_query,
 )
-from .tools import MANAGER_TOOLS, WORKER_TOOLS, execute_worker_tool, extract_legislation_ids_from_search
+from .tools import MANAGER_TOOLS, WORKER_TOOLS
+from .agent_shared import run_worker_tool
 
 logger = logging.getLogger("agent")
 
@@ -327,80 +326,19 @@ async def run_worker_agent(
     """Run the Worker agent with a fresh context for legal research."""
     logger.info(f"[Worker] Starting research on: {query}")
 
+    summarise_model = _get_cfg().get("summarisation_model") or model
+
     messages = [
         {"role": "system", "content": WORKER_SYSTEM_PROMPT},
         {"role": "user", "content": query},
     ]
 
     async def worker_tool_executor(name: str, args: dict) -> str:
-        if parent_on_chunk:
-            await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}"})
-
-        result = await execute_worker_tool(
-            name, args, on_chunk=parent_on_chunk, timing_collector=timing_collector
+        return await run_worker_tool(
+            name, args, query, _summarise_chunk, summarise_model,
+            parent_on_chunk=parent_on_chunk,
+            timing_collector=timing_collector,
         )
-
-        # For search_legislation: capture legislation_ids from the raw response
-        # before any summarisation strips them, so we can inject a Phase 2
-        # instruction into the final result the model actually sees.
-        phase2_note = ""
-        if name == "search_legislation":
-            try:
-                raw_data = json.loads(result)
-                id_pairs = extract_legislation_ids_from_search(raw_data)
-                if id_pairs:
-                    id_lines = "\n".join(
-                        f'  - legislation_id: "{lid}"  ({title})'
-                        for lid, title in id_pairs[:5]
-                    )
-                    phase2_note = (
-                        f"\n\n[NEXT STEP: Call search_legislation_sections with the relevant "
-                        f"legislation_id(s) below to retrieve the actual legal text before "
-                        f"composing your answer:\n{id_lines}]"
-                    )
-            except Exception:
-                phase2_note = (
-                    "\n\n[NEXT STEP: Call search_legislation_sections with the legislation_id "
-                    "from this result to retrieve the actual legal text.]"
-                )
-
-        if len(result) > SUMMARISE_THRESHOLD_CHARS:
-            logger.info(
-                f"[Worker] Result from '{name}' is {len(result)} chars — summarising for query focus"
-            )
-
-            # Extract a human-readable document title from the result JSON
-            doc_name = name
-            try:
-                result_data = json.loads(result)
-                doc_name = (
-                    result_data.get("title")
-                    or result_data.get("name")
-                    or args.get("legislation_id")
-                    or name
-                )
-            except Exception:
-                doc_name = args.get("legislation_id") or name
-
-            if parent_on_chunk:
-                await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": "Extracting the relevant sections from a large document"})
-
-            async def _emit_progress(msg: str) -> None:
-                if parent_on_chunk:
-                    await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": msg})
-
-            result = await summarise_for_query(result, query, model, chunk_fn=_summarise_chunk, on_progress=_emit_progress, timing_collector=timing_collector, doc_name=doc_name)
-            logger.info(f"[Worker] Summarised to {len(result)} chars")
-            if parent_on_chunk:
-                await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": "Extracting the relevant sections from a large document", "result": "Done"})
-
-        # Append Phase 2 instruction after summarisation (so it is not discarded
-        # by the summariser and is visible in the message the model receives).
-        result += phase2_note
-
-        if parent_on_chunk:
-            await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "result": "Done"})
-        return result
 
     return await chat_loop(
         messages, model, cancel_event, num_ctx,

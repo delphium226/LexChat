@@ -8,6 +8,10 @@ from ..dependencies import get_admin_user
 router = APIRouter(prefix="/api/stats", tags=["Statistics"])
 
 
+def _round_ms(val):
+    return round(float(val)) if val is not None else 0
+
+
 def _build_date_filter(days: str, table_alias: str = "") -> str:
     """Return a WHERE clause string for the given days parameter."""
     col = f"{table_alias}.created_at" if table_alias else "created_at"
@@ -164,9 +168,6 @@ async def get_performance_stats(
         LIMIT 10
     """))
 
-    def _round_ms(val):
-        return round(float(val)) if val is not None else 0
-
     return {
         "kpi": {
             "totalRequests": int(kpi_row["total_requests"]),
@@ -207,5 +208,117 @@ async def get_performance_stats(
                 "createdAt": row["created_at"].isoformat(),
             }
             for row in slowest_result.mappings()
+        ],
+    }
+
+
+@router.get("/cost")
+async def get_cost_stats(
+    days: str = "30",
+    admin: dict = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return OpenRouter cost statistics derived from request_timings and messages."""
+    date_filter = _build_date_filter(days)
+
+    # Build a date filter for the messages join (uses table alias)
+    if days == "all":
+        msg_date_filter = ""
+    else:
+        days_num = int(days) if days.isdigit() else 30
+        msg_date_filter = f"AND m.created_at > NOW() - INTERVAL '{days_num} days'"
+
+    # --- KPI ---
+    kpi_result = await db.execute(text(f"""
+        SELECT
+            COUNT(*) FILTER (WHERE total_cost_usd > 0)              AS paid_requests,
+            COALESCE(SUM(total_cost_usd), 0)                        AS total_cost,
+            COALESCE(AVG(total_cost_usd) FILTER
+                     (WHERE total_cost_usd > 0), 0)                 AS avg_cost,
+            COALESCE(MAX(total_cost_usd), 0)                        AS max_cost
+        FROM request_timings
+        {date_filter}
+    """))
+    kpi_row = kpi_result.mappings().first()
+
+    # --- Daily spend ---
+    daily_result = await db.execute(text(f"""
+        SELECT
+            DATE(created_at)                                        AS date,
+            COALESCE(SUM(total_cost_usd), 0)                        AS daily_cost,
+            COUNT(*) FILTER (WHERE total_cost_usd > 0)              AS paid_count
+        FROM request_timings
+        {date_filter}
+        GROUP BY DATE(created_at)
+        ORDER BY DATE(created_at) ASC
+    """))
+
+    # --- Cost by user (from messages, assistant only) ---
+    per_user_result = await db.execute(text(f"""
+        SELECT
+            u.username,
+            COALESCE(SUM(m.cost_usd), 0)   AS total_cost,
+            COUNT(m.id)                     AS query_count
+        FROM messages m
+        JOIN chats c ON m.chat_id = c.id
+        JOIN users u ON c.user_id = u.id
+        WHERE m.role = 'assistant' AND m.cost_usd > 0
+        {msg_date_filter}
+        GROUP BY u.username
+        ORDER BY total_cost DESC
+        LIMIT 10
+    """))
+
+    # --- Most expensive individual requests ---
+    priciest_result = await db.execute(text(f"""
+        SELECT
+            request_id,
+            ROUND(total_cost_usd::numeric, 6)   AS cost_usd,
+            ROUND(total_ms::numeric, 0)          AS total_ms,
+            llm_calls,
+            created_at
+        FROM request_timings
+        WHERE total_cost_usd > 0
+        {('AND' + date_filter.replace('WHERE', '')) if date_filter else ''}
+        ORDER BY total_cost_usd DESC
+        LIMIT 10
+    """))
+
+    def _usd(v):
+        return round(float(v), 6) if v is not None else 0.0
+
+    return {
+        "kpi": {
+            "paidRequests": int(kpi_row["paid_requests"]),
+            "totalCost": _usd(kpi_row["total_cost"]),
+            "avgCost": _usd(kpi_row["avg_cost"]),
+            "maxCost": _usd(kpi_row["max_cost"]),
+        },
+        "daily": [
+            {
+                "date": row["date"].isoformat(),
+                "dailyCost": _usd(row["daily_cost"]),
+                "paidCount": int(row["paid_count"]),
+                "label": f"{row['date'].day} {row['date'].strftime('%b')}",
+            }
+            for row in daily_result.mappings()
+        ],
+        "perUser": [
+            {
+                "username": row["username"],
+                "totalCost": _usd(row["total_cost"]),
+                "queryCount": int(row["query_count"]),
+            }
+            for row in per_user_result.mappings()
+        ],
+        "priciest": [
+            {
+                "requestId": row["request_id"],
+                "costUsd": _usd(row["cost_usd"]),
+                "totalMs": _round_ms(row["total_ms"]),
+                "llmCalls": int(row["llm_calls"]),
+                "createdAt": row["created_at"].isoformat(),
+            }
+            for row in priciest_result.mappings()
         ],
     }
