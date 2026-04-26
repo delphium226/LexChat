@@ -156,7 +156,7 @@ If you cannot use the automated scripts:
 
 2.  **LLM Provider**:
     *   Default provider is **Ollama** using `mistral-large-3:675b-cloud` (cloud-routed).
-    *   **OpenRouter** is also supported as an alternative provider. Requires `OPENROUTER_API_KEY` in `.env.native` and internet access (not available on air-gapped deployments).
+    *   **OpenRouter** is also supported as an alternative provider. Requires `OPENROUTER_API_KEY` in `.env.native` and outbound internet access to `openrouter.ai` (not available on fully air-gapped deployments).
     *   The active provider and all per-provider settings (model, temperature, concurrency limits, base URL, API key) are configurable at runtime via **Admin Portal → Developer tab** — no restart required.
 
 3.  **Configuration**:

@@ -1,15 +1,96 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --ink-950: #0b1220;
+  --ink-900: #111a2e;
+  --ink-800: #1a2540;
+  --ink-700: #2a3657;
+  --ink-600: #465277;
+  --ink-500: #6b7699;
+  --ink-400: #95a0bd;
+  --ink-300: #c3cbdd;
+  --ink-200: #e2e6ef;
+  --ink-100: #eef1f7;
+  --ink-50:  #f6f7fa;
+  --ink-25:  #fbfbfd;
+  --paper: #ffffff;
+
+  --accent:       oklch(0.50 0.10 240);
+  --accent-hover: oklch(0.44 0.11 240);
+  --accent-soft:  oklch(0.96 0.02 240);
+  --accent-ink:   oklch(0.28 0.08 255);
+
+  --cite:      oklch(0.55 0.12 200);
+  --cite-soft: oklch(0.96 0.03 200);
+  --success:   oklch(0.62 0.12 155);
+  --warn:      oklch(0.68 0.13 65);
+  --danger:    oklch(0.58 0.18 25);
+
+  --font-ui:    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-serif: 'Source Serif 4', Georgia, serif;
+  --font-mono:  'JetBrains Mono', ui-monospace, monospace;
+
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+
+  --shadow-sm: 0 1px 2px rgba(11,18,32,0.05);
+  --shadow-md: 0 4px 12px rgba(11,18,32,0.06), 0 1px 3px rgba(11,18,32,0.04);
+}
+
+* { box-sizing: border-box; }
+
 body {
-  background-color: #f3f4f6;
-  font-family: 'Inter', sans-serif;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-ui);
+  background: var(--ink-50);
+  color: var(--ink-900);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01", "cv11";
+}
+
+button { font-family: inherit; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.lex-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.lex-scroll::-webkit-scrollbar-thumb {
+  background: var(--ink-200);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.lex-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ink-300);
+  background-clip: content-box;
+}
+
+@keyframes lex-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50%       { opacity: 1;   transform: scale(1);   }
+}
+
+.lex-thinking-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: lex-pulse 1.4s ease-in-out infinite;
+  flex-shrink: 0;
 }
 
 @keyframes hourglass-flip {
-  0% { transform: rotate(0deg); }
-  50% { transform: rotate(180deg); }
+  0%   { transform: rotate(0deg); }
+  50%  { transform: rotate(180deg); }
   100% { transform: rotate(360deg); }
 }
 

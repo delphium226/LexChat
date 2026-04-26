@@ -11,11 +11,11 @@ LexChat is an AI-powered legal research assistant for a **UK government legal de
 - **Model**: Configured per-provider in Admin Portal → Developer tab; defaults to `mistral-large-3:675b-cloud` (Ollama)
 
 ## Deployment Target
-- **OS**: Windows Server 2022, **air-gapped** (no internet access)
+- **OS**: Windows Server 2022, **internet-restricted** (outbound access limited to whitelisted addresses only — not fully air-gapped)
 - **No Docker, no WSL** — everything runs natively
 - **HTTPS on port 443** using organisational certificates at `deployment/certs/lexchat.crt` and `deployment/certs/lexchat.key`
 - PostgreSQL runs as a Windows service; Ollama and uvicorn are started by the launch scripts
-- OpenRouter requires internet — only usable on the dev machine or a non-air-gapped deployment
+- OpenRouter requires outbound internet to `openrouter.ai` — works on the target if that address is whitelisted
 
 ## Active Branch
 All deployment work happens on **`experiment/native-deployment`**. Main branch is `main`.

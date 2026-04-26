@@ -5,6 +5,7 @@ import json
 import logging
 import time
 import uuid
+import xml.etree.ElementTree as ET
 
 import httpx
 
@@ -171,6 +172,100 @@ WORKER_TOOLS = [
 ]
 
 
+CASE_LAW_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_case_law",
+            "description": (
+                "Search for UK case law judgments from the National Archives Find Case Law database. "
+                "Returns judgment titles, neutral citation numbers (NCNs), courts, dates, and URLs. "
+                "Use this to find leading cases, precedents, and judicial decisions on a legal topic. "
+                "DATABASE COVERAGE: Primarily covers England & Wales courts and UK-wide courts. "
+                "The Scottish Court of Session (CSOH/CSIH) and Sheriff Courts are NOT indexed. "
+                "For Scottish matters, this database contains only UK Supreme Court and Privy Council decisions."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query (e.g., 'fair dismissal reasonable adjustment', 'judicial review planning permission').",
+                    },
+                    "court": {
+                        "type": "string",
+                        "description": (
+                            "Optional court filter. ONLY use one of these exact values: "
+                            "'uksc' (UK Supreme Court), 'ukpc' (Privy Council), "
+                            "'ewca/civ' (Court of Appeal Civil), 'ewca/crim' (Court of Appeal Criminal), "
+                            "'ewhc/admin' (Administrative Court), 'ewhc/qb' (King's Bench), "
+                            "'ewhc/ch' (Chancery), 'ewhc/fam' (Family), 'ewhc/comm' (Commercial), "
+                            "'ewhc/pat' (Patents), 'ewhc/tcc' (Technology & Construction), "
+                            "'ukut' (Upper Tribunal), 'ukut/iac' (Immigration), 'ukut/lc' (Lands Chamber), "
+                            "'eat' (Employment Appeal Tribunal). "
+                            "DO NOT invent court codes — an invalid value causes a 400 error. Omit to search all courts."
+                        ),
+                    },
+                    "date_from": {
+                        "type": "string",
+                        "description": "Optional start date filter (YYYY-MM-DD).",
+                    },
+                    "date_to": {
+                        "type": "string",
+                        "description": "Optional end date filter (YYYY-MM-DD).",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+]
+
+
+def get_worker_tools(research_mode: str = "legislation_only") -> list:
+    """Return the appropriate tool set for the given research mode."""
+    if research_mode == "case_law_only":
+        return CASE_LAW_TOOLS
+    elif research_mode == "legislation_and_case_law":
+        return WORKER_TOOLS + CASE_LAW_TOOLS
+    return WORKER_TOOLS
+
+
+_ATOM_NS = "http://www.w3.org/2005/Atom"
+_UK_NS = "https://caselaw.nationalarchives.gov.uk/terms/v1"
+
+
+def _parse_case_law_atom(xml_text: str) -> list[dict]:
+    """Parse a National Archives case law Atom feed into a list of slim judgment dicts."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+
+    entries = []
+    for entry in root.findall(f"{{{_ATOM_NS}}}entry"):
+        title = entry.findtext(f"{{{_ATOM_NS}}}title", "")
+        url_el = entry.find(f"{{{_ATOM_NS}}}link[@rel='alternate']")
+        if url_el is None:
+            url_el = entry.find(f"{{{_ATOM_NS}}}link")
+        url = (
+            url_el.get("href", "")
+            if url_el is not None
+            else entry.findtext(f"{{{_ATOM_NS}}}id", "")
+        )
+        published = entry.findtext(f"{{{_ATOM_NS}}}published", "")
+        ncn = entry.findtext(f"{{{_UK_NS}}}ncn", "")
+        court = entry.findtext(f"{{{_UK_NS}}}court", "")
+        entries.append({
+            "title": title,
+            "ncn": ncn,
+            "court": court,
+            "date": published[:10] if published else "",
+            "url": url,
+        })
+    return entries
+
+
 # -----------------------------------------------------------------------
 # Tool execution (LEX API client)
 # -----------------------------------------------------------------------
@@ -318,6 +413,55 @@ async def execute_worker_tool(
 
                 resp.raise_for_status()
                 return json.dumps(resp_json)
+
+            elif name == "search_case_law":
+                url = "https://caselaw.nationalarchives.gov.uk/atom.xml"
+                params: dict = {"query": args["query"]}
+                if args.get("court"):
+                    params["court"] = args["court"]
+                if args.get("date_from"):
+                    params["date_from"] = args["date_from"]
+                if args.get("date_to"):
+                    params["date_to"] = args["date_to"]
+
+                await _emit(on_chunk, {
+                    "type": "api_call_start",
+                    "id": call_id,
+                    "url": url,
+                    "method": "GET",
+                    "payload": params,
+                })
+
+                t0 = time.perf_counter()
+                resp = await client.get(url, params=params, timeout=15.0)
+                elapsed_ms = (time.perf_counter() - t0) * 1000
+
+                if timing_collector:
+                    timing_collector.record_lex_api_call(name, elapsed_ms)
+
+                await _emit(on_chunk, {
+                    "type": "api_call_end",
+                    "id": call_id,
+                    "url": url,
+                    "status": resp.status_code,
+                    "response": {"preview": resp.text[:300]},
+                    "elapsed_ms": round(elapsed_ms),
+                })
+
+                if resp.status_code == 400:
+                    court = args.get("court", "")
+                    return json.dumps({
+                        "error": f"Invalid court filter '{court}'. Use only the exact court codes listed in the tool description (e.g. 'uksc', 'ewca/civ', 'ewhc/admin'). Retry without the court filter, or with a valid code.",
+                        "results": [],
+                        "total": 0,
+                    })
+                resp.raise_for_status()
+                entries = _parse_case_law_atom(resp.text)
+                return json.dumps({
+                    "results": entries,
+                    "total": len(entries),
+                    "query": args["query"],
+                })
 
             else:
                 return f"Error: Tool {name} not found in worker toolset."

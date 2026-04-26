@@ -1,238 +1,286 @@
 import React, { useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-
 import { marked } from 'marked';
 import { rateMessage } from '../services/api';
-
 import CommentModal from './CommentModal';
 
-const formatCost = (usd) => {
-    if (!usd || usd <= 0) return null;
-    if (usd < 0.01) return '<$0.01';
-    return `$${usd.toFixed(2)}`;
-};
+function formatTime(isoDate) {
+  if (!isoDate) return '';
+  const d = new Date(isoDate);
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
 
-const ChatMessage = ({ message, onResend, showThinking }) => {
-    const isUser = message.role === 'user';
-    const isTool = message.role === 'tool';
-    const [copied, setCopied] = useState(false);
-    const [rating, setRating] = useState(message.rating || 0);
-    const [isRating, setIsRating] = useState(false);
-    const [comment, setComment] = useState(message.feedback_comment || '');
-    const [showCommentModal, setShowCommentModal] = useState(false);
+function formatCost(usd) {
+  if (!usd || usd <= 0) return null;
+  if (usd < 0.01) return '<$0.01';
+  return `$${usd.toFixed(2)}`;
+}
 
-    const handleRate = async (value) => {
-        if (!message.id) return;
-        setIsRating(true);
-        try {
-            await rateMessage(message.id, value, comment); // Send existing comment if any
-            setRating(value);
-        } catch (error) {
-            console.error('Failed to rate message', error);
-        } finally {
-            setIsRating(false);
-        }
-    };
+function ToolBtn({ label, onClick, active, children }) {
+  const [h, setH] = React.useState(false);
+  return (
+    <button
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      onMouseEnter={() => setH(true)}
+      onMouseLeave={() => setH(false)}
+      style={{
+        width: 30, height: 30, borderRadius: 8, border: 'none',
+        background: active ? 'var(--accent-soft)' : (h ? 'var(--ink-100)' : 'transparent'),
+        color: active ? 'var(--accent)' : 'var(--ink-500)',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        cursor: 'pointer', transition: 'background 120ms',
+      }}
+    >{children}</button>
+  );
+}
 
-    const handleCommentSubmit = async (newComment) => {
-        if (!message.id) return;
-        setIsRating(true);
-        try {
-            await rateMessage(message.id, rating, newComment);
-            setComment(newComment);
-            setShowCommentModal(false);
-        } catch (error) {
-            console.error('Failed to save comment', error);
-        } finally {
-            setIsRating(false);
-        }
-    };
+const CopyIcon = () => (
+  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    <rect x="9" y="9" width="11" height="11" rx="2" />
+    <path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" />
+  </svg>
+);
 
-    const processedContent = useMemo(() => {
-        let content = message.content;
-        if (!content) return '';
+const RefreshIcon = () => (
+  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 12a8 8 0 0 1 14-5.3L21 9" />
+    <path d="M21 4v5h-5" />
+    <path d="M20 12a8 8 0 0 1-14 5.3L3 15" />
+    <path d="M3 20v-5h5" />
+  </svg>
+);
 
-        // Regex for complete thinking blocks
-        const thinkBlockRegex = /<(think|thinking)>([\s\S]*?)<\/\1>/gi;
+const ThumbUpIcon = () => (
+  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M7 10v10H4V10h3zm0 0 4-7a2 2 0 0 1 2 2v3h5a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 16.8 19H7" />
+  </svg>
+);
 
-        // Regex for unclosed thinking block (usually at the start or during streaming)
-        const unclosedThinkRegex = /<(think|thinking)>([\s\S]*)$/i;
+const ThumbDownIcon = () => (
+  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M7 14V4H4v10h3zm0 0 4 7a2 2 0 0 0 2-2v-3h5a2 2 0 0 0 2-2.3L18.8 6.7A2 2 0 0 0 16.8 5H7" />
+  </svg>
+);
 
-        if (showThinking) {
-            // Replace complete blocks with * content * (italics)
-            content = content.replace(thinkBlockRegex, (match, tag, innerContent) => `\n*${innerContent.trim()}*\n`);
+const BookmarkIcon = () => (
+  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 3h12v18l-6-4-6 4z" />
+  </svg>
+);
 
-            // Replace unclosed block
-            content = content.replace(unclosedThinkRegex, (match, tag, innerContent) => `\n*${innerContent.trim()}*`);
+const ShareIcon = () => (
+  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="18" cy="5" r="2.5" />
+    <circle cx="6" cy="12" r="2.5" />
+    <circle cx="18" cy="19" r="2.5" />
+    <path d="M8.2 10.8 15.8 6.2M8.2 13.2l7.6 4.6" />
+  </svg>
+);
 
-            return content;
-        } else {
-            // Remove complete blocks
-            content = content.replace(thinkBlockRegex, '');
+const ChatMessage = ({ message, onResend, showThinking, authorInitials = 'U' }) => {
+  const isUser = message.role === 'user';
+  const isTool = message.role === 'tool';
 
-            // Remove unclosed block
-            content = content.replace(unclosedThinkRegex, '');
+  const [copied, setCopied] = useState(false);
+  const [rating, setRating] = useState(message.rating || 0);
+  const [isRating, setIsRating] = useState(false);
+  const [comment, setComment] = useState(message.feedback_comment || '');
+  const [showCommentModal, setShowCommentModal] = useState(false);
 
-            return content.trim();
-        }
-    }, [message.content, showThinking]);
-
-    const handleCopy = async () => {
-        try {
-            const htmlContent = await marked(processedContent);
-            const blobHtml = new Blob([htmlContent], { type: 'text/html' });
-            const blobText = new Blob([processedContent], { type: 'text/plain' });
-
-            const data = [new ClipboardItem({
-                ['text/html']: blobHtml,
-                ['text/plain']: blobText,
-            })];
-
-            await navigator.clipboard.write(data);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch (err) {
-            console.error('Failed to copy: ', err);
-            // Fallback to simple text copy if rich copy fails
-            navigator.clipboard.writeText(processedContent);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        }
-    };
-
-    if (isTool) {
-        // Optional: Hide tool outputs or show them in a collapsible detail
-        return (
-            <div className="flex justify-start mb-4">
-                <div className="bg-gray-300 text-gray-700 text-xs p-2 rounded-lg max-w-3xl font-mono">
-                    <strong>Tool Output ({message.name}):</strong> <span className="italic">Hidden for brevity (check console)</span>
-                </div>
-            </div>
-        );
+  const handleRate = async (value) => {
+    if (!message.id) return;
+    setIsRating(true);
+    try {
+      await rateMessage(message.id, value, comment);
+      setRating(value);
+    } catch (err) {
+      console.error('Failed to rate message', err);
+    } finally {
+      setIsRating(false);
     }
+  };
 
+  const handleCommentSubmit = async (newComment) => {
+    if (!message.id) return;
+    setIsRating(true);
+    try {
+      await rateMessage(message.id, rating, newComment);
+      setComment(newComment);
+      setShowCommentModal(false);
+    } catch (err) {
+      console.error('Failed to save comment', err);
+    } finally {
+      setIsRating(false);
+    }
+  };
+
+  const processedContent = useMemo(() => {
+    let content = message.content;
+    if (!content) return '';
+    const thinkBlock = /<(think|thinking)>([\s\S]*?)<\/\1>/gi;
+    const unclosed = /<(think|thinking)>([\s\S]*)$/i;
+    if (showThinking) {
+      content = content.replace(thinkBlock, (_, _t, inner) => `\n*${inner.trim()}*\n`);
+      content = content.replace(unclosed, (_, _t, inner) => `\n*${inner.trim()}*`);
+      return content;
+    }
+    content = content.replace(thinkBlock, '');
+    content = content.replace(unclosed, '');
+    return content.trim();
+  }, [message.content, showThinking]);
+
+  const handleCopy = async () => {
+    try {
+      const html = await marked(processedContent);
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([processedContent], { type: 'text/plain' }) }),
+      ]);
+    } catch {
+      navigator.clipboard.writeText(processedContent);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (isTool) return null;
+
+  const timeStr = formatTime(message.created_at || message.at);
+
+  // ── User message ──────────────────────────────────────────────
+  if (isUser) {
     return (
-        <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
-            <div
-                className={`rounded-lg max-w-[90%] shadow-md overflow-hidden min-w-[150px] ${isUser
-                    ? 'bg-legal-blue text-white'
-                    : 'bg-white text-gray-800 border border-gray-200 dark:bg-black dark:text-white dark:border-gray-700'
-                    }`}
-            >
-                <div className={`p-4 prose prose-sm max-w-none ${isUser ? 'prose-invert text-white' : 'dark:prose-invert dark:text-white'}`}>
-                    <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                            a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" />
-                        }}
-                    >
-                        {processedContent}
-                    </ReactMarkdown>
-                </div>
-                {message.tool_calls && (
-                    <div className="mt-2 text-xs opacity-75 border-t pt-2 border-gray-300">
-                        <span className="font-semibold">Used Tools:</span>
-                        <ul className="list-disc pl-4">
-                            {message.tool_calls.map((tc, i) => (
-                                <li key={i}>{tc.function.name}</li>
-                            ))}
-                        </ul>
-                    </div>
-                )}
-                {!isUser && (
-                    <div className="bg-gray-50 dark:bg-gray-900/50 p-2 px-4 flex justify-between items-center border-t border-gray-100 dark:border-gray-800">
-                        {/* Response time + Rating/Feedback */}
-                        <div className="flex items-center gap-3">
-                            {message.responseTimeMs != null && (
-                                <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">
-                                    {message.responseTimeMs >= 60000
-                                        ? `${Math.floor(message.responseTimeMs / 60000)}m ${Math.round((message.responseTimeMs % 60000) / 1000)}s`
-                                        : `${(message.responseTimeMs / 1000).toFixed(1)}s`}
-                                </span>
-                            )}
-                            {formatCost(message.costUsd ?? message.cost_usd) && (
-                                <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums" title="Estimated OpenRouter cost">
-                                    {formatCost(message.costUsd ?? message.cost_usd)}
-                                </span>
-                            )}
-                            <button
-                                onClick={() => setShowCommentModal(true)}
-                                className={`text-xs px-2 py-1 rounded transition-colors flex items-center gap-1 ${rating > 0
-                                    ? 'text-yellow-600 bg-yellow-50 dark:text-yellow-400 dark:bg-yellow-900/30'
-                                    : 'text-gray-500 hover:text-legal-blue hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
-                                    }`}
-                            >
-                                {rating > 0 ? (
-                                    <>
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
-                                            <path fillRule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401z" clipRule="evenodd" />
-                                        </svg>
-                                        <span>{rating} Stars</span>
-                                    </>
-                                ) : (
-                                    <span>Rate this answer</span>
-                                )}
-                            </button>
-                        </div>
-
-                        <button
-                            onClick={handleCopy}
-                            className="text-xs text-gray-500 hover:text-legal-blue transition-colors flex items-center gap-1"
-                            title="Copy to clipboard"
-                        >
-                            {copied ? (
-                                <span className="text-green-600 font-medium">Copied!</span>
-                            ) : (
-                                <>
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5" />
-                                    </svg>
-                                </>
-                            )}
-                        </button>
-                    </div>
-                )}
-                {isUser && (
-                    <div className="mt-2 flex justify-end gap-3 border-t border-white/20 pt-2 px-4 pb-2">
-                        <button
-                            onClick={handleCopy}
-                            className="text-white/70 hover:text-white transition-colors"
-                            title="Copy to clipboard"
-                        >
-                            {copied ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                                </svg>
-                            ) : (
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5" />
-                                </svg>
-                            )}
-                        </button>
-                        <button
-                            onClick={onResend}
-                            className="text-white/70 hover:text-white transition-colors"
-                            title="Re-run query"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                            </svg>
-                        </button>
-                    </div>
-                )}
-            </div>
-
-            <CommentModal
-                isOpen={showCommentModal}
-                onClose={() => setShowCommentModal(false)}
-                onSubmit={handleCommentSubmit}
-                initialComment={comment}
-                rating={rating}
-                onRate={handleRate}
-            />
+      <div style={{
+        display: 'flex', gap: 12, alignItems: 'flex-start',
+        padding: '8px 0 4px', fontFamily: 'var(--font-ui)',
+      }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: '50%',
+          background: 'var(--ink-100)', color: 'var(--ink-700)',
+          display: 'grid', placeItems: 'center',
+          fontSize: 11, fontWeight: 600, flex: '0 0 28px',
+        }}>{authorInitials}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-900)' }}>You</span>
+            {timeStr && <span style={{ fontSize: 12, color: 'var(--ink-400)' }}>{timeStr}</span>}
+          </div>
+          <div style={{ fontSize: 15, color: 'var(--ink-800)', lineHeight: 1.5 }}>{message.content}</div>
         </div>
+      </div>
     );
+  }
+
+  // ── Assistant message ─────────────────────────────────────────
+  const timingMs = message.responseTimeMs;
+  const timingLabel = timingMs != null
+    ? (timingMs >= 60000
+      ? `${Math.floor(timingMs / 60000)}m ${Math.round((timingMs % 60000) / 1000)}s`
+      : `${(timingMs / 1000).toFixed(1)}s`)
+    : null;
+  const cost = formatCost(message.costUsd ?? message.cost_usd);
+
+  return (
+    <>
+      <div style={{
+        background: 'var(--paper)',
+        border: '1px solid var(--ink-200)',
+        borderRadius: 12, padding: 24,
+        boxShadow: 'var(--shadow-sm)',
+        fontFamily: 'var(--font-ui)',
+      }}>
+        <div style={{
+          fontFamily: 'var(--font-serif)',
+          fontSize: 15.5, lineHeight: 1.7,
+          color: 'var(--ink-800)',
+        }}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              a: ({ node, ...p }) => <a {...p} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }} />,
+              p: ({ node, ...p }) => <p {...p} style={{ margin: '0 0 14px' }} />,
+              ul: ({ node, ...p }) => <ul {...p} style={{ margin: '0 0 14px', paddingLeft: 24 }} />,
+              ol: ({ node, ...p }) => <ol {...p} style={{ margin: '0 0 14px', paddingLeft: 24 }} />,
+              li: ({ node, ...p }) => <li {...p} style={{ marginBottom: 4 }} />,
+              blockquote: ({ node, ...p }) => (
+                <blockquote {...p} style={{
+                  borderLeft: '3px solid var(--ink-200)', paddingLeft: 12,
+                  marginLeft: 0, color: 'var(--ink-600)', fontStyle: 'italic',
+                }} />
+              ),
+              code: ({ node, inline, ...p }) => inline
+                ? <code {...p} style={{ fontFamily: 'var(--font-mono)', fontSize: 13, background: 'var(--ink-100)', padding: '1px 4px', borderRadius: 4, color: 'var(--ink-800)' }} />
+                : <code {...p} style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }} />,
+              pre: ({ node, ...p }) => (
+                <pre {...p} style={{
+                  background: 'var(--ink-50)', border: '1px solid var(--ink-200)',
+                  borderRadius: 8, padding: '12px 16px', overflowX: 'auto',
+                  margin: '0 0 14px', fontFamily: 'var(--font-mono)', fontSize: 13,
+                }} />
+              ),
+              h1: ({ node, ...p }) => <h1 {...p} style={{ fontSize: 18, fontWeight: 700, color: 'var(--ink-900)', margin: '0 0 12px', lineHeight: 1.3, fontFamily: 'var(--font-ui)' }} />,
+              h2: ({ node, ...p }) => <h2 {...p} style={{ fontSize: 16, fontWeight: 600, color: 'var(--ink-900)', margin: '18px 0 8px', lineHeight: 1.3, fontFamily: 'var(--font-ui)' }} />,
+              h3: ({ node, ...p }) => <h3 {...p} style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)', margin: '14px 0 6px', lineHeight: 1.3, fontFamily: 'var(--font-ui)' }} />,
+            }}
+          >
+            {processedContent}
+          </ReactMarkdown>
+        </div>
+
+        <div style={{
+          borderTop: '1px solid var(--ink-100)', marginTop: 16, paddingTop: 10,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <ToolBtn label={copied ? 'Copied!' : 'Copy answer'} onClick={handleCopy} active={copied}>
+              <CopyIcon />
+            </ToolBtn>
+            <ToolBtn label="Regenerate" onClick={onResend}>
+              <RefreshIcon />
+            </ToolBtn>
+            <ToolBtn
+              label="Good answer"
+              onClick={() => handleRate(5)}
+              active={rating === 5}
+            >
+              <ThumbUpIcon />
+            </ToolBtn>
+            <ToolBtn
+              label="Report an issue"
+              onClick={() => { handleRate(1); setShowCommentModal(true); }}
+              active={rating === 1}
+            >
+              <ThumbDownIcon />
+            </ToolBtn>
+            <ToolBtn label="Save to matter">
+              <BookmarkIcon />
+            </ToolBtn>
+            <ToolBtn label="Share">
+              <ShareIcon />
+            </ToolBtn>
+          </div>
+          <div style={{
+            display: 'flex', gap: 10, fontSize: 11,
+            color: 'var(--ink-400)', fontFamily: 'var(--font-mono)',
+          }}>
+            {timingLabel && <span>{timingLabel}</span>}
+            {cost && <span title="Estimated OpenRouter cost">{cost}</span>}
+          </div>
+        </div>
+      </div>
+
+      <CommentModal
+        isOpen={showCommentModal}
+        onClose={() => setShowCommentModal(false)}
+        onSubmit={handleCommentSubmit}
+        initialComment={comment}
+        rating={rating}
+        onRate={handleRate}
+      />
+    </>
+  );
 };
 
 export default ChatMessage;

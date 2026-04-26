@@ -50,6 +50,7 @@ class ChatRequest(BaseModel):
     model: str
     num_ctx: Optional[int] = None
     deep_research: Optional[bool] = False
+    research_mode: Optional[str] = "legislation_only"
 
 
 @router.post("/api/chat")
@@ -73,7 +74,11 @@ async def chat_endpoint(body: ChatRequest, request: Request):
             active_provider = await get_active_provider(_cfg_db)
             provider_config = await get_provider_config(_cfg_db, active_provider)
 
-        set_request_provider_config({**provider_config, "_provider": active_provider})
+        set_request_provider_config({
+            **provider_config,
+            "_provider": active_provider,
+            "_research_mode": body.research_mode or "legislation_only",
+        })
         # Always use the server-side configured model — the frontend may be stale
         # (e.g. user switched provider via Dev tab without refreshing the page).
         resolved_model = provider_config.get("model") or body.model

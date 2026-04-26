@@ -10,6 +10,8 @@ from ..config import (
     MANAGER_SYSTEM_PROMPT,
     MODEL_LIST,
     WORKER_SYSTEM_PROMPT,
+    get_manager_mode_note,
+    get_worker_system_prompt,
     settings,
 )
 from .learning import format_learning_context, get_relevant_examples
@@ -17,7 +19,7 @@ from .summarisation import (
     call_chunk,
     summarise_prompt,
 )
-from .tools import MANAGER_TOOLS, WORKER_TOOLS
+from .tools import MANAGER_TOOLS, WORKER_TOOLS, get_worker_tools
 from .agent_shared import run_worker_tool
 
 logger = logging.getLogger("agent")
@@ -326,26 +328,39 @@ async def run_worker_agent(
     """Run the Worker agent with a fresh context for legal research."""
     logger.info(f"[Worker] Starting research on: {query}")
 
+    research_mode = _get_cfg().get("_research_mode", "legislation_only")
     summarise_model = _get_cfg().get("summarisation_model") or model
 
     messages = [
-        {"role": "system", "content": WORKER_SYSTEM_PROMPT},
+        {"role": "system", "content": get_worker_system_prompt(research_mode)},
         {"role": "user", "content": query},
     ]
+
+    worker_tools = get_worker_tools(research_mode)
+    source_accumulator: list = []
 
     async def worker_tool_executor(name: str, args: dict) -> str:
         return await run_worker_tool(
             name, args, query, _summarise_chunk, summarise_model,
             parent_on_chunk=parent_on_chunk,
             timing_collector=timing_collector,
+            source_accumulator=source_accumulator,
         )
 
-    return await chat_loop(
+    result = await chat_loop(
         messages, model, cancel_event, num_ctx,
-        WORKER_TOOLS, worker_tool_executor, None,  # on_chunk=None for worker to avoid mixing tokens
+        worker_tools, worker_tool_executor, None,  # on_chunk=None for worker to avoid mixing tokens
         emit_tool_details=emit_tool_details,
         timing_collector=timing_collector,
     )
+
+    if source_accumulator:
+        result["sources"] = [
+            {**{k: v for k, v in src.items() if not k.startswith("_")}, "n": i + 1}
+            for i, src in enumerate(source_accumulator)
+        ]
+
+    return result
 
 
 # -----------------------------------------------------------------------
@@ -373,7 +388,9 @@ async def process_user_request(
         db_session: Optional async DB session for learning retrieval.
         emit_tool_details: Whether to emit detailed tool events.
     """
-    system_content = MANAGER_SYSTEM_PROMPT
+    research_mode = _get_cfg().get("_research_mode", "legislation_only")
+    mode_note = get_manager_mode_note(research_mode)
+    system_content = (mode_note + "\n\n" + MANAGER_SYSTEM_PROMPT) if mode_note else MANAGER_SYSTEM_PROMPT
 
     # Learning mechanism injection
     if db_session:
@@ -398,6 +415,8 @@ async def process_user_request(
     else:
         final_messages = [system_message, *final_messages]
 
+    accumulated_sources: list = []
+
     async def manager_tool_executor(name: str, args: dict) -> str:
         if name == "delegate_research":
             if on_chunk:
@@ -412,16 +431,27 @@ async def process_user_request(
             if on_chunk:
                 await call_chunk(on_chunk, {"type": "tool_end", "tool": "Research Agent", "result": "Research Complete"})
 
+            # Capture sources before discarding the structured result
+            accumulated_sources.extend(result.get("sources", []))
+
             return f"[Research Agent Result]\n{result['content']}"
 
         return f"Error: Unknown manager tool {name}"
 
-    return await chat_loop(
+    final = await chat_loop(
         final_messages, model, cancel_event, num_ctx,
         MANAGER_TOOLS, manager_tool_executor, on_chunk,
         emit_tool_details=emit_tool_details,
         timing_collector=timing_collector,
     )
+
+    if accumulated_sources:
+        final["sources"] = [
+            {**{k: v for k, v in s.items() if k != "n"}, "n": i + 1}
+            for i, s in enumerate(accumulated_sources)
+        ]
+
+    return final
 
 
 # -----------------------------------------------------------------------
