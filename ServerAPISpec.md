@@ -1,327 +1,284 @@
-# Server API Specification
+# LexChat — Server API Specification
 
-## Overview
-This document outlines the API endpoints for the LexChat server. The server uses **FastAPI (Python)** and communicates with a PostgreSQL database.
+**Base URL**: `/api`
 
-**Base URL**: `/api` (implicitly relative to the server root)
-
-### Interactive Documentation
-The API provides auto-generated interactive documentation, accessible when running locally with the backend port exposed:
-*   **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
-*   **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+Interactive docs (local dev only):
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
 
 ## Authentication
-Authentication is handled via JWT (JSON Web Tokens).
-*   **Method**: Bearer Token in `Authorization` header OR `token` cookie.
-*   **Header Format**: `Authorization: Bearer <token>`
-*   **Middleware**: `authenticateToken` validates the token. `isAdmin` restricts access to users with `role: 'admin'`.
+
+JWT-based. Token delivered via HTTP-only cookie on login, or passed as `Authorization: Bearer <token>` header.
+
+All protected endpoints return `401` if unauthenticated, `403` if authenticated but insufficient role.
 
 ---
 
-## 1. Authentication & Session (`/api/auth`)
+## 1. Auth (`/api/auth`)
 
-### Login
-*   **Endpoint**: `POST /api/auth/login`
-*   **Public**: Yes
-*   **Body**:
-    ```json
-    {
-      "username": "string",
-      "password": "string",
-      "rememberMe": "boolean (optional)"
-    }
-    ```
-*   **Response**: `200 OK`
-    ```json
-    {
-      "token": "jwt_token_string",
-      "user": {
-        "id": "integer",
-        "username": "string",
-        "role": "string",
-        "dark_mode": "boolean"
-      }
-    }
-    ```
-    *Note: Also sets an HTTP-only `token` cookie.*
+### POST `/api/auth/login` — Public
+```json
+// Request
+{ "username": "string", "password": "string", "rememberMe": false }
 
-### Logout
-*   **Endpoint**: `POST /api/auth/logout`
-*   **Public**: Yes
-*   **Response**: `200 OK`
-    ```json
-    { "message": "Logged out successfully" }
-    ```
-    *Note: Clears the `token` cookie.*
+// Response 200
+{
+  "token": "jwt_string",
+  "user": { "id": 1, "username": "string", "role": "user|admin", "dark_mode": false, "research_mode": "legislation_only" }
+}
+```
+Also sets an HTTP-only `token` cookie.
 
-### Get Current User
-*   **Endpoint**: `GET /api/auth/me`
-*   **Auth Required**: Yes
-*   **Response**: `200 OK`
-    ```json
-    {
-      "user": {
-        "id": "integer",
-        "username": "string",
-        "role": "string",
-        "dark_mode": "boolean"
-      }
-    }
-    ```
+### POST `/api/auth/logout` — Public
+Clears the `token` cookie. Returns `{ "message": "Logged out successfully" }`.
 
-### Request Password Reset
-*   **Endpoint**: `POST /api/auth/reset-password-request`
-*   **Public**: Yes
-*   **Body**: `{"username": "string"}`
-*   **Response**: `200 OK`
-    ```json
-    { "message": "If user exists, a password reset email has been sent." }
-    ```
+### GET `/api/auth/me` — Auth required
+Returns current user object (same shape as login response `user`).
 
-### Change Password
-*   **Endpoint**: `POST /api/auth/change-password`
-*   **Auth Required**: Yes
-*   **Body**:
-    ```json
-    {
-      "currentPassword": "string",
-      "newPassword": "string"
-    }
-    ```
-*   **Response**: `200 OK` `{"message": "Password updated successfully"}`
+### POST `/api/auth/reset-password-request` — Public
+```json
+// Request
+{ "username": "string" }
+// Response 200 — always 200 regardless of whether user exists (prevents enumeration)
+{ "message": "If that username exists, a reset has been initiated." }
+```
 
-### Update Preferences
-*   **Endpoint**: `PUT /api/auth/preferences`
-*   **Auth Required**: Yes
-*   **Body**: `{"dark_mode": "boolean"}`
-*   **Response**: `200 OK` `{"message": "Preferences updated"}`
+### POST `/api/auth/change-password` — Auth required
+```json
+// Request
+{ "currentPassword": "string", "newPassword": "string" }
+// Response 200
+{ "message": "Password updated successfully" }
+```
+
+### PUT `/api/auth/preferences` — Auth required
+```json
+// Request (all fields optional)
+{ "dark_mode": true, "research_mode": "legislation_only|case_law|combined" }
+// Response 200
+{ "message": "Preferences updated" }
+```
 
 ---
 
-## 2. Chat Management (`/api/chats`)
+## 2. Chats (`/api/chats`) — Auth required
 
-**All endpoints require Authentication.**
+### GET `/api/chats`
+Returns array of chat objects ordered by `created_at DESC`.
+```json
+[{
+  "id": 1, "user_id": 1, "title": "string", "model": "string",
+  "provider": "ollama|openrouter", "matter_id": null, "created_at": "ISO8601"
+}]
+```
 
-### List Chats
-*   **Endpoint**: `GET /api/chats`
-*   **Response**: `200 OK` - Array of chat objects.
-    ```json
-    [
-      {
-        "id": "integer",
-        "user_id": "integer",
-        "title": "string",
-        "model": "string",
-        "created_at": "timestamp"
-      }
-    ]
-    ```
+### POST `/api/chats`
+```json
+// Request
+{ "title": "string (optional)", "model": "string", "provider": "string (optional)" }
+// Response 200 — created chat object
+```
 
-### Create Chat
-*   **Endpoint**: `POST /api/chats`
-*   **Body**:
-    ```json
-    {
-      "title": "string (optional)",
-      "model": "string"
-    }
-    ```
-*   **Response**: `200 OK` - The created chat object.
+### PUT `/api/chats/{id}`
+```json
+// Request
+{ "title": "string" }
+// Response 200 — updated chat object
+```
 
-### Update Chat (Title)
-*   **Endpoint**: `PUT /api/chats/:id`
-*   **Body**: `{"title": "string"}`
-*   **Response**: `200 OK` - The updated chat object.
+### DELETE `/api/chats/{id}`
+Returns `{ "message": "Chat deleted" }`.
 
-### Delete Chat
-*   **Endpoint**: `DELETE /api/chats/:id`
-*   **Response**: `200 OK` `{"message": "Chat deleted"}`
+### GET `/api/chats/{id}/messages`
+Returns array of message objects ordered by `created_at ASC`.
+```json
+[{
+  "id": 1, "chat_id": 1, "role": "user|assistant",
+  "content": "string", "model": "string|null", "provider": "string|null",
+  "rating": null, "feedback_comment": null, "cost_usd": null,
+  "created_at": "ISO8601"
+}]
+```
 
-### Get Messages
-*   **Endpoint**: `GET /api/chats/:id/messages`
-*   **Response**: `200 OK` - Array of message objects.
-    ```json
-    [
-      {
-        "id": "integer",
-        "chat_id": "integer",
-        "role": "string (user/assistant)",
-        "content": "string",
-        "rating": "integer (nullable)",
-        "feedback_comment": "string (nullable)",
-        "created_at": "timestamp"
-      }
-    ]
-    ```
+### POST `/api/chats/{id}/messages`
+```json
+// Request
+{ "role": "user|assistant", "content": "string", "model": "string|null", "provider": "string|null", "cost_usd": 0.0012 }
+// Response 200 — created message object
+```
 
-### Add Message
-*   **Endpoint**: `POST /api/chats/:id/messages`
-*   **Body**:
-    ```json
-    {
-      "role": "string",
-      "content": "string"
-    }
-    ```
-*   **Response**: `200 OK` - The created message object.
-
-### Rate Message
-*   **Endpoint**: `PUT /api/chats/messages/:id/rating`
-*   **Body**:
-    ```json
-    {
-      "rating": "integer (1-5)",
-      "comment": "string (optional)"
-    }
-    ```
-*   **Response**: `200 OK` - The updated message object.
+### PUT `/api/chats/messages/{id}/rating` — Auth required
+```json
+// Request
+{ "rating": 4, "comment": "string (optional)" }
+// Response 200 — updated message object
+```
 
 ---
 
-## 3. User Administration (`/api/users`)
+## 3. AI (`/api`)
 
-**Require Authentication + Admin Role.**
+### GET `/api/models` — Public
+Returns the active provider's model list with `active: true` on the configured default model.
+```json
+[{ "name": "mistral-large-3:675b-cloud", "label": "Mistral Large 3", "active": true }]
+```
 
-### List Users
-*   **Endpoint**: `GET /api/users`
-*   **Response**: `200 OK` - Array of user objects.
+### POST `/api/chat` — Public (auth not enforced at API level; conversation filtering is client-side)
+SSE streaming endpoint. Each event is `data: {...}\n\n`.
+```json
+// Request
+{
+  "messages": [{ "role": "user", "content": "..." }],
+  "model": "string",
+  "num_ctx": 262144,
+  "deep_research": false,
+  "research_mode": "legislation_only|case_law|combined"
+}
+```
 
-### Create User
-*   **Endpoint**: `POST /api/users`
-*   **Body**:
-    ```json
-    {
-      "username": "string",
-      "password": "string",
-      "role": "string (user/admin)",
-      "email": "string"
-    }
-    ```
-*   **Response**: `201 Created` - The created user object.
-
-### Update User
-*   **Endpoint**: `PUT /api/users/:id`
-*   **Body**: User fields to update (username, role, email, password).
-*   **Response**: `200 OK` - The updated user object.
-
-### Delete User
-*   **Endpoint**: `DELETE /api/users/:id`
-*   **Response**: `200 OK` `{"message": "User deleted"}`
-
----
-
-## 4. Learning & Feedback (`/api/learning`)
-
-**Require Authentication + Admin Role.**
-
-### Get Feedback
-*   **Endpoint**: `GET /api/learning/feedback`
-*   **Description**: Retrieves recent messages that have user ratings/comments.
-*   **Response**: `200 OK` - Array of feedback objects.
-
-### Get Stats
-*   **Endpoint**: `GET /api/learning/stats`
-*   **Query Params**: `days` (string, e.g., '30' or 'all').
-*   **Description**: Aggregate ratings by day and model.
-*   **Response**: `200 OK` - Array of stats objects.
-
-### Test Retrieval
-*   **Endpoint**: `POST /api/learning/test`
-*   **Body**: `{"query": "string"}`
-*   **Response**: `200 OK` - RAG retrieval results.
+SSE event types:
+| Type | Shape | Description |
+|---|---|---|
+| `token` | `{ "type": "token", "content": "..." }` | Streamed token from Manager |
+| `status` | `{ "type": "status", "message": "..." }` | Agent status update (e.g. "Research Agent starting...") |
+| `tool_start` | `{ "type": "tool_start", "tool": "..." }` | Tool execution beginning |
+| `tool_end` | `{ "type": "tool_end", "tool": "...", "result": "..." }` | Tool execution complete |
+| `timing` | `{ "type": "timing", ... }` | Request performance breakdown |
+| `result` | `{ "type": "result", "message": { "role": "assistant", "content": "...", "model": "...", "provider": "...", "cost_usd": 0.002 } }` | Final response |
+| `error` | `{ "type": "error", "error": "..." }` | Error occurred |
 
 ---
 
-## 5. Developer Tools (`/api/developer`)
+## 4. System Chat (`/api/system`) — Public
 
-**(Ideally should be restricted, but code is currently public/available if defined)**
-
-### Seed Data
-*   **Endpoint**: `POST /api/developer/seed`
-*   **Description**: Generates synthetic users and chat history.
-*   **Response**: `200 OK` `{"success": true, "stats": {...}}`
-
-### Reset Database
-*   **Endpoint**: `POST /api/developer/reset`
-*   **Description**: Deletes all data except the 'admin' user.
-*   **Response**: `200 OK`
+### POST `/api/system/chat`
+Machine-to-machine variant of `/api/chat`. Relays all internal SSE events including tool calls and API call start/end events. Same request shape as `/api/chat`. Additional event types:
+- `tool_call` — model's tool call payload
+- `api_call_start` / `api_call_end` — LEX API request/response details
 
 ---
 
-## 6. Statistics (`/api/stats`)
+## 5. Users (`/api/users`) — Admin only
 
-**Require Authentication + Admin Role.**
+### GET `/api/users`
+Returns array of all users.
 
-### Get Usage Stats
-*   **Endpoint**: `GET /api/stats/usage`
-*   **Query Params**: `days` (string, e.g., '30' or 'all').
-*   **Response**: `200 OK`
-    ```json
-    {
-      "kpi": { "users": int, "chats": int, "messages": int, "activeUsers": int },
-      "activity": [...],
-      "models": [...],
-      "topUsers": [...]
-    }
-    ```
+### POST `/api/users`
+```json
+{ "username": "string", "password": "string", "role": "user|admin", "email": "string (optional)" }
+```
 
----
+### PUT `/api/users/{id}`
+Partial update — any combination of `username`, `role`, `email`, `password`.
 
-## 7. Model & Chat Operations (Root Level)
-
-### List Models
-*   **Endpoint**: `GET /api/models`
-*   **Public**: Yes
-*   **Response**: `200 OK` - List of available LLM models.
-
-### Chat Stream
-*   **Endpoint**: `POST /api/chat`
-*   **Public**: Yes
-*   **Body**:
-    ```json
-    {
-      "messages": [{"role": "user", "content": "..."}],
-      "model": "string",
-      "num_ctx": "integer (optional)",
-      "deep_research": "boolean (optional)"
-    }
-    ```
-*   **Response**: `200 OK` (Streamed SSE)
-    *   Events: `data: { "type": "token", "content": "..." }`, `data: { "type": "result", "message": "..." }`
+### DELETE `/api/users/{id}`
+Returns `{ "message": "User deleted" }`.
 
 ---
 
-## 8. System Health (`/api/health`)
+## 6. Learning & Feedback (`/api/learning`) — Admin only
 
-### Health Check
-*   **Endpoint**: `GET /api/health`
-*   **Public**: Yes
-*   **Response**: `200 OK`
-    ```json
+### GET `/api/learning/feedback`
+Returns recent messages with user ratings and comments.
+
+### GET `/api/learning/stats`
+Query param: `days` (integer or `"all"`). Returns aggregate ratings by day and model.
+
+### POST `/api/learning/test`
+```json
+// Request
+{ "query": "string" }
+// Response — RAG retrieval results: examples and critiques matched to the query
+```
 
 ---
 
-## 9. System-to-System Chat (`/api/system`)
+## 7. Statistics (`/api/stats`) — Admin only
 
-### System Chat
-*   **Endpoint**: `POST /api/system/chat`
-*   **Description**: A chat endpoint tailored for machine-to-machine communication. It relays all LLM events including detailed tool calls and results, allowing the connecting system to "see" the agent's thought process and actions.
-*   **Public**: Yes (currently, similar to `/api/chat`)
-*   **Body**:
-    ```json
-    {
-      "messages": [{"role": "user", "content": "..."}],
-      "model": "string",
-      "num_ctx": "integer (optional)"
-    }
-    ```
-*   **Response**: `200 OK` (Streamed SSE)
-    *   **Events**:
-        *   `data: { "type": "token", "content": "..." }` - Standard token stream.
-        *   `data: { "type": "tool_call", "tool_calls": [...] }` - Emitted when the model decides to call a tool. Contains the full tool call payload (name, arguments).
-        *   `data: { "type": "tool_start", "tool": "..." }` - Emitted when a tool execution begins.
-        *   `data: { "type": "tool_end", "tool": "...", "result": "..." }` - Emitted when a tool execution finishes.
-        *   `data: { "type": "tool_result", "tool": "...", "result": "..." }` - Emitted with the final output of the tool call (e.g. the research report).
-        *   `data: { "type": "api_call_start", "id": "...", "url": "...", "method": "...", "payload": {...} }` - Emitted when an external API call is made.
-        *   `data: { "type": "api_call_end", "id": "...", "url": "...", "status": int, "response": {...} }` - Emitted when an external API call completes.
-        *   `data: { "type": "result", "message": "..." }` - Final assistant response.
+### GET `/api/stats/usage`
+Query param: `days` (integer). Returns KPIs, daily activity, model breakdown, top users.
+```json
+{
+  "kpi": { "users": 12, "chats": 340, "messages": 2100, "activeUsers": 8 },
+  "activity": [...],
+  "models": [...],
+  "topUsers": [...]
+}
+```
+
+### GET `/api/stats/performance`
+Query param: `days`. Returns request timing breakdowns (queue wait, LLM ms, LEX API ms, total ms).
+
+### GET `/api/stats/cost`
+Query param: `days`. Returns per-day cost totals and per-model cost breakdown from `Message.cost_usd`.
+
+---
+
+## 8. Developer Tools (`/api/developer`) — Admin only
+
+### GET `/api/developer/provider-config`
+Returns current settings for both providers:
+```json
+{
+  "active_provider": "ollama",
+  "ollama": { "base_url": "...", "api_key": "...", "model": "...", "summarisation_model": "...", "temperature": 0.3, "max_concurrent_requests": 2, "max_summarise_concurrency": 1 },
+  "openrouter": { ... }
+}
+```
+
+### POST `/api/developer/provider-config`
+```json
+{ "provider": "ollama|openrouter", "config": { ...same fields... } }
+```
+
+### POST `/api/developer/active-provider`
+```json
+{ "active_provider": "ollama|openrouter" }
+```
+
+### GET `/api/developer/openrouter-models`
+Returns the curated OpenRouter model list from `config.py`.
+
+### POST `/api/developer/seed`
+Generates ~100 synthetic users with 6 months of chat history. Returns `{ "success": true, "stats": { ... } }`.
+
+### POST `/api/developer/reset`
+Deletes all data except the `admin` user. Irreversible.
+
+### POST `/api/developer/clear-usage`
+Deletes all `RequestTiming` rows.
+
+### POST `/api/developer/clear-performance`
+Deletes performance-related data.
+
+---
+
+## 9. Health (`/api/health`)
+
+### GET `/api/health` — Public
+Simple liveness check. Returns `{ "status": "healthy" }`.
+
+### GET `/api/health/status` — Auth required
+Returns the latest health check result for each monitored service (Ollama, LEX API, PostgreSQL).
+```json
+[{ "service_name": "ollama", "is_healthy": true, "latency_ms": 230, "error_message": null, "checked_at": "ISO8601" }]
+```
+
+### GET `/api/health/history` — Auth required
+Query params: `service` (string), `limit` (integer, default 100). Returns historical health check log for a service.
+
+### POST `/api/health/trigger` — Admin only
+Triggers an immediate health check cycle for all services.
+
+---
+
+## 10. Product Feedback (`/api/feedback`)
+
+### POST `/api/feedback` — Auth required
+```json
+{ "message": "string" }
+```
+
+### GET `/api/feedback` — Admin only
+Returns all product feedback messages with user info.

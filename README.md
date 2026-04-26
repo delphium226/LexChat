@@ -1,187 +1,117 @@
-# LexChat UK - Legal Research Assistant
+# LexChat — AI Legal Research Assistant
 
-A locally hosted AI chatbot for UK legislation and case law research, powered by Ollama and the LEX API. This application uses a sophisticated **Manager-Worker Agent Architecture** to handle complex legal queries with precision and depth.
+A locally-hosted AI assistant for UK government legal departments. Powered by a Manager-Worker agent architecture that queries the LEX API for authoritative UK legislation and case law.
 
 ## Key Features
 
--   **🤖 Manager-Worker Architecture**:
-    -   **Manager Agent**: Maintains conversation context and interacts with the user.
-    -   **Worker Agent**: Performs deep, iterative research in an ephemeral context to prevent context window overflow and hallucinations.
--   **🔍 Deep Research**: Capable of performing iterative web searches (using `google-sr` and `cheerio`) to find specific legislation and case law.
--   **⚖️ LEX API Integration**: Connects to a specialized legal data API for authoritative UK statute and case law text.
--   **👮 Admin Portal**: Built-in system for managing users and viewing detailed **Usage Statistics** (token consumption, query counts) with interactive graphs and time-frame filtering.
--   **🔐 Authentication**: Secure signup and login functionality using JWT and bcrypt.
--   **📧 Email Integration**: Configured to send system notifications (requires SMTP credentials).
--   **🌓 Dark Mode**: Fully supported UI with a toggle for user preference.
--   **📝 Self-Improvement Loop**: A feedback mechanism where user ratings and comments (1-5 stars) are used to train the system via Few-Shot Learning (RAG), checking for past "Gold Standard" answers or "Critiques" before responding.
+- **Manager-Worker Agent Architecture** — the Manager handles conversation and delegates complex queries to a Worker Agent that performs multi-phase legislation research via the LEX API
+- **Dual LLM Provider Support** — switch between Ollama (cloud-routed local proxy) and OpenRouter at runtime via the Admin Portal; no restart required
+- **Sources Rail** — per-response citation panel listing legislation and case law with excerpts and direct legislation.gov.uk links
+- **Deep Research mode** — iterative multi-Act research with parallel tool calls, section-level retrieval, and automatic summarisation of large results
+- **Admin Portal** — user management, usage analytics, performance stats, per-query cost tracking, provider/model configuration, and service health monitoring
+- **Self-improvement loop** — user ratings (1–5 stars) and comments are stored and injected as few-shot examples or warnings for similar future queries (RAG)
+- **Dark mode** — persisted per user
 
 ## Architecture
 
-The application follows a modern client-server architecture:
+### Frontend (`client/`)
+- React 19 + Vite + Tailwind CSS
+- Pre-built and served as static files by the FastAPI backend (no separate Node.js server at runtime)
+- Key components: `App.jsx` (main chat UI), `SourcesRail.jsx` (citations panel), `LexMark.jsx` (wordmark/spinner), `ChatMessage.jsx` (markdown + citation rendering), `AdminPortal.jsx` (admin dashboard)
 
-### Frontend (Client)
--   **Framework**: React 19 (Vite)
--   **Styling**: Tailwind CSS
--   **Features**:
-    -   Responsive Chat Interface
-    -   Markdown Rendering with Citation Links
-    -   Admin Dashboard (`/admin`)
-    -   Settings & Profile Management
+### Backend (`server_py/`)
+- Python 3.11 + FastAPI + uvicorn
+- PostgreSQL 15 for persistence
+- Async throughout (SQLAlchemy asyncpg, httpx, asyncio)
+- Agent pipeline: `provider_factory.py` → `ollama_client.py` or `openrouter_client.py` → `agent_shared.py` → `tools.py` (LEX API)
 
-### Backend (Server)
--   **Runtime**: Python with FastAPI
--   **Database**: PostgreSQL
--   **AI Engine**: Ollama (Running locally)
--   **Responsibilities**:
-    -   Agent Orchestration (Manager/Worker logic)
-    -   Authentication & Session Management
-    -   Prompt Engineering & Context Management
+### LLM Providers
+| Provider | How it works |
+|---|---|
+| **Ollama** | Local Ollama process acts as a proxy to cloud-hosted models (e.g. `mistral-large-3:675b-cloud`). Models are identified by `:cloud` suffix. |
+| **OpenRouter** | Direct HTTPS to `openrouter.ai` via an OpenAI-compatible API. Requires outbound internet to `openrouter.ai`. |
 
-    -   Prompt Engineering & Context Management
-    -   **Learning Module**: Retrieval of relevant past examples/critiques for context injection.
+Active provider and all per-provider settings (base URL, API key, model, temperature, concurrency) are stored in the database and configurable at runtime via Admin Portal → Developer tab.
 
-## Self-Improvement Loop
+## Deployment
 
-The application implements a unique **"Learning"** mechanism to get smarter over time without fine-tuning:
+The application runs natively on **Windows Server 2022** (no Docker, no WSL). The frontend is pre-built on the dev machine and committed to the repository; the target server requires only Python and PostgreSQL.
 
-1.  **Data Collection**: Users rate responses (1-5 stars) and optionally leave comments.
-2.  **Positive Reinforcement**: When a new query arrives, the system searches for past **similar queries** with **High Ratings (≥4)**. It injects these Q&A pairs into the context as "Gold Standard" examples.
-3.  **Negative Reinforcement**: If past similar queries had **Low Ratings (≤3)** and comments, the system injects the *comment* as a "Warning/Critique" to prevent repeating the mistake.
+See [deployment/NATIVE_DEPLOYMENT.md](deployment/NATIVE_DEPLOYMENT.md) for full deployment instructions including internet-connected, air-gapped, and frontend-only update workflows.
 
-## Admin Dashboard
+### Quick start (internet-connected)
 
-The Admin Portal (`/admin`) provides comprehensive oversight of the application:
-
-### 📊 Usage Analytics
--   **Interactive Graphs**: Visualise daily token usage and query volume using Recharts.
--   **Time-frame Filtering**: Filter data by last 7, 30, or 90 days (or all time) to spot trends.
--   **Cost Monitoring**: Track total input/output tokens to estimate LLM costs.
-
-### 🧠 Learning Monitor
--   **Feedback Table**: View all user ratings and comments in real-time.
--   **Retrieval Playground**: Test the "Learning" logic by typing a query (e.g., "Duty of Care") to see exactly what "Memories" (Examples or Critiques) the agent retrieves for that topic.
-
-
-## Native Windows Deployment (No Docker/WSL)
-
-For environments where Docker or WSL are not available, you can run the application natively on Windows Server.
-
-### Internet-Connected
-1.  Open PowerShell as Administrator and run the installer:
-    ```powershell
-    cd deployment
-    .\install_native.ps1
-    ```
-2.  Start the application:
-    ```cmd
-    deployment\start_native.cmd
-    ```
-3.  Stop the application:
-    ```cmd
-    deployment\stop_native.cmd
-    ```
-
-*The application is served over HTTPS on **port 443** (e.g., `https://localhost`).*
-
-### Air-Gapped (No Internet)
-
-1. **Package (Online)**: Run `deployment\package_offline_native.ps1` on the dev machine.
-2. **Chunk (Online)**: Run `deployment\compress_and_chunk.ps1` to split into <50MB parts.
-3. **Transfer**: Move the chunks to the target server.
-4. **Reconstruct (Offline)**: Run `deployment\reconstruct_binaries.ps1` on the target.
-5. **Install (Offline)**: Run `deployment\install_native_offline.ps1` as Administrator.
-6. **Start**: Run `deployment\start_native_offline.cmd`.
-7. **Stop**: Run `deployment\stop_native.cmd`.
-
-For **frontend-only updates** on an air-gapped machine, use `deployment\package_frontend_update.ps1` (online) and `deployment\apply_frontend_update.ps1` (offline) — no need to repackage everything.
-
-See [deployment/NATIVE_DEPLOYMENT.md](deployment/NATIVE_DEPLOYMENT.md) for full details.
-
-## Prerequisites (Local Development)
-
-Before running the application locally (without Docker), ensure you have the following installed:
-
-1.  **Node.js** (v18 or higher)
-2.  **PostgreSQL** (v14 or higher)
-3.  **Ollama** (v0.3 or higher)
-    -   Ensure your Ollama instance is running.
-    -   Pull the required models (e.g., `mistral-large`, `deepseek-v3`).
-
-## Installation & Setup (Local Development)
-
-### 1. Clone the Repository
-```bash
-git clone <repository-url>
-cd LexAPITest
+```powershell
+# As Administrator
+cd deployment
+.\install_native.ps1
 ```
 
-### 2. Database Setup
-The application is designed to **automatically initialize** the database schema on the first run.
--   Ensure your PostgreSQL service is running.
--   Create a database (e.g., `lexchat_db`):
-    ```sql
-    CREATE DATABASE lexchat_db;
-    ```
--   The application will create the `users`, `chats`, and `messages` tables automatically.
--   **Default Admin**: On first run, a default admin account is created:
-    -   **Username**: `admin`
-    -   **Password**: `admin`
-
-### 3. Environment Configuration
-Create a `.env` file in the `server_py` directory with the following variables:
-
-```env
-# Server Configuration
-PORT=8000
-DATABASE_URL=postgresql://user:password@localhost:5432/lexchat_db
-
-# Security
-JWT_SECRET=your_super_secret_jwt_key
-
-# Ollama Configuration
-OLLAMA_BASE_URL=http://localhost:11434
-
-# External APIs
-LEX_API_URL=https://lex-api.victoriousdesert-f8e685e0.uksouth.azurecontainerapps.io
-
-# Email (Optional)
-EMAIL_USER=your_email@gmail.com
-EMAIL_PASS=your_app_password
+Then start:
+```cmd
+deployment\start_native.cmd
 ```
 
-### 4. Install Dependencies
+Application is served over **HTTPS on port 443**.
 
-**Server:**
+## Local Development Setup
+
+### Prerequisites
+- Python 3.11
+- PostgreSQL 15 (`lexuser` / `lexpassword` / `lexchat`)
+- Ollama running locally, or an OpenRouter API key
+- Node.js v22 (portable install at `C:\Users\rhett\node_portable\node-v22.15.0-win-x64` on the dev machine)
+
+### Run the backend
+
 ```bash
 cd server_py
 pip install -r requirements.txt
-```
-
-**Client:**
-```bash
-cd ../client
-npm install
-```
-
-## Running the Application (Local Development)
-
-### Start the Backend
-```bash
-cd server_py
 uvicorn src.main:app --reload --port 8000
 ```
-*The server runs on `http://localhost:8000`.*
 
-### Start the Frontend
+The backend runs on `http://localhost:8000` and serves the pre-built frontend from `client/dist/`.
+
+### Build the frontend (after source changes)
+
 ```bash
+export PATH="/c/Users/rhett/node_portable/node-v22.15.0-win-x64:$PATH"
 cd client
-npm run dev
+npm install
+npm run build
 ```
-*The client runs on `http://localhost:5173` (typically).*
 
-## Usage
+Force-add the built dist before committing (it is gitignored):
 
-1.  **Login/Signup**: Create a new account or log in with the default `admin` credentials (admin/admin).
-2.  **Ask a Question**: Type a legal query (e.g., *"What are the requirements for a Section 21 notice?"*).
-3.  **Deep Research**: For complex topics, the system will automatically delegate to the Worker Agent to perform deep research steps.
-4.  **Admin Portal**: Log in as `admin` and navigate to the Admin Portal to manage users.
+```bash
+git add -f client/dist/
+```
+
+### Environment variables (`server_py/.env`)
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://lexuser:lexpassword@localhost:5432/lexchat` |
+| `JWT_SECRET` | Auth token signing key | `dev_secret_key_change_me` |
+| `OLLAMA_BASE_URL` | Ollama endpoint | `http://localhost:11434` |
+| `OLLAMA_API_KEY` | Bearer token for cloud-routed Ollama | *(blank)* |
+| `OPENROUTER_API_KEY` | OpenRouter API key | *(blank)* |
+| `OPENROUTER_BASE_URL` | OpenRouter endpoint | `https://openrouter.ai/api/v1` |
+
+All `.env` values are startup defaults only. Provider settings can be overridden at runtime via the Admin Portal and are persisted in the database.
+
+## Default Admin Credentials
+
+On first run, the database is seeded with:
+- **Username**: `admin`
+- **Password**: `admin`
+
+Change this immediately in production via Admin Portal → Users.
+
+## API Documentation
+
+When running locally, interactive API docs are available at:
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+
+See [ServerAPISpec.md](ServerAPISpec.md) for the full endpoint reference.
