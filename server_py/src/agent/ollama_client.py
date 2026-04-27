@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from typing import AsyncGenerator, Callable, Optional
 
 import httpx
@@ -328,11 +329,12 @@ async def run_worker_agent(
     """Run the Worker agent with a fresh context for legal research."""
     logger.info(f"[Worker] Starting research on: {query}")
 
-    research_mode = _get_cfg().get("_research_mode", "legislation_only")
-    summarise_model = _get_cfg().get("summarisation_model") or model
+    cfg = _get_cfg()
+    research_mode = cfg.get("_research_mode", "legislation_only")
+    summarise_model = cfg.get("summarisation_model") or model
 
     messages = [
-        {"role": "system", "content": get_worker_system_prompt(research_mode)},
+        {"role": "system", "content": get_worker_system_prompt(research_mode, cfg)},
         {"role": "user", "content": query},
     ]
 
@@ -388,8 +390,9 @@ async def process_user_request(
         db_session: Optional async DB session for learning retrieval.
         emit_tool_details: Whether to emit detailed tool events.
     """
-    research_mode = _get_cfg().get("_research_mode", "legislation_only")
-    mode_note = get_manager_mode_note(research_mode)
+    _cfg = _get_cfg()
+    research_mode = _cfg.get("_research_mode", "legislation_only")
+    mode_note = get_manager_mode_note(research_mode, _cfg)
     system_content = (mode_note + "\n\n" + MANAGER_SYSTEM_PROMPT) if mode_note else MANAGER_SYSTEM_PROMPT
 
     # Learning mechanism injection
@@ -419,8 +422,9 @@ async def process_user_request(
 
     async def manager_tool_executor(name: str, args: dict) -> str:
         if name == "delegate_research":
+            research_id = uuid.uuid4().hex[:8]
             if on_chunk:
-                await call_chunk(on_chunk, {"type": "tool_start", "tool": "Research Agent"})
+                await call_chunk(on_chunk, {"type": "tool_start", "tool": "Research Agent", "id": research_id})
 
             result = await run_worker_agent(
                 args["query"], model, cancel_event, num_ctx, on_chunk,
@@ -429,7 +433,7 @@ async def process_user_request(
             )
 
             if on_chunk:
-                await call_chunk(on_chunk, {"type": "tool_end", "tool": "Research Agent", "result": "Research Complete"})
+                await call_chunk(on_chunk, {"type": "tool_end", "tool": "Research Agent", "id": research_id, "result": "Research Complete"})
 
             # Capture sources before discarding the structured result
             accumulated_sources.extend(result.get("sources", []))

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..dependencies import get_current_user
-from ..models import Chat, Message
+from ..models import Chat, Matter, Message
 
 logger = logging.getLogger("app")
 
@@ -34,10 +34,15 @@ class ChatOut(BaseModel):
     title: Optional[str]
     model: Optional[str]
     provider: Optional[str] = None
+    matter_id: Optional[int] = None
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class ChatAssignMatter(BaseModel):
+    matter_id: Optional[int] = None
 
 
 class MessageCreate(BaseModel):
@@ -46,6 +51,7 @@ class MessageCreate(BaseModel):
     model: Optional[str] = None
     provider: Optional[str] = None
     cost_usd: Optional[float] = None
+    sources: Optional[List] = None
 
 
 class RatingUpdate(BaseModel):
@@ -63,6 +69,7 @@ class MessageOut(BaseModel):
     rating: Optional[int] = None
     feedback_comment: Optional[str] = None
     cost_usd: Optional[float] = None
+    sources: Optional[List] = None
     created_at: datetime
 
     class Config:
@@ -100,7 +107,7 @@ async def list_chats(
     return [
         ChatOut(
             id=c.id, user_id=c.user_id, title=c.title, model=c.model,
-            provider=c.provider, created_at=c.created_at
+            provider=c.provider, matter_id=c.matter_id, created_at=c.created_at
         ) for c in chats
     ]
 
@@ -124,7 +131,8 @@ async def create_chat(
     logger.info(f"[Chats] Created chat id={new_chat.id} for user id={user['id']} model={new_chat.model!r}")
     return ChatOut(
         id=new_chat.id, user_id=new_chat.user_id, title=new_chat.title,
-        model=new_chat.model, provider=new_chat.provider, created_at=new_chat.created_at
+        model=new_chat.model, provider=new_chat.provider, matter_id=new_chat.matter_id,
+        created_at=new_chat.created_at
     )
 
 
@@ -175,7 +183,7 @@ async def get_messages(
             id=m.id, chat_id=m.chat_id, role=m.role, content=m.content,
             model=m.model, provider=m.provider,
             rating=m.rating, feedback_comment=m.feedback_comment,
-            cost_usd=m.cost_usd, created_at=m.created_at
+            cost_usd=m.cost_usd, sources=m.sources, created_at=m.created_at
         ) for m in msgs
     ]
 
@@ -195,6 +203,7 @@ async def add_message(
         model=body.model,
         provider=body.provider,
         cost_usd=body.cost_usd,
+        sources=body.sources,
     )
     db.add(new_msg)
     await db.commit()
@@ -203,7 +212,7 @@ async def add_message(
         id=new_msg.id, chat_id=new_msg.chat_id, role=new_msg.role, content=new_msg.content,
         model=new_msg.model, provider=new_msg.provider,
         rating=new_msg.rating, feedback_comment=new_msg.feedback_comment,
-        cost_usd=new_msg.cost_usd, created_at=new_msg.created_at
+        cost_usd=new_msg.cost_usd, sources=new_msg.sources, created_at=new_msg.created_at
     )
 
 
@@ -235,4 +244,28 @@ async def rate_message(
     return MessageOut(
         id=msg.id, chat_id=msg.chat_id, role=msg.role, content=msg.content,
         rating=msg.rating, feedback_comment=msg.feedback_comment, created_at=msg.created_at
+    )
+
+
+@router.post("/{chat_id}/matter", response_model=ChatOut)
+async def assign_chat_to_matter(
+    chat_id: int,
+    body: ChatAssignMatter,
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    chat = await _get_owned_chat(chat_id, user["id"], db)
+    if body.matter_id is not None:
+        result = await db.execute(
+            select(Matter).where(Matter.id == body.matter_id, Matter.user_id == user["id"])
+        )
+        if result.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Matter not found")
+    chat.matter_id = body.matter_id
+    await db.commit()
+    await db.refresh(chat)
+    logger.info(f"[Chats] Chat id={chat_id} assigned to matter id={body.matter_id} by user id={user['id']}")
+    return ChatOut(
+        id=chat.id, user_id=chat.user_id, title=chat.title, model=chat.model,
+        provider=chat.provider, matter_id=chat.matter_id, created_at=chat.created_at
     )

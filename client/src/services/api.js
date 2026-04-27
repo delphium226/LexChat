@@ -7,7 +7,7 @@ export const getModels = async () => {
     return response.data;
 };
 
-export const sendMessage = (messages, model, num_ctx, onUpdate, signal, deep_research = false, research_mode = 'legislation_only') => {
+export const sendMessage = (messages, model, num_ctx, onUpdate, signal, deep_research = false, research_mode = 'legislation_only', filters = {}) => {
     return new Promise(async (resolve, reject) => {
         try {
             const response = await fetch(`${API_URL}/chat`, {
@@ -15,7 +15,15 @@ export const sendMessage = (messages, model, num_ctx, onUpdate, signal, deep_res
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ messages, model, num_ctx, deep_research, research_mode }),
+                body: JSON.stringify({
+                    messages, model, num_ctx, deep_research, research_mode,
+                    jurisdiction: filters.jurisdiction || null,
+                    year_from: filters.yearFrom ? parseInt(filters.yearFrom, 10) : null,
+                    year_to: filters.yearTo ? parseInt(filters.yearTo, 10) : null,
+                    date_from: filters.caseLawDateFrom || null,
+                    date_to: filters.caseLawDateTo || null,
+                    court: filters.caseLawCourt || null,
+                }),
                 signal
             });
 
@@ -29,33 +37,46 @@ export const sendMessage = (messages, model, num_ctx, onUpdate, signal, deep_res
             let buffer = '';
             let capturedTiming = null;
 
+            const processLine = (line) => {
+                if (!line.startsWith('data: ')) return;
+                try {
+                    const data = JSON.parse(line.slice(6));
+                    if (data.type === 'timing') {
+                        capturedTiming = data;
+                    } else if (data.type === 'result') {
+                        resolve({ ...data.message, timing: capturedTiming });
+                    } else if (data.type === 'error') {
+                        reject(new Error(data.error));
+                    } else {
+                        if (onUpdate) onUpdate(data);
+                    }
+                } catch (e) {
+                    console.error('Error parsing SSE data:', e, 'Line:', line.slice(0, 200));
+                }
+            };
+
             while (true) {
                 const { done, value } = await reader.read();
-                if (done) break;
+                if (done) {
+                    // Flush any remaining buffered data before exiting.
+                    // The server may close without a trailing \n\n on the last event.
+                    const remaining = buffer.trim();
+                    if (remaining) processLine(remaining);
+                    break;
+                }
 
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split('\n\n');
-                buffer = lines.pop(); // Keep the last incomplete chunk
+                buffer = lines.pop(); // keep last incomplete chunk
 
                 for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        try {
-                            const data = JSON.parse(line.slice(6));
-                            if (data.type === 'timing') {
-                                capturedTiming = data;
-                            } else if (data.type === 'result') {
-                                resolve({ ...data.message, timing: capturedTiming });
-                            } else if (data.type === 'error') {
-                                reject(new Error(data.error));
-                            } else {
-                                if (onUpdate) onUpdate(data);
-                            }
-                        } catch (e) {
-                            console.error('Error parsing SSE data:', e);
-                        }
-                    }
+                    processLine(line);
                 }
             }
+
+            // Stream closed without a result event (server crash, timeout, or network drop).
+            // reject() is a no-op if resolve() was already called — this only fires in the error path.
+            reject(new Error('The server closed the connection before returning a response.'));
         } catch (error) {
             reject(error);
         }
@@ -135,8 +156,8 @@ export const getChatMessages = async (chatId) => {
     return response.data;
 };
 
-export const saveMessage = async (chatId, role, content, model = null, provider = null, cost_usd = null) => {
-    const response = await axios.post(`${API_URL}/chats/${chatId}/messages`, { role, content, model, provider, cost_usd });
+export const saveMessage = async (chatId, role, content, model = null, provider = null, cost_usd = null, sources = null) => {
+    const response = await axios.post(`${API_URL}/chats/${chatId}/messages`, { role, content, model, provider, cost_usd, sources });
     return response.data;
 };
 
@@ -255,5 +276,55 @@ export const setActiveProvider = async (activeProvider) => {
 
 export const getOpenRouterModels = async () => {
     const response = await axios.get(`${API_URL}/developer/openrouter-models`);
+    return response.data;
+};
+
+// --- MATTERS ---
+export const getMatters = async () => {
+    const response = await axios.get(`${API_URL}/matters`);
+    return response.data;
+};
+
+export const createMatter = async (title, description = null) => {
+    const response = await axios.post(`${API_URL}/matters`, { title, description });
+    return response.data;
+};
+
+export const updateMatter = async (matterId, data) => {
+    const response = await axios.put(`${API_URL}/matters/${matterId}`, data);
+    return response.data;
+};
+
+export const deleteMatter = async (matterId) => {
+    await axios.delete(`${API_URL}/matters/${matterId}`);
+};
+
+export const assignChatToMatter = async (chatId, matterId) => {
+    const response = await axios.post(`${API_URL}/chats/${chatId}/matter`, { matter_id: matterId });
+    return response.data;
+};
+
+export const getMatterNotes = async (matterId) => {
+    const response = await axios.get(`${API_URL}/matters/${matterId}/notes`);
+    return response.data;
+};
+
+export const addMatterNote = async (matterId, content, messageId = null) => {
+    const response = await axios.post(`${API_URL}/matters/${matterId}/notes`, { content, message_id: messageId });
+    return response.data;
+};
+
+export const deleteMatterNote = async (matterId, noteId) => {
+    await axios.delete(`${API_URL}/matters/${matterId}/notes/${noteId}`);
+};
+
+// --- FEATURE FLAGS ---
+export const getFeatures = async () => {
+    const response = await axios.get(`${API_URL}/developer/features`);
+    return response.data;
+};
+
+export const saveFeatures = async (features) => {
+    const response = await axios.post(`${API_URL}/developer/features`, features);
     return response.data;
 };

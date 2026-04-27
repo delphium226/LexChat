@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { sendMessage, createChat, getChatMessages, saveMessage, updatePreferences, submitFeedback, getModels, getChats } from './services/api';
+import { sendMessage, createChat, getChatMessages, saveMessage, updatePreferences, submitFeedback, getModels, getChats, getMatters, assignChatToMatter, getFeatures } from './services/api';
 import ChatMessage from './components/ChatMessage';
 import { LexMark, LexWordmark } from './components/LexMark';
 import SourcesRail from './components/SourcesRail';
@@ -9,6 +9,8 @@ import AdminPortal from './pages/AdminPortal';
 import Settings from './pages/Settings';
 import HistoryModal from './components/HistoryModal';
 import SettingsMenuModal from './components/SettingsMenuModal';
+import CreateMatterModal from './components/CreateMatterModal';
+import MatterNotesModal from './components/MatterNotesModal';
 import { Routes, Route } from 'react-router-dom';
 import SystemChat from './pages/SystemChat';
 
@@ -76,12 +78,6 @@ const BookmarkIcon = () => (
   </svg>
 );
 
-const Share2Icon = () => (
-  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="18" cy="5" r="2.5" /><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="19" r="2.5" />
-    <path d="M8.2 10.8 15.8 6.2M8.2 13.2l7.6 4.6" />
-  </svg>
-);
 
 const ScalesIcon = () => (
   <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
@@ -248,11 +244,18 @@ function AppContent() {
   const [activeProvider, setActiveProvider] = useState('ollama');
   const [loading, setLoading] = useState(false);
   const [agentStatus, setAgentStatus] = useState('');
+  const [activities, setActivities] = useState(new Map());
   const [contextUsage, setContextUsage] = useState(null);
   const [showThinking] = useState(false);
   const [currentChatId, setCurrentChatId] = useState(null);
   const [currentChatTitle, setCurrentChatTitle] = useState(null);
   const [researchMode, setResearchMode] = useState('legislation_only');
+  const [jurisdiction, setJurisdiction] = useState(() => localStorage.getItem('filter_jurisdiction') || null);
+  const [yearFrom, setYearFrom] = useState(() => localStorage.getItem('filter_yearFrom') || '');
+  const [yearTo, setYearTo] = useState(() => localStorage.getItem('filter_yearTo') || '');
+  const [caseLawDateFrom, setCaseLawDateFrom] = useState(() => localStorage.getItem('filter_caseLawDateFrom') || '');
+  const [caseLawDateTo, setCaseLawDateTo] = useState(() => localStorage.getItem('filter_caseLawDateTo') || '');
+  const [caseLawCourt, setCaseLawCourt] = useState(() => localStorage.getItem('filter_caseLawCourt') || '');
 
   // ── UI state ─────────────────────────────────────────────────
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
@@ -269,6 +272,15 @@ function AppContent() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+
+  // ── Matters state ────────────────────────────────────────────
+  const [features, setFeatures] = useState({ matters_enabled: true });
+  const [matters, setMatters] = useState([]);
+  const [expandedMatterIds, setExpandedMatterIds] = useState(new Set());
+  const [showCreateMatterModal, setShowCreateMatterModal] = useState(false);
+  const [notesModalMatter, setNotesModalMatter] = useState(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assigningChatId, setAssigningChatId] = useState(null);
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('darkMode');
@@ -313,11 +325,18 @@ function AppContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, agentStatus]);
 
-  // Reload recent chats whenever active chat changes or user logs in
+  // Fetch feature flags once on login
   useEffect(() => {
     if (!user) return;
-    getChats().then(chats => setRecentChats(chats.slice(0, 12))).catch(() => {});
-  }, [user, currentChatId]);
+    getFeatures().then(setFeatures).catch(() => {});
+  }, [user]);
+
+  // Reload chats and matters whenever active chat changes or user logs in
+  useEffect(() => {
+    if (!user) return;
+    getChats().then(setRecentChats).catch(() => {});
+    if (features.matters_enabled) getMatters().then(setMatters).catch(() => {});
+  }, [user, currentChatId, features.matters_enabled]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -370,10 +389,11 @@ function AppContent() {
   useEffect(() => {
     if (!user) {
       setMessages([]); setInput(''); setCurrentChatId(null); setCurrentChatTitle(null);
-      setContextUsage(null); setAgentStatus(''); setLoading(false);
+      setContextUsage(null); setAgentStatus(''); setActivities(new Map()); setLoading(false);
       setShowSettingsMenu(false); setShowHistoryModal(false);
       setShowAdminModal(false); setShowSettingsModal(false);
       setResearchMode('legislation_only');
+      setMatters([]); setExpandedMatterIds(new Set());
     }
   }, [user]);
 
@@ -398,6 +418,84 @@ function AppContent() {
   const todayISO = new Date().toISOString().slice(0, 10);
   const todayLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
+  const JURISDICTION_OPTIONS = [
+    { value: null,                label: 'All jurisdictions' },
+    { value: 'england_and_wales', label: 'England & Wales' },
+    { value: 'scotland',          label: 'Scotland' },
+    { value: 'northern_ireland',  label: 'Northern Ireland' },
+    { value: 'wales',             label: 'Wales' },
+    { value: 'uk_wide',           label: 'UK-wide only' },
+  ];
+  const JURISDICTION_SHORT = {
+    england_and_wales: 'E&W', scotland: 'SCO', northern_ireland: 'NI', wales: 'WAL', uk_wide: 'UK',
+  };
+  const jurisdictionLabel = jurisdiction ? (JURISDICTION_OPTIONS.find(o => o.value === jurisdiction)?.label || 'All jurisdictions') : 'All jurisdictions';
+  const jurisdictionShort = jurisdiction ? (JURISDICTION_SHORT[jurisdiction] || 'All UK') : 'All UK';
+
+  const currentYear = new Date().getFullYear();
+  const YEAR_PRESETS = [
+    { label: `Since 2000`, from: '2000', to: '' },
+    { label: '2000–2010',  from: '2000', to: '2010' },
+    { label: 'Pre-2000',   from: '',     to: '1999' },
+  ];
+  const DATE_PRESETS = [
+    { label: 'Last 5 years',  from: `${currentYear - 5}-01-01`, to: '' },
+    { label: 'Last 10 years', from: `${currentYear - 10}-01-01`, to: '' },
+    { label: 'Since 2009',    from: '2009-10-01', to: '' },
+  ];
+  const COURT_GROUPS = [
+    { group: 'UK-wide', courts: [
+      { value: 'uksc',      label: 'UK Supreme Court' },
+      { value: 'ukpc',      label: 'Privy Council' },
+    ]},
+    { group: 'Court of Appeal', courts: [
+      { value: 'ewca/civ',  label: 'Civil Division' },
+      { value: 'ewca/crim', label: 'Criminal Division' },
+    ]},
+    { group: 'High Court', courts: [
+      { value: 'ewhc/admin', label: 'Administrative Court' },
+      { value: 'ewhc/qb',   label: "King's Bench" },
+      { value: 'ewhc/ch',   label: 'Chancery' },
+      { value: 'ewhc/fam',  label: 'Family' },
+      { value: 'ewhc/comm', label: 'Commercial' },
+      { value: 'ewhc/pat',  label: 'Patents' },
+      { value: 'ewhc/tcc',  label: 'Technology & Construction' },
+    ]},
+    { group: 'Tribunals', courts: [
+      { value: 'ukut',      label: 'Upper Tribunal' },
+      { value: 'ukut/iac',  label: 'Immigration & Asylum' },
+      { value: 'ukut/lc',   label: 'Lands Chamber' },
+      { value: 'eat',       label: 'Employment Appeal' },
+    ]},
+  ];
+  const courtLabel = caseLawCourt
+    ? COURT_GROUPS.flatMap(g => g.courts).find(c => c.value === caseLawCourt)?.label || caseLawCourt
+    : '';
+
+  const yearPresetActive = (p) => p.from === yearFrom && p.to === yearTo;
+  const datePresetActive = (p) => p.from === caseLawDateFrom && p.to === caseLawDateTo;
+
+  const setJurisdictionPersist = (v) => {
+    setJurisdiction(v);
+    if (v) localStorage.setItem('filter_jurisdiction', v);
+    else localStorage.removeItem('filter_jurisdiction');
+  };
+  const setYearFromPersist = (v) => { setYearFrom(v); localStorage.setItem('filter_yearFrom', v); };
+  const setYearToPersist = (v) => { setYearTo(v); localStorage.setItem('filter_yearTo', v); };
+  const setDateFromPersist = (v) => { setCaseLawDateFrom(v); localStorage.setItem('filter_caseLawDateFrom', v); };
+  const setDateToPersist = (v) => { setCaseLawDateTo(v); localStorage.setItem('filter_caseLawDateTo', v); };
+  const setCourtPersist = (v) => { setCaseLawCourt(v); localStorage.setItem('filter_caseLawCourt', v); };
+  const clearAllFilters = () => {
+    setJurisdictionPersist(null);
+    setYearFromPersist(''); setYearToPersist('');
+    setDateFromPersist(''); setDateToPersist('');
+    setCourtPersist('');
+  };
+  const hasActiveFilters = jurisdiction || yearFrom || yearTo || caseLawDateFrom || caseLawDateTo || caseLawCourt;
+
+  const showScotlandNINote = (jurisdiction === 'scotland' || jurisdiction === 'northern_ireland')
+    && researchMode !== 'legislation_only';
+
   const userInitials = getInitials(user?.username);
 
   // ── Handlers ─────────────────────────────────────────────────
@@ -409,6 +507,7 @@ function AppContent() {
       setLoading(false);
       sendingRef.current = false;
       setAgentStatus('Stopped by user.');
+      setActivities(new Map());
     }
   };
 
@@ -427,6 +526,7 @@ function AppContent() {
     if (typeof manualContent !== 'string') setInput('');
     setLoading(true);
     setAgentStatus('Thinking…');
+    setActivities(new Map());
     const requestStartTime = Date.now();
     let activeChatId = currentChatId;
 
@@ -447,20 +547,28 @@ function AppContent() {
       const response = await sendMessage(
         messagesToSend, selectedModel, selectedModelContext,
         (status) => {
+          const toolLabel = (tool) => ({
+            'Research Agent': 'Researching…',
+            'Worker: search_legislation': 'Querying legislation database…',
+            'Worker: search_legislation_sections': 'Retrieving statutory sections…',
+            'Worker: get_legislation_text': 'Reviewing statutory text…',
+            'Worker: search_case_law': 'Searching case law database…',
+            'Extracting the relevant sections from a large document': 'Summarising document…',
+          }[tool] || `${tool}…`);
+
           if (status.type === 'tool_start') {
-            const labels = {
-              'Research Agent': 'Delegating to research agent…',
-              'Worker: search_legislation': 'Querying legislation database…',
-              'Worker: get_legislation_text': 'Reviewing statutory text…',
-              'Worker: search_case_law': 'Searching case law database…',
-              'search_legislation': 'Querying legislation database…',
-              'get_legislation_text': 'Reviewing statutory text…',
-              'search_case_law': 'Searching case law database…',
-            };
-            setAgentStatus(labels[status.tool] || `${status.tool}…`);
+            const label = toolLabel(status.tool);
+            if (status.id) {
+              setActivities(prev => new Map(prev).set(status.id, label));
+            }
+            setAgentStatus(label);
           } else if (status.type === 'tool_end') {
+            if (status.id) {
+              setActivities(prev => { const next = new Map(prev); next.delete(status.id); return next; });
+            }
             setAgentStatus('Analysing findings…');
           } else if (status.type === 'token') {
+            setActivities(new Map());
             setAgentStatus('Typing…');
             setMessages(prev => {
               const updated = [...prev];
@@ -478,7 +586,8 @@ function AppContent() {
             setAgentStatus(status.message);
           }
         },
-        controller.signal, false, researchMode
+        controller.signal, false, researchMode,
+        { jurisdiction, yearFrom, yearTo, caseLawDateFrom, caseLawDateTo, caseLawCourt }
       );
 
       if (response.stats) setContextUsage(response.stats);
@@ -496,7 +605,7 @@ function AppContent() {
       });
 
       if (activeChatId) {
-        const saved = await saveMessage(activeChatId, 'assistant', response.content, response.model, response.provider, response.timing?.total_cost_usd ?? null).catch(err => { console.error('Failed to save assistant message:', err); return null; });
+        const saved = await saveMessage(activeChatId, 'assistant', response.content, response.model, response.provider, response.timing?.total_cost_usd ?? null, response.sources ?? null).catch(err => { console.error('Failed to save assistant message:', err); return null; });
         if (saved) {
           setMessages(prev => {
             const updated = [...prev];
@@ -531,6 +640,7 @@ function AppContent() {
       if (abortControllerRef.current === controller) {
         setLoading(false);
         setAgentStatus('');
+        setActivities(new Map());
         abortControllerRef.current = null;
         sendingRef.current = false;
       }
@@ -579,7 +689,7 @@ function AppContent() {
   return (
     <div style={{
       display: 'flex', height: '100dvh',
-      background: 'var(--ink-50)',
+      background: '#d4d4d4',
       fontFamily: 'var(--font-ui)',
       color: 'var(--ink-900)',
       overflow: 'hidden',
@@ -641,19 +751,13 @@ function AppContent() {
                   width: '100%', display: 'flex', alignItems: 'center', gap: 8,
                   padding: '8px 10px', borderRadius: 8, border: '1px solid var(--ink-200)',
                   background: 'var(--paper)', color: 'var(--ink-800)', fontWeight: 500,
-                  cursor: 'pointer', fontSize: 13, justifyContent: 'space-between',
+                  cursor: 'pointer', fontSize: 13,
                   boxShadow: 'var(--shadow-sm)', fontFamily: 'var(--font-ui)',
                 }}
               >
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <PlusIcon /> New research thread
+                  <PlusIcon /> New research
                 </span>
-                <span style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 11,
-                  padding: '1px 5px', borderRadius: 4,
-                  background: 'var(--ink-100)', color: 'var(--ink-600)',
-                  border: '1px solid var(--ink-200)',
-                }}>⌘K</span>
               </button>
             </div>
 
@@ -673,15 +777,77 @@ function AppContent() {
             </div>
 
             {/* Matters section */}
+            {features.matters_enabled && (<>
             <div style={{ padding: '8px 16px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-500)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Matters</span>
-              <IBtn label="Add matter" size={22}><PlusIcon /></IBtn>
+              <IBtn label="Add matter" size={22} onClick={() => setShowCreateMatterModal(true)}><PlusIcon /></IBtn>
             </div>
             <div style={{ padding: '0 8px 4px', flexShrink: 0 }}>
-              <div style={{ padding: '8px 10px', color: 'var(--ink-400)', fontSize: 12, fontStyle: 'italic' }}>
-                No matters yet
-              </div>
+              {matters.length === 0 ? (
+                <div style={{ padding: '8px 10px', color: 'var(--ink-400)', fontSize: 12, fontStyle: 'italic' }}>No matters yet</div>
+              ) : matters.map(matter => {
+                const isExpanded = expandedMatterIds.has(matter.id);
+                const matterChats = recentChats.filter(c => c.matter_id === matter.id);
+                return (
+                  <div key={matter.id}>
+                    <div
+                      onClick={() => {
+                        const next = new Set(expandedMatterIds);
+                        if (next.has(matter.id)) next.delete(matter.id); else next.add(matter.id);
+                        setExpandedMatterIds(next);
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        padding: '5px 6px', borderRadius: 6, cursor: 'pointer',
+                        color: 'var(--ink-700)',
+                      }}
+                    >
+                      <span style={{
+                        display: 'inline-flex', flexShrink: 0,
+                        transform: isExpanded ? 'rotate(90deg)' : 'none',
+                        transition: 'transform 150ms',
+                      }}><ChevRightIcon /></span>
+                      <span style={{ flexShrink: 0, display: 'inline-flex', color: 'var(--ink-500)' }}><FolderIcon /></span>
+                      <span style={{
+                        flex: 1, overflow: 'hidden', textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap', fontSize: 13,
+                      }}>{matter.title}</span>
+                      {matter.note_count > 0 && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 600, color: 'var(--accent)',
+                          background: 'var(--accent-soft)', borderRadius: 10,
+                          padding: '1px 5px', flexShrink: 0,
+                        }}>{matter.note_count}</span>
+                      )}
+                      <IBtn size={20} label="Notes" onClick={e => { e.stopPropagation(); setNotesModalMatter(matter); }}>
+                        <BookmarkIcon />
+                      </IBtn>
+                    </div>
+                    {isExpanded && (
+                      matterChats.length === 0
+                        ? <div style={{ paddingLeft: 28, fontSize: 12, color: 'var(--ink-400)', fontStyle: 'italic', padding: '3px 6px 3px 28px' }}>No threads assigned</div>
+                        : matterChats.map(chat => {
+                          const active = chat.id === currentChatId;
+                          return (
+                            <div
+                              key={chat.id}
+                              onClick={() => loadChat(chat.id, chat.model)}
+                              style={{
+                                padding: '5px 6px 5px 26px', borderRadius: 6, marginBottom: 1,
+                                background: active ? 'var(--ink-100)' : 'transparent',
+                                color: active ? 'var(--ink-900)' : 'var(--ink-700)',
+                                cursor: 'pointer', fontSize: 13,
+                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              }}
+                            >{chat.title}</div>
+                          );
+                        })
+                    )}
+                  </div>
+                );
+              })}
             </div>
+            </>)}
 
             {/* Divider */}
             <div style={{ height: 1, background: 'var(--ink-200)', margin: '4px 14px', flexShrink: 0 }} />
@@ -692,10 +858,10 @@ function AppContent() {
             </div>
 
             <div className="lex-scroll" style={{ flex: 1, overflow: 'auto', padding: '0 8px' }}>
-              {recentChats.length === 0 && (
+              {recentChats.filter(c => !c.matter_id).length === 0 && (
                 <div style={{ padding: '8px 8px', color: 'var(--ink-400)', fontSize: 12, fontStyle: 'italic' }}>No recent threads</div>
               )}
-              {recentChats.map(chat => {
+              {recentChats.filter(c => !c.matter_id).slice(0, 12).map(chat => {
                 const active = chat.id === currentChatId;
                 return (
                   <div
@@ -761,8 +927,10 @@ function AppContent() {
             </span>
           </div>
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-            <GhostBtn icon={<BookmarkIcon />}>Save to matter</GhostBtn>
-            <GhostBtn icon={<Share2Icon />}>Share</GhostBtn>
+            {features.matters_enabled && <GhostBtn
+              icon={<BookmarkIcon />}
+              onClick={() => { if (currentChatId) { setAssigningChatId(currentChatId); setShowAssignModal(true); } }}
+            >Save to matter</GhostBtn>}
           </div>
         </div>
 
@@ -780,23 +948,39 @@ function AppContent() {
               <div style={{ maxWidth: 680, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
 
                 {/* Research context chips */}
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', paddingBottom: 4 }}>
-                  {[
+                {(() => {
+                  const chips = [
                     { icon: <ScalesIcon />, label: researchModeLabel },
-                    { icon: <GavelIcon />, label: 'England & Wales' },
+                    { icon: <GavelIcon />, label: jurisdictionLabel },
                     { icon: <CalendarIcon />, label: `In force · ${todayLabel}` },
-                  ].map((chip, i) => (
-                    <span key={i} style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 500,
-                      background: 'var(--paper)', border: '1px solid var(--ink-200)',
-                      color: 'var(--ink-600)',
-                    }}>
-                      <span style={{ color: 'var(--ink-400)', display: 'inline-flex' }}>{chip.icon}</span>
-                      {chip.label}
-                    </span>
-                  ))}
-                </div>
+                  ];
+                  if ((yearFrom || yearTo) && researchMode !== 'case_law_only') {
+                    const yr = yearFrom && yearTo ? `${yearFrom}–${yearTo}` : yearFrom ? `From ${yearFrom}` : `To ${yearTo}`;
+                    chips.push({ icon: <CalendarIcon />, label: `Legislation: ${yr}` });
+                  }
+                  if ((caseLawDateFrom || caseLawDateTo) && researchMode !== 'legislation_only') {
+                    const dr = caseLawDateFrom && caseLawDateTo ? `${caseLawDateFrom} – ${caseLawDateTo}` : caseLawDateFrom ? `From ${caseLawDateFrom}` : `To ${caseLawDateTo}`;
+                    chips.push({ icon: <CalendarIcon />, label: `Cases: ${dr}` });
+                  }
+                  if (courtLabel && researchMode !== 'legislation_only') {
+                    chips.push({ icon: <GavelIcon />, label: courtLabel });
+                  }
+                  return (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', paddingBottom: 4 }}>
+                      {chips.map((chip, i) => (
+                        <span key={i} style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                          padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 500,
+                          background: 'var(--paper)', border: '1px solid var(--ink-200)',
+                          color: 'var(--ink-600)',
+                        }}>
+                          <span style={{ color: 'var(--ink-400)', display: 'inline-flex' }}>{chip.icon}</span>
+                          {chip.label}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 {/* Empty state */}
                 {messages.length === 0 && !loading && (
@@ -815,33 +999,54 @@ function AppContent() {
                     <ChatMessage
                       key={idx}
                       message={msg}
-                      onResend={() => handleSend(msg.content)}
+                      onResend={() => {
+                        setInput(msg.content);
+                        setTimeout(() => {
+                          const ta = textareaRef.current;
+                          if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+                        }, 0);
+                      }}
                       showThinking={showThinking}
                       authorInitials={userInitials}
+                      matters={matters}
+                      mattersEnabled={features.matters_enabled}
                     />
                   );
                 })}
 
                 {/* Loading indicator */}
                 {loading && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '8px 0', fontSize: 13, color: 'var(--ink-500)',
-                  }}>
-                    <div className="lex-thinking-dot" />
-                    <span style={{ flex: 1 }}>{agentStatus || 'Thinking…'}</span>
-                    <button
-                      onClick={handleStop}
-                      style={{
-                        fontSize: 12, fontWeight: 500, padding: '4px 10px',
-                        borderRadius: 6, border: '1px solid var(--ink-200)',
-                        background: 'var(--paper)', color: 'var(--ink-600)',
-                        cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
-                        fontFamily: 'var(--font-ui)',
-                      }}
-                    >
-                      <StopIcon /> Stop
-                    </button>
+                  <div style={{ padding: '8px 0', fontSize: 13, color: 'var(--ink-500)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div className="lex-thinking-dot" />
+                      <span style={{ flex: 1 }}>{agentStatus || 'Thinking…'}</span>
+                      <button
+                        onClick={handleStop}
+                        style={{
+                          fontSize: 12, fontWeight: 500, padding: '4px 10px',
+                          borderRadius: 6, border: '1px solid var(--ink-200)',
+                          background: 'var(--paper)', color: 'var(--ink-600)',
+                          cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
+                          fontFamily: 'var(--font-ui)',
+                        }}
+                      >
+                        <StopIcon /> Stop
+                      </button>
+                    </div>
+                    {activities.size > 0 && (
+                      <div style={{ marginTop: 6, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {[...activities.entries()].map(([id, label]) => (
+                          <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--ink-400)' }}>
+                            <div style={{
+                              width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+                              background: 'var(--accent)', opacity: 0.7,
+                              animation: 'lex-pulse 1.4s ease-in-out infinite',
+                            }} />
+                            <span>{label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -854,45 +1059,134 @@ function AppContent() {
               ref={composerRef}
               style={{
                 padding: '12px 28px 18px',
-                background: 'linear-gradient(180deg, transparent, var(--ink-50) 36%)',
+                background: '#d4d4d4',
                 marginTop: -120, position: 'relative', zIndex: 2,
               }}
             >
               <div style={{ maxWidth: 680, margin: '0 auto', position: 'relative' }}>
 
                 {/* Filters popover */}
-                {showFilters && (
-                  <div style={{
-                    position: 'absolute', bottom: '100%', left: 0, marginBottom: 8,
-                    background: 'var(--paper)', border: '1px solid var(--ink-200)',
-                    borderRadius: 10, boxShadow: 'var(--shadow-md)',
-                    padding: 8, minWidth: 210, zIndex: 10,
-                  }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-500)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '4px 8px 6px' }}>Research mode</div>
-                    {[
-                      { value: 'legislation_only', label: 'Legislation only' },
-                      { value: 'case_law_only', label: 'Case law only' },
-                      { value: 'legislation_and_case_law', label: 'Legislation & case law' },
-                    ].map(opt => (
-                      <button
-                        key={opt.value}
-                        onClick={() => {
-                          setResearchMode(opt.value);
-                          updatePreferences({ research_mode: opt.value }).catch(() => {});
-                          setShowFilters(false);
-                        }}
-                        style={{
-                          display: 'block', width: '100%', textAlign: 'left',
-                          padding: '7px 10px', borderRadius: 6, border: 'none',
-                          background: researchMode === opt.value ? 'var(--accent-soft)' : 'transparent',
-                          color: researchMode === opt.value ? 'var(--accent-ink)' : 'var(--ink-700)',
-                          fontSize: 13, fontWeight: researchMode === opt.value ? 600 : 400,
+                {showFilters && (() => {
+                  const secHead = (label) => (
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-500)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '4px 8px 6px' }}>{label}</div>
+                  );
+                  const divider = () => (
+                    <div style={{ height: 1, background: 'var(--ink-100)', margin: '6px 0' }} />
+                  );
+                  const optBtn = (isActive, onClick, label) => (
+                    <button onClick={onClick} style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '6px 10px', borderRadius: 6, border: 'none',
+                      background: isActive ? 'var(--accent-soft)' : 'transparent',
+                      color: isActive ? 'var(--accent-ink)' : 'var(--ink-700)',
+                      fontSize: 13, fontWeight: isActive ? 600 : 400,
+                      cursor: 'pointer', fontFamily: 'var(--font-ui)',
+                    }}>{label}</button>
+                  );
+                  const presetRow = (presets, isActive, onSet) => (
+                    <div style={{ display: 'flex', gap: 4, padding: '2px 8px 6px', flexWrap: 'wrap' }}>
+                      {presets.map(p => (
+                        <button key={p.label} onClick={() => onSet(p)} style={{
+                          padding: '3px 9px', borderRadius: 999, fontSize: 12, border: '1px solid',
+                          borderColor: isActive(p) ? 'var(--accent)' : 'var(--ink-200)',
+                          background: isActive(p) ? 'var(--accent-soft)' : 'transparent',
+                          color: isActive(p) ? 'var(--accent-ink)' : 'var(--ink-600)',
                           cursor: 'pointer', fontFamily: 'var(--font-ui)',
-                        }}
-                      >{opt.label}</button>
-                    ))}
-                  </div>
-                )}
+                        }}>{p.label}</button>
+                      ))}
+                    </div>
+                  );
+                  const inputRow = (labelA, valA, setA, labelB, valB, setB, type = 'number') => (
+                    <div style={{ display: 'flex', gap: 6, padding: '0 8px 6px', alignItems: 'center' }}>
+                      <input type={type} placeholder={labelA} value={valA}
+                        onChange={e => setA(e.target.value)} min={type === 'number' ? 1000 : undefined} max={type === 'number' ? 9999 : undefined}
+                        style={{ flex: 1, padding: '4px 7px', borderRadius: 6, border: '1px solid var(--ink-200)', fontSize: 12, fontFamily: 'var(--font-ui)', background: 'var(--paper)', color: 'var(--ink-700)', outline: 'none' }}
+                      />
+                      <span style={{ fontSize: 11, color: 'var(--ink-400)' }}>–</span>
+                      <input type={type} placeholder={labelB} value={valB}
+                        onChange={e => setB(e.target.value)} min={type === 'number' ? 1000 : undefined} max={type === 'number' ? 9999 : undefined}
+                        style={{ flex: 1, padding: '4px 7px', borderRadius: 6, border: '1px solid var(--ink-200)', fontSize: 12, fontFamily: 'var(--font-ui)', background: 'var(--paper)', color: 'var(--ink-700)', outline: 'none' }}
+                      />
+                    </div>
+                  );
+
+                  return (
+                    <div style={{
+                      position: 'absolute', bottom: '100%', left: 0, marginBottom: 8,
+                      background: 'var(--paper)', border: '1px solid var(--ink-200)',
+                      borderRadius: 10, boxShadow: 'var(--shadow-md)',
+                      paddingTop: 8, paddingBottom: 4, minWidth: 300, zIndex: 10,
+                      maxHeight: '80vh', overflowY: 'auto',
+                    }}>
+
+                      {/* § Research mode */}
+                      {secHead('Research mode')}
+                      {[
+                        { value: 'legislation_only', label: 'Legislation only' },
+                        { value: 'case_law_only', label: 'Case law only' },
+                        { value: 'legislation_and_case_law', label: 'Legislation & case law' },
+                      ].map(opt => optBtn(
+                        researchMode === opt.value,
+                        () => { setResearchMode(opt.value); updatePreferences({ research_mode: opt.value }).catch(() => {}); },
+                        opt.label,
+                      ))}
+
+                      {divider()}
+
+                      {/* § Jurisdiction */}
+                      {secHead('Jurisdiction')}
+                      {JURISDICTION_OPTIONS.map(opt => optBtn(
+                        jurisdiction === opt.value,
+                        () => setJurisdictionPersist(opt.value),
+                        opt.label,
+                      ))}
+                      {showScotlandNINote && (
+                        <div style={{ margin: '2px 8px 4px', padding: '5px 8px', borderRadius: 6, background: 'var(--accent-soft)', fontSize: 11, color: 'var(--accent-ink)', lineHeight: 1.4 }}>
+                          Case law database covers E&amp;W and UK-wide courts only — Scottish and NI courts are not indexed.
+                        </div>
+                      )}
+
+                      {/* § Legislation year range */}
+                      {researchMode !== 'case_law_only' && (<>
+                        {divider()}
+                        {secHead('Legislation year range')}
+                        {presetRow(YEAR_PRESETS, yearPresetActive, p => { setYearFromPersist(p.from); setYearToPersist(p.to); })}
+                        {inputRow('From', yearFrom, setYearFromPersist, 'To', yearTo, setYearToPersist, 'number')}
+                      </>)}
+
+                      {/* § Case law */}
+                      {researchMode !== 'legislation_only' && (<>
+                        {divider()}
+                        {secHead('Case law date range')}
+                        {presetRow(DATE_PRESETS, datePresetActive, p => { setDateFromPersist(p.from); setDateToPersist(p.to); })}
+                        {inputRow('From', caseLawDateFrom, setDateFromPersist, 'To', caseLawDateTo, setDateToPersist, 'date')}
+                        {secHead('Case law court')}
+                        <div style={{ padding: '0 8px 6px' }}>
+                          <select value={caseLawCourt} onChange={e => setCourtPersist(e.target.value)}
+                            style={{ width: '100%', padding: '5px 7px', borderRadius: 6, border: '1px solid var(--ink-200)', fontSize: 12, fontFamily: 'var(--font-ui)', background: 'var(--paper)', color: 'var(--ink-700)', cursor: 'pointer', outline: 'none' }}>
+                            <option value=''>All courts</option>
+                            {COURT_GROUPS.map(g => (
+                              <optgroup key={g.group} label={g.group}>
+                                {g.courts.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                              </optgroup>
+                            ))}
+                          </select>
+                        </div>
+                      </>)}
+
+                      {/* Clear */}
+                      {hasActiveFilters && (<>
+                        {divider()}
+                        <div style={{ padding: '2px 8px 4px', textAlign: 'right' }}>
+                          <button onClick={clearAllFilters} style={{
+                            background: 'none', border: 'none', fontSize: 12, color: 'var(--ink-500)',
+                            cursor: 'pointer', fontFamily: 'var(--font-ui)', textDecoration: 'underline',
+                          }}>Clear filters</button>
+                        </div>
+                      </>)}
+                    </div>
+                  );
+                })()}
 
                 {/* Composer card */}
                 <div style={{
@@ -933,7 +1227,7 @@ function AppContent() {
                       </IBtn>
                       <IBtn label="Point in time"><CalendarIcon /></IBtn>
                       <span style={{ fontSize: 12, color: 'var(--ink-500)', marginLeft: 6, fontFamily: 'var(--font-mono)' }}>
-                        E&amp;W · {todayISO}
+                        {jurisdictionShort} · {todayISO}
                       </span>
                     </div>
 
@@ -986,6 +1280,106 @@ function AppContent() {
       {/* ── Modals ───────────────────────────────────────────── */}
 
       {showFeedbackModal && <FeedbackModal onClose={() => setShowFeedbackModal(false)} />}
+
+      {features.matters_enabled && showCreateMatterModal && (
+        <CreateMatterModal
+          onClose={() => setShowCreateMatterModal(false)}
+          onCreated={(matter) => {
+            setMatters(prev => [matter, ...prev]);
+            setExpandedMatterIds(prev => new Set([...prev, matter.id]));
+          }}
+        />
+      )}
+
+      {features.matters_enabled && notesModalMatter && (
+        <MatterNotesModal
+          matter={notesModalMatter}
+          onClose={() => {
+            setNotesModalMatter(null);
+            getMatters().then(setMatters).catch(() => {});
+          }}
+        />
+      )}
+
+      {features.matters_enabled && showAssignModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(11,18,32,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 50, padding: 16,
+          }}
+          onMouseDown={e => { if (e.target === e.currentTarget) setShowAssignModal(false); }}
+        >
+          <div style={{
+            background: 'var(--paper)', borderRadius: 'var(--r-lg)',
+            width: '100%', maxWidth: 380,
+            boxShadow: '0 8px 32px rgba(11,18,32,0.14)',
+            fontFamily: 'var(--font-ui)',
+          }}>
+            <div style={{
+              padding: '16px 20px 12px',
+              borderBottom: '1px solid var(--ink-200)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink-900)' }}>Save thread to matter</span>
+              <button onClick={() => setShowAssignModal(false)} style={{
+                width: 28, height: 28, border: 'none', background: 'transparent',
+                cursor: 'pointer', color: 'var(--ink-500)', display: 'grid', placeItems: 'center', borderRadius: 6,
+              }}>
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div style={{ padding: '8px 12px' }}>
+              {matters.length === 0 ? (
+                <div style={{ padding: '12px 8px', color: 'var(--ink-400)', fontSize: 13, fontStyle: 'italic' }}>
+                  No matters yet. Create one first.
+                </div>
+              ) : matters.map(m => {
+                const currentMatterId = recentChats.find(c => c.id === assigningChatId)?.matter_id;
+                const isAssigned = currentMatterId === m.id;
+                return (
+                  <div
+                    key={m.id}
+                    onClick={async () => {
+                      await assignChatToMatter(assigningChatId, isAssigned ? null : m.id);
+                      getChats().then(setRecentChats).catch(() => {});
+                      getMatters().then(setMatters).catch(() => {});
+                      setShowAssignModal(false);
+                    }}
+                    style={{
+                      padding: '9px 10px', borderRadius: 6, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      background: isAssigned ? 'var(--accent-soft)' : 'transparent',
+                      color: isAssigned ? 'var(--accent-ink)' : 'var(--ink-800)',
+                      marginBottom: 2,
+                    }}
+                  >
+                    <FolderIcon />
+                    <span style={{ flex: 1, fontSize: 13 }}>{m.title}</span>
+                    {isAssigned && <span style={{ fontSize: 11, color: 'var(--accent)' }}>✓ Assigned</span>}
+                  </div>
+                );
+              })}
+              {recentChats.find(c => c.id === assigningChatId)?.matter_id && (
+                <div
+                  onClick={async () => {
+                    await assignChatToMatter(assigningChatId, null);
+                    getChats().then(setRecentChats).catch(() => {});
+                    getMatters().then(setMatters).catch(() => {});
+                    setShowAssignModal(false);
+                  }}
+                  style={{
+                    padding: '8px 10px', borderRadius: 6, cursor: 'pointer',
+                    fontSize: 13, color: 'var(--danger)', marginTop: 4,
+                    borderTop: '1px solid var(--ink-200)', paddingTop: 10,
+                  }}
+                >Remove from matter</div>
+              )}
+            </div>
+            <div style={{ height: 8 }} />
+          </div>
+        </div>
+      )}
 
       {showAbout && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">

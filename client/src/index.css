@@ -49,7 +49,7 @@ body {
   margin: 0;
   padding: 0;
   font-family: var(--font-ui);
-  background: var(--ink-50);
+  background: #d4d4d4;
   color: var(--ink-900);
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "ss01", "cv11";

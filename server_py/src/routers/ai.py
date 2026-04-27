@@ -51,6 +51,12 @@ class ChatRequest(BaseModel):
     num_ctx: Optional[int] = None
     deep_research: Optional[bool] = False
     research_mode: Optional[str] = "legislation_only"
+    jurisdiction: Optional[str] = None
+    year_from: Optional[int] = None
+    year_to: Optional[int] = None
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
+    court: Optional[str] = None
 
 
 @router.post("/api/chat")
@@ -78,6 +84,12 @@ async def chat_endpoint(body: ChatRequest, request: Request):
             **provider_config,
             "_provider": active_provider,
             "_research_mode": body.research_mode or "legislation_only",
+            "_jurisdiction": body.jurisdiction or None,
+            "_year_from": body.year_from or None,
+            "_year_to": body.year_to or None,
+            "_date_from": body.date_from or None,
+            "_date_to": body.date_to or None,
+            "_court": body.court or None,
         })
         # Always use the server-side configured model — the frontend may be stale
         # (e.g. user switched provider via Dev tab without refreshing the page).
@@ -183,6 +195,9 @@ async def chat_endpoint(body: ChatRequest, request: Request):
 
             if result_message:
                 yield f"data: {json.dumps({'type': 'result', 'message': result_message})}\n\n"
+            else:
+                logger.error("[AI] Agent returned no result — sending error to client")
+                yield f"data: {json.dumps({'type': 'error', 'error': 'The agent completed but returned no response. Please try again.'})}\n\n"
 
         except asyncio.CancelledError:
             logger.info("[AI] Client closed connection, aborted processing.")

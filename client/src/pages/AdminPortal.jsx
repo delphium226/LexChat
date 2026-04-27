@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData, getUsageStats, resetDatabase, clearUsageData, clearPerformanceData, getLatestHealthStatus, getHealthHistory, triggerHealthCheck, getQueryPerformanceStats, getProductFeedback, getProviderConfig, saveProviderConfig, setActiveProvider, getOpenRouterModels, getCostStats } from '../services/api';
+import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData, getUsageStats, resetDatabase, clearUsageData, clearPerformanceData, getLatestHealthStatus, getHealthHistory, triggerHealthCheck, getQueryPerformanceStats, getProductFeedback, getProviderConfig, saveProviderConfig, setActiveProvider, getOpenRouterModels, getCostStats, getFeatures, saveFeatures } from '../services/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const Spinner = ({ size = 'md' }) => {
@@ -901,6 +901,10 @@ const AdminPortal = ({ currentUser }) => {
     const [productFeedback, setProductFeedback] = useState([]);
     const [isProductFeedbackLoading, setIsProductFeedbackLoading] = useState(false);
 
+    // --- FEATURE FLAGS STATE ---
+    const [features, setFeatures] = useState({ matters_enabled: true });
+    const [isSavingFeatures, setIsSavingFeatures] = useState(false);
+
     // --- INITIAL FETCH ---
     useEffect(() => {
         if (activeTab === 'users') {
@@ -918,6 +922,8 @@ const AdminPortal = ({ currentUser }) => {
             fetchHealthStatus();
         } else if (activeTab === 'product-feedback') {
             fetchProductFeedback();
+        } else if (activeTab === 'developer') {
+            getFeatures().then(setFeatures).catch(() => {});
         }
     }, [activeTab, timeframe, learningTimeframe, perfTimeframe, costTimeframe]);
 
@@ -1776,6 +1782,42 @@ const AdminPortal = ({ currentUser }) => {
 
                         {/* LLM Provider Configuration */}
                         <ProviderConfigPanel />
+
+                        {/* Feature Flags */}
+                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+                            <h2 className="text-lg font-bold mb-1 dark:text-white">Feature Flags</h2>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
+                                Toggle features on or off for all users. Changes take effect immediately.
+                            </p>
+                            <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-zinc-700">
+                                <div>
+                                    <p className="text-sm font-medium dark:text-white">Matters</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        Lets users organise threads into named matters with notes.
+                                    </p>
+                                </div>
+                                <button
+                                    role="switch"
+                                    aria-checked={features.matters_enabled}
+                                    disabled={isSavingFeatures}
+                                    onClick={async () => {
+                                        const next = { ...features, matters_enabled: !features.matters_enabled };
+                                        setIsSavingFeatures(true);
+                                        try {
+                                            const saved = await saveFeatures(next);
+                                            setFeatures(saved.features);
+                                        } catch {
+                                            setMessage('Failed to save feature flags.');
+                                        } finally {
+                                            setIsSavingFeatures(false);
+                                        }
+                                    }}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${features.matters_enabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-zinc-600'} ${isSavingFeatures ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                >
+                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${features.matters_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                                </button>
+                            </div>
+                        </div>
 
                         <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
                             <h2 className="text-lg font-bold mb-4 dark:text-white">Synthetic Data Generation</h2>

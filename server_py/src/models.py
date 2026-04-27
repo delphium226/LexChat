@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy import (
-    Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text, text
+    Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, text
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -24,6 +24,9 @@ class User(Base):
     chats: Mapped[list["Chat"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    matters: Mapped[list["Matter"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class AppSetting(Base):
@@ -40,12 +43,16 @@ class Chat(Base):
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
+    matter_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("matters.id", ondelete="SET NULL"), nullable=True
+    )
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
     model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     user: Mapped["User"] = relationship(back_populates="chats")
+    matter: Mapped["Matter | None"] = relationship(back_populates="chats")
     messages: Mapped[list["Message"]] = relationship(
         back_populates="chat", cascade="all, delete-orphan"
     )
@@ -53,6 +60,7 @@ class Chat(Base):
     __table_args__ = (
         Index('idx_chats_user_created', 'user_id', 'created_at'),
         Index('idx_chats_created_at', 'created_at'),
+        Index('idx_chats_matter', 'matter_id'),
     )
 
 
@@ -70,6 +78,7 @@ class Message(Base):
     rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
     feedback_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sources: Mapped[list | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     chat: Mapped["Chat"] = relationship(back_populates="messages")
@@ -128,4 +137,48 @@ class ServiceHealthStatus(Base):
 
     __table_args__ = (
         Index('idx_health_service_checked', 'service_name', 'checked_at'),
+    )
+
+
+class Matter(Base):
+    __tablename__ = "matters"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="open")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    user: Mapped["User"] = relationship(back_populates="matters")
+    chats: Mapped[list["Chat"]] = relationship(back_populates="matter")
+    notes: Mapped[list["MatterNote"]] = relationship(
+        back_populates="matter", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index('idx_matters_user_created', 'user_id', 'created_at'),
+    )
+
+
+class MatterNote(Base):
+    __tablename__ = "matter_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    matter_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("matters.id", ondelete="CASCADE"), nullable=False
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    message_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    matter: Mapped["Matter"] = relationship(back_populates="notes")
+
+    __table_args__ = (
+        Index('idx_matter_notes_matter', 'matter_id', 'created_at'),
     )

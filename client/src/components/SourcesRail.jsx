@@ -52,6 +52,17 @@ const GavelIcon = () => (
   </svg>
 );
 
+function formatExtent(extent) {
+  if (!extent || extent.length === 0) return null;
+  const all4 = ['England', 'Wales', 'Scotland', 'Northern Ireland'];
+  if (all4.every(j => extent.includes(j))) return 'UK-wide';
+  if (extent.length === 1) return extent[0];
+  const abbr = { England: 'E', Wales: 'W', Scotland: 'S', 'Northern Ireland': 'NI' };
+  const parts = extent.map(j => abbr[j] || j);
+  if (parts.length === 2) return parts.join(' & ');
+  return parts.slice(0, -1).join(', ') + ' & ' + parts[parts.length - 1];
+}
+
 export default function SourcesRail({ sources = [], activeCite, onCiteClick }) {
   const activeRef = useRef(null);
 
@@ -61,7 +72,7 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick }) {
     }
   }, [activeCite]);
 
-  const primaryCount = sources.filter(s => s.kind === 'Statute' || s.kind === 'SI').length;
+  const primaryCount = sources.filter(s => s.kind !== 'Case' && s.kind !== 'Article').length;
   const secondaryCount = sources.filter(s => s.kind === 'Case' || s.kind === 'Article').length;
 
   return (
@@ -105,6 +116,16 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick }) {
         ) : (
           sources.map(s => {
             const active = s.n === activeCite;
+            const isDraftSI = s.kind === 'Draft SI';
+            const isCase = s.kind === 'Case';
+            const badgeBg = isCase ? 'oklch(0.95 0.04 65)' : isDraftSI ? 'oklch(0.96 0.06 85)' : 'oklch(0.95 0.03 155)';
+            const badgeBorder = isCase ? 'oklch(0.85 0.08 65)' : isDraftSI ? 'oklch(0.88 0.10 85)' : 'oklch(0.85 0.06 155)';
+            const badgeColor = isCase ? 'oklch(0.40 0.12 65)' : isDraftSI ? 'oklch(0.40 0.14 85)' : 'oklch(0.35 0.10 155)';
+
+            const extentStr = formatExtent(s.extent);
+            const metaParts = [s.year, s.meta, extentStr].filter(Boolean);
+            const displayMeta = metaParts.length > 0 ? metaParts.join(' · ') : null;
+
             return (
               <div
                 key={s.n}
@@ -128,18 +149,16 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick }) {
                     display: 'inline-flex', alignItems: 'center', gap: 4,
                     padding: '3px 8px', borderRadius: 999, fontSize: 12, fontWeight: 500,
                     border: '1px solid',
-                    background: s.kind === 'Case' ? 'oklch(0.95 0.04 65)' : 'oklch(0.95 0.03 155)',
-                    borderColor: s.kind === 'Case' ? 'oklch(0.85 0.08 65)' : 'oklch(0.85 0.06 155)',
-                    color: s.kind === 'Case' ? 'oklch(0.40 0.12 65)' : 'oklch(0.35 0.10 155)',
+                    background: badgeBg, borderColor: badgeBorder, color: badgeColor,
                   }}>
-                    {s.kind === 'Case' ? <GavelIcon /> : <BookIcon />}
+                    {isCase ? <GavelIcon /> : <BookIcon />}
                     {s.kind}
                   </span>
                 </div>
 
                 <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)', marginBottom: 2 }}>{s.title}</div>
                 {s.sub && <div style={{ fontSize: 12, color: 'var(--ink-600)', marginBottom: 8 }}>{s.sub}</div>}
-                {s.meta && <div style={{ fontSize: 11, color: 'var(--ink-400)', marginBottom: s.excerpt ? 8 : 0, fontFamily: 'var(--font-mono)' }}>{s.meta}</div>}
+                {displayMeta && <div style={{ fontSize: 11, color: 'var(--ink-400)', marginBottom: s.excerpt ? 8 : 0, fontFamily: 'var(--font-mono)' }}>{displayMeta}</div>}
 
                 {s.excerpt && (
                   <div style={{

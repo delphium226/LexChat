@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { marked } from 'marked';
-import { rateMessage } from '../services/api';
+import { rateMessage, addMatterNote } from '../services/api';
 import CommentModal from './CommentModal';
 
 function formatTime(isoDate) {
@@ -71,16 +71,8 @@ const BookmarkIcon = () => (
   </svg>
 );
 
-const ShareIcon = () => (
-  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="18" cy="5" r="2.5" />
-    <circle cx="6" cy="12" r="2.5" />
-    <circle cx="18" cy="19" r="2.5" />
-    <path d="M8.2 10.8 15.8 6.2M8.2 13.2l7.6 4.6" />
-  </svg>
-);
 
-const ChatMessage = ({ message, onResend, showThinking, authorInitials = 'U' }) => {
+const ChatMessage = ({ message, onResend, showThinking, authorInitials = 'U', matters = [], mattersEnabled = true }) => {
   const isUser = message.role === 'user';
   const isTool = message.role === 'tool';
 
@@ -89,6 +81,29 @@ const ChatMessage = ({ message, onResend, showThinking, authorInitials = 'U' }) 
   const [isRating, setIsRating] = useState(false);
   const [comment, setComment] = useState(message.feedback_comment || '');
   const [showCommentModal, setShowCommentModal] = useState(false);
+  const [showPinPopover, setShowPinPopover] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const pinRef = useRef(null);
+
+  useEffect(() => {
+    if (!showPinPopover) return;
+    const handler = (e) => {
+      if (pinRef.current && !pinRef.current.contains(e.target)) setShowPinPopover(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showPinPopover]);
+
+  const handlePin = async (matterId) => {
+    try {
+      await addMatterNote(matterId, message.content, message.id || null);
+      setPinned(true);
+      setTimeout(() => setPinned(false), 2000);
+    } catch {
+      // silently fail
+    }
+    setShowPinPopover(false);
+  };
 
   const handleRate = async (value) => {
     if (!message.id) return;
@@ -254,12 +269,43 @@ const ChatMessage = ({ message, onResend, showThinking, authorInitials = 'U' }) 
             >
               <ThumbDownIcon />
             </ToolBtn>
-            <ToolBtn label="Save to matter">
-              <BookmarkIcon />
-            </ToolBtn>
-            <ToolBtn label="Share">
-              <ShareIcon />
-            </ToolBtn>
+            {mattersEnabled && <div ref={pinRef} style={{ position: 'relative' }}>
+              <ToolBtn
+                label={pinned ? 'Pinned!' : 'Save to matter'}
+                active={pinned}
+                onClick={() => matters.length > 0 && setShowPinPopover(v => !v)}
+              >
+                <BookmarkIcon />
+              </ToolBtn>
+              {showPinPopover && (
+                <div style={{
+                  position: 'absolute', bottom: '100%', left: 0, marginBottom: 4,
+                  background: 'var(--paper)', border: '1px solid var(--ink-200)',
+                  borderRadius: 'var(--r-md)', boxShadow: 'var(--shadow-md)',
+                  minWidth: 200, zIndex: 40, padding: '4px 0',
+                  fontFamily: 'var(--font-ui)',
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-400)', padding: '4px 10px 6px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Pin to matter</div>
+                  {matters.map(m => (
+                    <div
+                      key={m.id}
+                      onClick={() => handlePin(m.id)}
+                      style={{
+                        padding: '7px 10px', cursor: 'pointer', fontSize: 13,
+                        color: 'var(--ink-800)', display: 'flex', alignItems: 'center', gap: 6,
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--ink-50)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+                      </svg>
+                      {m.title}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>}
           </div>
           <div style={{
             display: 'flex', gap: 10, fontSize: 11,

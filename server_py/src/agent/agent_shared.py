@@ -8,6 +8,7 @@ need to happen here.
 """
 import json
 import logging
+import uuid
 from typing import Callable, Optional
 
 from .summarisation import call_chunk, summarise_for_query
@@ -37,6 +38,18 @@ def _extract_sources_from_tool(name: str, args: dict, raw_result_str: str, accum
         logger.debug(f"[Sources] Extraction skipped for '{name}': {e}")
 
 
+def _legislation_kind(legislation_id: str) -> str:
+    """Derive a human-readable source kind from the legislation_id path prefix."""
+    prefix = legislation_id.split("/")[0].lower()
+    if prefix in ("ukpga", "ukla", "ukppa", "ukpba", "nia", "asp", "anaw", "asc", "mwa"):
+        return "Act"
+    if prefix in ("uksi", "nisi", "wsi", "ssi", "nisr", "ukmo"):
+        return "SI"
+    if prefix == "ukdsi":
+        return "Draft SI"
+    return "Statute"
+
+
 def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list) -> None:
     if name == "search_legislation":
         for item in data.get("results", []):
@@ -47,10 +60,12 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                 continue
             accumulator.append({
                 "_lid": lid,
-                "kind": "Statute",
+                "kind": _legislation_kind(lid),
                 "title": item.get("title") or lid,
                 "url": item.get("url") or "",
                 "meta": item.get("status") or "",
+                "year": item.get("year"),
+                "extent": item.get("extent") or [],
                 "cite": lid,
             })
 
@@ -113,7 +128,7 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                 "title": case.get("title") or case.get("name") or "",
                 "sub": ncn,
                 "meta": ", ".join(meta_parts),
-                "cite": ncn or case.get("title") or "",
+                "cite": ncn,
                 "url": url,
             })
 
@@ -141,8 +156,10 @@ async def run_worker_tool(
         source_accumulator: If provided, structured sources are extracted from the
             raw result (before summarisation) and appended here.
     """
+    activity_id = uuid.uuid4().hex[:8]
+
     if parent_on_chunk:
-        await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}"})
+        await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
 
     result = await execute_worker_tool(name, args, on_chunk=parent_on_chunk, timing_collector=timing_collector)
 
@@ -216,10 +233,13 @@ async def run_worker_tool(
         except Exception:
             doc_name = args.get("legislation_id") or name
 
+        summarise_id = uuid.uuid4().hex[:8]
+
         if parent_on_chunk:
             await call_chunk(parent_on_chunk, {
                 "type": "tool_start",
                 "tool": "Extracting the relevant sections from a large document",
+                "id": summarise_id,
             })
 
         async def _emit_progress(msg: str) -> None:
@@ -239,6 +259,7 @@ async def run_worker_tool(
             await call_chunk(parent_on_chunk, {
                 "type": "tool_end",
                 "tool": "Extracting the relevant sections from a large document",
+                "id": summarise_id,
                 "result": "Done",
             })
 
@@ -248,6 +269,6 @@ async def run_worker_tool(
     result += case_law_note
 
     if parent_on_chunk:
-        await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "result": "Done"})
+        await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done"})
 
     return result

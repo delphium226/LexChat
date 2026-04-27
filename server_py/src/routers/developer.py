@@ -1,3 +1,4 @@
+import json
 import logging
 import random
 import time
@@ -19,7 +20,7 @@ from ..agent.provider_factory import (
 )
 from ..config import MODEL_LIST, settings
 from ..database import get_db
-from ..models import Chat, Message, RequestTiming, User
+from ..models import AppSetting, Chat, Message, RequestTiming, User
 
 logger = logging.getLogger("app")
 
@@ -322,3 +323,47 @@ async def clear_performance_data(db: AsyncSession = Depends(get_db)):
         "success": True,
         "message": "Performance data cleared. All timing records have been deleted.",
     }
+
+
+# -----------------------------------------------------------------------
+# Feature flags
+# -----------------------------------------------------------------------
+
+_FEATURES_KEY = "features"
+_DEFAULT_FEATURES = {"matters_enabled": True}
+
+
+async def _read_features(db: AsyncSession) -> dict:
+    result = await db.execute(select(AppSetting).where(AppSetting.key == _FEATURES_KEY))
+    row = result.scalar_one_or_none()
+    if not row:
+        return dict(_DEFAULT_FEATURES)
+    try:
+        return json.loads(row.value)
+    except (json.JSONDecodeError, ValueError):
+        return dict(_DEFAULT_FEATURES)
+
+
+@router.get("/features")
+async def get_features(db: AsyncSession = Depends(get_db)):
+    """Return current feature flag settings."""
+    return await _read_features(db)
+
+
+class FeaturesUpdate(BaseModel):
+    matters_enabled: bool
+
+
+@router.post("/features")
+async def save_features(body: FeaturesUpdate, db: AsyncSession = Depends(get_db)):
+    """Persist feature flag settings."""
+    data = {"matters_enabled": body.matters_enabled}
+    result = await db.execute(select(AppSetting).where(AppSetting.key == _FEATURES_KEY))
+    row = result.scalar_one_or_none()
+    if row:
+        row.value = json.dumps(data)
+    else:
+        db.add(AppSetting(key=_FEATURES_KEY, value=json.dumps(data)))
+    await db.commit()
+    logger.info(f"[Developer] Features updated: {data}")
+    return {"success": True, "features": data}

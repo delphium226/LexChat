@@ -40,13 +40,36 @@ async def init_db() -> None:
             await conn.run_sync(Base.metadata.create_all)
 
         # Migrate existing tables — add columns that may not exist yet
+        # matters/matter_notes tables must be created before matter_id FK is added to chats.
+        # For fresh installs, create_all handles table creation in dependency order.
+        # For existing databases, we create the new tables explicitly first.
         migration_statements = [
+            # New tables (safe to run on existing DBs via IF NOT EXISTS)
+            """CREATE TABLE IF NOT EXISTS matters (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                title VARCHAR(255) NOT NULL,
+                description TEXT,
+                status VARCHAR(50) NOT NULL DEFAULT 'open',
+                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )""",
+            """CREATE TABLE IF NOT EXISTS matter_notes (
+                id SERIAL PRIMARY KEY,
+                matter_id INTEGER NOT NULL REFERENCES matters(id) ON DELETE CASCADE,
+                content TEXT NOT NULL,
+                message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )""",
+            # Existing table column additions
             "ALTER TABLE chats ADD COLUMN IF NOT EXISTS provider VARCHAR(50)",
+            "ALTER TABLE chats ADD COLUMN IF NOT EXISTS matter_id INTEGER REFERENCES matters(id) ON DELETE SET NULL",
             "ALTER TABLE messages ADD COLUMN IF NOT EXISTS model VARCHAR(255)",
             "ALTER TABLE messages ADD COLUMN IF NOT EXISTS provider VARCHAR(50)",
             "ALTER TABLE messages ADD COLUMN IF NOT EXISTS cost_usd FLOAT",
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS total_cost_usd FLOAT NOT NULL DEFAULT 0.0",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS research_mode VARCHAR(50) NOT NULL DEFAULT 'legislation_only'",
+            "ALTER TABLE messages ADD COLUMN IF NOT EXISTS sources JSONB",
         ]
         async with engine.begin() as conn:
             for stmt in migration_statements:
@@ -57,12 +80,15 @@ async def init_db() -> None:
         index_statements = [
             "CREATE INDEX IF NOT EXISTS idx_chats_user_created ON chats (user_id, created_at)",
             "CREATE INDEX IF NOT EXISTS idx_chats_created_at ON chats (created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_chats_matter ON chats (matter_id)",
             "CREATE INDEX IF NOT EXISTS idx_messages_chat_created ON messages (chat_id, created_at)",
             "CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages (created_at)",
             "CREATE INDEX IF NOT EXISTS idx_messages_rated ON messages (chat_id, created_at) WHERE rating IS NOT NULL",
             "CREATE INDEX IF NOT EXISTS idx_messages_content_fts ON messages USING GIN (to_tsvector('english', content))",
             "CREATE INDEX IF NOT EXISTS idx_health_service_checked ON service_health_logs (service_name, checked_at)",
             "CREATE INDEX IF NOT EXISTS idx_request_timings_created_at ON request_timings (created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_matters_user_created ON matters (user_id, created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_matter_notes_matter ON matter_notes (matter_id, created_at)",
         ]
         async with engine.begin() as conn:
             for stmt in index_statements:

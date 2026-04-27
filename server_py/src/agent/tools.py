@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 import httpx
 
 from ..config import settings
+from .provider_factory import get_request_provider_config
 
 logger = logging.getLogger("agent")
 
@@ -48,6 +49,32 @@ def _slim_search_results(resp_json: dict) -> dict:
         "results": slimmed,
         "total": resp_json.get("total", len(slimmed)),
     }
+
+
+def _matches_jurisdiction(extent: list, jurisdiction: str) -> bool:
+    """Return True if the legislation extent covers the requested jurisdiction.
+
+    Extent values are strings like "E+W+S+NI". Split on "+" to get individual
+    territory tokens: E (England), W (Wales), S (Scotland), NI (Northern Ireland).
+    An empty extent list is treated as unknown — included by default.
+    """
+    if not extent:
+        return True
+    tokens: set[str] = set()
+    for e in extent:
+        for t in e.split("+"):
+            tokens.add(t.strip())
+    if jurisdiction == "england_and_wales":
+        return "E" in tokens
+    if jurisdiction == "scotland":
+        return "S" in tokens
+    if jurisdiction == "northern_ireland":
+        return "NI" in tokens
+    if jurisdiction == "wales":
+        return "W" in tokens
+    if jurisdiction == "uk_wide":
+        return tokens >= {"E", "W", "S", "NI"}
+    return True
 
 
 def extract_legislation_ids_from_search(resp_json: dict) -> list[tuple[str, str]]:
@@ -293,11 +320,29 @@ async def execute_worker_tool(
         async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
             if name == "search_legislation":
                 url = f"{LEX_API_URL}/legislation/search"
+                cfg = get_request_provider_config()
+                user_year_from = cfg.get("_year_from")
+                user_year_to = cfg.get("_year_to")
+                jurisdiction = cfg.get("_jurisdiction")
+
+                # Merge user filter with model-supplied year args (take intersection)
+                model_year_from = args.get("year_from")
+                model_year_to = args.get("year_to")
+                if user_year_from and model_year_from:
+                    final_year_from = max(user_year_from, model_year_from)
+                else:
+                    final_year_from = user_year_from or model_year_from
+                if user_year_to and model_year_to:
+                    final_year_to = min(user_year_to, model_year_to)
+                else:
+                    final_year_to = user_year_to or model_year_to
+
                 payload = {
                     "query": args["query"],
-                    "year_from": args.get("year_from"),
-                    "year_to": args.get("year_to"),
-                    "limit": 5,
+                    "year_from": final_year_from,
+                    "year_to": final_year_to,
+                    # Over-fetch when jurisdiction filtering so post-filter has enough to work with
+                    "limit": 15 if jurisdiction else 5,
                     "include_text": False,
                 }
 
@@ -332,11 +377,15 @@ async def execute_worker_tool(
                 })
 
                 resp.raise_for_status()
-                # Slim the response before returning — strips provenance metadata,
-                # timestamps, and ranked section arrays the model never uses.
-                # Reduces a typical 5-result payload from ~10k to ~1.5k chars,
-                # keeping it under the summarisation threshold.
-                return json.dumps(_slim_search_results(resp_json))
+                slimmed = _slim_search_results(resp_json)
+                # Post-filter by jurisdiction when set, then cap at 5 results.
+                if jurisdiction:
+                    slimmed["results"] = [
+                        r for r in slimmed["results"]
+                        if _matches_jurisdiction(r.get("extent", []), jurisdiction)
+                    ][:5]
+                    slimmed["total"] = len(slimmed["results"])
+                return json.dumps(slimmed)
 
             elif name == "search_legislation_sections":
                 url = f"{LEX_API_URL}/legislation/section/search"
@@ -423,6 +472,17 @@ async def execute_worker_tool(
                     params["date_from"] = args["date_from"]
                 if args.get("date_to"):
                     params["date_to"] = args["date_to"]
+
+                # Apply user's hard filter constraints (override model args)
+                cl_cfg = get_request_provider_config()
+                if cl_cfg.get("_court"):
+                    params["court"] = cl_cfg["_court"]
+                if cl_cfg.get("_date_from"):
+                    model_df = args.get("date_from") or ""
+                    params["date_from"] = max(model_df, cl_cfg["_date_from"]) if model_df else cl_cfg["_date_from"]
+                if cl_cfg.get("_date_to"):
+                    model_dt = args.get("date_to") or ""
+                    params["date_to"] = min(model_dt, cl_cfg["_date_to"]) if model_dt else cl_cfg["_date_to"]
 
                 await _emit(on_chunk, {
                     "type": "api_call_start",

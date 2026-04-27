@@ -175,24 +175,112 @@ OUTPUT STRUCTURE (Use Markdown):
 5. **References:** Complete list of all sources used."""
 
 
-def get_worker_system_prompt(research_mode: str = "legislation_only") -> str:
-    if research_mode == "case_law_only":
-        return WORKER_SYSTEM_PROMPT_CASE_LAW
-    elif research_mode == "legislation_and_case_law":
-        return WORKER_SYSTEM_PROMPT_HYBRID
-    return WORKER_SYSTEM_PROMPT
+_JURISDICTION_LABELS = {
+    "england_and_wales": "England and Wales",
+    "scotland": "Scotland",
+    "northern_ireland": "Northern Ireland",
+    "wales": "Wales",
+    "uk_wide": "United Kingdom (UK-wide only)",
+}
+
+_JURISDICTION_EXTENT_NOTES = {
+    "england_and_wales": (
+        "Prioritise legislation where extent includes E+W or E+W+S+NI. "
+        "If a cited Act's extent does not cover England and Wales, note this explicitly."
+    ),
+    "scotland": (
+        "Prioritise legislation where extent includes S or E+W+S+NI. "
+        "Note that the case law database does not comprehensively index the Scottish Court of Session."
+    ),
+    "northern_ireland": "Prioritise legislation where extent includes NI or E+W+S+NI.",
+    "wales": "Prioritise legislation where extent includes W or E+W+S+NI.",
+    "uk_wide": (
+        "Include only legislation that applies UK-wide (E+W+S+NI). "
+        "If no UK-wide legislation exists for this topic, note this clearly."
+    ),
+}
+
+_COURT_LABELS = {
+    "uksc": "UK Supreme Court (uksc)",
+    "ukpc": "Privy Council (ukpc)",
+    "ewca/civ": "Court of Appeal Civil Division (ewca/civ)",
+    "ewca/crim": "Court of Appeal Criminal Division (ewca/crim)",
+    "ewhc/admin": "Administrative Court (ewhc/admin)",
+    "ewhc/qb": "King's Bench Division (ewhc/qb)",
+    "ewhc/ch": "Chancery Division (ewhc/ch)",
+    "ewhc/fam": "Family Division (ewhc/fam)",
+    "ewhc/comm": "Commercial Court (ewhc/comm)",
+    "ewhc/pat": "Patents Court (ewhc/pat)",
+    "ewhc/tcc": "Technology & Construction Court (ewhc/tcc)",
+    "ukut": "Upper Tribunal (ukut)",
+    "ukut/iac": "Immigration & Asylum Chamber (ukut/iac)",
+    "ukut/lc": "Lands Chamber (ukut/lc)",
+    "eat": "Employment Appeal Tribunal (eat)",
+}
 
 
-def get_manager_mode_note(research_mode: str) -> str:
+def build_filter_constraint_block(cfg: dict) -> str:
+    """Build a constraint block to append to system prompts when research filters are active."""
+    jurisdiction = cfg.get("_jurisdiction")
+    year_from = cfg.get("_year_from")
+    year_to = cfg.get("_year_to")
+    date_from = cfg.get("_date_from")
+    date_to = cfg.get("_date_to")
+    court = cfg.get("_court")
+
+    if not any([jurisdiction, year_from, year_to, date_from, date_to, court]):
+        return ""
+
+    lines = ["ACTIVE RESEARCH FILTERS (applied by the system — do not override or ignore):"]
+
+    if jurisdiction:
+        label = _JURISDICTION_LABELS.get(jurisdiction, jurisdiction)
+        note = _JURISDICTION_EXTENT_NOTES.get(jurisdiction, "")
+        lines.append(f"- Jurisdiction: {label}. {note}")
+
+    if year_from and year_to:
+        lines.append(f"- Legislation year range: {year_from}–{year_to}.")
+    elif year_from:
+        lines.append(f"- Legislation year range: from {year_from} onwards.")
+    elif year_to:
+        lines.append(f"- Legislation year range: up to {year_to}.")
+
+    if date_from and date_to:
+        lines.append(f"- Case law date range: {date_from} to {date_to}.")
+    elif date_from:
+        lines.append(f"- Case law date range: from {date_from} onwards.")
+    elif date_to:
+        lines.append(f"- Case law date range: up to {date_to}.")
+
+    if court:
+        label = _COURT_LABELS.get(court, court)
+        lines.append(f"- Case law court: {label} only.")
+
+    return "\n".join(lines)
+
+
+def get_worker_system_prompt(research_mode: str = "legislation_only", cfg: dict = None) -> str:
+    base = {
+        "case_law_only": WORKER_SYSTEM_PROMPT_CASE_LAW,
+        "legislation_and_case_law": WORKER_SYSTEM_PROMPT_HYBRID,
+    }.get(research_mode, WORKER_SYSTEM_PROMPT)
+    if cfg:
+        block = build_filter_constraint_block(cfg)
+        if block:
+            return base + "\n\n" + block
+    return base
+
+
+def get_manager_mode_note(research_mode: str, cfg: dict = None) -> str:
     if research_mode == "case_law_only":
-        return (
+        note = (
             "CURRENT RESEARCH MODE: Case Law Only. "
             "The user is seeking case law research. Delegate questions about court judgments, "
             "precedents, and judicial decisions using `delegate_research`. "
             "If the user asks about legislation, note that they are in Case Law Only mode."
         )
     elif research_mode == "legislation_and_case_law":
-        return (
+        note = (
             "CURRENT RESEARCH MODE: Legislation & Case Law. "
             "The user wants comprehensive research covering BOTH legislation AND case law. "
             "Delegate all legal research queries using `delegate_research`. "
@@ -203,7 +291,15 @@ def get_manager_mode_note(research_mode: str) -> str:
             "Example brief structure: 'Find the relevant legislation on [topic]. "
             "ALSO search for case law using these keywords: [copy the user's original terms, e.g. Scottish Ministers, Health Boards, direction].'"
         )
-    return ""
+    else:
+        note = ""
+
+    if cfg:
+        block = build_filter_constraint_block(cfg)
+        if block:
+            note = (note + "\n\n" + block) if note else block
+
+    return note
 
 
 DEEP_RESEARCH_SYSTEM_PROMPT = """You are a Deep Research Agent.
