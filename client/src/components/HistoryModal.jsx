@@ -6,6 +6,7 @@ const HistoryModal = ({ onClose, onSelectChat }) => {
     const [loading, setLoading] = useState(true);
     const [editingId, setEditingId] = useState(null);
     const [editTitle, setEditTitle] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
         loadChats();
@@ -61,6 +62,10 @@ const HistoryModal = ({ onClose, onSelectChat }) => {
         }
     };
 
+    const filteredChats = chats.filter(c =>
+        c.title.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
     return (
         <div className="flex flex-col h-full w-full bg-white dark:bg-gray-800 rounded-lg overflow-hidden relative">
             <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
@@ -76,14 +81,41 @@ const HistoryModal = ({ onClose, onSelectChat }) => {
                 </button>
             </div>
 
+            <div className="px-4 pt-3 pb-1">
+                <div className="relative">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" />
+                    </svg>
+                    <input
+                        type="text"
+                        placeholder="Search chats…"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
+            </div>
+
             <div className="flex-1 overflow-y-auto p-4">
                 {loading ? (
                     <div className="text-center text-gray-500 mt-4">Loading history...</div>
-                ) : chats.length === 0 ? (
-                    <div className="text-center text-gray-500 mt-4">No chat history found.</div>
+                ) : filteredChats.length === 0 ? (
+                    <div className="text-center text-gray-500 mt-4">
+                        {searchQuery ? 'No chats match your search.' : 'No chat history found.'}
+                    </div>
                 ) : (
                     <div className="space-y-2">
-                        {chats.map(chat => (
+                        {filteredChats.map(chat => (
                             <div
                                 key={chat.id}
                                 onClick={() => onSelectChat(chat.id, chat.model)}

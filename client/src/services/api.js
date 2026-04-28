@@ -17,12 +17,15 @@ export const sendMessage = (messages, model, num_ctx, onUpdate, signal, deep_res
                 },
                 body: JSON.stringify({
                     messages, model, num_ctx, deep_research, research_mode,
+                    chat_id: filters.chatId || null,
                     jurisdiction: filters.jurisdiction || null,
                     year_from: filters.dateFrom ? parseInt(filters.dateFrom, 10) : null,
                     year_to: filters.dateTo ? parseInt(filters.dateTo, 10) : null,
                     date_from: filters.dateFrom ? `${filters.dateFrom}-01-01` : null,
                     date_to: filters.dateTo ? `${filters.dateTo}-12-31` : null,
                     court: filters.caseLawCourt || null,
+                    legislation_type: filters.legislationType || null,
+                    current_only: filters.currentOnly || false,
                 }),
                 signal
             });
@@ -316,6 +319,25 @@ export const addMatterNote = async (matterId, content, messageId = null) => {
 
 export const deleteMatterNote = async (matterId, noteId) => {
     await axios.delete(`${API_URL}/matters/${matterId}/notes/${noteId}`);
+};
+
+// --- DOCUMENTS ---
+export const uploadDocument = async (chatId, file) => {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await axios.post(`${API_URL}/chats/${chatId}/documents`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+};
+
+export const getChatDocuments = async (chatId) => {
+    const response = await axios.get(`${API_URL}/chats/${chatId}/documents`);
+    return response.data;
+};
+
+export const deleteDocument = async (docId) => {
+    await axios.delete(`${API_URL}/documents/${docId}`);
 };
 
 // --- FEATURE FLAGS ---

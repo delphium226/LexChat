@@ -10,7 +10,6 @@ const SettingsMenuModal = ({
     onOpenAdminPortal,
     onOpenAbout,
     onOpenDataSources,
-    onGiveFeedback,
     onLogout
 }) => {
     if (!isOpen) return null;
@@ -90,15 +89,6 @@ const SettingsMenuModal = ({
 
                         <span className="font-medium">About AILA</span>
                     </button>
-
-                    {onGiveFeedback && (
-                        <button
-                            onClick={() => { onGiveFeedback(); onClose(); }}
-                            className="w-full text-left px-4 py-3 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors flex items-center gap-3"
-                        >
-                            <span className="font-medium">Give Feedback</span>
-                        </button>
-                    )}
 
                     <div className="border-t border-gray-100 dark:border-gray-700 my-1 mx-2"></div>
 

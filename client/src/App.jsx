@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { sendMessage, createChat, getChatMessages, saveMessage, updatePreferences, submitFeedback, getModels, getChats, getMatters, assignChatToMatter, getFeatures } from './services/api';
+import { sendMessage, createChat, getChatMessages, saveMessage, updatePreferences, submitFeedback, getModels, getChats, getMatters, assignChatToMatter, getFeatures, uploadDocument, getChatDocuments, deleteDocument, updateChatTitle } from './services/api';
 import ChatMessage from './components/ChatMessage';
 import { LexMark, LexWordmark } from './components/LexMark';
 import SourcesRail from './components/SourcesRail';
@@ -205,7 +205,7 @@ const FeedbackModal = ({ onClose }) => {
           <>
             <p className="text-sm text-gray-600 mb-4">Share any thoughts, suggestions, or issues with AILA.</p>
             <textarea
-              className="w-full border border-gray-300 rounded-md p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-md p-3 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-700 placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               rows={6}
               placeholder="Describe your experience, suggest a feature, or report a problem..."
               value={text}
@@ -249,11 +249,15 @@ function AppContent() {
   const [showThinking] = useState(false);
   const [currentChatId, setCurrentChatId] = useState(null);
   const [currentChatTitle, setCurrentChatTitle] = useState(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [editTitleValue, setEditTitleValue] = useState('');
   const [researchMode, setResearchMode] = useState('legislation_only');
   const [jurisdiction, setJurisdiction] = useState(() => localStorage.getItem('filter_jurisdiction') || null);
   const [dateFrom, setDateFrom] = useState(() => localStorage.getItem('filter_dateFrom') || '');
   const [dateTo, setDateTo] = useState(() => localStorage.getItem('filter_dateTo') || String(new Date().getFullYear()));
   const [caseLawCourt, setCaseLawCourt] = useState(() => localStorage.getItem('filter_caseLawCourt') || '');
+  const [legislationType, setLegislationType] = useState(() => localStorage.getItem('filter_legislationType') || null);
+  const [currentOnly, setCurrentOnly] = useState(() => localStorage.getItem('filter_currentOnly') !== 'false');
 
   // ── UI state ─────────────────────────────────────────────────
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
@@ -288,12 +292,18 @@ function AppContent() {
     return false;
   });
 
+  // ── Document state ───────────────────────────────────────────
+  const [chatDocuments, setChatDocuments] = useState([]);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+
   // ── Refs ─────────────────────────────────────────────────────
   const messagesEndRef = useRef(null);
+  const chatScrollRef = useRef(null);
   const abortControllerRef = useRef(null);
   const sendingRef = useRef(false);
   const textareaRef = useRef(null);
   const composerRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // ── Effects ──────────────────────────────────────────────────
 
@@ -321,7 +331,10 @@ function AppContent() {
   }, [darkMode]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = chatScrollRef.current;
+    if (!el) return;
+    const target = el.scrollHeight - el.clientHeight;
+    if (target > el.scrollTop) el.scrollTo({ top: target, behavior: 'smooth' });
   }, [messages, agentStatus]);
 
   // Fetch feature flags once on login
@@ -431,6 +444,13 @@ function AppContent() {
   const jurisdictionLabel = jurisdiction ? (JURISDICTION_OPTIONS.find(o => o.value === jurisdiction)?.label || 'All jurisdictions') : 'All jurisdictions';
   const jurisdictionShort = jurisdiction ? (JURISDICTION_SHORT[jurisdiction] || 'All UK') : 'All UK';
 
+  const LEGISLATION_TYPE_OPTIONS = [
+    { value: null,        label: 'All types' },
+    { value: 'primary',   label: 'Acts (primary)' },
+    { value: 'secondary', label: 'SIs & Rules (secondary)' },
+    { value: 'draft',     label: 'Draft instruments' },
+  ];
+
   const thisYear = String(new Date().getFullYear());
   const COURT_GROUPS = [
     { group: 'UK-wide', courts: [
@@ -463,7 +483,7 @@ function AppContent() {
 
   const saveFiltersToChatStorage = (chatId, overrides = {}) => {
     if (!chatId) return;
-    const filters = { dateFrom, dateTo, jurisdiction, court: caseLawCourt, ...overrides };
+    const filters = { dateFrom, dateTo, jurisdiction, court: caseLawCourt, legislationType, currentOnly, ...overrides };
     localStorage.setItem(`filter_chat_${chatId}`, JSON.stringify(filters));
   };
   const setJurisdictionPersist = (v) => {
@@ -475,12 +495,25 @@ function AppContent() {
   const setDateFromPersist = (v) => { setDateFrom(v); localStorage.setItem('filter_dateFrom', v); if (currentChatId) saveFiltersToChatStorage(currentChatId, { dateFrom: v }); };
   const setDateToPersist = (v) => { setDateTo(v); localStorage.setItem('filter_dateTo', v); if (currentChatId) saveFiltersToChatStorage(currentChatId, { dateTo: v }); };
   const setCourtPersist = (v) => { setCaseLawCourt(v); localStorage.setItem('filter_caseLawCourt', v); if (currentChatId) saveFiltersToChatStorage(currentChatId, { court: v }); };
+  const setLegislationTypePersist = (v) => {
+    setLegislationType(v);
+    if (v) localStorage.setItem('filter_legislationType', v);
+    else localStorage.removeItem('filter_legislationType');
+    if (currentChatId) saveFiltersToChatStorage(currentChatId, { legislationType: v });
+  };
+  const setCurrentOnlyPersist = (v) => {
+    setCurrentOnly(v);
+    localStorage.setItem('filter_currentOnly', String(v));
+    if (currentChatId) saveFiltersToChatStorage(currentChatId, { currentOnly: v });
+  };
   const clearAllFilters = () => {
     setJurisdictionPersist(null);
     setDateFromPersist(''); setDateToPersist(thisYear);
     setCourtPersist('');
+    setLegislationTypePersist(null);
+    setCurrentOnlyPersist(false);
   };
-  const hasActiveFilters = jurisdiction || dateFrom || dateTo !== thisYear || caseLawCourt;
+  const hasActiveFilters = jurisdiction || dateFrom || dateTo !== thisYear || caseLawCourt || legislationType || currentOnly;
 
   const showScotlandNINote = (jurisdiction === 'scotland' || jurisdiction === 'northern_ireland')
     && researchMode !== 'legislation_only';
@@ -488,6 +521,42 @@ function AppContent() {
   const userInitials = getInitials(user?.username);
 
   // ── Handlers ─────────────────────────────────────────────────
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!fileInputRef.current) fileInputRef.current.value = '';
+    if (!file) return;
+    fileInputRef.current.value = '';
+
+    setUploadingDoc(true);
+    try {
+      let activeChatId = currentChatId;
+      if (!activeChatId) {
+        const newChat = await createChat(file.name.slice(0, 80), selectedModel, activeProvider);
+        activeChatId = newChat.id;
+        setCurrentChatId(activeChatId);
+        setCurrentChatTitle(newChat.title);
+        saveFiltersToChatStorage(activeChatId);
+      }
+      const doc = await uploadDocument(activeChatId, file);
+      setChatDocuments(prev => [...prev, doc]);
+    } catch (err) {
+      console.error('Document upload failed:', err);
+      const msg = err.response?.data?.detail || err.message || 'Upload failed.';
+      alert(msg);
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  const handleDeleteDocument = async (docId) => {
+    try {
+      await deleteDocument(docId);
+      setChatDocuments(prev => prev.filter(d => d.id !== docId));
+    } catch (err) {
+      console.error('Failed to delete document:', err);
+    }
+  };
 
   const handleStop = () => {
     if (abortControllerRef.current) {
@@ -577,7 +646,7 @@ function AppContent() {
           }
         },
         controller.signal, false, researchMode,
-        { jurisdiction, dateFrom, dateTo, caseLawCourt }
+        { jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, currentOnly, chatId: activeChatId }
       );
 
       if (response.stats) setContextUsage(response.stats);
@@ -645,6 +714,7 @@ function AppContent() {
     setCurrentChatId(null);
     setCurrentChatTitle(null);
     setActiveCite(null);
+    setChatDocuments([]);
   };
 
   const loadChat = async (chatId, model) => {
@@ -657,6 +727,8 @@ function AppContent() {
       setShowHistoryModal(false);
       setContextUsage(null);
       setActiveCite(null);
+      setChatDocuments([]);
+      getChatDocuments(chatId).then(setChatDocuments).catch(() => {});
       const saved = localStorage.getItem(`filter_chat_${chatId}`);
       if (saved) {
         try {
@@ -669,6 +741,15 @@ function AppContent() {
             else localStorage.removeItem('filter_jurisdiction');
           }
           if (f.court !== undefined) { setCaseLawCourt(f.court); localStorage.setItem('filter_caseLawCourt', f.court); }
+          if (f.legislationType !== undefined) {
+            setLegislationType(f.legislationType);
+            if (f.legislationType) localStorage.setItem('filter_legislationType', f.legislationType);
+            else localStorage.removeItem('filter_legislationType');
+          }
+          if (f.currentOnly !== undefined) {
+            setCurrentOnly(f.currentOnly);
+            localStorage.setItem('filter_currentOnly', String(f.currentOnly));
+          }
         } catch {}
       }
     } catch (err) {
@@ -923,18 +1004,64 @@ function AppContent() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <span style={{ fontSize: 13, color: 'var(--ink-500)', flexShrink: 0 }}>Research</span>
             <span style={{ color: 'var(--ink-300)', flexShrink: 0 }}>/</span>
-            <span style={{
-              fontSize: 14, fontWeight: 500, color: 'var(--ink-900)',
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
-              {currentChatTitle || 'New thread'}
-            </span>
+            {editingTitle ? (
+              <input
+                autoFocus
+                value={editTitleValue}
+                onChange={e => setEditTitleValue(e.target.value)}
+                onKeyDown={async e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const trimmed = editTitleValue.trim();
+                    if (trimmed && trimmed !== currentChatTitle && currentChatId) {
+                      await updateChatTitle(currentChatId, trimmed).catch(() => {});
+                      setCurrentChatTitle(trimmed);
+                    }
+                    setEditingTitle(false);
+                  } else if (e.key === 'Escape') {
+                    setEditingTitle(false);
+                  }
+                }}
+                onBlur={async () => {
+                  const trimmed = editTitleValue.trim();
+                  if (trimmed && trimmed !== currentChatTitle && currentChatId) {
+                    await updateChatTitle(currentChatId, trimmed).catch(() => {});
+                    setCurrentChatTitle(trimmed);
+                  }
+                  setEditingTitle(false);
+                }}
+                style={{
+                  fontSize: 14, fontWeight: 500, color: 'var(--ink-900)',
+                  background: 'var(--surface-1, #f5f5f5)', border: '1px solid var(--ink-200, #d1d5db)',
+                  borderRadius: 4, padding: '2px 6px', minWidth: 0, width: 320, maxWidth: '100%',
+                  outline: 'none',
+                }}
+              />
+            ) : (
+              <span
+                onClick={() => {
+                  if (!currentChatId) return;
+                  setEditTitleValue(currentChatTitle || '');
+                  setEditingTitle(true);
+                }}
+                title={currentChatId ? 'Click to rename' : undefined}
+                style={{
+                  fontSize: 14, fontWeight: 500, color: 'var(--ink-900)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  cursor: currentChatId ? 'text' : 'default',
+                  borderBottom: currentChatId ? '1px dotted var(--ink-300, #9ca3af)' : 'none',
+                }}
+              >
+                {currentChatTitle || 'New thread'}
+              </span>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
             {features.matters_enabled && <GhostBtn
               icon={<BookmarkIcon />}
               onClick={() => { if (currentChatId) { setAssigningChatId(currentChatId); setShowAssignModal(true); } }}
             >Save to matter</GhostBtn>}
+            <GhostBtn onClick={() => setShowFeedbackModal(true)}>Give Feedback</GhostBtn>
           </div>
         </div>
 
@@ -946,6 +1073,7 @@ function AppContent() {
 
             {/* Scroll area */}
             <div
+              ref={chatScrollRef}
               className="lex-scroll"
               style={{ flex: 1, overflow: 'auto', padding: '20px 28px 140px' }}
             >
@@ -1000,7 +1128,8 @@ function AppContent() {
                       key={idx}
                       message={msg}
                       onResend={() => {
-                        setInput(msg.content);
+                        const prevUser = messages.slice(0, idx).reverse().find(m => m.role === 'user');
+                        setInput(prevUser ? prevUser.content : '');
                         setTimeout(() => {
                           const ta = textareaRef.current;
                           if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
@@ -1020,18 +1149,6 @@ function AppContent() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div className="lex-thinking-dot" />
                       <span style={{ flex: 1 }}>{agentStatus || 'Thinking…'}</span>
-                      <button
-                        onClick={handleStop}
-                        style={{
-                          fontSize: 12, fontWeight: 500, padding: '4px 10px',
-                          borderRadius: 6, border: '1px solid var(--ink-200)',
-                          background: 'var(--paper)', color: 'var(--ink-600)',
-                          cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
-                          fontFamily: 'var(--font-ui)',
-                        }}
-                      >
-                        <StopIcon /> Stop
-                      </button>
                     </div>
                     {activities.size > 0 && (
                       <div style={{ marginTop: 6, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1133,6 +1250,40 @@ function AppContent() {
                         </div>
                       )}
 
+                      {/* § Legislation type */}
+                      {researchMode !== 'case_law_only' && (<>
+                        {divider()}
+                        {secHead('Legislation type')}
+                        {LEGISLATION_TYPE_OPTIONS.map(opt => optBtn(
+                          legislationType === opt.value,
+                          () => setLegislationTypePersist(opt.value),
+                          opt.label,
+                        ))}
+                        {divider()}
+                        {secHead('Status')}
+                        <div
+                          style={{ padding: '4px 8px 8px', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
+                          onClick={() => setCurrentOnlyPersist(!currentOnly)}
+                        >
+                          <div style={{
+                            width: 30, height: 17, borderRadius: 9,
+                            background: currentOnly ? 'var(--accent)' : 'var(--ink-200)',
+                            position: 'relative', flexShrink: 0, transition: 'background 120ms',
+                          }}>
+                            <span style={{
+                              position: 'absolute', top: 2,
+                              left: currentOnly ? 15 : 2,
+                              width: 13, height: 13, borderRadius: '50%',
+                              background: 'white', transition: 'left 120ms',
+                              display: 'block',
+                            }} />
+                          </div>
+                          <span style={{ fontSize: 13, color: 'var(--ink-700)', fontFamily: 'var(--font-ui)', userSelect: 'none' }}>
+                            Current legislation only
+                          </span>
+                        </div>
+                      </>)}
+
                       {/* § Date range */}
                       {divider()}
                       {secHead('Date range')}
@@ -1176,6 +1327,59 @@ function AppContent() {
                   borderRadius: 12, padding: 12,
                   boxShadow: 'var(--shadow-sm)',
                 }}>
+                  {/* Hidden file input */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.docx,.txt,.md"
+                    style={{ display: 'none' }}
+                    onChange={handleFileUpload}
+                  />
+
+                  {/* Document chips */}
+                  {chatDocuments.length > 0 && (
+                    <div style={{
+                      display: 'flex', flexWrap: 'wrap', gap: 4,
+                      paddingBottom: 8, marginBottom: 6,
+                      borderBottom: '1px solid var(--ink-100)',
+                    }}>
+                      {chatDocuments.map(doc => (
+                        <div key={doc.id} style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          padding: '2px 8px', background: 'var(--ink-100)',
+                          borderRadius: 6, fontSize: 12, color: 'var(--ink-600)',
+                          maxWidth: 220,
+                        }}>
+                          <PaperclipIcon style={{ width: 11, height: 11, flexShrink: 0 }} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            title={doc.filename}>{doc.filename}</span>
+                          <button
+                            onClick={() => handleDeleteDocument(doc.id)}
+                            style={{
+                              background: 'none', border: 'none', padding: '0 0 0 2px',
+                              cursor: 'pointer', color: 'var(--ink-400)', fontSize: 14,
+                              lineHeight: 1, flexShrink: 0,
+                            }}
+                            title="Remove document"
+                          >×</button>
+                        </div>
+                      ))}
+                      {uploadingDoc && (
+                        <div style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          padding: '2px 8px', background: 'var(--ink-100)',
+                          borderRadius: 6, fontSize: 12, color: 'var(--ink-400)',
+                        }}>Uploading…</div>
+                      )}
+                    </div>
+                  )}
+                  {uploadingDoc && chatDocuments.length === 0 && (
+                    <div style={{
+                      fontSize: 12, color: 'var(--ink-400)', paddingBottom: 6,
+                      borderBottom: '1px solid var(--ink-100)', marginBottom: 6,
+                    }}>Uploading…</div>
+                  )}
+
                   <textarea
                     ref={textareaRef}
                     value={input}
@@ -1202,7 +1406,7 @@ function AppContent() {
                     justifyContent: 'space-between', marginTop: 6,
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 2, color: 'var(--ink-500)' }}>
-                      <IBtn label="Attach file"><PaperclipIcon /></IBtn>
+                      <IBtn label="Attach file (PDF, DOCX, TXT)" onClick={() => fileInputRef.current?.click()} disabled={uploadingDoc}><PaperclipIcon /></IBtn>
                       <IBtn label="Research filters" onClick={() => setShowFilters(f => !f)}>
                         <SlidersIcon />
                       </IBtn>
@@ -1561,7 +1765,6 @@ function AppContent() {
         onOpenAdminPortal={() => setShowAdminModal(true)}
         onOpenAbout={() => setShowAbout(true)}
         onOpenDataSources={() => setShowDataSources(true)}
-        onGiveFeedback={() => setShowFeedbackModal(true)}
         onLogout={logout}
       />
     </div>

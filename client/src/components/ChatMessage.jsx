@@ -53,17 +53,6 @@ const RefreshIcon = () => (
   </svg>
 );
 
-const ThumbUpIcon = () => (
-  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M7 10v10H4V10h3zm0 0 4-7a2 2 0 0 1 2 2v3h5a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 16.8 19H7" />
-  </svg>
-);
-
-const ThumbDownIcon = () => (
-  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M7 14V4H4v10h3zm0 0 4 7a2 2 0 0 0 2-2v-3h5a2 2 0 0 0 2-2.3L18.8 6.7A2 2 0 0 0 16.8 5H7" />
-  </svg>
-);
 
 const BookmarkIcon = () => (
   <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
@@ -255,20 +244,27 @@ const ChatMessage = ({ message, onResend, showThinking, authorInitials = 'U', ma
             <ToolBtn label="Regenerate" onClick={onResend}>
               <RefreshIcon />
             </ToolBtn>
-            <ToolBtn
-              label="Good answer"
-              onClick={() => handleRate(5)}
-              active={rating === 5}
+            <button
+              onClick={() => setShowCommentModal(true)}
+              title="Rate this response"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '3px 8px', borderRadius: 6, border: '1px solid',
+                fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                fontFamily: 'var(--font-ui)',
+                background: rating > 0 ? 'var(--accent-muted, #e8f0fe)' : 'transparent',
+                borderColor: rating > 0 ? 'var(--accent, #4a6cf7)' : 'var(--ink-200)',
+                color: rating > 0 ? 'var(--accent, #4a6cf7)' : 'var(--ink-500)',
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { if (!rating) { e.currentTarget.style.borderColor = 'var(--ink-400)'; e.currentTarget.style.color = 'var(--ink-700)'; } }}
+              onMouseLeave={e => { if (!rating) { e.currentTarget.style.borderColor = 'var(--ink-200)'; e.currentTarget.style.color = 'var(--ink-500)'; } }}
             >
-              <ThumbUpIcon />
-            </ToolBtn>
-            <ToolBtn
-              label="Report an issue"
-              onClick={() => { handleRate(1); setShowCommentModal(true); }}
-              active={rating === 1}
-            >
-              <ThumbDownIcon />
-            </ToolBtn>
+              <svg width={12} height={12} viewBox="0 0 24 24" fill={rating > 0 ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
+              {rating > 0 ? `Rated ${rating}/5` : 'Rate'}
+            </button>
             {mattersEnabled && <div ref={pinRef} style={{ position: 'relative' }}>
               <ToolBtn
                 label={pinned ? 'Pinned!' : 'Save to matter'}

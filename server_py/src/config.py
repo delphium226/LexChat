@@ -1,6 +1,11 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
 
+# Document upload limits
+MAX_DOC_CHARS_PER_FILE = 50_000   # ~12K tokens per file
+MAX_TOTAL_DOC_CHARS = 80_000      # total injected into system prompt
+MAX_DOC_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
+
 
 MANAGER_SYSTEM_PROMPT = """You are the Senior Legal Interface for a UK government legal department.
 Your users are qualified lawyers. Your demeanor must be professional, concise, and objective.
@@ -175,6 +180,12 @@ OUTPUT STRUCTURE (Use Markdown):
 5. **References:** Complete list of all sources used."""
 
 
+_LEGISLATION_TYPE_LABELS = {
+    "primary":   "Acts (primary legislation only — ukpga, asp, nia, ukla, ukppa)",
+    "secondary": "Statutory Instruments and Rules (secondary legislation only — uksi, ssi, wsi, nisr)",
+    "draft":     "Draft Statutory Instruments (ukdsi only)",
+}
+
 _JURISDICTION_LABELS = {
     "england_and_wales": "England and Wales",
     "scotland": "Scotland",
@@ -227,11 +238,20 @@ def build_filter_constraint_block(cfg: dict) -> str:
     date_from = cfg.get("_date_from")
     date_to = cfg.get("_date_to")
     court = cfg.get("_court")
+    legislation_type = cfg.get("_legislation_type")
+    current_only = cfg.get("_current_only", False)
 
-    if not any([jurisdiction, year_from, year_to, date_from, date_to, court]):
+    if not any([jurisdiction, year_from, year_to, date_from, date_to, court, legislation_type, current_only]):
         return ""
 
     lines = ["ACTIVE RESEARCH FILTERS (applied by the system — do not override or ignore):"]
+
+    if legislation_type:
+        label = _LEGISLATION_TYPE_LABELS.get(legislation_type, legislation_type)
+        lines.append(f"- Legislation type: {label}.")
+
+    if current_only:
+        lines.append("- Status: In-force legislation only. Do not cite or rely on repealed or not-yet-in-force legislation.")
 
     if jurisdiction:
         label = _JURISDICTION_LABELS.get(jurisdiction, jurisdiction)

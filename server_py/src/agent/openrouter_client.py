@@ -426,6 +426,10 @@ async def process_user_request(
     mode_note = get_manager_mode_note(research_mode, _cfg)
     system_content = (mode_note + "\n\n" + MANAGER_SYSTEM_PROMPT) if mode_note else MANAGER_SYSTEM_PROMPT
 
+    doc_context = _cfg.get("_doc_context", "")
+    if doc_context:
+        system_content += f"\n\n{doc_context}"
+
     if db_session:
         try:
             last_msg = messages[-1] if messages else None

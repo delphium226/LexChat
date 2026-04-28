@@ -18,8 +18,9 @@ from ..agent.provider_factory import (
     get_request_queue,
     set_request_provider_config,
 )
+from ..config import MAX_TOTAL_DOC_CHARS
 from ..database import async_session_maker
-from ..models import RequestTiming
+from ..models import Document, RequestTiming
 from ..utils.stopwatch import TimingCollector
 
 logger = logging.getLogger("app")
@@ -57,6 +58,9 @@ class ChatRequest(BaseModel):
     date_from: Optional[str] = None
     date_to: Optional[str] = None
     court: Optional[str] = None
+    legislation_type: Optional[str] = None
+    current_only: Optional[bool] = False
+    chat_id: Optional[int] = None
 
 
 @router.post("/api/chat")
@@ -80,6 +84,8 @@ async def chat_endpoint(body: ChatRequest, request: Request):
             active_provider = await get_active_provider(_cfg_db)
             provider_config = await get_provider_config(_cfg_db, active_provider)
 
+        doc_context = await _load_doc_context(body.chat_id) if body.chat_id else ""
+
         set_request_provider_config({
             **provider_config,
             "_provider": active_provider,
@@ -90,6 +96,9 @@ async def chat_endpoint(body: ChatRequest, request: Request):
             "_date_from": body.date_from or None,
             "_date_to": body.date_to or None,
             "_court": body.court or None,
+            "_legislation_type": body.legislation_type or None,
+            "_current_only": body.current_only or False,
+            "_doc_context": doc_context,
         })
         # Always use the server-side configured model — the frontend may be stale
         # (e.g. user switched provider via Dev tab without refreshing the page).
@@ -235,6 +244,43 @@ async def chat_endpoint(body: ChatRequest, request: Request):
             "Connection": "keep-alive",
         },
     )
+
+
+async def _load_doc_context(chat_id: int) -> str:
+    """Return a formatted document context block for the given chat, or empty string."""
+    from sqlalchemy import select as sa_select
+    try:
+        async with async_session_maker() as db:
+            rows = await db.execute(
+                sa_select(Document)
+                .where(Document.chat_id == chat_id)
+                .order_by(Document.created_at)
+            )
+            docs = rows.scalars().all()
+    except Exception as e:
+        logger.error(f"[AI] Failed to load documents for chat {chat_id}: {e}")
+        return ""
+
+    if not docs:
+        return ""
+
+    parts = []
+    total = 0
+    for doc in docs:
+        remaining = MAX_TOTAL_DOC_CHARS - total
+        if remaining <= 0:
+            break
+        text = doc.content_text[:remaining]
+        parts.append(f"[{doc.filename}]\n{text}")
+        total += len(text)
+
+    header = (
+        "UPLOADED DOCUMENTS FOR THIS SESSION\n"
+        "The following documents were provided by the user. Reference them directly as "
+        "primary source material. Extract any relevant statutory references, case names, "
+        "dates, or facts and include them in `delegate_research` briefs.\n\n"
+    )
+    return header + "\n\n---\n\n".join(parts)
 
 
 async def _watch_disconnect(request: Request, cancel_event: asyncio.Event):

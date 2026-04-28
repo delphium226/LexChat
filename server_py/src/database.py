@@ -70,6 +70,15 @@ async def init_db() -> None:
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS total_cost_usd FLOAT NOT NULL DEFAULT 0.0",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS research_mode VARCHAR(50) NOT NULL DEFAULT 'legislation_only'",
             "ALTER TABLE messages ADD COLUMN IF NOT EXISTS sources JSONB",
+            """CREATE TABLE IF NOT EXISTS documents (
+                id SERIAL PRIMARY KEY,
+                chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                filename VARCHAR(255) NOT NULL,
+                content_text TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )""",
         ]
         async with engine.begin() as conn:
             for stmt in migration_statements:
@@ -89,6 +98,7 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_request_timings_created_at ON request_timings (created_at)",
             "CREATE INDEX IF NOT EXISTS idx_matters_user_created ON matters (user_id, created_at)",
             "CREATE INDEX IF NOT EXISTS idx_matter_notes_matter ON matter_notes (matter_id, created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_documents_chat ON documents (chat_id)",
         ]
         async with engine.begin() as conn:
             for stmt in index_statements:

@@ -87,6 +87,12 @@ def extract_legislation_ids_from_search(resp_json: dict) -> list[tuple[str, str]
 
 LEX_API_URL = settings.lex_api_url.rstrip("/")
 
+_TYPE_CODES: dict[str, set[str]] = {
+    "primary":   {"ukpga", "ukppa", "ukla", "asp", "nia"},
+    "secondary": {"uksi", "ssi", "wsi", "nisr"},
+    "draft":     {"ukdsi"},
+}
+
 # -----------------------------------------------------------------------
 # Tool schemas (Ollama function-calling format)
 # -----------------------------------------------------------------------
@@ -324,6 +330,8 @@ async def execute_worker_tool(
                 user_year_from = cfg.get("_year_from")
                 user_year_to = cfg.get("_year_to")
                 jurisdiction = cfg.get("_jurisdiction")
+                legislation_type = cfg.get("_legislation_type")
+                current_only = cfg.get("_current_only", False)
 
                 # Merge user filter with model-supplied year args (take intersection)
                 model_year_from = args.get("year_from")
@@ -337,12 +345,13 @@ async def execute_worker_tool(
                 else:
                     final_year_to = user_year_to or model_year_to
 
+                needs_post_filter = bool(jurisdiction or legislation_type or current_only)
                 payload = {
                     "query": args["query"],
                     "year_from": final_year_from,
                     "year_to": final_year_to,
-                    # Over-fetch when jurisdiction filtering so post-filter has enough to work with
-                    "limit": 15 if jurisdiction else 5,
+                    # Over-fetch when post-filters are active so they have enough results to work with
+                    "limit": 20 if needs_post_filter else 5,
                     "include_text": False,
                 }
 
@@ -378,13 +387,34 @@ async def execute_worker_tool(
 
                 resp.raise_for_status()
                 slimmed = _slim_search_results(resp_json)
-                # Post-filter by jurisdiction when set, then cap at 5 results.
+                results = slimmed["results"]
+
+                # Post-filter: legislation type (by legislation_id prefix)
+                if legislation_type:
+                    type_codes = _TYPE_CODES.get(legislation_type, set())
+                    results = [
+                        r for r in results
+                        if r.get("legislation_id", "").split("/")[0] in type_codes
+                    ]
+
+                # Post-filter: current legislation only (exclude known non-in-force)
+                if current_only:
+                    _INACTIVE = {"repealed", "revoked", "spent", "expired", "not in force"}
+                    results = [
+                        r for r in results
+                        if r.get("status", "").lower() not in _INACTIVE
+                    ]
+
+                # Post-filter: jurisdiction (by extent field)
                 if jurisdiction:
-                    slimmed["results"] = [
-                        r for r in slimmed["results"]
+                    results = [
+                        r for r in results
                         if _matches_jurisdiction(r.get("extent", []), jurisdiction)
-                    ][:5]
-                    slimmed["total"] = len(slimmed["results"])
+                    ]
+
+                results = results[:5]
+                slimmed["results"] = results
+                slimmed["total"] = len(results)
                 return json.dumps(slimmed)
 
             elif name == "search_legislation_sections":

@@ -12,3 +12,5 @@ python-dotenv
 faker
 pytest
 pytest-asyncio
+pdfplumber
+python-docx
