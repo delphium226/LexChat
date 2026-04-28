@@ -16,7 +16,7 @@ export function LexWordmark({ size = 18 }) {
       color: 'var(--ink-900)', fontFamily: 'var(--font-ui)',
     }}>
       <LexMark size={Math.round(size * 1.15)} color="var(--accent)" />
-      Lex<span style={{ color: 'var(--accent)' }}>Chat</span>
+      AILA
     </span>
   );
 }

@@ -17,7 +17,8 @@
   --ink-100: #eef1f7;
   --ink-50:  #f6f7fa;
   --ink-25:  #fbfbfd;
-  --paper: #ffffff;
+  --paper:   #ffffff;
+  --bg-app:  #d4d4d4;
 
   --accent:       oklch(0.50 0.10 240);
   --accent-hover: oklch(0.44 0.11 240);
@@ -43,13 +44,41 @@
   --shadow-md: 0 4px 12px rgba(11,18,32,0.06), 0 1px 3px rgba(11,18,32,0.04);
 }
 
+.dark {
+  --ink-950: #f0f3f9;
+  --ink-900: #e4e8f2;
+  --ink-800: #c8cedf;
+  --ink-700: #a8b0c8;
+  --ink-600: #8891ae;
+  --ink-500: #6b7699;
+  --ink-400: #46516e;
+  --ink-300: #313f5c;
+  --ink-200: #243151;
+  --ink-100: #1c2847;
+  --ink-50:  #17223f;
+  --ink-25:  #131d38;
+  --paper:   #131c2f;
+  --bg-app:  #09111e;
+
+  --accent:       oklch(0.62 0.12 240);
+  --accent-hover: oklch(0.56 0.13 240);
+  --accent-soft:  oklch(0.22 0.06 240);
+  --accent-ink:   oklch(0.75 0.10 255);
+
+  --cite:      oklch(0.65 0.12 200);
+  --cite-soft: oklch(0.20 0.05 200);
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.20);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.20);
+}
+
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
   padding: 0;
   font-family: var(--font-ui);
-  background: #d4d4d4;
+  background: var(--bg-app);
   color: var(--ink-900);
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "ss01", "cv11";

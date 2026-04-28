@@ -9,6 +9,7 @@ const SettingsMenuModal = ({
     onOpenAccountSettings,
     onOpenAdminPortal,
     onOpenAbout,
+    onOpenDataSources,
     onGiveFeedback,
     onLogout
 }) => {
@@ -73,13 +74,21 @@ const SettingsMenuModal = ({
                         </div>
                     </div>
 
+                    {/* Data Sources */}
+                    <button
+                        onClick={() => { onOpenDataSources(); onClose(); }}
+                        className="w-full text-left px-4 py-3 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors flex items-center gap-3"
+                    >
+                        <span className="font-medium">Data Sources</span>
+                    </button>
+
                     {/* About */}
                     <button
                         onClick={() => { onOpenAbout(); onClose(); }}
                         className="w-full text-left px-4 py-3 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors flex items-center gap-3"
                     >
 
-                        <span className="font-medium">About LexChat</span>
+                        <span className="font-medium">About AILA</span>
                     </button>
 
                     {onGiveFeedback && (

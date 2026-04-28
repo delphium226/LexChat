@@ -203,7 +203,7 @@ const FeedbackModal = ({ onClose }) => {
           </div>
         ) : (
           <>
-            <p className="text-sm text-gray-600 mb-4">Share any thoughts, suggestions, or issues with LexChat.</p>
+            <p className="text-sm text-gray-600 mb-4">Share any thoughts, suggestions, or issues with AILA.</p>
             <textarea
               className="w-full border border-gray-300 rounded-md p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               rows={6}
@@ -251,10 +251,8 @@ function AppContent() {
   const [currentChatTitle, setCurrentChatTitle] = useState(null);
   const [researchMode, setResearchMode] = useState('legislation_only');
   const [jurisdiction, setJurisdiction] = useState(() => localStorage.getItem('filter_jurisdiction') || null);
-  const [yearFrom, setYearFrom] = useState(() => localStorage.getItem('filter_yearFrom') || '');
-  const [yearTo, setYearTo] = useState(() => localStorage.getItem('filter_yearTo') || '');
-  const [caseLawDateFrom, setCaseLawDateFrom] = useState(() => localStorage.getItem('filter_caseLawDateFrom') || '');
-  const [caseLawDateTo, setCaseLawDateTo] = useState(() => localStorage.getItem('filter_caseLawDateTo') || '');
+  const [dateFrom, setDateFrom] = useState(() => localStorage.getItem('filter_dateFrom') || '');
+  const [dateTo, setDateTo] = useState(() => localStorage.getItem('filter_dateTo') || String(new Date().getFullYear()));
   const [caseLawCourt, setCaseLawCourt] = useState(() => localStorage.getItem('filter_caseLawCourt') || '');
 
   // ── UI state ─────────────────────────────────────────────────
@@ -272,6 +270,7 @@ function AppContent() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [showDataSources, setShowDataSources] = useState(false);
 
   // ── Matters state ────────────────────────────────────────────
   const [features, setFeatures] = useState({ matters_enabled: true });
@@ -362,7 +361,7 @@ function AppContent() {
   useEffect(() => {
     const favicon = document.querySelector("link[rel='icon']");
     if (!favicon) return;
-    if (!loading) { favicon.href = '/favicon.png'; return; }
+    if (!loading) { favicon.href = '/favicon.svg'; return; }
 
     const canvas = document.createElement('canvas');
     canvas.width = 32; canvas.height = 32;
@@ -382,7 +381,7 @@ function AppContent() {
     };
 
     animId = requestAnimationFrame(draw);
-    return () => { cancelAnimationFrame(animId); favicon.href = '/favicon.png'; };
+    return () => { cancelAnimationFrame(animId); favicon.href = '/favicon.svg'; };
   }, [loading]);
 
   // Reset on logout
@@ -432,17 +431,7 @@ function AppContent() {
   const jurisdictionLabel = jurisdiction ? (JURISDICTION_OPTIONS.find(o => o.value === jurisdiction)?.label || 'All jurisdictions') : 'All jurisdictions';
   const jurisdictionShort = jurisdiction ? (JURISDICTION_SHORT[jurisdiction] || 'All UK') : 'All UK';
 
-  const currentYear = new Date().getFullYear();
-  const YEAR_PRESETS = [
-    { label: `Since 2000`, from: '2000', to: '' },
-    { label: '2000–2010',  from: '2000', to: '2010' },
-    { label: 'Pre-2000',   from: '',     to: '1999' },
-  ];
-  const DATE_PRESETS = [
-    { label: 'Last 5 years',  from: `${currentYear - 5}-01-01`, to: '' },
-    { label: 'Last 10 years', from: `${currentYear - 10}-01-01`, to: '' },
-    { label: 'Since 2009',    from: '2009-10-01', to: '' },
-  ];
+  const thisYear = String(new Date().getFullYear());
   const COURT_GROUPS = [
     { group: 'UK-wide', courts: [
       { value: 'uksc',      label: 'UK Supreme Court' },
@@ -472,26 +461,26 @@ function AppContent() {
     ? COURT_GROUPS.flatMap(g => g.courts).find(c => c.value === caseLawCourt)?.label || caseLawCourt
     : '';
 
-  const yearPresetActive = (p) => p.from === yearFrom && p.to === yearTo;
-  const datePresetActive = (p) => p.from === caseLawDateFrom && p.to === caseLawDateTo;
-
+  const saveFiltersToChatStorage = (chatId, overrides = {}) => {
+    if (!chatId) return;
+    const filters = { dateFrom, dateTo, jurisdiction, court: caseLawCourt, ...overrides };
+    localStorage.setItem(`filter_chat_${chatId}`, JSON.stringify(filters));
+  };
   const setJurisdictionPersist = (v) => {
     setJurisdiction(v);
     if (v) localStorage.setItem('filter_jurisdiction', v);
     else localStorage.removeItem('filter_jurisdiction');
+    if (currentChatId) saveFiltersToChatStorage(currentChatId, { jurisdiction: v });
   };
-  const setYearFromPersist = (v) => { setYearFrom(v); localStorage.setItem('filter_yearFrom', v); };
-  const setYearToPersist = (v) => { setYearTo(v); localStorage.setItem('filter_yearTo', v); };
-  const setDateFromPersist = (v) => { setCaseLawDateFrom(v); localStorage.setItem('filter_caseLawDateFrom', v); };
-  const setDateToPersist = (v) => { setCaseLawDateTo(v); localStorage.setItem('filter_caseLawDateTo', v); };
-  const setCourtPersist = (v) => { setCaseLawCourt(v); localStorage.setItem('filter_caseLawCourt', v); };
+  const setDateFromPersist = (v) => { setDateFrom(v); localStorage.setItem('filter_dateFrom', v); if (currentChatId) saveFiltersToChatStorage(currentChatId, { dateFrom: v }); };
+  const setDateToPersist = (v) => { setDateTo(v); localStorage.setItem('filter_dateTo', v); if (currentChatId) saveFiltersToChatStorage(currentChatId, { dateTo: v }); };
+  const setCourtPersist = (v) => { setCaseLawCourt(v); localStorage.setItem('filter_caseLawCourt', v); if (currentChatId) saveFiltersToChatStorage(currentChatId, { court: v }); };
   const clearAllFilters = () => {
     setJurisdictionPersist(null);
-    setYearFromPersist(''); setYearToPersist('');
-    setDateFromPersist(''); setDateToPersist('');
+    setDateFromPersist(''); setDateToPersist(thisYear);
     setCourtPersist('');
   };
-  const hasActiveFilters = jurisdiction || yearFrom || yearTo || caseLawDateFrom || caseLawDateTo || caseLawCourt;
+  const hasActiveFilters = jurisdiction || dateFrom || dateTo !== thisYear || caseLawCourt;
 
   const showScotlandNINote = (jurisdiction === 'scotland' || jurisdiction === 'northern_ireland')
     && researchMode !== 'legislation_only';
@@ -537,6 +526,7 @@ function AppContent() {
         activeChatId = newChat.id;
         setCurrentChatId(activeChatId);
         setCurrentChatTitle(title);
+        saveFiltersToChatStorage(activeChatId);
       }
 
       if (activeChatId) {
@@ -587,7 +577,7 @@ function AppContent() {
           }
         },
         controller.signal, false, researchMode,
-        { jurisdiction, yearFrom, yearTo, caseLawDateFrom, caseLawDateTo, caseLawCourt }
+        { jurisdiction, dateFrom, dateTo, caseLawCourt }
       );
 
       if (response.stats) setContextUsage(response.stats);
@@ -667,6 +657,20 @@ function AppContent() {
       setShowHistoryModal(false);
       setContextUsage(null);
       setActiveCite(null);
+      const saved = localStorage.getItem(`filter_chat_${chatId}`);
+      if (saved) {
+        try {
+          const f = JSON.parse(saved);
+          if (f.dateFrom !== undefined) { setDateFrom(f.dateFrom); localStorage.setItem('filter_dateFrom', f.dateFrom); }
+          if (f.dateTo !== undefined) { setDateTo(f.dateTo); localStorage.setItem('filter_dateTo', f.dateTo); }
+          if (f.jurisdiction !== undefined) {
+            setJurisdiction(f.jurisdiction);
+            if (f.jurisdiction) localStorage.setItem('filter_jurisdiction', f.jurisdiction);
+            else localStorage.removeItem('filter_jurisdiction');
+          }
+          if (f.court !== undefined) { setCaseLawCourt(f.court); localStorage.setItem('filter_caseLawCourt', f.court); }
+        } catch {}
+      }
     } catch (err) {
       console.error('Failed to load chat', err);
     } finally {
@@ -689,7 +693,7 @@ function AppContent() {
   return (
     <div style={{
       display: 'flex', height: '100dvh',
-      background: '#d4d4d4',
+      background: 'var(--bg-app)',
       fontFamily: 'var(--font-ui)',
       color: 'var(--ink-900)',
       overflow: 'hidden',
@@ -954,13 +958,9 @@ function AppContent() {
                     { icon: <GavelIcon />, label: jurisdictionLabel },
                     { icon: <CalendarIcon />, label: `In force · ${todayLabel}` },
                   ];
-                  if ((yearFrom || yearTo) && researchMode !== 'case_law_only') {
-                    const yr = yearFrom && yearTo ? `${yearFrom}–${yearTo}` : yearFrom ? `From ${yearFrom}` : `To ${yearTo}`;
-                    chips.push({ icon: <CalendarIcon />, label: `Legislation: ${yr}` });
-                  }
-                  if ((caseLawDateFrom || caseLawDateTo) && researchMode !== 'legislation_only') {
-                    const dr = caseLawDateFrom && caseLawDateTo ? `${caseLawDateFrom} – ${caseLawDateTo}` : caseLawDateFrom ? `From ${caseLawDateFrom}` : `To ${caseLawDateTo}`;
-                    chips.push({ icon: <CalendarIcon />, label: `Cases: ${dr}` });
+                  if (dateFrom || dateTo !== thisYear) {
+                    const dr = dateFrom && dateTo ? `${dateFrom}–${dateTo}` : dateFrom ? `From ${dateFrom}` : `To ${dateTo}`;
+                    chips.push({ icon: <CalendarIcon />, label: `Date: ${dr}` });
                   }
                   if (courtLabel && researchMode !== 'legislation_only') {
                     chips.push({ icon: <GavelIcon />, label: courtLabel });
@@ -1059,7 +1059,7 @@ function AppContent() {
               ref={composerRef}
               style={{
                 padding: '12px 28px 18px',
-                background: '#d4d4d4',
+                background: 'var(--bg-app)',
                 marginTop: -120, position: 'relative', zIndex: 2,
               }}
             >
@@ -1083,28 +1083,15 @@ function AppContent() {
                       cursor: 'pointer', fontFamily: 'var(--font-ui)',
                     }}>{label}</button>
                   );
-                  const presetRow = (presets, isActive, onSet) => (
-                    <div style={{ display: 'flex', gap: 4, padding: '2px 8px 6px', flexWrap: 'wrap' }}>
-                      {presets.map(p => (
-                        <button key={p.label} onClick={() => onSet(p)} style={{
-                          padding: '3px 9px', borderRadius: 999, fontSize: 12, border: '1px solid',
-                          borderColor: isActive(p) ? 'var(--accent)' : 'var(--ink-200)',
-                          background: isActive(p) ? 'var(--accent-soft)' : 'transparent',
-                          color: isActive(p) ? 'var(--accent-ink)' : 'var(--ink-600)',
-                          cursor: 'pointer', fontFamily: 'var(--font-ui)',
-                        }}>{p.label}</button>
-                      ))}
-                    </div>
-                  );
-                  const inputRow = (labelA, valA, setA, labelB, valB, setB, type = 'number') => (
+                  const inputRow = (labelA, valA, setA, labelB, valB, setB) => (
                     <div style={{ display: 'flex', gap: 6, padding: '0 8px 6px', alignItems: 'center' }}>
-                      <input type={type} placeholder={labelA} value={valA}
-                        onChange={e => setA(e.target.value)} min={type === 'number' ? 1000 : undefined} max={type === 'number' ? 9999 : undefined}
+                      <input type="text" placeholder={labelA} value={valA} maxLength={4}
+                        onChange={e => setA(e.target.value.replace(/\D/g, '').slice(0, 4))}
                         style={{ flex: 1, padding: '4px 7px', borderRadius: 6, border: '1px solid var(--ink-200)', fontSize: 12, fontFamily: 'var(--font-ui)', background: 'var(--paper)', color: 'var(--ink-700)', outline: 'none' }}
                       />
                       <span style={{ fontSize: 11, color: 'var(--ink-400)' }}>–</span>
-                      <input type={type} placeholder={labelB} value={valB}
-                        onChange={e => setB(e.target.value)} min={type === 'number' ? 1000 : undefined} max={type === 'number' ? 9999 : undefined}
+                      <input type="text" placeholder={labelB} value={valB} maxLength={4}
+                        onChange={e => setB(e.target.value.replace(/\D/g, '').slice(0, 4))}
                         style={{ flex: 1, padding: '4px 7px', borderRadius: 6, border: '1px solid var(--ink-200)', fontSize: 12, fontFamily: 'var(--font-ui)', background: 'var(--paper)', color: 'var(--ink-700)', outline: 'none' }}
                       />
                     </div>
@@ -1146,20 +1133,14 @@ function AppContent() {
                         </div>
                       )}
 
-                      {/* § Legislation year range */}
-                      {researchMode !== 'case_law_only' && (<>
-                        {divider()}
-                        {secHead('Legislation year range')}
-                        {presetRow(YEAR_PRESETS, yearPresetActive, p => { setYearFromPersist(p.from); setYearToPersist(p.to); })}
-                        {inputRow('From', yearFrom, setYearFromPersist, 'To', yearTo, setYearToPersist, 'number')}
-                      </>)}
+                      {/* § Date range */}
+                      {divider()}
+                      {secHead('Date range')}
+                      {inputRow('From', dateFrom, setDateFromPersist, 'To', dateTo, setDateToPersist)}
 
-                      {/* § Case law */}
+                      {/* § Case law court */}
                       {researchMode !== 'legislation_only' && (<>
                         {divider()}
-                        {secHead('Case law date range')}
-                        {presetRow(DATE_PRESETS, datePresetActive, p => { setDateFromPersist(p.from); setDateToPersist(p.to); })}
-                        {inputRow('From', caseLawDateFrom, setDateFromPersist, 'To', caseLawDateTo, setDateToPersist, 'date')}
                         {secHead('Case law court')}
                         <div style={{ padding: '0 8px 6px' }}>
                           <select value={caseLawCourt} onChange={e => setCourtPersist(e.target.value)}
@@ -1225,8 +1206,7 @@ function AppContent() {
                       <IBtn label="Research filters" onClick={() => setShowFilters(f => !f)}>
                         <SlidersIcon />
                       </IBtn>
-                      <IBtn label="Point in time"><CalendarIcon /></IBtn>
-                      <span style={{ fontSize: 12, color: 'var(--ink-500)', marginLeft: 6, fontFamily: 'var(--font-mono)' }}>
+<span style={{ fontSize: 12, color: 'var(--ink-500)', marginLeft: 6, fontFamily: 'var(--font-mono)' }}>
                         {jurisdictionShort} · {todayISO}
                       </span>
                     </div>
@@ -1381,15 +1361,134 @@ function AppContent() {
         </div>
       )}
 
+      {showDataSources && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={() => setShowDataSources(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Data Sources</h2>
+              <button onClick={() => setShowDataSources(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 focus:outline-none">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="overflow-y-auto p-6 space-y-6 text-sm text-gray-700 dark:text-gray-300">
+
+              {/* Legislation API */}
+              <section>
+                <h3 className="text-base font-bold text-gray-900 dark:text-white mb-2">Source Overview: The National Archives "Legislation" API</h3>
+                <p>AILA connects to the official API for legislation.gov.uk, operated by The National Archives. This database serves as the official, government-maintained statute book for the United Kingdom. Through this integration, AILA can retrieve and analyze the text of laws, regulations, and statutory rules.</p>
+              </section>
+
+              <section>
+                <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Jurisdictions and Parliaments Covered</h4>
+                <p className="mb-2">Unlike the Case Law database, the Legislation API provides comprehensive coverage across all four nations of the UK. AILA can retrieve legislation from:</p>
+                <ul className="list-disc list-inside space-y-1 pl-2">
+                  <li>The UK Parliament (Westminster)</li>
+                  <li>The Scottish Parliament (Holyrood)</li>
+                  <li>The Welsh Parliament / Senedd Cymru</li>
+                  <li>The Northern Ireland Assembly</li>
+                </ul>
+              </section>
+
+              <section>
+                <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Types of Legislation Included</h4>
+                <p className="mb-2">AILA has access to both primary laws (the main Acts) and secondary legislation (the detailed rules and regulations):</p>
+                <ul className="list-disc list-inside space-y-1 pl-2">
+                  <li><strong>Primary Legislation:</strong> Public General Acts of the UK Parliament, Acts of the Scottish Parliament (ASPs), Acts/Measures of the Senedd Cymru, and Acts of the Northern Ireland Assembly.</li>
+                  <li><strong>Secondary Legislation:</strong> Statutory Instruments (SIs), Scottish Statutory Instruments (SSIs), and Welsh Statutory Instruments.</li>
+                  <li><strong>Historical EU Law:</strong> "Retained EU legislation" that was incorporated into UK domestic law following Brexit.</li>
+                </ul>
+              </section>
+
+              <section>
+                <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Versioning: "As Enacted" vs. "Revised"</h4>
+                <p className="mb-2">One of the most powerful features of this database is how it handles the timeline of the law. AILA can distinguish between:</p>
+                <ul className="list-disc list-inside space-y-1 pl-2">
+                  <li><strong>As Enacted:</strong> The original text of the law exactly as it was originally passed by Parliament.</li>
+                  <li><strong>Latest Available (Revised):</strong> The current, up-to-date version of the law, reflecting any amendments, insertions, or repeals made by subsequent legislation.</li>
+                </ul>
+              </section>
+
+              <section className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-md p-4">
+                <h4 className="font-semibold text-amber-800 dark:text-amber-300 mb-2">Important Limitations (The "Revision Gap")</h4>
+                <p className="mb-2 text-amber-900 dark:text-amber-200">To ensure users interpret the law correctly, it is important to understand a key limitation of the official UK statute book:</p>
+                <ul className="list-disc list-inside space-y-1 pl-2 text-amber-900 dark:text-amber-200">
+                  <li><strong>Delayed Revisions:</strong> While the National Archives team works constantly to update the database, there is often a "revision gap." When a new law amends an old law, it can take time (sometimes months or, for obscure legislation, years) for those changes to be officially applied to the "Revised" text on the database.</li>
+                  <li><strong>Repealed Text:</strong> AILA may retrieve legislation that has been entirely repealed or is no longer in force if you specifically ask for historical context, so always verify the current legal status of older statutes.</li>
+                </ul>
+              </section>
+
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <h3 className="text-base font-bold text-gray-900 dark:text-white mb-2">Source Overview: The National Archives "Find Case Law" API</h3>
+                <p>Alongside legislation, AILA integrates with The National Archives (TNA) "Find Case Law" API. This is the official, government-backed repository for court judgments and tribunal decisions in the United Kingdom. By connecting directly to this source, AILA ensures that the case law it references is authoritative, unmodified, and publicly verifiable.</p>
+              </div>
+
+              <section>
+                <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Courts and Tribunals Covered</h4>
+                <p className="mb-2">The API primarily covers the higher courts of England and Wales, alongside the highest appellate courts for the entire UK. Through this integration, AILA can retrieve judgments from:</p>
+                <div className="space-y-3 pl-2">
+                  <div>
+                    <p className="font-medium text-gray-800 dark:text-gray-200">UK-Wide Appellate Courts:</p>
+                    <ul className="list-disc list-inside space-y-1 pl-4">
+                      <li>The UK Supreme Court (UKSC)</li>
+                      <li>The Judicial Committee of the Privy Council (JCPC)</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-800 dark:text-gray-200">England &amp; Wales Higher Courts:</p>
+                    <ul className="list-disc list-inside space-y-1 pl-4">
+                      <li>Court of Appeal (Civil and Criminal Divisions)</li>
+                      <li>High Court of Justice (King's Bench, Chancery, and Family Divisions)</li>
+                      <li>Courts Martial Appeal Court</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-800 dark:text-gray-200">UK Tribunals:</p>
+                    <ul className="list-disc list-inside space-y-1 pl-4">
+                      <li>Upper Tribunal (Administrative Appeals, Immigration and Asylum, Lands, and Tax and Chancery Chambers)</li>
+                      <li>Employment Appeal Tribunal (EAT)</li>
+                    </ul>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Temporal Coverage (Dates)</h4>
+                <ul className="list-disc list-inside space-y-1 pl-2">
+                  <li><strong>Modern Judgments:</strong> The database is highly comprehensive for cases handed down from 2003 onwards.</li>
+                  <li><strong>Recent Cases:</strong> Newly published judgments are added to the database shortly after being handed down by the courts.</li>
+                  <li><strong>Historical Cases:</strong> While not a complete historical archive, the database is continually expanding to include significant landmark judgments from before 2003.</li>
+                </ul>
+              </section>
+
+              <section className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-md p-4">
+                <h4 className="font-semibold text-amber-800 dark:text-amber-300 mb-2">Important Limitations (What is NOT Covered)</h4>
+                <p className="mb-2 text-amber-900 dark:text-amber-200">To ensure you get the most out of AILA, it is important to know which jurisdictions and courts are not currently available through this official API:</p>
+                <ul className="list-disc list-inside space-y-1 pl-2 text-amber-900 dark:text-amber-200">
+                  <li><strong>Scotland and Northern Ireland:</strong> The API does not host judgments from the domestic courts of Scotland (e.g., Court of Session, High Court of Justiciary) or Northern Ireland, except when those cases are appealed to the UK Supreme Court.</li>
+                  <li><strong>Lower Courts:</strong> Judgments from the Crown Court, County Courts, Magistrates' Courts, and Family Court are generally not published or available through this API.</li>
+                  <li><strong>First-Tier Tribunals:</strong> Decisions from lower-level tribunals (like the Employment Tribunal or First-tier Immigration Tribunals) are currently excluded.</li>
+                </ul>
+              </section>
+
+            </div>
+            <div className="flex justify-end p-4 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
+              <button onClick={() => setShowDataSources(false)} className="bg-brand-navy text-white px-4 py-2 rounded-md hover:bg-brand-navy-dark transition-colors">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showAbout && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full shadow-xl">
             <div className="flex items-center justify-center gap-2 mb-4">
               <LexMark size={32} color="var(--accent)" />
-              <h1 className="text-3xl font-bold" style={{ color: 'var(--accent)' }}>LexChat</h1>
+              <h1 className="text-3xl font-bold" style={{ color: 'var(--accent)' }}>AILA</h1>
             </div>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">About LexChat</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">About AILA</h2>
               <button onClick={() => setShowAbout(false)} className="text-gray-400 hover:text-gray-600 focus:outline-none">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1397,7 +1496,7 @@ function AppContent() {
               </button>
             </div>
             <div className="space-y-4 text-gray-700 dark:text-gray-300 text-sm">
-              <p><strong>LexChat</strong> is an intelligent legal research assistant for UK legislation and case law.</p>
+              <p><strong>AILA</strong> is an intelligent legal research assistant for UK legislation and case law.</p>
               <div>
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Data Sources</h3>
                 <ul className="list-disc list-inside"><li><strong>The National Archives</strong> (legislation.gov.uk)</li></ul>
@@ -1461,6 +1560,7 @@ function AppContent() {
         onOpenAccountSettings={() => setShowSettingsModal(true)}
         onOpenAdminPortal={() => setShowAdminModal(true)}
         onOpenAbout={() => setShowAbout(true)}
+        onOpenDataSources={() => setShowDataSources(true)}
         onGiveFeedback={() => setShowFeedbackModal(true)}
         onLogout={logout}
       />

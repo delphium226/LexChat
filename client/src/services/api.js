@@ -18,10 +18,10 @@ export const sendMessage = (messages, model, num_ctx, onUpdate, signal, deep_res
                 body: JSON.stringify({
                     messages, model, num_ctx, deep_research, research_mode,
                     jurisdiction: filters.jurisdiction || null,
-                    year_from: filters.yearFrom ? parseInt(filters.yearFrom, 10) : null,
-                    year_to: filters.yearTo ? parseInt(filters.yearTo, 10) : null,
-                    date_from: filters.caseLawDateFrom || null,
-                    date_to: filters.caseLawDateTo || null,
+                    year_from: filters.dateFrom ? parseInt(filters.dateFrom, 10) : null,
+                    year_to: filters.dateTo ? parseInt(filters.dateTo, 10) : null,
+                    date_from: filters.dateFrom ? `${filters.dateFrom}-01-01` : null,
+                    date_to: filters.dateTo ? `${filters.dateTo}-12-31` : null,
                     court: filters.caseLawCourt || null,
                 }),
                 signal
