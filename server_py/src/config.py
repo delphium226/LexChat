@@ -382,6 +382,9 @@ class Settings(BaseSettings):
     # LEX API
     lex_api_url: str = "https://lex.lab.i.ai.gov.uk/"
 
+    # Proxy
+    https_proxy: Optional[str] = None
+
     # Email
     email_user: Optional[str] = None
     email_pass: Optional[str] = None
