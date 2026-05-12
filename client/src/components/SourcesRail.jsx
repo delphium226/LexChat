@@ -37,6 +37,18 @@ const ExternalBtnIcon = () => (
   </svg>
 );
 
+const ChevronRightIcon = () => (
+  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 18l6-6-6-6" />
+  </svg>
+);
+
+const ChevronLeftIcon = () => (
+  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M15 18l-6-6 6-6" />
+  </svg>
+);
+
 const BookIcon = () => (
   <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
     <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v16H6.5A2.5 2.5 0 0 0 4 20.5z" />
@@ -63,8 +75,9 @@ function formatExtent(extent) {
   return parts.slice(0, -1).join(', ') + ' & ' + parts[parts.length - 1];
 }
 
-export default function SourcesRail({ sources = [], activeCite, onCiteClick }) {
+export default function SourcesRail({ sources = [], activeCite, onCiteClick, collapsed = false, onCollapsedChange }) {
   const activeRef = useRef(null);
+  const setCollapsed = (v) => onCollapsedChange?.(v);
 
   useEffect(() => {
     if (activeRef.current) {
@@ -74,6 +87,32 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick }) {
 
   const primaryCount = sources.filter(s => s.kind !== 'Case' && s.kind !== 'Article').length;
   const secondaryCount = sources.filter(s => s.kind === 'Case' || s.kind === 'Article').length;
+
+  if (collapsed) {
+    return (
+      <aside style={{
+        width: 40, flex: '0 0 40px',
+        borderLeft: '1px solid var(--ink-200)',
+        background: 'var(--paper)',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', paddingTop: 10,
+        minHeight: 0, fontFamily: 'var(--font-ui)',
+        transition: 'width 150ms ease',
+      }}>
+        <IBtn label="Expand sources" onClick={() => setCollapsed(false)}>
+          <ChevronLeftIcon />
+        </IBtn>
+        <div style={{
+          marginTop: 12, fontSize: 12, fontWeight: 600,
+          color: 'var(--ink-500)', writingMode: 'vertical-rl',
+          transform: 'rotate(180deg)', letterSpacing: '0.06em',
+          userSelect: 'none',
+        }}>
+          Sources
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside style={{
@@ -100,6 +139,9 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick }) {
         <div style={{ display: 'flex', gap: 4 }}>
           <IBtn label="Filter sources"><FilterIcon /></IBtn>
           <IBtn label="Export sources"><ExternalBtnIcon /></IBtn>
+          <IBtn label="Collapse sources" onClick={() => setCollapsed(true)}>
+            <ChevronRightIcon />
+          </IBtn>
         </div>
       </div>
 

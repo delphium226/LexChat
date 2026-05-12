@@ -430,6 +430,10 @@ async def process_user_request(
     if doc_context:
         system_content += f"\n\n{doc_context}"
 
+    matter_context = _cfg.get("_matter_context", "")
+    if matter_context:
+        system_content += f"\n\n{matter_context}"
+
     if db_session:
         try:
             last_msg = messages[-1] if messages else None

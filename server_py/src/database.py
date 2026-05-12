@@ -69,6 +69,8 @@ async def init_db() -> None:
             "ALTER TABLE messages ADD COLUMN IF NOT EXISTS cost_usd FLOAT",
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS total_cost_usd FLOAT NOT NULL DEFAULT 0.0",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS research_mode VARCHAR(50) NOT NULL DEFAULT 'legislation_only'",
+            "ALTER TABLE matters ADD COLUMN IF NOT EXISTS jurisdiction VARCHAR(100)",
+            "ALTER TABLE matters ADD COLUMN IF NOT EXISTS legislation_type VARCHAR(100)",
             "ALTER TABLE messages ADD COLUMN IF NOT EXISTS sources JSONB",
             """CREATE TABLE IF NOT EXISTS documents (
                 id SERIAL PRIMARY KEY,

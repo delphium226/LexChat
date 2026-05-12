@@ -13,9 +13,9 @@ export function LexWordmark({ size = 18 }) {
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 8,
       fontWeight: 700, fontSize: size, letterSpacing: '-0.01em',
-      color: 'var(--ink-900)', fontFamily: 'var(--font-ui)',
+      color: 'var(--accent)', fontFamily: 'var(--font-ui)',
     }}>
-      <LexMark size={Math.round(size * 1.15)} color="var(--accent)" />
+      <LexMark size={Math.round(size * 1.15)} color="#2563eb" />
       AILA
     </span>
   );

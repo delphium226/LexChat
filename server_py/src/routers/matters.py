@@ -8,9 +8,9 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..database import get_db
+from ..database import async_session_maker, get_db
 from ..dependencies import get_current_user
-from ..models import AppSetting, Matter, MatterNote
+from ..models import AppSetting, Chat, Matter, MatterNote, Message
 
 logger = logging.getLogger("app")
 
@@ -36,12 +36,16 @@ async def _assert_matters_enabled(db: AsyncSession) -> None:
 class MatterCreate(BaseModel):
     title: str
     description: Optional[str] = None
+    jurisdiction: Optional[str] = None
+    legislation_type: Optional[str] = None
 
 
 class MatterUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     status: Optional[str] = None
+    jurisdiction: Optional[str] = None
+    legislation_type: Optional[str] = None
 
 
 class MatterOut(BaseModel):
@@ -50,6 +54,8 @@ class MatterOut(BaseModel):
     title: str
     description: Optional[str]
     status: str
+    jurisdiction: Optional[str]
+    legislation_type: Optional[str]
     note_count: int
     created_at: datetime
     updated_at: datetime
@@ -90,14 +96,18 @@ async def _get_owned_matter(matter_id: int, user_id: int, db: AsyncSession) -> M
 
 @router.get("", response_model=List[MatterOut])
 async def list_matters(
+    include_closed: bool = False,
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await _assert_matters_enabled(db)
+    where_clause = [Matter.user_id == user["id"]]
+    if not include_closed:
+        where_clause.append(Matter.status == "open")
     result = await db.execute(
         select(Matter, func.count(MatterNote.id).label("note_count"))
         .outerjoin(MatterNote, MatterNote.matter_id == Matter.id)
-        .where(Matter.user_id == user["id"], Matter.status == "open")
+        .where(*where_clause)
         .group_by(Matter.id)
         .order_by(Matter.created_at.desc())
     )
@@ -109,6 +119,8 @@ async def list_matters(
             title=row.Matter.title,
             description=row.Matter.description,
             status=row.Matter.status,
+            jurisdiction=row.Matter.jurisdiction,
+            legislation_type=row.Matter.legislation_type,
             note_count=row.note_count,
             created_at=row.Matter.created_at,
             updated_at=row.Matter.updated_at,
@@ -128,6 +140,8 @@ async def create_matter(
         user_id=user["id"],
         title=body.title.strip(),
         description=body.description,
+        jurisdiction=body.jurisdiction,
+        legislation_type=body.legislation_type,
     )
     db.add(matter)
     await db.commit()
@@ -135,8 +149,9 @@ async def create_matter(
     logger.info(f"[Matters] Created matter id={matter.id} for user id={user['id']}")
     return MatterOut(
         id=matter.id, user_id=matter.user_id, title=matter.title,
-        description=matter.description, status=matter.status, note_count=0,
-        created_at=matter.created_at, updated_at=matter.updated_at,
+        description=matter.description, status=matter.status,
+        jurisdiction=matter.jurisdiction, legislation_type=matter.legislation_type,
+        note_count=0, created_at=matter.created_at, updated_at=matter.updated_at,
     )
 
 
@@ -155,6 +170,10 @@ async def update_matter(
         matter.description = body.description
     if body.status is not None:
         matter.status = body.status
+    if body.jurisdiction is not None:
+        matter.jurisdiction = body.jurisdiction if body.jurisdiction != '' else None
+    if body.legislation_type is not None:
+        matter.legislation_type = body.legislation_type if body.legislation_type != '' else None
     matter.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(matter)
@@ -166,8 +185,9 @@ async def update_matter(
 
     return MatterOut(
         id=matter.id, user_id=matter.user_id, title=matter.title,
-        description=matter.description, status=matter.status, note_count=note_count,
-        created_at=matter.created_at, updated_at=matter.updated_at,
+        description=matter.description, status=matter.status,
+        jurisdiction=matter.jurisdiction, legislation_type=matter.legislation_type,
+        note_count=note_count, created_at=matter.created_at, updated_at=matter.updated_at,
     )
 
 
@@ -252,3 +272,96 @@ async def delete_note(
     await db.delete(note)
     await db.commit()
     return {"message": "Note deleted"}
+
+
+# --- Brief endpoints ---
+
+class MatterBriefRequest(BaseModel):
+    mode: str = "brief"  # "brief" or "gaps"
+
+
+@router.post("/{matter_id}/brief")
+async def generate_brief(
+    matter_id: int,
+    body: MatterBriefRequest,
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _assert_matters_enabled(db)
+    matter = await _get_owned_matter(matter_id, user["id"], db)
+
+    chat_result = await db.execute(select(Chat).where(Chat.matter_id == matter_id))
+    chats = chat_result.scalars().all()
+
+    if not chats:
+        return {"content": "No research threads are assigned to this matter yet."}
+
+    MAX_CHARS = 80_000
+    parts = []
+    total_chars = 0
+
+    for chat in chats:
+        if total_chars >= MAX_CHARS:
+            break
+        msg_result = await db.execute(
+            select(Message)
+            .where(Message.chat_id == chat.id, Message.role == "assistant")
+            .order_by(Message.created_at)
+        )
+        msgs = msg_result.scalars().all()
+        for msg in msgs:
+            if total_chars >= MAX_CHARS:
+                break
+            chunk = msg.content[:(MAX_CHARS - total_chars)]
+            parts.append(f"[Thread: {chat.title or 'Untitled'}]\n{chunk}")
+            total_chars += len(chunk)
+
+    if not parts:
+        return {"content": "No research findings have been recorded in this matter yet."}
+
+    research_text = "\n\n---\n\n".join(parts)
+
+    if body.mode == "gaps":
+        prompt = (
+            f"You are an AI legal assistant reviewing research conducted on the matter: '{matter.title}'.\n"
+            "Analyse the following research findings and identify significant gaps — areas of law, statutes, "
+            "cases, or questions that appear relevant to the matter but have NOT been researched.\n"
+            "Begin your response by identifying yourself as an AI legal assistant. "
+            "Present your findings as a numbered list of research gaps, each with a brief explanation.\n\n"
+            f"Research findings:\n{research_text}"
+        )
+    else:
+        prompt = (
+            f"You are an AI legal assistant compiling a research brief for the matter: '{matter.title}'.\n"
+            "Synthesise the following research findings into a structured legal briefing note. "
+            "Begin your response by identifying yourself as an AI legal assistant. "
+            "Include: key legislation identified, main legal principles established, relevant case law, "
+            "and a concise summary of the current legal position.\n\n"
+            f"Research findings:\n{research_text}"
+        )
+
+    from ..agent.provider_factory import (
+        get_active_provider, get_provider_config, set_request_provider_config, get_active_chat_loop,
+    )
+
+    async with async_session_maker() as cfg_db:
+        active_provider = await get_active_provider(cfg_db)
+        provider_config = await get_provider_config(cfg_db, active_provider)
+
+    set_request_provider_config({**provider_config, "_provider": active_provider})
+
+    async def _noop_tool(_name: str, _args: dict) -> str:
+        return ""
+
+    chat_loop = get_active_chat_loop()
+    result = await chat_loop(
+        [{"role": "user", "content": prompt}],
+        provider_config.get("model", ""),
+        None,
+        0,
+        [],
+        _noop_tool,
+        None,
+    )
+
+    return {"content": result.get("content", "")}

@@ -283,13 +283,13 @@ export const getOpenRouterModels = async () => {
 };
 
 // --- MATTERS ---
-export const getMatters = async () => {
-    const response = await axios.get(`${API_URL}/matters`);
+export const getMatters = async (includeClosed = false) => {
+    const response = await axios.get(`${API_URL}/matters`, { params: includeClosed ? { include_closed: true } : {} });
     return response.data;
 };
 
-export const createMatter = async (title, description = null) => {
-    const response = await axios.post(`${API_URL}/matters`, { title, description });
+export const createMatter = async (title, description = null, jurisdiction = null, legislation_type = null) => {
+    const response = await axios.post(`${API_URL}/matters`, { title, description, jurisdiction, legislation_type });
     return response.data;
 };
 
@@ -319,6 +319,11 @@ export const addMatterNote = async (matterId, content, messageId = null) => {
 
 export const deleteMatterNote = async (matterId, noteId) => {
     await axios.delete(`${API_URL}/matters/${matterId}/notes/${noteId}`);
+};
+
+export const generateMatterBrief = async (matterId, mode = 'brief') => {
+    const response = await axios.post(`${API_URL}/matters/${matterId}/brief`, { mode });
+    return response.data;
 };
 
 // --- DOCUMENTS ---

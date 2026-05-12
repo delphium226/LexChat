@@ -33,8 +33,8 @@ const LoginModal = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white dark:bg-zinc-800 p-8 rounded-lg shadow-xl w-96">
                 <div className="flex items-center justify-center gap-0 mb-6">
-                    <LexMark size={40} color="var(--accent)" />
-                    <h1 className="text-3xl font-bold text-blue-600 tracking-tight">AILA</h1>
+                    <LexMark size={40} color="#2563eb" />
+                    <h1 className="text-3xl font-bold tracking-tight" style={{ color: 'var(--accent)' }}>AILA</h1>
                 </div>
                 <h2 className="text-2xl font-bold mb-6 text-zinc-900 dark:text-white text-center">
                     {isForgotPassword ? 'Reset Password' : 'Login'}

@@ -860,6 +860,66 @@ const ProviderConfigPanel = () => {
 };
 
 
+function getISOWeekKey(dateStr) {
+  const d = new Date(dateStr);
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+}
+
+function buildWeeklyChartData(feedbackItems) {
+  const weeks = [];
+  const now = new Date();
+  for (let i = 7; i >= 0; i--) {
+    const d = new Date(now);
+    d.setUTCDate(d.getUTCDate() - i * 7);
+    weeks.push(getISOWeekKey(d.toISOString()));
+  }
+  const counts = {};
+  weeks.forEach(w => { counts[w] = 0; });
+  feedbackItems.forEach(item => {
+    const k = getISOWeekKey(item.created_at);
+    if (counts[k] !== undefined) counts[k]++;
+  });
+  return weeks.map(w => ({ week: w.replace(/^\d{4}-/, ''), count: counts[w] }));
+}
+
+const WeeklyFeedbackChart = ({ data }) => {
+  const maxCount = Math.max(...data.map(d => d.count), 1);
+  const chartHeight = 100;
+  const barWidth = 28;
+  const gap = 10;
+  return (
+    <div className="mb-6">
+      <div className="text-sm font-semibold mb-3 dark:text-white">Submissions per week (last 8 weeks)</div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap, height: chartHeight + 34 }}>
+        {data.map((d, i) => {
+          const barH = Math.max(Math.round((d.count / maxCount) * chartHeight), d.count > 0 ? 4 : 0);
+          return (
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: barWidth }}>
+              {d.count > 0 && (
+                <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 2 }}>{d.count}</div>
+              )}
+              <div
+                title={`${d.week}: ${d.count} submission${d.count !== 1 ? 's' : ''}`}
+                style={{ width: barWidth, height: barH, background: '#2563eb', borderRadius: '3px 3px 0 0' }}
+              />
+              <div style={{
+                fontSize: 9, color: '#9ca3af', marginTop: 4,
+                transform: 'rotate(-30deg)', transformOrigin: 'top center', whiteSpace: 'nowrap',
+              }}>
+                {d.week}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const AdminPortal = ({ currentUser }) => {
     const [activeTab, setActiveTab] = useState('users');
     const [isLoading, setIsLoading] = useState(false);
@@ -1929,6 +1989,10 @@ const AdminPortal = ({ currentUser }) => {
                                 <h2 className="text-lg font-bold dark:text-white">User Feedback</h2>
                                 <button onClick={fetchProductFeedback} className="text-xs text-blue-500 hover:underline">Refresh</button>
                             </div>
+
+                            {!isProductFeedbackLoading && productFeedback.length > 0 && (
+                                <WeeklyFeedbackChart data={buildWeeklyChartData(productFeedback)} />
+                            )}
 
                             {isProductFeedbackLoading ? (
                                 <div className="flex justify-center items-center h-32"><Spinner /></div>

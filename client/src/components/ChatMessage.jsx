@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { marked } from 'marked';
 import { rateMessage, addMatterNote } from '../services/api';
-import CommentModal from './CommentModal';
+
 
 function formatTime(isoDate) {
   if (!isoDate) return '';
@@ -17,21 +17,22 @@ function formatCost(usd) {
   return `$${usd.toFixed(2)}`;
 }
 
-function ToolBtn({ label, onClick, active, children }) {
+function ToolBtn({ label, onClick, active, disabled, error, children }) {
   const [h, setH] = React.useState(false);
   return (
     <button
       aria-label={label}
       title={label}
-      onClick={onClick}
-      onMouseEnter={() => setH(true)}
+      onClick={disabled ? undefined : onClick}
+      onMouseEnter={() => !disabled && setH(true)}
       onMouseLeave={() => setH(false)}
       style={{
         width: 30, height: 30, borderRadius: 8, border: 'none',
-        background: active ? 'var(--accent-soft)' : (h ? 'var(--ink-100)' : 'transparent'),
-        color: active ? 'var(--accent)' : 'var(--ink-500)',
+        background: error ? 'var(--red-soft, #fee2e2)' : active ? 'var(--accent-soft)' : (h ? 'var(--ink-100)' : 'transparent'),
+        color: error ? 'var(--red, #dc2626)' : active ? 'var(--accent)' : disabled ? 'var(--ink-300)' : 'var(--ink-500)',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        cursor: 'pointer', transition: 'background 120ms',
+        cursor: disabled ? 'not-allowed' : 'pointer', transition: 'background 120ms',
+        opacity: disabled ? 0.5 : 1,
       }}
     >{children}</button>
   );
@@ -61,17 +62,21 @@ const BookmarkIcon = () => (
 );
 
 
-const ChatMessage = ({ message, onResend, showThinking, authorInitials = 'U', matters = [], mattersEnabled = true }) => {
+const ChatMessage = ({ message, onResend, onRerun, showThinking, authorInitials = 'U', matters = [], mattersEnabled = true, sourcesCount = 0, onViewSources, sourcesActive = false }) => {
   const isUser = message.role === 'user';
   const isTool = message.role === 'tool';
 
   const [copied, setCopied] = useState(false);
+  const [copiedUser, setCopiedUser] = useState(false);
   const [rating, setRating] = useState(message.rating || 0);
   const [isRating, setIsRating] = useState(false);
   const [comment, setComment] = useState(message.feedback_comment || '');
-  const [showCommentModal, setShowCommentModal] = useState(false);
+  const [showThumbsDownForm, setShowThumbsDownForm] = useState(false);
+  const [thumbsDownText, setThumbsDownText] = useState('');
+  const [thumbsSubmitting, setThumbsSubmitting] = useState(false);
   const [showPinPopover, setShowPinPopover] = useState(false);
   const [pinned, setPinned] = useState(false);
+  const [pinError, setPinError] = useState(false);
   const pinRef = useRef(null);
 
   useEffect(() => {
@@ -89,7 +94,8 @@ const ChatMessage = ({ message, onResend, showThinking, authorInitials = 'U', ma
       setPinned(true);
       setTimeout(() => setPinned(false), 2000);
     } catch {
-      // silently fail
+      setPinError(true);
+      setTimeout(() => setPinError(false), 2500);
     }
     setShowPinPopover(false);
   };
@@ -107,17 +113,18 @@ const ChatMessage = ({ message, onResend, showThinking, authorInitials = 'U', ma
     }
   };
 
-  const handleCommentSubmit = async (newComment) => {
+  const handleThumbsDownSubmit = async () => {
     if (!message.id) return;
-    setIsRating(true);
+    setThumbsSubmitting(true);
     try {
-      await rateMessage(message.id, rating, newComment);
-      setComment(newComment);
-      setShowCommentModal(false);
+      await rateMessage(message.id, 1, thumbsDownText.trim() || null);
+      setRating(1);
+      setComment(thumbsDownText.trim() || '');
+      setShowThumbsDownForm(false);
     } catch (err) {
-      console.error('Failed to save comment', err);
+      console.error('Failed to submit thumbs down', err);
     } finally {
-      setIsRating(false);
+      setThumbsSubmitting(false);
     }
   };
 
@@ -154,6 +161,12 @@ const ChatMessage = ({ message, onResend, showThinking, authorInitials = 'U', ma
   const timeStr = formatTime(message.created_at || message.at);
 
   // ── User message ──────────────────────────────────────────────
+  const handleCopyUser = () => {
+    navigator.clipboard.writeText(message.content);
+    setCopiedUser(true);
+    setTimeout(() => setCopiedUser(false), 2000);
+  };
+
   if (isUser) {
     return (
       <div style={{
@@ -172,6 +185,16 @@ const ChatMessage = ({ message, onResend, showThinking, authorInitials = 'U', ma
             {timeStr && <span style={{ fontSize: 12, color: 'var(--ink-400)' }}>{timeStr}</span>}
           </div>
           <div style={{ fontSize: 15, color: 'var(--ink-800)', lineHeight: 1.5 }}>{message.content}</div>
+          <div style={{ display: 'flex', gap: 2, marginTop: 6 }}>
+            <ToolBtn label={copiedUser ? 'Copied!' : 'Copy query'} onClick={handleCopyUser} active={copiedUser}>
+              <CopyIcon />
+            </ToolBtn>
+            {onRerun && (
+              <ToolBtn label="Re-run query" onClick={onRerun}>
+                <RefreshIcon />
+              </ToolBtn>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -244,32 +267,65 @@ const ChatMessage = ({ message, onResend, showThinking, authorInitials = 'U', ma
             <ToolBtn label="Regenerate" onClick={onResend}>
               <RefreshIcon />
             </ToolBtn>
-            <button
-              onClick={() => setShowCommentModal(true)}
-              title="Rate this response"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '3px 8px', borderRadius: 6, border: '1px solid',
-                fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                fontFamily: 'var(--font-ui)',
-                background: rating > 0 ? 'var(--accent-muted, #e8f0fe)' : 'transparent',
-                borderColor: rating > 0 ? 'var(--accent, #4a6cf7)' : 'var(--ink-200)',
-                color: rating > 0 ? 'var(--accent, #4a6cf7)' : 'var(--ink-500)',
-                transition: 'all 0.15s',
-              }}
-              onMouseEnter={e => { if (!rating) { e.currentTarget.style.borderColor = 'var(--ink-400)'; e.currentTarget.style.color = 'var(--ink-700)'; } }}
-              onMouseLeave={e => { if (!rating) { e.currentTarget.style.borderColor = 'var(--ink-200)'; e.currentTarget.style.color = 'var(--ink-500)'; } }}
-            >
-              <svg width={12} height={12} viewBox="0 0 24 24" fill={rating > 0 ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-              </svg>
-              {rating > 0 ? `Rated ${rating}/5` : 'Rate'}
-            </button>
+            {sourcesCount > 0 && (
+              <button
+                onClick={onViewSources}
+                title="View sources for this response"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '3px 8px', borderRadius: 6, border: '1px solid',
+                  fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                  fontFamily: 'var(--font-ui)',
+                  background: sourcesActive ? 'var(--accent-muted, #e8f0fe)' : 'transparent',
+                  borderColor: sourcesActive ? 'var(--accent, #4a6cf7)' : 'var(--ink-200)',
+                  color: sourcesActive ? 'var(--accent, #4a6cf7)' : 'var(--ink-500)',
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => { if (!sourcesActive) { e.currentTarget.style.borderColor = 'var(--ink-400)'; e.currentTarget.style.color = 'var(--ink-700)'; } }}
+                onMouseLeave={e => { if (!sourcesActive) { e.currentTarget.style.borderColor = 'var(--ink-200)'; e.currentTarget.style.color = 'var(--ink-500)'; } }}
+              >
+                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v16H6.5A2.5 2.5 0 0 0 4 20.5z" />
+                  <path d="M20 18v4H6.5A2.5 2.5 0 0 1 4 19.5" />
+                </svg>
+                Sources ({sourcesCount})
+              </button>
+            )}
+            {(rating === 0 || rating === 5) && (
+              <ToolBtn
+                label={rating === 5 ? 'Rated helpful' : 'Helpful'}
+                active={rating === 5}
+                disabled={isRating || rating === 1}
+                onClick={() => { if (rating !== 5) handleRate(5); }}
+              >
+                <svg width={15} height={15} viewBox="0 0 24 24"
+                  fill={rating === 5 ? 'currentColor' : 'none'}
+                  stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M7 10V21H3V10zM21 10a2 2 0 0 0-2-2h-5.5l.8-3.7A2 2 0 0 0 12.4 2L7 8v13h11a2 2 0 0 0 2-1.7l1-7A2 2 0 0 0 21 10z" />
+                </svg>
+              </ToolBtn>
+            )}
+            {(rating === 0 || rating === 1) && (
+              <ToolBtn
+                label={rating === 1 ? 'Marked unhelpful' : 'Not helpful'}
+                active={rating === 1}
+                disabled={isRating || rating === 5}
+                onClick={() => { if (rating !== 1) setShowThumbsDownForm(v => !v); }}
+              >
+                <svg width={15} height={15} viewBox="0 0 24 24"
+                  fill={rating === 1 ? 'currentColor' : 'none'}
+                  stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 14V3H21V14zM3 14a2 2 0 0 0 2 2h5.5l-.8 3.7A2 2 0 0 0 11.6 22L17 16V3H6a2 2 0 0 0-2 1.7l-1 7A2 2 0 0 0 3 14z" />
+                </svg>
+              </ToolBtn>
+            )}
             {mattersEnabled && <div ref={pinRef} style={{ position: 'relative' }}>
               <ToolBtn
-                label={pinned ? 'Pinned!' : 'Save to matter'}
+                label={pinError ? 'Failed to save' : pinned ? 'Pinned!' : matters.length === 0 ? 'Create a matter first' : 'Save to matter'}
                 active={pinned}
                 onClick={() => matters.length > 0 && setShowPinPopover(v => !v)}
+                disabled={matters.length === 0}
+                error={pinError}
               >
                 <BookmarkIcon />
               </ToolBtn>
@@ -313,14 +369,50 @@ const ChatMessage = ({ message, onResend, showThinking, authorInitials = 'U', ma
         </div>
       </div>
 
-      <CommentModal
-        isOpen={showCommentModal}
-        onClose={() => setShowCommentModal(false)}
-        onSubmit={handleCommentSubmit}
-        initialComment={comment}
-        rating={rating}
-        onRate={handleRate}
-      />
+      {showThumbsDownForm && rating !== 1 && (
+        <div style={{
+          marginTop: 12, padding: '12px 14px',
+          background: 'var(--ink-50)', borderRadius: 8,
+          border: '1px solid var(--ink-200)',
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 8 }}>
+            What went wrong? <span style={{ fontWeight: 400, color: 'var(--ink-400)' }}>(optional)</span>
+          </div>
+          <textarea
+            value={thumbsDownText}
+            onChange={e => setThumbsDownText(e.target.value)}
+            placeholder="Describe the issue with this response…"
+            rows={3}
+            style={{
+              width: '100%', boxSizing: 'border-box', padding: '7px 10px',
+              borderRadius: 6, border: '1px solid var(--ink-300)',
+              fontSize: 13, fontFamily: 'var(--font-ui)',
+              color: 'var(--ink-800)', background: 'var(--paper)',
+              resize: 'vertical', outline: 'none',
+            }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+            <button
+              onClick={() => { setShowThumbsDownForm(false); setThumbsDownText(''); }}
+              style={{
+                padding: '5px 14px', borderRadius: 6, border: '1px solid var(--ink-200)',
+                background: 'transparent', fontSize: 12, fontWeight: 500,
+                color: 'var(--ink-700)', cursor: 'pointer', fontFamily: 'var(--font-ui)',
+              }}
+            >Cancel</button>
+            <button
+              onClick={handleThumbsDownSubmit}
+              disabled={thumbsSubmitting}
+              style={{
+                padding: '5px 14px', borderRadius: 6, border: 'none',
+                background: 'var(--accent)', fontSize: 12, fontWeight: 500,
+                color: 'white', cursor: thumbsSubmitting ? 'not-allowed' : 'pointer',
+                opacity: thumbsSubmitting ? 0.6 : 1, fontFamily: 'var(--font-ui)',
+              }}
+            >{thumbsSubmitting ? 'Submitting…' : 'Submit'}</button>
+          </div>
+        </div>
+      )}
     </>
   );
 };

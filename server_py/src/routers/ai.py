@@ -20,7 +20,7 @@ from ..agent.provider_factory import (
 )
 from ..config import MAX_TOTAL_DOC_CHARS
 from ..database import async_session_maker
-from ..models import Document, RequestTiming
+from ..models import Chat, Document, Matter, RequestTiming
 from ..utils.stopwatch import TimingCollector
 
 logger = logging.getLogger("app")
@@ -85,6 +85,7 @@ async def chat_endpoint(body: ChatRequest, request: Request):
             provider_config = await get_provider_config(_cfg_db, active_provider)
 
         doc_context = await _load_doc_context(body.chat_id) if body.chat_id else ""
+        matter_context = await _load_matter_context(body.chat_id) if body.chat_id else ""
 
         set_request_provider_config({
             **provider_config,
@@ -99,6 +100,7 @@ async def chat_endpoint(body: ChatRequest, request: Request):
             "_legislation_type": body.legislation_type or None,
             "_current_only": body.current_only or False,
             "_doc_context": doc_context,
+            "_matter_context": matter_context,
         })
         # Always use the server-side configured model — the frontend may be stale
         # (e.g. user switched provider via Dev tab without refreshing the page).
@@ -281,6 +283,35 @@ async def _load_doc_context(chat_id: int) -> str:
         "dates, or facts and include them in `delegate_research` briefs.\n\n"
     )
     return header + "\n\n---\n\n".join(parts)
+
+
+async def _load_matter_context(chat_id: int) -> str:
+    """Return a formatted matter context block if this chat is assigned to a matter."""
+    from sqlalchemy import select as sa_select
+    try:
+        async with async_session_maker() as db:
+            row = await db.execute(sa_select(Chat).where(Chat.id == chat_id))
+            chat = row.scalar_one_or_none()
+            if chat is None or chat.matter_id is None:
+                return ""
+            mrow = await db.execute(sa_select(Matter).where(Matter.id == chat.matter_id))
+            matter = mrow.scalar_one_or_none()
+            if matter is None:
+                return ""
+    except Exception as e:
+        logger.error(f"[AI] Failed to load matter context for chat {chat_id}: {e}")
+        return ""
+
+    parts = [f"Title: {matter.title}"]
+    if matter.description:
+        parts.append(f"Description: {matter.description}")
+    if matter.jurisdiction:
+        parts.append(f"Jurisdiction: {matter.jurisdiction.replace('_', ' ').title()}")
+    if matter.legislation_type:
+        parts.append(f"Legislation type: {matter.legislation_type}")
+
+    header = "MATTER CONTEXT\nThis conversation is part of the following legal matter:\n"
+    return header + "\n".join(parts)
 
 
 async def _watch_disconnect(request: Request, cancel_event: asyncio.Event):

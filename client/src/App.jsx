@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { sendMessage, createChat, getChatMessages, saveMessage, updatePreferences, submitFeedback, getModels, getChats, getMatters, assignChatToMatter, getFeatures, uploadDocument, getChatDocuments, deleteDocument, updateChatTitle } from './services/api';
+import { sendMessage, createChat, getChatMessages, saveMessage, updatePreferences, submitFeedback, getModels, getChats, getMatters, updateMatter, assignChatToMatter, getFeatures, uploadDocument, getChatDocuments, deleteDocument, updateChatTitle } from './services/api';
 import ChatMessage from './components/ChatMessage';
 import { LexMark, LexWordmark } from './components/LexMark';
 import SourcesRail from './components/SourcesRail';
@@ -13,6 +13,7 @@ import CreateMatterModal from './components/CreateMatterModal';
 import MatterNotesModal from './components/MatterNotesModal';
 import { Routes, Route } from 'react-router-dom';
 import SystemChat from './pages/SystemChat';
+import WeeklyFeedbackBanner from './components/WeeklyFeedbackBanner';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -152,19 +153,22 @@ function IBtn({ children, label, onClick, size = 30 }) {
   );
 }
 
-function GhostBtn({ children, icon, onClick }) {
+function GhostBtn({ children, icon, onClick, disabled, title }) {
   const [h, setH] = React.useState(false);
   return (
     <button
-      onClick={onClick}
-      onMouseEnter={() => setH(true)}
+      onClick={disabled ? undefined : onClick}
+      onMouseEnter={() => !disabled && setH(true)}
       onMouseLeave={() => setH(false)}
+      title={title}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 6,
         padding: '6px 10px', fontSize: 13, fontWeight: 500,
         background: h ? 'var(--ink-100)' : 'transparent',
-        color: 'var(--ink-700)', border: '1px solid var(--ink-200)',
-        borderRadius: 8, cursor: 'pointer', transition: 'background 120ms',
+        color: disabled ? 'var(--ink-300)' : 'var(--ink-700)',
+        border: '1px solid var(--ink-200)',
+        borderRadius: 8, cursor: disabled ? 'not-allowed' : 'pointer',
+        transition: 'background 120ms', opacity: disabled ? 0.6 : 1,
         fontFamily: 'var(--font-ui)',
       }}
     >{icon}{children}</button>
@@ -265,6 +269,8 @@ function AppContent() {
   );
   const [recentChats, setRecentChats] = useState([]);
   const [activeCite, setActiveCite] = useState(null);
+  const [activeSourcesMsgId, setActiveSourcesMsgId] = useState(null);
+  const [sourcesCollapsed, setSourcesCollapsed] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
   // ── Modal state ──────────────────────────────────────────────
@@ -275,10 +281,14 @@ function AppContent() {
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showDataSources, setShowDataSources] = useState(false);
+  const [showWeeklyBanner, setShowWeeklyBanner] = useState(false);
+  const weeklyBannerCheckedRef = useRef(false);
 
   // ── Matters state ────────────────────────────────────────────
   const [features, setFeatures] = useState({ matters_enabled: true });
   const [matters, setMatters] = useState([]);
+  const [closedMatters, setClosedMatters] = useState([]);
+  const [showClosedMatters, setShowClosedMatters] = useState(false);
   const [expandedMatterIds, setExpandedMatterIds] = useState(new Set());
   const [showCreateMatterModal, setShowCreateMatterModal] = useState(false);
   const [notesModalMatter, setNotesModalMatter] = useState(null);
@@ -405,21 +415,52 @@ function AppContent() {
       setShowSettingsMenu(false); setShowHistoryModal(false);
       setShowAdminModal(false); setShowSettingsModal(false);
       setResearchMode('legislation_only');
-      setMatters([]); setExpandedMatterIds(new Set());
+      setMatters([]); setClosedMatters([]); setShowClosedMatters(false); setExpandedMatterIds(new Set());
+      setShowWeeklyBanner(false); weeklyBannerCheckedRef.current = false;
     }
+  }, [user]);
+
+  // Weekly feedback banner — show once per week per user.
+  // Uses a ref (not state) for the checked flag so setting it doesn't trigger
+  // a re-render that would cancel the timer via effect cleanup.
+  useEffect(() => {
+    if (!user || weeklyBannerCheckedRef.current) return;
+    weeklyBannerCheckedRef.current = true;
+    const timer = setTimeout(() => {
+      const key = `weeklyFeedbackLastShown_${user.id}`;
+      const last = localStorage.getItem(key);
+      if (!last || Date.now() - parseInt(last, 10) > 7 * 24 * 60 * 60 * 1000) {
+        setShowWeeklyBanner(true);
+      }
+    }, 2000);
+    return () => clearTimeout(timer);
   }, [user]);
 
   // ── Derived ──────────────────────────────────────────────────
 
-  // Sources from the last assistant message that carries them
+  // ID of the last assistant message that has sources (used for default highlight)
+  const latestSourceMsgId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'assistant' && messages[i].sources?.length && messages[i].id) {
+        return messages[i].id;
+      }
+    }
+    return null;
+  }, [messages]);
+
+  // Sources for the rail — shows explicitly selected turn, else the latest turn
   const activeSources = useMemo(() => {
+    if (activeSourcesMsgId != null) {
+      const msg = messages.find(m => m.id === activeSourcesMsgId);
+      if (msg?.sources?.length) return msg.sources;
+    }
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === 'assistant' && messages[i].sources?.length) {
         return messages[i].sources;
       }
     }
     return [];
-  }, [messages]);
+  }, [messages, activeSourcesMsgId]);
 
   const researchModeLabel = {
     legislation_only: 'Legislation only',
@@ -676,6 +717,7 @@ function AppContent() {
             }
             return updated;
           });
+          if (response.sources?.length) setActiveSourcesMsgId(saved.id);
         }
       }
     } catch (error) {
@@ -714,6 +756,7 @@ function AppContent() {
     setCurrentChatId(null);
     setCurrentChatTitle(null);
     setActiveCite(null);
+    setActiveSourcesMsgId(null);
     setChatDocuments([]);
   };
 
@@ -727,30 +770,45 @@ function AppContent() {
       setShowHistoryModal(false);
       setContextUsage(null);
       setActiveCite(null);
+      setActiveSourcesMsgId(null);
       setChatDocuments([]);
       getChatDocuments(chatId).then(setChatDocuments).catch(() => {});
       const saved = localStorage.getItem(`filter_chat_${chatId}`);
+      const savedFilters = saved ? (() => { try { return JSON.parse(saved); } catch { return {}; } })() : {};
       if (saved) {
-        try {
-          const f = JSON.parse(saved);
-          if (f.dateFrom !== undefined) { setDateFrom(f.dateFrom); localStorage.setItem('filter_dateFrom', f.dateFrom); }
-          if (f.dateTo !== undefined) { setDateTo(f.dateTo); localStorage.setItem('filter_dateTo', f.dateTo); }
-          if (f.jurisdiction !== undefined) {
-            setJurisdiction(f.jurisdiction);
-            if (f.jurisdiction) localStorage.setItem('filter_jurisdiction', f.jurisdiction);
-            else localStorage.removeItem('filter_jurisdiction');
+        const f = savedFilters;
+        if (f.dateFrom !== undefined) { setDateFrom(f.dateFrom); localStorage.setItem('filter_dateFrom', f.dateFrom); }
+        if (f.dateTo !== undefined) { setDateTo(f.dateTo); localStorage.setItem('filter_dateTo', f.dateTo); }
+        if (f.jurisdiction !== undefined) {
+          setJurisdiction(f.jurisdiction);
+          if (f.jurisdiction) localStorage.setItem('filter_jurisdiction', f.jurisdiction);
+          else localStorage.removeItem('filter_jurisdiction');
+        }
+        if (f.court !== undefined) { setCaseLawCourt(f.court); localStorage.setItem('filter_caseLawCourt', f.court); }
+        if (f.legislationType !== undefined) {
+          setLegislationType(f.legislationType);
+          if (f.legislationType) localStorage.setItem('filter_legislationType', f.legislationType);
+          else localStorage.removeItem('filter_legislationType');
+        }
+        if (f.currentOnly !== undefined) {
+          setCurrentOnly(f.currentOnly);
+          localStorage.setItem('filter_currentOnly', String(f.currentOnly));
+        }
+      }
+      // Apply matter-level defaults for any filter not already saved for this chat
+      const chatMatterId = recentChats.find(c => c.id === chatId)?.matter_id;
+      if (chatMatterId) {
+        const chatMatter = matters.find(m => m.id === chatMatterId);
+        if (chatMatter) {
+          if (chatMatter.jurisdiction && savedFilters.jurisdiction === undefined) {
+            setJurisdiction(chatMatter.jurisdiction);
+            localStorage.setItem('filter_jurisdiction', chatMatter.jurisdiction);
           }
-          if (f.court !== undefined) { setCaseLawCourt(f.court); localStorage.setItem('filter_caseLawCourt', f.court); }
-          if (f.legislationType !== undefined) {
-            setLegislationType(f.legislationType);
-            if (f.legislationType) localStorage.setItem('filter_legislationType', f.legislationType);
-            else localStorage.removeItem('filter_legislationType');
+          if (chatMatter.legislation_type && savedFilters.legislationType === undefined) {
+            setLegislationType(chatMatter.legislation_type);
+            localStorage.setItem('filter_legislationType', chatMatter.legislation_type);
           }
-          if (f.currentOnly !== undefined) {
-            setCurrentOnly(f.currentOnly);
-            localStorage.setItem('filter_currentOnly', String(f.currentOnly));
-          }
-        } catch {}
+        }
       }
     } catch (err) {
       console.error('Failed to load chat', err);
@@ -881,6 +939,8 @@ function AppContent() {
                         if (next.has(matter.id)) next.delete(matter.id); else next.add(matter.id);
                         setExpandedMatterIds(next);
                       }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--ink-50)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 4,
                         padding: '5px 6px', borderRadius: 6, cursor: 'pointer',
@@ -907,6 +967,14 @@ function AppContent() {
                       <IBtn size={20} label="Notes" onClick={e => { e.stopPropagation(); setNotesModalMatter(matter); }}>
                         <BookmarkIcon />
                       </IBtn>
+                      <IBtn size={20} label="Close matter" onClick={async e => {
+                        e.stopPropagation();
+                        await updateMatter(matter.id, { status: 'closed' });
+                        setMatters(prev => prev.filter(m => m.id !== matter.id));
+                        if (showClosedMatters) setClosedMatters(prev => [{ ...matter, status: 'closed' }, ...prev]);
+                      }}>
+                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </IBtn>
                     </div>
                     {isExpanded && (
                       matterChats.length === 0
@@ -931,6 +999,53 @@ function AppContent() {
                   </div>
                 );
               })}
+              {/* Closed matters toggle */}
+              <div
+                onClick={async () => {
+                  if (!showClosedMatters) {
+                    const all = await getMatters(true);
+                    setClosedMatters(all.filter(m => m.status === 'closed'));
+                  }
+                  setShowClosedMatters(v => !v);
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '5px 6px', borderRadius: 6, cursor: 'pointer',
+                  color: 'var(--ink-400)', fontSize: 12,
+                }}
+                onMouseEnter={e => e.currentTarget.style.color = 'var(--ink-600)'}
+                onMouseLeave={e => e.currentTarget.style.color = 'var(--ink-400)'}
+              >
+                <span style={{ display: 'inline-flex', transform: showClosedMatters ? 'rotate(90deg)' : 'none', transition: 'transform 150ms' }}><ChevRightIcon /></span>
+                Closed matters
+              </div>
+              {showClosedMatters && closedMatters.map(matter => (
+                <div
+                  key={matter.id}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    padding: '5px 6px', borderRadius: 6,
+                    color: 'var(--ink-400)', opacity: 0.7,
+                  }}
+                >
+                  <span style={{ flexShrink: 0, display: 'inline-flex' }}><FolderIcon /></span>
+                  <span style={{
+                    flex: 1, overflow: 'hidden', textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap', fontSize: 13,
+                    textDecoration: 'line-through',
+                  }}>{matter.title}</span>
+                  <IBtn size={20} label="Reopen matter" onClick={async () => {
+                    await updateMatter(matter.id, { status: 'open' });
+                    setClosedMatters(prev => prev.filter(m => m.id !== matter.id));
+                    setMatters(prev => [{ ...matter, status: 'open' }, ...prev]);
+                  }}>
+                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.48"/></svg>
+                  </IBtn>
+                </div>
+              ))}
+              {showClosedMatters && closedMatters.length === 0 && (
+                <div style={{ padding: '4px 6px 4px 22px', color: 'var(--ink-400)', fontSize: 12, fontStyle: 'italic' }}>No closed matters</div>
+              )}
             </div>
             </>)}
 
@@ -1059,7 +1174,9 @@ function AppContent() {
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
             {features.matters_enabled && <GhostBtn
               icon={<BookmarkIcon />}
-              onClick={() => { if (currentChatId) { setAssigningChatId(currentChatId); setShowAssignModal(true); } }}
+              onClick={() => { setAssigningChatId(currentChatId); setShowAssignModal(true); }}
+              disabled={!currentChatId}
+              title={!currentChatId ? 'Open a chat to assign it to a matter' : 'Save this thread to a matter'}
             >Save to matter</GhostBtn>}
             <GhostBtn onClick={() => setShowFeedbackModal(true)}>Give Feedback</GhostBtn>
           </div>
@@ -1077,7 +1194,14 @@ function AppContent() {
               className="lex-scroll"
               style={{ flex: 1, overflow: 'auto', padding: '20px 28px 140px' }}
             >
-              <div style={{ maxWidth: 680, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
+              <div style={{ maxWidth: '95%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
+
+                {showWeeklyBanner && (
+                  <WeeklyFeedbackBanner
+                    userId={user.id}
+                    onClose={() => setShowWeeklyBanner(false)}
+                  />
+                )}
 
                 {/* Research context chips */}
                 {(() => {
@@ -1135,10 +1259,23 @@ function AppContent() {
                           if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
                         }, 0);
                       }}
+                      onRerun={msg.role === 'user' ? () => {
+                        setInput(msg.content);
+                        setTimeout(() => {
+                          const ta = textareaRef.current;
+                          if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+                        }, 0);
+                      } : undefined}
                       showThinking={showThinking}
                       authorInitials={userInitials}
                       matters={matters}
                       mattersEnabled={features.matters_enabled}
+                      sourcesCount={msg.role === 'assistant' && msg.id ? (msg.sources?.length ?? 0) : 0}
+                      onViewSources={msg.role === 'assistant' && msg.id ? () => { setActiveSourcesMsgId(msg.id); setSourcesCollapsed(false); } : undefined}
+                      sourcesActive={msg.role === 'assistant' && msg.id != null && (
+                        msg.id === activeSourcesMsgId ||
+                        (activeSourcesMsgId == null && msg.id === latestSourceMsgId)
+                      )}
                     />
                   );
                 })}
@@ -1180,7 +1317,7 @@ function AppContent() {
                 marginTop: -120, position: 'relative', zIndex: 2,
               }}
             >
-              <div style={{ maxWidth: 680, margin: '0 auto', position: 'relative' }}>
+              <div style={{ maxWidth: '95%', margin: '0 auto', position: 'relative' }}>
 
                 {/* Filters popover */}
                 {showFilters && (() => {
@@ -1457,6 +1594,8 @@ function AppContent() {
             sources={activeSources}
             activeCite={activeCite}
             onCiteClick={setActiveCite}
+            collapsed={sourcesCollapsed}
+            onCollapsedChange={setSourcesCollapsed}
           />
         </div>
       </div>

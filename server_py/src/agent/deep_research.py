@@ -8,6 +8,7 @@ from .provider_factory import (
     call_chunk,
     get_active_chat_loop,
     get_active_summarise_for_query,
+    get_request_provider_config,
     get_summarise_model,
     get_summarise_threshold,
 )
@@ -66,7 +67,13 @@ async def chat_with_deep_research(
     """
     logger.info("[Deep Research] Starting session...")
 
-    system_message = {"role": "system", "content": DEEP_RESEARCH_SYSTEM_PROMPT}
+    _cfg = get_request_provider_config()
+    system_content = DEEP_RESEARCH_SYSTEM_PROMPT
+    matter_context = _cfg.get("_matter_context", "")
+    if matter_context:
+        system_content += f"\n\n{matter_context}"
+
+    system_message = {"role": "system", "content": system_content}
 
     final_messages = list(messages)
     if final_messages and final_messages[0].get("role") == "system":
