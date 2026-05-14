@@ -1,3 +1,5 @@
+import ctypes
+import ctypes.wintypes
 import logging
 import os
 import sys
@@ -16,6 +18,17 @@ _WHITE  = "\033[97m"
 _YELLOW = "\033[33m"
 _RED    = "\033[31m"
 _BOLD_RED = "\033[1;31m"
+
+def _enable_windows_ansi():
+    try:
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        mode = ctypes.wintypes.DWORD()
+        if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            kernel32.SetConsoleMode(handle, mode.value | 0x0004)  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+    except Exception:
+        pass
+
 
 _LEVEL_COLOURS = {
     logging.DEBUG:    _GREY,
@@ -62,6 +75,7 @@ def setup_logging():
     - agent: AI/tool activity logs
     - http: HTTP request/response logs
     """
+    _enable_windows_ansi()
     # App logger
     app_logger = logging.getLogger("app")
     app_logger.setLevel(logging.INFO)

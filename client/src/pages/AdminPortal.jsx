@@ -561,6 +561,17 @@ const ModelCombobox = ({ value, onChange, models, loading, error }) => {
     );
 };
 
+const PROVIDER_DEFAULTS = {
+    openrouter: {
+        model: 'google/gemini-3.1-pro-preview',
+        summarisation_model: 'google/gemini-3-flash-preview',
+    },
+    ollama: {
+        model: 'mistral-large-3:675b-cloud',
+        summarisation_model: '',
+    },
+};
+
 const ProviderConfigPanel = () => {
     const [data, setData] = React.useState(null);           // full GET response
     const [selectedId, setSelectedId] = React.useState(null); // which provider card is selected for editing
@@ -627,6 +638,16 @@ const ProviderConfigPanel = () => {
         } finally {
             setSavingConfig(false);
         }
+    };
+
+    const handleSetToDefault = () => {
+        if (!selectedId) return;
+        const defaults = PROVIDER_DEFAULTS[selectedId];
+        if (!defaults) return;
+        setDrafts(prev => ({
+            ...prev,
+            [selectedId]: { ...prev[selectedId], ...defaults },
+        }));
     };
 
     const handleSetActive = async () => {
@@ -835,6 +856,15 @@ const ProviderConfigPanel = () => {
                             {savingConfig && <Spinner size="sm" />}
                             {savingConfig ? 'Saving…' : 'Save Settings'}
                         </button>
+
+                        {PROVIDER_DEFAULTS[selectedId] && (
+                            <button
+                                onClick={handleSetToDefault}
+                                className="px-5 py-2 bg-gray-100 dark:bg-zinc-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-zinc-600 transition-colors text-sm font-medium"
+                            >
+                                Set to default
+                            </button>
+                        )}
 
                         {!isActive && (
                             <button
