@@ -33,6 +33,21 @@ Write-Host "Case law URL : $CaseLawUrl"
 Write-Host ""
 
 # ---------------------------------------------------------------------------
+# Skip SSL certificate validation (Windows PowerShell 5.1 compatible)
+# ---------------------------------------------------------------------------
+
+Add-Type @"
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
+public class TrustAllCerts : ICertificatePolicy {
+    public bool CheckValidationResult(
+        ServicePoint sp, X509Certificate cert, WebRequest req, int problem) { return true; }
+}
+"@
+[System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCerts
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+
+# ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
 
@@ -67,7 +82,6 @@ function Test-Endpoint {
                 -Body $jsonBody `
                 -ContentType "application/json" `
                 -TimeoutSec 30 `
-                -SkipCertificateCheck `
                 -ErrorAction Stop
         } else {
             # Build URI with query params
@@ -80,7 +94,6 @@ function Test-Endpoint {
                 -Uri $Url `
                 -Method GET `
                 -TimeoutSec 30 `
-                -SkipCertificateCheck `
                 -ErrorAction Stop
         }
 
