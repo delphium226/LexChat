@@ -67,13 +67,27 @@ try {
 
 # ── Test 1: TCP to proxy ─────────────────────────────────────────────────────
 
-Write-Host "[TEST 1] TCP connection to proxy $($proxyUri.Host):$($proxyUri.Port)" -ForegroundColor Yellow
-$tcp = Test-NetConnection -ComputerName $proxyUri.Host -Port $proxyUri.Port -WarningAction SilentlyContinue -InformationLevel Quiet
-if ($tcp.TcpTestSucceeded) {
-    Write-Host "  PASS - proxy is reachable" -ForegroundColor Green
-} else {
-    Write-Host "  FAIL - cannot reach proxy host/port; check HTTPS_PROXY value" -ForegroundColor Red
-    exit 1
+Write-Host "[TEST 1] TCP connection to proxy" -ForegroundColor Yellow
+Write-Host "  Parsed host : $($proxyUri.Host)" -ForegroundColor Cyan
+Write-Host "  Parsed port : $($proxyUri.Port)" -ForegroundColor Cyan
+
+# Use TcpClient directly — more reliable than Test-NetConnection on Server 2022
+$tcpClient = New-Object System.Net.Sockets.TcpClient
+try {
+    $connect = $tcpClient.BeginConnect($proxyUri.Host, $proxyUri.Port, $null, $null)
+    $waited  = $connect.AsyncWaitHandle.WaitOne(5000, $false)
+    if ($waited -and $tcpClient.Connected) {
+        $tcpClient.EndConnect($connect)
+        Write-Host "  PASS - TCP connection succeeded" -ForegroundColor Green
+    } else {
+        Write-Host "  FAIL - TCP connection timed out after 5s" -ForegroundColor Red
+        Write-Host "         Confirm the host/port above match your proxy, and that this server can reach it on that port" -ForegroundColor DarkGray
+        # Don't exit — still attempt the HTTP tests, which give more detail
+    }
+} catch {
+    Write-Host "  FAIL - $($_.Exception.Message)" -ForegroundColor Red
+} finally {
+    $tcpClient.Close()
 }
 
 # ── Test 2: Unauthenticated request through proxy ────────────────────────────
