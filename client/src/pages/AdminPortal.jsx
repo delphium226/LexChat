@@ -644,10 +644,13 @@ const ProviderConfigPanel = () => {
         if (!selectedId) return;
         const defaults = PROVIDER_DEFAULTS[selectedId];
         if (!defaults) return;
-        setDrafts(prev => ({
-            ...prev,
-            [selectedId]: { ...prev[selectedId], ...defaults },
-        }));
+        setDrafts(prev => {
+            const current = prev[selectedId] || {};
+            return {
+                ...prev,
+                [selectedId]: { ...current, ...defaults, api_key: current.api_key },
+            };
+        });
     };
 
     const handleSetActive = async () => {
