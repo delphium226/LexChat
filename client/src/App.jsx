@@ -250,7 +250,6 @@ function AppContent() {
   const [agentStatus, setAgentStatus] = useState('');
   const [activities, setActivities] = useState(new Map());
   const [contextUsage, setContextUsage] = useState(null);
-  const [showThinking] = useState(false);
   const [currentChatId, setCurrentChatId] = useState(null);
   const [currentChatTitle, setCurrentChatTitle] = useState(null);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -1266,7 +1265,6 @@ function AppContent() {
                           if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
                         }, 0);
                       } : undefined}
-                      showThinking={showThinking}
                       authorInitials={userInitials}
                       matters={matters}
                       mattersEnabled={features.matters_enabled}

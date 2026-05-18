@@ -62,7 +62,7 @@ const BookmarkIcon = () => (
 );
 
 
-const ChatMessage = ({ message, onResend, onRerun, showThinking, authorInitials = 'U', matters = [], mattersEnabled = true, sourcesCount = 0, onViewSources, sourcesActive = false }) => {
+const ChatMessage = ({ message, onResend, onRerun, authorInitials = 'U', matters = [], mattersEnabled = true, sourcesCount = 0, onViewSources, sourcesActive = false }) => {
   const isUser = message.role === 'user';
   const isTool = message.role === 'tool';
 
@@ -131,17 +131,10 @@ const ChatMessage = ({ message, onResend, onRerun, showThinking, authorInitials 
   const processedContent = useMemo(() => {
     let content = message.content;
     if (!content) return '';
-    const thinkBlock = /<(think|thinking)>([\s\S]*?)<\/\1>/gi;
-    const unclosed = /<(think|thinking)>([\s\S]*)$/i;
-    if (showThinking) {
-      content = content.replace(thinkBlock, (_, _t, inner) => `\n*${inner.trim()}*\n`);
-      content = content.replace(unclosed, (_, _t, inner) => `\n*${inner.trim()}*`);
-      return content;
-    }
-    content = content.replace(thinkBlock, '');
-    content = content.replace(unclosed, '');
+    content = content.replace(/<(think|thinking)>([\s\S]*?)<\/\1>/gi, '');
+    content = content.replace(/<(think|thinking)>([\s\S]*)$/i, '');
     return content.trim();
-  }, [message.content, showThinking]);
+  }, [message.content]);
 
   const handleCopy = async () => {
     try {
