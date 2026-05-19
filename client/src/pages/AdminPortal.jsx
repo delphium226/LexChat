@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData, getUsageStats, resetDatabase, clearUsageData, clearPerformanceData, getLatestHealthStatus, getHealthHistory, triggerHealthCheck, getQueryPerformanceStats, getProductFeedback, getProviderConfig, saveProviderConfig, setActiveProvider, getOpenRouterModels, getCostStats, getFeatures, saveFeatures } from '../services/api';
+import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData, getUsageStats, resetDatabase, clearUsageData, clearPerformanceData, getLatestHealthStatus, getHealthHistory, triggerHealthCheck, getQueryPerformanceStats, getProductFeedback, getSurveyCompliance, getProviderConfig, saveProviderConfig, setActiveProvider, getOpenRouterModels, getCostStats, getFeatures, saveFeatures } from '../services/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const Spinner = ({ size = 'md' }) => {
@@ -993,6 +993,7 @@ const AdminPortal = ({ currentUser }) => {
     // --- PRODUCT FEEDBACK STATE ---
     const [productFeedback, setProductFeedback] = useState([]);
     const [isProductFeedbackLoading, setIsProductFeedbackLoading] = useState(false);
+    const [surveyCompliance, setSurveyCompliance] = useState(null);
 
     // --- FEATURE FLAGS STATE ---
     const [features, setFeatures] = useState({ matters_enabled: true });
@@ -1023,8 +1024,9 @@ const AdminPortal = ({ currentUser }) => {
     const fetchProductFeedback = async () => {
         setIsProductFeedbackLoading(true);
         try {
-            const data = await getProductFeedback();
+            const [data, compliance] = await Promise.all([getProductFeedback(), getSurveyCompliance()]);
             setProductFeedback(data);
+            setSurveyCompliance(compliance);
         } catch (err) {
             console.error('Failed to fetch product feedback:', err);
         } finally {
@@ -2015,47 +2017,144 @@ const AdminPortal = ({ currentUser }) => {
                     </div>
                 )}
                 {/* USER FEEDBACK TAB */}
-                {activeTab === 'product-feedback' && (
-                    <div className="space-y-4">
-                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
-                            <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-lg font-bold dark:text-white">User Feedback</h2>
-                                <button onClick={fetchProductFeedback} className="text-xs text-blue-500 hover:underline">Refresh</button>
+                {activeTab === 'product-feedback' && (() => {
+                    const withTime = productFeedback.filter(f => f.time_saved_hours != null && f.time_without_aila_hours != null);
+                    const avgSaved = withTime.length > 0 ? (withTime.reduce((s, f) => s + f.time_saved_hours, 0) / withTime.length) : null;
+                    const avgWithout = withTime.length > 0 ? (withTime.reduce((s, f) => s + f.time_without_aila_hours, 0) / withTime.length) : null;
+                    const withConf = productFeedback.filter(f => f.confidence != null);
+                    const avgConf = withConf.length > 0 ? (withConf.reduce((s, f) => s + f.confidence, 0) / withConf.length) : null;
+                    const thCls = "px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-left font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap";
+                    return (
+                        <div className="space-y-4">
+                            <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-lg font-bold dark:text-white">User Feedback</h2>
+                                    <button onClick={fetchProductFeedback} className="text-xs text-blue-500 hover:underline">Refresh</button>
+                                </div>
+
+                                {!isProductFeedbackLoading && productFeedback.length > 0 && (
+                                    <WeeklyFeedbackChart data={buildWeeklyChartData(productFeedback)} />
+                                )}
+
+                                {/* Aggregate summary */}
+                                {!isProductFeedbackLoading && productFeedback.length > 0 && (
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 mt-4">
+                                        <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
+                                            <div className="text-2xl font-bold text-zinc-800 dark:text-white">
+                                                {avgSaved != null ? avgSaved.toFixed(1) : '—'}
+                                            </div>
+                                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Avg hrs saved</div>
+                                        </div>
+                                        <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
+                                            <div className="text-2xl font-bold text-zinc-800 dark:text-white">
+                                                {avgWithout != null ? avgWithout.toFixed(1) : '—'}
+                                            </div>
+                                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Avg hrs without AILA</div>
+                                        </div>
+                                        <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
+                                            <div className="text-2xl font-bold text-zinc-800 dark:text-white">
+                                                {avgSaved != null && avgWithout != null && (avgWithout - avgSaved) > 0
+                                                    ? `${(avgWithout / (avgWithout - avgSaved)).toFixed(1)}×`
+                                                    : '—'}
+                                            </div>
+                                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Efficiency ratio</div>
+                                        </div>
+                                        <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
+                                            <div className="text-2xl font-bold text-zinc-800 dark:text-white">
+                                                {avgConf != null ? `${avgConf.toFixed(1)}/5` : '—'}
+                                            </div>
+                                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Avg confidence</div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {isProductFeedbackLoading ? (
+                                    <div className="flex justify-center items-center h-32"><Spinner /></div>
+                                ) : productFeedback.length === 0 ? (
+                                    <p className="text-gray-400 text-sm">No feedback has been submitted yet.</p>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full text-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th className={`${thCls} w-32`}>User</th>
+                                                    <th className={`${thCls} w-44`}>Date &amp; Time</th>
+                                                    <th className={`${thCls} w-28`}>Saved (hrs)</th>
+                                                    <th className={`${thCls} w-36`}>Without AILA (hrs)</th>
+                                                    <th className={`${thCls} w-40`}>Success</th>
+                                                    <th className={`${thCls} w-24`}>Confidence</th>
+                                                    <th className={thCls}>Comments</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {productFeedback.map((item) => (
+                                                    <tr key={item.id} className="border-b border-zinc-100 dark:border-zinc-700 align-top">
+                                                        <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200 whitespace-nowrap">{item.username}</td>
+                                                        <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(item.created_at).toLocaleString()}</td>
+                                                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.time_saved_hours != null ? item.time_saved_hours : '—'}</td>
+                                                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.time_without_aila_hours != null ? item.time_without_aila_hours : '—'}</td>
+                                                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{item.research_success || '—'}</td>
+                                                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.confidence != null ? `${item.confidence}/5` : '—'}</td>
+                                                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{item.message || ''}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
                             </div>
 
-                            {!isProductFeedbackLoading && productFeedback.length > 0 && (
-                                <WeeklyFeedbackChart data={buildWeeklyChartData(productFeedback)} />
-                            )}
-
-                            {isProductFeedbackLoading ? (
-                                <div className="flex justify-center items-center h-32"><Spinner /></div>
-                            ) : productFeedback.length === 0 ? (
-                                <p className="text-gray-400 text-sm">No feedback has been submitted yet.</p>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <table className="min-w-full text-sm">
-                                        <thead>
-                                            <tr>
-                                                <th className="px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-left font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap w-32">User</th>
-                                                <th className="px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-left font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap w-44">Date &amp; Time</th>
-                                                <th className="px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-left font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Feedback</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {productFeedback.map((item) => (
-                                                <tr key={item.id} className="border-b border-zinc-100 dark:border-zinc-700 align-top">
-                                                    <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200 whitespace-nowrap">{item.username}</td>
-                                                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(item.created_at).toLocaleString()}</td>
-                                                    <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{item.message}</td>
+                        {/* Survey compliance grid */}
+                        {surveyCompliance && (() => {
+                            const cellColor = (weekData, isCurrent) => {
+                                if (weekData.survey_submitted) return 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200';
+                                if (weekData.query_count === 0) return 'bg-zinc-100 dark:bg-zinc-700 text-zinc-400 dark:text-zinc-400';
+                                if (isCurrent) return 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200';
+                                return 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200';
+                            };
+                            return (
+                                <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+                                    <h2 className="text-lg font-bold dark:text-white mb-4">Survey Completion — Last 4 Weeks</h2>
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full text-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th className="px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-left font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap w-32">User</th>
+                                                    {surveyCompliance.weeks.map((w, i) => (
+                                                        <th key={i} className="px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-center font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap">
+                                                            {w.label}
+                                                        </th>
+                                                    ))}
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody>
+                                                {surveyCompliance.users.map(u => (
+                                                    <tr key={u.user_id} className="border-b border-zinc-100 dark:border-zinc-700">
+                                                        <td className="px-4 py-2 font-medium text-gray-800 dark:text-gray-200 whitespace-nowrap">{u.username}</td>
+                                                        {u.weeks.map((w, i) => (
+                                                            <td key={i} className="px-2 py-2 text-center">
+                                                                <span className={`inline-block rounded px-2 py-1 text-xs font-semibold ${cellColor(w, surveyCompliance.weeks[i].is_current)}`}>
+                                                                    {w.query_count} {w.query_count === 1 ? 'query' : 'queries'}
+                                                                </span>
+                                                            </td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div className="flex gap-4 mt-4 text-xs text-zinc-500 dark:text-zinc-400">
+                                        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-green-200"></span> Survey submitted</span>
+                                        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-yellow-200"></span> Active, survey pending</span>
+                                        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-red-200"></span> Active, survey missed</span>
+                                        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-zinc-200"></span> No activity</span>
+                                    </div>
                                 </div>
-                            )}
-                        </div>
+                            );
+                        })()}
                     </div>
-                )}
+                    );
+                })()}
 
             </div>
         </div>

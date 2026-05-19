@@ -246,13 +246,18 @@ export const triggerHealthCheck = async () => {
 };
 
 // --- PRODUCT FEEDBACK ---
-export const submitFeedback = async (message) => {
-    const response = await axios.post(`${API_URL}/feedback`, { message });
+export const submitFeedback = async (payload) => {
+    const response = await axios.post(`${API_URL}/feedback`, payload);
     return response.data;
 };
 
 export const getProductFeedback = async () => {
     const response = await axios.get(`${API_URL}/feedback`);
+    return response.data;
+};
+
+export const getSurveyCompliance = async () => {
+    const response = await axios.get(`${API_URL}/feedback/compliance`);
     return response.data;
 };
 

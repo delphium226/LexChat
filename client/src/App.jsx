@@ -185,7 +185,7 @@ const FeedbackModal = ({ onClose }) => {
     if (!text.trim()) return;
     setStatus('submitting');
     try {
-      await submitFeedback(text.trim());
+      await submitFeedback({ message: text.trim() });
       setStatus('success');
     } catch {
       setStatus('error');
@@ -281,6 +281,7 @@ function AppContent() {
   const [showAbout, setShowAbout] = useState(false);
   const [showDataSources, setShowDataSources] = useState(false);
   const [showWeeklyBanner, setShowWeeklyBanner] = useState(false);
+  const [surveyDue, setSurveyDue] = useState(false);
   const weeklyBannerCheckedRef = useRef(false);
 
   // ── Matters state ────────────────────────────────────────────
@@ -419,16 +420,22 @@ function AppContent() {
     }
   }, [user]);
 
-  // Weekly feedback banner — show once per week per user.
+  // Weekly feedback — show banner once per week, button whenever survey not yet submitted this week.
   // Uses a ref (not state) for the checked flag so setting it doesn't trigger
   // a re-render that would cancel the timer via effect cleanup.
   useEffect(() => {
     if (!user || weeklyBannerCheckedRef.current) return;
     weeklyBannerCheckedRef.current = true;
+    const week = 7 * 24 * 60 * 60 * 1000;
+    const submittedKey = `weeklyFeedbackSubmitted_${user.id}`;
+    const lastSubmitted = localStorage.getItem(submittedKey);
+    if (!lastSubmitted || Date.now() - parseInt(lastSubmitted, 10) > week) {
+      setSurveyDue(true);
+    }
     const timer = setTimeout(() => {
-      const key = `weeklyFeedbackLastShown_${user.id}`;
-      const last = localStorage.getItem(key);
-      if (!last || Date.now() - parseInt(last, 10) > 7 * 24 * 60 * 60 * 1000) {
+      const shownKey = `weeklyFeedbackLastShown_${user.id}`;
+      const last = localStorage.getItem(shownKey);
+      if (!last || Date.now() - parseInt(last, 10) > week) {
         setShowWeeklyBanner(true);
       }
     }, 2000);
@@ -743,6 +750,7 @@ function AppContent() {
         setActivities(new Map());
         abortControllerRef.current = null;
         sendingRef.current = false;
+        setTimeout(() => textareaRef.current?.focus(), 0);
       }
     }
   };
@@ -1177,6 +1185,7 @@ function AppContent() {
               disabled={!currentChatId}
               title={!currentChatId ? 'Open a chat to assign it to a matter' : 'Save this thread to a matter'}
             >Save to matter</GhostBtn>}
+            {surveyDue && <GhostBtn onClick={() => setShowWeeklyBanner(true)}>Take weekly survey</GhostBtn>}
             <GhostBtn onClick={() => setShowFeedbackModal(true)}>Give Feedback</GhostBtn>
           </div>
         </div>
@@ -1199,6 +1208,10 @@ function AppContent() {
                   <WeeklyFeedbackBanner
                     userId={user.id}
                     onClose={() => setShowWeeklyBanner(false)}
+                    onSubmitted={() => {
+                      localStorage.setItem(`weeklyFeedbackSubmitted_${user.id}`, Date.now().toString());
+                      setSurveyDue(false);
+                    }}
                   />
                 )}
 
