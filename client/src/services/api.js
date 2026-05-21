@@ -229,6 +229,16 @@ export const clearPerformanceData = async () => {
     return response.data;
 };
 
+export const clearFeedbackData = async () => {
+    const response = await axios.post(`${API_URL}/developer/clear-feedback`);
+    return response.data;
+};
+
+export const submitFeedback = async (payload) => {
+    const response = await axios.post(`${API_URL}/feedback`, payload);
+    return response.data;
+};
+
 // --- HEALTH STATUS APIS ---
 export const getLatestHealthStatus = async () => {
     const response = await axios.get(`${API_URL}/health/status`);
@@ -245,19 +255,19 @@ export const triggerHealthCheck = async () => {
     return response.data;
 };
 
-// --- PRODUCT FEEDBACK ---
-export const submitFeedback = async (payload) => {
-    const response = await axios.post(`${API_URL}/feedback`, payload);
-    return response.data;
-};
 
-export const getProductFeedback = async () => {
-    const response = await axios.get(`${API_URL}/feedback`);
+export const getProductFeedback = async (days = '30') => {
+    const response = await axios.get(`${API_URL}/feedback`, { params: { days } });
     return response.data;
 };
 
 export const getSurveyCompliance = async () => {
     const response = await axios.get(`${API_URL}/feedback/compliance`);
+    return response.data;
+};
+
+export const getMessageRatings = async (days = '30') => {
+    const response = await axios.get(`${API_URL}/feedback/message-ratings`, { params: { days } });
     return response.data;
 };
 

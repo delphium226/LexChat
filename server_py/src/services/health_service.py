@@ -6,7 +6,7 @@ import httpx
 
 from sqlalchemy import select
 from ..database import async_session_maker
-from ..models import ServiceHealthStatus
+from ..models import ServiceHealthStatus, AppSetting
 from ..config import settings
 
 logger = logging.getLogger("app")
@@ -34,30 +34,56 @@ async def check_ollama() -> dict:
         latency = int((time.time() - start_time) * 1000)
         return {"service_name": "ollama", "is_healthy": False, "error_message": str(e), "latency_ms": latency}
 
-async def check_lex_api() -> dict:
+async def check_openrouter(base_url: str, api_key: str | None) -> dict:
     start_time = time.time()
     try:
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         async with httpx.AsyncClient(timeout=5.0) as client:
-            # We just ping the base URL for health
-            response = await client.get(settings.lex_api_url)
-            # Accept 200 or 401/403 as "service is up but maybe needs auth"
-            # Actually LEX API root often returns 404 or something, let's just make sure it connects
-            # A connection error would throw an exception
+            response = await client.get(f"{base_url}/models", headers=headers)
+            # Any HTTP response means the service is reachable; treat 200 as healthy
             latency = int((time.time() - start_time) * 1000)
-            return {"service_name": "lex_api", "is_healthy": True, "error_message": None, "latency_ms": latency}
+            is_healthy = response.status_code == 200
+            error = None if is_healthy else f"HTTP {response.status_code}"
+            return {"service_name": "openrouter", "is_healthy": is_healthy, "error_message": error, "latency_ms": latency}
     except Exception as e:
         latency = int((time.time() - start_time) * 1000)
-        return {"service_name": "lex_api", "is_healthy": False, "error_message": str(e), "latency_ms": latency}
+        return {"service_name": "openrouter", "is_healthy": False, "error_message": str(e), "latency_ms": latency}
+
+async def _get_active_llm_check():
+    """Return (provider_name, check_coroutine) based on the active provider in DB."""
+    try:
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(AppSetting).where(AppSetting.key == "active_provider")
+            )
+            setting = result.scalar_one_or_none()
+            active = setting.value if setting else "ollama"
+
+            if active == "openrouter":
+                cfg_result = await session.execute(
+                    select(AppSetting).where(AppSetting.key == "provider.openrouter")
+                )
+                cfg_setting = cfg_result.scalar_one_or_none()
+                import json
+                cfg = json.loads(cfg_setting.value) if cfg_setting else {}
+                base_url = cfg.get("base_url") or settings.openrouter_base_url
+                api_key = cfg.get("api_key") or settings.openrouter_api_key
+                return "openrouter", check_openrouter(base_url, api_key)
+
+    except Exception as e:
+        logger.error(f"[Health] Failed to read active provider for health check: {e}")
+
+    return "ollama", check_ollama()
 
 async def perform_health_checks():
-    # Run all checks concurrently
+    _, llm_check = await _get_active_llm_check()
+
     results = await asyncio.gather(
         check_database(),
-        check_ollama(),
+        llm_check,
         check_lex_api()
     )
-    
-    # Save to database
+
     try:
         async with async_session_maker() as session:
             for res in results:
@@ -74,6 +100,17 @@ async def perform_health_checks():
         logger.error(f"[Health] Failed to write health checks to DB: {db_err}")
 
     return results
+
+async def check_lex_api() -> dict:
+    start_time = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.get(settings.lex_api_url)
+            latency = int((time.time() - start_time) * 1000)
+            return {"service_name": "lex_api", "is_healthy": True, "error_message": None, "latency_ms": latency}
+    except Exception as e:
+        latency = int((time.time() - start_time) * 1000)
+        return {"service_name": "lex_api", "is_healthy": False, "error_message": str(e), "latency_ms": latency}
 
 async def background_health_loop(interval_seconds: int = 60):
     logger.info(f"[Health] Background check loop started (interval: {interval_seconds}s)")

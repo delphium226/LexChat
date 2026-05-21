@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import axios from 'axios';
-import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, generateSyntheticData, getUsageStats, resetDatabase, clearUsageData, clearPerformanceData, getLatestHealthStatus, getHealthHistory, triggerHealthCheck, getQueryPerformanceStats, getProductFeedback, getSurveyCompliance, getProviderConfig, saveProviderConfig, setActiveProvider, getOpenRouterModels, getCostStats, getFeatures, saveFeatures } from '../services/api';
+import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, getUsageStats, clearUsageData, clearPerformanceData, clearFeedbackData, getLatestHealthStatus, getHealthHistory, triggerHealthCheck, getQueryPerformanceStats, getProductFeedback, getSurveyCompliance, getMessageRatings, getProviderConfig, saveProviderConfig, setActiveProvider, getOpenRouterModels, getCostStats, getFeatures, saveFeatures } from '../services/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const Spinner = ({ size = 'md' }) => {
@@ -893,65 +895,77 @@ const ProviderConfigPanel = () => {
 };
 
 
-function getISOWeekKey(dateStr) {
-  const d = new Date(dateStr);
-  const day = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - day);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNum = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+function buildSurveyComplianceChartData(surveyCompliance) {
+    if (!surveyCompliance) return [];
+    const totalUsers = surveyCompliance.users.length;
+    return [...surveyCompliance.weeks].reverse().map((w, ri) => {
+        const i = surveyCompliance.weeks.length - 1 - ri;
+        const activeCount = surveyCompliance.users.filter(u => u.weeks[i].query_count > 0).length;
+        const surveyedCount = surveyCompliance.users.filter(u => u.weeks[i].survey_submitted).length;
+        return { week: w.label, totalUsers, activeUsers: activeCount, surveyed: surveyedCount };
+    });
 }
 
-function buildWeeklyChartData(feedbackItems) {
-  const weeks = [];
-  const now = new Date();
-  for (let i = 7; i >= 0; i--) {
-    const d = new Date(now);
-    d.setUTCDate(d.getUTCDate() - i * 7);
-    weeks.push(getISOWeekKey(d.toISOString()));
-  }
-  const counts = {};
-  weeks.forEach(w => { counts[w] = 0; });
-  feedbackItems.forEach(item => {
-    const k = getISOWeekKey(item.created_at);
-    if (counts[k] !== undefined) counts[k]++;
-  });
-  return weeks.map(w => ({ week: w.replace(/^\d{4}-/, ''), count: counts[w] }));
-}
-
-const WeeklyFeedbackChart = ({ data }) => {
-  const maxCount = Math.max(...data.map(d => d.count), 1);
-  const chartHeight = 100;
-  const barWidth = 28;
-  const gap = 10;
-  return (
-    <div className="mb-6">
-      <div className="text-sm font-semibold mb-3 dark:text-white">Submissions per week (last 8 weeks)</div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap, height: chartHeight + 34 }}>
-        {data.map((d, i) => {
-          const barH = Math.max(Math.round((d.count / maxCount) * chartHeight), d.count > 0 ? 4 : 0);
-          return (
-            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: barWidth }}>
-              {d.count > 0 && (
-                <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 2 }}>{d.count}</div>
-              )}
-              <div
-                title={`${d.week}: ${d.count} submission${d.count !== 1 ? 's' : ''}`}
-                style={{ width: barWidth, height: barH, background: '#2563eb', borderRadius: '3px 3px 0 0' }}
-              />
-              <div style={{
-                fontSize: 9, color: '#9ca3af', marginTop: 4,
-                transform: 'rotate(-30deg)', transformOrigin: 'top center', whiteSpace: 'nowrap',
-              }}>
-                {d.week}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+const WeeklySurveyComplianceChart = ({ surveyCompliance }) => {
+    const raw = buildSurveyComplianceChartData(surveyCompliance);
+    if (raw.length === 0) return null;
+    const totalUsers = raw[0]?.totalUsers || 1;
+    const data = raw.map(w => ({
+        week: w.week,
+        totalUsers: w.totalUsers,
+        surveyed: w.surveyed,
+        activeOnly: Math.max(0, w.activeUsers - w.surveyed),
+        inactive: Math.max(0, w.totalUsers - w.activeUsers),
+    }));
+    return (
+        <div className="mb-6">
+            <h3 className="text-sm font-bold mb-3 dark:text-white">Weekly Survey Submissions</h3>
+            <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={data} barCategoryGap="30%">
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="week" tick={{ fontSize: 11 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={28} domain={[0, totalUsers]} />
+                    <Tooltip
+                        contentStyle={{ fontSize: 11 }}
+                        formatter={(value, name, props) => {
+                            const tot = props.payload.totalUsers;
+                            const pct = tot > 0 ? Math.round((value / tot) * 100) : 0;
+                            return [`${value} (${pct}%)`, name];
+                        }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="surveyed" name="Completed Survey" stackId="a" fill="#22c55e" />
+                    <Bar dataKey="activeOnly" name="Declined response" stackId="a" fill="#3b82f6" />
+                    <Bar dataKey="inactive" name="Inactive" stackId="a" fill="#94a3b8" radius={[3, 3, 0, 0]} />
+                </BarChart>
+            </ResponsiveContainer>
+        </div>
+    );
 };
+
+function buildDailyRatingsData(items, timeframe) {
+    const numDays = (!timeframe || timeframe === 'all') ? 60 : Math.min(parseInt(timeframe, 10), 60);
+    const dayKeys = [];
+    const now = new Date();
+    for (let i = numDays - 1; i >= 0; i--) {
+        const d = new Date(now);
+        d.setUTCDate(d.getUTCDate() - i);
+        dayKeys.push(d.toISOString().slice(0, 10));
+    }
+    const counts = {};
+    dayKeys.forEach(d => { counts[d] = { up: 0, down: 0 }; });
+    items.forEach(item => {
+        const k = item.created_at.slice(0, 10);
+        if (counts[k]) {
+            if (item.rating === 5) counts[k].up++;
+            else if (item.rating === 1) counts[k].down++;
+        }
+    });
+    return dayKeys.map(d => ({
+        day: new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+        ...counts[d],
+    }));
+}
 
 const AdminPortal = ({ currentUser }) => {
     const [activeTab, setActiveTab] = useState('users');
@@ -994,6 +1008,12 @@ const AdminPortal = ({ currentUser }) => {
     const [productFeedback, setProductFeedback] = useState([]);
     const [isProductFeedbackLoading, setIsProductFeedbackLoading] = useState(false);
     const [surveyCompliance, setSurveyCompliance] = useState(null);
+    const [messageRatings, setMessageRatings] = useState([]);
+    const [isMessageRatingsLoading, setIsMessageRatingsLoading] = useState(false);
+    const [ratingsFilter, setRatingsFilter] = useState('all');
+    const [expandedRatingRow, setExpandedRatingRow] = useState(null);
+    const [ratingViewItem, setRatingViewItem] = useState(null);
+    const [productFeedbackTimeframe, setProductFeedbackTimeframe] = useState('30');
 
     // --- FEATURE FLAGS STATE ---
     const [features, setFeatures] = useState({ matters_enabled: true });
@@ -1015,23 +1035,26 @@ const AdminPortal = ({ currentUser }) => {
         } else if (activeTab === 'health') {
             fetchHealthStatus();
         } else if (activeTab === 'product-feedback') {
-            fetchProductFeedback();
+            fetchProductFeedback(productFeedbackTimeframe);
         } else if (activeTab === 'developer') {
             getFeatures().then(setFeatures).catch(() => {});
         }
-    }, [activeTab, timeframe, learningTimeframe, perfTimeframe, costTimeframe]);
+    }, [activeTab, timeframe, learningTimeframe, perfTimeframe, costTimeframe, productFeedbackTimeframe]);
 
-    const fetchProductFeedback = async () => {
+    const fetchProductFeedback = async (days = '30') => {
         setIsProductFeedbackLoading(true);
-        try {
-            const [data, compliance] = await Promise.all([getProductFeedback(), getSurveyCompliance()]);
-            setProductFeedback(data);
-            setSurveyCompliance(compliance);
-        } catch (err) {
-            console.error('Failed to fetch product feedback:', err);
-        } finally {
-            setIsProductFeedbackLoading(false);
-        }
+        setIsMessageRatingsLoading(true);
+        const [surveyResult, complianceResult, ratingsResult] = await Promise.allSettled([
+            getProductFeedback(days), getSurveyCompliance(), getMessageRatings(days),
+        ]);
+        if (surveyResult.status === 'fulfilled') setProductFeedback(surveyResult.value);
+        else console.error('Failed to fetch product feedback:', surveyResult.reason);
+        if (complianceResult.status === 'fulfilled') setSurveyCompliance(complianceResult.value);
+        else console.error('Failed to fetch survey compliance:', complianceResult.reason);
+        if (ratingsResult.status === 'fulfilled') setMessageRatings(ratingsResult.value);
+        else console.error('Failed to fetch message ratings:', ratingsResult.reason);
+        setIsProductFeedbackLoading(false);
+        setIsMessageRatingsLoading(false);
     };
 
     // ==========================================
@@ -1456,21 +1479,21 @@ const AdminPortal = ({ currentUser }) => {
                                         <p className="text-xs text-gray-500 mt-4">Last checked: {healthStatus?.database?.checked_at ? new Date(healthStatus.database.checked_at).toLocaleString() : 'Never'}</p>
                                     </div>
                                 </div>
-                                {/* Ollama Card */}
-                                <div className={`p-6 rounded-lg shadow border-l-4 ${healthStatus?.ollama?.is_healthy ? 'border-green-500 bg-white dark:bg-zinc-800' : 'border-red-500 bg-red-50 dark:bg-red-900/20'}`}>
+                                {/* LLM Provider Card */}
+                                <div className={`p-6 rounded-lg shadow border-l-4 ${healthStatus?.llm?.is_healthy ? 'border-green-500 bg-white dark:bg-zinc-800' : 'border-red-500 bg-red-50 dark:bg-red-900/20'}`}>
                                     <h3 className="text-lg font-bold mb-2 dark:text-white flex items-center justify-between">
-                                        Ollama Reasoning Engine
-                                        <span className={`inline-block w-3 h-3 rounded-full ${healthStatus?.ollama?.is_healthy ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></span>
+                                        {healthStatus?.active_llm_provider === 'openrouter' ? 'OpenRouter API' : 'Ollama Reasoning Engine'}
+                                        <span className={`inline-block w-3 h-3 rounded-full ${healthStatus?.llm?.is_healthy ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></span>
                                     </h3>
                                     <div className="text-sm space-y-2 dark:text-gray-300">
-                                        <p><strong>Status:</strong> {healthStatus?.ollama?.is_healthy ? 'Healthy' : 'Disconnected / Refused'}</p>
-                                        <p><strong>Latency:</strong> {healthStatus?.ollama?.latency_ms !== null ? `${healthStatus.ollama.latency_ms}ms` : 'N/A'}</p>
-                                        {!healthStatus?.ollama?.is_healthy && healthStatus?.ollama?.error_message && (
+                                        <p><strong>Status:</strong> {healthStatus?.llm?.is_healthy ? 'Healthy' : 'Disconnected / Refused'}</p>
+                                        <p><strong>Latency:</strong> {healthStatus?.llm?.latency_ms !== null ? `${healthStatus.llm.latency_ms}ms` : 'N/A'}</p>
+                                        {!healthStatus?.llm?.is_healthy && healthStatus?.llm?.error_message && (
                                             <p className="text-red-600 dark:text-red-400 text-xs mt-2 p-2 bg-red-100 dark:bg-red-900/40 rounded">
-                                                <strong>Error:</strong> {healthStatus.ollama.error_message}
+                                                <strong>Error:</strong> {healthStatus.llm.error_message}
                                             </p>
                                         )}
-                                        <p className="text-xs text-gray-500 mt-4">Last checked: {healthStatus?.ollama?.checked_at ? new Date(healthStatus.ollama.checked_at).toLocaleString() : 'Never'}</p>
+                                        <p className="text-xs text-gray-500 mt-4">Last checked: {healthStatus?.llm?.checked_at ? new Date(healthStatus.llm.checked_at).toLocaleString() : 'Never'}</p>
                                     </div>
                                 </div>
                                 {/* LEX API Card */}
@@ -1914,34 +1937,7 @@ const AdminPortal = ({ currentUser }) => {
                             </div>
                         </div>
 
-                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
-                            <h2 className="text-lg font-bold mb-4 dark:text-white">Synthetic Data Generation</h2>
-                            <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-                                Generate synthetic users, chat history, and ratings to test system performance and visualization.
-                                <strong> Warning: This adds significant data to the database.</strong>
-                            </p>
-                            <button
-                                onClick={async () => {
-                                    if (!window.confirm('This will generate 100 users and ~6 months of data. Continue?')) return;
-                                    setIsLoading(true);
-                                    try {
-                                        const res = await generateSyntheticData();
-                                        setMessage(res.message);
-                                        // Refresh other tabs if needed
-                                        fetchStats();
-                                    } catch (err) {
-                                        setMessage('Error generating data: ' + err.message);
-                                    } finally {
-                                        setIsLoading(false);
-                                    }
-                                }}
-                                disabled={isLoading}
-                                className={`bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors text-sm flex items-center gap-2 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            >
-                                {isLoading && <Spinner size="sm" />}
-                                {isLoading ? 'Generating Data...' : 'Generate 100 Synthetic Users (6 Months History)'}
-                            </button>
-                        </div>
+
 
                         <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow border border-red-200 dark:border-red-900">
                             <h2 className="text-lg font-bold mb-4 text-red-600 dark:text-red-400">Danger Zone</h2>
@@ -1988,36 +1984,32 @@ const AdminPortal = ({ currentUser }) => {
                                     {isLoading && <Spinner size="sm" />}
                                     Clear All Performance Data
                                 </button>
+                                <button
+                                    onClick={async () => {
+                                        if (!window.confirm('This will delete all product feedback surveys and clear all message ratings and comments.\n\nAre you sure?')) return;
+                                        setIsLoading(true);
+                                        try {
+                                            const res = await clearFeedbackData();
+                                            setMessage(res.message);
+                                        } catch (err) {
+                                            setMessage('Error clearing feedback data: ' + err.message);
+                                        } finally {
+                                            setIsLoading(false);
+                                        }
+                                    }}
+                                    disabled={isLoading}
+                                    className={`bg-orange-600 text-white px-5 py-2.5 rounded-lg hover:bg-orange-700 transition-colors text-sm flex items-center gap-2 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                    {isLoading && <Spinner size="sm" />}
+                                    Clear User Feedback
+                                </button>
                             </div>
-                            <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">
-                                Full reset: deletes all users (except 'admin'), all chats, and all messages.
-                            </p>
-                            <button
-                                onClick={async () => {
-                                    if (!window.confirm('WARNING: This will delete ALL data (users, chats, messages). Only the admin account will be preserved.\n\nAre you sure you want to proceed?')) return;
-                                    setIsLoading(true);
-                                    try {
-                                        const res = await resetDatabase();
-                                        setMessage(res.message);
-                                        fetchStats();
-                                        fetchUsers();
-                                    } catch (err) {
-                                        setMessage('Error resetting database: ' + err.message);
-                                    } finally {
-                                        setIsLoading(false);
-                                    }
-                                }}
-                                disabled={isLoading}
-                                className={`bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors text-sm flex items-center gap-2 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            >
-                                {isLoading && <Spinner size="sm" />}
-                                {isLoading ? 'Processing...' : 'Reset Database'}
-                            </button>
                         </div>
                     </div>
                 )}
                 {/* USER FEEDBACK TAB */}
                 {activeTab === 'product-feedback' && (() => {
+                    const timeframeLabel = productFeedbackTimeframe === 'all' ? 'All Time' : `Last ${productFeedbackTimeframe} Days`;
                     const withTime = productFeedback.filter(f => f.time_saved_hours != null && f.time_without_aila_hours != null);
                     const avgSaved = withTime.length > 0 ? (withTime.reduce((s, f) => s + f.time_saved_hours, 0) / withTime.length) : null;
                     const avgWithout = withTime.length > 0 ? (withTime.reduce((s, f) => s + f.time_without_aila_hours, 0) / withTime.length) : null;
@@ -2026,19 +2018,263 @@ const AdminPortal = ({ currentUser }) => {
                     const thCls = "px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-left font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap";
                     return (
                         <div className="space-y-4">
+
+                            {/* TIMEFRAME FILTER HEADER */}
+                            <div className="flex justify-between items-center bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
+                                <h2 className="text-lg font-bold dark:text-white">User Feedback</h2>
+                                <div className="flex items-center space-x-2">
+                                    <label className="text-sm text-gray-500 dark:text-gray-400 font-medium">Timeframe:</label>
+                                    <select
+                                        value={productFeedbackTimeframe}
+                                        onChange={(e) => setProductFeedbackTimeframe(e.target.value)}
+                                        className="p-2 border rounded-md text-sm dark:bg-zinc-700 dark:border-zinc-600 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                    >
+                                        <option value="1">Last 1 Day</option>
+                                        <option value="3">Last 3 Days</option>
+                                        <option value="7">Last 7 Days</option>
+                                        <option value="30">Last 30 Days</option>
+                                        <option value="90">Last 90 Days</option>
+                                        <option value="all">All Time</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* RESPONSE RATINGS CARD */}
+                            {(() => {
+                                const total = messageRatings.length;
+                                const upCount = messageRatings.filter(r => r.rating === 5).length;
+                                const downCount = messageRatings.filter(r => r.rating === 1).length;
+                                const commentedCount = messageRatings.filter(r => r.feedback_comment).length;
+                                const upPct = total > 0 ? Math.round((upCount / total) * 100) : null;
+                                const downPct = total > 0 ? Math.round((downCount / total) * 100) : null;
+                                const filtered = messageRatings.filter(r => {
+                                    if (ratingsFilter === 'up') return r.rating === 5;
+                                    if (ratingsFilter === 'down') return r.rating === 1;
+                                    if (ratingsFilter === 'commented') return !!r.feedback_comment;
+                                    return true;
+                                });
+                                const thR = "px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-left font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap text-xs";
+                                return (
+                                    <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+                                        <div className="flex justify-between items-center mb-5">
+                                            <h2 className="text-lg font-bold dark:text-white">LLM Response Ratings</h2>
+                                            <button onClick={() => fetchProductFeedback(productFeedbackTimeframe)} className="text-xs text-blue-500 hover:underline">Refresh</button>
+                                        </div>
+
+                                        {/* KPIs */}
+                                        {!isMessageRatingsLoading && total > 0 && (
+                                            <>
+                                                <h3 className="text-sm font-bold mb-3 dark:text-white">Rating Summary</h3>
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+                                                    <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
+                                                        <div className="text-2xl font-bold text-zinc-800 dark:text-white">{total}</div>
+                                                        <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Total rated</div>
+                                                    </div>
+                                                    <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-4 text-center">
+                                                        <div className="text-2xl font-bold text-green-700 dark:text-green-300">{upCount}</div>
+                                                        <div className="text-xs text-green-600 dark:text-green-400 mt-1">👍 Helpful{upPct != null ? ` (${upPct}%)` : ''}</div>
+                                                    </div>
+                                                    <div className="bg-red-50 dark:bg-red-900/30 rounded-lg p-4 text-center">
+                                                        <div className="text-2xl font-bold text-red-700 dark:text-red-300">{downCount}</div>
+                                                        <div className="text-xs text-red-600 dark:text-red-400 mt-1">👎 Unhelpful{downPct != null ? ` (${downPct}%)` : ''}</div>
+                                                    </div>
+                                                    <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
+                                                        <div className="text-2xl font-bold text-zinc-800 dark:text-white">{commentedCount}</div>
+                                                        <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">With comments</div>
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {/* Daily ratings chart */}
+                                        {!isMessageRatingsLoading && total > 0 && (
+                                            <div className="mb-6">
+                                                <h3 className="text-sm font-bold mb-3 dark:text-white">Daily Ratings</h3>
+                                                <ResponsiveContainer width="100%" height={160}>
+                                                    <BarChart data={buildDailyRatingsData(messageRatings, productFeedbackTimeframe)} barCategoryGap="35%">
+                                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                                        <XAxis dataKey="day" tick={{ fontSize: 11 }} interval={Math.max(0, Math.floor(parseInt(productFeedbackTimeframe) / 7) - 1) || 'preserveStartEnd'} />
+                                                        <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={24} />
+                                                        <Tooltip />
+                                                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                                                        <Bar dataKey="up" name="Helpful" fill="#22c55e" radius={[3, 3, 0, 0]} />
+                                                        <Bar dataKey="down" name="Unhelpful" fill="#ef4444" radius={[3, 3, 0, 0]} />
+                                                    </BarChart>
+                                                </ResponsiveContainer>
+                                            </div>
+                                        )}
+
+                                        {/* Filter tabs */}
+                                        {!isMessageRatingsLoading && total > 0 && (
+                                            <div className="flex flex-wrap gap-2 mb-4">
+                                                {[
+                                                    { key: 'all', label: `All (${total})` },
+                                                    { key: 'down', label: `👎 Unhelpful (${downCount})` },
+                                                    { key: 'up', label: `👍 Helpful (${upCount})` },
+                                                    { key: 'commented', label: `💬 With comments (${commentedCount})` },
+                                                ].map(f => (
+                                                    <button
+                                                        key={f.key}
+                                                        onClick={() => setRatingsFilter(f.key)}
+                                                        className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${ratingsFilter === f.key
+                                                            ? 'bg-blue-600 text-white border-blue-600'
+                                                            : 'bg-white dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-600 hover:border-zinc-400 dark:hover:border-zinc-400'
+                                                        }`}
+                                                    >{f.label}</button>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {/* Table */}
+                                        <h3 className="text-sm font-bold mb-3 mt-2 dark:text-white">Individual LLM Response Ratings</h3>
+                                        {isMessageRatingsLoading ? (
+                                            <div className="flex justify-center items-center h-32"><Spinner /></div>
+                                        ) : total === 0 ? (
+                                            <p className="text-gray-400 text-sm">No responses have been rated yet.</p>
+                                        ) : filtered.length === 0 ? (
+                                            <p className="text-gray-400 text-sm">No ratings match this filter.</p>
+                                        ) : (
+                                            <>
+                                            <div className="overflow-x-auto">
+                                                <table className="min-w-full text-sm">
+                                                    <thead>
+                                                        <tr>
+                                                            <th className={`${thR} w-24`}>User</th>
+                                                            <th className={`${thR} w-32`}>Date</th>
+                                                            <th className={`${thR} w-24`}>Rating</th>
+                                                            <th className={`${thR} w-48`}>Comment</th>
+                                                            <th className={`${thR} w-40`}>Query / Response</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {filtered.map(item => (
+                                                            <tr
+                                                                key={item.id}
+                                                                className="border-b border-zinc-100 dark:border-zinc-700 align-top"
+                                                            >
+                                                                <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200 whitespace-nowrap">{item.username}</td>
+                                                                <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap text-xs">
+                                                                    {new Date(item.created_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                                </td>
+                                                                <td className="px-4 py-3">
+                                                                    {item.rating === 5
+                                                                        ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 text-xs font-semibold whitespace-nowrap">👍 Helpful</span>
+                                                                        : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 text-xs font-semibold whitespace-nowrap">👎 Unhelpful</span>
+                                                                    }
+                                                                </td>
+                                                                <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
+                                                                    {item.feedback_comment
+                                                                        ? <span className="italic text-xs">{item.feedback_comment}</span>
+                                                                        : <span className="text-zinc-400 text-xs">—</span>
+                                                                    }
+                                                                </td>
+                                                                <td className="px-4 py-3">
+                                                                    <button
+                                                                        onClick={() => setRatingViewItem(item)}
+                                                                        className="px-3 py-1 text-xs rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-600 transition-colors whitespace-nowrap"
+                                                                    >
+                                                                        View query/response
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            {/* Query/Response modal */}
+                                            {ratingViewItem && (
+                                                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setRatingViewItem(null)}>
+                                                    <div
+                                                        className="bg-white dark:bg-zinc-800 rounded-xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col max-h-[80vh]"
+                                                        onClick={e => e.stopPropagation()}
+                                                    >
+                                                        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200 dark:border-zinc-700">
+                                                            <h3 className="font-semibold text-zinc-800 dark:text-white text-sm">Query &amp; Response</h3>
+                                                            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                                                                {ratingViewItem.username} · {new Date(ratingViewItem.created_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                            </span>
+                                                        </div>
+                                                        <div className="overflow-y-auto px-6 py-4 space-y-4 flex-1">
+                                                            {(() => {
+                                                                const mdComponents = {
+                                                                    p: ({ node, ...p }) => <p {...p} className="mb-3 last:mb-0" />,
+                                                                    ul: ({ node, ...p }) => <ul {...p} className="list-disc pl-5 mb-3" />,
+                                                                    ol: ({ node, ...p }) => <ol {...p} className="list-decimal pl-5 mb-3" />,
+                                                                    li: ({ node, ...p }) => <li {...p} className="mb-1" />,
+                                                                    h1: ({ node, ...p }) => <h1 {...p} className="text-base font-bold mt-3 mb-2" />,
+                                                                    h2: ({ node, ...p }) => <h2 {...p} className="text-sm font-bold mt-3 mb-1" />,
+                                                                    h3: ({ node, ...p }) => <h3 {...p} className="text-sm font-semibold mt-2 mb-1" />,
+                                                                    strong: ({ node, ...p }) => <strong {...p} className="font-semibold" />,
+                                                                    blockquote: ({ node, ...p }) => <blockquote {...p} className="border-l-2 border-zinc-300 dark:border-zinc-600 pl-3 italic text-zinc-600 dark:text-zinc-400 my-2" />,
+                                                                    code: ({ node, inline, ...p }) => inline
+                                                                        ? <code {...p} className="bg-zinc-100 dark:bg-zinc-700 px-1 py-0.5 rounded text-xs font-mono" />
+                                                                        : <code {...p} className="text-xs font-mono" />,
+                                                                    pre: ({ node, ...p }) => <pre {...p} className="bg-zinc-100 dark:bg-zinc-700 rounded p-3 overflow-x-auto text-xs font-mono mb-3" />,
+                                                                    a: ({ node, ...p }) => <a {...p} className="text-blue-600 dark:text-blue-400 underline" target="_blank" rel="noopener noreferrer" />,
+                                                                };
+                                                                return (
+                                                                    <>
+                                                                        <div>
+                                                                            <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-2">Query</p>
+                                                                            <div className="text-sm text-zinc-800 dark:text-zinc-200">
+                                                                                {ratingViewItem.query
+                                                                                    ? <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{ratingViewItem.query}</ReactMarkdown>
+                                                                                    : <span className="italic text-zinc-400">—</span>
+                                                                                }
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="border-t border-zinc-100 dark:border-zinc-700 pt-4">
+                                                                            <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-2">Response</p>
+                                                                            <div className="text-sm text-zinc-800 dark:text-zinc-200">
+                                                                                <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{ratingViewItem.response || '—'}</ReactMarkdown>
+                                                                            </div>
+                                                                        </div>
+                                                                    </>
+                                                                );
+                                                            })()}
+                                                        </div>
+                                                        <div className="flex justify-end gap-3 px-6 py-4 border-t border-zinc-200 dark:border-zinc-700">
+                                                            <button
+                                                                onClick={() => {
+                                                                    const text = `Query:\n${ratingViewItem.query || ''}\n\nResponse:\n${ratingViewItem.response || ''}`;
+                                                                    navigator.clipboard.writeText(text);
+                                                                }}
+                                                                className="px-4 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-600 transition-colors"
+                                                            >
+                                                                Copy to clipboard
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setRatingViewItem(null)}
+                                                                className="px-4 py-2 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                                                            >
+                                                                Close
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            </>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
                             <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
                                 <div className="flex justify-between items-center mb-4">
-                                    <h2 className="text-lg font-bold dark:text-white">User Feedback</h2>
-                                    <button onClick={fetchProductFeedback} className="text-xs text-blue-500 hover:underline">Refresh</button>
+                                    <h2 className="text-lg font-bold dark:text-white">Weekly User Surveys</h2>
+                                    <button onClick={() => fetchProductFeedback(productFeedbackTimeframe)} className="text-xs text-blue-500 hover:underline">Refresh</button>
                                 </div>
 
-                                {!isProductFeedbackLoading && productFeedback.length > 0 && (
-                                    <WeeklyFeedbackChart data={buildWeeklyChartData(productFeedback)} />
+                                {!isProductFeedbackLoading && surveyCompliance && (
+                                    <WeeklySurveyComplianceChart surveyCompliance={surveyCompliance} />
                                 )}
 
                                 {/* Aggregate summary */}
                                 {!isProductFeedbackLoading && productFeedback.length > 0 && (
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 mt-4">
+                                    <>
+                                    <h3 className="text-sm font-bold mb-3 dark:text-white">Productivity Summary</h3>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
                                         <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
                                             <div className="text-2xl font-bold text-zinc-800 dark:text-white">
                                                 {avgSaved != null ? avgSaved.toFixed(1) : '—'}
@@ -2066,8 +2302,10 @@ const AdminPortal = ({ currentUser }) => {
                                             <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Avg confidence</div>
                                         </div>
                                     </div>
+                                    </>
                                 )}
 
+                                <h3 className="text-sm font-bold mb-3 mt-2 dark:text-white">Individual Survey Responses</h3>
                                 {isProductFeedbackLoading ? (
                                     <div className="flex justify-center items-center h-32"><Spinner /></div>
                                 ) : productFeedback.length === 0 ? (
@@ -2113,6 +2351,7 @@ const AdminPortal = ({ currentUser }) => {
                                 return 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200';
                             };
                             return (
+                                <>
                                 <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
                                     <h2 className="text-lg font-bold dark:text-white mb-4">Survey Completion — Last 4 Weeks</h2>
                                     <div className="overflow-x-auto">
@@ -2150,6 +2389,66 @@ const AdminPortal = ({ currentUser }) => {
                                         <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-zinc-200"></span> No activity</span>
                                     </div>
                                 </div>
+
+                                {/* Survey Non-completion table */}
+                                {(() => {
+                                    const nonCompleters = surveyCompliance.users.filter(u =>
+                                        u.weeks.some((w, i) => !surveyCompliance.weeks[i].is_current && w.query_count > 0 && !w.survey_submitted)
+                                    );
+                                    const thNC = "px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-center font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap text-xs";
+                                    return (
+                                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow mt-4">
+                                            <h2 className="text-lg font-bold dark:text-white mb-4">Survey Non-completion — Last 4 Weeks</h2>
+                                            {nonCompleters.length === 0 ? (
+                                                <p className="text-sm text-green-600 dark:text-green-400">All active users have completed their weekly surveys.</p>
+                                            ) : (
+                                                <>
+                                                    <div className="overflow-x-auto">
+                                                        <table className="min-w-full text-sm">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th className="px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-left font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap w-32 text-xs">User</th>
+                                                                    {surveyCompliance.weeks.map((w, i) => (
+                                                                        <th key={i} className={thNC}>{w.label}</th>
+                                                                    ))}
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {nonCompleters.map(u => (
+                                                                    <tr key={u.user_id} className="border-b border-zinc-100 dark:border-zinc-700">
+                                                                        <td className="px-4 py-2 font-medium text-gray-800 dark:text-gray-200 whitespace-nowrap text-xs">{u.username}</td>
+                                                                        {u.weeks.map((w, i) => {
+                                                                            const isMissed = !surveyCompliance.weeks[i].is_current && w.query_count > 0 && !w.survey_submitted;
+                                                                            return (
+                                                                                <td key={i} className="px-2 py-2 text-center">
+                                                                                    {isMissed ? (
+                                                                                        <span className="inline-block rounded px-2 py-1 text-xs font-semibold bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">
+                                                                                            {w.query_count} {w.query_count === 1 ? 'query' : 'queries'}
+                                                                                        </span>
+                                                                                    ) : w.survey_submitted ? (
+                                                                                        <span className="inline-block rounded px-2 py-1 text-xs font-semibold bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">✓</span>
+                                                                                    ) : (
+                                                                                        <span className="text-zinc-400 dark:text-zinc-500 text-xs">—</span>
+                                                                                    )}
+                                                                                </td>
+                                                                            );
+                                                                        })}
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                    <div className="flex gap-4 mt-4 text-xs text-zinc-500 dark:text-zinc-400">
+                                                        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-red-200"></span> Active, survey missed</span>
+                                                        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-green-200"></span> Survey submitted</span>
+                                                        <span className="flex items-center gap-1"><span className="text-zinc-400 mr-1">—</span> No activity</span>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+                                </>
                             );
                         })()}
                     </div>

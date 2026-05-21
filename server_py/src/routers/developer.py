@@ -20,7 +20,7 @@ from ..agent.provider_factory import (
 )
 from ..config import MODEL_LIST, settings
 from ..database import get_db
-from ..models import AppSetting, Chat, Message, RequestTiming, User
+from ..models import AppSetting, Chat, Message, ProductFeedback, RequestTiming, User
 
 logger = logging.getLogger("app")
 
@@ -322,6 +322,22 @@ async def clear_performance_data(db: AsyncSession = Depends(get_db)):
     return {
         "success": True,
         "message": "Performance data cleared. All timing records have been deleted.",
+    }
+
+
+@router.post("/clear-feedback")
+async def clear_feedback_data(db: AsyncSession = Depends(get_db)):
+    """Delete all product feedback surveys and clear message ratings/comments."""
+    await db.execute(delete(ProductFeedback))
+    await db.execute(
+        text("UPDATE messages SET rating = NULL, feedback_comment = NULL WHERE rating IS NOT NULL OR feedback_comment IS NOT NULL")
+    )
+    await db.commit()
+
+    logger.warning("[Developer] Feedback data cleared: product_feedback deleted, message ratings nulled")
+    return {
+        "success": True,
+        "message": "User feedback cleared. All surveys and message ratings have been deleted.",
     }
 
 

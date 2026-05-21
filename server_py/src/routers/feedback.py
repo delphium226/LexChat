@@ -36,6 +36,17 @@ class FeedbackOut(BaseModel):
     created_at: str
 
 
+class MessageRatingOut(BaseModel):
+    id: int
+    rating: int
+    feedback_comment: str | None
+    response: str
+    query: str | None
+    username: str
+    chat_title: str | None
+    created_at: str
+
+
 def _week_bounds(weeks_ago: int) -> tuple[datetime, datetime]:
     today = date.today()
     this_monday = today - timedelta(days=today.weekday())
@@ -56,7 +67,7 @@ def _week_label(weeks_ago: int) -> str:
     end = start + timedelta(days=6)
     if start.month == end.month:
         return f"{start.day}–{end.day} {end.strftime('%b')}"
-    return f"{start.strftime('%-d %b')}–{end.strftime('%-d %b')}"
+    return f"{start.day} {start.strftime('%b')}–{end.day} {end.strftime('%b')}"
 
 
 @router.post("", status_code=201)
@@ -91,16 +102,18 @@ async def submit_feedback(
 
 @router.get("", response_model=list[FeedbackOut])
 async def get_all_feedback(
+    days: str = "30",
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin access required.")
-    result = await db.execute(
-        select(ProductFeedback, User.username)
-        .join(User, ProductFeedback.user_id == User.id)
-        .order_by(desc(ProductFeedback.created_at))
-    )
+    query = select(ProductFeedback, User.username).join(User, ProductFeedback.user_id == User.id)
+    if days != "all":
+        days_num = int(days) if days.isdigit() else 30
+        cutoff = datetime.utcnow() - timedelta(days=days_num)
+        query = query.where(ProductFeedback.created_at >= cutoff)
+    result = await db.execute(query.order_by(desc(ProductFeedback.created_at)))
     rows = result.all()
     return [
         FeedbackOut(
@@ -114,6 +127,63 @@ async def get_all_feedback(
             created_at=fb.created_at.isoformat(),
         )
         for fb, username in rows
+    ]
+
+
+@router.get("/message-ratings", response_model=list[MessageRatingOut])
+async def get_message_ratings(
+    days: str = "30",
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    date_filter = ""
+    if days != "all":
+        days_num = int(days) if days.isdigit() else 30
+        date_filter = f"AND m.created_at >= NOW() - INTERVAL '{days_num} days'"
+
+    result = await db.execute(
+        text(f"""
+            SELECT
+                m.id,
+                m.rating,
+                m.feedback_comment,
+                m.content AS response,
+                m.created_at,
+                u.username,
+                c.title AS chat_title,
+                (
+                    SELECT um.content
+                    FROM messages um
+                    WHERE um.chat_id = m.chat_id
+                      AND um.role = 'user'
+                      AND um.created_at < m.created_at
+                    ORDER BY um.created_at DESC
+                    LIMIT 1
+                ) AS query
+            FROM messages m
+            JOIN chats c ON m.chat_id = c.id
+            JOIN users u ON c.user_id = u.id
+            WHERE m.rating IS NOT NULL AND m.role = 'assistant'
+            {date_filter}
+            ORDER BY m.created_at DESC
+        """)
+    )
+    rows = result.mappings().all()
+    return [
+        MessageRatingOut(
+            id=row["id"],
+            rating=row["rating"],
+            feedback_comment=row["feedback_comment"],
+            response=row["response"],
+            query=row["query"],
+            username=row["username"],
+            chat_title=row["chat_title"],
+            created_at=row["created_at"].isoformat(),
+        )
+        for row in rows
     ]
 
 

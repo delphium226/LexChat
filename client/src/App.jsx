@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { sendMessage, createChat, getChatMessages, saveMessage, updatePreferences, submitFeedback, getModels, getChats, getMatters, updateMatter, assignChatToMatter, getFeatures, uploadDocument, getChatDocuments, deleteDocument, updateChatTitle } from './services/api';
+import { sendMessage, createChat, getChatMessages, saveMessage, updatePreferences, getModels, getChats, getMatters, updateMatter, assignChatToMatter, getFeatures, uploadDocument, getChatDocuments, deleteDocument, updateChatTitle } from './services/api';
 import ChatMessage from './components/ChatMessage';
 import { LexMark, LexWordmark } from './components/LexMark';
 import SourcesRail from './components/SourcesRail';
@@ -175,66 +175,6 @@ function GhostBtn({ children, icon, onClick, disabled, title }) {
   );
 }
 
-// ── Feedback Modal ─────────────────────────────────────────────
-
-const FeedbackModal = ({ onClose }) => {
-  const [text, setText] = React.useState('');
-  const [status, setStatus] = React.useState('idle');
-
-  const handleSubmit = async () => {
-    if (!text.trim()) return;
-    setStatus('submitting');
-    try {
-      await submitFeedback({ message: text.trim() });
-      setStatus('success');
-    } catch {
-      setStatus('error');
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full shadow-xl">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Give Feedback</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 focus:outline-none text-xl leading-none">&times;</button>
-        </div>
-        {status === 'success' ? (
-          <div className="text-center py-6">
-            <p className="text-green-600 font-medium text-lg mb-2">Thank you for your feedback!</p>
-            <p className="text-gray-500 text-sm mb-6">Your response has been recorded.</p>
-            <button onClick={onClose} className="px-6 py-2 bg-brand-navy text-white rounded-md hover:bg-brand-navy-dark transition-colors text-sm font-medium">Close</button>
-          </div>
-        ) : (
-          <>
-            <p className="text-sm text-gray-600 mb-4">Share any thoughts, suggestions, or issues with AILA.</p>
-            <textarea
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-md p-3 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-700 placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              rows={6}
-              placeholder="Describe your experience, suggest a feature, or report a problem..."
-              value={text}
-              onChange={e => setText(e.target.value)}
-              disabled={status === 'submitting'}
-              autoFocus
-            />
-            {status === 'error' && <p className="text-red-500 text-xs mt-2">Something went wrong. Please try again.</p>}
-            <div className="flex justify-end gap-3 mt-4">
-              <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors">Cancel</button>
-              <button
-                onClick={handleSubmit}
-                disabled={!text.trim() || status === 'submitting'}
-                className="px-5 py-2 bg-brand-navy text-white rounded-md hover:bg-brand-navy-dark transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {status === 'submitting' ? 'Submitting…' : 'Submit Feedback'}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-};
-
 // ── Main app ───────────────────────────────────────────────────
 
 function AppContent() {
@@ -277,7 +217,6 @@ function AppContent() {
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showDataSources, setShowDataSources] = useState(false);
   const [showWeeklyBanner, setShowWeeklyBanner] = useState(false);
@@ -1186,7 +1125,6 @@ function AppContent() {
               title={!currentChatId ? 'Open a chat to assign it to a matter' : 'Save this thread to a matter'}
             >Save to matter</GhostBtn>}
             {surveyDue && <GhostBtn onClick={() => setShowWeeklyBanner(true)}>Take weekly survey</GhostBtn>}
-            <GhostBtn onClick={() => setShowFeedbackModal(true)}>Give Feedback</GhostBtn>
           </div>
         </div>
 
@@ -1261,7 +1199,7 @@ function AppContent() {
                   if (msg.role === 'tool') return null;
                   return (
                     <ChatMessage
-                      key={idx}
+                      key={msg.id ?? idx}
                       message={msg}
                       onResend={() => {
                         const prevUser = messages.slice(0, idx).reverse().find(m => m.role === 'user');
@@ -1613,7 +1551,6 @@ function AppContent() {
 
       {/* ── Modals ───────────────────────────────────────────── */}
 
-      {showFeedbackModal && <FeedbackModal onClose={() => setShowFeedbackModal(false)} />}
 
       {features.matters_enabled && showCreateMatterModal && (
         <CreateMatterModal

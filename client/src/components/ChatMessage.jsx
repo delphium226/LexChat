@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { marked } from 'marked';
@@ -61,6 +62,153 @@ const BookmarkIcon = () => (
   </svg>
 );
 
+function ThumbsDownModal({ text, onChange, onCancel, onSubmit, submitting }) {
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    textareaRef.current?.focus();
+    const onKey = (e) => { if (e.key === 'Escape') onCancel(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 24,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--paper)', borderRadius: 12,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+          padding: '24px 28px', width: '100%', maxWidth: 460,
+          fontFamily: 'var(--font-ui)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink-900)' }}>
+            What went wrong?
+          </div>
+          <button
+            onClick={onCancel}
+            style={{
+              width: 28, height: 28, borderRadius: 6, border: 'none',
+              background: 'transparent', cursor: 'pointer',
+              display: 'grid', placeItems: 'center', color: 'var(--ink-400)',
+            }}
+            aria-label="Close"
+          >
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 14, lineHeight: 1.5 }}>
+          Your feedback helps improve response quality. Reason is optional.
+        </p>
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={e => onChange(e.target.value)}
+          placeholder="Describe the issue with this response…"
+          rows={4}
+          style={{
+            width: '100%', boxSizing: 'border-box', padding: '8px 10px',
+            borderRadius: 7, border: '1px solid var(--ink-300)',
+            fontSize: 13, fontFamily: 'var(--font-ui)',
+            color: 'var(--ink-800)', background: 'var(--paper)',
+            resize: 'vertical', outline: 'none', lineHeight: 1.5,
+          }}
+          onFocus={e => { e.target.style.borderColor = 'var(--accent)'; }}
+          onBlur={e => { e.target.style.borderColor = 'var(--ink-300)'; }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+          <button
+            onClick={onCancel}
+            style={{
+              padding: '7px 18px', borderRadius: 7, border: '1px solid var(--ink-200)',
+              background: 'transparent', fontSize: 13, fontWeight: 500,
+              color: 'var(--ink-700)', cursor: 'pointer',
+            }}
+          >Cancel</button>
+          <button
+            onClick={onSubmit}
+            disabled={submitting}
+            style={{
+              padding: '7px 18px', borderRadius: 7, border: 'none',
+              background: 'var(--accent)', fontSize: 13, fontWeight: 500,
+              color: 'white', cursor: submitting ? 'not-allowed' : 'pointer',
+              opacity: submitting ? 0.6 : 1,
+            }}
+          >{submitting ? 'Submitting…' : 'Submit feedback'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function ConfirmModal({ message, confirmLabel, onConfirm, onCancel }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onCancel(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 24,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--paper)', borderRadius: 12,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+          padding: '24px 28px', width: '100%', maxWidth: 400,
+          fontFamily: 'var(--font-ui)',
+        }}
+      >
+        <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink-900)', marginBottom: 10 }}>
+          Change rating?
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--ink-500)', lineHeight: 1.5, marginBottom: 20 }}>
+          {message}
+        </p>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button
+            onClick={onCancel}
+            style={{
+              padding: '7px 18px', borderRadius: 7, border: '1px solid var(--ink-200)',
+              background: 'transparent', fontSize: 13, fontWeight: 500,
+              color: 'var(--ink-700)', cursor: 'pointer',
+            }}
+          >Cancel</button>
+          <button
+            onClick={onConfirm}
+            style={{
+              padding: '7px 18px', borderRadius: 7, border: 'none',
+              background: 'var(--accent)', fontSize: 13, fontWeight: 500,
+              color: 'white', cursor: 'pointer',
+            }}
+          >{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 const ChatMessage = ({ message, onResend, onRerun, authorInitials = 'U', matters = [], mattersEnabled = true, sourcesCount = 0, onViewSources, sourcesActive = false }) => {
   const isUser = message.role === 'user';
@@ -74,10 +222,19 @@ const ChatMessage = ({ message, onResend, onRerun, authorInitials = 'U', matters
   const [showThumbsDownForm, setShowThumbsDownForm] = useState(false);
   const [thumbsDownText, setThumbsDownText] = useState('');
   const [thumbsSubmitting, setThumbsSubmitting] = useState(false);
+  const [showUpgradeConfirm, setShowUpgradeConfirm] = useState(false);
   const [showPinPopover, setShowPinPopover] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [pinError, setPinError] = useState(false);
   const pinRef = useRef(null);
+
+  useEffect(() => {
+    setRating(message.rating || 0);
+    setComment(message.feedback_comment || '');
+    setShowThumbsDownForm(false);
+    setThumbsDownText('');
+    setShowUpgradeConfirm(false);
+  }, [message.id]);
 
   useEffect(() => {
     if (!showPinPopover) return;
@@ -100,16 +257,26 @@ const ChatMessage = ({ message, onResend, onRerun, authorInitials = 'U', matters
     setShowPinPopover(false);
   };
 
-  const handleRate = async (value) => {
+  const handleRate = async (value, feedbackComment) => {
     if (!message.id) return;
     setIsRating(true);
     try {
-      await rateMessage(message.id, value, comment);
+      await rateMessage(message.id, value, feedbackComment !== undefined ? feedbackComment : comment);
       setRating(value);
+      if (feedbackComment !== undefined) setComment(feedbackComment);
     } catch (err) {
       console.error('Failed to rate message', err);
     } finally {
       setIsRating(false);
+    }
+  };
+
+  const handleThumbsUpClick = () => {
+    if (rating === 5 || isRating) return;
+    if (rating === 1 && comment) {
+      setShowUpgradeConfirm(true);
+    } else {
+      handleRate(5);
     }
   };
 
@@ -284,34 +451,30 @@ const ChatMessage = ({ message, onResend, onRerun, authorInitials = 'U', matters
                 Sources ({sourcesCount})
               </button>
             )}
-            {(rating === 0 || rating === 5) && (
-              <ToolBtn
-                label={rating === 5 ? 'Rated helpful' : 'Helpful'}
-                active={rating === 5}
-                disabled={isRating || rating === 1}
-                onClick={() => { if (rating !== 5) handleRate(5); }}
-              >
-                <svg width={15} height={15} viewBox="0 0 24 24"
-                  fill={rating === 5 ? 'currentColor' : 'none'}
-                  stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M7 10V21H3V10zM21 10a2 2 0 0 0-2-2h-5.5l.8-3.7A2 2 0 0 0 12.4 2L7 8v13h11a2 2 0 0 0 2-1.7l1-7A2 2 0 0 0 21 10z" />
-                </svg>
-              </ToolBtn>
-            )}
-            {(rating === 0 || rating === 1) && (
-              <ToolBtn
-                label={rating === 1 ? 'Marked unhelpful' : 'Not helpful'}
-                active={rating === 1}
-                disabled={isRating || rating === 5}
-                onClick={() => { if (rating !== 1) setShowThumbsDownForm(v => !v); }}
-              >
-                <svg width={15} height={15} viewBox="0 0 24 24"
-                  fill={rating === 1 ? 'currentColor' : 'none'}
-                  stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 14V3H21V14zM3 14a2 2 0 0 0 2 2h5.5l-.8 3.7A2 2 0 0 0 11.6 22L17 16V3H6a2 2 0 0 0-2 1.7l-1 7A2 2 0 0 0 3 14z" />
-                </svg>
-              </ToolBtn>
-            )}
+            <ToolBtn
+              label={rating === 5 ? 'Rated helpful' : 'Mark as helpful'}
+              active={rating === 5}
+              disabled={isRating || rating === 5}
+              onClick={handleThumbsUpClick}
+            >
+              <svg width={15} height={15} viewBox="0 0 24 24"
+                fill={rating === 5 ? 'currentColor' : 'none'}
+                stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 10V21H3V10zM21 10a2 2 0 0 0-2-2h-5.5l.8-3.7A2 2 0 0 0 12.4 2L7 8v13h11a2 2 0 0 0 2-1.7l1-7A2 2 0 0 0 21 10z" />
+              </svg>
+            </ToolBtn>
+            <ToolBtn
+              label={rating === 1 ? 'Marked unhelpful' : 'Mark as unhelpful'}
+              active={rating === 1}
+              disabled={isRating || rating === 1}
+              onClick={() => { if (rating !== 1) setShowThumbsDownForm(v => !v); }}
+            >
+              <svg width={15} height={15} viewBox="0 0 24 24"
+                fill={rating === 1 ? 'currentColor' : 'none'}
+                stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 14V3H21V14zM3 14a2 2 0 0 0 2 2h5.5l-.8 3.7A2 2 0 0 0 11.6 22L17 16V3H6a2 2 0 0 0-2 1.7l-1 7A2 2 0 0 0 3 14z" />
+              </svg>
+            </ToolBtn>
             {mattersEnabled && <div ref={pinRef} style={{ position: 'relative' }}>
               <ToolBtn
                 label={pinError ? 'Failed to save' : pinned ? 'Pinned!' : matters.length === 0 ? 'Create a matter first' : 'Save to matter'}
@@ -362,49 +525,24 @@ const ChatMessage = ({ message, onResend, onRerun, authorInitials = 'U', matters
         </div>
       </div>
 
-      {showThumbsDownForm && rating !== 1 && (
-        <div style={{
-          marginTop: 12, padding: '12px 14px',
-          background: 'var(--ink-50)', borderRadius: 8,
-          border: '1px solid var(--ink-200)',
-        }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 8 }}>
-            What went wrong? <span style={{ fontWeight: 400, color: 'var(--ink-400)' }}>(optional)</span>
-          </div>
-          <textarea
-            value={thumbsDownText}
-            onChange={e => setThumbsDownText(e.target.value)}
-            placeholder="Describe the issue with this response…"
-            rows={3}
-            style={{
-              width: '100%', boxSizing: 'border-box', padding: '7px 10px',
-              borderRadius: 6, border: '1px solid var(--ink-300)',
-              fontSize: 13, fontFamily: 'var(--font-ui)',
-              color: 'var(--ink-800)', background: 'var(--paper)',
-              resize: 'vertical', outline: 'none',
-            }}
-          />
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
-            <button
-              onClick={() => { setShowThumbsDownForm(false); setThumbsDownText(''); }}
-              style={{
-                padding: '5px 14px', borderRadius: 6, border: '1px solid var(--ink-200)',
-                background: 'transparent', fontSize: 12, fontWeight: 500,
-                color: 'var(--ink-700)', cursor: 'pointer', fontFamily: 'var(--font-ui)',
-              }}
-            >Cancel</button>
-            <button
-              onClick={handleThumbsDownSubmit}
-              disabled={thumbsSubmitting}
-              style={{
-                padding: '5px 14px', borderRadius: 6, border: 'none',
-                background: 'var(--accent)', fontSize: 12, fontWeight: 500,
-                color: 'white', cursor: thumbsSubmitting ? 'not-allowed' : 'pointer',
-                opacity: thumbsSubmitting ? 0.6 : 1, fontFamily: 'var(--font-ui)',
-              }}
-            >{thumbsSubmitting ? 'Submitting…' : 'Submit'}</button>
-          </div>
-        </div>
+      {showThumbsDownForm && rating !== 1 && ReactDOM.createPortal(
+        <ThumbsDownModal
+          text={thumbsDownText}
+          onChange={setThumbsDownText}
+          onCancel={() => { setShowThumbsDownForm(false); setThumbsDownText(''); }}
+          onSubmit={handleThumbsDownSubmit}
+          submitting={thumbsSubmitting}
+        />,
+        document.body
+      )}
+      {showUpgradeConfirm && ReactDOM.createPortal(
+        <ConfirmModal
+          message="You left a comment when marking this response as unhelpful. Marking it as helpful will delete that comment."
+          confirmLabel="Mark helpful & delete comment"
+          onConfirm={() => { setShowUpgradeConfirm(false); handleRate(5, null); }}
+          onCancel={() => setShowUpgradeConfirm(false)}
+        />,
+        document.body
       )}
     </>
   );
