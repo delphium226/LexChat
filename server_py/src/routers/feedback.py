@@ -14,15 +14,12 @@ logger = logging.getLogger("app")
 
 router = APIRouter(prefix="/api/feedback", tags=["Feedback"])
 
-VALID_RESEARCH_SUCCESS = {"Always", "Most of the time", "About half the time", "Rarely", "Never"}
-
-
 class FeedbackCreate(BaseModel):
     message: str | None = None
     time_saved_hours: float | None = None
     time_without_aila_hours: float | None = None
-    research_success: str | None = None
     confidence: int | None = None
+    verification_hours: float | None = None
 
 
 class FeedbackOut(BaseModel):
@@ -31,8 +28,8 @@ class FeedbackOut(BaseModel):
     message: str | None
     time_saved_hours: float | None
     time_without_aila_hours: float | None
-    research_success: str | None
     confidence: int | None
+    verification_hours: float | None
     created_at: str
 
 
@@ -80,10 +77,10 @@ async def submit_feedback(
         raise HTTPException(status_code=400, detail="time_saved_hours must be non-negative.")
     if body.time_without_aila_hours is not None and body.time_without_aila_hours < 0:
         raise HTTPException(status_code=400, detail="time_without_aila_hours must be non-negative.")
-    if body.research_success is not None and body.research_success not in VALID_RESEARCH_SUCCESS:
-        raise HTTPException(status_code=400, detail="Invalid research_success value.")
     if body.confidence is not None and not (1 <= body.confidence <= 5):
         raise HTTPException(status_code=400, detail="Confidence must be between 1 and 5.")
+    if body.verification_hours is not None and body.verification_hours < 0:
+        raise HTTPException(status_code=400, detail="verification_hours must be non-negative.")
 
     message = body.message.strip() if body.message else None
     entry = ProductFeedback(
@@ -91,8 +88,8 @@ async def submit_feedback(
         message=message,
         time_saved_hours=body.time_saved_hours,
         time_without_aila_hours=body.time_without_aila_hours,
-        research_success=body.research_success,
         confidence=body.confidence,
+        verification_hours=body.verification_hours,
     )
     db.add(entry)
     await db.commit()
@@ -122,8 +119,8 @@ async def get_all_feedback(
             message=fb.message,
             time_saved_hours=fb.time_saved_hours,
             time_without_aila_hours=fb.time_without_aila_hours,
-            research_success=fb.research_success,
             confidence=fb.confidence,
+            verification_hours=fb.verification_hours,
             created_at=fb.created_at.isoformat(),
         )
         for fb, username in rows

@@ -86,6 +86,7 @@ async def init_db() -> None:
             "ALTER TABLE product_feedback ADD COLUMN IF NOT EXISTS time_without_aila_hours FLOAT",
             "ALTER TABLE product_feedback ADD COLUMN IF NOT EXISTS research_success VARCHAR(50)",
             "ALTER TABLE product_feedback ADD COLUMN IF NOT EXISTS confidence INTEGER",
+            "ALTER TABLE product_feedback ADD COLUMN IF NOT EXISTS verification_hours FLOAT",
         ]
         async with engine.begin() as conn:
             for stmt in migration_statements:

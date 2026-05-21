@@ -2015,6 +2015,8 @@ const AdminPortal = ({ currentUser }) => {
                     const avgWithout = withTime.length > 0 ? (withTime.reduce((s, f) => s + f.time_without_aila_hours, 0) / withTime.length) : null;
                     const withConf = productFeedback.filter(f => f.confidence != null);
                     const avgConf = withConf.length > 0 ? (withConf.reduce((s, f) => s + f.confidence, 0) / withConf.length) : null;
+                    const withVerif = productFeedback.filter(f => f.verification_hours != null);
+                    const avgVerif = withVerif.length > 0 ? (withVerif.reduce((s, f) => s + f.verification_hours, 0) / withVerif.length) : null;
                     const thCls = "px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-left font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap";
                     return (
                         <div className="space-y-4">
@@ -2274,7 +2276,13 @@ const AdminPortal = ({ currentUser }) => {
                                 {!isProductFeedbackLoading && productFeedback.length > 0 && (
                                     <>
                                     <h3 className="text-sm font-bold mb-3 dark:text-white">Productivity Summary</h3>
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+                                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
+                                        <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
+                                            <div className="text-2xl font-bold text-zinc-800 dark:text-white">
+                                                {avgWithout != null ? avgWithout.toFixed(1) : '—'}
+                                            </div>
+                                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Avg manual hrs</div>
+                                        </div>
                                         <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
                                             <div className="text-2xl font-bold text-zinc-800 dark:text-white">
                                                 {avgSaved != null ? avgSaved.toFixed(1) : '—'}
@@ -2283,17 +2291,17 @@ const AdminPortal = ({ currentUser }) => {
                                         </div>
                                         <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
                                             <div className="text-2xl font-bold text-zinc-800 dark:text-white">
-                                                {avgWithout != null ? avgWithout.toFixed(1) : '—'}
-                                            </div>
-                                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Avg hrs without AILA</div>
-                                        </div>
-                                        <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
-                                            <div className="text-2xl font-bold text-zinc-800 dark:text-white">
                                                 {avgSaved != null && avgWithout != null && (avgWithout - avgSaved) > 0
                                                     ? `${(avgWithout / (avgWithout - avgSaved)).toFixed(1)}×`
                                                     : '—'}
                                             </div>
                                             <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Efficiency ratio</div>
+                                        </div>
+                                        <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
+                                            <div className="text-2xl font-bold text-zinc-800 dark:text-white">
+                                                {avgVerif != null ? avgVerif.toFixed(1) : '—'}
+                                            </div>
+                                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Avg verification hrs</div>
                                         </div>
                                         <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
                                             <div className="text-2xl font-bold text-zinc-800 dark:text-white">
@@ -2317,10 +2325,10 @@ const AdminPortal = ({ currentUser }) => {
                                                 <tr>
                                                     <th className={`${thCls} w-32`}>User</th>
                                                     <th className={`${thCls} w-44`}>Date &amp; Time</th>
+                                                    <th className={`${thCls} w-32`}>Manual (hrs)</th>
                                                     <th className={`${thCls} w-28`}>Saved (hrs)</th>
-                                                    <th className={`${thCls} w-36`}>Without AILA (hrs)</th>
-                                                    <th className={`${thCls} w-40`}>Success</th>
                                                     <th className={`${thCls} w-24`}>Confidence</th>
+                                                    <th className={`${thCls} w-32`}>Verification (hrs)</th>
                                                     <th className={thCls}>Comments</th>
                                                 </tr>
                                             </thead>
@@ -2329,10 +2337,10 @@ const AdminPortal = ({ currentUser }) => {
                                                     <tr key={item.id} className="border-b border-zinc-100 dark:border-zinc-700 align-top">
                                                         <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200 whitespace-nowrap">{item.username}</td>
                                                         <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(item.created_at).toLocaleString()}</td>
-                                                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.time_saved_hours != null ? item.time_saved_hours : '—'}</td>
                                                         <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.time_without_aila_hours != null ? item.time_without_aila_hours : '—'}</td>
-                                                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{item.research_success || '—'}</td>
+                                                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.time_saved_hours != null ? item.time_saved_hours : '—'}</td>
                                                         <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.confidence != null ? `${item.confidence}/5` : '—'}</td>
+                                                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.verification_hours != null ? item.verification_hours : '—'}</td>
                                                         <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{item.message || ''}</td>
                                                     </tr>
                                                 ))}

@@ -1,14 +1,6 @@
 import React, { useState } from 'react';
 import { submitFeedback } from '../services/api';
 
-const RESEARCH_OPTIONS = [
-  'Always',
-  'Most of the time',
-  'About half the time',
-  'Rarely',
-  'Never',
-];
-
 const inputStyle = {
   width: '100%', boxSizing: 'border-box',
   padding: '6px 10px', borderRadius: 6,
@@ -24,10 +16,10 @@ const labelStyle = {
 };
 
 const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted }) => {
-  const [timeSaved, setTimeSaved] = useState('');
   const [timeWithout, setTimeWithout] = useState('');
-  const [researchSuccess, setResearchSuccess] = useState('');
+  const [timeSaved, setTimeSaved] = useState('');
   const [confidence, setConfidence] = useState(null);
+  const [verificationHours, setVerificationHours] = useState('');
   const [text, setText] = useState('');
   const [status, setStatus] = useState('idle');
 
@@ -44,8 +36,8 @@ const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted }) => {
         message: text.trim() || null,
         time_saved_hours: timeSaved !== '' ? parseFloat(timeSaved) : null,
         time_without_aila_hours: timeWithout !== '' ? parseFloat(timeWithout) : null,
-        research_success: researchSuccess || null,
         confidence: confidence,
+        verification_hours: verificationHours !== '' ? parseFloat(verificationHours) : null,
       };
       await submitFeedback(payload);
       if (onSubmitted) onSubmitted();
@@ -78,57 +70,41 @@ const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted }) => {
             </div>
           ) : (
             <>
-              {/* Time inputs side-by-side */}
-              <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={labelStyle}>Time AILA saved you (hrs)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={timeSaved}
-                    onChange={e => setTimeSaved(e.target.value)}
-                    placeholder="e.g. 1.5"
-                    disabled={status === 'submitting'}
-                    style={inputStyle}
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={labelStyle}>Time without AILA (hrs)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={timeWithout}
-                    onChange={e => setTimeWithout(e.target.value)}
-                    placeholder="e.g. 4"
-                    disabled={status === 'submitting'}
-                    style={inputStyle}
-                  />
-                </div>
-              </div>
-
-              {/* Research success */}
+              {/* Q1: Time without AILA */}
               <div style={{ marginBottom: 14 }}>
-                <label style={labelStyle}>Did AILA find what you were looking for?</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px' }}>
-                  {RESEARCH_OPTIONS.map(opt => (
-                    <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: 'var(--ink-700)', cursor: 'pointer' }}>
-                      <input
-                        type="radio"
-                        name="researchSuccess"
-                        value={opt}
-                        checked={researchSuccess === opt}
-                        onChange={() => setResearchSuccess(opt)}
-                        disabled={status === 'submitting'}
-                      />
-                      {opt}
-                    </label>
-                  ))}
-                </div>
+                <label style={labelStyle}>
+                  Think about the tasks you used the AI assistant for this past week. If you had to complete those exact same tasks manually, approximately how much total time would it have taken you? (hours)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={timeWithout}
+                  onChange={e => setTimeWithout(e.target.value)}
+                  placeholder="e.g. 4.0"
+                  disabled={status === 'submitting'}
+                  style={inputStyle}
+                />
               </div>
 
-              {/* Confidence */}
+              {/* Q2: Time saved */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={labelStyle}>
+                  By using the AI assistant for those tasks, how much time do you estimate you actively saved this week? (hours)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={timeSaved}
+                  onChange={e => setTimeSaved(e.target.value)}
+                  placeholder="e.g. 1.5"
+                  disabled={status === 'submitting'}
+                  style={inputStyle}
+                />
+              </div>
+
+              {/* Q3: Confidence */}
               <div style={{ marginBottom: 14 }}>
                 <label style={labelStyle}>Confidence in AILA's answers</label>
                 <div style={{ display: 'flex', gap: 6 }}>
@@ -160,7 +136,24 @@ const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted }) => {
                 </div>
               </div>
 
-              {/* Free text */}
+              {/* Q4: Verification time */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={labelStyle}>
+                  Did you spend any time this week verifying the AI's outputs or correcting inaccuracies that reduced your overall time savings? (hours)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={verificationHours}
+                  onChange={e => setVerificationHours(e.target.value)}
+                  placeholder="e.g. 0.5"
+                  disabled={status === 'submitting'}
+                  style={inputStyle}
+                />
+              </div>
+
+              {/* Q5: Free text */}
               <div style={{ marginBottom: 12 }}>
                 <label style={labelStyle}>Anything else? (optional)</label>
                 <textarea
