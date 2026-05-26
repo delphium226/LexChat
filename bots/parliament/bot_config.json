@@ -1,0 +1,12 @@
+{
+  "bot_identity": {
+    "bot_id": "parliament_bot",
+    "name": "Parliament Bot",
+    "tagline": "UK Parliamentary Records & Debates",
+    "logo_path": "bots/parliament/assets/logo.png"
+  },
+  "agent": {
+    "research_mode": "parliamentary_records"
+  },
+  "peer_registry_seed": []
+}

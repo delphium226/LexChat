@@ -74,8 +74,8 @@ Review your answer before responding: Does every claim have a corresponding sour
   },
   models: [
     { name: 'deepseek-v3.2:cloud', contextLengthKB: 160 },
-    { name: 'mistral-large-3:675b-cloud', contextLengthKB: 256 },
-    { name: 'kimi-k2-thinking:cloud', contextLengthKB: 256 }
+    { name: 'mistral-large-3:675b-cloud', contextLengthKB: 200 },
+    { name: 'kimi-k2-thinking:cloud', contextLengthKB: 200 }
 
   ]
 };

@@ -18,7 +18,7 @@ LexChat is an AI-powered legal research assistant for a **UK government legal de
 - OpenRouter requires outbound internet to `openrouter.ai` — works on the target if that address is whitelisted
 
 ## Active Branch
-All deployment work happens on **`experiment/native-deployment`**. Main branch is `main`.
+All work happens on **`main`**, which is also the branch the server pulls from.
 
 ## Key Architectural Decisions
 
@@ -79,12 +79,12 @@ The Worker's research pipeline has been tuned to minimise unnecessary LLM calls 
 All `.env` values are startup defaults only. Provider-specific settings (base URL, API key, model, temperature, concurrency) can be overridden at runtime via Admin Portal → Developer tab and are persisted in the DB.
 
 ## Deployment Workflow
-The **only** way to deploy to the target server is via GitHub — the target does a `git pull` from `origin/experiment/native-deployment`. There is no direct file transfer or zip-based deployment.
+The **only** way to deploy to the target server is via GitHub — the target does a `git pull` from `origin/main`. There is no direct file transfer or zip-based deployment.
 
 1. Make changes to `client/src/`
 2. Build: `npm run build` (in `client/`)
 3. Commit **including** `client/dist/` (force-add — it is gitignored): `git add -f client/dist/`
-4. Push to `origin experiment/native-deployment`
+4. Push to `origin main`
 5. On the target: `git pull`, then restart with `stop_native.cmd` and `start_native.cmd`
 
 Always commit and push together in the same step — uncommitted or unpushed changes are invisible to the target.
