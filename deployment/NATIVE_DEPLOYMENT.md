@@ -180,8 +180,9 @@ When only the frontend (UI) has changed, use the lightweight update scripts inst
 | `start_native_offline.cmd` | Start Ollama + backend (air-gapped, interactive) |
 | `stop_native.cmd` | Gracefully stop all services |
 | `start_background.ps1` | Headless startup called by Task Scheduler at boot |
-| `install_autostart.ps1` | One-time setup: register boot-time Task Scheduler task |
-| `uninstall_autostart.ps1` | Remove the Task Scheduler task (revert to manual startup) |
+| `install_autostart.ps1` | One-time setup: register boot-time Task Scheduler task for LexChat backend |
+| `install_ollama_autostart.ps1` | One-time setup: ensure Ollama starts at boot (service or Task Scheduler task) |
+| `uninstall_autostart.ps1` | Remove the LexChat Task Scheduler task (revert to manual startup) |
 
 ---
 
