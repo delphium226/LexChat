@@ -338,7 +338,8 @@ Follow this iterative process:
 
 MODEL_LIST = [
     {"name": "deepseek-v3.2:cloud", "contextLengthKB": 160},
-    {"name": "mistral-large-3:675b-cloud", "contextLengthKB": 256},
+    {"name": "deepseek-v4-pro:cloud", "contextLengthKB": 160},
+    {"name": "mistral-large-3:675b-cloud", "contextLengthKB": 160},
     {"name": "kimi-k2-thinking:cloud", "contextLengthKB": 256},
 ]
 

@@ -40,7 +40,45 @@ deployment\stop_native.cmd
 ```
 This gracefully stops the FastAPI backend, Ollama, and the PostgreSQL service.
 
-### 5. Updating (Internet-Connected)
+### 5. Auto-Start at Boot (Recommended for Production)
+
+By default the app only starts when you run `start_native.cmd` after logging in. To have LexChat start automatically every time the server boots — without requiring a login — run the autostart installer once:
+
+```powershell
+# Open PowerShell as Administrator
+cd C:\Projects\LexChat
+.\deployment\install_autostart.ps1
+```
+
+This will:
+1. Detect the Python and Ollama executable paths on this machine and write them to `deployment\autostart_config.ps1` (machine-specific, not committed to the repo).
+2. Create `deployment\logs\` if it does not exist.
+3. Register a **"LexChat Autostart"** Task Scheduler task that runs `start_background.ps1` as the SYSTEM account on every boot.
+
+After installation, LexChat starts automatically on every reboot. To trigger it immediately without rebooting:
+
+```powershell
+Start-ScheduledTask -TaskName "LexChat Autostart"
+```
+
+Startup and backend logs are written to `deployment\logs\`:
+
+| File | Contents |
+|---|---|
+| `startup.log` | Each boot: which services were found/started, any errors |
+| `backend.log` | uvicorn stdout (access log, startup confirmation) |
+| `backend_err.log` | uvicorn stderr (application errors, stack traces) |
+| `ollama.log` / `ollama_err.log` | Ollama output (only if not running as a Windows service) |
+
+To remove autostart and revert to manual startup:
+
+```powershell
+.\deployment\uninstall_autostart.ps1
+```
+
+> **Note:** PostgreSQL already auto-starts as a Windows service and is unaffected by this feature.
+
+### 6. Updating (Internet-Connected)
 To pull the latest code and rebuild:
 
 ```powershell
@@ -138,9 +176,12 @@ When only the frontend (UI) has changed, use the lightweight update scripts inst
 | `compress_and_chunk.ps1` | Chunk binaries into <50MB parts for transfer |
 | `reconstruct_binaries.ps1` | Reconstruct chunks back into binaries on target |
 | `update_native.ps1` | Pull latest code and rebuild (internet-connected) |
-| `start_native.cmd` | Start Ollama + backend (internet-connected) |
-| `start_native_offline.cmd` | Start Ollama + backend (air-gapped) |
+| `start_native.cmd` | Start Ollama + backend (internet-connected, interactive) |
+| `start_native_offline.cmd` | Start Ollama + backend (air-gapped, interactive) |
 | `stop_native.cmd` | Gracefully stop all services |
+| `start_background.ps1` | Headless startup called by Task Scheduler at boot |
+| `install_autostart.ps1` | One-time setup: register boot-time Task Scheduler task |
+| `uninstall_autostart.ps1` | Remove the Task Scheduler task (revert to manual startup) |
 
 ---
 
