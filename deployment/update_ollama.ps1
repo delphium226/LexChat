@@ -5,12 +5,23 @@
 .DESCRIPTION
     Run as Administrator on the target server after git pull.
 
-    1. Stops Ollama (service or process).
-    2. Downloads OllamaSetup.exe from GitHub and installs it silently.
-    3. Copies cloud model manifests and blobs from deployment\ollama_models\ into
-       the Ollama models directory (%USERPROFILE%\.ollama\models or %OLLAMA_MODELS%).
-    4. Restarts Ollama.
+    Steps:
+      1. Stops Ollama (service or process).
+      2. Installs OllamaSetup.exe — either downloaded automatically or supplied manually.
+      3. Copies cloud model manifests and blobs from deployment\ollama_models\ into
+         the Ollama models directory (%USERPROFILE%\.ollama\models or %OLLAMA_MODELS%).
+      4. Restarts Ollama.
 
+    INSTALLER DOWNLOAD
+    The script tries these URLs in order:
+      1. https://ollama.com/download/OllamaSetup.exe  (likely accessible if ollama.ai is whitelisted)
+      2. https://github.com/ollama/ollama/releases/download/<version>/OllamaSetup.exe
+
+    If neither URL is reachable, place OllamaSetup.exe manually in the repo root
+    (C:\Projects\LexChat\OllamaSetup.exe) before running this script — it will be
+    used automatically and deleted afterwards. Do NOT commit it (it is ~2 GB).
+
+    MODEL MANIFESTS
     Cloud models have no local weights — manifests are a few hundred bytes each.
     The full set is committed to deployment\ollama_models\ so git pull keeps them
     current without any separate file transfer.
@@ -31,11 +42,15 @@
 
 $ErrorActionPreference = "Stop"
 
-$OllamaVersion  = "v0.24.0"
-$InstallerUrl   = "https://github.com/ollama/ollama/releases/download/$OllamaVersion/OllamaSetup.exe"
-$InstallerPath  = "$env:TEMP\OllamaSetup.exe"
-$RepoRoot       = Split-Path $PSScriptRoot -Parent
-$ModelsSrc      = "$RepoRoot\deployment\ollama_models"
+$OllamaVersion   = "v0.24.0"
+$DownloadUrls    = @(
+    "https://ollama.com/download/OllamaSetup.exe",
+    "https://github.com/ollama/ollama/releases/download/$OllamaVersion/OllamaSetup.exe"
+)
+$InstallerPath   = "$env:TEMP\OllamaSetup.exe"
+$RepoRoot        = Split-Path $PSScriptRoot -Parent
+$ManualInstaller = "$RepoRoot\OllamaSetup.exe"
+$ModelsSrc       = "$RepoRoot\deployment\ollama_models"
 
 Write-Host ""
 Write-Host "=== Ollama Updater ($OllamaVersion) ===" -ForegroundColor Cyan
@@ -62,20 +77,59 @@ if ($svc -and $svc.Status -eq "Running") {
 Start-Sleep -Seconds 2
 
 # ---------------------------------------------------------------------------
-# 2. Download and install
+# 2. Locate or download installer
 # ---------------------------------------------------------------------------
-Write-Host "[2/4] Downloading OllamaSetup.exe $OllamaVersion..."
-Invoke-WebRequest -Uri $InstallerUrl -OutFile $InstallerPath -UseBasicParsing
-Write-Host "      Downloaded to $InstallerPath"
+Write-Host "[2/4] Locating OllamaSetup.exe..."
 
-Write-Host "      Installing (silent)..."
-$proc = Start-Process -FilePath $InstallerPath -ArgumentList "/VERYSILENT", "/NORESTART" -PassThru -Wait
-if ($proc.ExitCode -ne 0) {
-    Write-Warning "Installer exited with code $($proc.ExitCode) — check if Ollama updated correctly."
-} else {
-    Write-Host "      Ollama $OllamaVersion installed."
+$installerReady = $false
+
+# Check for manually placed installer first
+if (Test-Path $ManualInstaller) {
+    Write-Host "      Using manually placed installer at $ManualInstaller"
+    $InstallerPath = $ManualInstaller
+    $installerReady = $true
 }
-Remove-Item $InstallerPath -ErrorAction SilentlyContinue
+
+# Try each download URL in turn
+if (-not $installerReady) {
+    foreach ($url in $DownloadUrls) {
+        Write-Host "      Trying: $url"
+        try {
+            Invoke-WebRequest -Uri $url -OutFile $InstallerPath -UseBasicParsing -TimeoutSec 30
+            Write-Host "      Downloaded successfully."
+            $installerReady = $true
+            break
+        } catch {
+            Write-Host "      Failed: $_"
+        }
+    }
+}
+
+if (-not $installerReady) {
+    Write-Host ""
+    Write-Host "ERROR: Could not obtain OllamaSetup.exe." -ForegroundColor Red
+    Write-Host ""
+    Write-Host "To install manually:" -ForegroundColor Yellow
+    Write-Host "  1. Download OllamaSetup.exe ($OllamaVersion) on a machine with internet access:"
+    Write-Host "     https://github.com/ollama/ollama/releases/download/$OllamaVersion/OllamaSetup.exe"
+    Write-Host "  2. Copy it to: $RepoRoot\OllamaSetup.exe"
+    Write-Host "  3. Re-run this script."
+    Write-Host ""
+    Write-Host "The script will continue to restore model manifests without updating Ollama."
+    Write-Host ""
+} else {
+    Write-Host "      Installing (silent)..."
+    $result = Start-Process -FilePath $InstallerPath -ArgumentList "/VERYSILENT", "/NORESTART" -PassThru -Wait
+    if ($result.ExitCode -ne 0) {
+        Write-Warning "Installer exited with code $($result.ExitCode) — check if Ollama updated correctly."
+    } else {
+        Write-Host "      Ollama $OllamaVersion installed."
+    }
+    # Clean up temp download (not the manually placed one)
+    if ($InstallerPath -eq "$env:TEMP\OllamaSetup.exe") {
+        Remove-Item $InstallerPath -ErrorAction SilentlyContinue
+    }
+}
 
 # ---------------------------------------------------------------------------
 # 3. Restore model manifests and blobs
@@ -109,14 +163,14 @@ if ($svc) {
         Start-ScheduledTask -TaskName "Ollama Autostart"
         Write-Host "      Ollama Autostart task triggered."
     } else {
-        # Find executable and start directly
-        $ollamaExe = (Get-Command ollama -ErrorAction SilentlyContinue)?.Source
-        if (-not $ollamaExe) {
-            $ollamaExe = Get-ChildItem "C:\Users" -Recurse -Filter "ollama.exe" -ErrorAction SilentlyContinue |
-                         Select-Object -First 1 -ExpandProperty FullName
+        $ollamaExe = (Get-Command ollama -ErrorAction SilentlyContinue)
+        $ollamaExePath = if ($ollamaExe) { $ollamaExe.Source } else { $null }
+        if (-not $ollamaExePath) {
+            $ollamaExePath = Get-ChildItem "C:\Users" -Recurse -Filter "ollama.exe" -ErrorAction SilentlyContinue |
+                             Select-Object -First 1 -ExpandProperty FullName
         }
-        if ($ollamaExe) {
-            Start-Process -FilePath $ollamaExe -ArgumentList "serve" -WindowStyle Hidden
+        if ($ollamaExePath) {
+            Start-Process -FilePath $ollamaExePath -ArgumentList "serve" -WindowStyle Hidden
             Write-Host "      ollama serve started in background."
         } else {
             Write-Warning "Could not find ollama.exe — start Ollama manually."
@@ -126,6 +180,10 @@ if ($svc) {
 
 Write-Host ""
 Write-Host "=== Done ===" -ForegroundColor Green
-Write-Host "Ollama $OllamaVersion is installed and cloud model manifests are restored."
+if ($installerReady) {
+    Write-Host "Ollama $OllamaVersion installed and cloud model manifests restored."
+} else {
+    Write-Host "Cloud model manifests restored. Ollama binary was NOT updated (no installer available)."
+}
 Write-Host "Restart LexChat: deployment\stop_native.cmd then deployment\start_native.cmd"
 Write-Host ""
