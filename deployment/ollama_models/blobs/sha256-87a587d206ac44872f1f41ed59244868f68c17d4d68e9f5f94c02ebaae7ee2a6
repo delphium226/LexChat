@@ -1,0 +1,1 @@
+{"model_format":"","model_family":"minimax","model_families":["minimax"],"model_type":"","file_type":"","remote_host":"https://ollama.com:443","remote_model":"minimax-m2.7","capabilities":["completion","tools","thinking"],"context_length":204800,"embedding_length":3072,"base_name":"minimax-m2.7","architecture":"amd64","os":"linux","rootfs":{"type":"layers","diff_ids":[]}}
