@@ -252,11 +252,7 @@ const MatterNotesModal = ({ matter, onClose }) => {
               </div>
               <button
                 onClick={onClose}
-                style={{
-                  width: 28, height: 28, borderRadius: 6, border: 'none',
-                  background: 'transparent', cursor: 'pointer', color: 'var(--ink-500)',
-                  display: 'grid', placeItems: 'center', flexShrink: 0,
-                }}
+                className="size-7 flex items-center justify-center rounded-md text-ink-500 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent flex-shrink-0"
                 aria-label="Close"
               >
                 <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round">
@@ -313,11 +309,7 @@ const MatterNotesModal = ({ matter, onClose }) => {
                     </div>
                     <button
                       onClick={() => handleDelete(note.id)}
-                      style={{
-                        fontSize: 12, color: 'var(--danger)', background: 'none',
-                        border: 'none', cursor: 'pointer', padding: '2px 6px',
-                        borderRadius: 4, fontFamily: 'var(--font-ui)',
-                      }}
+                      className="font-ui text-xs text-danger hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger rounded px-1.5 py-0.5"
                     >Delete</button>
                   </div>
                 </div>
@@ -383,14 +375,7 @@ const MatterNotesModal = ({ matter, onClose }) => {
                 <button
                   onClick={handleAdd}
                   disabled={saving || editorEmpty}
-                  style={{
-                    padding: '6px 16px', borderRadius: 'var(--r-sm)',
-                    border: 'none', background: 'var(--accent)',
-                    fontSize: 13, fontWeight: 500, color: 'white',
-                    cursor: saving || editorEmpty ? 'not-allowed' : 'pointer',
-                    opacity: saving || editorEmpty ? 0.6 : 1,
-                    fontFamily: 'var(--font-ui)',
-                  }}
+                  className="bg-brand text-white font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                 >{saving ? 'Saving…' : 'Add note'}</button>
               </div>
             </div>
@@ -409,28 +394,18 @@ const MatterNotesModal = ({ matter, onClose }) => {
                       <button
                         key={opt.value}
                         onClick={() => { setBriefMode(opt.value); setBriefContent(''); setBriefError(''); }}
-                        style={{
-                          padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500,
-                          border: '1px solid',
-                          borderColor: briefMode === opt.value ? 'var(--accent)' : 'var(--ink-200)',
-                          background: briefMode === opt.value ? 'var(--accent-soft)' : 'transparent',
-                          color: briefMode === opt.value ? 'var(--accent)' : 'var(--ink-600)',
-                          cursor: 'pointer', fontFamily: 'var(--font-ui)',
-                        }}
+                        className={`rounded-full px-3 py-1 font-ui text-xs font-medium border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                          briefMode === opt.value
+                            ? 'bg-accent text-white border-transparent'
+                            : 'border-ink-200 text-ink-600 hover:bg-ink-50'
+                        }`}
                       >{opt.label}</button>
                     ))}
                   </div>
                   <button
                     onClick={handleGenerateBrief}
                     disabled={briefLoading}
-                    style={{
-                      marginLeft: 'auto', padding: '6px 14px', borderRadius: 'var(--r-sm)',
-                      border: 'none', background: 'var(--accent)',
-                      fontSize: 13, fontWeight: 500, color: 'white',
-                      cursor: briefLoading ? 'not-allowed' : 'pointer',
-                      opacity: briefLoading ? 0.6 : 1,
-                      fontFamily: 'var(--font-ui)',
-                    }}
+                    className="ml-auto bg-brand text-white font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                   >{briefLoading ? 'Generating…' : 'Generate'}</button>
                 </div>
               </div>
@@ -489,24 +464,12 @@ const MatterNotesModal = ({ matter, onClose }) => {
                 <div style={{ padding: '10px 20px 14px', borderTop: '1px solid var(--ink-200)', flexShrink: 0, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                   <button
                     onClick={handleCopy}
-                    style={{
-                      padding: '6px 14px', borderRadius: 'var(--r-sm)',
-                      border: '1px solid var(--ink-200)', background: 'transparent',
-                      fontSize: 13, fontWeight: 500, color: copied ? 'var(--accent)' : 'var(--ink-700)',
-                      cursor: 'pointer', fontFamily: 'var(--font-ui)',
-                    }}
+                    className={`bg-paper border border-ink-200 font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${copied ? 'text-accent' : 'text-ink-700'}`}
                   >{copied ? 'Copied!' : 'Copy to clipboard'}</button>
                   <button
                     onClick={handleSaveBriefAsNote}
                     disabled={savingBrief}
-                    style={{
-                      padding: '6px 14px', borderRadius: 'var(--r-sm)',
-                      border: 'none', background: 'var(--accent)',
-                      fontSize: 13, fontWeight: 500, color: 'white',
-                      cursor: savingBrief ? 'not-allowed' : 'pointer',
-                      opacity: savingBrief ? 0.6 : 1,
-                      fontFamily: 'var(--font-ui)',
-                    }}
+                    className="bg-brand text-white font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                   >{briefSaved ? 'Saved!' : savingBrief ? 'Saving…' : 'Save as note'}</button>
                 </div>
               )}

@@ -20,16 +20,25 @@
   --paper:   #ffffff;
   --bg-app:  #d4d4d4;
 
+  --brand:       oklch(0.32 0.13 240);
+  --brand-hover: oklch(0.27 0.13 240);
+  --brand-soft:  oklch(0.96 0.03 240);
+
   --accent:       oklch(0.50 0.10 240);
   --accent-hover: oklch(0.44 0.11 240);
   --accent-soft:  oklch(0.96 0.02 240);
   --accent-ink:   oklch(0.28 0.08 255);
 
-  --cite:      oklch(0.55 0.12 200);
-  --cite-soft: oklch(0.96 0.03 200);
-  --success:   oklch(0.62 0.12 155);
-  --warn:      oklch(0.68 0.13 65);
-  --danger:    oklch(0.58 0.18 25);
+  --cite:         oklch(0.55 0.12 200);
+  --cite-soft:    oklch(0.96 0.03 200);
+  --success:      oklch(0.62 0.12 155);
+  --success-soft: oklch(0.95 0.04 155);
+  --warn:         oklch(0.68 0.13 65);
+  --warn-soft:    oklch(0.96 0.05 65);
+  --danger:       oklch(0.58 0.18 25);
+  --danger-soft:  oklch(0.96 0.04 25);
+
+  --legal-gold: #c2a355;
 
   --font-ui:    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-serif: 'Source Serif 4', Georgia, serif;
@@ -60,13 +69,20 @@
   --paper:   #131c2f;
   --bg-app:  #09111e;
 
+  --brand:       oklch(0.55 0.14 240);
+  --brand-hover: oklch(0.61 0.14 240);
+  --brand-soft:  oklch(0.22 0.07 240);
+
   --accent:       oklch(0.62 0.12 240);
   --accent-hover: oklch(0.56 0.13 240);
   --accent-soft:  oklch(0.22 0.06 240);
   --accent-ink:   oklch(0.75 0.10 255);
 
-  --cite:      oklch(0.65 0.12 200);
-  --cite-soft: oklch(0.20 0.05 200);
+  --cite:         oklch(0.65 0.12 200);
+  --cite-soft:    oklch(0.20 0.05 200);
+  --success-soft: oklch(0.22 0.06 155);
+  --warn-soft:    oklch(0.22 0.06 65);
+  --danger-soft:  oklch(0.22 0.07 25);
 
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.20);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.20);

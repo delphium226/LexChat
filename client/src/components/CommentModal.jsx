@@ -10,11 +10,11 @@ const CommentModal = ({ isOpen, onClose, onSubmit, initialComment = '', rating =
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full shadow-xl relative animate-fadeIn">
+        <div className="fixed inset-0 bg-ink-950/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-paper rounded-xl p-6 max-w-lg w-full shadow-md relative">
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Rate & Feedback</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 focus:outline-none">
+                    <h3 className="font-ui text-xl font-semibold text-ink-900">Rate & Feedback</h3>
+                    <button onClick={onClose} className="size-[30px] flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Close">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
@@ -23,13 +23,13 @@ const CommentModal = ({ isOpen, onClose, onSubmit, initialComment = '', rating =
 
                 {/* Star Rating Section */}
                 <div className="flex justify-center mb-6 items-center gap-2">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Rating -</span>
+                    <span className="font-ui text-sm font-medium text-ink-700">Rating -</span>
                     <div className="flex space-x-2">
                         {[1, 2, 3, 4, 5].map((star) => (
                             <button
                                 key={star}
                                 onClick={() => onRate(star)}
-                                className={`focus:outline-none transition-colors transform hover:scale-110 ${star <= rating ? 'text-yellow-400' : 'text-gray-300 dark:text-gray-600 hover:text-yellow-200'
+                                className={`transition-colors transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded ${star <= rating ? 'text-warn' : 'text-ink-300 hover:text-warn'
                                     }`}
                                 title={`Rate ${star} star${star > 1 ? 's' : ''}`}
                             >
@@ -42,7 +42,7 @@ const CommentModal = ({ isOpen, onClose, onSubmit, initialComment = '', rating =
                 </div>
 
                 <textarea
-                    className="w-full h-32 p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-legal-blue dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 resize-none"
+                    className="w-full h-32 border border-ink-200 rounded-sm px-3 py-2 font-ui text-sm bg-paper text-ink-900 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent resize-none"
                     placeholder="Enter your detailed feedback here..."
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
@@ -52,13 +52,13 @@ const CommentModal = ({ isOpen, onClose, onSubmit, initialComment = '', rating =
                 <div className="mt-4 flex justify-end gap-2">
                     <button
                         onClick={onClose}
-                        className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+                        className="bg-paper border border-ink-200 text-ink-900 font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={() => onSubmit(comment)}
-                        className="px-4 py-2 text-sm bg-brand-navy text-white rounded-md hover:bg-brand-navy-dark transition-colors"
+                        className="bg-brand text-white font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
                     >
                         Submit Feedback
                     </button>

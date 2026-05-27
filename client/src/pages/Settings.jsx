@@ -33,63 +33,63 @@ const Settings = () => {
     };
 
     return (
-        <div className="p-6">
-            <h1 className="text-3xl font-bold mb-6 dark:text-white">Settings</h1>
+        <div>
+            <h1 className="text-xl font-bold mb-5 text-ink-900 font-ui">Account Settings</h1>
 
-            <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow max-w-md">
-                <h2 className="text-xl font-bold mb-4 dark:text-white">Change Password</h2>
+            <div className="max-w-md">
+                <h2 className="text-sm font-semibold text-ink-700 font-ui uppercase tracking-wide mb-4">Change Password</h2>
 
                 {message && (
-                    <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+                    <div className="border border-success/40 bg-success/10 text-success px-4 py-3 rounded-md mb-4 text-sm font-ui">
                         {message}
                     </div>
                 )}
                 {error && (
-                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                    <div className="border border-danger/40 bg-danger/10 text-danger px-4 py-3 rounded-md mb-4 text-sm font-ui">
                         {error}
                     </div>
                 )}
 
                 <form onSubmit={handlePasswordChange}>
                     <div className="mb-4">
-                        <label className="block text-zinc-700 dark:text-zinc-300 text-sm font-bold mb-2">
+                        <label className="block text-ink-700 font-ui text-xs font-semibold uppercase tracking-wide mb-2">
                             Current Password
                         </label>
                         <input
                             type="password"
                             value={currentPassword}
                             onChange={(e) => setCurrentPassword(e.target.value)}
-                            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-zinc-700 dark:border-zinc-600 dark:text-white"
+                            className="w-full px-3 py-2 border border-ink-300 rounded-md text-sm text-ink-900 bg-paper focus:outline-none focus:ring-2 focus:ring-accent font-ui"
                             required
                         />
                     </div>
                     <div className="mb-4">
-                        <label className="block text-zinc-700 dark:text-zinc-300 text-sm font-bold mb-2">
+                        <label className="block text-ink-700 font-ui text-xs font-semibold uppercase tracking-wide mb-2">
                             New Password
                         </label>
                         <input
                             type="password"
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
-                            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-zinc-700 dark:border-zinc-600 dark:text-white"
+                            className="w-full px-3 py-2 border border-ink-300 rounded-md text-sm text-ink-900 bg-paper focus:outline-none focus:ring-2 focus:ring-accent font-ui"
                             required
                         />
                     </div>
                     <div className="mb-6">
-                        <label className="block text-zinc-700 dark:text-zinc-300 text-sm font-bold mb-2">
+                        <label className="block text-ink-700 font-ui text-xs font-semibold uppercase tracking-wide mb-2">
                             Confirm New Password
                         </label>
                         <input
                             type="password"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-zinc-700 dark:border-zinc-600 dark:text-white"
+                            className="w-full px-3 py-2 border border-ink-300 rounded-md text-sm text-ink-900 bg-paper focus:outline-none focus:ring-2 focus:ring-accent font-ui"
                             required
                         />
                     </div>
                     <button
                         type="submit"
-                        className="bg-brand-navy hover:bg-brand-navy-dark text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full"
+                        className="bg-brand hover:bg-brand-hover text-white font-ui text-sm font-medium py-2 px-4 rounded-md w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
                     >
                         Update Password
                     </button>

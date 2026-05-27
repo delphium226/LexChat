@@ -176,25 +176,13 @@ const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted }) => {
                 <button
                   onClick={handleSubmit}
                   disabled={status === 'submitting'}
-                  style={{
-                    padding: '6px 16px', borderRadius: 6, border: 'none',
-                    background: 'var(--accent)', color: 'white',
-                    fontSize: 13, fontWeight: 500,
-                    cursor: status === 'submitting' ? 'not-allowed' : 'pointer',
-                    opacity: status === 'submitting' ? 0.6 : 1,
-                    fontFamily: 'var(--font-ui)',
-                  }}
+                  className="bg-brand text-white font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {status === 'submitting' ? 'Submitting…' : 'Submit'}
                 </button>
                 <button
                   onClick={dismiss}
-                  style={{
-                    padding: '6px 16px', borderRadius: 6,
-                    border: '1px solid var(--ink-200)', background: 'transparent',
-                    fontSize: 13, fontWeight: 500, color: 'var(--ink-600)',
-                    cursor: 'pointer', fontFamily: 'var(--font-ui)',
-                  }}
+                  className="bg-paper border border-ink-200 text-ink-900 font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 >
                   Maybe Later
                 </button>
@@ -206,11 +194,7 @@ const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted }) => {
         <button
           onClick={dismiss}
           aria-label="Dismiss"
-          style={{
-            width: 24, height: 24, border: 'none', background: 'transparent',
-            cursor: 'pointer', color: 'var(--ink-400)',
-            display: 'grid', placeItems: 'center', borderRadius: 4, flexShrink: 0,
-          }}
+          className="size-6 flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           <svg width={14} height={14} viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth={2} strokeLinecap="round">

@@ -97,11 +97,34 @@ Always commit and push together in the same step — uncommitted or unpushed cha
 
 Start script launches PostgreSQL, then Ollama, then the FastAPI backend. Stop script kills uvicorn, Ollama, and the PostgreSQL Windows service.
 
+## Frontend Design System
+
+The full token/component reference lives at `client/src/design-system.md`. **Read it before writing any new frontend UI.** Key rules:
+
+- Use design token classes — never raw Tailwind palette values (`text-blue-600`, `bg-zinc-800`, `text-gray-500`, etc.)
+- **`bg-brand` ≠ `bg-accent`** — `bg-brand` is for primary CTA button backgrounds; `bg-accent` is for focus rings, active indicators, and selected states only. Mixing these up is the most common mistake.
+- `bg-brand-navy` / `hover:bg-brand-navy-dark` are **old non-token classes** that no longer exist — replace with `bg-brand` / `hover:bg-brand-hover`.
+- Token-backed classes (`text-ink-*`, `bg-paper`, `bg-brand`, etc.) switch for dark mode automatically — no `dark:` variants needed for colour.
+- All button labels, inputs, and UI chrome use `font-ui`; legal content uses `font-serif`.
+
+### Button quick-reference
+
+| Variant | Key classes |
+|---|---|
+| Primary | `bg-brand hover:bg-brand-hover text-white font-ui text-sm font-medium rounded-md px-4 py-2 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed` |
+| Secondary | `bg-paper border border-ink-200 text-ink-900 font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-ink-50 focus-visible:ring-2 focus-visible:ring-accent` |
+| Danger | `bg-danger text-white font-ui text-sm font-medium rounded-md px-4 py-2 hover:opacity-90 focus-visible:ring-2 focus-visible:ring-danger` |
+| Icon | `size-[30px] flex items-center justify-center rounded-md text-ink-500 hover:bg-ink-100 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-accent` |
+| Filter pill (active) | `bg-accent text-white border-transparent rounded-full px-3 py-1 font-ui text-xs` |
+| Filter pill (inactive) | `border border-ink-200 text-ink-600 rounded-full px-3 py-1 font-ui text-xs hover:bg-ink-50` |
+
 ## Key Files
 | File | Purpose |
 |---|---|
 | `client/src/App.jsx` | Main frontend app — chat UI, favicon swap, dynamic model fetch |
+| `client/src/design-system.md` | Design token reference — colours, typography, button/component patterns |
 | `client/src/pages/AdminPortal.jsx` | Admin portal including Developer tab with provider config panel |
+| `client/src/pages/Settings.jsx` | Account settings page — change password form |
 | `server_py/src/config.py` | `MODEL_LIST`, `OPENROUTER_MODEL_LIST`, system prompts, app settings |
 | `server_py/src/agent/tools.py` | LEX API tool schemas, `_slim_search_results`, `execute_worker_tool` |
 | `server_py/src/agent/agent_shared.py` | Shared worker tool execution pipeline (used by both provider clients) |

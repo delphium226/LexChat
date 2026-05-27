@@ -25,7 +25,7 @@ http_logger = logging.getLogger("http")
 async def lifespan(app: FastAPI):
     # Startup
     await init_db()
-    health_task = asyncio.create_task(background_health_loop(60))
+    health_task = asyncio.create_task(background_health_loop(300))
     logger.info(f"[Main] Server running on http://{settings.host}:{settings.port}")
     yield
     # Shutdown

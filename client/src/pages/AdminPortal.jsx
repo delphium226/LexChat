@@ -705,8 +705,8 @@ const ProviderConfigPanel = () => {
                             key={provider.id}
                             onClick={() => setSelectedId(provider.id)}
                             className={`text-left p-4 rounded-lg border-2 transition-colors ${isSel
-                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                                : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'}`}
+                                ? 'border-accent bg-accent-soft'
+                                : 'border-ink-200 hover:border-ink-300'}`}
                         >
                             <div className="flex items-center justify-between mb-1">
                                 <span className="font-semibold text-sm dark:text-white">{provider.name}</span>
@@ -715,7 +715,7 @@ const ProviderConfigPanel = () => {
                                         <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 font-medium">Active</span>
                                     )}
                                     {isSel && (
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-blue-500 flex-shrink-0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-accent flex-shrink-0">
                                             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
                                         </svg>
                                     )}
@@ -763,7 +763,7 @@ const ProviderConfigPanel = () => {
                                 <button
                                     type="button"
                                     onClick={() => setShowKeys(prev => ({ ...prev, [selectedId]: !prev[selectedId] }))}
-                                    className="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    className="px-2 py-1.5 text-xs border border-ink-200 rounded-md text-ink-500 hover:bg-ink-50 font-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                                 >
                                     {showKeys[selectedId] ? 'Hide' : 'Show'}
                                 </button>
@@ -856,7 +856,7 @@ const ProviderConfigPanel = () => {
                         <button
                             onClick={handleSaveConfig}
                             disabled={savingConfig}
-                            className="px-5 py-2 bg-brand-navy text-white rounded-md hover:bg-brand-navy-dark transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            className="px-5 py-2 bg-brand hover:bg-brand-hover text-white rounded-md font-ui text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
                         >
                             {savingConfig && <Spinner size="sm" />}
                             {savingConfig ? 'Saving…' : 'Save Settings'}
@@ -865,7 +865,7 @@ const ProviderConfigPanel = () => {
                         {PROVIDER_DEFAULTS[selectedId] && (
                             <button
                                 onClick={handleSetToDefault}
-                                className="px-5 py-2 bg-gray-100 dark:bg-zinc-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-zinc-600 transition-colors text-sm font-medium"
+                                className="px-5 py-2 bg-paper border border-ink-200 text-ink-900 rounded-md hover:bg-ink-50 font-ui text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                             >
                                 Set to default
                             </button>
@@ -875,7 +875,7 @@ const ProviderConfigPanel = () => {
                             <button
                                 onClick={handleSetActive}
                                 disabled={switchingActive}
-                                className="px-5 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                className="px-5 py-2 bg-brand hover:bg-brand-hover text-white rounded-md font-ui text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
                             >
                                 {switchingActive && <Spinner size="sm" />}
                                 {switchingActive ? 'Switching…' : `Set as Active`}
@@ -1263,81 +1263,29 @@ const AdminPortal = ({ currentUser }) => {
                 <h1 className="text-lg font-bold dark:text-white mb-3">Admin Portal</h1>
 
                 {/* TABS */}
-                <div className="flex space-x-1 bg-gray-200 dark:bg-gray-700 p-1 rounded-lg w-full">
-                    <button
-                        onClick={() => setActiveTab('users')}
-                        className={`flex-1 px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'users'
-                            ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white'
-                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                <div className="flex space-x-1 bg-ink-100 p-1 rounded-lg w-full">
+                    {[
+                        { id: 'users', label: 'User Management' },
+                        { id: 'usage', label: 'Usage Stats' },
+                        { id: 'performance', label: 'Performance' },
+                        { id: 'cost', label: 'Cost' },
+                        { id: 'learning', label: 'Learning Monitor' },
+                        ...(currentUser?.username === 'admin' ? [{ id: 'developer', label: 'Developer' }] : []),
+                        { id: 'health', label: 'Service Health' },
+                        { id: 'product-feedback', label: 'User Feedback' },
+                    ].map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex-1 px-4 py-2 rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                                activeTab === tab.id
+                                    ? 'bg-paper shadow text-ink-900'
+                                    : 'text-ink-500 hover:text-ink-800'
                             }`}
-                    >
-                        User Management
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('usage')}
-                        className={`flex-1 px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'usage'
-                            ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white'
-                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                            }`}
-                    >
-                        Usage Stats
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('performance')}
-                        className={`flex-1 px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'performance'
-                            ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white'
-                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                            }`}
-                    >
-                        Performance
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('cost')}
-                        className={`flex-1 px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'cost'
-                            ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white'
-                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                            }`}
-                    >
-                        Cost
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('learning')}
-                        className={`flex-1 px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'learning'
-                            ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white'
-                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                            }`}
-                    >
-                        Learning Monitor
-                    </button>
-                    {currentUser?.username === 'admin' && (
-                    <button
-                        onClick={() => setActiveTab('developer')}
-                        className={`flex-1 px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'developer'
-                            ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white'
-                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                            }`}
-                    >
-                        Developer
-                    </button>
-                    )}
-                    <button
-                        onClick={() => setActiveTab('health')}
-                        className={`flex-1 px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'health'
-                            ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white'
-                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                            }`}
-                    >
-                        Service Health
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('product-feedback')}
-                        className={`flex-1 px-4 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'product-feedback'
-                            ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white'
-                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                            }`}
-                    >
-                        User Feedback
-                    </button>
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
                 </div>
             </div>
 
@@ -1390,7 +1338,7 @@ const AdminPortal = ({ currentUser }) => {
                                 </select>
                                 <button
                                     type="submit"
-                                    className="bg-brand-navy hover:bg-brand-navy-dark text-white font-bold py-2 px-4 rounded text-sm w-full"
+                                    className="bg-brand hover:bg-brand-hover text-white font-ui text-sm font-medium py-2 px-4 rounded-md w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
                                 >
                                     {editingUser ? 'Update User' : 'Create User'}
                                 </button>
@@ -1398,7 +1346,7 @@ const AdminPortal = ({ currentUser }) => {
                                     <button
                                         type="button"
                                         onClick={cancelEditing}
-                                        className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded text-sm w-full"
+                                        className="bg-paper border border-ink-200 text-ink-900 font-ui text-sm font-medium py-2 px-4 rounded-md w-full hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                                     >
                                         Cancel
                                     </button>
@@ -1431,9 +1379,9 @@ const AdminPortal = ({ currentUser }) => {
                                                 <td className="px-5 py-5 border-b border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs dark:text-gray-200">{user.role}</td>
                                                 <td className="px-5 py-5 border-b border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs dark:text-gray-200">{user.email}</td>
                                                 <td className="px-5 py-5 border-b border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm dark:text-gray-200">
-                                                    <button onClick={() => startEditing(user)} className="text-blue-500 hover:text-blue-700 mr-3 text-xs">Edit</button>
+                                                    <button onClick={() => startEditing(user)} className="text-accent hover:underline mr-3 text-xs font-ui">Edit</button>
                                                     {user.username !== 'admin' && (
-                                                        <button onClick={() => handleDeleteUser(user.id)} className="text-red-500 hover:text-red-700 text-xs">Delete</button>
+                                                        <button onClick={() => handleDeleteUser(user.id)} className="text-danger hover:underline text-xs font-ui">Delete</button>
                                                     )}
                                                 </td>
                                             </tr>
@@ -1454,7 +1402,7 @@ const AdminPortal = ({ currentUser }) => {
                             <button
                                 onClick={handleTriggerHealthCheck}
                                 disabled={isTriggeringHealth}
-                                className={`bg-brand-navy text-white px-4 py-2 rounded text-sm hover:bg-brand-navy-dark transition-colors ${isTriggeringHealth ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                className="bg-brand hover:bg-brand-hover text-white font-ui text-sm font-medium px-4 py-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {isTriggeringHealth ? 'Checking...' : 'Run Health Check Now'}
                             </button>
@@ -1767,7 +1715,7 @@ const AdminPortal = ({ currentUser }) => {
                         <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
                             <h2 className="text-lg font-bold mb-4 dark:text-white flex justify-between items-center">
                                 <span>Recent User Feedback</span>
-                                <button onClick={fetchFeedback} className="text-xs text-blue-500 hover:underline">Refresh</button>
+                                <button onClick={fetchFeedback} className="text-xs text-accent hover:underline font-ui">Refresh</button>
                             </h2>
                             {isLoading ? (
                                 <div className="flex justify-center items-center h-40">
@@ -1835,7 +1783,7 @@ const AdminPortal = ({ currentUser }) => {
                                 <button
                                     type="submit"
                                     disabled={isTestLoading}
-                                    className={`bg-brand-navy text-white px-6 py-3 rounded-lg hover:bg-brand-navy-dark transition-colors text-sm flex items-center gap-2 ${isTestLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    className="bg-brand hover:bg-brand-hover text-white px-6 py-3 rounded-md font-ui text-sm font-medium flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isTestLoading && <Spinner size="sm" />}
                                     {isTestLoading ? 'Testing...' : 'Test'}
@@ -1930,7 +1878,7 @@ const AdminPortal = ({ currentUser }) => {
                                             setIsSavingFeatures(false);
                                         }
                                     }}
-                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${features.matters_enabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-zinc-600'} ${isSavingFeatures ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${features.matters_enabled ? 'bg-accent' : 'bg-ink-300'} ${isSavingFeatures ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                 >
                                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${features.matters_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
                                 </button>
@@ -1960,7 +1908,7 @@ const AdminPortal = ({ currentUser }) => {
                                         }
                                     }}
                                     disabled={isLoading}
-                                    className={`bg-orange-600 text-white px-5 py-2.5 rounded-lg hover:bg-orange-700 transition-colors text-sm flex items-center gap-2 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    className="bg-danger text-white px-5 py-2.5 rounded-md font-ui text-sm font-medium flex items-center gap-2 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isLoading && <Spinner size="sm" />}
                                     Clear All Usage Data
@@ -1979,7 +1927,7 @@ const AdminPortal = ({ currentUser }) => {
                                         }
                                     }}
                                     disabled={isLoading}
-                                    className={`bg-orange-600 text-white px-5 py-2.5 rounded-lg hover:bg-orange-700 transition-colors text-sm flex items-center gap-2 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    className="bg-danger text-white px-5 py-2.5 rounded-md font-ui text-sm font-medium flex items-center gap-2 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isLoading && <Spinner size="sm" />}
                                     Clear All Performance Data
@@ -1998,7 +1946,7 @@ const AdminPortal = ({ currentUser }) => {
                                         }
                                     }}
                                     disabled={isLoading}
-                                    className={`bg-orange-600 text-white px-5 py-2.5 rounded-lg hover:bg-orange-700 transition-colors text-sm flex items-center gap-2 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    className="bg-danger text-white px-5 py-2.5 rounded-md font-ui text-sm font-medium flex items-center gap-2 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isLoading && <Spinner size="sm" />}
                                     Clear User Feedback
@@ -2060,7 +2008,7 @@ const AdminPortal = ({ currentUser }) => {
                                     <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
                                         <div className="flex justify-between items-center mb-5">
                                             <h2 className="text-lg font-bold dark:text-white">LLM Response Ratings</h2>
-                                            <button onClick={() => fetchProductFeedback(productFeedbackTimeframe)} className="text-xs text-blue-500 hover:underline">Refresh</button>
+                                            <button onClick={() => fetchProductFeedback(productFeedbackTimeframe)} className="text-xs text-accent hover:underline font-ui">Refresh</button>
                                         </div>
 
                                         {/* KPIs */}
@@ -2118,9 +2066,9 @@ const AdminPortal = ({ currentUser }) => {
                                                     <button
                                                         key={f.key}
                                                         onClick={() => setRatingsFilter(f.key)}
-                                                        className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${ratingsFilter === f.key
-                                                            ? 'bg-blue-600 text-white border-blue-600'
-                                                            : 'bg-white dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-600 hover:border-zinc-400 dark:hover:border-zinc-400'
+                                                        className={`px-3 py-1 rounded-full text-xs font-medium border font-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${ratingsFilter === f.key
+                                                            ? 'bg-accent text-white border-transparent'
+                                                            : 'bg-paper text-ink-600 border-ink-200 hover:bg-ink-50'
                                                         }`}
                                                     >{f.label}</button>
                                                 ))}
@@ -2173,7 +2121,7 @@ const AdminPortal = ({ currentUser }) => {
                                                                 <td className="px-4 py-3">
                                                                     <button
                                                                         onClick={() => setRatingViewItem(item)}
-                                                                        className="px-3 py-1 text-xs rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-600 transition-colors whitespace-nowrap"
+                                                                        className="px-3 py-1 text-xs rounded-md border border-ink-200 bg-paper text-ink-700 hover:bg-ink-50 font-ui font-medium whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                                                                     >
                                                                         View query/response
                                                                     </button>
@@ -2242,13 +2190,13 @@ const AdminPortal = ({ currentUser }) => {
                                                                     const text = `Query:\n${ratingViewItem.query || ''}\n\nResponse:\n${ratingViewItem.response || ''}`;
                                                                     navigator.clipboard.writeText(text);
                                                                 }}
-                                                                className="px-4 py-2 text-xs rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-600 transition-colors"
+                                                                className="px-4 py-2 text-xs rounded-md border border-ink-200 bg-paper text-ink-700 hover:bg-ink-50 font-ui font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                                                             >
                                                                 Copy to clipboard
                                                             </button>
                                                             <button
                                                                 onClick={() => setRatingViewItem(null)}
-                                                                className="px-4 py-2 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                                                                className="px-4 py-2 text-xs rounded-md bg-brand hover:bg-brand-hover text-white font-ui font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
                                                             >
                                                                 Close
                                                             </button>
@@ -2265,7 +2213,7 @@ const AdminPortal = ({ currentUser }) => {
                             <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
                                 <div className="flex justify-between items-center mb-4">
                                     <h2 className="text-lg font-bold dark:text-white">Weekly User Surveys</h2>
-                                    <button onClick={() => fetchProductFeedback(productFeedbackTimeframe)} className="text-xs text-blue-500 hover:underline">Refresh</button>
+                                    <button onClick={() => fetchProductFeedback(productFeedbackTimeframe)} className="text-xs text-accent hover:underline font-ui">Refresh</button>
                                 </div>
 
                                 {!isProductFeedbackLoading && surveyCompliance && (

@@ -79,11 +79,7 @@ const CreateMatterModal = ({ onClose, onCreated }) => {
           <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink-900)' }}>New matter</span>
           <button
             onClick={onClose}
-            style={{
-              width: 28, height: 28, borderRadius: 6, border: 'none',
-              background: 'transparent', cursor: 'pointer', color: 'var(--ink-500)',
-              display: 'grid', placeItems: 'center',
-            }}
+            className="size-7 flex items-center justify-center rounded-md text-ink-500 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             aria-label="Close"
           >
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round">
@@ -160,24 +156,12 @@ const CreateMatterModal = ({ onClose, onCreated }) => {
         }}>
           <button
             onClick={onClose}
-            style={{
-              padding: '7px 16px', borderRadius: 'var(--r-sm)',
-              border: '1px solid var(--ink-200)', background: 'transparent',
-              fontSize: 13, fontWeight: 500, color: 'var(--ink-700)',
-              cursor: 'pointer', fontFamily: 'var(--font-ui)',
-            }}
+            className="bg-paper border border-ink-200 text-ink-900 font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >Cancel</button>
           <button
             onClick={handleSubmit}
             disabled={saving || !title.trim()}
-            style={{
-              padding: '7px 18px', borderRadius: 'var(--r-sm)',
-              border: 'none', background: 'var(--accent)',
-              fontSize: 13, fontWeight: 500, color: 'white',
-              cursor: saving || !title.trim() ? 'not-allowed' : 'pointer',
-              opacity: saving || !title.trim() ? 0.6 : 1,
-              fontFamily: 'var(--font-ui)',
-            }}
+            className="bg-brand text-white font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >{saving ? 'Creating…' : 'Create matter'}</button>
         </div>
       </div>

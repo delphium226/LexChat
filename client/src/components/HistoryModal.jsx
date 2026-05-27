@@ -42,7 +42,7 @@ const HistoryModal = ({ onClose, onSelectChat }) => {
     };
 
     const saveTitle = async (e) => {
-        e.stopPropagation(); // Prevent executing onSelectChat if triggered by enter key in input inside the row
+        e.stopPropagation();
         if (!editTitle.trim()) return;
 
         try {
@@ -67,15 +67,15 @@ const HistoryModal = ({ onClose, onSelectChat }) => {
     );
 
     return (
-        <div className="flex flex-col h-full w-full bg-white dark:bg-gray-800 rounded-lg overflow-hidden relative">
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Chat History</h2>
+        <div className="flex flex-col h-full w-full bg-paper rounded-lg overflow-hidden relative">
+            <div className="p-4 border-b border-ink-200 flex justify-between items-center">
+                <h2 className="text-xl font-bold text-ink-900">Chat History</h2>
                 <button
                     onClick={onClose}
-                    className="text-gray-400 hover:text-gray-600 focus:outline-none"
-                    title="Close"
+                    className="size-[30px] flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    aria-label="Close"
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                 </button>
@@ -83,7 +83,7 @@ const HistoryModal = ({ onClose, onSelectChat }) => {
 
             <div className="px-4 pt-3 pb-1">
                 <div className="relative">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" />
                     </svg>
                     <input
@@ -91,12 +91,13 @@ const HistoryModal = ({ onClose, onSelectChat }) => {
                         placeholder="Search chats…"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full pl-9 pr-4 py-2 text-sm border border-ink-200 rounded-lg bg-ink-50 text-ink-900 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-accent"
                     />
                     {searchQuery && (
                         <button
                             onClick={() => setSearchQuery('')}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                            aria-label="Clear search"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -108,9 +109,9 @@ const HistoryModal = ({ onClose, onSelectChat }) => {
 
             <div className="flex-1 overflow-y-auto p-4">
                 {loading ? (
-                    <div className="text-center text-gray-500 mt-4">Loading history...</div>
+                    <div className="text-center text-ink-500 mt-4">Loading history...</div>
                 ) : filteredChats.length === 0 ? (
-                    <div className="text-center text-gray-500 mt-4">
+                    <div className="text-center text-ink-500 mt-4">
                         {searchQuery ? 'No chats match your search.' : 'No chat history found.'}
                     </div>
                 ) : (
@@ -120,7 +121,7 @@ const HistoryModal = ({ onClose, onSelectChat }) => {
                                 key={chat.id}
                                 onClick={() => onSelectChat(chat.id, chat.model)}
                                 title={chat.title}
-                                className="relative flex items-center p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors group w-full"
+                                className="relative flex items-center p-3 rounded-lg border border-ink-200 hover:bg-ink-50 cursor-pointer transition-colors group w-full"
                             >
                                 <div className="flex-1 min-w-0 pr-2">
                                     {editingId === chat.id ? (
@@ -131,25 +132,25 @@ const HistoryModal = ({ onClose, onSelectChat }) => {
                                             onKeyDown={handleKeyDown}
                                             onBlur={() => setEditingId(null)}
                                             autoFocus
-                                            className="w-full px-2 py-1 text-sm border rounded dark:bg-gray-600 dark:text-white dark:border-gray-500"
+                                            className="w-full px-2 py-1 text-sm border border-ink-200 rounded bg-paper text-ink-900"
                                             onClick={(e) => e.stopPropagation()}
                                         />
                                     ) : (
                                         <div>
-                                            <div className="font-medium text-gray-900 dark:text-white truncate">
+                                            <div className="font-medium text-ink-900 truncate">
                                                 {chat.title}
                                             </div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                                            <div className="text-xs text-ink-500">
                                                 {new Date(chat.created_at).toLocaleString()}
                                             </div>
                                         </div>
                                     )}
                                 </div>
 
-                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center opacity-0 group-hover:opacity-100 transition-opacity bg-gray-50 dark:bg-gray-700 rounded pl-1">
+                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center opacity-0 group-hover:opacity-100 transition-opacity bg-ink-50 rounded pl-1">
                                     <button
                                         onClick={(e) => startEditing(e, chat)}
-                                        className="p-1 mr-1 text-gray-400 hover:text-blue-500 transition-colors"
+                                        className="p-1 mr-1 rounded-md text-ink-400 hover:text-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                                         title="Rename"
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
@@ -158,7 +159,7 @@ const HistoryModal = ({ onClose, onSelectChat }) => {
                                     </button>
                                     <button
                                         onClick={(e) => handleDelete(e, chat.id)}
-                                        className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                                        className="p-1 rounded-md text-ink-400 hover:text-danger transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
                                         title="Delete"
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
@@ -172,10 +173,10 @@ const HistoryModal = ({ onClose, onSelectChat }) => {
                 )}
             </div>
 
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 rounded-b-lg flex justify-end">
+            <div className="p-4 border-t border-ink-200 bg-ink-50 rounded-b-lg flex justify-end">
                 <button
                     onClick={onClose}
-                    className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-md text-gray-800 dark:text-gray-200 transition-colors"
+                    className="bg-brand hover:bg-brand-hover text-white font-ui text-sm font-medium rounded-md px-4 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
                 >
                     Close
                 </button>

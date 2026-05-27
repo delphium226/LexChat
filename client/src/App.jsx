@@ -134,43 +134,28 @@ const ChevRightIcon = () => (
 // ── Small reusable button primitives ───────────────────────────
 
 function IBtn({ children, label, onClick, size = 30 }) {
-  const [h, setH] = React.useState(false);
   return (
     <button
       aria-label={label}
       title={label}
       onClick={onClick}
-      onMouseEnter={() => setH(true)}
-      onMouseLeave={() => setH(false)}
-      style={{
-        width: size, height: size, borderRadius: 8, border: 'none',
-        background: h ? 'var(--ink-100)' : 'transparent',
-        color: 'var(--ink-600)',
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        cursor: 'pointer', transition: 'background 120ms', flexShrink: 0,
-      }}
+      className="inline-flex items-center justify-center rounded-md text-ink-500 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent flex-shrink-0"
+      style={{ width: size, height: size }}
     >{children}</button>
   );
 }
 
 function GhostBtn({ children, icon, onClick, disabled, title }) {
-  const [h, setH] = React.useState(false);
   return (
     <button
       onClick={disabled ? undefined : onClick}
-      onMouseEnter={() => !disabled && setH(true)}
-      onMouseLeave={() => setH(false)}
+      disabled={disabled}
       title={title}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6,
-        padding: '6px 10px', fontSize: 13, fontWeight: 500,
-        background: h ? 'var(--ink-100)' : 'transparent',
-        color: disabled ? 'var(--ink-300)' : 'var(--ink-700)',
-        border: '1px solid var(--ink-200)',
-        borderRadius: 8, cursor: disabled ? 'not-allowed' : 'pointer',
-        transition: 'background 120ms', opacity: disabled ? 0.6 : 1,
-        fontFamily: 'var(--font-ui)',
-      }}
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 font-ui text-sm font-medium rounded-md border border-ink-200 bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+        disabled
+          ? 'text-ink-300 opacity-60 cursor-not-allowed'
+          : 'text-ink-900 hover:bg-ink-50 cursor-pointer'
+      }`}
     >{icon}{children}</button>
   );
 }
@@ -819,15 +804,17 @@ function AppContent() {
             <IBtn label="New research thread" onClick={handleNewChat}><PlusIcon /></IBtn>
             <IBtn label="Search threads" onClick={() => setShowHistoryModal(true)}><SearchIcon /></IBtn>
             <div style={{ flex: 1 }} />
-            <div
+            <button
               onClick={() => setShowSettingsMenu(true)}
+              aria-label="Settings"
               style={{
                 width: 28, height: 28, borderRadius: '50%',
                 background: 'var(--accent-ink)', color: 'white',
                 display: 'grid', placeItems: 'center',
                 fontSize: 11, fontWeight: 600, cursor: 'pointer', marginBottom: 12,
+                border: 'none',
               }}
-            >{userInitials}</div>
+            >{userInitials}</button>
           </div>
         ) : (
           /* Full expanded state */
@@ -836,33 +823,20 @@ function AppContent() {
             <div style={{ padding: '4px 10px 8px', flexShrink: 0 }}>
               <button
                 onClick={handleNewChat}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '8px 10px', borderRadius: 8, border: '1px solid var(--ink-200)',
-                  background: 'var(--paper)', color: 'var(--ink-800)', fontWeight: 500,
-                  cursor: 'pointer', fontSize: 13,
-                  boxShadow: 'var(--shadow-sm)', fontFamily: 'var(--font-ui)',
-                }}
+                className="w-full flex items-center gap-2 px-4 py-2 rounded-md bg-brand hover:bg-brand-hover text-white font-ui text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
               >
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <PlusIcon /> New research
-                </span>
+                <PlusIcon /> New research
               </button>
             </div>
 
             {/* Search threads */}
             <div style={{ padding: '0 10px 10px', flexShrink: 0 }}>
-              <div
+              <button
                 onClick={() => setShowHistoryModal(true)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '6px 10px', borderRadius: 8,
-                  background: 'var(--ink-50)', color: 'var(--ink-500)',
-                  fontSize: 13, cursor: 'pointer',
-                }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-accent-ink font-ui text-sm hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <SearchIcon /><span>Search threads…</span>
-              </div>
+              </button>
             </div>
 
             {/* Matters section */}
@@ -1093,7 +1067,7 @@ function AppContent() {
                 }}
                 style={{
                   fontSize: 14, fontWeight: 500, color: 'var(--ink-900)',
-                  background: 'var(--surface-1, #f5f5f5)', border: '1px solid var(--ink-200, #d1d5db)',
+                  background: 'var(--ink-50)', border: '1px solid var(--ink-200)',
                   borderRadius: 4, padding: '2px 6px', minWidth: 0, width: 320, maxWidth: '100%',
                   outline: 'none',
                 }}
@@ -1277,14 +1251,7 @@ function AppContent() {
                     <div style={{ height: 1, background: 'var(--ink-100)', margin: '6px 0' }} />
                   );
                   const optBtn = (isActive, onClick, label) => (
-                    <button onClick={onClick} style={{
-                      display: 'block', width: '100%', textAlign: 'left',
-                      padding: '6px 10px', borderRadius: 6, border: 'none',
-                      background: isActive ? 'var(--accent-soft)' : 'transparent',
-                      color: isActive ? 'var(--accent-ink)' : 'var(--ink-700)',
-                      fontSize: 13, fontWeight: isActive ? 600 : 400,
-                      cursor: 'pointer', fontFamily: 'var(--font-ui)',
-                    }}>{label}</button>
+                    <button onClick={onClick} className={`block w-full text-left px-[10px] py-[6px] rounded-md font-ui text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isActive ? 'bg-accent-soft text-accent-ink font-semibold' : 'text-ink-700 hover:bg-ink-50'}`}>{label}</button>
                   );
                   const inputRow = (labelA, valA, setA, labelB, valB, setB) => (
                     <div style={{ display: 'flex', gap: 6, padding: '0 8px 6px', alignItems: 'center' }}>
@@ -1396,10 +1363,7 @@ function AppContent() {
                       {hasActiveFilters && (<>
                         {divider()}
                         <div style={{ padding: '2px 8px 4px', textAlign: 'right' }}>
-                          <button onClick={clearAllFilters} style={{
-                            background: 'none', border: 'none', fontSize: 12, color: 'var(--ink-500)',
-                            cursor: 'pointer', fontFamily: 'var(--font-ui)', textDecoration: 'underline',
-                          }}>Clear filters</button>
+                          <button onClick={clearAllFilters} className="font-ui text-xs text-ink-500 underline hover:text-ink-700 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded">Clear filters</button>
                         </div>
                       </>)}
                     </div>
@@ -1504,13 +1468,7 @@ function AppContent() {
                     {loading ? (
                       <button
                         onClick={handleStop}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 6,
-                          padding: '7px 14px', fontSize: 13, fontWeight: 600,
-                          background: 'var(--danger)', color: 'white',
-                          border: 'none', borderRadius: 8, cursor: 'pointer',
-                          fontFamily: 'var(--font-ui)',
-                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-danger text-white font-ui text-sm font-semibold rounded-md hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
                       >
                         <StopIcon /> Stop
                       </button>
@@ -1518,16 +1476,7 @@ function AppContent() {
                       <button
                         onClick={() => { if (input.trim()) handleSend(); }}
                         disabled={!input.trim()}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 6,
-                          padding: '7px 14px', fontSize: 13, fontWeight: 600,
-                          background: input.trim() ? 'var(--accent)' : 'var(--ink-200)',
-                          color: input.trim() ? 'white' : 'var(--ink-400)',
-                          border: 'none', borderRadius: 8,
-                          cursor: input.trim() ? 'pointer' : 'not-allowed',
-                          transition: 'background 120ms',
-                          fontFamily: 'var(--font-ui)',
-                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 font-ui text-sm font-semibold rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:cursor-not-allowed transition-colors disabled:bg-ink-200 disabled:text-ink-400 bg-brand text-white hover:bg-brand-hover"
                       >
                         <SendIcon /> Send
                       </button>
@@ -1593,10 +1542,11 @@ function AppContent() {
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             }}>
               <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink-900)' }}>Save thread to matter</span>
-              <button onClick={() => setShowAssignModal(false)} style={{
-                width: 28, height: 28, border: 'none', background: 'transparent',
-                cursor: 'pointer', color: 'var(--ink-500)', display: 'grid', placeItems: 'center', borderRadius: 6,
-              }}>
+              <button
+                onClick={() => setShowAssignModal(false)}
+                className="size-7 flex items-center justify-center rounded-md text-ink-500 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                aria-label="Close"
+              >
                 <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
               </button>
             </div>
@@ -1653,26 +1603,26 @@ function AppContent() {
       )}
 
       {showDataSources && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={() => setShowDataSources(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Data Sources</h2>
-              <button onClick={() => setShowDataSources(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 focus:outline-none">
+        <div className="fixed inset-0 bg-ink-950/50 flex items-center justify-center p-4 z-50" onClick={() => setShowDataSources(false)}>
+          <div className="bg-paper rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-6 border-b border-ink-200 flex-shrink-0">
+              <h2 className="text-xl font-bold text-ink-900">Data Sources</h2>
+              <button onClick={() => setShowDataSources(false)} className="size-[30px] flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Close">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <div className="overflow-y-auto p-6 space-y-6 text-sm text-gray-700 dark:text-gray-300">
+            <div className="overflow-y-auto p-6 space-y-6 text-sm text-ink-700">
 
               {/* Legislation API */}
               <section>
-                <h3 className="text-base font-bold text-gray-900 dark:text-white mb-2">Source Overview: The National Archives "Legislation" API</h3>
+                <h3 className="text-base font-bold text-ink-900 mb-2">Source Overview: The National Archives "Legislation" API</h3>
                 <p>AILA connects to the official API for legislation.gov.uk, operated by The National Archives. This database serves as the official, government-maintained statute book for the United Kingdom. Through this integration, AILA can retrieve and analyze the text of laws, regulations, and statutory rules.</p>
               </section>
 
               <section>
-                <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Jurisdictions and Parliaments Covered</h4>
+                <h4 className="font-semibold text-ink-900 mb-2">Jurisdictions and Parliaments Covered</h4>
                 <p className="mb-2">Unlike the Case Law database, the Legislation API provides comprehensive coverage across all four nations of the UK. AILA can retrieve legislation from:</p>
                 <ul className="list-disc list-inside space-y-1 pl-2">
                   <li>The UK Parliament (Westminster)</li>
@@ -1683,7 +1633,7 @@ function AppContent() {
               </section>
 
               <section>
-                <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Types of Legislation Included</h4>
+                <h4 className="font-semibold text-ink-900 mb-2">Types of Legislation Included</h4>
                 <p className="mb-2">AILA has access to both primary laws (the main Acts) and secondary legislation (the detailed rules and regulations):</p>
                 <ul className="list-disc list-inside space-y-1 pl-2">
                   <li><strong>Primary Legislation:</strong> Public General Acts of the UK Parliament, Acts of the Scottish Parliament (ASPs), Acts/Measures of the Senedd Cymru, and Acts of the Northern Ireland Assembly.</li>
@@ -1693,7 +1643,7 @@ function AppContent() {
               </section>
 
               <section>
-                <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Versioning: "As Enacted" vs. "Revised"</h4>
+                <h4 className="font-semibold text-ink-900 mb-2">Versioning: "As Enacted" vs. "Revised"</h4>
                 <p className="mb-2">One of the most powerful features of this database is how it handles the timeline of the law. AILA can distinguish between:</p>
                 <ul className="list-disc list-inside space-y-1 pl-2">
                   <li><strong>As Enacted:</strong> The original text of the law exactly as it was originally passed by Parliament.</li>
@@ -1710,24 +1660,24 @@ function AppContent() {
                 </ul>
               </section>
 
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                <h3 className="text-base font-bold text-gray-900 dark:text-white mb-2">Source Overview: The National Archives "Find Case Law" API</h3>
+              <div className="border-t border-ink-200 pt-6">
+                <h3 className="text-base font-bold text-ink-900 mb-2">Source Overview: The National Archives "Find Case Law" API</h3>
                 <p>Alongside legislation, AILA integrates with The National Archives (TNA) "Find Case Law" API. This is the official, government-backed repository for court judgments and tribunal decisions in the United Kingdom. By connecting directly to this source, AILA ensures that the case law it references is authoritative, unmodified, and publicly verifiable.</p>
               </div>
 
               <section>
-                <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Courts and Tribunals Covered</h4>
+                <h4 className="font-semibold text-ink-900 mb-2">Courts and Tribunals Covered</h4>
                 <p className="mb-2">The API primarily covers the higher courts of England and Wales, alongside the highest appellate courts for the entire UK. Through this integration, AILA can retrieve judgments from:</p>
                 <div className="space-y-3 pl-2">
                   <div>
-                    <p className="font-medium text-gray-800 dark:text-gray-200">UK-Wide Appellate Courts:</p>
+                    <p className="font-medium text-ink-800">UK-Wide Appellate Courts:</p>
                     <ul className="list-disc list-inside space-y-1 pl-4">
                       <li>The UK Supreme Court (UKSC)</li>
                       <li>The Judicial Committee of the Privy Council (JCPC)</li>
                     </ul>
                   </div>
                   <div>
-                    <p className="font-medium text-gray-800 dark:text-gray-200">England &amp; Wales Higher Courts:</p>
+                    <p className="font-medium text-ink-800">England &amp; Wales Higher Courts:</p>
                     <ul className="list-disc list-inside space-y-1 pl-4">
                       <li>Court of Appeal (Civil and Criminal Divisions)</li>
                       <li>High Court of Justice (King's Bench, Chancery, and Family Divisions)</li>
@@ -1735,7 +1685,7 @@ function AppContent() {
                     </ul>
                   </div>
                   <div>
-                    <p className="font-medium text-gray-800 dark:text-gray-200">UK Tribunals:</p>
+                    <p className="font-medium text-ink-800">UK Tribunals:</p>
                     <ul className="list-disc list-inside space-y-1 pl-4">
                       <li>Upper Tribunal (Administrative Appeals, Immigration and Asylum, Lands, and Tax and Chancery Chambers)</li>
                       <li>Employment Appeal Tribunal (EAT)</li>
@@ -1745,7 +1695,7 @@ function AppContent() {
               </section>
 
               <section>
-                <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Temporal Coverage (Dates)</h4>
+                <h4 className="font-semibold text-ink-900 mb-2">Temporal Coverage (Dates)</h4>
                 <ul className="list-disc list-inside space-y-1 pl-2">
                   <li><strong>Modern Judgments:</strong> The database is highly comprehensive for cases handed down from 2003 onwards.</li>
                   <li><strong>Recent Cases:</strong> Newly published judgments are added to the database shortly after being handed down by the courts.</li>
@@ -1764,50 +1714,50 @@ function AppContent() {
               </section>
 
             </div>
-            <div className="flex justify-end p-4 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
-              <button onClick={() => setShowDataSources(false)} className="bg-brand-navy text-white px-4 py-2 rounded-md hover:bg-brand-navy-dark transition-colors">Close</button>
+            <div className="flex justify-end p-4 border-t border-ink-200 flex-shrink-0">
+              <button onClick={() => setShowDataSources(false)} className="bg-brand text-white font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1">Close</button>
             </div>
           </div>
         </div>
       )}
 
       {showAbout && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full shadow-xl">
+        <div className="fixed inset-0 bg-ink-950/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-paper rounded-lg p-6 max-w-2xl w-full shadow-xl">
             <div className="flex items-center justify-center gap-2 mb-4">
               <LexMark size={32} color="var(--accent)" />
-              <h1 className="text-3xl font-bold" style={{ color: 'var(--accent)' }}>AILA</h1>
+              <h1 className="text-3xl font-bold text-accent">AILA</h1>
             </div>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">About AILA</h2>
-              <button onClick={() => setShowAbout(false)} className="text-gray-400 hover:text-gray-600 focus:outline-none">
+              <h2 className="text-xl font-bold text-ink-900">About AILA</h2>
+              <button onClick={() => setShowAbout(false)} className="size-[30px] flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Close">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <div className="space-y-4 text-gray-700 dark:text-gray-300 text-sm">
+            <div className="space-y-4 text-ink-700 text-sm">
               <p><strong>AILA</strong> is an intelligent legal research assistant for UK legislation and case law.</p>
               <div>
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Data Sources</h3>
+                <h3 className="font-semibold text-ink-900 mb-1">Data Sources</h3>
                 <ul className="list-disc list-inside"><li><strong>The National Archives</strong> (legislation.gov.uk)</li></ul>
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-1">AI Approach</h3>
+                <h3 className="font-semibold text-ink-900 mb-1">AI Approach</h3>
                 <p>Agentic RAG architecture — the system queries the LEX API and uses an LLM to provide accurate, context-aware answers.</p>
               </div>
             </div>
             <div className="mt-6 flex justify-end">
-              <button onClick={() => setShowAbout(false)} className="bg-brand-navy text-white px-4 py-2 rounded-md hover:bg-brand-navy-dark transition-colors">Close</button>
+              <button onClick={() => setShowAbout(false)} className="bg-brand text-white font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1">Close</button>
             </div>
           </div>
         </div>
       )}
 
       {showAdminModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-[95vw] h-[95vh] overflow-y-auto shadow-xl relative">
-            <button onClick={() => setShowAdminModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 focus:outline-none">
+        <div className="fixed inset-0 bg-ink-950/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-paper rounded-lg p-6 w-[95vw] h-[95vh] overflow-y-auto shadow-xl relative">
+            <button onClick={() => setShowAdminModal(false)} className="absolute top-4 right-4 size-[30px] flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Close">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -1818,9 +1768,9 @@ function AppContent() {
       )}
 
       {showSettingsModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full shadow-xl relative">
-            <button onClick={() => setShowSettingsModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 focus:outline-none">
+        <div className="fixed inset-0 bg-ink-950/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-paper rounded-lg p-6 max-w-lg w-full shadow-xl relative">
+            <button onClick={() => setShowSettingsModal(false)} className="absolute top-4 right-4 size-[30px] flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Close">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -1831,8 +1781,8 @@ function AppContent() {
       )}
 
       {showHistoryModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full h-[80vh] shadow-xl relative overflow-hidden">
+        <div className="fixed inset-0 bg-ink-950/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-paper rounded-lg max-w-2xl w-full h-[80vh] shadow-xl relative overflow-hidden">
             <HistoryModal onClose={() => setShowHistoryModal(false)} onSelectChat={loadChat} />
           </div>
         </div>

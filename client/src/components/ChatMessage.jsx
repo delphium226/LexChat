@@ -97,11 +97,7 @@ function ThumbsDownModal({ text, onChange, onCancel, onSubmit, submitting }) {
           </div>
           <button
             onClick={onCancel}
-            style={{
-              width: 28, height: 28, borderRadius: 6, border: 'none',
-              background: 'transparent', cursor: 'pointer',
-              display: 'grid', placeItems: 'center', color: 'var(--ink-400)',
-            }}
+            className="size-7 flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             aria-label="Close"
           >
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
@@ -131,21 +127,12 @@ function ThumbsDownModal({ text, onChange, onCancel, onSubmit, submitting }) {
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
           <button
             onClick={onCancel}
-            style={{
-              padding: '7px 18px', borderRadius: 7, border: '1px solid var(--ink-200)',
-              background: 'transparent', fontSize: 13, fontWeight: 500,
-              color: 'var(--ink-700)', cursor: 'pointer',
-            }}
+            className="bg-paper border border-ink-200 text-ink-900 font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >Cancel</button>
           <button
             onClick={onSubmit}
             disabled={submitting}
-            style={{
-              padding: '7px 18px', borderRadius: 7, border: 'none',
-              background: 'var(--accent)', fontSize: 13, fontWeight: 500,
-              color: 'white', cursor: submitting ? 'not-allowed' : 'pointer',
-              opacity: submitting ? 0.6 : 1,
-            }}
+            className="bg-brand text-white font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >{submitting ? 'Submitting…' : 'Submit feedback'}</button>
         </div>
       </div>
@@ -189,19 +176,11 @@ function ConfirmModal({ message, confirmLabel, onConfirm, onCancel }) {
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button
             onClick={onCancel}
-            style={{
-              padding: '7px 18px', borderRadius: 7, border: '1px solid var(--ink-200)',
-              background: 'transparent', fontSize: 13, fontWeight: 500,
-              color: 'var(--ink-700)', cursor: 'pointer',
-            }}
+            className="bg-paper border border-ink-200 text-ink-900 font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >Cancel</button>
           <button
             onClick={onConfirm}
-            style={{
-              padding: '7px 18px', borderRadius: 7, border: 'none',
-              background: 'var(--accent)', fontSize: 13, fontWeight: 500,
-              color: 'white', cursor: 'pointer',
-            }}
+            className="bg-brand text-white font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
           >{confirmLabel}</button>
         </div>
       </div>
