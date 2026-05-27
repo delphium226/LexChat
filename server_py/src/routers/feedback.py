@@ -19,6 +19,7 @@ class FeedbackCreate(BaseModel):
     time_saved_hours: float | None = None
     time_without_aila_hours: float | None = None
     confidence: int | None = None
+    usability: int | None = None
     verification_hours: float | None = None
 
 
@@ -29,6 +30,7 @@ class FeedbackOut(BaseModel):
     time_saved_hours: float | None
     time_without_aila_hours: float | None
     confidence: int | None
+    usability: int | None
     verification_hours: float | None
     created_at: str
 
@@ -79,6 +81,8 @@ async def submit_feedback(
         raise HTTPException(status_code=400, detail="time_without_aila_hours must be non-negative.")
     if body.confidence is not None and not (1 <= body.confidence <= 5):
         raise HTTPException(status_code=400, detail="Confidence must be between 1 and 5.")
+    if body.usability is not None and not (1 <= body.usability <= 5):
+        raise HTTPException(status_code=400, detail="Usability must be between 1 and 5.")
     if body.verification_hours is not None and body.verification_hours < 0:
         raise HTTPException(status_code=400, detail="verification_hours must be non-negative.")
 
@@ -89,6 +93,7 @@ async def submit_feedback(
         time_saved_hours=body.time_saved_hours,
         time_without_aila_hours=body.time_without_aila_hours,
         confidence=body.confidence,
+        usability=body.usability,
         verification_hours=body.verification_hours,
     )
     db.add(entry)
@@ -120,6 +125,7 @@ async def get_all_feedback(
             time_saved_hours=fb.time_saved_hours,
             time_without_aila_hours=fb.time_without_aila_hours,
             confidence=fb.confidence,
+            usability=fb.usability,
             verification_hours=fb.verification_hours,
             created_at=fb.created_at.isoformat(),
         )

@@ -19,6 +19,7 @@ const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted }) => {
   const [timeWithout, setTimeWithout] = useState('');
   const [timeSaved, setTimeSaved] = useState('');
   const [confidence, setConfidence] = useState(null);
+  const [usability, setUsability] = useState(null);
   const [verificationHours, setVerificationHours] = useState('');
   const [text, setText] = useState('');
   const [status, setStatus] = useState('idle');
@@ -37,6 +38,7 @@ const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted }) => {
         time_saved_hours: timeSaved !== '' ? parseFloat(timeSaved) : null,
         time_without_aila_hours: timeWithout !== '' ? parseFloat(timeWithout) : null,
         confidence: confidence,
+        usability: usability,
         verification_hours: verificationHours !== '' ? parseFloat(verificationHours) : null,
       };
       await submitFeedback(payload);
@@ -136,10 +138,42 @@ const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted }) => {
                 </div>
               </div>
 
-              {/* Q4: Verification time */}
+              {/* Q4: Usability */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={labelStyle}>How easy was it to use AILA?</label>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setUsability(usability === n ? null : n)}
+                      disabled={status === 'submitting'}
+                      title={['Very difficult', 'Difficult', 'Neither easy nor difficult', 'Easy', 'Very easy'][n - 1]}
+                      style={{
+                        width: 32, height: 32, borderRadius: 6, border: '1px solid',
+                        borderColor: usability >= n ? 'var(--accent)' : 'var(--ink-300)',
+                        background: usability >= n ? 'var(--accent)' : 'transparent',
+                        color: usability >= n ? 'white' : 'var(--ink-500)',
+                        fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                        fontFamily: 'var(--font-ui)',
+                        opacity: status === 'submitting' ? 0.6 : 1,
+                      }}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                  {usability !== null && (
+                    <span style={{ fontSize: 12, color: 'var(--ink-500)', alignSelf: 'center', marginLeft: 4 }}>
+                      {['Very difficult', 'Difficult', 'Neither easy nor difficult', 'Easy', 'Very easy'][usability - 1]}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Q5: Verification time */}
               <div style={{ marginBottom: 14 }}>
                 <label style={labelStyle}>
-                  Did you spend any time this week verifying the AI's outputs or correcting inaccuracies that reduced your overall time savings? (hours)
+                  How many hours did you spend checking or correcting the outputs of ALIA this week, if any?
                 </label>
                 <input
                   type="number"
@@ -153,13 +187,13 @@ const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted }) => {
                 />
               </div>
 
-              {/* Q5: Free text */}
+              {/* Q6: Free text */}
               <div style={{ marginBottom: 12 }}>
-                <label style={labelStyle}>Anything else? (optional)</label>
+                <label style={labelStyle}>Is there anything we should do to make ALIA better? (optional)</label>
                 <textarea
                   value={text}
                   onChange={e => setText(e.target.value)}
-                  placeholder="Suggestions, issues, or comments…"
+                  placeholder="Share any suggestions…"
                   rows={2}
                   disabled={status === 'submitting'}
                   style={{ ...inputStyle, resize: 'vertical' }}

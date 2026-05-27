@@ -1965,6 +1965,8 @@ const AdminPortal = ({ currentUser }) => {
                     const avgConf = withConf.length > 0 ? (withConf.reduce((s, f) => s + f.confidence, 0) / withConf.length) : null;
                     const withVerif = productFeedback.filter(f => f.verification_hours != null);
                     const avgVerif = withVerif.length > 0 ? (withVerif.reduce((s, f) => s + f.verification_hours, 0) / withVerif.length) : null;
+                    const withUsab = productFeedback.filter(f => f.usability != null);
+                    const avgUsab = withUsab.length > 0 ? (withUsab.reduce((s, f) => s + f.usability, 0) / withUsab.length) : null;
                     const thCls = "px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-left font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap";
                     return (
                         <div className="space-y-4">
@@ -2224,7 +2226,7 @@ const AdminPortal = ({ currentUser }) => {
                                 {!isProductFeedbackLoading && productFeedback.length > 0 && (
                                     <>
                                     <h3 className="text-sm font-bold mb-3 dark:text-white">Productivity Summary</h3>
-                                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
+                                    <div className="grid grid-cols-2 sm:grid-cols-6 gap-4 mb-6">
                                         <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
                                             <div className="text-2xl font-bold text-zinc-800 dark:text-white">
                                                 {avgWithout != null ? avgWithout.toFixed(1) : '—'}
@@ -2257,6 +2259,12 @@ const AdminPortal = ({ currentUser }) => {
                                             </div>
                                             <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Avg confidence</div>
                                         </div>
+                                        <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
+                                            <div className="text-2xl font-bold text-zinc-800 dark:text-white">
+                                                {avgUsab != null ? `${avgUsab.toFixed(1)}/5` : '—'}
+                                            </div>
+                                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Avg usability</div>
+                                        </div>
                                     </div>
                                     </>
                                 )}
@@ -2276,6 +2284,7 @@ const AdminPortal = ({ currentUser }) => {
                                                     <th className={`${thCls} w-32`}>Manual (hrs)</th>
                                                     <th className={`${thCls} w-28`}>Saved (hrs)</th>
                                                     <th className={`${thCls} w-24`}>Confidence</th>
+                                                    <th className={`${thCls} w-24`}>Usability</th>
                                                     <th className={`${thCls} w-32`}>Verification (hrs)</th>
                                                     <th className={thCls}>Comments</th>
                                                 </tr>
@@ -2288,6 +2297,7 @@ const AdminPortal = ({ currentUser }) => {
                                                         <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.time_without_aila_hours != null ? item.time_without_aila_hours : '—'}</td>
                                                         <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.time_saved_hours != null ? item.time_saved_hours : '—'}</td>
                                                         <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.confidence != null ? `${item.confidence}/5` : '—'}</td>
+                                                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.usability != null ? `${item.usability}/5` : '—'}</td>
                                                         <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.verification_hours != null ? item.verification_hours : '—'}</td>
                                                         <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{item.message || ''}</td>
                                                     </tr>

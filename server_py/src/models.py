@@ -124,6 +124,7 @@ class ProductFeedback(Base):
     time_without_aila_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
     research_success: Mapped[str | None] = mapped_column(String(50), nullable=True)
     confidence: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    usability: Mapped[int | None] = mapped_column(Integer, nullable=True)
     verification_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
