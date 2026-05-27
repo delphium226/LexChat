@@ -86,6 +86,29 @@ cd deployment
 .\update_native.ps1
 ```
 
+### 7. Updating Ollama and Restoring Cloud Model Manifests
+
+Cloud model manifests are committed to `deployment\ollama_models\` — they are tiny JSON pointers (no local weights). If Ollama needs updating or manifests disappear from the server, after `git pull` run:
+
+```powershell
+# In an elevated PowerShell session:
+cd C:\Projects\LexChat
+.\deployment\update_ollama.ps1
+```
+
+This stops Ollama, installs the pinned version (`OllamaSetup.exe` from GitHub), copies manifests from the repo into `%USERPROFILE%\.ollama\models\`, and restarts Ollama.
+
+**To update to a newer Ollama version or add/update models (dev machine):**
+
+1. Pull any new models: `ollama pull <model-name>`
+2. Copy the updated model store into the repo:
+   ```powershell
+   Remove-Item -Recurse C:\Projects\LexChat\deployment\ollama_models
+   Copy-Item -Recurse "$env:USERPROFILE\.ollama\models" C:\Projects\LexChat\deployment\ollama_models
+   ```
+3. Update `$OllamaVersion` in `deployment\update_ollama.ps1`.
+4. Commit and push. On the target: `git pull` then `.\deployment\update_ollama.ps1`.
+
 ---
 
 ## Air-Gapped Deployment
@@ -176,6 +199,7 @@ When only the frontend (UI) has changed, use the lightweight update scripts inst
 | `compress_and_chunk.ps1` | Chunk binaries into <50MB parts for transfer |
 | `reconstruct_binaries.ps1` | Reconstruct chunks back into binaries on target |
 | `update_native.ps1` | Pull latest code and rebuild (internet-connected) |
+| `update_ollama.ps1` | Update Ollama binary and restore cloud model manifests from repo |
 | `start_native.cmd` | Start Ollama + backend (internet-connected, interactive) |
 | `start_native_offline.cmd` | Start Ollama + backend (air-gapped, interactive) |
 | `stop_native.cmd` | Gracefully stop all services |
