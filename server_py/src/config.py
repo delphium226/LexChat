@@ -341,6 +341,9 @@ MODEL_LIST = [
     {"name": "deepseek-v4-pro:cloud", "contextLengthKB": 160},
     {"name": "mistral-large-3:675b-cloud", "contextLengthKB": 160},
     {"name": "kimi-k2-thinking:cloud", "contextLengthKB": 256},
+    {"name": "kimi-k2.6:cloud", "contextLengthKB": 256},
+    {"name": "glm-5.1:cloud", "contextLengthKB": 128},
+    {"name": "minimax-m2.7:cloud", "contextLengthKB": 256},
 ]
 
 OPENROUTER_MODEL_LIST = [
