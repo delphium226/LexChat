@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import axios from 'axios';
 import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, getUsageStats, clearUsageData, clearPerformanceData, clearFeedbackData, getLatestHealthStatus, getHealthHistory, triggerHealthCheck, getQueryPerformanceStats, getProductFeedback, getSurveyCompliance, getMessageRatings, getProviderConfig, saveProviderConfig, setActiveProvider, getOpenRouterModels, getCostStats, getFeatures, saveFeatures } from '../services/api';
+import ActivityLogModal from '../components/ActivityLogModal';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const Spinner = ({ size = 'md' }) => {
@@ -1018,6 +1019,7 @@ const AdminPortal = ({ currentUser }) => {
     // --- FEATURE FLAGS STATE ---
     const [features, setFeatures] = useState({ matters_enabled: true });
     const [isSavingFeatures, setIsSavingFeatures] = useState(false);
+    const [showActivityLog, setShowActivityLog] = useState(false);
 
     // --- INITIAL FETCH ---
     useEffect(() => {
@@ -1887,6 +1889,20 @@ const AdminPortal = ({ currentUser }) => {
 
 
 
+                        {/* Activity Log */}
+                        <div className="bg-paper p-6 rounded-lg shadow">
+                            <h2 className="font-ui text-base font-semibold text-ink-900 mb-1">Activity Log</h2>
+                            <p className="font-ui text-sm text-ink-500 mb-4">
+                                Live feed of user logins, queries submitted, feedback, surveys, and service errors. Auto-refreshes every 10 minutes while open.
+                            </p>
+                            <button
+                                onClick={() => setShowActivityLog(true)}
+                                className="bg-brand hover:bg-brand-hover text-white font-ui text-sm font-medium rounded-md px-4 py-2 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
+                            >
+                                View Activity Log
+                            </button>
+                        </div>
+
                         <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow border border-red-200 dark:border-red-900">
                             <h2 className="text-lg font-bold mb-4 text-red-600 dark:text-red-400">Danger Zone</h2>
                             <p className="mb-2 text-sm text-gray-600 dark:text-gray-400">
@@ -2422,6 +2438,8 @@ const AdminPortal = ({ currentUser }) => {
                 })()}
 
             </div>
+
+            <ActivityLogModal open={showActivityLog} onClose={() => setShowActivityLog(false)} />
         </div>
     );
 };

@@ -1,6 +1,6 @@
 # Native Windows Deployment Guide
 
-This guide explains how to run LexChat natively on Windows Server 2022 without using Docker or WSL.
+This guide explains how to run AILA natively on Windows Server 2022 without using Docker or WSL.
 
 ## Quick Start
 
@@ -42,7 +42,7 @@ This gracefully stops the FastAPI backend, Ollama, and the PostgreSQL service.
 
 ### 5. Auto-Start at Boot (Recommended for Production)
 
-By default the app only starts when you run `start_native.cmd` after logging in. To have LexChat start automatically every time the server boots — without requiring a login — run the autostart installer once:
+By default the app only starts when you run `start_native.cmd` after logging in. To have AILA start automatically every time the server boots — without requiring a login — run the autostart installer once:
 
 ```powershell
 # Open PowerShell as Administrator
@@ -53,12 +53,12 @@ cd C:\Projects\LexChat
 This will:
 1. Detect the Python and Ollama executable paths on this machine and write them to `deployment\autostart_config.ps1` (machine-specific, not committed to the repo).
 2. Create `deployment\logs\` if it does not exist.
-3. Register a **"LexChat Autostart"** Task Scheduler task that runs `start_background.ps1` as the SYSTEM account on every boot.
+3. Register a **"AILA Autostart"** Task Scheduler task that runs `start_background.ps1` as the SYSTEM account on every boot.
 
-After installation, LexChat starts automatically on every reboot. To trigger it immediately without rebooting:
+After installation, AILA starts automatically on every reboot. To trigger it immediately without rebooting:
 
 ```powershell
-Start-ScheduledTask -TaskName "LexChat Autostart"
+Start-ScheduledTask -TaskName "AILA Autostart"
 ```
 
 Startup and backend logs are written to `deployment\logs\`:
@@ -204,9 +204,9 @@ When only the frontend (UI) has changed, use the lightweight update scripts inst
 | `start_native_offline.cmd` | Start Ollama + backend (air-gapped, interactive) |
 | `stop_native.cmd` | Gracefully stop all services |
 | `start_background.ps1` | Headless startup called by Task Scheduler at boot |
-| `install_autostart.ps1` | One-time setup: register boot-time Task Scheduler task for LexChat backend |
+| `install_autostart.ps1` | One-time setup: register boot-time Task Scheduler task for AILA backend |
 | `install_ollama_autostart.ps1` | One-time setup: ensure Ollama starts at boot (service or Task Scheduler task) |
-| `uninstall_autostart.ps1` | Remove the LexChat Task Scheduler task (revert to manual startup) |
+| `uninstall_autostart.ps1` | Remove the AILA Task Scheduler task (revert to manual startup) |
 
 ---
 

@@ -20,7 +20,8 @@ from ..agent.provider_factory import (
 )
 from ..config import MODEL_LIST, settings
 from ..database import get_db
-from ..models import AppSetting, Chat, Message, ProductFeedback, RequestTiming, User
+from ..dependencies import get_current_user
+from ..models import ActivityLog, AppSetting, Chat, Message, ProductFeedback, RequestTiming, ServiceHealthStatus, User
 
 logger = logging.getLogger("app")
 
@@ -383,3 +384,103 @@ async def save_features(body: FeaturesUpdate, db: AsyncSession = Depends(get_db)
     await db.commit()
     logger.info(f"[Developer] Features updated: {data}")
     return {"success": True, "features": data}
+
+
+# -----------------------------------------------------------------------
+# Activity log
+# -----------------------------------------------------------------------
+
+@router.get("/activity-log")
+async def get_activity_log(
+    days: str = "7",
+    limit: int = 500,
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return a unified activity feed for the admin activity log screen."""
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    outer_date_filter = ""
+    if days != "all":
+        days_num = int(days) if days.isdigit() else 7
+        outer_date_filter = f"WHERE created_at >= NOW() - INTERVAL '{days_num} days'"
+
+    query = text(f"""
+        SELECT event_type, username, description, created_at FROM (
+
+            SELECT event_type, username, description, created_at
+            FROM activity_log
+
+            UNION ALL
+
+            SELECT
+                'QUERY' AS event_type,
+                u.username,
+                LEFT(m.content, 300) AS description,
+                m.created_at
+            FROM messages m
+            JOIN chats c ON m.chat_id = c.id
+            JOIN users u ON c.user_id = u.id
+            WHERE m.role = 'user'
+
+            UNION ALL
+
+            SELECT
+                'SURVEY' AS event_type,
+                u.username,
+                CONCAT_WS(' · ',
+                    CASE WHEN pf.confidence IS NOT NULL
+                        THEN CONCAT('Confidence: ', pf.confidence, '/5') END,
+                    CASE WHEN pf.usability IS NOT NULL
+                        THEN CONCAT('Usability: ', pf.usability, '/5') END,
+                    CASE WHEN pf.message IS NOT NULL AND pf.message <> ''
+                        THEN CONCAT('"', LEFT(pf.message, 150), '"') END
+                ) AS description,
+                pf.created_at
+            FROM product_feedback pf
+            JOIN users u ON pf.user_id = u.id
+
+            UNION ALL
+
+            SELECT
+                'FEEDBACK' AS event_type,
+                u.username,
+                CONCAT('★', m.rating,
+                    CASE WHEN m.feedback_comment IS NOT NULL AND m.feedback_comment <> ''
+                        THEN CONCAT(' — ', LEFT(m.feedback_comment, 200))
+                        ELSE '' END
+                ) AS description,
+                m.created_at
+            FROM messages m
+            JOIN chats c ON m.chat_id = c.id
+            JOIN users u ON c.user_id = u.id
+            WHERE m.rating IS NOT NULL AND m.role = 'assistant'
+
+            UNION ALL
+
+            SELECT
+                'ERROR' AS event_type,
+                sh.service_name AS username,
+                sh.error_message AS description,
+                sh.checked_at AS created_at
+            FROM service_health_logs sh
+            WHERE sh.is_healthy = false
+
+        ) combined
+        {outer_date_filter}
+        ORDER BY created_at DESC
+        LIMIT :limit
+    """)
+
+    result = await db.execute(query, {"limit": limit})
+    rows = result.mappings().all()
+    return [
+        {
+            "event_type": row["event_type"],
+            "username": row["username"],
+            "description": row["description"],
+            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+        }
+        for row in rows
+    ]

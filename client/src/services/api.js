@@ -370,3 +370,10 @@ export const saveFeatures = async (features) => {
     const response = await axios.post(`${API_URL}/developer/features`, features);
     return response.data;
 };
+
+export const getActivityLog = async (days = '7', limit = 500) => {
+    const response = await axios.get(`${API_URL}/developer/activity-log`, {
+        params: { days, limit },
+    });
+    return response.data;
+};

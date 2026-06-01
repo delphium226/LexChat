@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import settings
 from ..database import get_db
 from ..dependencies import create_access_token, get_current_user
-from ..models import User
+from ..models import ActivityLog, User
 
 logger = logging.getLogger("app")
 
@@ -61,6 +61,12 @@ async def login(
         )
 
     logger.info(f"[Auth] Successful login: {user.username!r} (role={user.role})")
+    try:
+        db.add(ActivityLog(event_type="LOGIN", username=user.username))
+        await db.commit()
+    except Exception:
+        logger.warning("[Auth] Failed to write login activity log")
+
     token_data = {"sub": user.username, "id": user.id, "role": user.role}
     expires = timedelta(days=30) if creds.rememberMe else timedelta(days=1)
     access_token = create_access_token(data=token_data, expires_delta=expires)

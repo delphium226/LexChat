@@ -14,6 +14,7 @@ import MatterNotesModal from './components/MatterNotesModal';
 import { Routes, Route } from 'react-router-dom';
 import SystemChat from './pages/SystemChat';
 import WeeklyFeedbackBanner from './components/WeeklyFeedbackBanner';
+import DataSensitivityNotice from './components/DataSensitivityNotice';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -198,6 +199,7 @@ function AppContent() {
   const [showFilters, setShowFilters] = useState(false);
 
   // ── Modal state ──────────────────────────────────────────────
+  const [noticeAcknowledged, setNoticeAcknowledged] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -341,6 +343,7 @@ function AppContent() {
       setResearchMode('legislation_only');
       setMatters([]); setClosedMatters([]); setShowClosedMatters(false); setExpandedMatterIds(new Set());
       setShowWeeklyBanner(false); weeklyBannerCheckedRef.current = false;
+      setNoticeAcknowledged(false);
     }
   }, [user]);
 
@@ -757,6 +760,8 @@ function AppContent() {
   // ── Auth gate ─────────────────────────────────────────────────
 
   if (!user) return <LoginModal />;
+
+  if (!noticeAcknowledged) return <DataSensitivityNotice onAcknowledge={() => setNoticeAcknowledged(true)} />;
 
   // ── Render ────────────────────────────────────────────────────
 

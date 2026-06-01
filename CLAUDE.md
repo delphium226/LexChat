@@ -1,7 +1,7 @@
-# LexChat — Claude Code Context
+# AILA — Claude Code Context
 
 ## What This Project Is
-LexChat is an AI-powered legal research assistant for a **UK government legal department**. Users are qualified lawyers querying UK legislation and case law. The system uses a Manager-Worker agent architecture — the Manager handles conversation, the Worker performs deep research via the LEX API.
+AILA (AI Legal Assistant) is an AI-powered legal research assistant for a **UK government organisation**. Users are qualified lawyers querying UK legislation and case law. The system uses a Manager-Worker agent architecture — the Manager handles conversation, the Worker performs deep research via the LEX API.
 
 ## Tech Stack
 - **Frontend**: React 19 + Vite + Tailwind CSS (`client/`)
@@ -121,7 +121,8 @@ The full token/component reference lives at `client/src/design-system.md`. **Rea
 ## Key Files
 | File | Purpose |
 |---|---|
-| `client/src/App.jsx` | Main frontend app — chat UI, favicon swap, dynamic model fetch |
+| `client/src/App.jsx` | Main frontend app — chat UI, favicon swap, dynamic model fetch, post-login notice gate |
+| `client/src/components/DataSensitivityNotice.jsx` | Post-login splash screen — data sensitivity warning shown on every login session |
 | `client/src/design-system.md` | Design token reference — colours, typography, button/component patterns |
 | `client/src/pages/AdminPortal.jsx` | Admin portal including Developer tab with provider config panel |
 | `client/src/pages/Settings.jsx` | Account settings page — change password form |
@@ -132,15 +133,32 @@ The full token/component reference lives at `client/src/design-system.md`. **Rea
 | `server_py/src/agent/openrouter_client.py` | OpenRouter agent implementation (OpenAI-compatible) |
 | `server_py/src/agent/provider_factory.py` | Provider resolution, ContextVar config, queue/semaphore caches; `get_summarise_model()` |
 | `server_py/src/routers/ai.py` | `/api/models` and `/api/chat` endpoints |
-| `server_py/src/routers/developer.py` | Developer-only endpoints including provider config GET/POST |
-| `server_py/src/models.py` | SQLAlchemy models — includes `AppSetting`, `Chat.provider`, `Message.model/provider` |
+| `server_py/src/routers/developer.py` | Developer-only endpoints including provider config GET/POST and `GET /developer/activity-log` |
+| `server_py/src/models.py` | SQLAlchemy models — includes `AppSetting`, `Chat.provider`, `Message.model/provider`, `ActivityLog` |
+| `client/src/components/ActivityLogModal.jsx` | Admin activity log modal — unified feed of logins, queries, feedback, surveys, errors; auto-refreshes every 10 min |
 | `deployment/NATIVE_DEPLOYMENT.md` | Full deployment reference |
 
 ## Admin Portal — Developer Tab
 Available to the `admin` user only. Contains:
 - **LLM Provider panel** — configure both providers (base URL, API key, model, temperature, max concurrent requests, max concurrent summarisations); separate Save Settings and Set as Active buttons
+- **Activity Log** — unified feed of user logins, queries submitted, feedback ratings, survey responses, and service health errors; filterable by time range; auto-refreshes every 10 minutes; powered by `GET /developer/activity-log`
 - **Synthetic Data Generation** — seed 100 test users with 6 months of chat history
 - **Danger Zone** — wipe all data except the admin account
+
+## Activity Log
+- DB table: `activity_log` (columns: `id`, `event_type`, `username`, `description`, `created_at`); index on `created_at`
+- Model: `ActivityLog` in `server_py/src/models.py`
+- Currently only `LOGIN` events are written explicitly (in `auth.py` on successful login); `QUERY`, `FEEDBACK`, `SURVEY`, and `ERROR` events are synthesised at query time via UNION ALL from `messages`, `product_feedback`, and `service_health_logs`
+- Endpoint: `GET /developer/activity-log?days=7&limit=500` — admin only; `days=all` disables the date filter
+- Frontend: `ActivityLogModal.jsx` opened from the Developer tab
+
+## Post-Login Splash Screen
+- Shown on every login session, before the main app renders
+- Warns users not to enter information above OFFICIAL-SENSITIVE, personal data, privileged communications, ongoing proceedings, information under confidence, or commercially sensitive data
+- Explains that queries are processed by third-party LLM services outside the organisation's secure network
+- User must click "I understand — proceed to AILA" to dismiss; cannot be bypassed
+- State (`noticeAcknowledged`) resets to `false` on logout, ensuring the notice reappears on the next login
+- Component: `client/src/components/DataSensitivityNotice.jsx`
 
 ## Favicon Behaviour
 - Static: `client/public/favicon.png` (first frame of spinner GIF)

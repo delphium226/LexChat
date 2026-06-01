@@ -88,6 +88,13 @@ async def init_db() -> None:
             "ALTER TABLE product_feedback ADD COLUMN IF NOT EXISTS confidence INTEGER",
             "ALTER TABLE product_feedback ADD COLUMN IF NOT EXISTS verification_hours FLOAT",
             "ALTER TABLE product_feedback ADD COLUMN IF NOT EXISTS usability INTEGER",
+            """CREATE TABLE IF NOT EXISTS activity_log (
+                id SERIAL PRIMARY KEY,
+                event_type VARCHAR(20) NOT NULL,
+                username VARCHAR(255) NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )""",
         ]
         async with engine.begin() as conn:
             for stmt in migration_statements:
@@ -108,6 +115,7 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_matters_user_created ON matters (user_id, created_at)",
             "CREATE INDEX IF NOT EXISTS idx_matter_notes_matter ON matter_notes (matter_id, created_at)",
             "CREATE INDEX IF NOT EXISTS idx_documents_chat ON documents (chat_id)",
+            "CREATE INDEX IF NOT EXISTS idx_activity_log_created_at ON activity_log (created_at)",
         ]
         async with engine.begin() as conn:
             for stmt in index_statements:
