@@ -128,6 +128,41 @@ if settings.enable_deep_research:
         },
     })
 
+def get_manager_tools(peer_descriptions: str = "") -> list:
+    """Return the manager tool list, optionally including consult_peer.
+
+    When peer_descriptions is empty the output is identical to MANAGER_TOOLS so
+    existing behaviour is completely unchanged for deployments with no peers.
+    """
+    tools = list(MANAGER_TOOLS)
+    if peer_descriptions:
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": "consult_peer",
+                "description": (
+                    f"Consult a peer bot for specialised knowledge. "
+                    f"Available peers:\n{peer_descriptions}"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "peer_id": {
+                            "type": "string",
+                            "description": "peer_id of the bot to consult",
+                        },
+                        "question": {
+                            "type": "string",
+                            "description": "The specific question to ask the peer",
+                        },
+                    },
+                    "required": ["peer_id", "question"],
+                },
+            },
+        })
+    return tools
+
+
 WORKER_TOOLS = [
     {
         "type": "function",

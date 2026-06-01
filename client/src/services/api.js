@@ -377,3 +377,12 @@ export const getActivityLog = async (days = '7', limit = 500) => {
     });
     return response.data;
 };
+
+// --- BOT IDENTITY ---
+export const fetchBotInfo = () => axios.get(`${API_URL}/bot-info`).then(r => r.data);
+
+// --- PEER REGISTRY ---
+export const getPeers = () => axios.get(`${API_URL}/peers`).then(r => r.data);
+export const createPeer = (data) => axios.post(`${API_URL}/peers`, data).then(r => r.data);
+export const updatePeer = (peerId, data) => axios.put(`${API_URL}/peers/${peerId}`, data).then(r => r.data);
+export const deletePeer = (peerId) => axios.delete(`${API_URL}/peers/${peerId}`);

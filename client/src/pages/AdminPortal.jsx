@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import axios from 'axios';
-import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, getUsageStats, clearUsageData, clearPerformanceData, clearFeedbackData, getLatestHealthStatus, getHealthHistory, triggerHealthCheck, getQueryPerformanceStats, getProductFeedback, getSurveyCompliance, getMessageRatings, getProviderConfig, saveProviderConfig, setActiveProvider, getOpenRouterModels, getCostStats, getFeatures, saveFeatures } from '../services/api';
+import { getFeedbackStats, testLearningRetrieval, getPerformanceStats, getUsageStats, clearUsageData, clearPerformanceData, clearFeedbackData, getLatestHealthStatus, getHealthHistory, triggerHealthCheck, getQueryPerformanceStats, getProductFeedback, getSurveyCompliance, getMessageRatings, getProviderConfig, saveProviderConfig, setActiveProvider, getOpenRouterModels, getCostStats, getFeatures, saveFeatures, getPeers, createPeer, updatePeer, deletePeer } from '../services/api';
 import ActivityLogModal from '../components/ActivityLogModal';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
@@ -1021,6 +1021,13 @@ const AdminPortal = ({ currentUser }) => {
     const [isSavingFeatures, setIsSavingFeatures] = useState(false);
     const [showActivityLog, setShowActivityLog] = useState(false);
 
+    // --- FEDERATION STATE ---
+    const [peers, setPeers] = useState([]);
+    const [isPeersLoading, setIsPeersLoading] = useState(false);
+    const [peerForm, setPeerForm] = useState({ peer_id: '', name: '', base_url: '', api_key: '', description: '', enabled: true });
+    const [peerFormError, setPeerFormError] = useState('');
+    const [isSavingPeer, setIsSavingPeer] = useState(false);
+
     // --- INITIAL FETCH ---
     useEffect(() => {
         if (activeTab === 'users') {
@@ -1040,6 +1047,9 @@ const AdminPortal = ({ currentUser }) => {
             fetchProductFeedback(productFeedbackTimeframe);
         } else if (activeTab === 'developer') {
             getFeatures().then(setFeatures).catch(() => {});
+        } else if (activeTab === 'federation') {
+            setIsPeersLoading(true);
+            getPeers().then(setPeers).catch(() => {}).finally(() => setIsPeersLoading(false));
         }
     }, [activeTab, timeframe, learningTimeframe, perfTimeframe, costTimeframe, productFeedbackTimeframe]);
 
@@ -1273,6 +1283,7 @@ const AdminPortal = ({ currentUser }) => {
                         { id: 'cost', label: 'Cost' },
                         { id: 'learning', label: 'Learning Monitor' },
                         ...(currentUser?.username === 'admin' ? [{ id: 'developer', label: 'Developer' }] : []),
+                        ...(currentUser?.username === 'admin' ? [{ id: 'federation', label: 'Federation' }] : []),
                         { id: 'health', label: 'Service Health' },
                         { id: 'product-feedback', label: 'User Feedback' },
                     ].map(tab => (
@@ -2436,6 +2447,151 @@ const AdminPortal = ({ currentUser }) => {
                     </div>
                     );
                 })()}
+
+                {/* FEDERATION TAB */}
+                {activeTab === 'federation' && (
+                    <div className="space-y-6 p-1">
+                        <div className="bg-paper rounded-lg shadow p-6">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-lg font-bold text-ink-900">Registered Peers</h2>
+                                <button
+                                    onClick={() => { setIsPeersLoading(true); getPeers().then(setPeers).catch(() => {}).finally(() => setIsPeersLoading(false)); }}
+                                    className="border border-ink-200 text-ink-600 bg-paper font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-ink-50 focus-visible:ring-2 focus-visible:ring-accent"
+                                >Refresh</button>
+                            </div>
+
+                            {isPeersLoading ? (
+                                <div className="flex justify-center py-8"><Spinner /></div>
+                            ) : peers.length === 0 ? (
+                                <p className="text-ink-500 text-sm italic">No peers registered yet.</p>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full text-sm">
+                                        <thead>
+                                            <tr className="border-b border-ink-200">
+                                                {['Name', 'Peer ID', 'Base URL', 'Description', 'API Key', 'Enabled', ''].map(h => (
+                                                    <th key={h} className="px-3 py-2 text-left font-semibold text-ink-500 text-xs uppercase tracking-wider whitespace-nowrap">{h}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {peers.map(p => (
+                                                <tr key={p.peer_id} className="border-b border-ink-100 hover:bg-ink-50">
+                                                    <td className="px-3 py-2 font-medium text-ink-900 whitespace-nowrap">{p.name}</td>
+                                                    <td className="px-3 py-2 font-mono text-ink-600 text-xs whitespace-nowrap">{p.peer_id}</td>
+                                                    <td className="px-3 py-2 text-ink-600 text-xs max-w-[180px] truncate" title={p.base_url}>{p.base_url}</td>
+                                                    <td className="px-3 py-2 text-ink-600 max-w-[200px] truncate" title={p.description}>{p.description}</td>
+                                                    <td className="px-3 py-2 text-ink-500 text-xs">{p.has_api_key ? '••••••••' : '—'}</td>
+                                                    <td className="px-3 py-2">
+                                                        <button
+                                                            onClick={async () => {
+                                                                await updatePeer(p.peer_id, { enabled: !p.enabled });
+                                                                setPeers(prev => prev.map(x => x.peer_id === p.peer_id ? { ...x, enabled: !x.enabled } : x));
+                                                            }}
+                                                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-accent ${p.enabled ? 'bg-brand' : 'bg-ink-300'}`}
+                                                            aria-label={p.enabled ? 'Disable peer' : 'Enable peer'}
+                                                        >
+                                                            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${p.enabled ? 'translate-x-4' : 'translate-x-1'}`} />
+                                                        </button>
+                                                    </td>
+                                                    <td className="px-3 py-2">
+                                                        <button
+                                                            onClick={async () => {
+                                                                if (!window.confirm(`Delete peer "${p.peer_id}"?`)) return;
+                                                                await deletePeer(p.peer_id);
+                                                                setPeers(prev => prev.filter(x => x.peer_id !== p.peer_id));
+                                                            }}
+                                                            className="bg-danger text-white font-ui text-xs font-medium rounded px-2 py-1 hover:opacity-90 focus-visible:ring-2 focus-visible:ring-danger"
+                                                        >Delete</button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* ADD PEER FORM */}
+                        <div className="bg-paper rounded-lg shadow p-6">
+                            <h2 className="text-base font-bold text-ink-900 mb-4">Add Peer</h2>
+                            {peerFormError && (
+                                <div className="mb-3 rounded-md bg-red-50 border border-red-200 text-red-700 px-3 py-2 text-sm">{peerFormError}</div>
+                            )}
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                {[
+                                    { key: 'peer_id', label: 'Peer ID', placeholder: 'legislation_bot', mono: true },
+                                    { key: 'name', label: 'Name', placeholder: 'Legislation Bot' },
+                                    { key: 'base_url', label: 'Base URL', placeholder: 'http://localhost:8001' },
+                                    { key: 'api_key', label: 'API Key', placeholder: '(optional)', type: 'password' },
+                                ].map(({ key, label, placeholder, mono, type }) => (
+                                    <div key={key}>
+                                        <label className="block text-xs font-semibold text-ink-600 mb-1 font-ui">{label}</label>
+                                        <input
+                                            type={type || 'text'}
+                                            value={peerForm[key]}
+                                            onChange={e => setPeerForm(f => ({ ...f, [key]: e.target.value }))}
+                                            placeholder={placeholder}
+                                            className={`w-full rounded-md border border-ink-200 bg-paper px-3 py-2 text-sm text-ink-900 placeholder-ink-400 focus:outline-none focus:ring-2 focus:ring-accent ${mono ? 'font-mono' : 'font-ui'}`}
+                                        />
+                                    </div>
+                                ))}
+                                <div className="sm:col-span-2">
+                                    <label className="block text-xs font-semibold text-ink-600 mb-1 font-ui">Description (shown to the Manager LLM as tool description)</label>
+                                    <textarea
+                                        value={peerForm.description}
+                                        onChange={e => setPeerForm(f => ({ ...f, description: e.target.value }))}
+                                        placeholder="Searches UK Parliamentary records and debates"
+                                        rows={2}
+                                        className="w-full rounded-md border border-ink-200 bg-paper px-3 py-2 text-sm text-ink-900 placeholder-ink-400 font-ui focus:outline-none focus:ring-2 focus:ring-accent resize-none"
+                                    />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="peer-enabled"
+                                        checked={peerForm.enabled}
+                                        onChange={e => setPeerForm(f => ({ ...f, enabled: e.target.checked }))}
+                                        className="rounded border-ink-300 text-brand focus:ring-accent"
+                                    />
+                                    <label htmlFor="peer-enabled" className="text-sm font-ui text-ink-700">Enabled</label>
+                                </div>
+                            </div>
+                            <div className="mt-4 flex justify-end">
+                                <button
+                                    disabled={isSavingPeer}
+                                    onClick={async () => {
+                                        setPeerFormError('');
+                                        if (!peerForm.peer_id.trim() || !peerForm.name.trim() || !peerForm.base_url.trim() || !peerForm.description.trim()) {
+                                            setPeerFormError('Peer ID, Name, Base URL, and Description are required.');
+                                            return;
+                                        }
+                                        setIsSavingPeer(true);
+                                        try {
+                                            const created = await createPeer({
+                                                peer_id: peerForm.peer_id.trim(),
+                                                name: peerForm.name.trim(),
+                                                base_url: peerForm.base_url.trim(),
+                                                api_key: peerForm.api_key.trim() || null,
+                                                description: peerForm.description.trim(),
+                                                enabled: peerForm.enabled,
+                                            });
+                                            setPeers(prev => [...prev, created]);
+                                            setPeerForm({ peer_id: '', name: '', base_url: '', api_key: '', description: '', enabled: true });
+                                        } catch (e) {
+                                            setPeerFormError(e?.response?.data?.detail || 'Failed to create peer.');
+                                        } finally {
+                                            setIsSavingPeer(false);
+                                        }
+                                    }}
+                                    className="bg-brand hover:bg-brand-hover text-white font-ui text-sm font-medium rounded-md px-4 py-2 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isSavingPeer ? 'Saving…' : 'Add Peer'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
             </div>
 

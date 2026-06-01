@@ -1,0 +1,12 @@
+{
+  "bot_identity": {
+    "bot_id": "legislation_bot",
+    "name": "AILA",
+    "tagline": "AI Legal Assistant — UK Legislation",
+    "logo_path": "bots/legislation/assets/logo.png"
+  },
+  "agent": {
+    "research_mode": "legislation_only"
+  },
+  "peer_registry_seed": []
+}

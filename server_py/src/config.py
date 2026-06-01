@@ -393,6 +393,10 @@ class Settings(BaseSettings):
     email_user: Optional[str] = None
     email_pass: Optional[str] = None
 
+    # Bot identity — overridden by BOT_ID / BOT_CONFIG_PATH env vars
+    bot_id: str = "legislation_bot"
+    bot_config_path: str = ""
+
     class Config:
         env_file = ".env"
         env_case_sensitive = False

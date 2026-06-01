@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 from sqlalchemy import (
     Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, text
 )
@@ -204,6 +205,19 @@ class MatterNote(Base):
     __table_args__ = (
         Index('idx_matter_notes_matter', 'matter_id', 'created_at'),
     )
+
+
+class PeerBot(Base):
+    __tablename__ = "peer_bots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    peer_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    base_url: Mapped[str] = mapped_column(String(256), nullable=False)
+    api_key: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class Document(Base):
