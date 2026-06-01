@@ -18,7 +18,7 @@ AILA (AI Legal Assistant) is an AI-powered legal research assistant for a **UK g
 - OpenRouter requires outbound internet to `openrouter.ai` — works on the target if that address is whitelisted
 
 ## Active Branch
-All work happens on **`main`**, which is also the branch the server pulls from.
+Current feature branch: **`feature/multi-bot-federation`** — merge to `main` when testing is complete. `main` is the branch the server pulls from.
 
 ## Key Architectural Decisions
 
@@ -52,6 +52,19 @@ The Worker's research pipeline has been tuned to minimise unnecessary LLM calls 
 - **Model quality is the dominant variable** — A capable instruction-following model (e.g. Gemini Flash on OpenRouter) will correctly batch Phase 2 calls, use combined queries, and complete an 8-Act research query in ~90 seconds. A weaker model (e.g. free-tier Nemotron) ignores batching instructions, makes sequential single calls with duplicate `legislation_id`s, and produces bloated context — with the same infrastructure but ~10× worse performance.
 - **Phase 2 nudge** — After each `search_legislation` result is processed, a `[NEXT STEP: Call search_legislation_sections...]` instruction with extracted `legislation_id`s is appended to the tool result. This ensures the model proceeds to Phase 2 even if the system prompt instruction is not followed precisely.
 
+### Federation System
+Multiple specialised bots (each a separate FastAPI process + DB) can consult each other via `POST /api/consult`. The calling Manager agent gets a `consult_peer` tool injected alongside `delegate_research` — but only when at least one enabled peer is registered. With zero peers, behaviour is identical to today.
+
+Key design decisions:
+- **`peer_bots` DB table** — stores peer registry; managed via Admin Portal → Federation tab or `POST/PUT/DELETE /api/peers`
+- **`bot_config.json`** — each bot has an identity file (`bot_id`, `name`, `tagline`, `logo_path`) and an optional `peer_registry_seed` list loaded on startup (insert-or-ignore by `peer_id`). Path set via `BOT_CONFIG_PATH` env var.
+- **`get_manager_tools(peer_descriptions)`** in `tools.py` — builds the manager tool list dynamically. Returns the same list as the old hardcoded `MANAGER_TOOLS` when `peer_descriptions` is empty; appends `consult_peer` when peers exist.
+- **Depth limit** — `ConsultRequest.depth` is incremented by the caller. Any request arriving with `depth >= 2` gets HTTP 422 immediately — prevents A→B→C cascade loops.
+- **`api_key` is write-only** — stored in `peer_bots.api_key`; never returned by any API response (treat like a password).
+- **`/api/consult` is synchronous JSON** (not SSE) — the calling Manager blocks until the full peer answer is returned before synthesising its response.
+- **Identity endpoints** — `GET /api/bot-info` (no auth) returns `bot_id`, `name`, `tagline`; `GET /api/bot/logo` streams the logo file. Frontend fetches these on mount and uses them for dynamic branding.
+- **Local dev** — see `deployment/LOCAL_SETUP.md` for running multiple bots on one machine. `deployment/local/` is gitignored (holds per-machine `active_bots.txt` and `shared.env`).
+
 ### Other
 - Python deps are installed **globally** (no venv) on the target — the offline installer uses `pip install` directly
 - The frontend is **pre-built on the dev machine** and committed including `client/dist/` — the target has no Node.js
@@ -75,6 +88,8 @@ The Worker's research pipeline has been tuned to minimise unnecessary LLM calls 
 | `OPENROUTER_BASE_URL` | OpenRouter endpoint | `https://openrouter.ai/api/v1` |
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://lexuser:lexpassword@localhost:5432/lexchat` |
 | `JWT_SECRET` | Auth token signing key | `dev_secret_key_change_me` |
+| `BOT_ID` | This bot's identifier (used by `/api/bot-info` fallback) | `legislation_bot` |
+| `BOT_CONFIG_PATH` | Path to `bot_config.json` relative to repo root | *(blank — identity not loaded)* |
 
 All `.env` values are startup defaults only. Provider-specific settings (base URL, API key, model, temperature, concurrency) can be overridden at runtime via Admin Portal → Developer tab and are persisted in the DB.
 
@@ -121,21 +136,30 @@ The full token/component reference lives at `client/src/design-system.md`. **Rea
 ## Key Files
 | File | Purpose |
 |---|---|
-| `client/src/App.jsx` | Main frontend app — chat UI, favicon swap, dynamic model fetch, post-login notice gate |
+| `client/src/App.jsx` | Main frontend app — chat UI, favicon swap, dynamic model fetch, dynamic bot branding, post-login notice gate |
 | `client/src/components/DataSensitivityNotice.jsx` | Post-login splash screen — data sensitivity warning shown on every login session |
 | `client/src/design-system.md` | Design token reference — colours, typography, button/component patterns |
-| `client/src/pages/AdminPortal.jsx` | Admin portal including Developer tab with provider config panel |
+| `client/src/pages/AdminPortal.jsx` | Admin portal including Developer tab (provider config) and Federation tab (peer registry CRUD) |
 | `client/src/pages/Settings.jsx` | Account settings page — change password form |
-| `server_py/src/config.py` | `MODEL_LIST`, `OPENROUTER_MODEL_LIST`, system prompts, app settings |
-| `server_py/src/agent/tools.py` | LEX API tool schemas, `_slim_search_results`, `execute_worker_tool` |
+| `server_py/src/config.py` | `MODEL_LIST`, `OPENROUTER_MODEL_LIST`, system prompts, app settings; `bot_id`/`bot_config_path` |
+| `server_py/src/agent/tools.py` | LEX API tool schemas, `_slim_search_results`, `get_manager_tools(peer_descriptions)` |
 | `server_py/src/agent/agent_shared.py` | Shared worker tool execution pipeline (used by both provider clients) |
-| `server_py/src/agent/ollama_client.py` | Ollama agent implementation (chat_loop, worker, summarisation) |
-| `server_py/src/agent/openrouter_client.py` | OpenRouter agent implementation (OpenAI-compatible) |
+| `server_py/src/agent/ollama_client.py` | Ollama agent implementation (chat_loop, worker, summarisation, federation) |
+| `server_py/src/agent/openrouter_client.py` | OpenRouter agent implementation (OpenAI-compatible, federation) |
 | `server_py/src/agent/provider_factory.py` | Provider resolution, ContextVar config, queue/semaphore caches; `get_summarise_model()` |
+| `server_py/src/agent/federation_client.py` | `load_peer_registry`, `build_peer_descriptions`, `consult_peer`; `ConsultRequest`/`ConsultResponse` |
 | `server_py/src/routers/ai.py` | `/api/models` and `/api/chat` endpoints |
 | `server_py/src/routers/developer.py` | Developer-only endpoints including provider config GET/POST and `GET /developer/activity-log` |
-| `server_py/src/models.py` | SQLAlchemy models — includes `AppSetting`, `Chat.provider`, `Message.model/provider`, `ActivityLog` |
+| `server_py/src/routers/identity.py` | `GET /api/bot-info`, `GET /api/bot/logo` — no auth required |
+| `server_py/src/routers/federation.py` | `POST /api/consult` — receives peer consultation requests |
+| `server_py/src/routers/peers.py` | Admin CRUD for peer registry — `api_key` never returned |
+| `server_py/src/models.py` | SQLAlchemy models — includes `AppSetting`, `Chat.provider`, `Message.model/provider`, `ActivityLog`, `PeerBot` |
 | `client/src/components/ActivityLogModal.jsx` | Admin activity log modal — unified feed of logins, queries, feedback, surveys, errors; auto-refreshes every 10 min |
+| `bots/legislation/bot_config.json` | Legislation bot identity + peer seed (default/template bot config) |
+| `bots/parliament/bot_config.json` | Parliament bot identity stub |
+| `shared/scripts/new_bot.ps1` | Provision a new bot from the legislation template |
+| `shared/scripts/register_peer.ps1` | Register a peer bot via the admin API |
+| `deployment/LOCAL_SETUP.md` | Multi-bot local dev workflow |
 | `deployment/NATIVE_DEPLOYMENT.md` | Full deployment reference |
 
 ## Admin Portal — Developer Tab
@@ -144,6 +168,13 @@ Available to the `admin` user only. Contains:
 - **Activity Log** — unified feed of user logins, queries submitted, feedback ratings, survey responses, and service health errors; filterable by time range; auto-refreshes every 10 minutes; powered by `GET /developer/activity-log`
 - **Synthetic Data Generation** — seed 100 test users with 6 months of chat history
 - **Danger Zone** — wipe all data except the admin account
+
+## Admin Portal — Federation Tab
+Available to the `admin` user only. Contains:
+- **Peer table** — lists all registered peers with name, peer_id, base URL, description, API key indicator, and enable/disable toggle
+- **Delete** — removes a peer from the registry immediately
+- **Add Peer form** — `peer_id`, `name`, `base_url`, `api_key` (password field, write-only), `description`, `enabled` checkbox
+- API key is **never displayed** after save — `has_api_key: true/false` indicator only
 
 ## Activity Log
 - DB table: `activity_log` (columns: `id`, `event_type`, `username`, `description`, `created_at`); index on `created_at`
@@ -161,6 +192,13 @@ Available to the `admin` user only. Contains:
 - Component: `client/src/components/DataSensitivityNotice.jsx`
 
 ## Favicon Behaviour
-- Static: `client/public/favicon.png` (first frame of spinner GIF)
+- On mount: attempts `GET /api/bot/logo` — if the file exists, swaps favicon to it; falls back to `/favicon.svg` silently
 - While AI is generating: swaps to animated canvas spinner driven by `requestAnimationFrame`
-- Logic is in a `useEffect` watching the `loading` state in `App.jsx`
+- On load complete: reverts to `/favicon.svg` (or bot logo on next mount)
+- Logic is in two `useEffect`s in `App.jsx` — one watching `loading`, one running once on mount
+
+## Bot Identity & Branding
+- `GET /api/bot-info` (no auth) — returns `bot_id`, `name`, `tagline` from `bot_config.json` loaded at startup
+- `App.jsx` fetches bot info on mount: sets `document.title` and `botInfo` state; all "AILA" labels in the UI use `{botInfo.name}` (default `'AILA'` if the request fails)
+- `GET /api/bot/logo` — streams `bot_identity.logo_path`; 404 if not configured or file missing
+- `BOT_CONFIG_PATH` env var → path to `bot_config.json` relative to repo root; if unset, identity is not loaded and defaults apply
