@@ -3,7 +3,8 @@
     "bot_id": "legislation_bot",
     "name": "AILA",
     "tagline": "AI Legal Assistant — UK Legislation",
-    "logo_path": "bots/legislation/assets/logo.png"
+    "logo_path": "bots/legislation/assets/logo.svg",
+    "logo_emoji": "⚖"
   },
   "agent": {
     "research_mode": "legislation_only"

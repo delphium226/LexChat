@@ -229,7 +229,8 @@ function AppContent() {
   });
 
   // ── Bot identity ─────────────────────────────────────────────
-  const [botInfo, setBotInfo] = useState({ name: 'AILA', tagline: 'AI Legal Assistant' });
+  const [botInfo, setBotInfo] = useState({ name: 'AILA', tagline: 'AI Legal Assistant', brandColor: null, logoEmoji: null });
+  const [botLogoUrl, setBotLogoUrl] = useState(null);
 
   // ── Document state ───────────────────────────────────────────
   const [chatDocuments, setChatDocuments] = useState([]);
@@ -260,17 +261,18 @@ function AppContent() {
   useEffect(() => {
     fetchBotInfo().then(info => {
       if (info?.name) {
-        setBotInfo({ name: info.name, tagline: info.tagline || '' });
+        setBotInfo({ name: info.name, tagline: info.tagline || '', brandColor: info.brand_color || null, logoEmoji: info.logo_emoji || null });
         document.title = info.name;
       }
-      // Swap favicon to bot logo; fall back silently on 404
+      // Swap favicon to bot logo and track URL for in-app display; fall back silently on 404
       const favicon = document.querySelector("link[rel='icon']");
-      if (favicon) {
-        const img = new Image();
-        img.onload = () => { favicon.href = '/api/bot/logo'; };
-        img.onerror = () => {};
-        img.src = '/api/bot/logo';
-      }
+      const img = new Image();
+      img.onload = () => {
+        if (favicon) favicon.href = '/api/bot/logo';
+        setBotLogoUrl('/api/bot/logo');
+      };
+      img.onerror = () => {};
+      img.src = '/api/bot/logo';
     }).catch(() => {});
   }, []);
 
@@ -330,7 +332,7 @@ function AppContent() {
   useEffect(() => {
     const favicon = document.querySelector("link[rel='icon']");
     if (!favicon) return;
-    if (!loading) { favicon.href = '/favicon.svg'; return; }
+    if (!loading) { favicon.href = botLogoUrl || '/favicon.svg'; return; }
 
     const canvas = document.createElement('canvas');
     canvas.width = 32; canvas.height = 32;
@@ -350,8 +352,8 @@ function AppContent() {
     };
 
     animId = requestAnimationFrame(draw);
-    return () => { cancelAnimationFrame(animId); favicon.href = '/favicon.svg'; };
-  }, [loading]);
+    return () => { cancelAnimationFrame(animId); favicon.href = botLogoUrl || '/favicon.svg'; };
+  }, [loading, botLogoUrl]);
 
   // Reset on logout
   useEffect(() => {
@@ -779,9 +781,9 @@ function AppContent() {
 
   // ── Auth gate ─────────────────────────────────────────────────
 
-  if (!user) return <LoginModal />;
+  if (!user) return <LoginModal botName={botInfo.name} botLogoEmoji={botInfo.logoEmoji} />;
 
-  if (!noticeAcknowledged) return <DataSensitivityNotice onAcknowledge={() => setNoticeAcknowledged(true)} />;
+  if (!noticeAcknowledged) return <DataSensitivityNotice onAcknowledge={() => setNoticeAcknowledged(true)} botName={botInfo.name} botLogoEmoji={botInfo.logoEmoji} />;
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -814,8 +816,10 @@ function AppContent() {
           flexShrink: 0,
         }}>
           {sidebarCollapsed
-            ? <LexMark size={20} color="var(--accent)" />
-            : <LexWordmark size={16} />
+            ? (botInfo.logoEmoji
+                ? <span style={{ fontSize: 20, lineHeight: 1, userSelect: 'none' }} aria-hidden="true">{botInfo.logoEmoji}</span>
+                : <LexMark size={20} color={botInfo.brandColor || 'var(--accent)'} />)
+            : <LexWordmark size={16} name={botInfo.name} color={botInfo.brandColor || undefined} logoEmoji={botInfo.logoEmoji || undefined} />
           }
           {!sidebarCollapsed && (
             <IBtn label="Collapse sidebar" onClick={toggleSidebar}><SidebarIcon /></IBtn>
@@ -1144,6 +1148,7 @@ function AppContent() {
                 {showWeeklyBanner && (
                   <WeeklyFeedbackBanner
                     userId={user.id}
+                    botName={botInfo.name}
                     onClose={() => setShowWeeklyBanner(false)}
                     onSubmitted={() => {
                       localStorage.setItem(`weeklyFeedbackSubmitted_${user.id}`, Date.now().toString());
@@ -1187,7 +1192,10 @@ function AppContent() {
                 {messages.length === 0 && !loading && (
                   <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--ink-400)' }}>
                     <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center' }}>
-                      <LexMark size={40} color="var(--ink-300)" />
+                      {botInfo.logoEmoji
+                        ? <span style={{ fontSize: 40, lineHeight: 1, opacity: 0.4, userSelect: 'none' }} aria-hidden="true">{botInfo.logoEmoji}</span>
+                        : <LexMark size={40} color="var(--ink-300)" />
+                      }
                     </div>
                     <p style={{ fontSize: 14, margin: 0 }}>Ask about UK legislation or case law to begin.</p>
                   </div>
@@ -1750,8 +1758,11 @@ function AppContent() {
         <div className="fixed inset-0 bg-ink-950/50 flex items-center justify-center p-4 z-50">
           <div className="bg-paper rounded-lg p-6 max-w-2xl w-full shadow-xl">
             <div className="flex items-center justify-center gap-2 mb-4">
-              <LexMark size={32} color="var(--accent)" />
-              <h1 className="text-3xl font-bold text-accent">{botInfo.name}</h1>
+              {botInfo.logoEmoji
+                ? <span style={{ fontSize: 32, lineHeight: 1, userSelect: 'none' }} aria-hidden="true">{botInfo.logoEmoji}</span>
+                : <LexMark size={32} color={botInfo.brandColor || 'var(--accent)'} />
+              }
+              <h1 className="text-3xl font-bold" style={{ color: botInfo.brandColor || 'var(--accent)' }}>{botInfo.name}</h1>
             </div>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-ink-900">About {botInfo.name}</h2>
@@ -1817,6 +1828,7 @@ function AppContent() {
         isOpen={showSettingsMenu}
         onClose={() => setShowSettingsMenu(false)}
         user={user}
+        botName={botInfo.name}
         darkMode={darkMode}
         onToggleDarkMode={async () => {
           const next = !darkMode;

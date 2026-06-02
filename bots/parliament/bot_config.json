@@ -1,9 +1,11 @@
 {
   "bot_identity": {
     "bot_id": "parliament_bot",
-    "name": "Parliament Bot",
+    "name": "Parli Chat",
     "tagline": "UK Parliamentary Records & Debates",
-    "logo_path": "bots/parliament/assets/logo.png"
+    "logo_path": "bots/parliament/assets/logo.svg",
+    "logo_emoji": "🏛️",
+    "brand_color": "#B8860B"
   },
   "agent": {
     "research_mode": "parliamentary_records"

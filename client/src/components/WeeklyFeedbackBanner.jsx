@@ -15,7 +15,7 @@ const labelStyle = {
   marginBottom: 5, display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em',
 };
 
-const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted }) => {
+const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted, botName = 'AILA' }) => {
   const [timeWithout, setTimeWithout] = useState('');
   const [timeSaved, setTimeSaved] = useState('');
   const [confidence, setConfidence] = useState(null);
@@ -63,7 +63,7 @@ const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted }) => {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)', marginBottom: 12 }}>
-            How is AILA working for you this week?
+            How is {botName} working for you this week?
           </div>
 
           {status === 'success' ? (
@@ -108,7 +108,7 @@ const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted }) => {
 
               {/* Q3: Confidence */}
               <div style={{ marginBottom: 14 }}>
-                <label style={labelStyle}>Confidence in AILA's answers</label>
+                <label style={labelStyle}>Confidence in {botName}'s answers</label>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {[1, 2, 3, 4, 5].map(n => (
                     <button
@@ -140,7 +140,7 @@ const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted }) => {
 
               {/* Q4: Usability */}
               <div style={{ marginBottom: 14 }}>
-                <label style={labelStyle}>How easy was it to use AILA?</label>
+                <label style={labelStyle}>How easy was it to use {botName}?</label>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {[1, 2, 3, 4, 5].map(n => (
                     <button

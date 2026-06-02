@@ -10,7 +10,8 @@ const SettingsMenuModal = ({
     onOpenAdminPortal,
     onOpenAbout,
     onOpenDataSources,
-    onLogout
+    onLogout,
+    botName = 'AILA',
 }) => {
     if (!isOpen) return null;
 
@@ -84,7 +85,7 @@ const SettingsMenuModal = ({
                         onClick={() => { onOpenAbout(); onClose(); }}
                         className="w-full text-left px-4 py-3 rounded-md hover:bg-ink-100 text-ink-700 transition-colors flex items-center gap-3"
                     >
-                        <span className="font-medium">About AILA</span>
+                        <span className="font-medium">About {botName}</span>
                     </button>
 
                     <div className="border-t border-ink-100 my-1 mx-2"></div>

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#2563eb">
+  <!-- Top ornament -->
+  <circle cx="32" cy="10" r="5"/>
+
+  <!-- Central pillar -->
+  <rect x="29.5" y="14" width="5" height="42"/>
+
+  <!-- Balance beam -->
+  <rect x="5" y="21" width="54" height="4"/>
+
+  <!-- Left chain -->
+  <rect x="8.5" y="25" width="2.5" height="14"/>
+
+  <!-- Right chain -->
+  <rect x="53" y="25" width="2.5" height="14"/>
+
+  <!-- Left pan (shallow bowl) -->
+  <path d="M2,39 Q10.5,51 19,39 Z"/>
+
+  <!-- Right pan (shallow bowl) -->
+  <path d="M45,39 Q53.75,51 63,39 Z"/>
+
+  <!-- Base -->
+  <rect x="24" y="56" width="16" height="5" rx="2.5"/>
+</svg>
