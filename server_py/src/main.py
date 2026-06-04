@@ -17,7 +17,7 @@ from .services.health_service import background_health_loop
 from .utils.logger import setup_logging
 
 # Initialise structured logging before anything else
-setup_logging()
+setup_logging(bot_id=settings.bot_id)
 
 logger = logging.getLogger("app")
 http_logger = logging.getLogger("http")

@@ -9,10 +9,9 @@ from typing import AsyncGenerator, Callable, Optional
 import httpx
 
 from ..config import (
-    MANAGER_SYSTEM_PROMPT,
     OPENROUTER_MODEL_LIST,
     WORKER_SYSTEM_PROMPT,
-    get_manager_mode_note,
+    get_manager_system_prompt,
     get_worker_system_prompt,
     settings,
 )
@@ -387,6 +386,8 @@ async def run_worker_agent(
 
     worker_tools = get_worker_tools(research_mode)
     source_accumulator: list = []
+    # Limit Hansard searches so the model proceeds to Phase 2 instead of looping.
+    search_budget = {"remaining": 2} if research_mode == "parliamentary_records" else None
 
     async def worker_tool_executor(name: str, args: dict) -> str:
         return await run_worker_tool(
@@ -394,6 +395,7 @@ async def run_worker_agent(
             parent_on_chunk=parent_on_chunk,
             timing_collector=timing_collector,
             source_accumulator=source_accumulator,
+            search_budget=search_budget,
         )
 
     result = await chat_loop(
@@ -429,8 +431,7 @@ async def process_user_request(
 ) -> dict:
     _cfg = _get_cfg()
     research_mode = _cfg.get("_research_mode", "legislation_only")
-    mode_note = get_manager_mode_note(research_mode, _cfg)
-    system_content = (mode_note + "\n\n" + MANAGER_SYSTEM_PROMPT) if mode_note else MANAGER_SYSTEM_PROMPT
+    system_content = get_manager_system_prompt(research_mode, _cfg)
 
     doc_context = _cfg.get("_doc_context", "")
     if doc_context:

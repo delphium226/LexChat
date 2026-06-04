@@ -67,32 +67,39 @@ def _create_console_handler(level=logging.INFO) -> logging.StreamHandler:
     return handler
 
 
-def setup_logging():
+def setup_logging(bot_id: str = ""):
     """Configure structured logging for the application.
 
     Creates three loggers mirroring the Node.js Winston setup:
     - app: General application logs
     - agent: AI/tool activity logs
     - http: HTTP request/response logs
+
+    When bot_id is supplied, log files are prefixed with "<bot_id>_" so that
+    multiple bot processes sharing the same logs/ directory write to separate
+    files and avoid Windows file-lock conflicts on TimedRotatingFileHandler.
     """
     _enable_windows_ansi()
+    prefix = f"{bot_id}_" if bot_id else ""
+
     # App logger
     app_logger = logging.getLogger("app")
     app_logger.setLevel(logging.INFO)
-    app_logger.addHandler(_create_file_handler("app.log"))
-    app_logger.addHandler(_create_file_handler("error.log", logging.ERROR))
+    app_logger.addHandler(_create_file_handler(f"{prefix}app.log"))
+    app_logger.addHandler(_create_file_handler(f"{prefix}error.log", logging.ERROR))
     app_logger.addHandler(_create_console_handler())
 
     # Agent logger
     agent_logger = logging.getLogger("agent")
     agent_logger.setLevel(logging.INFO)
-    agent_logger.addHandler(_create_file_handler("agent.log"))
+    agent_logger.addHandler(_create_file_handler(f"{prefix}agent.log"))
+    agent_logger.addHandler(_create_file_handler(f"{prefix}error.log", logging.ERROR))
     agent_logger.addHandler(_create_console_handler())
 
     # HTTP logger
     http_logger = logging.getLogger("http")
     http_logger.setLevel(logging.INFO)
-    http_logger.addHandler(_create_file_handler("http.log"))
+    http_logger.addHandler(_create_file_handler(f"{prefix}http.log"))
 
     # Suppress noisy third-party loggers
     logging.getLogger("httpx").setLevel(logging.WARNING)

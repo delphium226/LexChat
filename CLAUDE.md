@@ -52,6 +52,17 @@ The Worker's research pipeline has been tuned to minimise unnecessary LLM calls 
 - **Model quality is the dominant variable** — A capable instruction-following model (e.g. Gemini Flash on OpenRouter) will correctly batch Phase 2 calls, use combined queries, and complete an 8-Act research query in ~90 seconds. A weaker model (e.g. free-tier Nemotron) ignores batching instructions, makes sequential single calls with duplicate `legislation_id`s, and produces bloated context — with the same infrastructure but ~10× worse performance.
 - **Phase 2 nudge** — After each `search_legislation` result is processed, a `[NEXT STEP: Call search_legislation_sections...]` instruction with extracted `legislation_id`s is appended to the tool result. This ensures the model proceeds to Phase 2 even if the system prompt instruction is not followed precisely.
 
+### Parliamentary Research Worker Optimisations
+When `research_mode == "parliamentary_records"` (set via `RESEARCH_MODE` env var for the parliament bot), the Worker uses `PARLIAMENT_TOOLS` instead of `WORKER_TOOLS`. Key design decisions:
+
+- **Parliament tool set** — `search_hansard`, `get_hansard_debate`, `get_member_info`, `search_bills`, `search_scottish_parliament`. Wired via `get_worker_tools("parliamentary_records")` in `tools.py`.
+- **TWFY API limitation** — `getHansard` does **not** support date range filtering. The `date_from`/`date_to` schema params are accepted but not forwarded to the API (they are silently ignored by the endpoint). Results are always ordered by date (most recent first), regardless of any date constraints. The model is informed of this in the system prompt.
+- **Search budget** — `run_worker_agent` creates `search_budget = {"remaining": 2}` for `parliamentary_records` mode and passes it to every `run_worker_tool` call. When the budget hits 0, `run_worker_tool` returns a hard-stop JSON message instead of calling the API, forcing the model to proceed to Phase 2. Without this cap, weaker models loop on `search_hansard` indefinitely (10–15 calls) because TWFY returns recent debates by date rather than by relevance, so results often look irrelevant to the query.
+- **Debate title extraction** — `_slim_hansard_results` extracts debate titles from `speech.parent.body` (not `speech.debate`, which is always empty). The `parent.body` field is HTML so it is run through `_strip_html` (which calls `html.unescape`).
+- **`debate_type` hint** — The slimmed result includes a `debate_type` field (`"lords"`, `"wrans"`, `"wms"`, or `"debates"`) detected from `speech.listurl`. The model passes this when calling `get_hansard_debate`, ensuring the correct TWFY endpoint is used (`getLords`, `getWrans`, or `getDebates`).
+- **Phase 2 nudge** — After each `search_hansard` result, a `[MANDATORY NEXT STEP — DO NOT call search_hansard again...]` instruction listing the returned gids and their `debate_type` values is appended to the tool result. This reinforces the search budget stop.
+- **TWFY API key** — Set via `TWFY_API_KEY` env var (free key from theyworkforyou.com/api/key). Required for `search_hansard`, `get_hansard_debate`, and `search_scottish_parliament`. If missing, those tools return a clear error.
+
 ### Federation System
 Multiple specialised bots (each a separate FastAPI process + DB) can consult each other via `POST /api/consult`. The calling Manager agent gets a `consult_peer` tool injected alongside `delegate_research` — but only when at least one enabled peer is registered. With zero peers, behaviour is identical to today.
 
@@ -64,6 +75,8 @@ Key design decisions:
 - **`/api/consult` is synchronous JSON** (not SSE) — the calling Manager blocks until the full peer answer is returned before synthesising its response.
 - **Identity endpoints** — `GET /api/bot-info` (no auth) returns `bot_id`, `name`, `tagline`; `GET /api/bot/logo` streams the logo file. Frontend fetches these on mount and uses them for dynamic branding.
 - **Local dev** — see `deployment/LOCAL_SETUP.md` for running multiple bots on one machine. `deployment/local/` is gitignored (holds per-machine `active_bots.txt` and `shared.env`).
+- **Parliament bot DB** — `lexchat_parliament` (set in `bots/parliament/.env`). `start_federation_dev.ps1` creates this DB automatically. The script loads `bots/parliament/.env` first, then overrides `BOT_ID` and `BOT_CONFIG_PATH` with absolute paths so the relative path in the `.env` file doesn't win.
+- **`BOT_CONFIG_PATH` note** — uvicorn runs from `server_py/`, so `os.path.abspath(path)` resolves relative paths relative to `server_py/`. The federation dev script sets this to an absolute path to avoid the ambiguity.
 
 ### Other
 - Python deps are installed **globally** (no venv) on the target — the offline installer uses `pip install` directly
@@ -89,7 +102,9 @@ Key design decisions:
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://lexuser:lexpassword@localhost:5432/lexchat` |
 | `JWT_SECRET` | Auth token signing key | `dev_secret_key_change_me` |
 | `BOT_ID` | This bot's identifier (used by `/api/bot-info` fallback) | `legislation_bot` |
-| `BOT_CONFIG_PATH` | Path to `bot_config.json` relative to repo root | *(blank — identity not loaded)* |
+| `BOT_CONFIG_PATH` | Path to `bot_config.json`; resolved relative to CWD (uvicorn runs from `server_py/`) | *(blank — identity not loaded)* |
+| `RESEARCH_MODE` | Override research mode for this bot instance; set to `parliamentary_records` for the parliament bot | *(blank — uses frontend value)* |
+| `TWFY_API_KEY` | TheyWorkForYou API key for Hansard/parliamentary tools; free at theyworkforyou.com/api/key | *(blank)* |
 
 All `.env` values are startup defaults only. Provider-specific settings (base URL, API key, model, temperature, concurrency) can be overridden at runtime via Admin Portal → Developer tab and are persisted in the DB.
 
@@ -142,8 +157,8 @@ The full token/component reference lives at `client/src/design-system.md`. **Rea
 | `client/src/pages/AdminPortal.jsx` | Admin portal including Developer tab (provider config) and Federation tab (peer registry CRUD) |
 | `client/src/pages/Settings.jsx` | Account settings page — change password form |
 | `server_py/src/config.py` | `MODEL_LIST`, `OPENROUTER_MODEL_LIST`, system prompts, app settings; `bot_id`/`bot_config_path` |
-| `server_py/src/agent/tools.py` | LEX API tool schemas, `_slim_search_results`, `get_manager_tools(peer_descriptions)` |
-| `server_py/src/agent/agent_shared.py` | Shared worker tool execution pipeline (used by both provider clients) |
+| `server_py/src/agent/tools.py` | LEX API tool schemas, `_slim_search_results`, parliament tools (`PARLIAMENT_TOOLS`, `execute_parliament_tool`, `_slim_hansard_results`), `get_manager_tools(peer_descriptions)`, `get_worker_tools(research_mode)` |
+| `server_py/src/agent/agent_shared.py` | Shared worker tool execution pipeline; `run_worker_tool` (includes `search_budget` enforcement for parliamentary mode) |
 | `server_py/src/agent/ollama_client.py` | Ollama agent implementation (chat_loop, worker, summarisation, federation) |
 | `server_py/src/agent/openrouter_client.py` | OpenRouter agent implementation (OpenAI-compatible, federation) |
 | `server_py/src/agent/provider_factory.py` | Provider resolution, ContextVar config, queue/semaphore caches; `get_summarise_model()` |
@@ -156,7 +171,8 @@ The full token/component reference lives at `client/src/design-system.md`. **Rea
 | `server_py/src/models.py` | SQLAlchemy models — includes `AppSetting`, `Chat.provider`, `Message.model/provider`, `ActivityLog`, `PeerBot` |
 | `client/src/components/ActivityLogModal.jsx` | Admin activity log modal — unified feed of logins, queries, feedback, surveys, errors; auto-refreshes every 10 min |
 | `bots/legislation/bot_config.json` | Legislation bot identity + peer seed (default/template bot config) |
-| `bots/parliament/bot_config.json` | Parliament bot identity stub |
+| `bots/parliament/bot_config.json` | Parliament bot identity; `research_mode: "parliamentary_records"` under `agent` key |
+| `bots/parliament/.env` | Parliament bot env overrides — `RESEARCH_MODE`, `TWFY_API_KEY`, `DATABASE_URL` (`lexchat_parliament`), `PORT=8001` |
 | `shared/scripts/new_bot.ps1` | Provision a new bot from the legislation template |
 | `shared/scripts/register_peer.ps1` | Register a peer bot via the admin API |
 | `deployment/LOCAL_SETUP.md` | Multi-bot local dev workflow |

@@ -12,7 +12,12 @@ import uuid
 from typing import Callable, Optional
 
 from .summarisation import call_chunk, summarise_for_query
-from .tools import execute_worker_tool, extract_legislation_ids_from_search
+from .tools import (
+    execute_worker_tool,
+    execute_parliament_tool,
+    extract_legislation_ids_from_search,
+    _PARLIAMENT_TOOL_NAMES,
+)
 
 logger = logging.getLogger("agent")
 
@@ -132,6 +137,48 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                 "url": url,
             })
 
+    elif name in ("search_hansard", "search_scottish_parliament"):
+        for speech in data.get("results", []):
+            url = speech.get("url", "")
+            if url and any(s.get("url") == url for s in accumulator):
+                continue
+            accumulator.append({
+                "kind": "Hansard",
+                "title": speech.get("debate", ""),
+                "sub": speech.get("speaker", ""),
+                "meta": speech.get("hdate", ""),
+                "cite": f"{speech.get('speaker', '')}, {speech.get('hdate', '')}",
+                "url": url,
+            })
+
+    elif name == "search_bills":
+        for bill in data.get("results", []):
+            url = bill.get("url", "")
+            if url and any(s.get("url") == url for s in accumulator):
+                continue
+            accumulator.append({
+                "kind": "Bill",
+                "title": bill.get("shortTitle", ""),
+                "sub": bill.get("currentStage", ""),
+                "meta": bill.get("currentHouse", ""),
+                "cite": bill.get("shortTitle", ""),
+                "url": url,
+            })
+
+    elif name == "get_member_info":
+        for member in data.get("results", []):
+            url = member.get("url", "")
+            if url and any(s.get("url") == url for s in accumulator):
+                continue
+            accumulator.append({
+                "kind": "Member",
+                "title": member.get("name", ""),
+                "sub": member.get("party", ""),
+                "meta": member.get("constituency", ""),
+                "cite": member.get("name", ""),
+                "url": url,
+            })
+
 
 async def run_worker_tool(
     name: str,
@@ -142,6 +189,7 @@ async def run_worker_tool(
     parent_on_chunk: Optional[Callable] = None,
     timing_collector=None,
     source_accumulator: Optional[list] = None,
+    search_budget: Optional[dict] = None,
 ) -> str:
     """Execute a single Worker tool call and return the (possibly summarised) result.
 
@@ -158,10 +206,36 @@ async def run_worker_tool(
     """
     activity_id = uuid.uuid4().hex[:8]
 
+    # Parliamentary search budget: after the allowed number of search_hansard /
+    # search_scottish_parliament calls, return a hard-stop message so the model
+    # proceeds to get_hansard_debate instead of looping indefinitely.
+    _PARLIAMENT_SEARCH_TOOLS = {"search_hansard", "search_scottish_parliament"}
+    if search_budget is not None and name in _PARLIAMENT_SEARCH_TOOLS:
+        if search_budget["remaining"] <= 0:
+            stop_msg = json.dumps({
+                "notice": "Search limit reached — you have already performed the maximum number of Hansard searches.",
+                "instruction": (
+                    "STOP calling search_hansard or search_scottish_parliament. "
+                    "You MUST now either: (a) call get_hansard_debate with gid(s) from your previous "
+                    "search results to retrieve full text, or (b) if no results were found at all, "
+                    "synthesize your answer stating that no relevant Hansard records were found."
+                ),
+                "results": [],
+                "total": 0,
+            })
+            if parent_on_chunk:
+                await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
+                await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Search limit reached"})
+            return stop_msg
+        search_budget["remaining"] -= 1
+
     if parent_on_chunk:
         await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
 
-    result = await execute_worker_tool(name, args, on_chunk=parent_on_chunk, timing_collector=timing_collector)
+    if name in _PARLIAMENT_TOOL_NAMES:
+        result = await execute_parliament_tool(name, args, on_chunk=parent_on_chunk, timing_collector=timing_collector)
+    else:
+        result = await execute_worker_tool(name, args, on_chunk=parent_on_chunk, timing_collector=timing_collector)
 
     # Extract sources from the raw structured response BEFORE summarisation compresses it.
     if source_accumulator is not None:
@@ -186,6 +260,61 @@ async def run_worker_tool(
                     f"\n\n[Found {n} result(s) above. If these adequately cover the question, "
                     f"proceed to SYNTHESISE your answer now. Only search further if important "
                     f"aspects of the question are not yet covered.]"
+                )
+        except Exception:
+            pass
+
+    # For search_hansard / search_scottish_parliament: inject a mandatory Phase 2 nudge.
+    # The model must call get_hansard_debate before composing its answer. Without this
+    # nudge weaker models re-search instead of retrieving full text.
+    hansard_phase2_note = ""
+    if name == "search_hansard":
+        try:
+            raw_data = json.loads(result)
+            results = raw_data.get("results", [])
+            if results:
+                gid_lines = "\n".join(
+                    f'  - gid: "{r["gid"]}"  debate_type: "{r.get("debate_type","debates")}"  ({r.get("speaker", "Unknown")}, {r.get("hdate", "")} — {r.get("debate", "Unknown debate")})'
+                    for r in results[:5]
+                    if r.get("gid")
+                )
+                hansard_phase2_note = (
+                    f"\n\n[MANDATORY NEXT STEP — DO NOT call search_hansard again. "
+                    f"Call get_hansard_debate NOW for the 1-3 most relevant results below to retrieve full speech text. "
+                    f"Only call search_hansard again if you received ZERO results. "
+                    f"Pass the debate_type field alongside gid so the correct endpoint is used:\n{gid_lines}]"
+                )
+            else:
+                hansard_phase2_note = (
+                    "\n\n[This search returned 0 results. You may retry search_hansard with "
+                    "different or broader keywords. If after 2 searches you still have 0 results, "
+                    "state that no relevant Hansard records were found and compose your answer.]"
+                )
+        except Exception:
+            pass
+
+    sp_phase2_note = ""
+    if name == "search_scottish_parliament":
+        try:
+            raw_data = json.loads(result)
+            results = raw_data.get("results", [])
+            if results:
+                gid_lines = "\n".join(
+                    f'  - gid: "{r["gid"]}"  debate_type: "{r.get("debate_type","sp")}"  ({r.get("speaker", "Unknown")}, {r.get("hdate", "")} — {r.get("debate", "Unknown debate")})'
+                    for r in results[:5]
+                    if r.get("gid")
+                )
+                sp_phase2_note = (
+                    f"\n\n[MANDATORY NEXT STEP — DO NOT call search_scottish_parliament again. "
+                    f"Call get_hansard_debate NOW for the 1-3 most relevant results below to retrieve full speech text. "
+                    f"Only call search_scottish_parliament again if you received ZERO results. "
+                    f"Pass the debate_type field alongside gid so the correct endpoint is used:\n{gid_lines}]"
+                )
+            else:
+                sp_phase2_note = (
+                    "\n\n[This search returned 0 results. You may retry search_scottish_parliament with "
+                    "different or broader keywords. If after 2 searches you still have 0 results, "
+                    "state that no relevant Scottish Parliament records were found and compose your answer.]"
                 )
         except Exception:
             pass
@@ -263,9 +392,11 @@ async def run_worker_tool(
                 "result": "Done",
             })
 
-    # Append Phase 2 instruction after summarisation so it is not discarded
-    # by the summariser and is visible in the message the model receives.
+    # Append phase nudges after summarisation so they are not discarded
+    # by the summariser and remain visible in the message the model receives.
     result += phase2_note
+    result += hansard_phase2_note
+    result += sp_phase2_note
     result += case_law_note
 
     if parent_on_chunk:

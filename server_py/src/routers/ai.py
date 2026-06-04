@@ -18,7 +18,7 @@ from ..agent.provider_factory import (
     get_request_queue,
     set_request_provider_config,
 )
-from ..config import MAX_TOTAL_DOC_CHARS
+from ..config import MAX_TOTAL_DOC_CHARS, settings
 from ..database import async_session_maker
 from ..models import Chat, Document, Matter, RequestTiming
 from ..utils.stopwatch import TimingCollector
@@ -90,7 +90,7 @@ async def chat_endpoint(body: ChatRequest, request: Request):
         set_request_provider_config({
             **provider_config,
             "_provider": active_provider,
-            "_research_mode": body.research_mode or "legislation_only",
+            "_research_mode": settings.research_mode or body.research_mode or "legislation_only",
             "_jurisdiction": body.jurisdiction or None,
             "_year_from": body.year_from or None,
             "_year_to": body.year_to or None,
