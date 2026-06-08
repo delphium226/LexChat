@@ -78,6 +78,22 @@ Key design decisions:
 - **Parliament bot DB** — `lexchat_parliament` (set in `bots/parliament/.env`). `start_federation_dev.ps1` creates this DB automatically. The script loads `bots/parliament/.env` first, then overrides `BOT_ID` and `BOT_CONFIG_PATH` with absolute paths so the relative path in the `.env` file doesn't win.
 - **`BOT_CONFIG_PATH` note** — uvicorn runs from `server_py/`, so `os.path.abspath(path)` resolves relative paths relative to `server_py/`. The federation dev script sets this to an absolute path to avoid the ambiguity.
 
+### External API Dependencies
+
+All external APIs called at query time. URLs must be reachable from the deployment target.
+
+| API | Base URL | Used by | Auth | Notes |
+|---|---|---|---|---|
+| LEX API | `https://lex.lab.i.ai.gov.uk` | Legislation bot | None (internal) | POST endpoints: `/legislation/search`, `/legislation/section/search`, `/legislation/text` |
+| National Archives case law | `https://caselaw.nationalarchives.gov.uk/atom.xml` | Legislation bot (case law mode) | None | GET with `query`, `court`, `date_from`, `date_to` params; returns Atom XML |
+| TheyWorkForYou (TWFY) | `https://www.theyworkforyou.com/api` | Parliament bot | `TWFY_API_KEY` | Endpoints: `getHansard`, `getDebates`, `getLords`, `getWrans`, `getSP`, `getMSPInfo` |
+| Parliament Members API | `https://members-api.parliament.uk/api/Members/Search` | Parliament bot | None | `get_member_info` for Commons (`House=1`) and Lords (`House=2`) |
+| Parliament Bills API | `https://bills-api.parliament.uk/api/v1/Bills` | Parliament bot | None | `search_bills` for UK Westminster |
+| Scottish Parliament Bills | `https://data.parliament.scot/api/bills` | Parliament bot | None | `search_bills` for Scotland; full list fetched, filtered client-side (no server-side search param) |
+| OpenRouter | `https://openrouter.ai/api/v1` | Both (optional) | `OPENROUTER_API_KEY` | Only when OpenRouter is set as active provider in Admin Portal |
+
+To verify all endpoints are reachable from a deployment target, run `server_py/test_apis.ps1` (reads `TWFY_API_KEY` from `.env`; TWFY tests skip gracefully if the key is absent).
+
 ### Other
 - Python deps are installed **globally** (no venv) on the target — the offline installer uses `pip install` directly
 - The frontend is **pre-built on the dev machine** and committed including `client/dist/` — the target has no Node.js

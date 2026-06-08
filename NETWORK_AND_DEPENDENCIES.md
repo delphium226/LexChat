@@ -59,13 +59,20 @@ Target server updates via `git pull` from GitHub:
 
 ### 2.2 Outbound Traffic — External Services
 
-| Destination | URL / Host | Port | Protocol | Description |
-|---|---|---|---|---|
-| **Ollama Cloud Models** | `https://registry.ollama.ai/` and third-party inference endpoints | 443 | HTTPS | When using cloud-tagged models (e.g. `mistral-large-3:675b-cloud`), Ollama routes requests to remote inference providers. Traffic includes the full chat context sent as JSON with **long-lived streaming responses** (60–300+ seconds per request). Authenticated via Ollama API key (`Authorization: Bearer` header). |
-| **OpenRouter** | `https://openrouter.ai/api/v1` | 443 | HTTPS | Alternative LLM provider. If OpenRouter is set as the active provider in the Admin Portal, all AI requests route here instead of Ollama. Also a long-lived streaming connection. Requires `OPENROUTER_API_KEY`. Only needed if OpenRouter provider is used. |
-| **LEX API** (Legislation) | `https://lex-api.victoriousdesert-f8e685e0.uksouth.azurecontainerapps.io` | 443 | HTTPS | Worker agent calls this API to search UK legislation and retrieve section text. Called on-demand when the AI agent invokes `search_legislation`, `search_legislation_sections`, or `get_legislation_text` tools. JSON POST requests with search queries and legislation IDs. |
-| **Google Search** | `https://www.google.com/search` | 443 | HTTPS | Used by the Deep Research agent's `search_web` tool when research mode includes web search. Requests use a standard browser User-Agent. Only triggered in web-search-enabled research modes. |
-| **Gmail SMTP** | `smtp.gmail.com` | 465 | SMTPS | Password reset emails (if `EMAIL_USER` and `EMAIL_PASS` are configured). Not configured by default in government deployment. |
+APIs marked **legislation bot** are used by the default legislation bot. APIs marked **parliament bot** are only required when the parliament bot is deployed. Both bots share the same LLM provider traffic.
+
+| Destination | URL / Host | Port | Protocol | Bot | Description |
+|---|---|---|---|---|---|
+| **Ollama Cloud Models** | `https://registry.ollama.ai/` and third-party inference endpoints | 443 | HTTPS | Both | When using cloud-tagged models (e.g. `mistral-large-3:675b-cloud`), Ollama routes requests to remote inference providers. Traffic includes the full chat context sent as JSON with **long-lived streaming responses** (60–300+ seconds per request). Authenticated via Ollama API key (`Authorization: Bearer` header). |
+| **OpenRouter** | `https://openrouter.ai/api/v1` | 443 | HTTPS | Both | Alternative LLM provider. If OpenRouter is set as the active provider in the Admin Portal, all AI requests route here instead of Ollama. Also a long-lived streaming connection. Requires `OPENROUTER_API_KEY`. Only needed if OpenRouter provider is used. |
+| **LEX API** | `https://lex.lab.i.ai.gov.uk` | 443 | HTTPS | Legislation | Worker agent calls this API to search UK legislation and retrieve section text. Invoked by `search_legislation`, `search_legislation_sections`, and `get_legislation_text` tools. JSON POST requests; responses can be large (full Act text). |
+| **National Archives case law** | `https://caselaw.nationalarchives.gov.uk` | 443 | HTTPS | Legislation | Searched when research mode includes case law (`legislation_and_case_law` or `case_law_only`). GET requests to `/atom.xml` with query, court, and date params; returns Atom XML feed of judgment metadata. |
+| **TheyWorkForYou (TWFY)** | `https://www.theyworkforyou.com/api` | 443 | HTTPS | Parliament | Hansard search and retrieval. Endpoints used: `getHansard` (search), `getDebates`, `getLords`, `getWrans`, `getSP` (full debate text), `getMSPInfo` (MSP lookup). Requires `TWFY_API_KEY`. GET requests with JSON output. |
+| **Parliament Members API** | `https://members-api.parliament.uk` | 443 | HTTPS | Parliament | MP and Lord lookup (`get_member_info` tool). GET requests to `/api/Members/Search` with name and house parameters. No authentication required. |
+| **Parliament Bills API** | `https://bills-api.parliament.uk` | 443 | HTTPS | Parliament | UK Westminster bill search (`search_bills` tool). GET requests to `/api/v1/Bills` with keyword search. No authentication required. |
+| **Scottish Parliament Bills** | `https://data.parliament.scot` | 443 | HTTPS | Parliament | Scottish Parliament bill search (`search_bills` tool, Scotland mode). GET request to `/api/bills` returns all bills; filtering is done client-side. No authentication required. |
+| **Google Search** | `https://www.google.com` | 443 | HTTPS | Both | Used by the Deep Research agent's `search_web` tool when research mode includes web search. Requests use a standard browser User-Agent. Only triggered in web-search-enabled research modes. |
+| **Gmail SMTP** | `smtp.gmail.com` | 465 | SMTPS | Both | Password reset emails (if `EMAIL_USER` and `EMAIL_PASS` are configured). Not configured by default in government deployment. |
 
 > **Ollama Cloud Inference note:** When using `:cloud` models, Ollama proxies to third-party AI inference providers whose exact hostnames are managed by Ollama and not statically defined in LexChat. Allowlisting `*.ollama.ai` covers the Ollama registry; actual inference traffic may route to additional provider-specific endpoints. Monitor initial connections with logging enabled to capture resolved FQDNs, or contact Ollama for their current provider domain list.
 
@@ -98,7 +105,12 @@ Target server updates via `git pull` from GitHub:
 |---|---|---|---|
 | Ollama Cloud Inference | `*.ollama.ai` + third-party inference endpoints | 443 | **Yes** — if using Ollama provider. Core AI functionality. |
 | OpenRouter | `openrouter.ai` | 443 | **Yes** — if using OpenRouter provider. Core AI functionality. |
-| LEX Legislation API | `lex-api.victoriousdesert-f8e685e0.uksouth.azurecontainerapps.io` | 443 | **Yes** — required for all legislation research. |
+| LEX Legislation API | `lex.lab.i.ai.gov.uk` | 443 | **Yes** — required for all legislation research (legislation bot). |
+| National Archives case law | `caselaw.nationalarchives.gov.uk` | 443 | **Yes** — required for case law research modes (legislation bot). |
+| TheyWorkForYou (TWFY) | `www.theyworkforyou.com` | 443 | **Yes** — required for Hansard/parliamentary research (parliament bot). |
+| Parliament Members API | `members-api.parliament.uk` | 443 | **Yes** — required for MP/Lord lookups (parliament bot). |
+| Parliament Bills API | `bills-api.parliament.uk` | 443 | **Yes** — required for Westminster bill search (parliament bot). |
+| Scottish Parliament Bills | `data.parliament.scot` | 443 | **Yes** — required for Scottish bill search (parliament bot). |
 | Google Web Search | `www.google.com` | 443 | **Optional** — only if Deep Research web search mode is used. |
 | Gmail SMTP | `smtp.gmail.com` | 465 | **Optional** — only if email notifications are configured. |
 
@@ -119,7 +131,11 @@ Target server updates via `git pull` from GitHub:
 | **Git (GitHub)** | Git verifies HTTPS certificates on clone/pull. | Bypass for `github.com`, OR `git config --global http.sslCAInfo /path/to/corporate-ca.crt`. |
 | **Ollama cloud connections** | Ollama uses key-pair authentication alongside HTTPS. TLS interception may interfere. | Bypass TLS inspection for `*.ollama.ai` and Ollama cloud provider domains. |
 | **OpenRouter** | Standard HTTPS REST API. | Bypass TLS inspection for `openrouter.ai`. |
-| **LEX API** | Standard HTTPS REST API. | Bypass TLS inspection for the LEX API hostname. |
+| **LEX API** | Standard HTTPS REST API. | Bypass TLS inspection for `lex.lab.i.ai.gov.uk`. |
+| **National Archives case law** | Standard HTTPS GET; returns Atom XML. | Bypass TLS inspection for `caselaw.nationalarchives.gov.uk`. |
+| **TheyWorkForYou (TWFY)** | Standard HTTPS REST API. Carries `TWFY_API_KEY` as a query parameter. | Bypass TLS inspection for `www.theyworkforyou.com`. |
+| **Parliament Members & Bills APIs** | Standard HTTPS REST APIs. No authentication. | Bypass TLS inspection for `members-api.parliament.uk` and `bills-api.parliament.uk`. |
+| **Scottish Parliament Bills** | Standard HTTPS REST API. No authentication. | Bypass TLS inspection for `data.parliament.scot`. |
 
 ---
 
@@ -127,12 +143,13 @@ Target server updates via `git pull` from GitHub:
 
 | File | Purpose |
 |---|---|
-| `server_py/.env` | Startup defaults: `DATABASE_URL`, `JWT_SECRET`, `OLLAMA_BASE_URL`, `OLLAMA_API_KEY`, `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL` |
+| `server_py/.env` | Startup defaults: `DATABASE_URL`, `JWT_SECRET`, `OLLAMA_BASE_URL`, `OLLAMA_API_KEY`, `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`, `TWFY_API_KEY` |
 | `server_py/src/config.py` | Application settings, model lists, system prompts, LEX API URL |
 | `server_py/src/agent/provider_factory.py` | Provider resolution, ContextVar, queue/semaphore caching |
-| `server_py/src/agent/tools.py` | LEX API client — `search_legislation`, `search_legislation_sections`, `get_legislation_text` |
+| `server_py/src/agent/tools.py` | LEX API client (legislation bot tools) + TWFY/Parliament API client (parliament bot tools) |
 | `server_py/src/agent/web_search.py` | Google web search for Deep Research mode |
 | `server_py/src/services/email_service.py` | Gmail SMTP email sender (optional) |
+| `server_py/test_apis.ps1` | Connectivity test script — verifies all runtime API endpoints are reachable |
 | `deployment/certs/lexchat.crt` | TLS certificate for HTTPS on port 443 |
 | `deployment/certs/lexchat.key` | TLS private key |
 | `deployment/install_native.ps1` | Internet-connected native installer |
