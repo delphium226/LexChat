@@ -225,7 +225,23 @@ If you cannot use the automated scripts:
     *   **OpenRouter** is also supported as an alternative provider. Requires `OPENROUTER_API_KEY` in `.env.native` and outbound internet access to `openrouter.ai` (not available on fully air-gapped deployments).
     *   The active provider and all per-provider settings (model, temperature, concurrency limits, base URL, API key) are configurable at runtime via **Admin Portal → Developer tab** — no restart required.
 
-3.  **Configuration**:
+3.  **Network Requirements (Outbound URL Whitelist)**:
+
+    The target environment restricts outbound internet access. The following URLs must be whitelisted for the application to function. URLs marked **parliament bot only** are not required if only the legislation bot is deployed.
+
+    | URL | Purpose | Bot |
+    |---|---|---|
+    | `lex.lab.i.ai.gov.uk` | LEX API — legislation search, section search, full text | Legislation |
+    | `caselaw.nationalarchives.gov.uk` | National Archives — UK case law (Atom feed) | Legislation (case law mode) |
+    | `www.theyworkforyou.com` | TheyWorkForYou — Hansard search, debates, MSP info | Parliament only |
+    | `members-api.parliament.uk` | UK Parliament Members API — MP/Lord lookup | Parliament only |
+    | `bills-api.parliament.uk` | UK Parliament Bills API — Westminster bill search | Parliament only |
+    | `data.parliament.scot` | Scottish Parliament — bill search | Parliament only |
+    | `openrouter.ai` | OpenRouter LLM provider (alternative to Ollama) | Both (if OpenRouter active) |
+
+    If using Ollama (default), `openrouter.ai` is not required. If using OpenRouter, `openrouter.ai` must be reachable.
+
+4.  **Configuration**:
     *   The app uses a `.env.native` file in `server_py/` to configure `localhost` connections.
     *   Add `OPENROUTER_API_KEY=sk-or-...` to `.env.native` to enable OpenRouter as a provider option.
 

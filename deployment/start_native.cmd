@@ -76,6 +76,7 @@ if !USE_SSL!==1 (
     echo    No SSL certificates found. Running on HTTP port 8000.
 )
 
+set BOT_CONFIG_PATH=%~dp0..\bots\legislation\bot_config.json
 start "LexChat Backend" cmd /k "python -m uvicorn src.main:app --host 0.0.0.0 !SSL_ARGS!"
 
 :: 5. Check Frontend
