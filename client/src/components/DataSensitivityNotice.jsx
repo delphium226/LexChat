@@ -49,7 +49,7 @@ export default function DataSensitivityNotice({ onAcknowledge, botName = 'AILA',
           </p>
           <ul className="space-y-2 mb-6">
             {[
-              'Information classified above OFFICIAL-SENSITIVE',
+              'Information classified above OFFICIAL',
               'Personal data within the meaning of the UK GDPR — including names, contact details, National Insurance numbers, or any information capable of identifying a living individual, whether directly or in combination with other data',
               'Details of ongoing legal proceedings, investigations, or enforcement action that are not already in the public domain',
               'Information subject to legal professional privilege',

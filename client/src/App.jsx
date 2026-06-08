@@ -264,14 +264,27 @@ function AppContent() {
         setBotInfo({ name: info.name, tagline: info.tagline || '', brandColor: info.brand_color || null, logoEmoji: info.logo_emoji || null });
         document.title = info.name;
       }
-      // Swap favicon to bot logo and track URL for in-app display; fall back silently on 404
+      // Swap favicon to bot logo; fall back to emoji canvas; leave as /favicon.svg if neither
       const favicon = document.querySelector("link[rel='icon']");
+      const emoji = info?.logo_emoji || null;
       const img = new Image();
       img.onload = () => {
         if (favicon) favicon.href = '/api/bot/logo';
         setBotLogoUrl('/api/bot/logo');
       };
-      img.onerror = () => {};
+      img.onerror = () => {
+        if (!emoji) return;
+        const canvas = document.createElement('canvas');
+        canvas.width = 32; canvas.height = 32;
+        const ctx = canvas.getContext('2d');
+        ctx.font = '24px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(emoji, 16, 17);
+        const dataUrl = canvas.toDataURL('image/png');
+        if (favicon) favicon.href = dataUrl;
+        setBotLogoUrl(dataUrl);
+      };
       img.src = '/api/bot/logo';
     }).catch(() => {});
   }, []);

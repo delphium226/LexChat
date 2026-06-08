@@ -7,6 +7,9 @@ from ..config import settings
 
 router = APIRouter(tags=["Identity"])
 
+# identity.py lives at server_py/src/routers/ — three dirname calls reach the project root
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 @router.get("/api/bot-info")
 async def bot_info():
@@ -29,7 +32,7 @@ async def bot_logo():
     logo_path = bot_identity.get("logo_path", "")
     if not logo_path:
         return JSONResponse({"detail": "No logo configured"}, status_code=404)
-    abs_path = os.path.abspath(logo_path)
+    abs_path = logo_path if os.path.isabs(logo_path) else os.path.normpath(os.path.join(_PROJECT_ROOT, logo_path))
     if not os.path.isfile(abs_path):
         return JSONResponse({"detail": "Logo file not found"}, status_code=404)
     return FileResponse(abs_path)
