@@ -9,10 +9,9 @@ from typing import AsyncGenerator, Callable, Optional
 import httpx
 
 from ..config import (
-    MANAGER_SYSTEM_PROMPT,
     OPENROUTER_MODEL_LIST,
     WORKER_SYSTEM_PROMPT,
-    get_manager_mode_note,
+    get_manager_system_prompt,
     get_worker_system_prompt,
     settings,
 )
@@ -21,8 +20,13 @@ from .summarisation import (
     call_chunk,
     summarise_prompt,
 )
-from .tools import MANAGER_TOOLS, WORKER_TOOLS, get_worker_tools
+from .tools import get_manager_tools, get_worker_tools
 from .agent_shared import run_worker_tool
+from .federation_client import (
+    build_peer_descriptions,
+    consult_peer,
+    load_peer_registry,
+)
 
 logger = logging.getLogger("agent")
 
@@ -382,6 +386,8 @@ async def run_worker_agent(
 
     worker_tools = get_worker_tools(research_mode)
     source_accumulator: list = []
+    # Limit Hansard searches so the model proceeds to Phase 2 instead of looping.
+    search_budget = {"remaining": 2} if research_mode == "parliamentary_records" else None
 
     async def worker_tool_executor(name: str, args: dict) -> str:
         return await run_worker_tool(
@@ -389,6 +395,7 @@ async def run_worker_agent(
             parent_on_chunk=parent_on_chunk,
             timing_collector=timing_collector,
             source_accumulator=source_accumulator,
+            search_budget=search_budget,
         )
 
     result = await chat_loop(
@@ -420,11 +427,11 @@ async def process_user_request(
     db_session=None,
     emit_tool_details: bool = False,
     timing_collector=None,
+    depth: int = 0,
 ) -> dict:
     _cfg = _get_cfg()
     research_mode = _cfg.get("_research_mode", "legislation_only")
-    mode_note = get_manager_mode_note(research_mode, _cfg)
-    system_content = (mode_note + "\n\n" + MANAGER_SYSTEM_PROMPT) if mode_note else MANAGER_SYSTEM_PROMPT
+    system_content = get_manager_system_prompt(research_mode, _cfg)
 
     doc_context = _cfg.get("_doc_context", "")
     if doc_context:
@@ -455,6 +462,16 @@ async def process_user_request(
     else:
         final_messages = [system_message, *final_messages]
 
+    # Load peer registry and build dynamic tool list
+    peers = []
+    if db_session:
+        try:
+            peers = await load_peer_registry(db_session)
+        except Exception as e:
+            logger.warning(f"[Federation] Could not load peer registry: {e}")
+    peer_descriptions = build_peer_descriptions(peers)
+    manager_tools = get_manager_tools(peer_descriptions)
+
     accumulated_sources: list = []
 
     async def manager_tool_executor(name: str, args: dict) -> str:
@@ -472,16 +489,31 @@ async def process_user_request(
             if on_chunk:
                 await call_chunk(on_chunk, {"type": "tool_end", "tool": "Research Agent", "id": research_id, "result": "Research Complete"})
 
-            # Capture sources before discarding the structured result
             accumulated_sources.extend(result.get("sources", []))
-
             return f"[Research Agent Result]\n{result['content']}"
+
+        if name == "consult_peer":
+            peer_id = args.get("peer_id", "")
+            question = args.get("question", "")
+            peer = next((p for p in peers if p.peer_id == peer_id), None)
+            if not peer:
+                return f"Error: Unknown peer '{peer_id}'"
+            try:
+                consult_id = uuid.uuid4().hex[:8]
+                if on_chunk:
+                    await call_chunk(on_chunk, {"type": "tool_start", "tool": f"Peer: {peer.name}", "id": consult_id})
+                answer = await consult_peer(peer, question, depth=depth + 1)
+                if on_chunk:
+                    await call_chunk(on_chunk, {"type": "tool_end", "tool": f"Peer: {peer.name}", "id": consult_id, "result": "Peer consult complete"})
+                return f"[Peer Bot: {peer.name}]\n{answer}"
+            except Exception as e:
+                return f"Error consulting peer '{peer_id}': {e}"
 
         return f"Error: Unknown manager tool {name}"
 
     final = await chat_loop(
         final_messages, model, cancel_event, num_ctx,
-        MANAGER_TOOLS, manager_tool_executor, on_chunk,
+        manager_tools, manager_tool_executor, on_chunk,
         emit_tool_details=emit_tool_details,
         timing_collector=timing_collector,
     )

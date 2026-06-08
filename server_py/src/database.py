@@ -95,6 +95,17 @@ async def init_db() -> None:
                 description TEXT,
                 created_at TIMESTAMP NOT NULL DEFAULT NOW()
             )""",
+            """CREATE TABLE IF NOT EXISTS peer_bots (
+                id SERIAL PRIMARY KEY,
+                peer_id VARCHAR(64) NOT NULL UNIQUE,
+                name VARCHAR(128) NOT NULL,
+                base_url VARCHAR(256) NOT NULL,
+                api_key VARCHAR(256),
+                description TEXT NOT NULL,
+                enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )""",
+            "ALTER TABLE peer_bots ADD COLUMN IF NOT EXISTS name VARCHAR(128) NOT NULL DEFAULT ''",
         ]
         async with engine.begin() as conn:
             for stmt in migration_statements:

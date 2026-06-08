@@ -21,9 +21,9 @@ if %errorlevel% neq 0 (
 :: 2. Start PostgreSQL
 echo.
 echo [1/4] Starting PostgreSQL...
-sc query postgresql-x64-15 | find "RUNNING" >nul
+sc query postgresql-x64-18 | find "RUNNING" >nul
 if %errorlevel% neq 0 (
-    net start postgresql-x64-15
+    net start postgresql-x64-18
     echo    PostgreSQL started.
 ) else (
     echo    PostgreSQL already running.

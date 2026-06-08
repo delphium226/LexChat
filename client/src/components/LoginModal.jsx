@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { LexMark } from './LexMark';
 
-const LoginModal = () => {
+const LoginModal = ({ botName = 'AILA', botLogoEmoji = null }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [rememberMe, setRememberMe] = useState(false);
@@ -21,9 +21,12 @@ const LoginModal = () => {
     return (
         <div className="fixed inset-0 bg-ink-950/50 flex items-center justify-center z-50">
             <div className="bg-paper p-8 rounded-lg shadow-xl w-96">
-                <div className="flex items-center justify-center gap-0 mb-6">
-                    <LexMark size={40} color="var(--accent)" />
-                    <h1 className="text-3xl font-bold tracking-tight text-accent">AILA</h1>
+                <div className="flex items-center justify-center gap-2 mb-6">
+                    {botLogoEmoji
+                        ? <span style={{ fontSize: 40, lineHeight: 1, userSelect: 'none' }} aria-hidden="true">{botLogoEmoji}</span>
+                        : <LexMark size={40} color="var(--accent)" />
+                    }
+                    <h1 className="text-3xl font-bold tracking-tight text-accent">{botName}</h1>
                 </div>
                 <h2 className="text-2xl font-bold mb-6 text-ink-900 text-center">
                     Login

@@ -8,14 +8,14 @@ const ShieldIcon = () => (
   </svg>
 );
 
-export default function DataSensitivityNotice({ onAcknowledge }) {
+export default function DataSensitivityNotice({ onAcknowledge, botName = 'AILA', botLogoEmoji = null }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/60 p-4">
       <div className="bg-paper rounded-xl shadow-md border border-ink-200 w-full max-w-2xl max-h-[90vh] flex flex-col">
 
         {/* Header */}
         <div className="flex items-center justify-between px-8 pt-7 pb-5 border-b border-ink-200 flex-shrink-0">
-          <LexWordmark size={14} />
+          <LexWordmark size={14} name={botName} logoEmoji={botLogoEmoji || undefined} />
           <span className="font-ui text-xs text-ink-400 uppercase tracking-wide">Pre-use notice</span>
         </div>
 
@@ -32,7 +32,7 @@ export default function DataSensitivityNotice({ onAcknowledge }) {
                 Processing Outside the Organisation's Secure Network
               </p>
               <p className="font-ui text-sm text-ink-800 leading-relaxed">
-                AILA currently routes queries through large language model (LLM) services hosted by third-party
+                {botName} currently routes queries through large language model (LLM) services hosted by third-party
                 providers outside this organisation's secure network. Text entered into this tool may be transmitted
                 to and processed by those external services.
               </p>
@@ -49,7 +49,7 @@ export default function DataSensitivityNotice({ onAcknowledge }) {
           </p>
           <ul className="space-y-2 mb-6">
             {[
-              'Information classified above OFFICIAL-SENSITIVE',
+              'Information classified above OFFICIAL',
               'Personal data within the meaning of the UK GDPR — including names, contact details, National Insurance numbers, or any information capable of identifying a living individual, whether directly or in combination with other data',
               'Details of ongoing legal proceedings, investigations, or enforcement action that are not already in the public domain',
               'Information subject to legal professional privilege',
@@ -68,7 +68,7 @@ export default function DataSensitivityNotice({ onAcknowledge }) {
             Permitted Use
           </h2>
           <p className="font-ui text-sm text-ink-700 leading-relaxed mb-4">
-            AILA is suitable for general legal research using publicly available UK legislation and case law.
+            {botName} is suitable for general legal research using publicly available UK legislation and case law.
             Queries should be framed in general, hypothetical, or anonymised terms. It must not be used as a
             substitute for independent legal advice or judgment on a specific matter.
           </p>
@@ -92,7 +92,7 @@ export default function DataSensitivityNotice({ onAcknowledge }) {
             onClick={onAcknowledge}
             className="flex-shrink-0 bg-brand hover:bg-brand-hover text-white font-ui text-sm font-medium rounded-md px-5 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
           >
-            I understand — proceed to AILA
+            I understand — proceed to {botName}
           </button>
         </div>
       </div>

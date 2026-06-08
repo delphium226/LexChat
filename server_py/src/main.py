@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import time
@@ -9,22 +10,76 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import settings
-from .database import init_db
+from .database import init_db, async_session_maker
 from .routers import auth, users, chats, ai, learning, stats, developer, system, health, feedback, matters, documents
+from .routers import identity, federation, peers
 from .services.health_service import background_health_loop
 from .utils.logger import setup_logging
 
 # Initialise structured logging before anything else
-setup_logging()
+setup_logging(bot_id=settings.bot_id)
 
 logger = logging.getLogger("app")
 http_logger = logging.getLogger("http")
+
+
+# Module-level dict populated from bot_config.json at startup; read by identity.py router.
+bot_identity: dict = {}
+
+
+async def _load_bot_config() -> None:
+    """Load bot_config.json and seed peer_bots table (insert-or-ignore by peer_id)."""
+    path = settings.bot_config_path
+    if not path:
+        return
+    abs_path = os.path.abspath(path)
+    if not os.path.isfile(abs_path):
+        logger.warning(f"[BotConfig] bot_config_path set but file not found: {abs_path}")
+        return
+    try:
+        with open(abs_path, encoding="utf-8") as f:
+            cfg = json.load(f)
+    except Exception as e:
+        logger.error(f"[BotConfig] Failed to parse {abs_path}: {e}")
+        return
+
+    global bot_identity
+    bot_identity = cfg.get("bot_identity", {})
+    logger.info(f"[BotConfig] Loaded identity: {bot_identity.get('name', '?')} ({bot_identity.get('bot_id', '?')})")
+
+    seeds = cfg.get("peer_registry_seed", [])
+    if not seeds:
+        return
+
+    from sqlalchemy import text as sa_text
+    async with async_session_maker() as session:
+        for peer in seeds:
+            pid = peer.get("peer_id", "")
+            if not pid:
+                continue
+            await session.execute(
+                sa_text(
+                    "INSERT INTO peer_bots (peer_id, name, base_url, api_key, description, enabled) "
+                    "VALUES (:peer_id, :name, :base_url, :api_key, :description, TRUE) "
+                    "ON CONFLICT (peer_id) DO NOTHING"
+                ),
+                {
+                    "peer_id": pid,
+                    "name": peer.get("name", pid),
+                    "base_url": peer.get("base_url", ""),
+                    "api_key": peer.get("api_key") or None,
+                    "description": peer.get("description", ""),
+                },
+            )
+        await session.commit()
+    logger.info(f"[BotConfig] Seeded {len(seeds)} peer(s) (insert-or-ignore).")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     await init_db()
+    await _load_bot_config()
     health_task = asyncio.create_task(background_health_loop(300))
     logger.info(f"[Main] Server running on http://{settings.host}:{settings.port}")
     yield
@@ -75,6 +130,9 @@ app.include_router(health.router)
 app.include_router(feedback.router)
 app.include_router(matters.router)
 app.include_router(documents.router)
+app.include_router(identity.router)
+app.include_router(federation.router)
+app.include_router(peers.router)
 
 
 import os

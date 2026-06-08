@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { sendMessage, createChat, getChatMessages, saveMessage, updatePreferences, getModels, getChats, getMatters, updateMatter, assignChatToMatter, getFeatures, uploadDocument, getChatDocuments, deleteDocument, updateChatTitle } from './services/api';
+import { sendMessage, createChat, getChatMessages, saveMessage, updatePreferences, getModels, getChats, getMatters, updateMatter, assignChatToMatter, getFeatures, uploadDocument, getChatDocuments, deleteDocument, updateChatTitle, fetchBotInfo } from './services/api';
 import ChatMessage from './components/ChatMessage';
 import { LexMark, LexWordmark } from './components/LexMark';
 import SourcesRail from './components/SourcesRail';
@@ -228,6 +228,10 @@ function AppContent() {
     return false;
   });
 
+  // ── Bot identity ─────────────────────────────────────────────
+  const [botInfo, setBotInfo] = useState({ name: 'AILA', tagline: 'AI Legal Assistant', brandColor: null, logoEmoji: null });
+  const [botLogoUrl, setBotLogoUrl] = useState(null);
+
   // ── Document state ───────────────────────────────────────────
   const [chatDocuments, setChatDocuments] = useState([]);
   const [uploadingDoc, setUploadingDoc] = useState(false);
@@ -252,6 +256,37 @@ function AppContent() {
         setActiveProvider(active.provider || 'ollama');
       }
     }).catch(() => setSelectedModel('mistral-large-3:675b-cloud'));
+  }, []);
+
+  useEffect(() => {
+    fetchBotInfo().then(info => {
+      if (info?.name) {
+        setBotInfo({ name: info.name, tagline: info.tagline || '', brandColor: info.brand_color || null, logoEmoji: info.logo_emoji || null });
+        document.title = info.name;
+      }
+      // Swap favicon to bot logo; fall back to emoji canvas; leave as /favicon.svg if neither
+      const favicon = document.querySelector("link[rel='icon']");
+      const emoji = info?.logo_emoji || null;
+      const img = new Image();
+      img.onload = () => {
+        if (favicon) favicon.href = '/api/bot/logo';
+        setBotLogoUrl('/api/bot/logo');
+      };
+      img.onerror = () => {
+        if (!emoji) return;
+        const canvas = document.createElement('canvas');
+        canvas.width = 32; canvas.height = 32;
+        const ctx = canvas.getContext('2d');
+        ctx.font = '24px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(emoji, 16, 17);
+        const dataUrl = canvas.toDataURL('image/png');
+        if (favicon) favicon.href = dataUrl;
+        setBotLogoUrl(dataUrl);
+      };
+      img.src = '/api/bot/logo';
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -310,7 +345,7 @@ function AppContent() {
   useEffect(() => {
     const favicon = document.querySelector("link[rel='icon']");
     if (!favicon) return;
-    if (!loading) { favicon.href = '/favicon.svg'; return; }
+    if (!loading) { favicon.href = botLogoUrl || '/favicon.svg'; return; }
 
     const canvas = document.createElement('canvas');
     canvas.width = 32; canvas.height = 32;
@@ -330,8 +365,8 @@ function AppContent() {
     };
 
     animId = requestAnimationFrame(draw);
-    return () => { cancelAnimationFrame(animId); favicon.href = '/favicon.svg'; };
-  }, [loading]);
+    return () => { cancelAnimationFrame(animId); favicon.href = botLogoUrl || '/favicon.svg'; };
+  }, [loading, botLogoUrl]);
 
   // Reset on logout
   useEffect(() => {
@@ -759,9 +794,9 @@ function AppContent() {
 
   // ── Auth gate ─────────────────────────────────────────────────
 
-  if (!user) return <LoginModal />;
+  if (!user) return <LoginModal botName={botInfo.name} botLogoEmoji={botInfo.logoEmoji} />;
 
-  if (!noticeAcknowledged) return <DataSensitivityNotice onAcknowledge={() => setNoticeAcknowledged(true)} />;
+  if (!noticeAcknowledged) return <DataSensitivityNotice onAcknowledge={() => setNoticeAcknowledged(true)} botName={botInfo.name} botLogoEmoji={botInfo.logoEmoji} />;
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -794,8 +829,10 @@ function AppContent() {
           flexShrink: 0,
         }}>
           {sidebarCollapsed
-            ? <LexMark size={20} color="var(--accent)" />
-            : <LexWordmark size={16} />
+            ? (botInfo.logoEmoji
+                ? <span style={{ fontSize: 20, lineHeight: 1, userSelect: 'none' }} aria-hidden="true">{botInfo.logoEmoji}</span>
+                : <LexMark size={20} color={botInfo.brandColor || 'var(--accent)'} />)
+            : <LexWordmark size={16} name={botInfo.name} color={botInfo.brandColor || undefined} logoEmoji={botInfo.logoEmoji || undefined} />
           }
           {!sidebarCollapsed && (
             <IBtn label="Collapse sidebar" onClick={toggleSidebar}><SidebarIcon /></IBtn>
@@ -1124,6 +1161,7 @@ function AppContent() {
                 {showWeeklyBanner && (
                   <WeeklyFeedbackBanner
                     userId={user.id}
+                    botName={botInfo.name}
                     onClose={() => setShowWeeklyBanner(false)}
                     onSubmitted={() => {
                       localStorage.setItem(`weeklyFeedbackSubmitted_${user.id}`, Date.now().toString());
@@ -1167,7 +1205,10 @@ function AppContent() {
                 {messages.length === 0 && !loading && (
                   <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--ink-400)' }}>
                     <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center' }}>
-                      <LexMark size={40} color="var(--ink-300)" />
+                      {botInfo.logoEmoji
+                        ? <span style={{ fontSize: 40, lineHeight: 1, opacity: 0.4, userSelect: 'none' }} aria-hidden="true">{botInfo.logoEmoji}</span>
+                        : <LexMark size={40} color="var(--ink-300)" />
+                      }
                     </div>
                     <p style={{ fontSize: 14, margin: 0 }}>Ask about UK legislation or case law to begin.</p>
                   </div>
@@ -1623,12 +1664,12 @@ function AppContent() {
               {/* Legislation API */}
               <section>
                 <h3 className="text-base font-bold text-ink-900 mb-2">Source Overview: The National Archives "Legislation" API</h3>
-                <p>AILA connects to the official API for legislation.gov.uk, operated by The National Archives. This database serves as the official, government-maintained statute book for the United Kingdom. Through this integration, AILA can retrieve and analyze the text of laws, regulations, and statutory rules.</p>
+                <p>{botInfo.name} connects to the official API for legislation.gov.uk, operated by The National Archives. This database serves as the official, government-maintained statute book for the United Kingdom. Through this integration, {botInfo.name} can retrieve and analyze the text of laws, regulations, and statutory rules.</p>
               </section>
 
               <section>
                 <h4 className="font-semibold text-ink-900 mb-2">Jurisdictions and Parliaments Covered</h4>
-                <p className="mb-2">Unlike the Case Law database, the Legislation API provides comprehensive coverage across all four nations of the UK. AILA can retrieve legislation from:</p>
+                <p className="mb-2">Unlike the Case Law database, the Legislation API provides comprehensive coverage across all four nations of the UK. {botInfo.name} can retrieve legislation from:</p>
                 <ul className="list-disc list-inside space-y-1 pl-2">
                   <li>The UK Parliament (Westminster)</li>
                   <li>The Scottish Parliament (Holyrood)</li>
@@ -1639,7 +1680,7 @@ function AppContent() {
 
               <section>
                 <h4 className="font-semibold text-ink-900 mb-2">Types of Legislation Included</h4>
-                <p className="mb-2">AILA has access to both primary laws (the main Acts) and secondary legislation (the detailed rules and regulations):</p>
+                <p className="mb-2">{botInfo.name} has access to both primary laws (the main Acts) and secondary legislation (the detailed rules and regulations):</p>
                 <ul className="list-disc list-inside space-y-1 pl-2">
                   <li><strong>Primary Legislation:</strong> Public General Acts of the UK Parliament, Acts of the Scottish Parliament (ASPs), Acts/Measures of the Senedd Cymru, and Acts of the Northern Ireland Assembly.</li>
                   <li><strong>Secondary Legislation:</strong> Statutory Instruments (SIs), Scottish Statutory Instruments (SSIs), and Welsh Statutory Instruments.</li>
@@ -1649,7 +1690,7 @@ function AppContent() {
 
               <section>
                 <h4 className="font-semibold text-ink-900 mb-2">Versioning: "As Enacted" vs. "Revised"</h4>
-                <p className="mb-2">One of the most powerful features of this database is how it handles the timeline of the law. AILA can distinguish between:</p>
+                <p className="mb-2">One of the most powerful features of this database is how it handles the timeline of the law. {botInfo.name} can distinguish between:</p>
                 <ul className="list-disc list-inside space-y-1 pl-2">
                   <li><strong>As Enacted:</strong> The original text of the law exactly as it was originally passed by Parliament.</li>
                   <li><strong>Latest Available (Revised):</strong> The current, up-to-date version of the law, reflecting any amendments, insertions, or repeals made by subsequent legislation.</li>
@@ -1661,18 +1702,18 @@ function AppContent() {
                 <p className="mb-2 text-amber-900 dark:text-amber-200">To ensure users interpret the law correctly, it is important to understand a key limitation of the official UK statute book:</p>
                 <ul className="list-disc list-inside space-y-1 pl-2 text-amber-900 dark:text-amber-200">
                   <li><strong>Delayed Revisions:</strong> While the National Archives team works constantly to update the database, there is often a "revision gap." When a new law amends an old law, it can take time (sometimes months or, for obscure legislation, years) for those changes to be officially applied to the "Revised" text on the database.</li>
-                  <li><strong>Repealed Text:</strong> AILA may retrieve legislation that has been entirely repealed or is no longer in force if you specifically ask for historical context, so always verify the current legal status of older statutes.</li>
+                  <li><strong>Repealed Text:</strong> {botInfo.name} may retrieve legislation that has been entirely repealed or is no longer in force if you specifically ask for historical context, so always verify the current legal status of older statutes.</li>
                 </ul>
               </section>
 
               <div className="border-t border-ink-200 pt-6">
                 <h3 className="text-base font-bold text-ink-900 mb-2">Source Overview: The National Archives "Find Case Law" API</h3>
-                <p>Alongside legislation, AILA integrates with The National Archives (TNA) "Find Case Law" API. This is the official, government-backed repository for court judgments and tribunal decisions in the United Kingdom. By connecting directly to this source, AILA ensures that the case law it references is authoritative, unmodified, and publicly verifiable.</p>
+                <p>Alongside legislation, {botInfo.name} integrates with The National Archives (TNA) "Find Case Law" API. This is the official, government-backed repository for court judgments and tribunal decisions in the United Kingdom. By connecting directly to this source, {botInfo.name} ensures that the case law it references is authoritative, unmodified, and publicly verifiable.</p>
               </div>
 
               <section>
                 <h4 className="font-semibold text-ink-900 mb-2">Courts and Tribunals Covered</h4>
-                <p className="mb-2">The API primarily covers the higher courts of England and Wales, alongside the highest appellate courts for the entire UK. Through this integration, AILA can retrieve judgments from:</p>
+                <p className="mb-2">The API primarily covers the higher courts of England and Wales, alongside the highest appellate courts for the entire UK. Through this integration, {botInfo.name} can retrieve judgments from:</p>
                 <div className="space-y-3 pl-2">
                   <div>
                     <p className="font-medium text-ink-800">UK-Wide Appellate Courts:</p>
@@ -1710,7 +1751,7 @@ function AppContent() {
 
               <section className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-md p-4">
                 <h4 className="font-semibold text-amber-800 dark:text-amber-300 mb-2">Important Limitations (What is NOT Covered)</h4>
-                <p className="mb-2 text-amber-900 dark:text-amber-200">To ensure you get the most out of AILA, it is important to know which jurisdictions and courts are not currently available through this official API:</p>
+                <p className="mb-2 text-amber-900 dark:text-amber-200">To ensure you get the most out of {botInfo.name}, it is important to know which jurisdictions and courts are not currently available through this official API:</p>
                 <ul className="list-disc list-inside space-y-1 pl-2 text-amber-900 dark:text-amber-200">
                   <li><strong>Scotland and Northern Ireland:</strong> The API does not host judgments from the domestic courts of Scotland (e.g., Court of Session, High Court of Justiciary) or Northern Ireland, except when those cases are appealed to the UK Supreme Court.</li>
                   <li><strong>Lower Courts:</strong> Judgments from the Crown Court, County Courts, Magistrates' Courts, and Family Court are generally not published or available through this API.</li>
@@ -1730,11 +1771,14 @@ function AppContent() {
         <div className="fixed inset-0 bg-ink-950/50 flex items-center justify-center p-4 z-50">
           <div className="bg-paper rounded-lg p-6 max-w-2xl w-full shadow-xl">
             <div className="flex items-center justify-center gap-2 mb-4">
-              <LexMark size={32} color="var(--accent)" />
-              <h1 className="text-3xl font-bold text-accent">AILA</h1>
+              {botInfo.logoEmoji
+                ? <span style={{ fontSize: 32, lineHeight: 1, userSelect: 'none' }} aria-hidden="true">{botInfo.logoEmoji}</span>
+                : <LexMark size={32} color={botInfo.brandColor || 'var(--accent)'} />
+              }
+              <h1 className="text-3xl font-bold" style={{ color: botInfo.brandColor || 'var(--accent)' }}>{botInfo.name}</h1>
             </div>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-ink-900">About AILA</h2>
+              <h2 className="text-xl font-bold text-ink-900">About {botInfo.name}</h2>
               <button onClick={() => setShowAbout(false)} className="size-[30px] flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Close">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1742,7 +1786,7 @@ function AppContent() {
               </button>
             </div>
             <div className="space-y-4 text-ink-700 text-sm">
-              <p><strong>AILA</strong> is an intelligent legal research assistant for UK legislation and case law.</p>
+              <p><strong>{botInfo.name}</strong> is an intelligent legal research assistant for UK legislation and case law.</p>
               <div>
                 <h3 className="font-semibold text-ink-900 mb-1">Data Sources</h3>
                 <ul className="list-disc list-inside"><li><strong>The National Archives</strong> (legislation.gov.uk)</li></ul>
@@ -1797,6 +1841,7 @@ function AppContent() {
         isOpen={showSettingsMenu}
         onClose={() => setShowSettingsMenu(false)}
         user={user}
+        botName={botInfo.name}
         darkMode={darkMode}
         onToggleDarkMode={async () => {
           const next = !darkMode;

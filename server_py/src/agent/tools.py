@@ -128,6 +128,41 @@ if settings.enable_deep_research:
         },
     })
 
+def get_manager_tools(peer_descriptions: str = "") -> list:
+    """Return the manager tool list, optionally including consult_peer.
+
+    When peer_descriptions is empty the output is identical to MANAGER_TOOLS so
+    existing behaviour is completely unchanged for deployments with no peers.
+    """
+    tools = list(MANAGER_TOOLS)
+    if peer_descriptions:
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": "consult_peer",
+                "description": (
+                    f"Consult a peer bot for specialised knowledge. "
+                    f"Available peers:\n{peer_descriptions}"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "peer_id": {
+                            "type": "string",
+                            "description": "peer_id of the bot to consult",
+                        },
+                        "question": {
+                            "type": "string",
+                            "description": "The specific question to ask the peer",
+                        },
+                    },
+                    "required": ["peer_id", "question"],
+                },
+            },
+        })
+    return tools
+
+
 WORKER_TOOLS = [
     {
         "type": "function",
@@ -255,13 +290,483 @@ CASE_LAW_TOOLS = [
 ]
 
 
+PARLIAMENT_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_hansard",
+            "description": (
+                "Search UK Parliament Hansard for speeches, debates, and written questions. "
+                "Returns speech excerpts with speaker, date, debate title, and a gid (global ID). "
+                "Follow up with get_hansard_debate to retrieve the full text of a relevant speech."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Full-text search query (e.g., 'housing supply planning', 'immigration Rwanda policy').",
+                    },
+                    "debate_type": {
+                        "type": "string",
+                        "description": (
+                            "Optional type filter. One of: 'debates' (Commons chamber), "
+                            "'lords' (Lords chamber), 'wrans' (written answers), "
+                            "'wms' (written ministerial statements). Omit to search all types."
+                        ),
+                    },
+                    "speaker": {
+                        "type": "string",
+                        "description": "Optional: filter results to a specific speaker by name.",
+                    },
+                    "date_from": {
+                        "type": "string",
+                        "description": "Optional start date filter (YYYY-MM-DD).",
+                    },
+                    "date_to": {
+                        "type": "string",
+                        "description": "Optional end date filter (YYYY-MM-DD).",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_hansard_debate",
+            "description": (
+                "Retrieve the full text of a specific Hansard debate or speech using a gid returned by search_hansard. "
+                "Use this after search_hansard when an excerpt is directly relevant but truncated."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "gid": {
+                        "type": "string",
+                        "description": "The global ID (gid) of the debate or speech, as returned by search_hansard.",
+                    },
+                    "debate_type": {
+                        "type": "string",
+                        "description": (
+                            "The type of content this gid refers to: 'debates' (Commons), "
+                            "'lords', or 'wrans' (written answers). Defaults to 'debates' if omitted."
+                        ),
+                    },
+                },
+                "required": ["gid"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_member_info",
+            "description": (
+                "Look up information about a UK Parliament member (MP or Lord) or Scottish Parliament MSP. "
+                "Returns biography, party, constituency, and current roles."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "The member's name (e.g., 'Keir Starmer', 'Angela Rayner').",
+                    },
+                    "parliament": {
+                        "type": "string",
+                        "description": "Which parliament to search: 'commons' (default), 'lords', or 'scotland'.",
+                    },
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_bills",
+            "description": (
+                "Search for parliamentary bills by topic, title, or keyword. "
+                "Returns bill title, current stage, house, and a link to the bill page."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search term (e.g., 'Renters Rights Bill', 'planning reform').",
+                    },
+                    "parliament": {
+                        "type": "string",
+                        "description": "Which parliament: 'uk' (Westminster, default) or 'scotland' (Holyrood).",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_scottish_parliament",
+            "description": (
+                "Search Scottish Parliament (Holyrood) debates and written answers. "
+                "Returns speech excerpts from MSPs with speaker, date, and gid."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Full-text search query.",
+                    },
+                    "debate_type": {
+                        "type": "string",
+                        "description": "Type of content: 'debates' (chamber debates) or 'written_answers'. Omit to search all.",
+                    },
+                    "date_from": {
+                        "type": "string",
+                        "description": "Optional start date filter (YYYY-MM-DD).",
+                    },
+                    "date_to": {
+                        "type": "string",
+                        "description": "Optional end date filter (YYYY-MM-DD).",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+]
+
+_PARLIAMENT_TOOL_NAMES = {t["function"]["name"] for t in PARLIAMENT_TOOLS}
+
+
 def get_worker_tools(research_mode: str = "legislation_only") -> list:
     """Return the appropriate tool set for the given research mode."""
     if research_mode == "case_law_only":
         return CASE_LAW_TOOLS
     elif research_mode == "legislation_and_case_law":
         return WORKER_TOOLS + CASE_LAW_TOOLS
+    elif research_mode == "parliamentary_records":
+        return PARLIAMENT_TOOLS
     return WORKER_TOOLS
+
+
+import re as _re
+
+_TWFY_API_BASE = "https://www.theyworkforyou.com/api"
+
+
+def _strip_html(text: str) -> str:
+    import html as _html
+    clean = _re.sub(r"<[^>]+>", " ", text or "")
+    return _html.unescape(clean).strip()
+
+
+def _slim_hansard_results(resp, query: str, source_type: str = "hansard") -> dict:
+    """Slim a TheyWorkForYou getHansard response to the fields the model needs.
+
+    source_type: "hansard" for UK Parliament results, "scottish_parliament" for SP results.
+    Passed explicitly because SP listurls don't match the UK listurl patterns and would
+    otherwise fall back to debate_type "debates" (the UK Commons endpoint), causing
+    get_hansard_debate to call the wrong TWFY endpoint.
+    """
+    if isinstance(resp, dict) and "error" in resp:
+        return {"error": resp["error"], "results": [], "total": 0, "query": query}
+    rows = resp if isinstance(resp, list) else resp.get("rows", [])
+    slimmed = []
+    for speech in rows[:10]:
+        body_clean = _strip_html(speech.get("body", ""))
+        speaker = speech.get("speaker") or {}
+        speaker_name = (
+            speaker.get("name", "") if isinstance(speaker, dict) else ""
+        ) or speech.get("hname", "")
+
+        # Debate title: TWFY API puts this in parent.body, not debate.name
+        parent = speech.get("parent") or {}
+        parent_body = parent.get("body", "") if isinstance(parent, dict) else ""
+        debate_name = _strip_html(parent_body) if parent_body else ""
+
+        listurl = speech.get("listurl", "")
+        if source_type == "scottish_parliament":
+            # SP written answers use spwrans; all other SP content uses getSP
+            debate_type_hint = "spwrans" if "wrans" in listurl.lower() else "sp"
+        elif "/lords/" in listurl:
+            debate_type_hint = "lords"
+        elif "/wrans/" in listurl:
+            debate_type_hint = "wrans"
+        elif "/wms/" in listurl:
+            debate_type_hint = "wms"
+        else:
+            debate_type_hint = "debates"
+
+        gid = speech.get("gid", "")
+        if source_type == "scottish_parliament":
+            speech_url = f"https://www.theyworkforyou.com/sp/?id={gid}"
+        else:
+            speech_url = f"https://www.theyworkforyou.com/debate/?id={gid}"
+        slimmed.append({
+            "gid": gid,
+            "hdate": speech.get("hdate", ""),
+            "speaker": speaker_name,
+            "debate": debate_name,
+            "debate_type": debate_type_hint,
+            "excerpt": body_clean[:400],
+            "url": speech_url,
+        })
+    return {"results": slimmed, "total": len(slimmed), "query": query}
+
+
+def _slim_members_results(resp: dict) -> dict:
+    """Slim a UK Parliament Members API response."""
+    items = resp.get("items", [])
+    slimmed = []
+    for item in items[:5]:
+        v = item.get("value", {})
+        membership = v.get("latestHouseMembership", {}) or {}
+        slimmed.append({
+            "id": v.get("id"),
+            "name": v.get("nameDisplayAs", ""),
+            "party": (v.get("latestParty") or {}).get("name", ""),
+            "constituency": membership.get("membershipFrom", ""),
+            "house": membership.get("house", ""),
+            "url": f"https://members.parliament.uk/member/{v.get('id')}/contact",
+        })
+    return {"results": slimmed, "total": resp.get("totalResults", len(slimmed))}
+
+
+def _slim_bills_results(resp: dict) -> dict:
+    """Slim a UK Parliament Bills API response."""
+    items = resp.get("items", [])
+    slimmed = []
+    for item in items[:10]:
+        stage = item.get("currentStage") or {}
+        slimmed.append({
+            "billId": item.get("billId"),
+            "shortTitle": item.get("shortTitle", ""),
+            "currentStage": stage.get("description", "") if isinstance(stage, dict) else str(stage),
+            "currentHouse": item.get("currentHouse", ""),
+            "lastUpdate": item.get("lastUpdate", ""),
+            "url": f"https://bills.parliament.uk/bills/{item.get('billId')}",
+        })
+    return {"results": slimmed, "total": resp.get("totalResults", len(slimmed))}
+
+
+async def execute_parliament_tool(
+    name: str,
+    args: dict,
+    on_chunk: Optional[Callable] = None,
+    timing_collector=None,
+) -> str:
+    """Execute a parliament research tool call and return JSON string result."""
+    logger.info(f"[Parliament Tool Exec] {name} with args: {json.dumps(args)}")
+
+    call_id = str(uuid.uuid4())
+    twfy_key = settings.twfy_api_key or ""
+
+    if not twfy_key and name in {"search_hansard", "get_hansard_debate", "search_scottish_parliament"}:
+        return json.dumps({
+            "error": (
+                "TWFY_API_KEY is not configured. "
+                "Register for a free key at https://www.theyworkforyou.com/api/key "
+                "and add TWFY_API_KEY to your environment."
+            ),
+            "results": [],
+        })
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+
+            if name == "search_hansard":
+                url = f"{_TWFY_API_BASE}/getHansard"
+                params: dict = {
+                    "key": twfy_key,
+                    "output": "js",
+                    "search": args["query"],
+                    "num": 10,
+                }
+                if args.get("debate_type"):
+                    params["type"] = args["debate_type"]
+                if args.get("speaker"):
+                    params["person"] = args["speaker"]
+                # Note: TWFY getHansard does not support date range filtering.
+                # date_from/date_to are accepted by the tool schema for intent
+                # but are not forwarded to the API — results are ordered by date
+                # (most recent first) regardless of any date constraints.
+
+                await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url, "method": "GET", "payload": params})
+                t0 = time.perf_counter()
+                resp = await client.get(url, params=params)
+                elapsed_ms = (time.perf_counter() - t0) * 1000
+                if timing_collector:
+                    timing_collector.record_lex_api_call(name, elapsed_ms)
+                try:
+                    resp_json = resp.json()
+                except Exception:
+                    resp_json = {"text": resp.text}
+                await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": url, "status": resp.status_code, "response": resp_json, "elapsed_ms": round(elapsed_ms)})
+                resp.raise_for_status()
+                return json.dumps(_slim_hansard_results(resp_json, args["query"]))
+
+            elif name == "get_hansard_debate":
+                gid = args["gid"]
+                debate_type = args.get("debate_type", "debates")
+                gid_lower = gid.lower()
+                if "wrans" in gid_lower or debate_type == "wrans":
+                    endpoint = "getWrans"
+                elif "lords" in gid_lower or debate_type == "lords":
+                    endpoint = "getLords"
+                elif debate_type in ("sp", "spwrans"):
+                    # Scottish Parliament debates and written answers both use getSP in TWFY
+                    endpoint = "getSP"
+                else:
+                    endpoint = "getDebates"
+
+                url = f"{_TWFY_API_BASE}/{endpoint}"
+                params = {"key": twfy_key, "output": "js", "id": gid}
+
+                await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url, "method": "GET", "payload": params})
+                t0 = time.perf_counter()
+                resp = await client.get(url, params=params)
+                elapsed_ms = (time.perf_counter() - t0) * 1000
+                if timing_collector:
+                    timing_collector.record_lex_api_call(name, elapsed_ms)
+                try:
+                    resp_json = resp.json()
+                except Exception:
+                    resp_json = {"text": resp.text}
+                await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": url, "status": resp.status_code, "response": {"preview": str(resp_json)[:300]}, "elapsed_ms": round(elapsed_ms)})
+                resp.raise_for_status()
+                return json.dumps(resp_json)
+
+            elif name == "get_member_info":
+                parliament = args.get("parliament", "commons")
+
+                if parliament == "scotland":
+                    url = f"{_TWFY_API_BASE}/getMSPInfo"
+                    params = {"key": twfy_key, "output": "js", "search": args["name"]}
+                    await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url, "method": "GET", "payload": params})
+                    t0 = time.perf_counter()
+                    resp = await client.get(url, params=params)
+                    elapsed_ms = (time.perf_counter() - t0) * 1000
+                    if timing_collector:
+                        timing_collector.record_lex_api_call(name, elapsed_ms)
+                    try:
+                        resp_json = resp.json()
+                    except Exception:
+                        resp_json = {"text": resp.text}
+                    await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": url, "status": resp.status_code, "response": resp_json, "elapsed_ms": round(elapsed_ms)})
+                    resp.raise_for_status()
+                    return json.dumps(resp_json)
+
+                else:
+                    house = 2 if parliament == "lords" else 1
+                    url = "https://members-api.parliament.uk/api/Members/Search"
+                    params = {"Name": args["name"], "House": house, "IsCurrentMember": "false", "Skip": 0, "Take": 5}
+                    await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url, "method": "GET", "payload": params})
+                    t0 = time.perf_counter()
+                    resp = await client.get(url, params=params)
+                    elapsed_ms = (time.perf_counter() - t0) * 1000
+                    if timing_collector:
+                        timing_collector.record_lex_api_call(name, elapsed_ms)
+                    try:
+                        resp_json = resp.json()
+                    except Exception:
+                        resp_json = {"text": resp.text}
+                    await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": url, "status": resp.status_code, "response": resp_json, "elapsed_ms": round(elapsed_ms)})
+                    resp.raise_for_status()
+                    return json.dumps(_slim_members_results(resp_json))
+
+            elif name == "search_bills":
+                parliament = args.get("parliament", "uk")
+
+                if parliament == "scotland":
+                    url = "https://data.parliament.scot/api/bills"
+                    params = {}
+                    await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url, "method": "GET", "payload": params})
+                    t0 = time.perf_counter()
+                    resp = await client.get(url, params=params)
+                    elapsed_ms = (time.perf_counter() - t0) * 1000
+                    if timing_collector:
+                        timing_collector.record_lex_api_call(name, elapsed_ms)
+                    try:
+                        resp_json = resp.json()
+                    except Exception:
+                        resp_json = {"text": resp.text}
+                    await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": url, "status": resp.status_code, "response": resp_json, "elapsed_ms": round(elapsed_ms)})
+                    resp.raise_for_status()
+                    # Filter Scottish bills by query keyword (no server-side search param)
+                    query_lower = args["query"].lower()
+                    bills = resp_json if isinstance(resp_json, list) else resp_json.get("items", [])
+                    filtered = [
+                        b for b in bills
+                        if query_lower in (b.get("ShortTitle") or b.get("title") or "").lower()
+                        or query_lower in (b.get("LongTitle") or "").lower()
+                    ][:10]
+                    slimmed = [{
+                        "billId": b.get("BillId") or b.get("id"),
+                        "shortTitle": b.get("ShortTitle") or b.get("title", ""),
+                        "currentStage": b.get("CurrentStage") or b.get("stage", ""),
+                        "url": f"https://www.parliament.scot/bills-and-laws/bills/{b.get('BillId') or b.get('id')}",
+                    } for b in filtered]
+                    return json.dumps({"results": slimmed, "total": len(slimmed), "parliament": "scotland"})
+
+                else:
+                    url = "https://bills-api.parliament.uk/api/v1/Bills"
+                    params = {"SearchTerm": args["query"], "SortOrder": "DateUpdatedDescending", "Take": 10, "Skip": 0}
+                    await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url, "method": "GET", "payload": params})
+                    t0 = time.perf_counter()
+                    resp = await client.get(url, params=params)
+                    elapsed_ms = (time.perf_counter() - t0) * 1000
+                    if timing_collector:
+                        timing_collector.record_lex_api_call(name, elapsed_ms)
+                    try:
+                        resp_json = resp.json()
+                    except Exception:
+                        resp_json = {"text": resp.text}
+                    await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": url, "status": resp.status_code, "response": resp_json, "elapsed_ms": round(elapsed_ms)})
+                    resp.raise_for_status()
+                    return json.dumps(_slim_bills_results(resp_json))
+
+            elif name == "search_scottish_parliament":
+                url = f"{_TWFY_API_BASE}/getHansard"
+                debate_type = args.get("debate_type")
+                twfy_type = "spwrans" if debate_type == "written_answers" else "sp"
+                params = {
+                    "key": twfy_key,
+                    "output": "js",
+                    "search": args["query"],
+                    "type": twfy_type,
+                    "num": 10,
+                }
+                # TWFY getHansard does not support date range filtering — params ignored.
+
+                await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url, "method": "GET", "payload": params})
+                t0 = time.perf_counter()
+                resp = await client.get(url, params=params)
+                elapsed_ms = (time.perf_counter() - t0) * 1000
+                if timing_collector:
+                    timing_collector.record_lex_api_call(name, elapsed_ms)
+                try:
+                    resp_json = resp.json()
+                except Exception:
+                    resp_json = {"text": resp.text}
+                await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": url, "status": resp.status_code, "response": resp_json, "elapsed_ms": round(elapsed_ms)})
+                resp.raise_for_status()
+                return json.dumps(_slim_hansard_results(resp_json, args["query"], source_type="scottish_parliament"))
+
+            else:
+                return f"Error: Tool {name} not found in parliament toolset."
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"[Parliament Tool Error] {name}: {e.response.text}")
+        return f"Error executing tool: {e.response.text}"
+    except Exception as e:
+        logger.error(f"[Parliament Tool Error] {name}: {e}")
+        return f"Error executing tool: {str(e)}"
 
 
 _ATOM_NS = "http://www.w3.org/2005/Atom"

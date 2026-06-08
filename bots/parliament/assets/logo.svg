@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="#B8860B">
+  <!-- Pediment (triangular roof) -->
+  <polygon points="4,26 40,8 76,26"/>
+
+  <!-- Entablature (horizontal band under pediment) -->
+  <rect x="4" y="26" width="72" height="6"/>
+
+  <!-- Columns — 4 columns with wide centre gap (doorway) -->
+  <rect x="11" y="32" width="7" height="30"/>
+  <rect x="24" y="32" width="7" height="30"/>
+  <rect x="49" y="32" width="7" height="30"/>
+  <rect x="62" y="32" width="7" height="30"/>
+
+  <!-- Stylobate (floor below columns) -->
+  <rect x="4" y="62" width="72" height="4"/>
+
+  <!-- Steps -->
+  <rect x="2" y="66" width="76" height="5"/>
+  <rect x="0" y="71" width="80" height="5"/>
+</svg>
