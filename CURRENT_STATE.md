@@ -50,7 +50,7 @@ A `ContextVar` in `provider_factory.py` carries the resolved config through the 
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/models` | Returns active provider's model list with `active` flag |
-| POST | `/api/chat` | SSE streaming; supports `deep_research` and `research_mode` |
+| POST | `/api/chat` | SSE streaming; supports `research_mode` |
 
 ### Users (`/api/users`) — 4 endpoints (admin only)
 CRUD: list, create, update, delete

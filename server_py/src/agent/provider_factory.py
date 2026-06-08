@@ -13,7 +13,7 @@ import asyncio
 import json
 import logging
 from contextvars import ContextVar
-from typing import Callable, Optional
+from typing import Callable
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -190,8 +190,6 @@ def get_summarise_semaphore(provider: str, concurrency: int) -> asyncio.Semaphor
 # Shared async helper (single definition lives in summarisation.py)
 # ---------------------------------------------------------------------------
 
-from .summarisation import call_chunk  # noqa: F401 — re-exported for deep_research.py
-
 
 # ---------------------------------------------------------------------------
 # Client function accessors (DB-based)
@@ -221,9 +219,7 @@ async def get_list_models(db: AsyncSession) -> Callable:
 # ---------------------------------------------------------------------------
 
 def get_active_chat_loop() -> Callable:
-    """Return the chat_loop for the active provider from the current request context.
-    Used by deep_research.py which doesn't have a DB session.
-    """
+    """Return the chat_loop for the active provider from the current request context."""
     provider = _provider_config_ctx.get({}).get("_provider", "ollama")
     if provider == "openrouter":
         from .openrouter_client import chat_loop
@@ -290,9 +286,8 @@ def get_summarise_model() -> str:
 def get_active_summarise_for_query() -> Callable:
     """Return a bound summarise_for_query for the active provider.
 
-    Used by deep_research.py to apply the same summarisation pipeline as the
-    Worker agent.  Returns summarise_for_query with the provider-specific
-    chunk_fn pre-bound so callers don't need to know about it.
+    Returns summarise_for_query with the provider-specific chunk_fn pre-bound
+    so callers don't need to know about it.
     """
     import functools
     from .summarisation import summarise_for_query

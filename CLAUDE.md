@@ -30,7 +30,6 @@ Current feature branch: **`feature/multi-bot-federation`** — merge to `main` w
 - `.env` values are startup defaults/fallbacks; DB overrides at request time
 - A `ContextVar` in `provider_factory.py` carries the resolved config through the entire async call chain (chat_loop, worker agent, summarisation) without changing function signatures
 - Per-provider `RequestQueue` and summarisation `asyncio.Semaphore` cached by `(provider, concurrency)` — recreated automatically if settings change
-- `deep_research.py` routes `chat_loop` through `get_active_chat_loop()` so deep research also uses the correct provider
 
 ### Model Selection
 - Model is no longer hardcoded in the frontend — `App.jsx` calls `GET /api/models` on load

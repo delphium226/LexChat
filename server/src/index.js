@@ -13,7 +13,6 @@ const RequestQueue = require('./utils/queue');
 
 // Initialize Request Queue
 const requestQueue = new RequestQueue(config.concurrency.maxConcurrentRequests);
-const { chatWithDeepResearch } = require('./agent/deepResearch'); // Move require up here
 
 
 const app = express();
@@ -84,8 +83,6 @@ app.post('/api/chat', async (req, res) => {
     });
 
     try {
-        const { deep_research } = req.body;
-
         // Wrap AI execution in the Queue
         const responseMessage = await requestQueue.enqueue(async () => {
             // Timeout to notify user of long processing
@@ -100,8 +97,7 @@ app.post('/api/chat', async (req, res) => {
             }, PROCESS_TIMEOUT_MS);
 
             try {
-                if (deep_research) {
-                    return await chatWithDeepResearch([...messages], model, (status) => {
+                return await chatWithOllama([...messages], model, (status) => {
                         if (status.type !== 'token') {
                             logger.info(`Tool Status: ${JSON.stringify(status)}`);
                         }
@@ -110,17 +106,6 @@ app.post('/api/chat', async (req, res) => {
                             res.write(`data: ${JSON.stringify(status)}\n\n`);
                         }
                     }, controller.signal, num_ctx);
-                } else {
-                    return await chatWithOllama([...messages], model, (status) => {
-                        if (status.type !== 'token') {
-                            logger.info(`Tool Status: ${JSON.stringify(status)}`);
-                        }
-                        // Stream status updates to client
-                        if (!controller.signal.aborted) {
-                            res.write(`data: ${JSON.stringify(status)}\n\n`);
-                        }
-                    }, controller.signal, num_ctx);
-                }
             } finally {
                 clearTimeout(timeoutId);
             }

@@ -424,20 +424,6 @@ OUTPUT STRUCTURE (Use Markdown):
 Review your answer before responding: Does every claim have a corresponding source from the tool results? If yes, proceed."""
 
 
-DEEP_RESEARCH_SYSTEM_PROMPT = """You are a Deep Research Agent.
-Your goal is to provide a comprehensive, well-researched answer to the user's query.
-You have access to:
-1. UK Legislation Database (via worker tools).
-2. Live Web Search (via search_web).
-
-Follow this iterative process:
-1. PLAN: Break down the user's query into search steps.
-2. SEARCH: Use web search for context and legal databases for specifics.
-3. REFINE: Analyze results. If insufficient, search again (up to 3-5 steps).
-4. ANSWER: Synthesize all findings into a detailed final report.
-5. CITATIONS: ALWAYS include the source URL for every piece of information using Markdown link format [Title](url). If a URL is not available, mention the source name explicitly.
-"""
-
 MODEL_LIST = [
     {"name": "deepseek-v3.2:cloud", "contextLengthKB": 160},
     {"name": "deepseek-v4-pro:cloud", "contextLengthKB": 160},
@@ -478,7 +464,6 @@ class Settings(BaseSettings):
     ollama_api_key: Optional[str] = None
     ollama_default_context: int = 131072
     max_concurrent_requests: int = 5
-    enable_deep_research: bool = True
     ollama_temperature: float = 0.1
 
     # Agent / OpenRouter

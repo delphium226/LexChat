@@ -248,7 +248,11 @@ async def chat_loop(
 
         next_messages = [*messages, assistant_message]
 
-        MAX_TOOL_RESULT_CHARS = 40_000
+        # Cap each tool result at the summarisation threshold — results above this
+        # are summarised by run_worker_tool before reaching here, so truncation only
+        # fires as a last-resort safety net (e.g. model not in config list).
+        from .provider_factory import get_summarise_threshold
+        MAX_TOOL_RESULT_CHARS = get_summarise_threshold()
 
         async def _run_tool(tc):
             if cancel_event and cancel_event.is_set():

@@ -204,9 +204,11 @@ async def chat_loop(
 
         next_messages = [*messages, message]
 
-        # Cap each tool result to avoid blowing the context window.
-        # Chunked summaries of large acts land at 15K-45K chars; 40 000 chars ≈ 10 000 tokens.
-        MAX_TOOL_RESULT_CHARS = 40_000
+        # Cap each tool result at the summarisation threshold — results above this
+        # are summarised by run_worker_tool before reaching here, so truncation only
+        # fires as a last-resort safety net (e.g. model not in config list).
+        from .provider_factory import get_summarise_threshold
+        MAX_TOOL_RESULT_CHARS = get_summarise_threshold()
 
         # Execute all tool calls concurrently — they are independent of each
         # other so there is no reason to serialise them.  Results are reordered

@@ -71,7 +71,6 @@ APIs marked **legislation bot** are used by the default legislation bot. APIs ma
 | **Parliament Members API** | `https://members-api.parliament.uk` | 443 | HTTPS | Parliament | MP and Lord lookup (`get_member_info` tool). GET requests to `/api/Members/Search` with name and house parameters. No authentication required. |
 | **Parliament Bills API** | `https://bills-api.parliament.uk` | 443 | HTTPS | Parliament | UK Westminster bill search (`search_bills` tool). GET requests to `/api/v1/Bills` with keyword search. No authentication required. |
 | **Scottish Parliament Bills** | `https://data.parliament.scot` | 443 | HTTPS | Parliament | Scottish Parliament bill search (`search_bills` tool, Scotland mode). GET request to `/api/bills` returns all bills; filtering is done client-side. No authentication required. |
-| **Google Search** | `https://www.google.com` | 443 | HTTPS | Both | Used by the Deep Research agent's `search_web` tool when research mode includes web search. Requests use a standard browser User-Agent. Only triggered in web-search-enabled research modes. |
 | **Gmail SMTP** | `smtp.gmail.com` | 465 | SMTPS | Both | Password reset emails (if `EMAIL_USER` and `EMAIL_PASS` are configured). Not configured by default in government deployment. |
 
 > **Ollama Cloud Inference note:** When using `:cloud` models, Ollama proxies to third-party AI inference providers whose exact hostnames are managed by Ollama and not statically defined in LexChat. Allowlisting `*.ollama.ai` covers the Ollama registry; actual inference traffic may route to additional provider-specific endpoints. Monitor initial connections with logging enabled to capture resolved FQDNs, or contact Ollama for their current provider domain list.
@@ -83,7 +82,6 @@ APIs marked **legislation bot** are used by the default legislation bot. APIs ma
 | **Long-lived streaming connections** | AI responses stream via HTTP POST with `Transfer-Encoding: chunked`. A single response can take **60–300+ seconds**. Proxies with default idle timeouts (typically 60s) will prematurely terminate these connections. **Set proxy read/idle timeout to at least 300 seconds** for traffic to Ollama and OpenRouter endpoints. |
 | **Authorization headers** | Requests to Ollama cloud endpoints and OpenRouter carry `Authorization: Bearer <token>`. Ensure the proxy does not strip or modify `Authorization` headers on outbound HTTPS requests. |
 | **No WebSocket traffic** | All traffic uses standard HTTP/HTTPS. No WebSocket connections are established. |
-| **Spoofed User-Agent** | The Deep Research web search feature (`server_py/src/agent/web_search.py`) sends requests to `www.google.com` with a Chrome browser User-Agent string. Proxies enforcing User-Agent policies may flag these. |
 
 ---
 
@@ -111,7 +109,6 @@ APIs marked **legislation bot** are used by the default legislation bot. APIs ma
 | Parliament Members API | `members-api.parliament.uk` | 443 | **Yes** — required for MP/Lord lookups (parliament bot). |
 | Parliament Bills API | `bills-api.parliament.uk` | 443 | **Yes** — required for Westminster bill search (parliament bot). |
 | Scottish Parliament Bills | `data.parliament.scot` | 443 | **Yes** — required for Scottish bill search (parliament bot). |
-| Google Web Search | `www.google.com` | 443 | **Optional** — only if Deep Research web search mode is used. |
 | Gmail SMTP | `smtp.gmail.com` | 465 | **Optional** — only if email notifications are configured. |
 
 ### 3.3 Minimum Required Inbound Access
@@ -147,7 +144,6 @@ APIs marked **legislation bot** are used by the default legislation bot. APIs ma
 | `server_py/src/config.py` | Application settings, model lists, system prompts, LEX API URL |
 | `server_py/src/agent/provider_factory.py` | Provider resolution, ContextVar, queue/semaphore caching |
 | `server_py/src/agent/tools.py` | LEX API client (legislation bot tools) + TWFY/Parliament API client (parliament bot tools) |
-| `server_py/src/agent/web_search.py` | Google web search for Deep Research mode |
 | `server_py/src/services/email_service.py` | Gmail SMTP email sender (optional) |
 | `server_py/test_apis.ps1` | Connectivity test script — verifies all runtime API endpoints are reachable |
 | `deployment/certs/lexchat.crt` | TLS certificate for HTTPS on port 443 |

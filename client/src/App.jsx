@@ -654,7 +654,7 @@ function AppContent() {
             setAgentStatus(status.message);
           }
         },
-        controller.signal, false, researchMode,
+        controller.signal, researchMode,
         { jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, currentOnly, chatId: activeChatId }
       );
 

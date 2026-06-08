@@ -97,9 +97,8 @@ _TYPE_CODES: dict[str, set[str]] = {
 # Tool schemas (Ollama function-calling format)
 # -----------------------------------------------------------------------
 
-MANAGER_TOOLS = []
-if settings.enable_deep_research:
-    MANAGER_TOOLS.append({
+MANAGER_TOOLS = [
+    {
         "type": "function",
         "function": {
             "name": "delegate_research",
@@ -126,7 +125,8 @@ if settings.enable_deep_research:
                 "required": ["query"],
             },
         },
-    })
+    },
+]
 
 def get_manager_tools(peer_descriptions: str = "") -> list:
     """Return the manager tool list, optionally including consult_peer.

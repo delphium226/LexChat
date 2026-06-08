@@ -132,7 +132,6 @@ SSE streaming endpoint. Each event is `data: {...}\n\n`.
   "messages": [{ "role": "user", "content": "..." }],
   "model": "string",
   "num_ctx": 262144,
-  "deep_research": false,
   "research_mode": "legislation_only|case_law|combined"
 }
 ```

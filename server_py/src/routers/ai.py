@@ -9,7 +9,6 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from ..agent.deep_research import chat_with_deep_research
 from ..agent.provider_factory import (
     get_active_provider,
     get_list_models,
@@ -50,7 +49,6 @@ class ChatRequest(BaseModel):
     messages: List[dict]
     model: str
     num_ctx: Optional[int] = None
-    deep_research: Optional[bool] = False
     research_mode: Optional[str] = "legislation_only"
     jurisdiction: Optional[str] = None
     year_from: Optional[int] = None
@@ -134,17 +132,7 @@ async def chat_endpoint(body: ChatRequest, request: Request):
                 process_user_request = get_process_user_request_from_context()
 
                 async with async_session_maker() as db_session:
-                    if body.deep_research:
-                        result = await chat_with_deep_research(
-                            list(body.messages),
-                            resolved_model,
-                            on_chunk,
-                            cancel_event,
-                            body.num_ctx or 0,
-                            timing_collector=timing,
-                        )
-                    else:
-                        result = await process_user_request(
+                    result = await process_user_request(
                             list(body.messages),
                             resolved_model,
                             on_chunk,
