@@ -389,7 +389,7 @@ async def run_worker_tool(
                 "type": "tool_end",
                 "tool": "Extracting the relevant sections from a large document",
                 "id": summarise_id,
-                "result": "Done",
+                "result": result,
             })
 
     # Append phase nudges after summarisation so they are not discarded

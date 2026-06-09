@@ -7,17 +7,18 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from ..agent.ollama_client import process_user_request
+from ..agent.provider_factory import (
+    get_active_provider,
+    get_provider_config,
+    get_process_user_request_from_context,
+    get_request_queue,
+    set_request_provider_config,
+)
 from ..database import async_session_maker
-from ..utils.queue import RequestQueue
-from ..config import settings
 
 logger = logging.getLogger("app")
 
 router = APIRouter(tags=["System"])
-
-# We can reuse the same queue or a separate one. For now, sharing the global queue seems safe to prevent overload.
-request_queue = RequestQueue(concurrency=settings.max_concurrent_requests)
 
 class SystemChatRequest(BaseModel):
     messages: List[dict]
@@ -38,9 +39,22 @@ async def system_chat_endpoint(body: SystemChatRequest, request: Request):
     cancel_event = asyncio.Event()
 
     async def event_stream():
+        async with async_session_maker() as _cfg_db:
+            active_provider = await get_active_provider(_cfg_db)
+            provider_config = await get_provider_config(_cfg_db, active_provider)
+
+        set_request_provider_config({
+            **provider_config,
+            "_provider": active_provider,
+        })
+        resolved_model = provider_config.get("model") or body.model
+        request_queue = get_request_queue(
+            active_provider, provider_config["max_concurrent_requests"]
+        )
+
         # Detect client disconnect
         disconnect_task = asyncio.create_task(_watch_disconnect(request, cancel_event))
-        
+
         try:
             # Collect SSE events via callback
             events = asyncio.Queue()
@@ -49,21 +63,18 @@ async def system_chat_endpoint(body: SystemChatRequest, request: Request):
                 events.put_nowait(data)
 
             async def run_agent_task():
-                # Get a DB session for learning injection
+                process_user_request = get_process_user_request_from_context()
                 async with async_session_maker() as db_session:
                     return await process_user_request(
                         list(body.messages),
-                        body.model,
+                        resolved_model,
                         on_chunk,
                         cancel_event,
                         body.num_ctx or 0,
                         db_session=db_session,
-                        emit_tool_details=True  # ENABLE DETAILED EVENTS
+                        emit_tool_details=True,
                     )
 
-            # Execution logic similar to ai.py but simplified (no queue waiting events needed for system? 
-            # Actually, system might want to know it's queued. Let's keep it.)
-            
             def on_queue_waiting(position):
                 events.put_nowait({"type": "queue", "position": position})
 
