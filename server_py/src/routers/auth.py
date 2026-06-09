@@ -68,10 +68,10 @@ async def login(
         logger.warning("[Auth] Failed to write login activity log")
 
     token_data = {"sub": user.username, "id": user.id, "role": user.role}
-    expires = timedelta(days=30) if creds.rememberMe else timedelta(days=1)
+    expires = timedelta(days=30) if creds.rememberMe else timedelta(days=7)
     access_token = create_access_token(data=token_data, expires_delta=expires)
 
-    max_age = 30 * 24 * 60 * 60 if creds.rememberMe else 24 * 60 * 60
+    max_age = 30 * 24 * 60 * 60 if creds.rememberMe else 7 * 24 * 60 * 60
     response.set_cookie(
         key="token",
         value=access_token,

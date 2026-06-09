@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
 const AuthContext = createContext();
@@ -8,6 +8,10 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [sessionExpired, setSessionExpired] = useState(false);
+    const userRef = useRef(null);
+
+    useEffect(() => { userRef.current = user; }, [user]);
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -23,7 +27,23 @@ export const AuthProvider = ({ children }) => {
         checkAuth();
     }, []);
 
+    // Global 401 interceptor — gracefully logs out if the token expires mid-session
+    useEffect(() => {
+        const id = axios.interceptors.response.use(
+            res => res,
+            err => {
+                if (err.response?.status === 401 && userRef.current !== null) {
+                    setSessionExpired(true);
+                    setUser(null);
+                }
+                return Promise.reject(err);
+            }
+        );
+        return () => axios.interceptors.response.eject(id);
+    }, []);
+
     const login = async (username, password, rememberMe) => {
+        setSessionExpired(false);
         try {
             const { data } = await axios.post('/api/auth/login', { username, password, rememberMe });
             setUser(data.user);
@@ -43,10 +63,17 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const logoutWithExpiry = async () => {
+        setSessionExpired(true);
+        await logout();
+    };
+
     const value = {
         user,
         login,
         logout,
+        logoutWithExpiry,
+        sessionExpired,
         loading
     };
 

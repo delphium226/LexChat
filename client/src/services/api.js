@@ -32,7 +32,9 @@ export const sendMessage = (messages, model, num_ctx, onUpdate, signal, research
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                const err = new Error(errorData.detail || errorData.error || `HTTP error! status: ${response.status}`);
+                err.status = response.status;
+                throw err;
             }
 
             const reader = response.body.getReader();
@@ -100,7 +102,9 @@ export const sendSystemMessage = (messages, model, num_ctx, onUpdate, signal) =>
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                const err = new Error(errorData.detail || errorData.error || `HTTP error! status: ${response.status}`);
+                err.status = response.status;
+                throw err;
             }
 
             const reader = response.body.getReader();

@@ -8,7 +8,7 @@ const LoginModal = ({ botName = 'AILA', botLogoEmoji = null }) => {
     const [rememberMe, setRememberMe] = useState(false);
     const [error, setError] = useState('');
     const [showForgotDialog, setShowForgotDialog] = useState(false);
-    const { login } = useAuth();
+    const { login, sessionExpired } = useAuth();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -31,6 +31,12 @@ const LoginModal = ({ botName = 'AILA', botLogoEmoji = null }) => {
                 <h2 className="text-2xl font-bold mb-6 text-ink-900 text-center">
                     Login
                 </h2>
+
+                {sessionExpired && (
+                    <div className="bg-amber-50 border border-amber-300 text-amber-800 px-4 py-3 rounded mb-4 text-sm">
+                        Your session has expired. Please log in again.
+                    </div>
+                )}
 
                 {error && (
                     <div className="bg-danger-soft border border-danger text-danger px-4 py-3 rounded mb-4">

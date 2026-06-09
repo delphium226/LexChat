@@ -164,7 +164,7 @@ function GhostBtn({ children, icon, onClick, disabled, title }) {
 // ── Main app ───────────────────────────────────────────────────
 
 function AppContent() {
-  const { user, logout } = useAuth();
+  const { user, logout, logoutWithExpiry } = useAuth();
 
   // ── Chat state ───────────────────────────────────────────────
   const [messages, setMessages] = useState([]);
@@ -691,6 +691,8 @@ function AppContent() {
     } catch (error) {
       if (error.name === 'AbortError' || error.message.includes('aborted') || error.message.includes('canceled')) {
         // stopped by user
+      } else if (error.status === 401) {
+        logoutWithExpiry();
       } else {
         console.error('Error sending message:', error);
         const match = error.message.match(/status code (\d{3})/);
