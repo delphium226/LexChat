@@ -27,20 +27,76 @@ To run over HTTPS, place your organisational certificate files in the `deploymen
 ```cmd
 deployment\start_native.cmd
 ```
-This script will automatically:
-1. Start **Ollama** (skips if already running)
-2. Start the **FastAPI backend** (uvicorn) on port 443 with HTTPS
+The script detects which mode to use automatically:
 
-*   **Application URL**: https://localhost
+| Condition | Mode | URL |
+|---|---|---|
+| SSL certs present in `deployment\certs\` | HTTPS on port 443 | `https://localhost` |
+| No certs, no `--nginx` flag | HTTP on port 8000 | `http://localhost:8000` |
+| `--nginx` flag passed | nginx reverse proxy on port 80 | `http://localhost` |
+
 *   *On an internal network, access via your machine's FQDN (e.g. `https://your-server-name`), matching your certificate.*
 
 ### 4. Stop the App
 ```cmd
 deployment\stop_native.cmd
 ```
-This gracefully stops the FastAPI backend, Ollama, and the PostgreSQL service.
+This gracefully stops nginx (if running), the FastAPI backend, Ollama, and the PostgreSQL service.
 
-### 5. Auto-Start at Boot (Recommended for Production)
+### 5. Demo / Home Server Mode (nginx Reverse Proxy)
+
+For hosting a demo on a home server or local VM, `start_native.cmd --nginx` starts the app behind an nginx reverse proxy on port 80 — no SSL certificates needed.
+
+#### Prerequisites
+
+Install nginx for Windows from [nginx.org](https://nginx.org/en/download.html) (download the stable Windows zip and unzip it). The script checks for nginx in:
+1. `PATH`
+2. `C:\nginx\`
+3. `C:\Program Files\nginx\`
+
+#### Start in nginx mode
+
+```cmd
+deployment\start_native.cmd --nginx
+```
+
+This starts uvicorn on port 8000 (internal only) and launches nginx on port 80 using `deployment\nginx\lexchat.conf`. The config disables response buffering so SSE streaming works correctly.
+
+#### IP Whitelisting (optional)
+
+To restrict access to specific IPs or subnets, add `allow`/`deny` directives to the `location /` block in `deployment\nginx\lexchat.conf`:
+
+```nginx
+location / {
+    allow 192.168.1.0/24;   # your LAN subnet
+    allow 10.0.0.5;         # a specific IP
+    deny all;               # block everyone else
+
+    proxy_pass http://lexchat;
+    # ... rest of config unchanged
+}
+```
+
+#### Firewall Hardening
+
+To lock down the Windows Defender Firewall to only the ports needed for the demo, run the hardening script as Administrator:
+
+```powershell
+# If scripts are blocked, set the execution policy first:
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+.\deployment\harden_firewall.ps1
+```
+
+Edit `$RDP_SUBNET` at the top of the script to match your LAN subnet before running. The script:
+- Allows inbound TCP port 80 (nginx, all sources)
+- Allows inbound TCP port 3389 (RDP, LAN subnet only)
+- Disables all other pre-existing inbound Allow rules
+- Sets the default inbound policy to Block
+
+The script is idempotent — safe to re-run after changing the subnet or adding rules.
+
+### 6. Auto-Start at Boot (Recommended for Production)
 
 By default the app only starts when you run `start_native.cmd` after logging in. To have AILA start automatically every time the server boots — without requiring a login — run the autostart installer once:
 
@@ -78,7 +134,7 @@ To remove autostart and revert to manual startup:
 
 > **Note:** PostgreSQL already auto-starts as a Windows service and is unaffected by this feature.
 
-### 6. Updating (Internet-Connected)
+### 7. Updating (Internet-Connected)
 To pull the latest code and rebuild:
 
 ```powershell
@@ -86,7 +142,7 @@ cd deployment
 .\update_native.ps1
 ```
 
-### 7. Updating Ollama and Restoring Cloud Model Manifests
+### 8. Updating Ollama and Restoring Cloud Model Manifests
 
 Cloud model manifests are committed to `deployment\ollama_models\` — they are tiny JSON pointers (no local weights). If Ollama needs updating or manifests disappear from the server, after `git pull` run:
 
@@ -200,9 +256,11 @@ When only the frontend (UI) has changed, use the lightweight update scripts inst
 | `reconstruct_binaries.ps1` | Reconstruct chunks back into binaries on target |
 | `update_native.ps1` | Pull latest code and rebuild (internet-connected) |
 | `update_ollama.ps1` | Update Ollama binary and restore cloud model manifests from repo |
-| `start_native.cmd` | Start Ollama + backend (internet-connected, interactive) |
+| `start_native.cmd` | Start all services; `--nginx` flag enables nginx reverse proxy mode |
 | `start_native_offline.cmd` | Start Ollama + backend (air-gapped, interactive) |
-| `stop_native.cmd` | Gracefully stop all services |
+| `stop_native.cmd` | Gracefully stop all services (including nginx if running) |
+| `harden_firewall.ps1` | Lock Windows Defender Firewall to ports 80 and 3389 only (demo/home server) |
+| `nginx/lexchat.conf` | nginx reverse proxy config for `--nginx` mode (port 80 → uvicorn port 8000) |
 | `start_background.ps1` | Headless startup called by Task Scheduler at boot |
 | `install_autostart.ps1` | One-time setup: register boot-time Task Scheduler task for AILA backend |
 | `install_ollama_autostart.ps1` | One-time setup: ensure Ollama starts at boot (service or Task Scheduler task) |
