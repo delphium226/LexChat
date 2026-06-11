@@ -97,30 +97,33 @@ set BOT_CONFIG_PATH=%~dp0..\bots\legislation\bot_config.json
 start "LexChat Backend" cmd /k "python -m uvicorn src.main:app --host 0.0.0.0 !SSL_ARGS!"
 
 :: 3b. Start Nginx (only in --nginx mode)
-if !USE_NGINX!==1 (
-    echo.
-    echo [3b] Starting Nginx (reverse proxy)...
-    set "NGINX_EXE="
-    for /f "delims=" %%i in ('where nginx 2^>nul') do if not defined NGINX_EXE set "NGINX_EXE=%%i"
-    if not defined NGINX_EXE if exist "C:\nginx\nginx.exe" set "NGINX_EXE=C:\nginx\nginx.exe"
-    if not defined NGINX_EXE if exist "C:\Program Files\nginx\nginx.exe" set "NGINX_EXE=C:\Program Files\nginx\nginx.exe"
+if !USE_NGINX!==0 goto :nginx_skip
 
-    if not defined NGINX_EXE (
-        echo [ERROR] nginx.exe not found in PATH or common install locations.
-        echo         Install nginx for Windows from nginx.org, then either add to PATH
-        echo         or install to C:\nginx or C:\Program Files\nginx
-        pause
-        exit /b 1
-    )
+echo.
+echo [3b] Starting Nginx (reverse proxy)...
 
-    for %%i in ("!NGINX_EXE!") do set "NGINX_DIR=%%~dpi"
-    set "NGINX_DIR=!NGINX_DIR:~0,-1!"
-    set "NGINX_CONF=%~dp0nginx\lexchat.conf"
+set "NGINX_EXE="
+for /f "delims=" %%i in ('where nginx 2^>nul') do if not defined NGINX_EXE set "NGINX_EXE=%%i"
+if not defined NGINX_EXE if exist "C:\nginx\nginx.exe" set "NGINX_EXE=C:\nginx\nginx.exe"
+if not defined NGINX_EXE if exist "C:\Program Files\nginx\nginx.exe" set "NGINX_EXE=C:\Program Files\nginx\nginx.exe"
 
-    start "LexChat Nginx" /MIN "!NGINX_EXE!" -p "!NGINX_DIR!" -c "!NGINX_CONF!"
-    echo    Nginx started.
-    echo    Traffic flow: external port 80 --^> uvicorn port 8000
+if not defined NGINX_EXE (
+    echo [ERROR] nginx.exe not found in PATH or common install locations.
+    echo         Install nginx for Windows from nginx.org, then either add to PATH
+    echo         or install to C:\nginx or C:\Program Files\nginx
+    pause
+    exit /b 1
 )
+
+for %%i in ("!NGINX_EXE!") do set "NGINX_DIR=%%~dpi"
+set "NGINX_DIR=!NGINX_DIR:~0,-1!"
+set "NGINX_CONF=%~dp0nginx\lexchat.conf"
+
+start "LexChat Nginx" /MIN "!NGINX_EXE!" -p "!NGINX_DIR!" -c "!NGINX_CONF!"
+echo    Nginx started.
+echo    Traffic flow: external port 80 --^> uvicorn port 8000
+
+:nginx_skip
 
 :: 5. Check Frontend
 echo.
