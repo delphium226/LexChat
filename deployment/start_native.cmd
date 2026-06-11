@@ -92,10 +92,6 @@ start "LexChat Backend" cmd /k "python -m uvicorn src.main:app --host 0.0.0.0 !S
 if !USE_NGINX!==1 (
     echo.
     echo [3b] Starting Nginx (reverse proxy)...
-    echo    Nginx will accept incoming connections on port 80 and forward
-    echo    them to the uvicorn backend running on port 8000. This is the
-    echo    recommended setup for hosting the demo on a local network.
-
     set "NGINX_EXE="
     for /f "delims=" %%i in ('where nginx 2^>nul') do if not defined NGINX_EXE set "NGINX_EXE=%%i"
     if not defined NGINX_EXE if exist "C:\nginx\nginx.exe" set "NGINX_EXE=C:\nginx\nginx.exe"
@@ -116,7 +112,6 @@ if !USE_NGINX!==1 (
     start "LexChat Nginx" /MIN "!NGINX_EXE!" -p "!NGINX_DIR!" -c "!NGINX_CONF!"
     echo    Nginx started.
     echo    Traffic flow: external port 80 --^> uvicorn port 8000
-    echo    Public URL:   !APP_URL!
 )
 
 :: 5. Check Frontend
