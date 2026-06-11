@@ -71,19 +71,27 @@ set KEY_PATH=..\deployment\certs\lexchat.key
 set USE_SSL=0
 if !USE_NGINX!==0 if exist !CERT_PATH! if exist !KEY_PATH! set USE_SSL=1
 
-if !USE_NGINX!==1 (
-    set SSL_ARGS=--port 8000
-    set APP_URL=http://localhost
-    echo    Nginx mode: uvicorn on HTTP port 8000 ^(internal only^).
-) else if !USE_SSL!==1 (
-    set SSL_ARGS=--port 443 --ssl-keyfile !KEY_PATH! --ssl-certfile !CERT_PATH!
-    set APP_URL=https://localhost
-    echo    SSL certificates found. Running on HTTPS port 443.
-) else (
-    set SSL_ARGS=--port 8000
-    set APP_URL=http://localhost:8000
-    echo    No SSL certificates found. Running on HTTP port 8000.
-)
+if !USE_NGINX!==1 goto :mode_nginx
+if !USE_SSL!==1 goto :mode_ssl
+
+:mode_http
+set SSL_ARGS=--port 8000
+set APP_URL=http://localhost:8000
+echo    No SSL certificates found. Running on HTTP port 8000.
+goto :mode_done
+
+:mode_nginx
+set SSL_ARGS=--port 8000
+set APP_URL=http://localhost
+echo    Nginx mode: uvicorn on HTTP port 8000 ^(internal only^).
+goto :mode_done
+
+:mode_ssl
+set SSL_ARGS=--port 443 --ssl-keyfile !KEY_PATH! --ssl-certfile !CERT_PATH!
+set APP_URL=https://localhost
+echo    SSL certificates found. Running on HTTPS port 443.
+
+:mode_done
 
 set BOT_CONFIG_PATH=%~dp0..\bots\legislation\bot_config.json
 start "LexChat Backend" cmd /k "python -m uvicorn src.main:app --host 0.0.0.0 !SSL_ARGS!"
