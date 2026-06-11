@@ -1,6 +1,10 @@
 @echo off
 SETLOCAL EnableDelayedExpansion
 
+:: Parse arguments
+set USE_NGINX=0
+for %%A in (%*) do if /I "%%A"=="--nginx" set USE_NGINX=1
+
 TITLE LexChat Native Launcher
 
 echo ===================================================
@@ -60,13 +64,18 @@ if exist venv\Scripts\activate.bat (
     echo [WARN] Virtual environment not found. Using system python.
 )
 
-:: Use SSL if certs are present, otherwise run on HTTP port 8000
+:: Use SSL if certs are present, otherwise run on HTTP port 8000.
+:: --nginx bypasses SSL: uvicorn runs on port 8000 internally; nginx is the public face on port 80.
 set CERT_PATH=..\deployment\certs\lexchat.crt
 set KEY_PATH=..\deployment\certs\lexchat.key
 set USE_SSL=0
-if exist !CERT_PATH! if exist !KEY_PATH! set USE_SSL=1
+if !USE_NGINX!==0 if exist !CERT_PATH! if exist !KEY_PATH! set USE_SSL=1
 
-if !USE_SSL!==1 (
+if !USE_NGINX!==1 (
+    set SSL_ARGS=--port 8000
+    set APP_URL=http://localhost
+    echo    Nginx mode: uvicorn on HTTP port 8000 ^(internal only^).
+) else if !USE_SSL!==1 (
     set SSL_ARGS=--port 443 --ssl-keyfile !KEY_PATH! --ssl-certfile !CERT_PATH!
     set APP_URL=https://localhost
     echo    SSL certificates found. Running on HTTPS port 443.
@@ -78,6 +87,32 @@ if !USE_SSL!==1 (
 
 set BOT_CONFIG_PATH=%~dp0..\bots\legislation\bot_config.json
 start "LexChat Backend" cmd /k "python -m uvicorn src.main:app --host 0.0.0.0 !SSL_ARGS!"
+
+:: 3b. Start Nginx (only in --nginx mode)
+if !USE_NGINX!==1 (
+    echo.
+    echo [3b] Starting Nginx on port 80...
+
+    set "NGINX_EXE="
+    for /f "delims=" %%i in ('where nginx 2^>nul') do if not defined NGINX_EXE set "NGINX_EXE=%%i"
+    if not defined NGINX_EXE if exist "C:\nginx\nginx.exe" set "NGINX_EXE=C:\nginx\nginx.exe"
+    if not defined NGINX_EXE if exist "C:\Program Files\nginx\nginx.exe" set "NGINX_EXE=C:\Program Files\nginx\nginx.exe"
+
+    if not defined NGINX_EXE (
+        echo [ERROR] nginx.exe not found in PATH or common install locations.
+        echo         Install nginx for Windows from nginx.org, then either add to PATH
+        echo         or install to C:\nginx or C:\Program Files\nginx
+        pause
+        exit /b 1
+    )
+
+    for %%i in ("!NGINX_EXE!") do set "NGINX_DIR=%%~dpi"
+    set "NGINX_DIR=!NGINX_DIR:~0,-1!"
+    set "NGINX_CONF=%~dp0nginx\lexchat.conf"
+
+    start "LexChat Nginx" /MIN "!NGINX_EXE!" -p "!NGINX_DIR!" -c "!NGINX_CONF!"
+    echo    Nginx started. Public URL: !APP_URL!
+)
 
 :: 5. Check Frontend
 echo.
