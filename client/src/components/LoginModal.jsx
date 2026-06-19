@@ -19,8 +19,8 @@ const LoginModal = ({ botName = 'AILA', botLogoEmoji = null }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-ink-950/50 flex items-center justify-center z-50">
-            <div className="bg-paper p-8 rounded-lg shadow-xl w-96">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-paper p-8 rounded-lg shadow-xl border border-ink-200 w-96">
                 <div className="flex items-center justify-center gap-2 mb-6">
                     {botLogoEmoji
                         ? <span style={{ fontSize: 40, lineHeight: 1, userSelect: 'none' }} aria-hidden="true">{botLogoEmoji}</span>
@@ -100,8 +100,8 @@ const LoginModal = ({ botName = 'AILA', botLogoEmoji = null }) => {
             </div>
 
             {showForgotDialog && (
-                <div className="fixed inset-0 bg-ink-950/60 flex items-center justify-center z-60">
-                    <div className="bg-paper p-6 rounded-lg shadow-xl w-80 text-center">
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-60">
+                    <div className="bg-paper p-6 rounded-lg shadow-xl border border-ink-200 w-80 text-center">
                         <p className="text-ink-900 mb-6">
                             Please contact the Administrators to get your password reset. Thank you.
                         </p>

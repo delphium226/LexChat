@@ -801,7 +801,6 @@ function AppContent() {
 
   if (!user) return <LoginModal botName={botInfo.name} botLogoEmoji={botInfo.logoEmoji} />;
 
-  if (!noticeAcknowledged) return <DataSensitivityNotice onAcknowledge={() => setNoticeAcknowledged(true)} botName={botInfo.name} botLogoEmoji={botInfo.logoEmoji} />;
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -1593,7 +1592,7 @@ function AppContent() {
       {features.matters_enabled && showAssignModal && (
         <div
           style={{
-            position: 'fixed', inset: 0, background: 'rgba(11,18,32,0.45)',
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             zIndex: 50, padding: 16,
           }}
@@ -1603,6 +1602,7 @@ function AppContent() {
             background: 'var(--paper)', borderRadius: 'var(--r-lg)',
             width: '100%', maxWidth: 380,
             boxShadow: '0 8px 32px rgba(11,18,32,0.14)',
+            border: '1px solid var(--ink-200)',
             fontFamily: 'var(--font-ui)',
           }}>
             <div style={{
@@ -1672,8 +1672,8 @@ function AppContent() {
       )}
 
       {showDataSources && (
-        <div className="fixed inset-0 bg-ink-950/50 flex items-center justify-center p-4 z-50" onClick={() => setShowDataSources(false)}>
-          <div className="bg-paper rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setShowDataSources(false)}>
+          <div className="bg-paper rounded-lg shadow-xl border border-ink-200 max-w-3xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-6 border-b border-ink-200 flex-shrink-0">
               <h2 className="text-xl font-bold text-ink-900">Data Sources</h2>
               <button onClick={() => setShowDataSources(false)} className="size-[30px] flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Close">
@@ -1791,8 +1791,8 @@ function AppContent() {
       )}
 
       {showAbout && (
-        <div className="fixed inset-0 bg-ink-950/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-paper rounded-lg p-6 max-w-2xl w-full shadow-xl">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-paper rounded-lg p-6 max-w-2xl w-full shadow-xl border border-ink-200">
             <div className="flex items-center justify-center gap-2 mb-4">
               {botInfo.logoEmoji
                 ? <span style={{ fontSize: 32, lineHeight: 1, userSelect: 'none' }} aria-hidden="true">{botInfo.logoEmoji}</span>
@@ -1827,8 +1827,8 @@ function AppContent() {
       )}
 
       {showAdminModal && (
-        <div className="fixed inset-0 bg-ink-950/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-paper rounded-lg p-6 w-[95vw] h-[95vh] overflow-y-auto shadow-xl relative">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-paper rounded-lg p-6 w-[95vw] h-[95vh] overflow-y-auto shadow-xl border border-ink-200 relative">
             <button onClick={() => setShowAdminModal(false)} className="absolute top-4 right-4 size-[30px] flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Close">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1840,8 +1840,8 @@ function AppContent() {
       )}
 
       {showSettingsModal && (
-        <div className="fixed inset-0 bg-ink-950/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-paper rounded-lg p-6 max-w-lg w-full shadow-xl relative">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-paper rounded-lg p-6 max-w-lg w-full shadow-xl border border-ink-200 relative">
             <button onClick={() => setShowSettingsModal(false)} className="absolute top-4 right-4 size-[30px] flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Close">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1853,8 +1853,8 @@ function AppContent() {
       )}
 
       {showHistoryModal && (
-        <div className="fixed inset-0 bg-ink-950/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-paper rounded-lg max-w-2xl w-full h-[80vh] shadow-xl relative overflow-hidden">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-paper rounded-lg max-w-2xl w-full h-[80vh] shadow-xl border border-ink-200 relative overflow-hidden">
             <HistoryModal onClose={() => setShowHistoryModal(false)} onSelectChat={loadChat} />
           </div>
         </div>
@@ -1877,6 +1877,14 @@ function AppContent() {
         onOpenDataSources={() => setShowDataSources(true)}
         onLogout={logout}
       />
+
+      {!noticeAcknowledged && (
+        <DataSensitivityNotice
+          onAcknowledge={() => setNoticeAcknowledged(true)}
+          botName={botInfo.name}
+          botLogoEmoji={botInfo.logoEmoji}
+        />
+      )}
     </div>
   );
 }

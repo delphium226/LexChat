@@ -16,9 +16,9 @@ const SettingsMenuModal = ({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-ink-950/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
             <div
-                className="bg-paper rounded-lg shadow-xl w-full max-w-sm overflow-hidden"
+                className="bg-paper rounded-lg shadow-xl border border-ink-200 w-full max-w-sm overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="p-4 border-b border-ink-200 flex justify-between items-center">

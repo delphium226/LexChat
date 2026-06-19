@@ -238,6 +238,7 @@ const MatterNotesModal = ({ matter, onClose }) => {
           width: '80vw', height: '80vh',
           display: 'flex', flexDirection: 'column',
           boxShadow: '0 8px 32px rgba(11,18,32,0.14)',
+          border: '1px solid var(--ink-200)',
           fontFamily: 'var(--font-ui)',
         }}>
           {/* Header */}

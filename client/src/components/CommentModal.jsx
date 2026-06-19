@@ -10,8 +10,8 @@ const CommentModal = ({ isOpen, onClose, onSubmit, initialComment = '', rating =
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-ink-950/50 flex items-center justify-center p-4 z-50">
-            <div className="bg-paper rounded-xl p-6 max-w-lg w-full shadow-md relative">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-paper rounded-xl p-6 max-w-lg w-full shadow-md border border-ink-200 relative">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="font-ui text-xl font-semibold text-ink-900">Rate & Feedback</h3>
                     <button onClick={onClose} className="size-[30px] flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Close">

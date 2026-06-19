@@ -10,7 +10,7 @@ const ShieldIcon = () => (
 
 export default function DataSensitivityNotice({ onAcknowledge, botName = 'AILA', botLogoEmoji = null }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/60 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-paper rounded-xl shadow-md border border-ink-200 w-full max-w-2xl max-h-[90vh] flex flex-col">
 
         {/* Header */}
