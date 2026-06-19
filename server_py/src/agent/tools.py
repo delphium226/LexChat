@@ -287,6 +287,28 @@ CASE_LAW_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_case_law_text",
+            "description": (
+                "Retrieve the full text of a specific judgment from the National Archives Find Case Law database. "
+                "Use a URL returned by search_case_law. "
+                "Returns the complete judgment text so you can read the reasoning, holdings, and obiter dicta "
+                "before synthesising your answer. Call this for the 1–3 most relevant cases found in Phase 1."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The URL of the case exactly as returned by search_case_law (e.g. 'https://caselaw.nationalarchives.gov.uk/uksc/2023/1').",
+                    },
+                },
+                "required": ["url"],
+            },
+        },
+    },
 ]
 
 
@@ -804,6 +826,40 @@ def _parse_case_law_atom(xml_text: str) -> list[dict]:
     return entries
 
 
+def _extract_judgment_text(xml_text: str) -> str:
+    """Extract plain text from a LegalDocML (AKOMA NTOSO) XML judgment."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return ""
+    parts = []
+    for el in root.iter():
+        if el.text and el.text.strip():
+            parts.append(el.text.strip())
+        if el.tail and el.tail.strip():
+            parts.append(el.tail.strip())
+    return "\n".join(parts)
+
+
+async def _fetch_judgment_text(url: str) -> dict:
+    """Fetch and return the full text of a National Archives judgment via its data.xml URL."""
+    data_url = url.rstrip("/") + "/data.xml"
+    async with httpx.AsyncClient(timeout=15.0, verify=False) as client:
+        resp = await client.get(data_url)
+        resp.raise_for_status()
+    text = _extract_judgment_text(resp.text)
+    # Extract title and NCN from the Atom entry we already have (best effort from XML)
+    try:
+        root = ET.fromstring(resp.text)
+        ncn = root.findtext(f"{{{_UK_NS}}}ncn") or ""
+        title_el = root.find(".//{http://docs.oasis-open.org/legaldocml/ns/akn/3.0}FRBRname")
+        title = title_el.get("value", "") if title_el is not None else ""
+    except Exception:
+        ncn = ""
+        title = ""
+    return {"url": url, "title": title, "ncn": ncn, "text": text}
+
+
 # -----------------------------------------------------------------------
 # Tool execution (LEX API client)
 # -----------------------------------------------------------------------
@@ -1057,6 +1113,40 @@ async def execute_worker_tool(
                     "total": len(entries),
                     "query": args["query"],
                 })
+
+            elif name == "get_case_law_text":
+                url = args["url"]
+
+                await _emit(on_chunk, {
+                    "type": "api_call_start",
+                    "id": call_id,
+                    "url": url + "/data.xml",
+                    "method": "GET",
+                    "payload": {},
+                })
+
+                t0 = time.perf_counter()
+                try:
+                    result = await _fetch_judgment_text(url)
+                except httpx.HTTPStatusError as e:
+                    result = {"error": f"HTTP {e.response.status_code} fetching judgment", "url": url, "text": ""}
+                except Exception as e:
+                    result = {"error": str(e), "url": url, "text": ""}
+                elapsed_ms = (time.perf_counter() - t0) * 1000
+
+                if timing_collector:
+                    timing_collector.record_lex_api_call(name, elapsed_ms)
+
+                await _emit(on_chunk, {
+                    "type": "api_call_end",
+                    "id": call_id,
+                    "url": url + "/data.xml",
+                    "status": 200 if "text" in result and result["text"] else 0,
+                    "response": {"preview": result.get("text", "")[:300]},
+                    "elapsed_ms": round(elapsed_ms),
+                })
+
+                return json.dumps(result)
 
             else:
                 return f"Error: Tool {name} not found in worker toolset."

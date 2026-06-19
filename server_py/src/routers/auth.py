@@ -34,6 +34,7 @@ class ChangePasswordRequest(BaseModel):
 class PreferencesRequest(BaseModel):
     dark_mode: Optional[bool] = None
     research_mode: Optional[str] = None
+    chat_mode: Optional[str] = None
 
 
 class ResetPasswordRequest(BaseModel):
@@ -89,6 +90,7 @@ async def login(
             "role": user.role,
             "dark_mode": user.dark_mode,
             "research_mode": user.research_mode,
+            "chat_mode": user.chat_mode,
         },
     }
 
@@ -115,6 +117,7 @@ async def get_me(
             "role": db_user.role,
             "dark_mode": db_user.dark_mode,
             "research_mode": db_user.research_mode,
+            "chat_mode": db_user.chat_mode,
         }
     }
 
@@ -170,6 +173,8 @@ async def update_preferences(
         db_user.dark_mode = body.dark_mode
     if body.research_mode is not None:
         db_user.research_mode = body.research_mode
+    if body.chat_mode is not None:
+        db_user.chat_mode = body.chat_mode
     await db.commit()
 
     return {"message": "Preferences updated"}

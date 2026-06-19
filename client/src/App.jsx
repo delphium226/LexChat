@@ -180,6 +180,7 @@ function AppContent() {
   const [currentChatTitle, setCurrentChatTitle] = useState(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState('');
+  const [chatMode, setChatMode] = useState('research');
   const [researchMode, setResearchMode] = useState('legislation_only');
   const [jurisdiction, setJurisdiction] = useState(() => localStorage.getItem('filter_jurisdiction') || null);
   const [dateFrom, setDateFrom] = useState(() => localStorage.getItem('filter_dateFrom') || '');
@@ -293,6 +294,7 @@ function AppContent() {
     if (!user) return;
     if (user.dark_mode !== undefined) setDarkMode(user.dark_mode);
     if (user.research_mode) setResearchMode(user.research_mode);
+    if (user.chat_mode) setChatMode(user.chat_mode);
   }, [user]);
 
   useEffect(() => {
@@ -375,6 +377,7 @@ function AppContent() {
       setContextUsage(null); setAgentStatus(''); setActivities(new Map()); setLoading(false);
       setShowSettingsMenu(false); setShowHistoryModal(false);
       setShowAdminModal(false); setShowSettingsModal(false);
+      setChatMode('research');
       setResearchMode('legislation_only');
       setMatters([]); setClosedMatters([]); setShowClosedMatters(false); setExpandedMatterIds(new Set());
       setShowWeeklyBanner(false); weeklyBannerCheckedRef.current = false;
@@ -654,7 +657,7 @@ function AppContent() {
             setAgentStatus(status.message);
           }
         },
-        controller.signal, researchMode,
+        controller.signal, chatMode, researchMode,
         { jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, currentOnly, chatId: activeChatId }
       );
 
@@ -881,6 +884,24 @@ function AppContent() {
               >
                 <SearchIcon /><span>Search threads…</span>
               </button>
+            </div>
+
+            {/* Mode selector */}
+            <div style={{ padding: '0 10px 10px', flexShrink: 0 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-500)', letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 4, paddingLeft: 2 }}>Mode</label>
+              <select
+                value={chatMode}
+                onChange={e => { setChatMode(e.target.value); updatePreferences({ chat_mode: e.target.value }).catch(() => {}); }}
+                style={{
+                  width: '100%', padding: '6px 8px', borderRadius: 6,
+                  border: '1px solid var(--ink-200)', fontSize: 13,
+                  fontFamily: 'var(--font-ui)', background: 'var(--paper)',
+                  color: 'var(--ink-700)', cursor: 'pointer', outline: 'none',
+                }}
+              >
+                <option value="conversational">Conversational</option>
+                <option value="research">Research</option>
+              </select>
             </div>
 
             {/* Matters section */}
@@ -1175,7 +1196,7 @@ function AppContent() {
                 {/* Research context chips */}
                 {(() => {
                   const chips = [
-                    { icon: <ScalesIcon />, label: researchModeLabel },
+                    { icon: <ScalesIcon />, label: chatMode === 'conversational' ? 'Conversational' : researchModeLabel },
                     { icon: <GavelIcon />, label: jurisdictionLabel },
                     { icon: <CalendarIcon />, label: `In force · ${todayLabel}` },
                   ];
@@ -1212,7 +1233,7 @@ function AppContent() {
                         : <LexMark size={40} color="var(--ink-300)" />
                       }
                     </div>
-                    <p style={{ fontSize: 14, margin: 0 }}>Ask about UK legislation or case law to begin.</p>
+                    <p style={{ fontSize: 14, margin: 0 }}>{chatMode === 'conversational' ? 'Ask a legal question to begin.' : 'Ask about UK legislation or case law to begin.'}</p>
                   </div>
                 )}
 
@@ -1324,8 +1345,8 @@ function AppContent() {
                       maxHeight: '80vh', overflowY: 'auto',
                     }}>
 
-                      {/* § Research mode */}
-                      {secHead('Research mode')}
+                      {/* § Research type */}
+                      {secHead('Research type')}
                       {[
                         { value: 'legislation_only', label: 'Legislation only' },
                         { value: 'case_law_only', label: 'Case law only' },
@@ -1490,7 +1511,7 @@ function AppContent() {
                     }}
                     disabled={loading}
                     rows={1}
-                    placeholder="Ask about UK legislation or case law…"
+                    placeholder={chatMode === 'conversational' ? 'Ask a legal question…' : 'Ask about UK legislation or case law…'}
                     style={{
                       width: '100%', resize: 'none', border: 'none', outline: 'none',
                       fontSize: 14, lineHeight: 1.5, color: 'var(--ink-800)',

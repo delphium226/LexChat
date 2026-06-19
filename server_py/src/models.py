@@ -20,6 +20,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(50), default="user")
     dark_mode: Mapped[bool] = mapped_column(Boolean, default=False)
     research_mode: Mapped[str] = mapped_column(String(50), default="legislation_only")
+    chat_mode: Mapped[str] = mapped_column(String(50), default="research")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     chats: Mapped[list["Chat"]] = relationship(

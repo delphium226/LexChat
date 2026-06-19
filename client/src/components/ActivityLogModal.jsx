@@ -8,6 +8,8 @@ const DAYS_OPTIONS = [
     { label: 'All time', value: 'all' },
 ];
 
+const ALL_EVENT_TYPES = ['LOGIN', 'QUERY', 'SURVEY', 'FEEDBACK', 'ERROR'];
+
 const BADGE_CLASSES = {
     LOGIN:    'bg-brand text-white',
     QUERY:    'bg-success-soft text-success',
@@ -23,6 +25,20 @@ const BADGE_LABELS = {
     FEEDBACK: 'Feedback',
     ERROR:    'Error',
 };
+
+const LS_TYPE_KEY = 'activitylog_type_filter';
+
+function loadSavedTypes() {
+    try {
+        const raw = localStorage.getItem(LS_TYPE_KEY);
+        if (!raw) return ALL_EVENT_TYPES;
+        const parsed = JSON.parse(raw);
+        const valid = parsed.filter(t => ALL_EVENT_TYPES.includes(t));
+        return valid.length > 0 ? valid : ALL_EVENT_TYPES;
+    } catch {
+        return ALL_EVENT_TYPES;
+    }
+}
 
 function EventBadge({ type }) {
     const cls = BADGE_CLASSES[type] ?? 'bg-ink-100 text-ink-600';
@@ -46,9 +62,24 @@ function fmtTimestamp(iso) {
 export default function ActivityLogModal({ open, onClose }) {
     const [entries, setEntries] = useState([]);
     const [days, setDays] = useState('7');
+    const [selectedTypes, setSelectedTypes] = useState(loadSavedTypes);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [lastRefreshed, setLastRefreshed] = useState(null);
+
+    const toggleType = useCallback((type) => {
+        setSelectedTypes(prev => {
+            const next = prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type];
+            if (next.length === 0) return prev;
+            localStorage.setItem(LS_TYPE_KEY, JSON.stringify(next));
+            return next;
+        });
+    }, []);
+
+    const selectAllTypes = useCallback(() => {
+        setSelectedTypes(ALL_EVENT_TYPES);
+        localStorage.setItem(LS_TYPE_KEY, JSON.stringify(ALL_EVENT_TYPES));
+    }, []);
 
     const fetchLog = useCallback(async () => {
         setLoading(true);
@@ -80,6 +111,8 @@ export default function ActivityLogModal({ open, onClose }) {
     }, [open, onClose]);
 
     if (!open) return null;
+
+    const filteredEntries = entries.filter(e => selectedTypes.includes(e.event_type));
 
     return (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -114,32 +147,49 @@ export default function ActivityLogModal({ open, onClose }) {
                     </div>
                 </div>
 
-                {/* Filter pills */}
-                <div className="flex items-center gap-2 px-6 py-3 border-b border-ink-200 shrink-0">
-                    <span className="font-ui text-xs text-ink-500 mr-1">Show:</span>
-                    {DAYS_OPTIONS.map((opt) => (
-                        <button
-                            key={opt.value}
-                            onClick={() => setDays(opt.value)}
-                            className={
-                                days === opt.value
-                                    ? 'bg-accent text-white border-transparent rounded-full px-3 py-1 font-ui text-xs'
-                                    : 'border border-ink-200 text-ink-600 rounded-full px-3 py-1 font-ui text-xs hover:bg-ink-50'
-                            }
-                        >
-                            {opt.label}
-                        </button>
-                    ))}
-
-                    {/* Legend */}
-                    <div className="ml-auto flex items-center gap-3">
-                        {Object.entries(BADGE_LABELS).map(([type, label]) => (
-                            <span key={type} className="flex items-center gap-1">
-                                <span className={`inline-block font-ui text-xs font-semibold px-2 py-0.5 rounded-full ${BADGE_CLASSES[type]}`}>
-                                    {label}
-                                </span>
-                            </span>
+                {/* Filters */}
+                <div className="px-6 py-3 border-b border-ink-200 shrink-0 space-y-2">
+                    {/* Period row */}
+                    <div className="flex items-center gap-2">
+                        <span className="font-ui text-xs text-ink-500 w-10 shrink-0">Period:</span>
+                        {DAYS_OPTIONS.map((opt) => (
+                            <button
+                                key={opt.value}
+                                onClick={() => setDays(opt.value)}
+                                className={
+                                    days === opt.value
+                                        ? 'bg-accent text-white border-transparent rounded-full px-3 py-1 font-ui text-xs'
+                                        : 'border border-ink-200 text-ink-600 rounded-full px-3 py-1 font-ui text-xs hover:bg-ink-50'
+                                }
+                            >
+                                {opt.label}
+                            </button>
                         ))}
+                    </div>
+                    {/* Event type row — multi-select */}
+                    <div className="flex items-center gap-2">
+                        <span className="font-ui text-xs text-ink-500 w-10 shrink-0">Type:</span>
+                        {ALL_EVENT_TYPES.map((type) => (
+                            <button
+                                key={type}
+                                onClick={() => toggleType(type)}
+                                className={
+                                    selectedTypes.includes(type)
+                                        ? 'bg-accent text-white border-transparent rounded-full px-3 py-1 font-ui text-xs'
+                                        : 'border border-ink-200 text-ink-400 rounded-full px-3 py-1 font-ui text-xs hover:bg-ink-50'
+                                }
+                            >
+                                {BADGE_LABELS[type]}
+                            </button>
+                        ))}
+                        {selectedTypes.length < ALL_EVENT_TYPES.length && (
+                            <button
+                                onClick={selectAllTypes}
+                                className="font-ui text-xs text-ink-400 hover:text-ink-700 underline underline-offset-2 ml-1"
+                            >
+                                All
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -151,13 +201,15 @@ export default function ActivityLogModal({ open, onClose }) {
                         </div>
                     )}
 
-                    {!error && entries.length === 0 && !loading && (
+                    {!error && filteredEntries.length === 0 && !loading && (
                         <p className="font-ui text-sm text-ink-500 text-center py-12">
-                            No activity found for the selected time range.
+                            {entries.length === 0
+                                ? 'No activity found for the selected time range.'
+                                : 'No events match the selected type filters.'}
                         </p>
                     )}
 
-                    {entries.length > 0 && (
+                    {filteredEntries.length > 0 && (
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="border-b border-ink-200">
@@ -168,7 +220,7 @@ export default function ActivityLogModal({ open, onClose }) {
                                 </tr>
                             </thead>
                             <tbody>
-                                {entries.map((entry, i) => (
+                                {filteredEntries.map((entry, i) => (
                                     <tr
                                         key={i}
                                         className={`border-b border-ink-100 align-top ${i % 2 === 0 ? '' : 'bg-ink-25'}`}
@@ -195,7 +247,9 @@ export default function ActivityLogModal({ open, onClose }) {
                 {/* Footer */}
                 <div className="px-6 py-3 border-t border-ink-200 shrink-0">
                     <p className="font-ui text-xs text-ink-500">
-                        {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
+                        {filteredEntries.length !== entries.length
+                            ? `${filteredEntries.length} of ${entries.length} entries`
+                            : `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`}
                         {entries.length === 500 && ' (limit reached — narrow the time range for older records)'}
                     </p>
                 </div>

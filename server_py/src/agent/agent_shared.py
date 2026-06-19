@@ -137,6 +137,25 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                 "url": url,
             })
 
+    elif name == "get_case_law_text":
+        url = data.get("url") or args.get("url") or ""
+        text = data.get("text") or ""
+        excerpt = text[:300] if text else ""
+        existing = next((s for s in accumulator if s.get("url") == url), None)
+        if existing:
+            if not existing.get("excerpt") and excerpt:
+                existing["excerpt"] = excerpt
+        else:
+            ncn = data.get("ncn") or ""
+            accumulator.append({
+                "kind": "Case",
+                "title": data.get("title") or url,
+                "sub": ncn,
+                "excerpt": excerpt,
+                "cite": ncn or url,
+                "url": url,
+            })
+
     elif name in ("search_hansard", "search_scottish_parliament"):
         for speech in data.get("results", []):
             url = speech.get("url", "")
@@ -241,8 +260,8 @@ async def run_worker_tool(
     if source_accumulator is not None:
         _extract_sources_from_tool(name, args, result, source_accumulator)
 
-    # For search_case_law: inject a stop-or-continue nudge so the model knows
-    # when to give up on empty searches rather than looping indefinitely.
+    # For search_case_law: inject a Phase 2 nudge to call get_case_law_text for
+    # the most relevant results, or a stop note on zero results.
     case_law_note = ""
     if name == "search_case_law":
         try:
@@ -256,10 +275,15 @@ async def run_worker_tool(
                     "and compose your answer noting that no directly relevant case law was found in this database.]"
                 )
             elif n > 0:
+                url_lines = "\n".join(
+                    f'  - url: "{r["url"]}"  ({r.get("title", "")} {r.get("ncn", "")})'
+                    for r in raw_data.get("results", [])[:3]
+                    if r.get("url")
+                )
                 case_law_note = (
-                    f"\n\n[Found {n} result(s) above. If these adequately cover the question, "
-                    f"proceed to SYNTHESISE your answer now. Only search further if important "
-                    f"aspects of the question are not yet covered.]"
+                    f"\n\n[MANDATORY NEXT STEP — DO NOT synthesise yet. "
+                    f"Call get_case_law_text for the 1–3 most relevant cases below to retrieve the full judgment text "
+                    f"before composing your answer. Pass the exact url field:\n{url_lines}]"
                 )
         except Exception:
             pass

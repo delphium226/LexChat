@@ -49,6 +49,7 @@ class ChatRequest(BaseModel):
     messages: List[dict]
     model: str
     num_ctx: Optional[int] = None
+    chat_mode: Optional[str] = "research"
     research_mode: Optional[str] = "legislation_only"
     jurisdiction: Optional[str] = None
     year_from: Optional[int] = None
@@ -88,6 +89,7 @@ async def chat_endpoint(body: ChatRequest, request: Request):
         set_request_provider_config({
             **provider_config,
             "_provider": active_provider,
+            "_chat_mode": body.chat_mode or "research",
             "_research_mode": settings.research_mode or body.research_mode or "legislation_only",
             "_jurisdiction": body.jurisdiction or None,
             "_year_from": body.year_from or None,

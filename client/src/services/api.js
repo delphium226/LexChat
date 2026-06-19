@@ -7,7 +7,7 @@ export const getModels = async () => {
     return response.data;
 };
 
-export const sendMessage = (messages, model, num_ctx, onUpdate, signal, research_mode = 'legislation_only', filters = {}) => {
+export const sendMessage = (messages, model, num_ctx, onUpdate, signal, chat_mode = 'research', research_mode = 'legislation_only', filters = {}) => {
     return new Promise(async (resolve, reject) => {
         try {
             const response = await fetch(`${API_URL}/chat`, {
@@ -16,7 +16,7 @@ export const sendMessage = (messages, model, num_ctx, onUpdate, signal, research
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    messages, model, num_ctx, research_mode,
+                    messages, model, num_ctx, chat_mode, research_mode,
                     chat_id: filters.chatId || null,
                     jurisdiction: filters.jurisdiction || null,
                     year_from: filters.dateFrom ? parseInt(filters.dateFrom, 10) : null,
