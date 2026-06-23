@@ -63,6 +63,7 @@ export default function ActivityLogModal({ open, onClose }) {
     const [entries, setEntries] = useState([]);
     const [days, setDays] = useState('7');
     const [selectedTypes, setSelectedTypes] = useState(loadSavedTypes);
+    const [selectedUser, setSelectedUser] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [lastRefreshed, setLastRefreshed] = useState(null);
@@ -112,11 +113,15 @@ export default function ActivityLogModal({ open, onClose }) {
 
     if (!open) return null;
 
-    const filteredEntries = entries.filter(e => selectedTypes.includes(e.event_type));
+    const uniqueUsers = [...new Set(entries.map(e => e.username).filter(Boolean))].sort();
+    const filteredEntries = entries.filter(e =>
+        selectedTypes.includes(e.event_type) &&
+        (selectedUser === '' || e.username === selectedUser)
+    );
 
     return (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-paper rounded-xl shadow-2xl border border-ink-200 w-full max-w-5xl max-h-[90vh] flex flex-col">
+            <div className="bg-paper rounded-xl shadow-2xl border border-ink-200 w-[90vw] h-[90vh] flex flex-col">
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-ink-200 shrink-0">
@@ -191,6 +196,28 @@ export default function ActivityLogModal({ open, onClose }) {
                             </button>
                         )}
                     </div>
+                    {/* User filter row */}
+                    <div className="flex items-center gap-2">
+                        <span className="font-ui text-xs text-ink-500 w-10 shrink-0">User:</span>
+                        <select
+                            value={selectedUser}
+                            onChange={e => setSelectedUser(e.target.value)}
+                            className="font-ui text-xs text-ink-800 bg-paper border border-ink-200 rounded-md px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                        >
+                            <option value="">All users</option>
+                            {uniqueUsers.map(u => (
+                                <option key={u} value={u}>{u}</option>
+                            ))}
+                        </select>
+                        {selectedUser && (
+                            <button
+                                onClick={() => setSelectedUser('')}
+                                className="font-ui text-xs text-ink-400 hover:text-ink-700 underline underline-offset-2"
+                            >
+                                Clear
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Body */}
@@ -205,7 +232,7 @@ export default function ActivityLogModal({ open, onClose }) {
                         <p className="font-ui text-sm text-ink-500 text-center py-12">
                             {entries.length === 0
                                 ? 'No activity found for the selected time range.'
-                                : 'No events match the selected type filters.'}
+                                : 'No events match the selected filters.'}
                         </p>
                     )}
 

@@ -624,6 +624,7 @@ function AppContent() {
             'Worker: search_legislation_sections': 'Retrieving statutory sections…',
             'Worker: get_legislation_text': 'Reviewing statutory text…',
             'Worker: search_case_law': 'Searching case law database…',
+            'Worker: get_case_law_text': 'Retrieving case law judgment…',
             'Extracting the relevant sections from a large document': 'Summarising document…',
           }[tool] || `${tool}…`);
 
@@ -1272,28 +1273,27 @@ function AppContent() {
                 })}
 
                 {/* Loading indicator */}
-                {loading && (
-                  <div style={{ padding: '8px 0', fontSize: 13, color: 'var(--ink-500)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div className="lex-thinking-dot" />
-                      <span style={{ flex: 1 }}>{agentStatus || 'Thinking…'}</span>
-                    </div>
-                    {activities.size > 0 && (
-                      <div style={{ marginTop: 6, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {[...activities.entries()].map(([id, label]) => (
-                          <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--ink-400)' }}>
-                            <div style={{
-                              width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
-                              background: 'var(--accent)', opacity: 0.7,
-                              animation: 'lex-pulse 1.4s ease-in-out infinite',
-                            }} />
-                            <span>{label}</span>
-                          </div>
-                        ))}
+                {loading && (() => {
+                  let statusText = agentStatus || 'Thinking…';
+                  if (activities.size > 0) {
+                    const counts = new Map();
+                    for (const label of activities.values()) {
+                      const clean = label.replace(/…$/, '');
+                      counts.set(clean, (counts.get(clean) || 0) + 1);
+                    }
+                    statusText = [...counts.entries()]
+                      .map(([label, n]) => n > 1 ? `${label} (${n})` : label)
+                      .join(', ');
+                  }
+                  return (
+                    <div style={{ padding: '8px 0', fontSize: 13, color: 'var(--ink-500)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div className="lex-thinking-dot" />
+                        <span style={{ flex: 1 }}>{statusText}</span>
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  );
+                })()}
 
                 <div ref={messagesEndRef} />
               </div>
