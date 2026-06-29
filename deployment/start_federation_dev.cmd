@@ -84,5 +84,6 @@ echo     Parliament Bot  : http://localhost:8001
 echo ===================================================
 echo.
 start http://localhost:8000
+start http://localhost:8001
 echo Close this window when done (bot windows will stay open).
 pause

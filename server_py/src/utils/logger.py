@@ -46,13 +46,31 @@ class _ColourFormatter(logging.Formatter):
         return f"{colour}{line}{_RESET}" if colour else line
 
 
-def _create_file_handler(filename: str, level=logging.INFO) -> TimedRotatingFileHandler:
-    handler = TimedRotatingFileHandler(
+class _WindowsSafeRotatingFileHandler(TimedRotatingFileHandler):
+    """TimedRotatingFileHandler that tolerates Windows file-lock errors on rollover.
+
+    When uvicorn runs with --reload, the reloader and worker processes both hold
+    the log file open. os.rename() fails with PermissionError (WinError 32) if
+    either process tries to rotate while the other has the handle. Swallowing the
+    error here keeps logging working; rotation resumes once only one process holds
+    the file (i.e. in production, or after the reloader's child is replaced).
+    """
+
+    def doRollover(self):
+        try:
+            super().doRollover()
+        except PermissionError:
+            pass
+
+
+def _create_file_handler(filename: str, level=logging.INFO) -> _WindowsSafeRotatingFileHandler:
+    handler = _WindowsSafeRotatingFileHandler(
         os.path.join(LOG_DIR, filename),
         when="midnight",
         interval=1,
         backupCount=14,
         encoding="utf-8",
+        delay=True,
     )
     handler.setLevel(level)
     handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT))

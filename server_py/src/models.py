@@ -1,7 +1,8 @@
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import (
-    Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, text
+    Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text,
+    UniqueConstraint, text
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -219,6 +220,27 @@ class PeerBot(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class SpCommitteeItem(Base):
+    __tablename__ = "sp_committee_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    meeting_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    slug: Mapped[str] = mapped_column(String(128), nullable=False)
+    iob_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    committee_code: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    committee_name: Mapped[str | None] = mapped_column(String(256), nullable=True, index=True)
+    meeting_date: Mapped[Date | None] = mapped_column(Date, nullable=True, index=True)
+    agenda_item_title: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    url: Mapped[str | None] = mapped_column(String(512), nullable=True, unique=True)
+    speeches: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    full_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("meeting_id", "iob_id", name="uq_sp_meeting_iob"),
+    )
 
 
 class Document(Base):

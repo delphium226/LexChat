@@ -18,7 +18,7 @@ AILA (AI Legal Assistant) is an AI-powered legal research assistant for a **UK g
 - OpenRouter requires outbound internet to `openrouter.ai` — works on the target if that address is whitelisted
 
 ## Active Branch
-Current feature branch: **`feature/multi-bot-federation`** — merge to `main` when testing is complete. `main` is the branch the server pulls from.
+`main` — the federation feature has been merged and is the active deployment branch.
 
 ## Key Architectural Decisions
 
@@ -54,13 +54,14 @@ The Worker's research pipeline has been tuned to minimise unnecessary LLM calls 
 ### Parliamentary Research Worker Optimisations
 When `research_mode == "parliamentary_records"` (set via `RESEARCH_MODE` env var for the parliament bot), the Worker uses `PARLIAMENT_TOOLS` instead of `WORKER_TOOLS`. Key design decisions:
 
-- **Parliament tool set** — `search_hansard`, `get_hansard_debate`, `get_member_info`, `search_bills`, `search_scottish_parliament`. Wired via `get_worker_tools("parliamentary_records")` in `tools.py`.
+- **Parliament tool set** — `search_hansard`, `get_hansard_debate`, `get_member_info`, `search_bills`, `search_scottish_parliament`, `search_scottish_committee_transcripts`, `get_scottish_committee_transcript`. Wired via `get_worker_tools("parliamentary_records")` in `tools.py`.
 - **TWFY API limitation** — `getHansard` does **not** support date range filtering. The `date_from`/`date_to` schema params are accepted but not forwarded to the API (they are silently ignored by the endpoint). Results are always ordered by date (most recent first), regardless of any date constraints. The model is informed of this in the system prompt.
-- **Search budget** — `run_worker_agent` creates `search_budget = {"remaining": 2}` for `parliamentary_records` mode and passes it to every `run_worker_tool` call. When the budget hits 0, `run_worker_tool` returns a hard-stop JSON message instead of calling the API, forcing the model to proceed to Phase 2. Without this cap, weaker models loop on `search_hansard` indefinitely (10–15 calls) because TWFY returns recent debates by date rather than by relevance, so results often look irrelevant to the query.
+- **Search budget** — `run_worker_agent` creates `search_budget = {"remaining": 3}` for `parliamentary_records` mode and passes it to every `run_worker_tool` call. When the budget hits 0, `run_worker_tool` returns a hard-stop JSON message instead of calling the API, forcing the model to proceed to Phase 2. The budget covers `search_hansard`, `search_scottish_parliament`, and `search_scottish_committee_transcripts`. Without this cap, weaker models loop on search tools indefinitely.
 - **Debate title extraction** — `_slim_hansard_results` extracts debate titles from `speech.parent.body` (not `speech.debate`, which is always empty). The `parent.body` field is HTML so it is run through `_strip_html` (which calls `html.unescape`).
 - **`debate_type` hint** — The slimmed result includes a `debate_type` field (`"lords"`, `"wrans"`, `"wms"`, or `"debates"`) detected from `speech.listurl`. The model passes this when calling `get_hansard_debate`, ensuring the correct TWFY endpoint is used (`getLords`, `getWrans`, or `getDebates`).
-- **Phase 2 nudge** — After each `search_hansard` result, a `[MANDATORY NEXT STEP — DO NOT call search_hansard again...]` instruction listing the returned gids and their `debate_type` values is appended to the tool result. This reinforces the search budget stop.
+- **Phase 2 nudge** — After each `search_hansard` result, a `[MANDATORY NEXT STEP — DO NOT call search_hansard again...]` instruction listing the returned gids and their `debate_type` values is appended to the tool result. After each `search_scottish_committee_transcripts` result, a similar nudge lists `meeting_id`, `slug`, and `iob_id` values for `get_scottish_committee_transcript`. Both nudges reinforce the search budget stop.
 - **TWFY API key** — Set via `TWFY_API_KEY` env var (free key from theyworkforyou.com/api/key). Required for `search_hansard`, `get_hansard_debate`, and `search_scottish_parliament`. If missing, those tools return a clear error.
+- **SP committee transcript database** — `search_scottish_committee_transcripts` queries the local `sp_committee_items` PostgreSQL table via GIN full-text search rather than scraping parliament.scot live. The table is populated by `parliament_crawler.py` which runs two background tasks on startup (when `RESEARCH_MODE=parliamentary_records`): a one-shot `backfill_session7()` that fetches date-windowed listing pages from Session 7 start (2026-05-06), and a `background_crawl_loop()` that re-crawls the listing page daily for new meetings. Rate-limited to ~1.5 req/s. If the table is empty the tool returns a graceful message telling the model to try `search_scottish_parliament` instead. The old `list_scottish_committee_meetings` tool (live scrape, ~2-week window, no keyword search) has been removed and replaced entirely by this DB-backed tool.
 
 ### Federation System
 Multiple specialised bots (each a separate FastAPI process + DB) can consult each other via `POST /api/consult`. The calling Manager agent gets a `consult_peer` tool injected alongside `delegate_research` — but only when at least one enabled peer is registered. With zero peers, behaviour is identical to today.
@@ -76,6 +77,9 @@ Key design decisions:
 - **Local dev** — see `deployment/LOCAL_SETUP.md` for running multiple bots on one machine. `deployment/local/` is gitignored (holds per-machine `active_bots.txt` and `shared.env`).
 - **Parliament bot DB** — `lexchat_parliament` (set in `bots/parliament/.env`). `start_federation_dev.ps1` creates this DB automatically. The script loads `bots/parliament/.env` first, then overrides `BOT_ID` and `BOT_CONFIG_PATH` with absolute paths so the relative path in the `.env` file doesn't win.
 - **`BOT_CONFIG_PATH` note** — uvicorn runs from `server_py/`, so `os.path.abspath(path)` resolves relative paths relative to `server_py/`. The federation dev script sets this to an absolute path to avoid the ambiguity.
+- **Cross-bot routing in manager prompts** — `MANAGER_SYSTEM_PROMPT` (legislation bot) has a SCOPE block instructing the manager to use `consult_peer` for parliamentary debate questions (Hansard, committee scrutiny, bill progress) rather than deflecting the user. `PARLIAMENT_MANAGER_SYSTEM_PROMPT` has a matching SCOPE block instructing the parliament manager to use `consult_peer` for legislation text questions (Act provisions, definitions, commencement dates) rather than refusing. Both prompts only mention `consult_peer` — the tool is silently absent when no peer is registered, so the instructions are harmless in single-bot deployments.
+- **"No results" vs "unavailable" distinction** — the legislation manager SCOPE explicitly instructs: if `consult_peer` was called but the Parliament Bot returned no records, tell the user "the Parliament Bot found no records of debate on this topic" — do NOT say parliamentary research is "unavailable in this session" (that phrase is reserved for when no parliament peer is registered at all).
+- **`PUT /api/peers/{peer_id}` uses the string peer_id** — e.g. `PUT /api/peers/parliament_bot`, NOT `PUT /api/peers/1` (the numeric DB row ID returns 404). The peer registry seed in `bot_config.json` uses 409-skip logic — it does NOT update existing records, so if a peer was seeded with `enabled: false`, you must PUT to enable it manually.
 
 ### External API Dependencies
 
@@ -84,11 +88,12 @@ All external APIs called at query time. URLs must be reachable from the deployme
 | API | Base URL | Used by | Auth | Notes |
 |---|---|---|---|---|
 | LEX API | `https://lex.lab.i.ai.gov.uk` | Legislation bot | None (internal) | POST endpoints: `/legislation/search`, `/legislation/section/search`, `/legislation/text` |
-| National Archives case law | `https://caselaw.nationalarchives.gov.uk/atom.xml` | Legislation bot (case law mode) | None | GET with `query`, `court`, `date_from`, `date_to` params; returns Atom XML |
+| National Archives case law | `https://caselaw.nationalarchives.gov.uk` | Legislation bot (case law mode) | None | `search_case_law`: `GET /atom.xml` with `query`, `court`, `date_from`, `date_to` params; returns Atom XML. `get_case_law_text`: `GET /{case-path}/data.xml` to fetch full judgment text (LegalDocML/AKN XML) |
 | TheyWorkForYou (TWFY) | `https://www.theyworkforyou.com/api` | Parliament bot | `TWFY_API_KEY` | Endpoints: `getHansard`, `getDebates`, `getLords`, `getWrans`, `getSP`, `getMSPInfo` |
 | Parliament Members API | `https://members-api.parliament.uk/api/Members/Search` | Parliament bot | None | `get_member_info` for Commons (`House=1`) and Lords (`House=2`) |
 | Parliament Bills API | `https://bills-api.parliament.uk/api/v1/Bills` | Parliament bot | None | `search_bills` for UK Westminster |
 | Scottish Parliament Bills | `https://data.parliament.scot/api/bills` | Parliament bot | None | `search_bills` for Scotland; full list fetched, filtered client-side (no server-side search param) |
+| SP Official Report | `https://www.parliament.scot/chamber-and-committees/official-report/search-what-was-said-in-parliament` | Parliament bot crawler | None | Crawled by `parliament_crawler.py` at startup and daily; three request types on the same base URL: (1) listing page with `showCommittee=true&dtDateFrom=X&dtDateTo=Y` params; (2) meeting detail pages at `/{slug}?meeting={id}`; (3) individual transcript pages at `/{slug}?meeting={id}&iob={iob_id}` |
 | OpenRouter | `https://openrouter.ai/api/v1` | Both (optional) | `OPENROUTER_API_KEY` | Only when OpenRouter is set as active provider in Admin Portal |
 
 To verify all endpoints are reachable from a deployment target, run `server_py/test_apis.ps1` (reads `TWFY_API_KEY` from `.env`; TWFY tests skip gracefully if the key is absent).
@@ -172,8 +177,9 @@ The full token/component reference lives at `client/src/design-system.md`. **Rea
 | `client/src/pages/AdminPortal.jsx` | Admin portal including Developer tab (provider config) and Federation tab (peer registry CRUD) |
 | `client/src/pages/Settings.jsx` | Account settings page — change password form |
 | `server_py/src/config.py` | `MODEL_LIST`, `OPENROUTER_MODEL_LIST`, system prompts, app settings; `bot_id`/`bot_config_path` |
-| `server_py/src/agent/tools.py` | LEX API tool schemas, `_slim_search_results`, parliament tools (`PARLIAMENT_TOOLS`, `execute_parliament_tool`, `_slim_hansard_results`), `get_manager_tools(peer_descriptions)`, `get_worker_tools(research_mode)` |
-| `server_py/src/agent/agent_shared.py` | Shared worker tool execution pipeline; `run_worker_tool` (includes `search_budget` enforcement for parliamentary mode) |
+| `server_py/src/agent/tools.py` | LEX API tool schemas, `_slim_search_results`, parliament tools (`PARLIAMENT_TOOLS`, `execute_parliament_tool`, `_slim_hansard_results`, `_search_committee_transcripts_db`), HTML parsers (`_parse_sp_listing_meetings`, `_parse_sp_meeting_page`, `_parse_sp_transcript_page`), `get_manager_tools(peer_descriptions)`, `get_worker_tools(research_mode)` |
+| `server_py/src/agent/agent_shared.py` | Shared worker tool execution pipeline; `run_worker_tool` (includes `search_budget` enforcement for parliamentary mode, phase 2 nudges for all search tools) |
+| `server_py/src/services/parliament_crawler.py` | Background crawler — `crawl_sp_new_meetings()` (daily rolling), `backfill_session7()` (one-shot on startup), `background_crawl_loop()`; reuses HTML parsers from `tools.py`; only runs when `RESEARCH_MODE=parliamentary_records` |
 | `server_py/src/agent/ollama_client.py` | Ollama agent implementation (chat_loop, worker, summarisation, federation) |
 | `server_py/src/agent/openrouter_client.py` | OpenRouter agent implementation (OpenAI-compatible, federation) |
 | `server_py/src/agent/provider_factory.py` | Provider resolution, ContextVar config, queue/semaphore caches; `get_summarise_model()` |
@@ -183,7 +189,7 @@ The full token/component reference lives at `client/src/design-system.md`. **Rea
 | `server_py/src/routers/identity.py` | `GET /api/bot-info`, `GET /api/bot/logo` — no auth required |
 | `server_py/src/routers/federation.py` | `POST /api/consult` — receives peer consultation requests |
 | `server_py/src/routers/peers.py` | Admin CRUD for peer registry — `api_key` never returned |
-| `server_py/src/models.py` | SQLAlchemy models — includes `AppSetting`, `Chat.provider`, `Message.model/provider`, `ActivityLog`, `PeerBot` |
+| `server_py/src/models.py` | SQLAlchemy models — includes `AppSetting`, `Chat.provider`, `Message.model/provider`, `ActivityLog`, `PeerBot`, `SpCommitteeItem` (SP committee transcript DB with GIN FTS index on `full_text`) |
 | `client/src/components/ActivityLogModal.jsx` | Admin activity log modal — unified feed of logins, queries, feedback, surveys, errors; auto-refreshes every 10 min |
 | `bots/legislation/bot_config.json` | Legislation bot identity + peer seed (default/template bot config) |
 | `bots/parliament/bot_config.json` | Parliament bot identity; `research_mode: "parliamentary_records"` under `agent` key |

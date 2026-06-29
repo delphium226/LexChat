@@ -198,6 +198,41 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                 "url": url,
             })
 
+    elif name == "search_scottish_committee_transcripts":
+        for item in data.get("results", []):
+            url = item.get("url", "")
+            if url and any(s.get("url") == url for s in accumulator):
+                continue
+            committee = item.get("committee_name", "")
+            meeting_date = item.get("meeting_date", "")
+            agenda_title = item.get("agenda_item_title", "")
+            accumulator.append({
+                "kind": "Committee",
+                "title": committee,
+                "sub": agenda_title,
+                "meta": meeting_date,
+                "cite": f"{committee}, {meeting_date}",
+                "url": url,
+            })
+
+    elif name == "get_scottish_committee_transcript":
+        url = data.get("url") or args.get("url") or ""
+        page_title = data.get("page_title") or data.get("committee_name") or ""
+        speeches = data.get("speeches") or []
+        excerpt = speeches[0].get("text", "")[:300] if speeches else ""
+        existing = next((s for s in accumulator if s.get("url") == url), None)
+        if existing:
+            if not existing.get("excerpt") and excerpt:
+                existing["excerpt"] = excerpt
+        else:
+            accumulator.append({
+                "kind": "Transcript",
+                "title": page_title or "Scottish Parliament Committee",
+                "excerpt": excerpt,
+                "cite": page_title or url,
+                "url": url,
+            })
+
 
 async def run_worker_tool(
     name: str,
@@ -225,19 +260,18 @@ async def run_worker_tool(
     """
     activity_id = uuid.uuid4().hex[:8]
 
-    # Parliamentary search budget: after the allowed number of search_hansard /
-    # search_scottish_parliament calls, return a hard-stop message so the model
-    # proceeds to get_hansard_debate instead of looping indefinitely.
-    _PARLIAMENT_SEARCH_TOOLS = {"search_hansard", "search_scottish_parliament"}
+    # Parliamentary search budget: after the allowed number of search/listing calls,
+    # return a hard-stop so the model proceeds to retrieval instead of looping.
+    _PARLIAMENT_SEARCH_TOOLS = {"search_hansard", "search_scottish_parliament", "search_scottish_committee_transcripts"}
     if search_budget is not None and name in _PARLIAMENT_SEARCH_TOOLS:
         if search_budget["remaining"] <= 0:
             stop_msg = json.dumps({
-                "notice": "Search limit reached — you have already performed the maximum number of Hansard searches.",
+                "notice": "Search limit reached — you have already performed the maximum number of parliamentary searches.",
                 "instruction": (
-                    "STOP calling search_hansard or search_scottish_parliament. "
-                    "You MUST now either: (a) call get_hansard_debate with gid(s) from your previous "
-                    "search results to retrieve full text, or (b) if no results were found at all, "
-                    "synthesize your answer stating that no relevant Hansard records were found."
+                    "STOP calling search_hansard, search_scottish_parliament, or search_scottish_committee_transcripts. "
+                    "You MUST now either: (a) call get_hansard_debate or get_scottish_committee_transcript with IDs "
+                    "from your previous results to retrieve full text, or (b) if no results were found at all, "
+                    "synthesize your answer stating that no relevant records were found."
                 ),
                 "results": [],
                 "total": 0,
@@ -343,6 +377,38 @@ async def run_worker_tool(
         except Exception:
             pass
 
+    sp_committee_phase2_note = ""
+    if name == "search_scottish_committee_transcripts":
+        try:
+            raw_data = json.loads(result)
+            items = raw_data.get("results", [])
+            note = raw_data.get("note", "")
+            if note and not items:
+                sp_committee_phase2_note = f"\n\n[{note}]"
+            elif items:
+                item_lines = [
+                    f'  - meeting_id: "{r["meeting_id"]}"  slug: "{r["slug"]}"  iob_id: "{r["iob_id"]}"'
+                    f'  ({r.get("committee_name", "")}, {r.get("meeting_date", "")} — {r.get("agenda_item_title", "")})'
+                    for r in items[:8]
+                    if r.get("meeting_id") and r.get("iob_id")
+                ]
+                if item_lines:
+                    sp_committee_phase2_note = (
+                        f"\n\n[MANDATORY NEXT STEP — Call get_scottish_committee_transcript for the most "
+                        f"relevant result(s) below to retrieve full speech text before composing your answer. "
+                        f"Pass meeting_id, slug, and iob_id exactly as shown:\n"
+                        + "\n".join(item_lines)
+                        + "]"
+                    )
+            else:
+                sp_committee_phase2_note = (
+                    "\n\n[No committee transcript results found. "
+                    "Try search_scottish_committee_transcripts with different or broader keywords, "
+                    "or use search_scottish_parliament for plenary debates.]"
+                )
+        except Exception:
+            pass
+
     # For search_legislation: capture legislation_ids from the raw response before
     # any summarisation strips them, so we can inject a Phase 2 instruction into
     # the final result the model actually sees.
@@ -421,6 +487,7 @@ async def run_worker_tool(
     result += phase2_note
     result += hansard_phase2_note
     result += sp_phase2_note
+    result += sp_committee_phase2_note
     result += case_law_note
 
     if parent_on_chunk:

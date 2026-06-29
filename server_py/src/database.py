@@ -107,6 +107,51 @@ async def init_db() -> None:
                 created_at TIMESTAMP NOT NULL DEFAULT NOW()
             )""",
             "ALTER TABLE peer_bots ADD COLUMN IF NOT EXISTS name VARCHAR(128) NOT NULL DEFAULT ''",
+            # lexchat_parliament DB was created when this column was called is_enabled.
+            # Rename it to match the model; no-op if enabled already exists.
+            """DO $$ BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='peer_bots' AND column_name='is_enabled'
+                ) AND NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='peer_bots' AND column_name='enabled'
+                ) THEN
+                    ALTER TABLE peer_bots RENAME COLUMN is_enabled TO enabled;
+                END IF;
+            END $$""",
+            # lexchat_parliament DB was built from a more evolved schema and has extra
+            # NOT NULL columns (display_name, timeout_s, ...) not in the current model.
+            # Drop NOT NULL from every column that isn't one of the core required fields
+            # so INSERTs that omit them don't fail. Safe on all DBs — the loop is a no-op
+            # for any columns that don't exist.
+            """DO $$
+            DECLARE col TEXT;
+            BEGIN
+                FOR col IN
+                    SELECT column_name FROM information_schema.columns
+                    WHERE table_name = 'peer_bots'
+                      AND is_nullable = 'NO'
+                      AND column_name NOT IN ('id','peer_id','name','base_url','description','enabled','created_at')
+                LOOP
+                    EXECUTE format('ALTER TABLE peer_bots ALTER COLUMN %I DROP NOT NULL', col);
+                END LOOP;
+            END $$""",
+            """CREATE TABLE IF NOT EXISTS sp_committee_items (
+                id SERIAL PRIMARY KEY,
+                meeting_id VARCHAR(32) NOT NULL,
+                slug VARCHAR(128) NOT NULL,
+                iob_id VARCHAR(32) NOT NULL,
+                committee_code VARCHAR(64),
+                committee_name VARCHAR(256),
+                meeting_date DATE,
+                agenda_item_title VARCHAR(512),
+                url VARCHAR(512) UNIQUE,
+                speeches JSONB,
+                full_text TEXT,
+                fetched_at TIMESTAMP,
+                CONSTRAINT uq_sp_meeting_iob UNIQUE (meeting_id, iob_id)
+            )""",
         ]
         async with engine.begin() as conn:
             for stmt in migration_statements:
@@ -128,6 +173,11 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_matter_notes_matter ON matter_notes (matter_id, created_at)",
             "CREATE INDEX IF NOT EXISTS idx_documents_chat ON documents (chat_id)",
             "CREATE INDEX IF NOT EXISTS idx_activity_log_created_at ON activity_log (created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_sp_items_meeting_id ON sp_committee_items (meeting_id)",
+            "CREATE INDEX IF NOT EXISTS idx_sp_items_committee_code ON sp_committee_items (committee_code)",
+            "CREATE INDEX IF NOT EXISTS idx_sp_items_committee_name ON sp_committee_items (committee_name)",
+            "CREATE INDEX IF NOT EXISTS idx_sp_items_meeting_date ON sp_committee_items (meeting_date)",
+            "CREATE INDEX IF NOT EXISTS idx_sp_items_full_text ON sp_committee_items USING GIN (to_tsvector('english', coalesce(full_text,'')))",
         ]
         async with engine.begin() as conn:
             for stmt in index_statements:
