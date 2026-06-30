@@ -18,17 +18,20 @@
 
 $DefaultLexUrl = "https://lex.lab.i.ai.gov.uk"
 $EnvFile       = Join-Path $PSScriptRoot ".env"
+$ParliamentEnv = Join-Path $PSScriptRoot "..\bots\parliament\.env"
 
 $LexBaseUrl = $DefaultLexUrl
 $TwfyApiKey = ""
 
-if (Test-Path $EnvFile) {
-    foreach ($line in (Get-Content $EnvFile)) {
-        if ($line -match '^\s*LEX_API_URL\s*=\s*(.+)$') {
-            $LexBaseUrl = $Matches[1].Split('#')[0].Trim().TrimEnd('/')
-        }
-        if ($line -match '^\s*TWFY_API_KEY\s*=\s*(.+)$') {
-            $TwfyApiKey = $Matches[1].Split('#')[0].Trim()
+foreach ($envPath in @($EnvFile, $ParliamentEnv)) {
+    if (Test-Path $envPath) {
+        foreach ($line in (Get-Content $envPath)) {
+            if ($line -match '^\s*LEX_API_URL\s*=\s*(.+)$') {
+                $LexBaseUrl = $Matches[1].Split('#')[0].Trim().TrimEnd('/')
+            }
+            if ($line -match '^\s*TWFY_API_KEY\s*=\s*(.+)$' -and -not $TwfyApiKey) {
+                $TwfyApiKey = $Matches[1].Split('#')[0].Trim()
+            }
         }
     }
 }
