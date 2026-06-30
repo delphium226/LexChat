@@ -79,6 +79,8 @@ $PassCount = 0
 $FailCount = 0
 $SkipCount = 0
 $Results   = [System.Collections.Generic.List[PSCustomObject]]::new()
+$LogFile   = Join-Path $PSScriptRoot "test_apis.log"
+$LogLines  = [System.Collections.Generic.List[string]]::new()
 
 function Test-Endpoint {
     param(
@@ -140,7 +142,7 @@ function Test-Endpoint {
         if ($status -ge 200 -and $status -lt 300) {
             Write-Host "PASS ($status, ${ms}ms)" -ForegroundColor Green
             $script:PassCount++
-            $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "PASS"; Url = $displayUrl })
+            $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "PASS"; Url = $displayUrl; ErrorCode = "" })
             $fullContent = $response.Content
             $preview = if ($fullContent.Length -gt 200) { $fullContent.Substring(0, 200) + "..." } else { $fullContent }
             Write-Host "         Preview: $preview"
@@ -149,14 +151,13 @@ function Test-Endpoint {
         } else {
             Write-Host "FAIL (HTTP $status)" -ForegroundColor Red
             $script:FailCount++
-            $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "FAIL"; Url = $displayUrl })
+            $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "FAIL"; Url = $displayUrl; ErrorCode = "HTTP $status" })
             Show-FailureDiagnostics -Url $BaseUrl -HttpStatus $status -ResponseBody $response.Content
         }
     } catch {
         $stopwatch.Stop()
         Write-Host "FAIL ($_)" -ForegroundColor Red
         $script:FailCount++
-        $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "FAIL"; Url = $displayUrl })
 
         # Attempt to read response body from the caught WebException (HTTP errors thrown by Invoke-WebRequest)
         $caughtEx    = $_.Exception
@@ -172,6 +173,16 @@ function Test-Endpoint {
                 $responseBody = $reader.ReadToEnd()
             } catch {}
         }
+
+        $exMsg = "$($caughtEx.Message) $(if ($caughtEx.InnerException) { $caughtEx.InnerException.Message })".ToLower()
+        $errCode = if ($httpStatus -gt 0) { "HTTP $httpStatus" }
+                   elseif ($exMsg -match "name.*resolut|could not resolve|no such host|getaddress") { "ERR_DNS" }
+                   elseif ($exMsg -match "actively refused|connection refused|no connection could be made") { "ERR_CONN_REFUSED" }
+                   elseif ($exMsg -match "timed out|a connection attempt failed|operation timed out") { "ERR_TIMEOUT" }
+                   elseif ($exMsg -match "ssl|tls|certificate|handshake|trust") { "ERR_TLS" }
+                   elseif ($exMsg -match "proxy|407") { "ERR_PROXY" }
+                   else { "ERR_UNKNOWN" }
+        $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "FAIL"; Url = $displayUrl; ErrorCode = $errCode })
         Show-FailureDiagnostics -Url $BaseUrl -Exception $caughtEx -ResponseBody $responseBody -HttpStatus $httpStatus
     }
 
@@ -183,7 +194,14 @@ function Skip-Test {
     Write-Host "  [$Label] SKIP -- $Reason" -ForegroundColor Yellow
     Write-Host ""
     $script:SkipCount++
-    $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "SKIP"; Url = "" })
+    $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "SKIP"; Url = ""; ErrorCode = "" })
+}
+
+# Write a line to both the console (with optional colour) and the log buffer.
+function Write-Log {
+    param([string]$Text, [string]$Color = "")
+    if ($Color) { Write-Host $Text -ForegroundColor $Color } else { Write-Host $Text }
+    $script:LogLines.Add($Text)
 }
 
 # ---------------------------------------------------------------------------
@@ -621,24 +639,39 @@ if ($SpMeeting -and $SpIobId) {
 # ---------------------------------------------------------------------------
 
 $Total = $PassCount + $FailCount + $SkipCount
-Write-Host "============================================================"
-Write-Host "SUMMARY"
-Write-Host "============================================================"
+
+Write-Log "============================================================"
+Write-Log "SUMMARY"
+Write-Log "============================================================"
+
+# API key status
+if ($TwfyApiKey) {
+    Write-Log "TWFY API key found -- TWFY tests ran."
+} else {
+    Write-Log "TWFY API key not found in .env -- TWFY tests were skipped." "Yellow"
+}
+Write-Log ""
+
+# Per-test results
 foreach ($r in $Results) {
     $urlSuffix = if ($r.Url) { "  $($r.Url)" } else { "" }
     switch ($r.Status) {
-        "PASS" { Write-Host ("  [PASS] " + $r.Label + $urlSuffix) -ForegroundColor Green  }
-        "FAIL" { Write-Host ("  [FAIL] " + $r.Label + $urlSuffix) -ForegroundColor Red    }
-        "SKIP" { Write-Host ("  [SKIP] " + $r.Label + $urlSuffix) -ForegroundColor Yellow }
+        "PASS" { Write-Log ("  [PASS] " + $r.Label + $urlSuffix) "Green"  }
+        "FAIL" { Write-Log ("  [FAIL] [$($r.ErrorCode)] " + $r.Label + $urlSuffix) "Red" }
+        "SKIP" { Write-Log ("  [SKIP] " + $r.Label + $urlSuffix) "Yellow" }
     }
 }
-Write-Host ""
-Write-Host "$PassCount passed  |  $FailCount failed  |  $SkipCount skipped  (of $Total tests)"
+
+Write-Log ""
+Write-Log "$PassCount passed  |  $FailCount failed  |  $SkipCount skipped  (of $Total tests)"
 
 if ($FailCount -gt 0) {
-    Write-Host "OVERALL: FAIL -- $FailCount endpoint(s) did not respond as expected." -ForegroundColor Red
-    exit 1
+    Write-Log "OVERALL: FAIL -- $FailCount endpoint(s) did not respond as expected." "Red"
 } else {
-    Write-Host "OVERALL: PASS -- all runnable endpoints healthy." -ForegroundColor Green
-    exit 0
+    Write-Log "OVERALL: PASS -- all runnable endpoints healthy." "Green"
 }
+
+# Flush log (overwrite each run)
+$LogLines | Set-Content -Path $LogFile -Encoding UTF8
+
+if ($FailCount -gt 0) { exit 1 } else { exit 0 }
