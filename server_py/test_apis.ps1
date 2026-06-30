@@ -298,16 +298,17 @@ function Get-TwfyGid {
 }
 
 # Extract the first case law judgment URL from a National Archives Atom XML response.
-# Atom <id> elements inside <entry> blocks hold the canonical case URL
+# Atom entry <id> elements use an opaque GUID form (/id/d-<uuid>) that doesn't serve
+# /data.xml — the human-readable court path lives in the entry's <link href="..."> element
 # (e.g. https://caselaw.nationalarchives.gov.uk/uksc/2024/1).
 function Get-CaseLawUrl {
     param([string]$Content)
     if (-not $Content) { return $null }
-    $allMatches = [regex]::Matches($Content, '<id>(https://caselaw\.nationalarchives\.gov\.uk/[^<]+)</id>')
+    $allMatches = [regex]::Matches($Content, '<link[^>]+href="(https://caselaw\.nationalarchives\.gov\.uk/[^"]+)"', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
     foreach ($m in $allMatches) {
         $url = $m.Groups[1].Value.Trim()
-        # Skip the feed-level <id> which points at atom.xml itself
-        if ($url -notmatch 'atom\.xml') {
+        # Skip the feed-level self-link and any non-judgment paths
+        if ($url -notmatch 'atom\.xml' -and $url -notmatch '/id/[a-z]-') {
             return $url
         }
     }
