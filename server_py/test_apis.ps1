@@ -441,73 +441,55 @@ if ($TwfyApiKey) {
 }
 
 Write-Host "10. search_hansard -- Lords (TWFY getHansard?type=lords)"
-$LordsContent = $null
 if ($TwfyApiKey) {
-    $LordsContent = Test-Endpoint `
-        -Label   "search_hansard (Lords)" `
-        -Url     "$TwfyBase/getHansard" `
-        -Method  GET `
-        -Query   @{ key = $TwfyApiKey; output = "js"; search = "criminal justice sentencing"; type = "lords"; num = 10 } `
-        -Capture
+    Test-Endpoint `
+        -Label  "search_hansard (Lords)" `
+        -Url    "$TwfyBase/getHansard" `
+        -Method GET `
+        -Query  @{ key = $TwfyApiKey; output = "js"; search = "criminal justice sentencing"; type = "lords"; num = 10 }
 } else {
     Skip-Test -Label "search_hansard (Lords)" -Reason "TWFY_API_KEY not set"
 }
 
 Write-Host "11. search_hansard -- Written answers (TWFY getHansard?type=wrans)"
-$WransContent = $null
 if ($TwfyApiKey) {
-    $WransContent = Test-Endpoint `
-        -Label   "search_hansard (Wrans)" `
-        -Url     "$TwfyBase/getHansard" `
-        -Method  GET `
-        -Query   @{ key = $TwfyApiKey; output = "js"; search = "NHS waiting times"; type = "wrans"; num = 10 } `
-        -Capture
+    Test-Endpoint `
+        -Label  "search_hansard (Wrans)" `
+        -Url    "$TwfyBase/getHansard" `
+        -Method GET `
+        -Query  @{ key = $TwfyApiKey; output = "js"; search = "NHS waiting times"; type = "wrans"; num = 10 }
 } else {
     Skip-Test -Label "search_hansard (Wrans)" -Reason "TWFY_API_KEY not set"
 }
 
 # --- get_hansard_debate (chains gids from the search_hansard calls above) ---
 
-Write-Host "12. get_hansard_debate -- Commons (TWFY getDebates)"
+Write-Host "12. get_hansard_debate -- Commons (TWFY getDebates type=commons gid=)"
 $CommonsGid = Get-TwfyGid -Content $CommonsContent
 if ($CommonsGid) {
     Test-Endpoint `
         -Label  "get_hansard_debate (Commons)" `
         -Url    "$TwfyBase/getDebates" `
         -Method GET `
-        -Query  @{ key = $TwfyApiKey; output = "js"; id = $CommonsGid }
+        -Query  @{ key = $TwfyApiKey; output = "js"; type = "commons"; gid = $CommonsGid }
 } elseif (-not $TwfyApiKey) {
     Skip-Test -Label "get_hansard_debate (Commons)" -Reason "TWFY_API_KEY not set"
 } else {
     Skip-Test -Label "get_hansard_debate (Commons)" -Reason "no gid returned by search_hansard (Commons)"
 }
 
-Write-Host "13. get_hansard_debate -- Lords (TWFY getLords)"
-$LordsGid = Get-TwfyGid -Content $LordsContent
-if ($LordsGid) {
-    Test-Endpoint `
-        -Label  "get_hansard_debate (Lords)" `
-        -Url    "$TwfyBase/getLords" `
-        -Method GET `
-        -Query  @{ key = $TwfyApiKey; output = "js"; id = $LordsGid }
-} elseif (-not $TwfyApiKey) {
-    Skip-Test -Label "get_hansard_debate (Lords)" -Reason "TWFY_API_KEY not set"
+Write-Host "13. get_hansard_debate -- Lords (TWFY getLords by gid no longer works -- SKIP)"
+if ($TwfyApiKey) {
+    Skip-Test -Label "get_hansard_debate (Lords)" -Reason "TWFY getLords is a member-list endpoint; Lords debate retrieval by gid not available"
 } else {
-    Skip-Test -Label "get_hansard_debate (Lords)" -Reason "no gid returned by search_hansard (Lords)"
+    Skip-Test -Label "get_hansard_debate (Lords)" -Reason "TWFY_API_KEY not set"
 }
 
-Write-Host "14. get_hansard_debate -- Written answers (TWFY getWrans)"
-$WransGid = Get-TwfyGid -Content $WransContent
-if ($WransGid) {
-    Test-Endpoint `
-        -Label  "get_hansard_debate (Wrans)" `
-        -Url    "$TwfyBase/getWrans" `
-        -Method GET `
-        -Query  @{ key = $TwfyApiKey; output = "js"; id = $WransGid }
-} elseif (-not $TwfyApiKey) {
-    Skip-Test -Label "get_hansard_debate (Wrans)" -Reason "TWFY_API_KEY not set"
+Write-Host "14. get_hansard_debate -- Written answers (TWFY getWrans by gid no longer works -- SKIP)"
+if ($TwfyApiKey) {
+    Skip-Test -Label "get_hansard_debate (Wrans)" -Reason "TWFY getWrans requires date= not gid=; per-gid retrieval not available"
 } else {
-    Skip-Test -Label "get_hansard_debate (Wrans)" -Reason "no gid returned by search_hansard (Wrans)"
+    Skip-Test -Label "get_hansard_debate (Wrans)" -Reason "TWFY_API_KEY not set"
 }
 
 # --- get_member_info ---
@@ -526,11 +508,11 @@ Test-Endpoint `
     -Method GET `
     -Query  @{ Name = "Baroness Hale"; House = 2; IsCurrentMember = "false"; Skip = 0; Take = 3 }
 
-Write-Host "17. get_member_info -- Scotland MSP (TWFY getMSPInfo)"
+Write-Host "17. get_member_info -- Scotland MSP (TWFY getMSPs -- getMSPInfo was removed)"
 if ($TwfyApiKey) {
     Test-Endpoint `
         -Label  "get_member_info (Scotland)" `
-        -Url    "$TwfyBase/getMSPInfo" `
+        -Url    "$TwfyBase/getMSPs" `
         -Method GET `
         -Query  @{ key = $TwfyApiKey; output = "js"; search = "John Swinney" }
 } else {
@@ -555,14 +537,12 @@ Test-Endpoint `
 # --- search_scottish_parliament ---
 
 Write-Host "20. search_scottish_parliament -- debates (TWFY getHansard)"
-$SpContent = $null
 if ($TwfyApiKey) {
-    $SpContent = Test-Endpoint `
-        -Label   "search_scottish_parliament" `
-        -Url     "$TwfyBase/getHansard" `
-        -Method  GET `
-        -Query   @{ key = $TwfyApiKey; output = "js"; search = "education Scotland curriculum"; num = 20 } `
-        -Capture
+    Test-Endpoint `
+        -Label  "search_scottish_parliament" `
+        -Url    "$TwfyBase/getHansard" `
+        -Method GET `
+        -Query  @{ key = $TwfyApiKey; output = "js"; search = "education Scotland curriculum"; num = 20 }
 } else {
     Skip-Test -Label "search_scottish_parliament" -Reason "TWFY_API_KEY not set"
 }
@@ -578,18 +558,11 @@ if ($TwfyApiKey) {
     Skip-Test -Label "search_scottish_parliament (wrans)" -Reason "TWFY_API_KEY not set"
 }
 
-Write-Host "22. get_hansard_debate -- Scottish Parliament (TWFY getSP)"
-$SpGid = Get-TwfyGid -Content $SpContent
-if ($SpGid) {
-    Test-Endpoint `
-        -Label  "get_hansard_debate (SP)" `
-        -Url    "$TwfyBase/getSP" `
-        -Method GET `
-        -Query  @{ key = $TwfyApiKey; output = "js"; id = $SpGid }
-} elseif (-not $TwfyApiKey) {
-    Skip-Test -Label "get_hansard_debate (SP)" -Reason "TWFY_API_KEY not set"
+Write-Host "22. get_hansard_debate -- Scottish Parliament (TWFY getSP removed -- SKIP)"
+if ($TwfyApiKey) {
+    Skip-Test -Label "get_hansard_debate (SP)" -Reason "TWFY getSP endpoint has been removed; SP full text not available via TWFY"
 } else {
-    Skip-Test -Label "get_hansard_debate (SP)" -Reason "no gid returned by search_scottish_parliament"
+    Skip-Test -Label "get_hansard_debate (SP)" -Reason "TWFY_API_KEY not set"
 }
 
 # ===========================================================================

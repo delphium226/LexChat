@@ -946,18 +946,24 @@ async def execute_parliament_tool(
                 gid = args["gid"]
                 debate_type = args.get("debate_type", "debates")
                 gid_lower = gid.lower()
+
+                # TWFY API notes (verified 2026-06):
+                # - getDebates requires type= and uses gid= (not id=); type=commons works
+                # - getLords is a member-list endpoint, not debate retrieval; Lords full text unavailable via TWFY
+                # - getWrans requires date=, not gid=; per-gid wrans retrieval unavailable via TWFY
+                # - getSP was removed; SP full text unavailable via TWFY
+                # For the broken cases we return a message so the model can fall back to the search excerpt.
                 if "wrans" in gid_lower or debate_type == "wrans":
-                    endpoint = "getWrans"
-                elif "lords" in gid_lower or debate_type == "lords":
-                    endpoint = "getLords"
+                    return json.dumps({"error": "TWFY no longer supports written answer retrieval by gid. Use the excerpt from search_hansard."})
                 elif debate_type in ("sp", "spwrans"):
-                    # Scottish Parliament debates and written answers both use getSP in TWFY
-                    endpoint = "getSP"
+                    return json.dumps({"error": "TWFY getSP endpoint has been removed. Use the excerpt from search_hansard."})
+                elif "lords" in gid_lower or debate_type == "lords":
+                    return json.dumps({"error": "TWFY getLords does not support debate retrieval by gid. Use the excerpt from search_hansard."})
                 else:
                     endpoint = "getDebates"
 
                 url = f"{_TWFY_API_BASE}/{endpoint}"
-                params = {"key": twfy_key, "output": "js", "id": gid}
+                params = {"key": twfy_key, "output": "js", "type": "commons", "gid": gid}
 
                 await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url, "method": "GET", "payload": params})
                 t0 = time.perf_counter()
@@ -977,7 +983,8 @@ async def execute_parliament_tool(
                 parliament = args.get("parliament", "commons")
 
                 if parliament == "scotland":
-                    url = f"{_TWFY_API_BASE}/getMSPInfo"
+                    # getMSPInfo was removed from TWFY; getMSPs with search= is the replacement
+                    url = f"{_TWFY_API_BASE}/getMSPs"
                     params = {"key": twfy_key, "output": "js", "search": args["name"]}
                     await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url, "method": "GET", "payload": params})
                     t0 = time.perf_counter()
