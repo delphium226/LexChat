@@ -137,7 +137,7 @@ function Test-Endpoint {
         if ($status -ge 200 -and $status -lt 300) {
             Write-Host "PASS ($status, ${ms}ms)" -ForegroundColor Green
             $script:PassCount++
-            $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "PASS" })
+            $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "PASS"; Url = $displayUrl })
             $fullContent = $response.Content
             $preview = if ($fullContent.Length -gt 200) { $fullContent.Substring(0, 200) + "..." } else { $fullContent }
             Write-Host "         Preview: $preview"
@@ -146,14 +146,14 @@ function Test-Endpoint {
         } else {
             Write-Host "FAIL (HTTP $status)" -ForegroundColor Red
             $script:FailCount++
-            $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "FAIL" })
+            $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "FAIL"; Url = $displayUrl })
             Show-FailureDiagnostics -Url $BaseUrl -HttpStatus $status -ResponseBody $response.Content
         }
     } catch {
         $stopwatch.Stop()
         Write-Host "FAIL ($_)" -ForegroundColor Red
         $script:FailCount++
-        $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "FAIL" })
+        $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "FAIL"; Url = $displayUrl })
 
         # Attempt to read response body from the caught WebException (HTTP errors thrown by Invoke-WebRequest)
         $caughtEx    = $_.Exception
@@ -180,7 +180,7 @@ function Skip-Test {
     Write-Host "  [$Label] SKIP -- $Reason" -ForegroundColor Yellow
     Write-Host ""
     $script:SkipCount++
-    $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "SKIP" })
+    $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "SKIP"; Url = "" })
 }
 
 # ---------------------------------------------------------------------------
@@ -648,10 +648,11 @@ Write-Host "============================================================"
 Write-Host "SUMMARY"
 Write-Host "============================================================"
 foreach ($r in $Results) {
+    $urlSuffix = if ($r.Url) { "  $($r.Url)" } else { "" }
     switch ($r.Status) {
-        "PASS" { Write-Host ("  [PASS] " + $r.Label) -ForegroundColor Green  }
-        "FAIL" { Write-Host ("  [FAIL] " + $r.Label) -ForegroundColor Red    }
-        "SKIP" { Write-Host ("  [SKIP] " + $r.Label) -ForegroundColor Yellow }
+        "PASS" { Write-Host ("  [PASS] " + $r.Label + $urlSuffix) -ForegroundColor Green  }
+        "FAIL" { Write-Host ("  [FAIL] " + $r.Label + $urlSuffix) -ForegroundColor Red    }
+        "SKIP" { Write-Host ("  [SKIP] " + $r.Label + $urlSuffix) -ForegroundColor Yellow }
     }
 }
 Write-Host ""
