@@ -496,19 +496,6 @@ if ($CommonsGid) {
     Skip-Test -Label "get_hansard_debate (Commons)" -Reason "no gid returned by search_hansard (Commons)"
 }
 
-Write-Host "13. get_hansard_debate -- Lords (TWFY getLords by gid no longer works -- SKIP)"
-if ($TwfyApiKey) {
-    Skip-Test -Label "get_hansard_debate (Lords)" -Reason "TWFY getLords is a member-list endpoint; Lords debate retrieval by gid not available"
-} else {
-    Skip-Test -Label "get_hansard_debate (Lords)" -Reason "TWFY_API_KEY not set"
-}
-
-Write-Host "14. get_hansard_debate -- Written answers (TWFY getWrans by gid no longer works -- SKIP)"
-if ($TwfyApiKey) {
-    Skip-Test -Label "get_hansard_debate (Wrans)" -Reason "TWFY getWrans requires date= not gid=; per-gid retrieval not available"
-} else {
-    Skip-Test -Label "get_hansard_debate (Wrans)" -Reason "TWFY_API_KEY not set"
-}
 
 # --- get_member_info ---
 
@@ -576,12 +563,6 @@ if ($TwfyApiKey) {
     Skip-Test -Label "search_scottish_parliament (wrans)" -Reason "TWFY_API_KEY not set"
 }
 
-Write-Host "22. get_hansard_debate -- Scottish Parliament (TWFY getSP removed -- SKIP)"
-if ($TwfyApiKey) {
-    Skip-Test -Label "get_hansard_debate (SP)" -Reason "TWFY getSP endpoint has been removed; SP full text not available via TWFY"
-} else {
-    Skip-Test -Label "get_hansard_debate (SP)" -Reason "TWFY_API_KEY not set"
-}
 
 # ===========================================================================
 # GROUP 3: SP OFFICIAL REPORT CRAWLER
