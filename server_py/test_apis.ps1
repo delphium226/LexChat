@@ -75,6 +75,7 @@ public class TrustAllCerts : ICertificatePolicy {
 $PassCount = 0
 $FailCount = 0
 $SkipCount = 0
+$Results   = [System.Collections.Generic.List[PSCustomObject]]::new()
 
 function Test-Endpoint {
     param(
@@ -136,6 +137,7 @@ function Test-Endpoint {
         if ($status -ge 200 -and $status -lt 300) {
             Write-Host "PASS ($status, ${ms}ms)" -ForegroundColor Green
             $script:PassCount++
+            $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "PASS" })
             $fullContent = $response.Content
             $preview = if ($fullContent.Length -gt 200) { $fullContent.Substring(0, 200) + "..." } else { $fullContent }
             Write-Host "         Preview: $preview"
@@ -144,12 +146,14 @@ function Test-Endpoint {
         } else {
             Write-Host "FAIL (HTTP $status)" -ForegroundColor Red
             $script:FailCount++
+            $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "FAIL" })
             Show-FailureDiagnostics -Url $BaseUrl -HttpStatus $status -ResponseBody $response.Content
         }
     } catch {
         $stopwatch.Stop()
         Write-Host "FAIL ($_)" -ForegroundColor Red
         $script:FailCount++
+        $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "FAIL" })
 
         # Attempt to read response body from the caught WebException (HTTP errors thrown by Invoke-WebRequest)
         $caughtEx    = $_.Exception
@@ -176,6 +180,7 @@ function Skip-Test {
     Write-Host "  [$Label] SKIP -- $Reason" -ForegroundColor Yellow
     Write-Host ""
     $script:SkipCount++
+    $script:Results.Add([PSCustomObject]@{ Label = $Label; Status = "SKIP" })
 }
 
 # ---------------------------------------------------------------------------
@@ -640,12 +645,22 @@ if ($SpMeeting -and $SpIobId) {
 
 $Total = $PassCount + $FailCount + $SkipCount
 Write-Host "============================================================"
-Write-Host "Results: $PassCount passed, $FailCount failed, $SkipCount skipped (of $Total tests)"
+Write-Host "SUMMARY"
+Write-Host "============================================================"
+foreach ($r in $Results) {
+    switch ($r.Status) {
+        "PASS" { Write-Host ("  [PASS] " + $r.Label) -ForegroundColor Green  }
+        "FAIL" { Write-Host ("  [FAIL] " + $r.Label) -ForegroundColor Red    }
+        "SKIP" { Write-Host ("  [SKIP] " + $r.Label) -ForegroundColor Yellow }
+    }
+}
+Write-Host ""
+Write-Host "$PassCount passed  |  $FailCount failed  |  $SkipCount skipped  (of $Total tests)"
 
 if ($FailCount -gt 0) {
-    Write-Host "FAIL -- $FailCount endpoint(s) did not respond as expected." -ForegroundColor Red
+    Write-Host "OVERALL: FAIL -- $FailCount endpoint(s) did not respond as expected." -ForegroundColor Red
     exit 1
 } else {
-    Write-Host "PASS -- all runnable endpoints healthy." -ForegroundColor Green
+    Write-Host "OVERALL: PASS -- all runnable endpoints healthy." -ForegroundColor Green
     exit 0
 }

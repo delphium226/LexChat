@@ -1181,18 +1181,6 @@ function AppContent() {
             >
               <div style={{ maxWidth: '95%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
 
-                {showWeeklyBanner && (
-                  <WeeklyFeedbackBanner
-                    userId={user.id}
-                    botName={botInfo.name}
-                    onClose={() => setShowWeeklyBanner(false)}
-                    onSubmitted={() => {
-                      localStorage.setItem(`weeklyFeedbackSubmitted_${user.id}`, Date.now().toString());
-                      setSurveyDue(false);
-                    }}
-                  />
-                )}
-
                 {/* Research context chips */}
                 {(() => {
                   const chips = [
@@ -1850,6 +1838,18 @@ function AppContent() {
             <Settings />
           </div>
         </div>
+      )}
+
+      {showWeeklyBanner && (
+        <WeeklyFeedbackBanner
+          userId={user.id}
+          botName={botInfo.name}
+          onClose={() => setShowWeeklyBanner(false)}
+          onSubmitted={() => {
+            localStorage.setItem(`weeklyFeedbackSubmitted_${user.id}`, Date.now().toString());
+            setSurveyDue(false);
+          }}
+        />
       )}
 
       {showHistoryModal && (

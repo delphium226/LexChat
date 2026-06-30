@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { submitFeedback } from '../services/api';
 
 const inputStyle = {
@@ -29,6 +29,12 @@ const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted, botName = 'AILA' }
     onClose();
   };
 
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') dismiss(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   const handleSubmit = async () => {
     localStorage.setItem(`weeklyFeedbackLastShown_${userId}`, Date.now().toString());
     setStatus('submitting');
@@ -51,15 +57,20 @@ const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted, botName = 'AILA' }
   };
 
   return (
-    <div style={{
-      marginBottom: 18,
-      padding: '16px 20px',
-      background: 'var(--paper)',
-      border: '1px solid var(--ink-200)',
-      borderRadius: 12,
-      boxShadow: 'var(--shadow-sm)',
-      fontFamily: 'var(--font-ui)',
-    }}>
+    <div
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 50,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) dismiss(); }}
+    >
+      <div style={{
+        background: 'var(--paper)', border: '1px solid var(--ink-200)',
+        borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+        width: '100%', maxWidth: 560, maxHeight: '90vh',
+        overflowY: 'auto', padding: '20px 24px',
+        fontFamily: 'var(--font-ui)',
+      }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)', marginBottom: 12 }}>
@@ -235,6 +246,7 @@ const WeeklyFeedbackBanner = ({ userId, onClose, onSubmitted, botName = 'AILA' }
             <path d="M18 6 6 18M6 6l12 12" />
           </svg>
         </button>
+      </div>
       </div>
     </div>
   );
