@@ -15,6 +15,12 @@ import { Routes, Route } from 'react-router-dom';
 import SystemChat from './pages/SystemChat';
 import WeeklyFeedbackBanner from './components/WeeklyFeedbackBanner';
 import DataSensitivityNotice from './components/DataSensitivityNotice';
+import {
+  PlusIcon, SearchIcon, FolderIcon, SettingsIcon, SidebarIcon, BookmarkIcon,
+  ScalesIcon, GavelIcon, CalendarIcon, PaperclipIcon, SlidersIcon, SendIcon,
+  StopIcon, ChevRightIcon,
+} from './components/ui/icons';
+import { IBtn, GhostBtn } from './components/ui/buttons';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -39,126 +45,6 @@ function formatRelativeTime(isoDate) {
   if (diffDays === 1) return 'Yesterday';
   if (diffDays < 7) return date.toLocaleDateString('en-GB', { weekday: 'short' });
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
-
-// ── Icons ──────────────────────────────────────────────────────
-
-const PlusIcon = () => (
-  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 5v14M5 12h14" />
-  </svg>
-);
-
-const SearchIcon = () => (
-  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="11" cy="11" r="7" /><path d="M16.5 16.5 21 21" />
-  </svg>
-);
-
-const FolderIcon = () => (
-  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
-  </svg>
-);
-
-const SettingsIcon = () => (
-  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
-  </svg>
-);
-
-const SidebarIcon = () => (
-  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" />
-  </svg>
-);
-
-const BookmarkIcon = () => (
-  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M6 3h12v18l-6-4-6 4z" />
-  </svg>
-);
-
-
-const ScalesIcon = () => (
-  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 3v18M5 21h14M6 7h12M6 7l-3 7a3 3 0 0 0 6 0z" />
-    <path d="M18 7l-3 7a3 3 0 0 0 6 0z" />
-  </svg>
-);
-
-const GavelIcon = () => (
-  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14 3l7 7-4 4-7-7z" />
-    <path d="M10 7 3 14l4 4 7-7" />
-    <path d="M5 21h10" />
-  </svg>
-);
-
-const CalendarIcon = () => (
-  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" />
-  </svg>
-);
-
-const PaperclipIcon = () => (
-  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 12.5 12.5 21a5.5 5.5 0 0 1-7.8-7.8l9-9a3.7 3.7 0 0 1 5.2 5.2l-9 9a1.8 1.8 0 1 1-2.6-2.6l8-8" />
-  </svg>
-);
-
-const SlidersIcon = () => (
-  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 5h18l-7 9v5l-4 2v-7L3 5z" />
-  </svg>
-);
-
-const SendIcon = () => (
-  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 12l18-8-8 18-2-8-8-2z" />
-  </svg>
-);
-
-const StopIcon = () => (
-  <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor">
-    <rect x="5" y="5" width="14" height="14" rx="2" />
-  </svg>
-);
-
-const ChevRightIcon = () => (
-  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 6l6 6-6 6" />
-  </svg>
-);
-
-// ── Small reusable button primitives ───────────────────────────
-
-function IBtn({ children, label, onClick, size = 30 }) {
-  return (
-    <button
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className="inline-flex items-center justify-center rounded-md text-ink-500 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent flex-shrink-0"
-      style={{ width: size, height: size }}
-    >{children}</button>
-  );
-}
-
-function GhostBtn({ children, icon, onClick, disabled, title }) {
-  return (
-    <button
-      onClick={disabled ? undefined : onClick}
-      disabled={disabled}
-      title={title}
-      className={`inline-flex items-center gap-1.5 px-3 py-1.5 font-ui text-sm font-medium rounded-md border border-ink-200 bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-        disabled
-          ? 'text-ink-300 opacity-60 cursor-not-allowed'
-          : 'text-ink-900 hover:bg-ink-50 cursor-pointer'
-      }`}
-    >{icon}{children}</button>
-  );
 }
 
 // ── Main app ───────────────────────────────────────────────────

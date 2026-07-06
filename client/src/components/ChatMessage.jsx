@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { marked } from 'marked';
 import { rateMessage, addMatterNote } from '../services/api';
+import { CopyIcon, RefreshIcon, BookmarkIcon } from './ui/icons';
 
 
 function formatTime(isoDate) {
@@ -38,29 +39,6 @@ function ToolBtn({ label, onClick, active, disabled, error, children }) {
     >{children}</button>
   );
 }
-
-const CopyIcon = () => (
-  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <rect x="9" y="9" width="11" height="11" rx="2" />
-    <path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" />
-  </svg>
-);
-
-const RefreshIcon = () => (
-  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M4 12a8 8 0 0 1 14-5.3L21 9" />
-    <path d="M21 4v5h-5" />
-    <path d="M20 12a8 8 0 0 1-14 5.3L3 15" />
-    <path d="M3 20v-5h5" />
-  </svg>
-);
-
-
-const BookmarkIcon = () => (
-  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M6 3h12v18l-6-4-6 4z" />
-  </svg>
-);
 
 function ThumbsDownModal({ text, onChange, onCancel, onSubmit, submitting }) {
   const textareaRef = useRef(null);

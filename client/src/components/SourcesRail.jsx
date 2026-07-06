@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { FilterIcon, ExternalLinkIcon, ChevronRightIcon, ChevronLeftIcon, BookIcon, GavelIcon } from './ui/icons';
 
 function IBtn({ label, onClick, children, active = false }) {
   const [h, setH] = React.useState(false);
@@ -18,46 +19,6 @@ function IBtn({ label, onClick, children, active = false }) {
     >{children}</button>
   );
 }
-
-const FilterIcon = () => (
-  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 5h18l-7 9v5l-4 2v-7L3 5z" />
-  </svg>
-);
-
-const ExternalLinkIcon = () => (
-  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M15 3h6v6M10 14 21 3M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
-  </svg>
-);
-
-
-const ChevronRightIcon = () => (
-  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 18l6-6-6-6" />
-  </svg>
-);
-
-const ChevronLeftIcon = () => (
-  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M15 18l-6-6 6-6" />
-  </svg>
-);
-
-const BookIcon = () => (
-  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v16H6.5A2.5 2.5 0 0 0 4 20.5z" />
-    <path d="M20 18v4H6.5A2.5 2.5 0 0 1 4 19.5" />
-  </svg>
-);
-
-const GavelIcon = () => (
-  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14 3l7 7-4 4-7-7z" />
-    <path d="M10 7 3 14l4 4 7-7" />
-    <path d="M5 21h10" />
-  </svg>
-);
 
 function formatExtent(extent) {
   if (!extent || extent.length === 0) return null;
@@ -326,7 +287,7 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick, col
                     border: '1px solid',
                     background: badgeBg, borderColor: badgeBorder, color: badgeColor,
                   }}>
-                    {isCase ? <GavelIcon /> : <BookIcon />}
+                    {isCase ? <GavelIcon size={13} /> : <BookIcon />}
                     {s.kind}
                   </span>
                 </div>
