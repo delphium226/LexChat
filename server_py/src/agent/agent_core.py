@@ -12,7 +12,7 @@ import logging
 import uuid
 from typing import Callable, Optional
 
-from ..config import get_manager_system_prompt, get_worker_system_prompt
+from ..prompts import get_manager_system_prompt, get_worker_system_prompt
 from .agent_shared import run_worker_tool
 from .federation_client import (
     build_peer_descriptions,
