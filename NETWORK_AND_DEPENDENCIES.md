@@ -33,7 +33,7 @@ The frontend is **not built on the target server**. It is built on the developer
 |---|---|---|
 | `https://registry.npmjs.org/` | Node.js packages from `client/package.json` | `npm install` |
 
-Node.js v22 portable install used on dev machine (`C:\Users\rhett\node_portable\`). Not required on target server.
+Node.js v22 is used on the dev machine only (portable install via `deployment/install_node.ps1`). Not required on target server.
 
 ### 1.3 Air-Gapped Installation (`install_native_offline.ps1`)
 
@@ -143,7 +143,7 @@ APIs marked **legislation bot** are used by the default legislation bot. APIs ma
 | `server_py/.env` | Startup defaults: `DATABASE_URL`, `JWT_SECRET`, `OLLAMA_BASE_URL`, `OLLAMA_API_KEY`, `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`, `TWFY_API_KEY` |
 | `server_py/src/config.py` | Application settings, model lists, system prompts, LEX API URL |
 | `server_py/src/agent/provider_factory.py` | Provider resolution, ContextVar, queue/semaphore caching |
-| `server_py/src/agent/tools.py` | LEX API client (legislation bot tools) + TWFY/Parliament API client (parliament bot tools) |
+| `server_py/src/agent/tools/` | LEX API client (legislation bot tools) + TWFY/Parliament API client (parliament bot tools) |
 | `server_py/src/services/email_service.py` | Gmail SMTP email sender (optional) |
 | `server_py/test_apis.ps1` | Connectivity test script — verifies all runtime API endpoints are reachable |
 | `deployment/certs/lexchat.crt` | TLS certificate for HTTPS on port 443 |
