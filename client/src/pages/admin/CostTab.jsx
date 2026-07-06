@@ -12,14 +12,14 @@ export const CostTab = ({ costStats, costTimeframe, setCostTimeframe }) => {
     return (
         <div className="space-y-6">
             {/* HEADER WITH FILTER */}
-            <div className="flex justify-between items-center bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
-                <h2 className="text-lg font-bold dark:text-white">OpenRouter Spend</h2>
+            <div className="flex justify-between items-center bg-paper p-4 rounded-lg shadow">
+                <h2 className="text-lg font-bold">OpenRouter Spend</h2>
                 <div className="flex items-center space-x-2">
-                    <label className="text-sm text-gray-500 dark:text-gray-400 font-medium">Timeframe:</label>
+                    <label className="text-sm text-ink-500 font-medium">Timeframe:</label>
                     <select
                         value={costTimeframe}
                         onChange={(e) => setCostTimeframe(e.target.value)}
-                        className="p-2 border rounded-md text-sm dark:bg-zinc-700 dark:border-zinc-600 dark:text-white focus:ring-2 focus:ring-blue-500"
+                        className="p-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500"
                     >
                         <option value="1">Last 1 Day</option>
                         <option value="3">Last 3 Days</option>
@@ -32,7 +32,7 @@ export const CostTab = ({ costStats, costTimeframe, setCostTimeframe }) => {
             </div>
 
             {!hasData && (
-                <div className="bg-white dark:bg-zinc-800 p-8 rounded-lg shadow text-center text-gray-400 dark:text-gray-500 text-sm">
+                <div className="bg-paper p-8 rounded-lg shadow text-center text-ink-400 text-sm">
                     No cost data for this period. Cost tracking is only recorded for OpenRouter queries.
                 </div>
             )}
@@ -41,33 +41,33 @@ export const CostTab = ({ costStats, costTimeframe, setCostTimeframe }) => {
                 <>
                     {/* KPI CARDS */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
-                            <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Total Spend</h3>
+                        <div className="bg-paper p-4 rounded-lg shadow">
+                            <h3 className="text-ink-500 text-xs font-bold uppercase">Total Spend</h3>
                             <p className="text-2xl font-bold text-emerald-600">{fmtUsd(kpi.totalCost)}</p>
-                            <p className="text-xs text-gray-400 mt-1">{timeframeLabel}</p>
+                            <p className="text-xs text-ink-400 mt-1">{timeframeLabel}</p>
                         </div>
-                        <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
-                            <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Avg Cost / Query</h3>
+                        <div className="bg-paper p-4 rounded-lg shadow">
+                            <h3 className="text-ink-500 text-xs font-bold uppercase">Avg Cost / Query</h3>
                             <p className="text-2xl font-bold text-emerald-600">{fmtUsd(kpi.avgCost)}</p>
-                            <p className="text-xs text-gray-400 mt-1">{kpi.paidRequests} paid queries</p>
+                            <p className="text-xs text-ink-400 mt-1">{kpi.paidRequests} paid queries</p>
                         </div>
-                        <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
-                            <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Most Expensive Query</h3>
+                        <div className="bg-paper p-4 rounded-lg shadow">
+                            <h3 className="text-ink-500 text-xs font-bold uppercase">Most Expensive Query</h3>
                             <p className="text-2xl font-bold text-amber-600">{fmtUsd(kpi.maxCost)}</p>
-                            <p className="text-xs text-gray-400 mt-1">single request peak</p>
+                            <p className="text-xs text-ink-400 mt-1">single request peak</p>
                         </div>
-                        <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
-                            <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">OpenRouter Queries</h3>
-                            <p className="text-2xl font-bold dark:text-white">{kpi.paidRequests}</p>
-                            <p className="text-xs text-gray-400 mt-1">{timeframeLabel}</p>
+                        <div className="bg-paper p-4 rounded-lg shadow">
+                            <h3 className="text-ink-500 text-xs font-bold uppercase">OpenRouter Queries</h3>
+                            <p className="text-2xl font-bold">{kpi.paidRequests}</p>
+                            <p className="text-xs text-ink-400 mt-1">{timeframeLabel}</p>
                         </div>
                     </div>
 
                     {/* CHARTS ROW */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {/* Daily Spend */}
-                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
-                            <h2 className="text-sm font-bold mb-4 dark:text-white">Daily Spend ({timeframeLabel})</h2>
+                        <div className="bg-paper p-6 rounded-lg shadow">
+                            <h2 className="text-sm font-bold mb-4">Daily Spend ({timeframeLabel})</h2>
                             {daily.length > 0 ? (
                                 <div className="h-56">
                                     <ResponsiveContainer width="100%" height="100%">
@@ -84,13 +84,13 @@ export const CostTab = ({ costStats, costTimeframe, setCostTimeframe }) => {
                                     </ResponsiveContainer>
                                 </div>
                             ) : (
-                                <div className="h-56 flex items-center justify-center text-gray-400 text-sm">No data for this period.</div>
+                                <div className="h-56 flex items-center justify-center text-ink-400 text-sm">No data for this period.</div>
                             )}
                         </div>
 
                         {/* Cost by User */}
-                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
-                            <h2 className="text-sm font-bold mb-4 dark:text-white">Top Users by Spend ({timeframeLabel})</h2>
+                        <div className="bg-paper p-6 rounded-lg shadow">
+                            <h2 className="text-sm font-bold mb-4">Top Users by Spend ({timeframeLabel})</h2>
                             {perUser.length > 0 ? (
                                 <div className="h-56">
                                     <ResponsiveContainer width="100%" height="100%">
@@ -114,20 +114,20 @@ export const CostTab = ({ costStats, costTimeframe, setCostTimeframe }) => {
                                     </ResponsiveContainer>
                                 </div>
                             ) : (
-                                <div className="h-56 flex items-center justify-center text-gray-400 text-sm">No data for this period.</div>
+                                <div className="h-56 flex items-center justify-center text-ink-400 text-sm">No data for this period.</div>
                             )}
                         </div>
                     </div>
 
                     {/* PRICIEST QUERIES TABLE */}
-                    <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
-                        <h2 className="text-sm font-bold mb-4 dark:text-white">10 Most Expensive Queries ({timeframeLabel})</h2>
+                    <div className="bg-paper p-6 rounded-lg shadow">
+                        <h2 className="text-sm font-bold mb-4">10 Most Expensive Queries ({timeframeLabel})</h2>
                         <div className="overflow-x-auto">
                             <table className="min-w-full text-xs">
                                 <thead>
                                     <tr>
                                         {['Request ID', 'Timestamp', 'Cost', 'AI Calls', 'Total Duration'].map(label => (
-                                            <th key={label} className="px-3 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-left font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap">
+                                            <th key={label} className="px-3 py-2 border-b-2 border-ink-200 text-left font-semibold text-ink-500 uppercase tracking-wider whitespace-nowrap">
                                                 {label}
                                             </th>
                                         ))}
@@ -135,12 +135,12 @@ export const CostTab = ({ costStats, costTimeframe, setCostTimeframe }) => {
                                 </thead>
                                 <tbody>
                                     {priciest.map((row) => (
-                                        <tr key={row.requestId} className="border-b border-zinc-100 dark:border-zinc-700">
-                                            <td className="px-3 py-3 font-mono dark:text-gray-300">{row.requestId}</td>
-                                            <td className="px-3 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(row.createdAt).toLocaleString()}</td>
+                                        <tr key={row.requestId} className="border-b border-ink-100">
+                                            <td className="px-3 py-3 font-mono">{row.requestId}</td>
+                                            <td className="px-3 py-3 text-ink-500 whitespace-nowrap">{new Date(row.createdAt).toLocaleString()}</td>
                                             <td className="px-3 py-3 font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">{fmtUsd(row.costUsd)}</td>
-                                            <td className="px-3 py-3 dark:text-gray-300">{row.llmCalls}</td>
-                                            <td className="px-3 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap">{fmtMs(row.totalMs)}</td>
+                                            <td className="px-3 py-3">{row.llmCalls}</td>
+                                            <td className="px-3 py-3 text-ink-500 whitespace-nowrap">{fmtMs(row.totalMs)}</td>
                                         </tr>
                                     ))}
                                 </tbody>

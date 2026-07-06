@@ -30,7 +30,7 @@ const CommentModal = ({ isOpen, onClose, onSubmit, initialComment = '', rating =
                                 key={star}
                                 onClick={() => onRate(star)}
                                 className={`transition-colors transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded ${star <= rating ? 'text-warn' : 'text-ink-300 hover:text-warn'
-                                    }`}
+ }`}
                                 title={`Rate ${star} star${star > 1 ? 's' : ''}`}
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8">

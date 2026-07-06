@@ -15,7 +15,7 @@ export const WeeklySurveyComplianceChart = ({ surveyCompliance }) => {
     }));
     return (
         <div className="mb-6">
-            <h3 className="text-sm font-bold mb-3 dark:text-white">Weekly Survey Submissions</h3>
+            <h3 className="text-sm font-bold mb-3">Weekly Survey Submissions</h3>
             <ResponsiveContainer width="100%" height={180}>
                 <BarChart data={data} barCategoryGap="30%">
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />

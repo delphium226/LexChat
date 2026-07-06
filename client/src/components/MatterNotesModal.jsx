@@ -396,10 +396,10 @@ const MatterNotesModal = ({ matter, onClose }) => {
                         key={opt.value}
                         onClick={() => { setBriefMode(opt.value); setBriefContent(''); setBriefError(''); }}
                         className={`rounded-full px-3 py-1 font-ui text-xs font-medium border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                          briefMode === opt.value
-                            ? 'bg-accent text-white border-transparent'
-                            : 'border-ink-200 text-ink-600 hover:bg-ink-50'
-                        }`}
+ briefMode === opt.value
+ ? 'bg-accent text-white border-transparent'
+ : 'border-ink-200 text-ink-600 hover:bg-ink-50'
+ }`}
                       >{opt.label}</button>
                     ))}
                   </div>

@@ -10,9 +10,9 @@ const PROVIDER_DISPLAY = {
 
 const Field = ({ label, children, hint }) => (
     <div>
-        <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">{label}</label>
+        <label className="block text-xs font-semibold text-ink-600 uppercase tracking-wide mb-1">{label}</label>
         {children}
-        {hint && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{hint}</p>}
+        {hint && <p className="text-xs text-ink-400 mt-0.5">{hint}</p>}
     </div>
 );
 
@@ -51,7 +51,7 @@ const ModelCombobox = ({ value, onChange, models, loading, error }) => {
                 onFocus={() => setOpen(true)}
                 placeholder={loading ? 'Loading models…' : open ? 'Search models…' : (value || 'Select a model')}
                 disabled={loading}
-                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                className="w-full text-sm border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             />
             {loading && (
                 <div className="absolute right-2.5 top-1/2 -translate-y-1/2"><Spinner size="sm" /></div>
@@ -59,26 +59,26 @@ const ModelCombobox = ({ value, onChange, models, loading, error }) => {
             {open && !loading && (
                 <ul
                     tabIndex={-1}
-                    className="absolute z-20 mt-1 w-full max-h-64 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-md shadow-lg text-sm"
+                    className="absolute z-20 mt-1 w-full max-h-64 overflow-auto bg-paper border border-ink-200 rounded-md shadow-lg text-sm"
                 >
                     {error && (
                         <li className="px-3 py-2 text-red-500 dark:text-red-400">{error}</li>
                     )}
                     {!error && filtered.length === 0 && (
-                        <li className="px-3 py-2 text-gray-400 dark:text-gray-500">No models match</li>
+                        <li className="px-3 py-2 text-ink-400">No models match</li>
                     )}
                     {!error && filtered.map(m => (
                         <li
                             key={m.name || '__blank__'}
                             tabIndex={-1}
                             onMouseDown={() => handleSelect(m.name)}
-                            className={`flex items-center justify-between px-3 py-1.5 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 ${m.name === value ? 'bg-blue-50 dark:bg-blue-900/20 font-medium' : ''}`}
+                            className={`flex items-center justify-between px-3 py-1.5 cursor-pointer hover:bg-accent-soft ${m.name === value ? 'bg-accent-soft font-medium' : ''}`}
                         >
-                            <span className={`truncate ${m.name ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500 italic'}`}>
+                            <span className={`truncate ${m.name ? 'text-ink-900 ' : 'text-ink-400 italic'}`}>
                                 {m.name || '— Same as Active Model —'}
                             </span>
                             {m.context_kb != null && (
-                                <span className="ml-3 flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">{m.context_kb}K ctx</span>
+                                <span className="ml-3 flex-shrink-0 text-xs text-ink-400">{m.context_kb}K ctx</span>
                             )}
                         </li>
                     ))}
@@ -196,9 +196,9 @@ export const ProviderConfigPanel = () => {
 
     if (!data) {
         return (
-            <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow flex items-center gap-3">
+            <div className="bg-paper p-6 rounded-lg shadow flex items-center gap-3">
                 <Spinner size="sm" />
-                <span className="text-sm text-gray-500 dark:text-gray-400">Loading provider config…</span>
+                <span className="text-sm text-ink-500">Loading provider config…</span>
             </div>
         );
     }
@@ -210,10 +210,10 @@ export const ProviderConfigPanel = () => {
     const hasApiKey = !!(draft.api_key);
 
     return (
-        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow space-y-6">
+        <div className="bg-paper p-6 rounded-lg shadow space-y-6">
             {/* Header */}
             <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold dark:text-white">LLM Provider</h2>
+                <h2 className="text-lg font-bold">LLM Provider</h2>
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300">
                     <span className="w-2 h-2 rounded-full bg-green-500 inline-block"></span>
                     Active: {activeInfo?.name ?? data.active_provider}
@@ -230,11 +230,11 @@ export const ProviderConfigPanel = () => {
                             key={provider.id}
                             onClick={() => setSelectedId(provider.id)}
                             className={`text-left p-4 rounded-lg border-2 transition-colors ${isSel
-                                ? 'border-accent bg-accent-soft'
-                                : 'border-ink-200 hover:border-ink-300'}`}
+ ? 'border-accent bg-accent-soft'
+ : 'border-ink-200 hover:border-ink-300'}`}
                         >
                             <div className="flex items-center justify-between mb-1">
-                                <span className="font-semibold text-sm dark:text-white">{provider.name}</span>
+                                <span className="font-semibold text-sm">{provider.name}</span>
                                 <div className="flex items-center gap-1.5">
                                     {isAct && (
                                         <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 font-medium">Active</span>
@@ -246,7 +246,7 @@ export const ProviderConfigPanel = () => {
                                     )}
                                 </div>
                             </div>
-                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                            <p className="text-xs text-ink-400">
                                 {provider.id === 'openrouter'
                                     ? 'Dynamic models'
                                     : `${provider.model_list.length} model${provider.model_list.length !== 1 ? 's' : ''}`
@@ -259,8 +259,8 @@ export const ProviderConfigPanel = () => {
 
             {/* Config fields for selected provider */}
             {selectedProvider && (
-                <div className="space-y-4 pt-2 border-t border-gray-100 dark:border-zinc-700">
-                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                <div className="space-y-4 pt-2 border-t border-ink-100">
+                    <h3 className="text-sm font-semibold text-ink-700">
                         Configure: {selectedProvider.name}
                     </h3>
 
@@ -271,7 +271,7 @@ export const ProviderConfigPanel = () => {
                                 type="text"
                                 value={draft.base_url || ''}
                                 onChange={e => updateDraft(selectedId, 'base_url', e.target.value)}
-                                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full text-sm border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </Field>
 
@@ -283,7 +283,7 @@ export const ProviderConfigPanel = () => {
                                     value={draft.api_key || ''}
                                     onChange={e => updateDraft(selectedId, 'api_key', e.target.value)}
                                     placeholder={hasApiKey ? '••••••••' : 'Not set'}
-                                    className="flex-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="flex-1 text-sm border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
                                 <button
                                     type="button"
@@ -309,7 +309,7 @@ export const ProviderConfigPanel = () => {
                                 <select
                                     value={draft.model || ''}
                                     onChange={e => updateDraft(selectedId, 'model', e.target.value)}
-                                    className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full text-sm border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 >
                                     {selectedProvider.model_list.map(m => (
                                         <option key={m.name} value={m.name}>{m.name} ({m.context_kb}K ctx)</option>
@@ -332,7 +332,7 @@ export const ProviderConfigPanel = () => {
                                 <select
                                     value={draft.summarisation_model || ''}
                                     onChange={e => updateDraft(selectedId, 'summarisation_model', e.target.value)}
-                                    className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full text-sm border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 >
                                     <option value="">— Same as Active Model —</option>
                                     {selectedProvider.model_list.map(m => (
@@ -349,7 +349,7 @@ export const ProviderConfigPanel = () => {
                                 min="0" max="2" step="0.05"
                                 value={draft.temperature ?? 0.1}
                                 onChange={e => updateDraft(selectedId, 'temperature', parseFloat(e.target.value))}
-                                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full text-sm border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </Field>
 
@@ -360,7 +360,7 @@ export const ProviderConfigPanel = () => {
                                 min="1" max="50" step="1"
                                 value={draft.max_concurrent_requests ?? 3}
                                 onChange={e => updateDraft(selectedId, 'max_concurrent_requests', parseInt(e.target.value))}
-                                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full text-sm border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </Field>
 
@@ -371,7 +371,7 @@ export const ProviderConfigPanel = () => {
                                 min="1" max="20" step="1"
                                 value={draft.max_summarise_concurrency ?? 1}
                                 onChange={e => updateDraft(selectedId, 'max_summarise_concurrency', parseInt(e.target.value))}
-                                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full text-sm border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </Field>
                     </div>

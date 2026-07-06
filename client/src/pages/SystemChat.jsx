@@ -150,8 +150,8 @@ export default function SystemChat() {
                                     {msg.events.map((event, j) => (
                                         <div key={j} className="text-sm break-words">
                                             {event.type === 'token_stream' ? (
-                                                <span className="text-gray-300">
-                                                    <span className="text-xs text-gray-500 uppercase mr-2">[STREAM]</span>
+                                                <span className="text-ink-300">
+                                                    <span className="text-xs text-ink-500 uppercase mr-2">[STREAM]</span>
                                                     {event.content}
                                                 </span>
                                             ) : event.type === 'api_call_start' ? (
@@ -164,7 +164,7 @@ export default function SystemChat() {
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <div className="text-gray-400 text-xs">
+                                                    <div className="text-ink-400 text-xs">
                                                         <div>Request:</div>
                                                         <pre className="overflow-x-auto bg-black/30 p-1 rounded mb-1">
                                                             {JSON.stringify(event.payload, null, 2)}
@@ -225,14 +225,14 @@ export default function SystemChat() {
 function getEventColor(type) {
     switch (type) {
         case 'tool_call': return 'text-yellow-400';
-        case 'tool_result': return 'text-blue-400';
+        case 'tool_result': return 'text-accent';
         case 'tool_start': return 'text-cyan-600';
         case 'tool_end': return 'text-cyan-600';
         case 'api_call_start': return 'text-purple-400';
         case 'api_call_end': return 'text-purple-400';
         case 'result': return 'text-green-500';
         case 'error': return 'text-red-500';
-        default: return 'text-gray-500';
+        default: return 'text-ink-500';
     }
 }
 

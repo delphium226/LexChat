@@ -319,7 +319,7 @@ const AdminPortal = ({ currentUser }) => {
     return (
         <div className="p-6 h-full flex flex-col">
             <div className="mb-6">
-                <h1 className="text-lg font-bold dark:text-white mb-3">Admin Portal</h1>
+                <h1 className="text-lg font-bold mb-3">Admin Portal</h1>
 
                 {/* TABS */}
                 <div className="flex space-x-1 bg-ink-100 p-1 rounded-lg w-full">
@@ -338,10 +338,10 @@ const AdminPortal = ({ currentUser }) => {
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
                             className={`flex-1 px-4 py-2 rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                                activeTab === tab.id
-                                    ? 'bg-paper shadow text-ink-900'
-                                    : 'text-ink-500 hover:text-ink-800'
-                            }`}
+ activeTab === tab.id
+ ? 'bg-paper shadow text-ink-900'
+ : 'text-ink-500 hover:text-ink-800'
+ }`}
                         >
                             {tab.label}
                         </button>
@@ -350,7 +350,7 @@ const AdminPortal = ({ currentUser }) => {
             </div>
 
             {message && (
-                <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded mb-4">
+                <div className="bg-accent-soft border border-blue-400 text-accent-ink px-4 py-3 rounded mb-4">
                     {message}
                 </div>
             )}
@@ -362,15 +362,15 @@ const AdminPortal = ({ currentUser }) => {
                 {activeTab === 'users' && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {/* LEFT COLUMN: FORM */}
-                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow h-fit">
-                            <h2 className="text-lg font-bold mb-4 dark:text-white">{editingUser ? 'Edit User' : 'Add New User'}</h2>
+                        <div className="bg-paper p-6 rounded-lg shadow h-fit">
+                            <h2 className="text-lg font-bold mb-4">{editingUser ? 'Edit User' : 'Add New User'}</h2>
                             <form onSubmit={handleCreateOrUpdateUser} className="grid grid-cols-1 gap-4">
                                 <input
                                     type="text"
                                     placeholder="Username"
                                     value={newUser.username}
                                     onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                                    className="p-2 border rounded dark:bg-zinc-700 dark:text-white text-sm"
+                                    className="p-2 border rounded text-sm"
                                     required
                                 />
                                 <input
@@ -378,7 +378,7 @@ const AdminPortal = ({ currentUser }) => {
                                     placeholder={editingUser ? "Leave blank to keep current password" : "Password"}
                                     value={newUser.password}
                                     onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                                    className="p-2 border rounded dark:bg-zinc-700 dark:text-white text-sm"
+                                    className="p-2 border rounded text-sm"
                                     required={!editingUser}
                                 />
                                 <input
@@ -386,12 +386,12 @@ const AdminPortal = ({ currentUser }) => {
                                     placeholder="Email"
                                     value={newUser.email}
                                     onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                                    className="p-2 border rounded dark:bg-zinc-700 dark:text-white text-sm"
+                                    className="p-2 border rounded text-sm"
                                 />
                                 <select
                                     value={newUser.role}
                                     onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                                    className="p-2 border rounded dark:bg-zinc-700 dark:text-white text-sm"
+                                    className="p-2 border rounded text-sm"
                                 >
                                     <option value="user">User</option>
                                     <option value="admin">Admin</option>
@@ -415,8 +415,8 @@ const AdminPortal = ({ currentUser }) => {
                         </div>
 
                         {/* RIGHT COLUMN: LIST */}
-                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow lg:col-span-2">
-                            <h2 className="text-lg font-bold mb-4 dark:text-white">Existing Users</h2>
+                        <div className="bg-paper p-6 rounded-lg shadow lg:col-span-2">
+                            <h2 className="text-lg font-bold mb-4">Existing Users</h2>
                             {isLoading ? (
                                 <div className="flex justify-center items-center h-40">
                                     <Spinner />
@@ -426,19 +426,19 @@ const AdminPortal = ({ currentUser }) => {
                                 <table className="min-w-full leading-normal">
                                     <thead>
                                         <tr>
-                                            <th className="px-5 py-3 border-b-2 border-zinc-200 dark:border-zinc-700 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">Username</th>
-                                            <th className="px-5 py-3 border-b-2 border-zinc-200 dark:border-zinc-700 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">Role</th>
-                                            <th className="px-5 py-3 border-b-2 border-zinc-200 dark:border-zinc-700 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">Email</th>
-                                            <th className="px-5 py-3 border-b-2 border-zinc-200 dark:border-zinc-700 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">Actions</th>
+                                            <th className="px-5 py-3 border-b-2 border-ink-200 text-left text-xs font-semibold text-ink-600 uppercase tracking-wider">Username</th>
+                                            <th className="px-5 py-3 border-b-2 border-ink-200 text-left text-xs font-semibold text-ink-600 uppercase tracking-wider">Role</th>
+                                            <th className="px-5 py-3 border-b-2 border-ink-200 text-left text-xs font-semibold text-ink-600 uppercase tracking-wider">Email</th>
+                                            <th className="px-5 py-3 border-b-2 border-ink-200 text-left text-xs font-semibold text-ink-600 uppercase tracking-wider">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {users.map((user) => (
                                             <tr key={user.id}>
-                                                <td className="px-5 py-5 border-b border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs dark:text-gray-200">{user.username}</td>
-                                                <td className="px-5 py-5 border-b border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs dark:text-gray-200">{user.role}</td>
-                                                <td className="px-5 py-5 border-b border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs dark:text-gray-200">{user.email}</td>
-                                                <td className="px-5 py-5 border-b border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm dark:text-gray-200">
+                                                <td className="px-5 py-5 border-b border-ink-200 bg-paper text-xs">{user.username}</td>
+                                                <td className="px-5 py-5 border-b border-ink-200 bg-paper text-xs">{user.role}</td>
+                                                <td className="px-5 py-5 border-b border-ink-200 bg-paper text-xs">{user.email}</td>
+                                                <td className="px-5 py-5 border-b border-ink-200 bg-paper text-sm">
                                                     <button onClick={() => startEditing(user)} className="text-accent hover:underline mr-3 text-xs font-ui">Edit</button>
                                                     {user.username !== 'admin' && (
                                                         <button onClick={() => handleDeleteUser(user.id)} className="text-danger hover:underline text-xs font-ui">Delete</button>
@@ -457,8 +457,8 @@ const AdminPortal = ({ currentUser }) => {
                 {/* SERVICE HEALTH TAB */}
                 {activeTab === 'health' && (
                     <div className="space-y-6">
-                        <div className="flex justify-between items-center bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
-                            <h2 className="text-lg font-bold dark:text-white">System Service Health</h2>
+                        <div className="flex justify-between items-center bg-paper p-4 rounded-lg shadow">
+                            <h2 className="text-lg font-bold">System Service Health</h2>
                             <button
                                 onClick={handleTriggerHealthCheck}
                                 disabled={isTriggeringHealth}
@@ -471,12 +471,12 @@ const AdminPortal = ({ currentUser }) => {
                         {healthStatus ? (
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 {/* Database Card */}
-                                <div className={`p-6 rounded-lg shadow border-l-4 ${healthStatus?.database?.is_healthy ? 'border-green-500 bg-white dark:bg-zinc-800' : 'border-red-500 bg-red-50 dark:bg-red-900/20'}`}>
-                                    <h3 className="text-lg font-bold mb-2 dark:text-white flex items-center justify-between">
+                                <div className={`p-6 rounded-lg shadow border-l-4 ${healthStatus?.database?.is_healthy ? 'border-green-500 bg-paper ' : 'border-red-500 bg-red-50 dark:bg-red-900/20'}`}>
+                                    <h3 className="text-lg font-bold mb-2 flex items-center justify-between">
                                         PostgreSQL Database
                                         <span className={`inline-block w-3 h-3 rounded-full ${healthStatus?.database?.is_healthy ? 'bg-green-500' : 'bg-red-500'}`}></span>
                                     </h3>
-                                    <div className="text-sm space-y-2 dark:text-gray-300">
+                                    <div className="text-sm space-y-2">
                                         <p><strong>Status:</strong> {healthStatus?.database?.is_healthy ? 'Healthy' : 'Degraded'}</p>
                                         <p><strong>Latency:</strong> {healthStatus?.database?.latency_ms !== null ? `${healthStatus.database.latency_ms}ms` : 'N/A'}</p>
                                         {!healthStatus?.database?.is_healthy && healthStatus?.database?.error_message && (
@@ -484,16 +484,16 @@ const AdminPortal = ({ currentUser }) => {
                                                 <strong>Error:</strong> {healthStatus.database.error_message}
                                             </p>
                                         )}
-                                        <p className="text-xs text-gray-500 mt-4">Last checked: {healthStatus?.database?.checked_at ? new Date(healthStatus.database.checked_at).toLocaleString() : 'Never'}</p>
+                                        <p className="text-xs text-ink-500 mt-4">Last checked: {healthStatus?.database?.checked_at ? new Date(healthStatus.database.checked_at).toLocaleString() : 'Never'}</p>
                                     </div>
                                 </div>
                                 {/* LLM Provider Card */}
-                                <div className={`p-6 rounded-lg shadow border-l-4 ${healthStatus?.llm?.is_healthy ? 'border-green-500 bg-white dark:bg-zinc-800' : 'border-red-500 bg-red-50 dark:bg-red-900/20'}`}>
-                                    <h3 className="text-lg font-bold mb-2 dark:text-white flex items-center justify-between">
+                                <div className={`p-6 rounded-lg shadow border-l-4 ${healthStatus?.llm?.is_healthy ? 'border-green-500 bg-paper ' : 'border-red-500 bg-red-50 dark:bg-red-900/20'}`}>
+                                    <h3 className="text-lg font-bold mb-2 flex items-center justify-between">
                                         {healthStatus?.active_llm_provider === 'openrouter' ? 'OpenRouter API' : 'Ollama Reasoning Engine'}
                                         <span className={`inline-block w-3 h-3 rounded-full ${healthStatus?.llm?.is_healthy ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></span>
                                     </h3>
-                                    <div className="text-sm space-y-2 dark:text-gray-300">
+                                    <div className="text-sm space-y-2">
                                         <p><strong>Status:</strong> {healthStatus?.llm?.is_healthy ? 'Healthy' : 'Disconnected / Refused'}</p>
                                         <p><strong>Latency:</strong> {healthStatus?.llm?.latency_ms !== null ? `${healthStatus.llm.latency_ms}ms` : 'N/A'}</p>
                                         {!healthStatus?.llm?.is_healthy && healthStatus?.llm?.error_message && (
@@ -501,16 +501,16 @@ const AdminPortal = ({ currentUser }) => {
                                                 <strong>Error:</strong> {healthStatus.llm.error_message}
                                             </p>
                                         )}
-                                        <p className="text-xs text-gray-500 mt-4">Last checked: {healthStatus?.llm?.checked_at ? new Date(healthStatus.llm.checked_at).toLocaleString() : 'Never'}</p>
+                                        <p className="text-xs text-ink-500 mt-4">Last checked: {healthStatus?.llm?.checked_at ? new Date(healthStatus.llm.checked_at).toLocaleString() : 'Never'}</p>
                                     </div>
                                 </div>
                                 {/* LEX API Card */}
-                                <div className={`p-6 rounded-lg shadow border-l-4 ${healthStatus?.lex_api?.is_healthy ? 'border-green-500 bg-white dark:bg-zinc-800' : 'border-red-500 bg-red-50 dark:bg-red-900/20'}`}>
-                                    <h3 className="text-lg font-bold mb-2 dark:text-white flex items-center justify-between">
+                                <div className={`p-6 rounded-lg shadow border-l-4 ${healthStatus?.lex_api?.is_healthy ? 'border-green-500 bg-paper ' : 'border-red-500 bg-red-50 dark:bg-red-900/20'}`}>
+                                    <h3 className="text-lg font-bold mb-2 flex items-center justify-between">
                                         External LEX Data API
                                         <span className={`inline-block w-3 h-3 rounded-full ${healthStatus?.lex_api?.is_healthy ? 'bg-green-500' : 'bg-red-500'}`}></span>
                                     </h3>
-                                    <div className="text-sm space-y-2 dark:text-gray-300">
+                                    <div className="text-sm space-y-2">
                                         <p><strong>Status:</strong> {healthStatus?.lex_api?.is_healthy ? 'Reachable' : 'Unreachable'}</p>
                                         <p><strong>Latency:</strong> {healthStatus?.lex_api?.latency_ms !== null ? `${healthStatus.lex_api.latency_ms}ms` : 'N/A'}</p>
                                         {!healthStatus?.lex_api?.is_healthy && healthStatus?.lex_api?.error_message && (
@@ -518,7 +518,7 @@ const AdminPortal = ({ currentUser }) => {
                                                 <strong>Error:</strong> {healthStatus.lex_api.error_message}
                                             </p>
                                         )}
-                                        <p className="text-xs text-gray-500 mt-4">Last checked: {healthStatus?.lex_api?.checked_at ? new Date(healthStatus.lex_api.checked_at).toLocaleString() : 'Never'}</p>
+                                        <p className="text-xs text-ink-500 mt-4">Last checked: {healthStatus?.lex_api?.checked_at ? new Date(healthStatus.lex_api.checked_at).toLocaleString() : 'Never'}</p>
                                     </div>
                                 </div>
                             </div>
@@ -527,9 +527,9 @@ const AdminPortal = ({ currentUser }) => {
                                 <Spinner />
                             </div>
                         )}
-                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow mt-6">
-                            <h3 className="text-md font-bold mb-2 dark:text-white">Note regarding Service Health</h3>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">Health checks execute automatically in the background every 60 seconds starting from server boot. If a component goes down, AILA will isolate the fault to its container to make proxy or downtime troubleshooting instantaneous.</p>
+                        <div className="bg-paper p-6 rounded-lg shadow mt-6">
+                            <h3 className="text-md font-bold mb-2">Note regarding Service Health</h3>
+                            <p className="text-sm text-ink-600">Health checks execute automatically in the background every 60 seconds starting from server boot. If a component goes down, AILA will isolate the fault to its container to make proxy or downtime troubleshooting instantaneous.</p>
                         </div>
                     </div>
                 )}
@@ -543,14 +543,14 @@ const AdminPortal = ({ currentUser }) => {
                 {activeTab === 'usage' && !isLoading && usageStats && (
                     <div className="space-y-6">
                         {/* HEADER WITH FILTER */}
-                        <div className="flex justify-between items-center bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
-                            <h2 className="text-lg font-bold dark:text-white">Usage Overview</h2>
+                        <div className="flex justify-between items-center bg-paper p-4 rounded-lg shadow">
+                            <h2 className="text-lg font-bold">Usage Overview</h2>
                             <div className="flex items-center space-x-2">
-                                <label className="text-sm text-gray-500 dark:text-gray-400 font-medium">Timeframe:</label>
+                                <label className="text-sm text-ink-500 font-medium">Timeframe:</label>
                                 <select
                                     value={timeframe}
                                     onChange={(e) => setTimeframe(e.target.value)}
-                                    className="p-2 border rounded-md text-sm dark:bg-zinc-700 dark:border-zinc-600 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                    className="p-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500"
                                 >
                                     <option value="1">Last 1 Day</option>
                                     <option value="3">Last 3 Days</option>
@@ -564,28 +564,28 @@ const AdminPortal = ({ currentUser }) => {
 
                         {/* KPI CARDS */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
-                                <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Total Users (Global)</h3>
-                                <p className="text-2xl font-bold dark:text-white">{usageStats.kpi.users}</p>
+                            <div className="bg-paper p-4 rounded-lg shadow">
+                                <h3 className="text-ink-500 text-xs font-bold uppercase">Total Users (Global)</h3>
+                                <p className="text-2xl font-bold">{usageStats.kpi.users}</p>
                             </div>
-                            <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
-                                <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Active Users {timeframe === 'all' ? '(All Time)' : `(${timeframe}d)`}</h3>
+                            <div className="bg-paper p-4 rounded-lg shadow">
+                                <h3 className="text-ink-500 text-xs font-bold uppercase">Active Users {timeframe === 'all' ? '(All Time)' : `(${timeframe}d)`}</h3>
                                 <p className="text-2xl font-bold text-green-600">{usageStats.kpi.activeUsers}</p>
                             </div>
-                            <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
-                                <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Total Chats</h3>
-                                <p className="text-2xl font-bold dark:text-white">{usageStats.kpi.chats}</p>
+                            <div className="bg-paper p-4 rounded-lg shadow">
+                                <h3 className="text-ink-500 text-xs font-bold uppercase">Total Chats</h3>
+                                <p className="text-2xl font-bold">{usageStats.kpi.chats}</p>
                             </div>
-                            <div className="bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
-                                <h3 className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">Total Messages</h3>
-                                <p className="text-2xl font-bold dark:text-white">{usageStats.kpi.messages}</p>
+                            <div className="bg-paper p-4 rounded-lg shadow">
+                                <h3 className="text-ink-500 text-xs font-bold uppercase">Total Messages</h3>
+                                <p className="text-2xl font-bold">{usageStats.kpi.messages}</p>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             {/* ACTIVITY CHART */}
-                            <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
-                                <h2 className="text-lg font-bold mb-4 dark:text-white">Daily Chats {timeframe === 'all' ? '(All Time)' : `(Last ${timeframe} Days)`}</h2>
+                            <div className="bg-paper p-6 rounded-lg shadow">
+                                <h2 className="text-lg font-bold mb-4">Daily Chats {timeframe === 'all' ? '(All Time)' : `(Last ${timeframe} Days)`}</h2>
                                 <div className="h-64">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={usageStats.activity}>
@@ -610,8 +610,8 @@ const AdminPortal = ({ currentUser }) => {
                             {/* POWER USERS & MODELS */}
                             <div className="space-y-6">
                                 {/* MODELS */}
-                                <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow h-fit">
-                                    <h2 className="text-lg font-bold mb-4 dark:text-white">Model Distribution</h2>
+                                <div className="bg-paper p-6 rounded-lg shadow h-fit">
+                                    <h2 className="text-lg font-bold mb-4">Model Distribution</h2>
                                     <div className="h-40 flex items-center justify-center">
                                         {/* Simple Pie Chart Placeholder or Real Implementation if easy */}
                                         <ResponsiveContainer width="100%" height="100%">
@@ -640,15 +640,15 @@ const AdminPortal = ({ currentUser }) => {
                                 </div>
 
                                 {/* TOP USERS */}
-                                <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
-                                    <h2 className="text-lg font-bold mb-4 dark:text-white">Top 5 Power Users</h2>
+                                <div className="bg-paper p-6 rounded-lg shadow">
+                                    <h2 className="text-lg font-bold mb-4">Top 5 Power Users</h2>
                                     <ul className="space-y-3">
                                         {usageStats.topUsers.map((u, i) => (
-                                            <li key={i} className="flex justify-between items-center text-sm border-b dark:border-zinc-700 pb-2 last:border-0 last:pb-0">
-                                                <span className="font-medium dark:text-gray-200">
+                                            <li key={i} className="flex justify-between items-center text-sm border-b pb-2 last:border-0 last:pb-0">
+                                                <span className="font-medium">
                                                     {i + 1}. {u.username}
                                                 </span>
-                                                <span className="bg-gray-100 dark:bg-zinc-700 text-gray-800 dark:text-gray-300 px-2 py-1 rounded text-xs font-bold">
+                                                <span className="bg-ink-100 text-ink-800 px-2 py-1 rounded text-xs font-bold">
                                                     {u.msg_count} msgs
                                                 </span>
                                             </li>
@@ -674,7 +674,7 @@ const AdminPortal = ({ currentUser }) => {
                     />
                 )}
                 {activeTab === 'performance' && !isPerfLoading && !perfStats && (
-                    <div className="flex justify-center items-center h-64 text-gray-500 text-sm">
+                    <div className="flex justify-center items-center h-64 text-ink-500 text-sm">
                         No performance data recorded yet. Run some queries to start collecting timings.
                     </div>
                 )}
@@ -693,7 +693,7 @@ const AdminPortal = ({ currentUser }) => {
                     />
                 )}
                 {activeTab === 'cost' && !isCostLoading && !costStats && (
-                    <div className="flex justify-center items-center h-64 text-gray-500 text-sm">
+                    <div className="flex justify-center items-center h-64 text-ink-500 text-sm">
                         No cost data available yet.
                     </div>
                 )}
@@ -702,15 +702,15 @@ const AdminPortal = ({ currentUser }) => {
                 {activeTab === 'learning' && (
                     <div className="space-y-6">
                         {/* 0. PERFORMANCE TRENDS CHART */}
-                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+                        <div className="bg-paper p-6 rounded-lg shadow">
                             <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-lg font-bold dark:text-white">Performance Trends (Avg Rating)</h2>
+                                <h2 className="text-lg font-bold">Performance Trends (Avg Rating)</h2>
                                 <div className="flex items-center space-x-2">
-                                    <label className="text-sm text-gray-500 dark:text-gray-400 font-medium">Timeframe:</label>
+                                    <label className="text-sm text-ink-500 font-medium">Timeframe:</label>
                                     <select
                                         value={learningTimeframe}
                                         onChange={(e) => setLearningTimeframe(e.target.value)}
-                                        className="p-2 border rounded-md text-sm dark:bg-zinc-700 dark:border-zinc-600 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                        className="p-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500"
                                     >
                                         <option value="1">Last 1 Day</option>
                                         <option value="3">Last 3 Days</option>
@@ -764,7 +764,7 @@ const AdminPortal = ({ currentUser }) => {
                                         </LineChart>
                                     </ResponsiveContainer>
                                 ) : (
-                                    <div className="h-full flex items-center justify-center text-gray-500 text-sm">
+                                    <div className="h-full flex items-center justify-center text-ink-500 text-sm">
                                         Not enough data to display trends yet.
                                     </div>
                                 )}
@@ -772,8 +772,8 @@ const AdminPortal = ({ currentUser }) => {
                         </div>
 
                         {/* 1. RECENT FEEDBACK */}
-                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
-                            <h2 className="text-lg font-bold mb-4 dark:text-white flex justify-between items-center">
+                        <div className="bg-paper p-6 rounded-lg shadow">
+                            <h2 className="text-lg font-bold mb-4 flex justify-between items-center">
                                 <span>Recent User Feedback</span>
                                 <button onClick={fetchFeedback} className="text-xs text-accent hover:underline font-ui">Refresh</button>
                             </h2>
@@ -786,38 +786,38 @@ const AdminPortal = ({ currentUser }) => {
                                 <table className="min-w-full leading-normal">
                                     <thead>
                                         <tr>
-                                            <th className="px-5 py-3 border-b-2 border-zinc-200 dark:border-zinc-700 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">Date</th>
-                                            <th className="px-5 py-3 border-b-2 border-zinc-200 dark:border-zinc-700 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">User</th>
-                                            <th className="px-5 py-3 border-b-2 border-zinc-200 dark:border-zinc-700 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">Rating</th>
-                                            <th className="px-5 py-3 border-b-2 border-zinc-200 dark:border-zinc-700 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">Comment</th>
+                                            <th className="px-5 py-3 border-b-2 border-ink-200 text-left text-xs font-semibold text-ink-600 uppercase tracking-wider">Date</th>
+                                            <th className="px-5 py-3 border-b-2 border-ink-200 text-left text-xs font-semibold text-ink-600 uppercase tracking-wider">User</th>
+                                            <th className="px-5 py-3 border-b-2 border-ink-200 text-left text-xs font-semibold text-ink-600 uppercase tracking-wider">Rating</th>
+                                            <th className="px-5 py-3 border-b-2 border-ink-200 text-left text-xs font-semibold text-ink-600 uppercase tracking-wider">Comment</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {feedback.map((item) => (
                                             <tr key={item.id} className={item.rating >= 4 ? 'bg-green-50 dark:bg-green-900/10' : (item.rating <= 2 ? 'bg-red-50 dark:bg-red-900/10' : '')}>
-                                                <td className="px-5 py-5 border-b border-zinc-200 dark:border-zinc-700 text-xs dark:text-gray-200">
+                                                <td className="px-5 py-5 border-b border-ink-200 text-xs">
                                                     {new Date(item.created_at).toLocaleDateString()}
                                                 </td>
-                                                <td className="px-5 py-5 border-b border-zinc-200 dark:border-zinc-700 text-xs dark:text-gray-200 font-medium">
+                                                <td className="px-5 py-5 border-b border-ink-200 text-xs font-medium">
                                                     {item.username}
                                                 </td>
-                                                <td className="px-5 py-5 border-b border-zinc-200 dark:border-zinc-700 text-xs dark:text-gray-200">
+                                                <td className="px-5 py-5 border-b border-ink-200 text-xs">
                                                     <div className="flex text-yellow-500">
                                                         {[...Array(5)].map((_, i) => (
-                                                            <svg key={i} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-4 h-4 ${i < item.rating ? '' : 'text-gray-300 dark:text-gray-600'}`}>
+                                                            <svg key={i} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-4 h-4 ${i < item.rating ? '' : 'text-ink-300 '}`}>
                                                                 <path fillRule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401z" clipRule="evenodd" />
                                                             </svg>
                                                         ))}
                                                     </div>
                                                 </td>
-                                                <td className="px-5 py-5 border-b border-zinc-200 dark:border-zinc-700 text-xs dark:text-gray-200 italic">
+                                                <td className="px-5 py-5 border-b border-ink-200 text-xs italic">
                                                     "{item.feedback_comment || 'No comment'}"
                                                 </td>
                                             </tr>
                                         ))}
                                         {feedback.length === 0 && (
                                             <tr>
-                                                <td colSpan="4" className="px-5 py-5 text-center text-gray-500 text-xs">No feedback data recorded yet.</td>
+                                                <td colSpan="4" className="px-5 py-5 text-center text-ink-500 text-xs">No feedback data recorded yet.</td>
                                             </tr>
                                         )}
                                     </tbody>
@@ -827,9 +827,9 @@ const AdminPortal = ({ currentUser }) => {
                         </div>
 
                         {/* 2. KNOWLEDGE BASE PLAYGROUND */}
-                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
-                            <h2 className="text-lg font-bold mb-4 dark:text-white">Knowledge Retrieval Playground</h2>
-                            <p className="mb-4 text-xs text-gray-600 dark:text-gray-400">
+                        <div className="bg-paper p-6 rounded-lg shadow">
+                            <h2 className="text-lg font-bold mb-4">Knowledge Retrieval Playground</h2>
+                            <p className="mb-4 text-xs text-ink-600">
                                 Test what "memories" the agent retrieves for a given user query.
                             </p>
                             <form onSubmit={handleTestRetrieval} className="flex gap-2 mb-6">
@@ -838,7 +838,7 @@ const AdminPortal = ({ currentUser }) => {
                                     placeholder="Enter a test query (e.g. 'Duty of Care')..."
                                     value={testQuery}
                                     onChange={(e) => setTestQuery(e.target.value)}
-                                    className="flex-1 p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-zinc-700 dark:border-zinc-600 dark:text-white text-sm"
+                                    className="flex-1 p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                                 />
                                 <button
                                     type="submit"
@@ -863,9 +863,9 @@ const AdminPortal = ({ currentUser }) => {
                                         </h3>
                                         <div className="space-y-4">
                                             {testResults.examples.map((ex, i) => (
-                                                <div key={i} className="bg-white dark:bg-zinc-900 p-3 rounded shadow-sm text-xs">
-                                                    <div className="font-semibold text-gray-700 dark:text-gray-300 mb-1">Q: {ex.question}</div>
-                                                    <div className="text-gray-600 dark:text-gray-400 line-clamp-3 mb-2">A: {ex.answer}</div>
+                                                <div key={i} className="bg-paper p-3 rounded shadow-sm text-xs">
+                                                    <div className="font-semibold text-ink-700 mb-1">Q: {ex.question}</div>
+                                                    <div className="text-ink-600 line-clamp-3 mb-2">A: {ex.answer}</div>
                                                     {ex.feedback_comment && (
                                                         <div className="text-xs text-green-600 dark:text-green-400 italic border-l-2 border-green-400 pl-2">
                                                             User Note: "{ex.feedback_comment}"
@@ -873,7 +873,7 @@ const AdminPortal = ({ currentUser }) => {
                                                     )}
                                                 </div>
                                             ))}
-                                            {testResults.examples.length === 0 && <p className="text-xs text-gray-500 italic">No positive examples found.</p>}
+                                            {testResults.examples.length === 0 && <p className="text-xs text-ink-500 italic">No positive examples found.</p>}
                                         </div>
                                     </div>
 
@@ -887,12 +887,12 @@ const AdminPortal = ({ currentUser }) => {
                                         </h3>
                                         <div className="space-y-4">
                                             {testResults.critiques.map((c, i) => (
-                                                <div key={i} className="bg-white dark:bg-zinc-900 p-3 rounded shadow-sm text-xs">
+                                                <div key={i} className="bg-paper p-3 rounded shadow-sm text-xs">
                                                     <div className="text-red-600 dark:text-red-400 font-medium mb-1">"{c.feedback_comment}"</div>
-                                                    <div className="text-xs text-gray-500">Context: "{c.question}"</div>
+                                                    <div className="text-xs text-ink-500">Context: "{c.question}"</div>
                                                 </div>
                                             ))}
-                                            {testResults.critiques.length === 0 && <p className="text-xs text-gray-500 italic">No critiques found.</p>}
+                                            {testResults.critiques.length === 0 && <p className="text-xs text-ink-500 italic">No critiques found.</p>}
                                         </div>
                                     </div>
                                 </div>
@@ -910,15 +910,15 @@ const AdminPortal = ({ currentUser }) => {
                         <ProviderConfigPanel />
 
                         {/* Feature Flags */}
-                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
-                            <h2 className="text-lg font-bold mb-1 dark:text-white">Feature Flags</h2>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
+                        <div className="bg-paper p-6 rounded-lg shadow">
+                            <h2 className="text-lg font-bold mb-1">Feature Flags</h2>
+                            <p className="text-sm text-ink-500 mb-5">
                                 Toggle features on or off for all users. Changes take effect immediately.
                             </p>
-                            <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-zinc-700">
+                            <div className="flex items-center justify-between py-3 border-b border-ink-100">
                                 <div>
-                                    <p className="text-sm font-medium dark:text-white">Matters</p>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    <p className="text-sm font-medium">Matters</p>
+                                    <p className="text-xs text-ink-500">
                                         Lets users organise threads into named matters with notes.
                                     </p>
                                 </div>
@@ -940,7 +940,7 @@ const AdminPortal = ({ currentUser }) => {
                                     }}
                                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${features.matters_enabled ? 'bg-accent' : 'bg-ink-300'} ${isSavingFeatures ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                 >
-                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${features.matters_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-paper shadow transition-transform ${features.matters_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
                                 </button>
                             </div>
                         </div>
@@ -961,9 +961,9 @@ const AdminPortal = ({ currentUser }) => {
                             </button>
                         </div>
 
-                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow border border-red-200 dark:border-red-900">
+                        <div className="bg-paper p-6 rounded-lg shadow border border-red-200 dark:border-red-900">
                             <h2 className="text-lg font-bold mb-4 text-red-600 dark:text-red-400">Danger Zone</h2>
-                            <p className="mb-2 text-sm text-gray-600 dark:text-gray-400">
+                            <p className="mb-2 text-sm text-ink-600">
                                 These actions permanently delete data and <strong>cannot be undone.</strong>
                             </p>
                             <div className="flex flex-wrap gap-3 mb-6">
@@ -1041,19 +1041,19 @@ const AdminPortal = ({ currentUser }) => {
                     const avgVerif = withVerif.length > 0 ? (withVerif.reduce((s, f) => s + f.verification_hours, 0) / withVerif.length) : null;
                     const withUsab = productFeedback.filter(f => f.usability != null);
                     const avgUsab = withUsab.length > 0 ? (withUsab.reduce((s, f) => s + f.usability, 0) / withUsab.length) : null;
-                    const thCls = "px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-left font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap";
+                    const thCls = "px-4 py-2 border-b-2 border-ink-200  text-left font-semibold text-ink-500  uppercase tracking-wider whitespace-nowrap";
                     return (
                         <div className="space-y-4">
 
                             {/* TIMEFRAME FILTER HEADER */}
-                            <div className="flex justify-between items-center bg-white dark:bg-zinc-800 p-4 rounded-lg shadow">
-                                <h2 className="text-lg font-bold dark:text-white">User Feedback</h2>
+                            <div className="flex justify-between items-center bg-paper p-4 rounded-lg shadow">
+                                <h2 className="text-lg font-bold">User Feedback</h2>
                                 <div className="flex items-center space-x-2">
-                                    <label className="text-sm text-gray-500 dark:text-gray-400 font-medium">Timeframe:</label>
+                                    <label className="text-sm text-ink-500 font-medium">Timeframe:</label>
                                     <select
                                         value={productFeedbackTimeframe}
                                         onChange={(e) => setProductFeedbackTimeframe(e.target.value)}
-                                        className="p-2 border rounded-md text-sm dark:bg-zinc-700 dark:border-zinc-600 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                        className="p-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500"
                                     >
                                         <option value="1">Last 1 Day</option>
                                         <option value="3">Last 3 Days</option>
@@ -1079,22 +1079,22 @@ const AdminPortal = ({ currentUser }) => {
                                     if (ratingsFilter === 'commented') return !!r.feedback_comment;
                                     return true;
                                 });
-                                const thR = "px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-left font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap text-xs";
+                                const thR = "px-4 py-2 border-b-2 border-ink-200  text-left font-semibold text-ink-500  uppercase tracking-wider whitespace-nowrap text-xs";
                                 return (
-                                    <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+                                    <div className="bg-paper p-6 rounded-lg shadow">
                                         <div className="flex justify-between items-center mb-5">
-                                            <h2 className="text-lg font-bold dark:text-white">LLM Response Ratings</h2>
+                                            <h2 className="text-lg font-bold">LLM Response Ratings</h2>
                                             <button onClick={() => fetchProductFeedback(productFeedbackTimeframe)} className="text-xs text-accent hover:underline font-ui">Refresh</button>
                                         </div>
 
                                         {/* KPIs */}
                                         {!isMessageRatingsLoading && total > 0 && (
                                             <>
-                                                <h3 className="text-sm font-bold mb-3 dark:text-white">Rating Summary</h3>
+                                                <h3 className="text-sm font-bold mb-3">Rating Summary</h3>
                                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-                                                    <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
-                                                        <div className="text-2xl font-bold text-zinc-800 dark:text-white">{total}</div>
-                                                        <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Total rated</div>
+                                                    <div className="bg-ink-50 rounded-lg p-4 text-center">
+                                                        <div className="text-2xl font-bold text-ink-800">{total}</div>
+                                                        <div className="text-xs text-ink-500 mt-1">Total rated</div>
                                                     </div>
                                                     <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-4 text-center">
                                                         <div className="text-2xl font-bold text-green-700 dark:text-green-300">{upCount}</div>
@@ -1104,9 +1104,9 @@ const AdminPortal = ({ currentUser }) => {
                                                         <div className="text-2xl font-bold text-red-700 dark:text-red-300">{downCount}</div>
                                                         <div className="text-xs text-red-600 dark:text-red-400 mt-1">👎 Unhelpful{downPct != null ? ` (${downPct}%)` : ''}</div>
                                                     </div>
-                                                    <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
-                                                        <div className="text-2xl font-bold text-zinc-800 dark:text-white">{commentedCount}</div>
-                                                        <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">With comments</div>
+                                                    <div className="bg-ink-50 rounded-lg p-4 text-center">
+                                                        <div className="text-2xl font-bold text-ink-800">{commentedCount}</div>
+                                                        <div className="text-xs text-ink-500 mt-1">With comments</div>
                                                     </div>
                                                 </div>
                                             </>
@@ -1115,7 +1115,7 @@ const AdminPortal = ({ currentUser }) => {
                                         {/* Daily ratings chart */}
                                         {!isMessageRatingsLoading && total > 0 && (
                                             <div className="mb-6">
-                                                <h3 className="text-sm font-bold mb-3 dark:text-white">Daily Ratings</h3>
+                                                <h3 className="text-sm font-bold mb-3">Daily Ratings</h3>
                                                 <ResponsiveContainer width="100%" height={160}>
                                                     <BarChart data={buildDailyRatingsData(messageRatings, productFeedbackTimeframe)} barCategoryGap="35%">
                                                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -1143,22 +1143,22 @@ const AdminPortal = ({ currentUser }) => {
                                                         key={f.key}
                                                         onClick={() => setRatingsFilter(f.key)}
                                                         className={`px-3 py-1 rounded-full text-xs font-medium border font-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${ratingsFilter === f.key
-                                                            ? 'bg-accent text-white border-transparent'
-                                                            : 'bg-paper text-ink-600 border-ink-200 hover:bg-ink-50'
-                                                        }`}
+ ? 'bg-accent text-white border-transparent'
+ : 'bg-paper text-ink-600 border-ink-200 hover:bg-ink-50'
+ }`}
                                                     >{f.label}</button>
                                                 ))}
                                             </div>
                                         )}
 
                                         {/* Table */}
-                                        <h3 className="text-sm font-bold mb-3 mt-2 dark:text-white">Individual LLM Response Ratings</h3>
+                                        <h3 className="text-sm font-bold mb-3 mt-2">Individual LLM Response Ratings</h3>
                                         {isMessageRatingsLoading ? (
                                             <div className="flex justify-center items-center h-32"><Spinner /></div>
                                         ) : total === 0 ? (
-                                            <p className="text-gray-400 text-sm">No responses have been rated yet.</p>
+                                            <p className="text-ink-400 text-sm">No responses have been rated yet.</p>
                                         ) : filtered.length === 0 ? (
-                                            <p className="text-gray-400 text-sm">No ratings match this filter.</p>
+                                            <p className="text-ink-400 text-sm">No ratings match this filter.</p>
                                         ) : (
                                             <>
                                             <div className="overflow-x-auto">
@@ -1176,10 +1176,10 @@ const AdminPortal = ({ currentUser }) => {
                                                         {filtered.map(item => (
                                                             <tr
                                                                 key={item.id}
-                                                                className="border-b border-zinc-100 dark:border-zinc-700 align-top"
+                                                                className="border-b border-ink-100 align-top"
                                                             >
-                                                                <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200 whitespace-nowrap">{item.username}</td>
-                                                                <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap text-xs">
+                                                                <td className="px-4 py-3 font-medium text-ink-800 whitespace-nowrap">{item.username}</td>
+                                                                <td className="px-4 py-3 text-ink-500 whitespace-nowrap text-xs">
                                                                     {new Date(item.created_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                                 </td>
                                                                 <td className="px-4 py-3">
@@ -1188,10 +1188,10 @@ const AdminPortal = ({ currentUser }) => {
                                                                         : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 text-xs font-semibold whitespace-nowrap">👎 Unhelpful</span>
                                                                     }
                                                                 </td>
-                                                                <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
+                                                                <td className="px-4 py-3 text-ink-600">
                                                                     {item.feedback_comment
                                                                         ? <span className="italic text-xs">{item.feedback_comment}</span>
-                                                                        : <span className="text-zinc-400 text-xs">—</span>
+                                                                        : <span className="text-ink-400 text-xs">—</span>
                                                                     }
                                                                 </td>
                                                                 <td className="px-4 py-3">
@@ -1212,12 +1212,12 @@ const AdminPortal = ({ currentUser }) => {
                                             {ratingViewItem && (
                                                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setRatingViewItem(null)}>
                                                     <div
-                                                        className="bg-white dark:bg-zinc-800 rounded-xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col max-h-[80vh]"
+                                                        className="bg-paper rounded-xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col max-h-[80vh]"
                                                         onClick={e => e.stopPropagation()}
                                                     >
-                                                        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200 dark:border-zinc-700">
-                                                            <h3 className="font-semibold text-zinc-800 dark:text-white text-sm">Query &amp; Response</h3>
-                                                            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                                                        <div className="flex items-center justify-between px-6 py-4 border-b border-ink-200">
+                                                            <h3 className="font-semibold text-ink-800 text-sm">Query &amp; Response</h3>
+                                                            <span className="text-xs text-ink-500">
                                                                 {ratingViewItem.username} · {new Date(ratingViewItem.created_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                             </span>
                                                         </div>
@@ -1232,27 +1232,27 @@ const AdminPortal = ({ currentUser }) => {
                                                                     h2: ({ node, ...p }) => <h2 {...p} className="text-sm font-bold mt-3 mb-1" />,
                                                                     h3: ({ node, ...p }) => <h3 {...p} className="text-sm font-semibold mt-2 mb-1" />,
                                                                     strong: ({ node, ...p }) => <strong {...p} className="font-semibold" />,
-                                                                    blockquote: ({ node, ...p }) => <blockquote {...p} className="border-l-2 border-zinc-300 dark:border-zinc-600 pl-3 italic text-zinc-600 dark:text-zinc-400 my-2" />,
+                                                                    blockquote: ({ node, ...p }) => <blockquote {...p} className="border-l-2 border-ink-300 pl-3 italic text-ink-600 my-2" />,
                                                                     code: ({ node, inline, ...p }) => inline
-                                                                        ? <code {...p} className="bg-zinc-100 dark:bg-zinc-700 px-1 py-0.5 rounded text-xs font-mono" />
+                                                                        ? <code {...p} className="bg-ink-100 px-1 py-0.5 rounded text-xs font-mono" />
                                                                         : <code {...p} className="text-xs font-mono" />,
-                                                                    pre: ({ node, ...p }) => <pre {...p} className="bg-zinc-100 dark:bg-zinc-700 rounded p-3 overflow-x-auto text-xs font-mono mb-3" />,
-                                                                    a: ({ node, ...p }) => <a {...p} className="text-blue-600 dark:text-blue-400 underline" target="_blank" rel="noopener noreferrer" />,
+                                                                    pre: ({ node, ...p }) => <pre {...p} className="bg-ink-100 rounded p-3 overflow-x-auto text-xs font-mono mb-3" />,
+                                                                    a: ({ node, ...p }) => <a {...p} className="text-accent underline" target="_blank" rel="noopener noreferrer" />,
                                                                 };
                                                                 return (
                                                                     <>
                                                                         <div>
-                                                                            <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-2">Query</p>
-                                                                            <div className="text-sm text-zinc-800 dark:text-zinc-200">
+                                                                            <p className="text-xs font-semibold text-ink-500 uppercase tracking-wide mb-2">Query</p>
+                                                                            <div className="text-sm text-ink-800">
                                                                                 {ratingViewItem.query
                                                                                     ? <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{ratingViewItem.query}</ReactMarkdown>
-                                                                                    : <span className="italic text-zinc-400">—</span>
+                                                                                    : <span className="italic text-ink-400">—</span>
                                                                                 }
                                                                             </div>
                                                                         </div>
-                                                                        <div className="border-t border-zinc-100 dark:border-zinc-700 pt-4">
-                                                                            <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-2">Response</p>
-                                                                            <div className="text-sm text-zinc-800 dark:text-zinc-200">
+                                                                        <div className="border-t border-ink-100 pt-4">
+                                                                            <p className="text-xs font-semibold text-ink-500 uppercase tracking-wide mb-2">Response</p>
+                                                                            <div className="text-sm text-ink-800">
                                                                                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{ratingViewItem.response || '—'}</ReactMarkdown>
                                                                             </div>
                                                                         </div>
@@ -1260,7 +1260,7 @@ const AdminPortal = ({ currentUser }) => {
                                                                 );
                                                             })()}
                                                         </div>
-                                                        <div className="flex justify-end gap-3 px-6 py-4 border-t border-zinc-200 dark:border-zinc-700">
+                                                        <div className="flex justify-end gap-3 px-6 py-4 border-t border-ink-200">
                                                             <button
                                                                 onClick={() => {
                                                                     const text = `Query:\n${ratingViewItem.query || ''}\n\nResponse:\n${ratingViewItem.response || ''}`;
@@ -1286,9 +1286,9 @@ const AdminPortal = ({ currentUser }) => {
                                 );
                             })()}
 
-                            <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
+                            <div className="bg-paper p-6 rounded-lg shadow">
                                 <div className="flex justify-between items-center mb-4">
-                                    <h2 className="text-lg font-bold dark:text-white">Weekly User Surveys</h2>
+                                    <h2 className="text-lg font-bold">Weekly User Surveys</h2>
                                     <button onClick={() => fetchProductFeedback(productFeedbackTimeframe)} className="text-xs text-accent hover:underline font-ui">Refresh</button>
                                 </div>
 
@@ -1299,55 +1299,55 @@ const AdminPortal = ({ currentUser }) => {
                                 {/* Aggregate summary */}
                                 {!isProductFeedbackLoading && productFeedback.length > 0 && (
                                     <>
-                                    <h3 className="text-sm font-bold mb-3 dark:text-white">Productivity Summary</h3>
+                                    <h3 className="text-sm font-bold mb-3">Productivity Summary</h3>
                                     <div className="grid grid-cols-2 sm:grid-cols-6 gap-4 mb-6">
-                                        <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
-                                            <div className="text-2xl font-bold text-zinc-800 dark:text-white">
+                                        <div className="bg-ink-50 rounded-lg p-4 text-center">
+                                            <div className="text-2xl font-bold text-ink-800">
                                                 {avgWithout != null ? avgWithout.toFixed(1) : '—'}
                                             </div>
-                                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Avg manual hrs</div>
+                                            <div className="text-xs text-ink-500 mt-1">Avg manual hrs</div>
                                         </div>
-                                        <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
-                                            <div className="text-2xl font-bold text-zinc-800 dark:text-white">
+                                        <div className="bg-ink-50 rounded-lg p-4 text-center">
+                                            <div className="text-2xl font-bold text-ink-800">
                                                 {avgSaved != null ? avgSaved.toFixed(1) : '—'}
                                             </div>
-                                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Avg hrs saved</div>
+                                            <div className="text-xs text-ink-500 mt-1">Avg hrs saved</div>
                                         </div>
-                                        <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
-                                            <div className="text-2xl font-bold text-zinc-800 dark:text-white">
+                                        <div className="bg-ink-50 rounded-lg p-4 text-center">
+                                            <div className="text-2xl font-bold text-ink-800">
                                                 {avgSaved != null && avgWithout != null && (avgWithout - avgSaved) > 0
                                                     ? `${(avgWithout / (avgWithout - avgSaved)).toFixed(1)}×`
                                                     : '—'}
                                             </div>
-                                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Efficiency ratio</div>
+                                            <div className="text-xs text-ink-500 mt-1">Efficiency ratio</div>
                                         </div>
-                                        <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
-                                            <div className="text-2xl font-bold text-zinc-800 dark:text-white">
+                                        <div className="bg-ink-50 rounded-lg p-4 text-center">
+                                            <div className="text-2xl font-bold text-ink-800">
                                                 {avgVerif != null ? avgVerif.toFixed(1) : '—'}
                                             </div>
-                                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Avg verification hrs</div>
+                                            <div className="text-xs text-ink-500 mt-1">Avg verification hrs</div>
                                         </div>
-                                        <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
-                                            <div className="text-2xl font-bold text-zinc-800 dark:text-white">
+                                        <div className="bg-ink-50 rounded-lg p-4 text-center">
+                                            <div className="text-2xl font-bold text-ink-800">
                                                 {avgConf != null ? `${avgConf.toFixed(1)}/5` : '—'}
                                             </div>
-                                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Avg confidence</div>
+                                            <div className="text-xs text-ink-500 mt-1">Avg confidence</div>
                                         </div>
-                                        <div className="bg-zinc-50 dark:bg-zinc-700 rounded-lg p-4 text-center">
-                                            <div className="text-2xl font-bold text-zinc-800 dark:text-white">
+                                        <div className="bg-ink-50 rounded-lg p-4 text-center">
+                                            <div className="text-2xl font-bold text-ink-800">
                                                 {avgUsab != null ? `${avgUsab.toFixed(1)}/5` : '—'}
                                             </div>
-                                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Avg usability</div>
+                                            <div className="text-xs text-ink-500 mt-1">Avg usability</div>
                                         </div>
                                     </div>
                                     </>
                                 )}
 
-                                <h3 className="text-sm font-bold mb-3 mt-2 dark:text-white">Individual Survey Responses</h3>
+                                <h3 className="text-sm font-bold mb-3 mt-2">Individual Survey Responses</h3>
                                 {isProductFeedbackLoading ? (
                                     <div className="flex justify-center items-center h-32"><Spinner /></div>
                                 ) : productFeedback.length === 0 ? (
-                                    <p className="text-gray-400 text-sm">No feedback has been submitted yet.</p>
+                                    <p className="text-ink-400 text-sm">No feedback has been submitted yet.</p>
                                 ) : (
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full text-sm">
@@ -1365,15 +1365,15 @@ const AdminPortal = ({ currentUser }) => {
                                             </thead>
                                             <tbody>
                                                 {productFeedback.map((item) => (
-                                                    <tr key={item.id} className="border-b border-zinc-100 dark:border-zinc-700 align-top">
-                                                        <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200 whitespace-nowrap">{item.username}</td>
-                                                        <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(item.created_at).toLocaleString()}</td>
-                                                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.time_without_aila_hours != null ? item.time_without_aila_hours : '—'}</td>
-                                                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.time_saved_hours != null ? item.time_saved_hours : '—'}</td>
-                                                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.confidence != null ? `${item.confidence}/5` : '—'}</td>
-                                                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.usability != null ? `${item.usability}/5` : '—'}</td>
-                                                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-center">{item.verification_hours != null ? item.verification_hours : '—'}</td>
-                                                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{item.message || ''}</td>
+                                                    <tr key={item.id} className="border-b border-ink-100 align-top">
+                                                        <td className="px-4 py-3 font-medium text-ink-800 whitespace-nowrap">{item.username}</td>
+                                                        <td className="px-4 py-3 text-ink-500 whitespace-nowrap">{new Date(item.created_at).toLocaleString()}</td>
+                                                        <td className="px-4 py-3 text-ink-700 text-center">{item.time_without_aila_hours != null ? item.time_without_aila_hours : '—'}</td>
+                                                        <td className="px-4 py-3 text-ink-700 text-center">{item.time_saved_hours != null ? item.time_saved_hours : '—'}</td>
+                                                        <td className="px-4 py-3 text-ink-700 text-center">{item.confidence != null ? `${item.confidence}/5` : '—'}</td>
+                                                        <td className="px-4 py-3 text-ink-700 text-center">{item.usability != null ? `${item.usability}/5` : '—'}</td>
+                                                        <td className="px-4 py-3 text-ink-700 text-center">{item.verification_hours != null ? item.verification_hours : '—'}</td>
+                                                        <td className="px-4 py-3 text-ink-700 whitespace-pre-wrap">{item.message || ''}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -1386,21 +1386,21 @@ const AdminPortal = ({ currentUser }) => {
                         {surveyCompliance && (() => {
                             const cellColor = (weekData, isCurrent) => {
                                 if (weekData.survey_submitted) return 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200';
-                                if (weekData.query_count === 0) return 'bg-zinc-100 dark:bg-zinc-700 text-zinc-400 dark:text-zinc-400';
+                                if (weekData.query_count === 0) return 'bg-ink-100  text-ink-400 ';
                                 if (isCurrent) return 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200';
                                 return 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200';
                             };
                             return (
                                 <>
-                                <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow">
-                                    <h2 className="text-lg font-bold dark:text-white mb-4">Survey Completion — Last 4 Weeks</h2>
+                                <div className="bg-paper p-6 rounded-lg shadow">
+                                    <h2 className="text-lg font-bold mb-4">Survey Completion — Last 4 Weeks</h2>
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full text-sm">
                                             <thead>
                                                 <tr>
-                                                    <th className="px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-left font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap w-32">User</th>
+                                                    <th className="px-4 py-2 border-b-2 border-ink-200 text-left font-semibold text-ink-500 uppercase tracking-wider whitespace-nowrap w-32">User</th>
                                                     {surveyCompliance.weeks.map((w, i) => (
-                                                        <th key={i} className="px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-center font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap">
+                                                        <th key={i} className="px-4 py-2 border-b-2 border-ink-200 text-center font-semibold text-ink-500 uppercase tracking-wider whitespace-nowrap">
                                                             {w.label}
                                                         </th>
                                                     ))}
@@ -1408,8 +1408,8 @@ const AdminPortal = ({ currentUser }) => {
                                             </thead>
                                             <tbody>
                                                 {surveyCompliance.users.map(u => (
-                                                    <tr key={u.user_id} className="border-b border-zinc-100 dark:border-zinc-700">
-                                                        <td className="px-4 py-2 font-medium text-gray-800 dark:text-gray-200 whitespace-nowrap">{u.username}</td>
+                                                    <tr key={u.user_id} className="border-b border-ink-100">
+                                                        <td className="px-4 py-2 font-medium text-ink-800 whitespace-nowrap">{u.username}</td>
                                                         {u.weeks.map((w, i) => (
                                                             <td key={i} className="px-2 py-2 text-center">
                                                                 <span className={`inline-block rounded px-2 py-1 text-xs font-semibold ${cellColor(w, surveyCompliance.weeks[i].is_current)}`}>
@@ -1422,11 +1422,11 @@ const AdminPortal = ({ currentUser }) => {
                                             </tbody>
                                         </table>
                                     </div>
-                                    <div className="flex gap-4 mt-4 text-xs text-zinc-500 dark:text-zinc-400">
+                                    <div className="flex gap-4 mt-4 text-xs text-ink-500">
                                         <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-green-200"></span> Survey submitted</span>
                                         <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-yellow-200"></span> Active, survey pending</span>
                                         <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-red-200"></span> Active, survey missed</span>
-                                        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-zinc-200"></span> No activity</span>
+                                        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-ink-200"></span> No activity</span>
                                     </div>
                                 </div>
 
@@ -1435,10 +1435,10 @@ const AdminPortal = ({ currentUser }) => {
                                     const nonCompleters = surveyCompliance.users.filter(u =>
                                         u.weeks.some((w, i) => !surveyCompliance.weeks[i].is_current && w.query_count > 0 && !w.survey_submitted)
                                     );
-                                    const thNC = "px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-center font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap text-xs";
+                                    const thNC = "px-4 py-2 border-b-2 border-ink-200  text-center font-semibold text-ink-500  uppercase tracking-wider whitespace-nowrap text-xs";
                                     return (
-                                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow mt-4">
-                                            <h2 className="text-lg font-bold dark:text-white mb-4">Survey Non-completion — Last 4 Weeks</h2>
+                                        <div className="bg-paper p-6 rounded-lg shadow mt-4">
+                                            <h2 className="text-lg font-bold mb-4">Survey Non-completion — Last 4 Weeks</h2>
                                             {nonCompleters.length === 0 ? (
                                                 <p className="text-sm text-green-600 dark:text-green-400">All active users have completed their weekly surveys.</p>
                                             ) : (
@@ -1447,7 +1447,7 @@ const AdminPortal = ({ currentUser }) => {
                                                         <table className="min-w-full text-sm">
                                                             <thead>
                                                                 <tr>
-                                                                    <th className="px-4 py-2 border-b-2 border-zinc-200 dark:border-zinc-700 text-left font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap w-32 text-xs">User</th>
+                                                                    <th className="px-4 py-2 border-b-2 border-ink-200 text-left font-semibold text-ink-500 uppercase tracking-wider whitespace-nowrap w-32 text-xs">User</th>
                                                                     {surveyCompliance.weeks.map((w, i) => (
                                                                         <th key={i} className={thNC}>{w.label}</th>
                                                                     ))}
@@ -1455,8 +1455,8 @@ const AdminPortal = ({ currentUser }) => {
                                                             </thead>
                                                             <tbody>
                                                                 {nonCompleters.map(u => (
-                                                                    <tr key={u.user_id} className="border-b border-zinc-100 dark:border-zinc-700">
-                                                                        <td className="px-4 py-2 font-medium text-gray-800 dark:text-gray-200 whitespace-nowrap text-xs">{u.username}</td>
+                                                                    <tr key={u.user_id} className="border-b border-ink-100">
+                                                                        <td className="px-4 py-2 font-medium text-ink-800 whitespace-nowrap text-xs">{u.username}</td>
                                                                         {u.weeks.map((w, i) => {
                                                                             const isMissed = !surveyCompliance.weeks[i].is_current && w.query_count > 0 && !w.survey_submitted;
                                                                             return (
@@ -1468,7 +1468,7 @@ const AdminPortal = ({ currentUser }) => {
                                                                                     ) : w.survey_submitted ? (
                                                                                         <span className="inline-block rounded px-2 py-1 text-xs font-semibold bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">✓</span>
                                                                                     ) : (
-                                                                                        <span className="text-zinc-400 dark:text-zinc-500 text-xs">—</span>
+                                                                                        <span className="text-ink-400 text-xs">—</span>
                                                                                     )}
                                                                                 </td>
                                                                             );
@@ -1478,10 +1478,10 @@ const AdminPortal = ({ currentUser }) => {
                                                             </tbody>
                                                         </table>
                                                     </div>
-                                                    <div className="flex gap-4 mt-4 text-xs text-zinc-500 dark:text-zinc-400">
+                                                    <div className="flex gap-4 mt-4 text-xs text-ink-500">
                                                         <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-red-200"></span> Active, survey missed</span>
                                                         <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-green-200"></span> Survey submitted</span>
-                                                        <span className="flex items-center gap-1"><span className="text-zinc-400 mr-1">—</span> No activity</span>
+                                                        <span className="flex items-center gap-1"><span className="text-ink-400 mr-1">—</span> No activity</span>
                                                     </div>
                                                 </>
                                             )}
@@ -1538,7 +1538,7 @@ const AdminPortal = ({ currentUser }) => {
                                                             className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-accent ${p.enabled ? 'bg-brand' : 'bg-ink-300'}`}
                                                             aria-label={p.enabled ? 'Disable peer' : 'Enable peer'}
                                                         >
-                                                            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${p.enabled ? 'translate-x-4' : 'translate-x-1'}`} />
+                                                            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-paper transition-transform ${p.enabled ? 'translate-x-4' : 'translate-x-1'}`} />
                                                         </button>
                                                     </td>
                                                     <td className="px-3 py-2">
