@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
 from ..database import get_db
-from ..dependencies import create_access_token, get_current_user
+from ..dependencies import create_access_token, get_current_db_user
 from ..models import ActivityLog, User
 
 logger = logging.getLogger("app")
@@ -103,13 +103,8 @@ async def logout(response: Response):
 
 @router.get("/me")
 async def get_me(
-    user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db_user: User = Depends(get_current_db_user),
 ):
-    result = await db.execute(select(User).where(User.id == user["id"]))
-    db_user = result.scalar_one_or_none()
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
     return {
         "user": {
             "id": db_user.id,
@@ -143,19 +138,16 @@ async def reset_password_request(
 @router.post("/change-password")
 async def change_password(
     body: ChangePasswordRequest,
-    user: dict = Depends(get_current_user),
+    db_user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(User).where(User.id == user["id"]))
-    db_user = result.scalar_one_or_none()
-
     if not bcrypt.verify(body.currentPassword, db_user.password_hash):
-        logger.warning(f"[Auth] Failed password change attempt for user id={user['id']}")
+        logger.warning(f"[Auth] Failed password change attempt for user id={db_user.id}")
         raise HTTPException(status_code=400, detail="Incorrect current password")
 
     db_user.password_hash = bcrypt.using(rounds=10).hash(body.newPassword)
     await db.commit()
-    logger.info(f"[Auth] Password changed for user id={user['id']}")
+    logger.info(f"[Auth] Password changed for user id={db_user.id}")
 
     return {"message": "Password updated successfully"}
 
@@ -163,12 +155,9 @@ async def change_password(
 @router.put("/preferences")
 async def update_preferences(
     body: PreferencesRequest,
-    user: dict = Depends(get_current_user),
+    db_user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(User).where(User.id == user["id"]))
-    db_user = result.scalar_one_or_none()
-
     if body.dark_mode is not None:
         db_user.dark_mode = body.dark_mode
     if body.research_mode is not None:

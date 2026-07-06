@@ -3,7 +3,13 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from .config import settings
+from .database import get_db
+from .models import User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -57,3 +63,15 @@ async def get_admin_user(user: dict = Depends(get_current_user)):
             detail="Admin privileges required"
         )
     return user
+
+
+async def get_current_db_user(
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Resolve the authenticated user's DB row (404 if the account no longer exists)."""
+    result = await db.execute(select(User).where(User.id == user["id"]))
+    db_user = result.scalar_one_or_none()
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
