@@ -12,13 +12,23 @@ def _round_ms(val):
     return round(float(val)) if val is not None else 0
 
 
-def _build_date_filter(days: str, table_alias: str = "") -> str:
-    """Return a WHERE clause string for the given days parameter."""
-    col = f"{table_alias}.created_at" if table_alias else "created_at"
+def _days_num(days: str):
+    """Coerce the user-supplied days param to a safe int (None = no filter).
+
+    Every SQL date-window interpolation in this module goes through this
+    single point, so only a literal integer can ever reach the query text.
+    """
     if days == "all":
+        return None
+    return int(days) if days.isdigit() else 30
+
+
+def _date_filter(days: str, col: str = "created_at", keyword: str = "WHERE") -> str:
+    """Return a date-window clause ('' when days == 'all')."""
+    n = _days_num(days)
+    if n is None:
         return ""
-    days_num = int(days) if days.isdigit() else 30
-    return f"WHERE {col} > NOW() - INTERVAL '{days_num} days'"
+    return f"{keyword} {col} > NOW() - INTERVAL '{n} days'"
 
 
 @router.get("/usage")
@@ -28,14 +38,8 @@ async def get_usage_stats(
     db: AsyncSession = Depends(get_db),
 ):
     # Build date filter clause
-    date_filter_chats = ""
-    date_filter_messages = ""
-
-    if days != "all":
-        days_num = int(days) if days.isdigit() else 30
-        interval = f"'{days_num} days'"
-        date_filter_chats = f"WHERE created_at > NOW() - INTERVAL {interval}"
-        date_filter_messages = f"WHERE created_at > NOW() - INTERVAL {interval}"
+    date_filter_chats = _date_filter(days)
+    date_filter_messages = _date_filter(days)
 
     # KPI counts
     total_users = await db.execute(text("SELECT COUNT(*) AS count FROM users"))
@@ -61,10 +65,7 @@ async def get_usage_stats(
     """))
 
     # Power users
-    power_user_filter = ""
-    if days != "all":
-        days_num = int(days) if days.isdigit() else 30
-        power_user_filter = f"WHERE m.created_at > NOW() - INTERVAL '{days_num} days'"
+    power_user_filter = _date_filter(days, col="m.created_at")
 
     power_users = await db.execute(text(f"""
         SELECT u.username, COUNT(m.id) AS msg_count
@@ -106,7 +107,7 @@ async def get_performance_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Return query timing statistics for the Performance dashboard."""
-    date_filter = _build_date_filter(days)
+    date_filter = _date_filter(days)
 
     # --- KPI aggregates ---
     kpi_result = await db.execute(text(f"""
@@ -219,14 +220,10 @@ async def get_cost_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Return OpenRouter cost statistics derived from request_timings and messages."""
-    date_filter = _build_date_filter(days)
+    date_filter = _date_filter(days)
 
-    # Build a date filter for the messages join (uses table alias)
-    if days == "all":
-        msg_date_filter = ""
-    else:
-        days_num = int(days) if days.isdigit() else 30
-        msg_date_filter = f"AND m.created_at > NOW() - INTERVAL '{days_num} days'"
+    # Date filter for the messages join (uses table alias, appends to existing WHERE)
+    msg_date_filter = _date_filter(days, col="m.created_at", keyword="AND")
 
     # --- KPI ---
     kpi_result = await db.execute(text(f"""
@@ -279,7 +276,7 @@ async def get_cost_stats(
             created_at
         FROM request_timings
         WHERE total_cost_usd > 0
-        {('AND' + date_filter.replace('WHERE', '')) if date_filter else ''}
+        {_date_filter(days, keyword="AND")}
         ORDER BY total_cost_usd DESC
         LIMIT 10
     """))

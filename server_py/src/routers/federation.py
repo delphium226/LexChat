@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..agent.federation_client import ConsultRequest, ConsultResponse
+from ..bot_state import get_bot_identity
 from ..agent.provider_factory import (
     get_active_provider,
     get_process_user_request,
@@ -27,7 +28,7 @@ async def consult(body: ConsultRequest, user: dict = Depends(get_current_user)):
     if body.depth >= 2:
         raise HTTPException(status_code=422, detail="Depth limit exceeded — no cascading federation")
 
-    from ..main import bot_identity
+    bot_identity = get_bot_identity()
 
     async with async_session_maker() as db:
         active_provider = await get_active_provider(db)

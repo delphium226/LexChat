@@ -3,6 +3,7 @@ import os
 from fastapi import APIRouter
 from fastapi.responses import FileResponse, JSONResponse
 
+from ..bot_state import get_bot_identity
 from ..config import settings
 
 router = APIRouter(tags=["Identity"])
@@ -13,7 +14,7 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 
 @router.get("/api/bot-info")
 async def bot_info():
-    from ..main import bot_identity
+    bot_identity = get_bot_identity()
     result = {
         "bot_id": bot_identity.get("bot_id", settings.bot_id),
         "name": bot_identity.get("name", "AILA"),
@@ -28,8 +29,7 @@ async def bot_info():
 
 @router.get("/api/bot/logo")
 async def bot_logo():
-    from ..main import bot_identity
-    logo_path = bot_identity.get("logo_path", "")
+    logo_path = get_bot_identity().get("logo_path", "")
     if not logo_path:
         return JSONResponse({"detail": "No logo configured"}, status_code=404)
     abs_path = logo_path if os.path.isabs(logo_path) else os.path.normpath(os.path.join(_PROJECT_ROOT, logo_path))

@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from .bot_state import set_bot_identity
 from .config import settings
 from .database import init_db, async_session_maker
 from .routers import auth, users, chats, ai, learning, stats, developer, system, health, feedback, matters, documents
@@ -22,10 +23,6 @@ setup_logging(bot_id=settings.bot_id)
 
 logger = logging.getLogger("app")
 http_logger = logging.getLogger("http")
-
-
-# Module-level dict populated from bot_config.json at startup; read by identity.py router.
-bot_identity: dict = {}
 
 
 async def _load_bot_config() -> None:
@@ -44,8 +41,8 @@ async def _load_bot_config() -> None:
         logger.error(f"[BotConfig] Failed to parse {abs_path}: {e}")
         return
 
-    global bot_identity
     bot_identity = cfg.get("bot_identity", {})
+    set_bot_identity(bot_identity)
     logger.info(f"[BotConfig] Loaded identity: {bot_identity.get('name', '?')} ({bot_identity.get('bot_id', '?')})")
 
     seeds = cfg.get("peer_registry_seed", [])

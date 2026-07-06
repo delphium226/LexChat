@@ -1294,7 +1294,7 @@ async def execute_worker_tool(
                 # Emit result before raising error, to see what happened
                 try:
                     resp_json = resp.json()
-                except:
+                except ValueError:
                     resp_json = {"text": resp.text}
 
                 await _emit(on_chunk, {
@@ -1399,7 +1399,7 @@ async def execute_worker_tool(
 
                 try:
                     resp_json = resp.json()
-                except:
+                except ValueError:
                     resp_json = {"text": resp.text}
 
                 await _emit(on_chunk, {
