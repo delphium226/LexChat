@@ -14,14 +14,14 @@ administrators configuring allowlist rules.
 
 Required only during initial setup or updates; not at runtime.
 
-### 1.1 Native Windows Deployment (`install_native.ps1`)
+### 1.1 Native Windows Deployment (dev machine / bundle production)
 
-| Website / URL | What is Downloaded | Script |
+The internet-connected installer has been removed; the target installs from the offline bundle (see 1.3). These URLs are only needed on the machine that produces the bundle:
+
+| Website / URL | What is Downloaded | Used by |
 |---|---|---|
-| `https://community.chocolatey.org/install.ps1` | Chocolatey package manager | `deployment/install_native.ps1` |
-| `https://community.chocolatey.org/` (NuGet feed) | Chocolatey packages: `python` (3.11.9), `postgresql15` | `deployment/install_native.ps1` |
-| `https://ollama.com/download/OllamaSetup.exe` | Ollama Windows installer | `deployment/install_native.ps1` |
-| `https://pypi.org/`, `https://files.pythonhosted.org/` | Python packages from `server_py/requirements.txt` | `deployment/install_native.ps1` |
+| `https://ollama.com/download/OllamaSetup.exe` | Ollama Windows installer | `deployment/package_offline_native.ps1` / `update_ollama.ps1` |
+| `https://pypi.org/`, `https://files.pythonhosted.org/` | Python packages from `server_py/requirements.txt` | `deployment/package_offline_native.ps1` |
 | `https://github.com/<repo>`, `https://objects.githubusercontent.com/` | Git repository clone/pull | `git clone` / `git pull` |
 | `https://registry.ollama.ai/`, `https://ollama.com/` | AI model registration for cloud-routed models | First model request via Ollama |
 
@@ -148,10 +148,7 @@ APIs marked **legislation bot** are used by the default legislation bot. APIs ma
 | `server_py/test_apis.ps1` | Connectivity test script — verifies all runtime API endpoints are reachable |
 | `deployment/certs/lexchat.crt` | TLS certificate for HTTPS on port 443 |
 | `deployment/certs/lexchat.key` | TLS private key |
-| `deployment/install_native.ps1` | Internet-connected native installer |
 | `deployment/install_native_offline.ps1` | Air-gapped native installer |
 | `deployment/start_native.cmd` | Start script: PostgreSQL → Ollama → FastAPI (uvicorn) |
 | `deployment/stop_native.cmd` | Stop script: kills uvicorn, Ollama, PostgreSQL service |
 | `deployment/package_offline_native.ps1` | Packages all deps + pre-built frontend for air-gap transfer |
-| `deployment/package_frontend_update.ps1` | Packages only the built frontend for a lightweight update |
-| `deployment/apply_frontend_update.ps1` | Applies a frontend update zip on the target server |

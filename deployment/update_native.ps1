@@ -23,7 +23,8 @@ if (Test-Path "venv") {
     .\venv\Scripts\python -m pip install -r requirements.txt
 }
 else {
-    Write-Warning "Virtual environment not found! Run install_native.ps1 first."
+    Write-Warning "Virtual environment not found - installing packages globally (matches offline installer behaviour)."
+    python -m pip install -r requirements.txt
 }
 
 # 3. Update Frontend

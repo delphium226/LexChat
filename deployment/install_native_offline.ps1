@@ -87,4 +87,4 @@ Write-Host "Please ensure your .env.native file is configured and you have added
 Write-Host "Configuring Windows Firewall to allow port 443 for remote access..."
 New-NetFirewallRule -DisplayName "LexChat HTTPS (Port 443)" -Direction Inbound -LocalPort 443 -Protocol TCP -Action Allow -ErrorAction SilentlyContinue | Out-Null
 
-Write-Host "Offline Installation Complete. You can start the server using deployment\start_native_offline.cmd"
+Write-Host "Offline Installation Complete. You can start the server using deployment\start_native.cmd"

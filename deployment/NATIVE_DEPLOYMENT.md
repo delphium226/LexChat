@@ -7,16 +7,8 @@ This guide explains how to run AILA natively on Windows Server 2022 without usin
 We provide automated scripts to handle the entire process.
 
 ### 1. Installation
-> [!WARNING]
-> This native installer requires an **active internet connection** to download dependencies (Python, Node.js, PostgreSQL, Ollama). If you are deploying to a secure, air-gapped environment without internet access, follow the **Air-Gapped Deployment** section below instead.
 
-Run the installer script as Administrator. This will install Python, Node.js, PostgreSQL, and Ollama, and set up the application.
-
-```powershell
-# Open PowerShell as Administrator
-cd deployment
-.\install_native.ps1
-```
+Installation on the internet-restricted target uses the offline installer — follow the **Air-Gapped Deployment** section below. (The old internet-connected installer, `install_native.ps1`, has been removed; the git-pull deployment workflow replaced it.)
 
 ### 2. Configure SSL Certificates
 To run over HTTPS, place your organisational certificate files in the `deployment\certs` folder:
@@ -201,70 +193,25 @@ For secure environments with no internet access. All steps are split between an 
 
 6. Start the application:
     ```cmd
-    deployment\start_native_offline.cmd
+    deployment\start_native.cmd
     ```
 
-### Applying Frontend Updates (Air-Gapped)
+### Applying Updates (Including Frontend)
 
-When only the frontend (UI) has changed, use the lightweight update scripts instead of repackaging everything.
+All updates — backend and frontend — are deployed via git. The frontend is pre-built on the dev machine and committed to the repo (`git add -f client/dist/`), so the target never needs Node.js:
 
-**On the online dev machine:**
-
-1. Ensure Node.js is available. If not, run:
-    ```powershell
-    .\install_node.ps1
-    ```
-2. Build the frontend:
-    ```powershell
-    cd client
-    npm install
-    npm run build
-    ```
-3. Package the built frontend:
-    ```powershell
-    cd deployment
-    .\package_frontend_update.ps1
-    ```
-4. Transfer `frontend_update.zip` to the repo root on the target server.
-
-**On the offline target server:**
-
-5. Apply the update:
-    ```powershell
-    cd deployment
-    .\apply_frontend_update.ps1
-    ```
-6. Restart the application:
+1. On the dev machine: build (`npm run build` in `client/`), force-add `client/dist/`, commit, push.
+2. On the target: `git pull`, then restart:
     ```cmd
     deployment\stop_native.cmd
-    deployment\start_native_offline.cmd
+    deployment\start_native.cmd
     ```
 
 ---
 
 ## Script Reference
 
-| Script | Description |
-|---|---|
-| `install_native.ps1` | Full installation (internet-connected) |
-| `install_native_offline.ps1` | Full installation (air-gapped) |
-| `install_node.ps1` | Install portable Node.js v22 on dev machine |
-| `package_offline_native.ps1` | Package all deps + pre-build frontend for air-gap transfer |
-| `package_frontend_update.ps1` | Package only the built frontend for a lightweight update |
-| `apply_frontend_update.ps1` | Apply a frontend update zip on the target server |
-| `compress_and_chunk.ps1` | Chunk binaries into <50MB parts for transfer |
-| `reconstruct_binaries.ps1` | Reconstruct chunks back into binaries on target |
-| `update_native.ps1` | Pull latest code and rebuild (internet-connected) |
-| `update_ollama.ps1` | Update Ollama binary and restore cloud model manifests from repo |
-| `start_native.cmd` | Start all services; `--nginx` flag enables nginx reverse proxy mode |
-| `start_native_offline.cmd` | Start Ollama + backend (air-gapped, interactive) |
-| `stop_native.cmd` | Gracefully stop all services (including nginx if running) |
-| `harden_firewall.ps1` | Lock Windows Defender Firewall to ports 80 and 3389 only (demo/home server) |
-| `nginx/lexchat.conf` | nginx reverse proxy config for `--nginx` mode (port 80 → uvicorn port 8000) |
-| `start_background.ps1` | Headless startup called by Task Scheduler at boot |
-| `install_autostart.ps1` | One-time setup: register boot-time Task Scheduler task for AILA backend |
-| `install_ollama_autostart.ps1` | One-time setup: ensure Ollama starts at boot (service or Task Scheduler task) |
-| `uninstall_autostart.ps1` | Remove the AILA Task Scheduler task (revert to manual startup) |
+See [deployment/README.md](README.md) for the full index of every script in this directory.
 
 ---
 

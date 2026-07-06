@@ -37,17 +37,11 @@ Active provider and all per-provider settings (base URL, API key, model, tempera
 
 The application runs natively on **Windows Server 2022** (no Docker, no WSL). The frontend is pre-built on the dev machine and committed to the repository; the target server requires only Python and PostgreSQL.
 
-See [deployment/NATIVE_DEPLOYMENT.md](deployment/NATIVE_DEPLOYMENT.md) for full deployment instructions including internet-connected, air-gapped, and frontend-only update workflows.
+See [deployment/NATIVE_DEPLOYMENT.md](deployment/NATIVE_DEPLOYMENT.md) for full deployment instructions (air-gapped installation and the git-pull update workflow), and [deployment/README.md](deployment/README.md) for an index of every deployment script.
 
-### Quick start (internet-connected)
+### Quick start
 
-```powershell
-# As Administrator
-cd deployment
-.\install_native.ps1
-```
-
-Then start:
+Install on the target using the offline bundle (see the air-gapped section of NATIVE_DEPLOYMENT.md), then start:
 ```cmd
 deployment\start_native.cmd
 ```
