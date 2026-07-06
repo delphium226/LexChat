@@ -1,0 +1,5 @@
+# Test/dev-only dependencies - not needed on the deployment target.
+# (pytest wheels also exist in the offline bundle if ever needed there.)
+-r requirements.txt
+pytest==8.4.2
+pytest-asyncio==1.0.0
