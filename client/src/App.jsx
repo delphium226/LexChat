@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { sendMessage, createChat, getChatMessages, saveMessage, updatePreferences, getModels, getChats, getMatters, updateMatter, assignChatToMatter, getFeatures, uploadDocument, getChatDocuments, deleteDocument, updateChatTitle, fetchBotInfo } from './services/api';
+import { sendMessage, createChat, getChatMessages, saveMessage, updatePreferences, getModels, getChats, getMatters, updateMatter, assignChatToMatter, getFeatures, uploadDocument, getChatDocuments, deleteDocument, updateChatTitle } from './services/api';
 import ChatMessage from './components/ChatMessage';
 import { LexMark, LexWordmark } from './components/LexMark';
 import SourcesRail from './components/SourcesRail';
@@ -21,31 +21,10 @@ import {
   StopIcon, ChevRightIcon,
 } from './components/ui/icons';
 import { IBtn, GhostBtn } from './components/ui/buttons';
-
-// ── Helpers ────────────────────────────────────────────────────
-
-function getInitials(username) {
-  if (!username) return '?';
-  const parts = username.trim().split(/[\s._-]+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return username.slice(0, 2).toUpperCase();
-}
-
-function formatRelativeTime(isoDate) {
-  if (!isoDate) return '';
-  const now = new Date();
-  const date = new Date(isoDate);
-  const diffMs = now - date;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-  if (diffMins < 5) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m`;
-  if (diffHours < 24) return `${diffHours}h`;
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return date.toLocaleDateString('en-GB', { weekday: 'short' });
-  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
+import { getInitials, formatRelativeTime } from './utils/format';
+import { useBotIdentity } from './hooks/useBotIdentity';
+import { useFilters } from './hooks/useFilters';
+import { usePreferences } from './hooks/usePreferences';
 
 // ── Main app ───────────────────────────────────────────────────
 
@@ -66,14 +45,7 @@ function AppContent() {
   const [currentChatTitle, setCurrentChatTitle] = useState(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState('');
-  const [chatMode, setChatMode] = useState('research');
-  const [researchMode, setResearchMode] = useState('legislation_only');
-  const [jurisdiction, setJurisdiction] = useState(() => localStorage.getItem('filter_jurisdiction') || null);
-  const [dateFrom, setDateFrom] = useState(() => localStorage.getItem('filter_dateFrom') || '');
-  const [dateTo, setDateTo] = useState(() => localStorage.getItem('filter_dateTo') || String(new Date().getFullYear()));
-  const [caseLawCourt, setCaseLawCourt] = useState(() => localStorage.getItem('filter_caseLawCourt') || '');
-  const [legislationType, setLegislationType] = useState(() => localStorage.getItem('filter_legislationType') || null);
-  const [currentOnly, setCurrentOnly] = useState(() => localStorage.getItem('filter_currentOnly') !== 'false');
+  const { chatMode, setChatMode, researchMode, setResearchMode, darkMode, setDarkMode } = usePreferences(user);
 
   // ── UI state ─────────────────────────────────────────────────
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
@@ -107,17 +79,9 @@ function AppContent() {
   const [notesModalMatter, setNotesModalMatter] = useState(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assigningChatId, setAssigningChatId] = useState(null);
-  const [darkMode, setDarkMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('darkMode');
-      if (saved !== null) return saved === 'true';
-    }
-    return false;
-  });
 
-  // ── Bot identity ─────────────────────────────────────────────
-  const [botInfo, setBotInfo] = useState({ name: 'AILA', tagline: 'AI Legal Assistant', brandColor: null, logoEmoji: null });
-  const [botLogoUrl, setBotLogoUrl] = useState(null);
+  // ── Bot identity (name/branding/favicon) ─────────────────────
+  const { botInfo } = useBotIdentity(loading);
 
   // ── Document state ───────────────────────────────────────────
   const [chatDocuments, setChatDocuments] = useState([]);
@@ -146,49 +110,6 @@ function AppContent() {
     }).catch(err => { console.warn('Failed to fetch model list, using fallback:', err); setSelectedModel('mistral-large-3:675b-cloud'); });
   }, []);
 
-  useEffect(() => {
-    fetchBotInfo().then(info => {
-      if (info?.name) {
-        setBotInfo({ name: info.name, tagline: info.tagline || '', brandColor: info.brand_color || null, logoEmoji: info.logo_emoji || null });
-        document.title = info.name;
-      }
-      // Swap favicon to bot logo; fall back to emoji canvas; leave as /favicon.svg if neither
-      const favicon = document.querySelector("link[rel='icon']");
-      const emoji = info?.logo_emoji || null;
-      const img = new Image();
-      img.onload = () => {
-        if (favicon) favicon.href = '/api/bot/logo';
-        setBotLogoUrl('/api/bot/logo');
-      };
-      img.onerror = () => {
-        if (!emoji) return;
-        const canvas = document.createElement('canvas');
-        canvas.width = 32; canvas.height = 32;
-        const ctx = canvas.getContext('2d');
-        ctx.font = '24px serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(emoji, 16, 17);
-        const dataUrl = canvas.toDataURL('image/png');
-        if (favicon) favicon.href = dataUrl;
-        setBotLogoUrl(dataUrl);
-      };
-      img.src = '/api/bot/logo';
-    }).catch(err => console.warn('Failed to fetch bot info:', err));
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    if (user.dark_mode !== undefined) setDarkMode(user.dark_mode);
-    if (user.research_mode) setResearchMode(user.research_mode);
-    if (user.chat_mode) setChatMode(user.chat_mode);
-  }, [user]);
-
-  useEffect(() => {
-    if (darkMode) document.documentElement.classList.add('dark');
-    else document.documentElement.classList.remove('dark');
-    localStorage.setItem('darkMode', darkMode);
-  }, [darkMode]);
 
   useEffect(() => {
     const el = chatScrollRef.current;
@@ -230,32 +151,6 @@ function AppContent() {
     return () => document.removeEventListener('mousedown', handler);
   }, [showFilters]);
 
-  // Favicon animation while loading
-  useEffect(() => {
-    const favicon = document.querySelector("link[rel='icon']");
-    if (!favicon) return;
-    if (!loading) { favicon.href = botLogoUrl || '/favicon.svg'; return; }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = 32; canvas.height = 32;
-    const ctx = canvas.getContext('2d');
-    let animId, startTime = null;
-
-    const draw = (ts) => {
-      if (!startTime) startTime = ts;
-      const angle = ((ts - startTime) / 700) * Math.PI * 2;
-      ctx.clearRect(0, 0, 32, 32);
-      ctx.beginPath(); ctx.arc(16, 16, 12, 0, Math.PI * 2);
-      ctx.strokeStyle = '#dbeafe'; ctx.lineWidth = 3.5; ctx.stroke();
-      ctx.beginPath(); ctx.arc(16, 16, 12, angle, angle + Math.PI * 1.25);
-      ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.stroke();
-      favicon.href = canvas.toDataURL('image/png');
-      animId = requestAnimationFrame(draw);
-    };
-
-    animId = requestAnimationFrame(draw);
-    return () => { cancelAnimationFrame(animId); favicon.href = botLogoUrl || '/favicon.svg'; };
-  }, [loading, botLogoUrl]);
 
   // Reset on logout
   useEffect(() => {
@@ -270,7 +165,7 @@ function AppContent() {
       setShowWeeklyBanner(false); weeklyBannerCheckedRef.current = false;
       setNoticeAcknowledged(false);
     }
-  }, [user]);
+  }, [user, setChatMode, setResearchMode]);
 
   // Weekly feedback — show banner once per week, button whenever survey not yet submitted this week.
   // Uses a ref (not state) for the checked flag so setting it doesn't trigger
@@ -329,6 +224,15 @@ function AppContent() {
   const todayISO = new Date().toISOString().slice(0, 10);
   const todayLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
+  // ── Research filters (state + persistence in useFilters) ─────
+  const {
+    thisYear,
+    jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, currentOnly,
+    setJurisdictionPersist, setDateFromPersist, setDateToPersist, setCourtPersist,
+    setLegislationTypePersist, setCurrentOnlyPersist,
+    saveFiltersToChatStorage, clearAllFilters, hasActiveFilters, restoreFiltersForChat,
+  } = useFilters(currentChatId);
+
   const JURISDICTION_OPTIONS = [
     { value: null,                label: 'All jurisdictions' },
     { value: 'england_and_wales', label: 'England & Wales' },
@@ -350,7 +254,6 @@ function AppContent() {
     { value: 'draft',     label: 'Draft instruments' },
   ];
 
-  const thisYear = String(new Date().getFullYear());
   const COURT_GROUPS = [
     { group: 'UK-wide', courts: [
       { value: 'uksc',      label: 'UK Supreme Court' },
@@ -380,39 +283,7 @@ function AppContent() {
     ? COURT_GROUPS.flatMap(g => g.courts).find(c => c.value === caseLawCourt)?.label || caseLawCourt
     : '';
 
-  const saveFiltersToChatStorage = (chatId, overrides = {}) => {
-    if (!chatId) return;
-    const filters = { dateFrom, dateTo, jurisdiction, court: caseLawCourt, legislationType, currentOnly, ...overrides };
-    localStorage.setItem(`filter_chat_${chatId}`, JSON.stringify(filters));
-  };
-  const setJurisdictionPersist = (v) => {
-    setJurisdiction(v);
-    if (v) localStorage.setItem('filter_jurisdiction', v);
-    else localStorage.removeItem('filter_jurisdiction');
-    if (currentChatId) saveFiltersToChatStorage(currentChatId, { jurisdiction: v });
-  };
-  const setDateFromPersist = (v) => { setDateFrom(v); localStorage.setItem('filter_dateFrom', v); if (currentChatId) saveFiltersToChatStorage(currentChatId, { dateFrom: v }); };
-  const setDateToPersist = (v) => { setDateTo(v); localStorage.setItem('filter_dateTo', v); if (currentChatId) saveFiltersToChatStorage(currentChatId, { dateTo: v }); };
-  const setCourtPersist = (v) => { setCaseLawCourt(v); localStorage.setItem('filter_caseLawCourt', v); if (currentChatId) saveFiltersToChatStorage(currentChatId, { court: v }); };
-  const setLegislationTypePersist = (v) => {
-    setLegislationType(v);
-    if (v) localStorage.setItem('filter_legislationType', v);
-    else localStorage.removeItem('filter_legislationType');
-    if (currentChatId) saveFiltersToChatStorage(currentChatId, { legislationType: v });
-  };
-  const setCurrentOnlyPersist = (v) => {
-    setCurrentOnly(v);
-    localStorage.setItem('filter_currentOnly', String(v));
-    if (currentChatId) saveFiltersToChatStorage(currentChatId, { currentOnly: v });
-  };
-  const clearAllFilters = () => {
-    setJurisdictionPersist(null);
-    setDateFromPersist(''); setDateToPersist(thisYear);
-    setCourtPersist('');
-    setLegislationTypePersist(null);
-    setCurrentOnlyPersist(false);
-  };
-  const hasActiveFilters = jurisdiction || dateFrom || dateTo !== thisYear || caseLawCourt || legislationType || currentOnly;
+
 
   const showScotlandNINote = (jurisdiction === 'scotland' || jurisdiction === 'northern_ireland')
     && researchMode !== 'legislation_only';
@@ -636,43 +507,9 @@ function AppContent() {
       setActiveSourcesMsgId(null);
       setChatDocuments([]);
       getChatDocuments(chatId).then(setChatDocuments).catch(err => console.warn('Failed to fetch chat documents:', err));
-      const saved = localStorage.getItem(`filter_chat_${chatId}`);
-      const savedFilters = saved ? (() => { try { return JSON.parse(saved); } catch { return {}; } })() : {};
-      if (saved) {
-        const f = savedFilters;
-        if (f.dateFrom !== undefined) { setDateFrom(f.dateFrom); localStorage.setItem('filter_dateFrom', f.dateFrom); }
-        if (f.dateTo !== undefined) { setDateTo(f.dateTo); localStorage.setItem('filter_dateTo', f.dateTo); }
-        if (f.jurisdiction !== undefined) {
-          setJurisdiction(f.jurisdiction);
-          if (f.jurisdiction) localStorage.setItem('filter_jurisdiction', f.jurisdiction);
-          else localStorage.removeItem('filter_jurisdiction');
-        }
-        if (f.court !== undefined) { setCaseLawCourt(f.court); localStorage.setItem('filter_caseLawCourt', f.court); }
-        if (f.legislationType !== undefined) {
-          setLegislationType(f.legislationType);
-          if (f.legislationType) localStorage.setItem('filter_legislationType', f.legislationType);
-          else localStorage.removeItem('filter_legislationType');
-        }
-        if (f.currentOnly !== undefined) {
-          setCurrentOnly(f.currentOnly);
-          localStorage.setItem('filter_currentOnly', String(f.currentOnly));
-        }
-      }
-      // Apply matter-level defaults for any filter not already saved for this chat
       const chatMatterId = recentChats.find(c => c.id === chatId)?.matter_id;
-      if (chatMatterId) {
-        const chatMatter = matters.find(m => m.id === chatMatterId);
-        if (chatMatter) {
-          if (chatMatter.jurisdiction && savedFilters.jurisdiction === undefined) {
-            setJurisdiction(chatMatter.jurisdiction);
-            localStorage.setItem('filter_jurisdiction', chatMatter.jurisdiction);
-          }
-          if (chatMatter.legislation_type && savedFilters.legislationType === undefined) {
-            setLegislationType(chatMatter.legislation_type);
-            localStorage.setItem('filter_legislationType', chatMatter.legislation_type);
-          }
-        }
-      }
+      const chatMatter = chatMatterId ? matters.find(m => m.id === chatMatterId) : null;
+      restoreFiltersForChat(chatId, chatMatter);
     } catch (err) {
       console.error('Failed to load chat', err);
     } finally {
