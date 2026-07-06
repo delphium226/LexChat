@@ -5,7 +5,7 @@ import time
 import uuid
 from typing import List, Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -19,6 +19,7 @@ from ..agent.provider_factory import (
 )
 from ..config import MAX_TOTAL_DOC_CHARS, settings
 from ..database import async_session_maker
+from ..dependencies import get_current_user
 from ..models import Chat, Document, Matter, RequestTiming
 from ..utils.stopwatch import TimingCollector
 
@@ -28,7 +29,7 @@ router = APIRouter(tags=["AI"])
 
 
 @router.get("/api/models")
-async def get_models():
+async def get_models(user: dict = Depends(get_current_user)):
     async with async_session_maker() as db:
         active_provider = await get_active_provider(db)
         provider_config = await get_provider_config(db, active_provider)
@@ -63,7 +64,7 @@ class ChatRequest(BaseModel):
 
 
 @router.post("/api/chat")
-async def chat_endpoint(body: ChatRequest, request: Request):
+async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depends(get_current_user)):
     """Main chat endpoint with SSE streaming, agent system, and queue."""
 
     if not body.messages or not body.model:
@@ -78,10 +79,18 @@ async def chat_endpoint(body: ChatRequest, request: Request):
     timing = TimingCollector(request_id)
 
     async def event_stream():
-        # Resolve provider config once — set context var for the full call chain
-        async with async_session_maker() as _cfg_db:
-            active_provider = await get_active_provider(_cfg_db)
-            provider_config = await get_provider_config(_cfg_db, active_provider)
+        # Resolve provider config once — set context var for the full call chain.
+        # get_active_provider re-raises on DB error (rather than silently defaulting
+        # to the wrong provider), so this happens before the main try/finally — a
+        # failure here must still emit a clean SSE error event, not a broken stream.
+        try:
+            async with async_session_maker() as _cfg_db:
+                active_provider = await get_active_provider(_cfg_db)
+                provider_config = await get_provider_config(_cfg_db, active_provider)
+        except Exception as e:
+            logger.error(f"[AI] Provider resolution failed: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'error': 'Service temporarily unavailable. Please try again.'})}\n\n"
+            return
 
         doc_context = await _load_doc_context(body.chat_id) if body.chat_id else ""
         matter_context = await _load_matter_context(body.chat_id) if body.chat_id else ""
@@ -112,7 +121,7 @@ async def chat_endpoint(body: ChatRequest, request: Request):
         # Detect client disconnect
         disconnect_task = asyncio.create_task(_watch_disconnect(request, cancel_event))
 
-        # 2-minute timeout warning
+        # "Taking longer than usual" warning, emitted once after 5 minutes
         warning_sent = False
 
         try:
@@ -162,30 +171,32 @@ async def chat_endpoint(body: ChatRequest, request: Request):
             # Timeout warning task
             timeout_task = asyncio.create_task(asyncio.sleep(300))
 
-            while not agent_task.done():
-                # Drain event queue
+            # Persistent get-task: awaited via asyncio.wait (which does NOT cancel
+            # it on timeout), so an event delivered right as the 0.5s window
+            # elapses is never lost — unlike wait_for(queue.get()), which cancels
+            # the get() and can drop an already-dequeued item.
+            get_task = asyncio.ensure_future(events.get())
+            try:
+                while not agent_task.done():
+                    done, _ = await asyncio.wait({get_task}, timeout=0.5)
+                    if get_task in done:
+                        yield f"data: {json.dumps(get_task.result())}\n\n"
+                        get_task = asyncio.ensure_future(events.get())
+                    elif timeout_task.done() and not warning_sent:
+                        warning_sent = True
+                        yield f"data: {json.dumps({'type': 'warning', 'message': 'The request is taking longer than usual. Please be patient...'})}\n\n"
+
+                # Drain remaining events — the pending get_task first (it may
+                # already hold the next item), then anything still queued.
+                if get_task.done():
+                    yield f"data: {json.dumps(get_task.result())}\n\n"
+                else:
+                    get_task.cancel()
                 while not events.empty():
-                    try:
-                        event = events.get_nowait()
-                        yield f"data: {json.dumps(event)}\n\n"
-                    except asyncio.QueueEmpty:
-                        break
-
-                # Check timeout
-                if timeout_task.done() and not warning_sent:
-                    warning_sent = True
-                    yield f"data: {json.dumps({'type': 'warning', 'message': 'The request is taking longer than usual. Please be patient...'})}\n\n"
-
-                # Small sleep to avoid busy loop
-                await asyncio.sleep(0.05)
-
-            # Drain remaining events
-            while not events.empty():
-                try:
-                    event = events.get_nowait()
-                    yield f"data: {json.dumps(event)}\n\n"
-                except asyncio.QueueEmpty:
-                    break
+                    yield f"data: {json.dumps(events.get_nowait())}\n\n"
+            finally:
+                if not get_task.done():
+                    get_task.cancel()
 
             # Get final result
             result_message = agent_task.result()

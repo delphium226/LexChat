@@ -44,6 +44,7 @@ async def summarise_for_query(
     on_progress: Optional[Callable] = None,
     timing_collector=None,
     doc_name: str = "document",
+    cancel_event=None,
 ) -> str:
     """Produce a query-focused summary of a legislation text.
 
@@ -56,7 +57,15 @@ async def summarise_for_query(
     individual chunk calls fail.
 
     on_progress(msg) is called before each chunk so the UI can show progress.
+
+    cancel_event, if set, aborts before each stage so a disconnected client
+    stops paying for summarisation work that will never be read.
     """
+    def _check_cancel():
+        if cancel_event is not None and cancel_event.is_set():
+            raise asyncio.CancelledError("Aborted")
+
+    _check_cancel()
     if len(text) <= SUMMARISE_CHUNK_CHARS:
         result = await chunk_fn(text, query, model, timing_collector=timing_collector)
         if result is None:
@@ -75,6 +84,7 @@ async def summarise_for_query(
     if on_progress:
         await on_progress(f"Searching through large document ({doc_name}) - {n} parts")
 
+    _check_cancel()
     logger.info(f"[Summarise] Summarising {n} chunks concurrently...")
     raw_summaries = await asyncio.gather(
         *[chunk_fn(chunk, query, model, timing_collector=timing_collector) for chunk in chunks]
@@ -95,6 +105,7 @@ async def summarise_for_query(
 
     # If the combined summaries are still large, do one final consolidation pass.
     if len(combined) > SUMMARISE_CHUNK_CHARS:
+        _check_cancel()
         if on_progress:
             await on_progress("Consolidating extracted sections")
         logger.info("[Summarise] Running final consolidation pass")

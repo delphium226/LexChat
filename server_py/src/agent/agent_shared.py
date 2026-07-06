@@ -244,6 +244,7 @@ async def run_worker_tool(
     timing_collector=None,
     source_accumulator: Optional[list] = None,
     search_budget: Optional[dict] = None,
+    cancel_event=None,
 ) -> str:
     """Execute a single Worker tool call and return the (possibly summarised) result.
 
@@ -471,8 +472,23 @@ async def run_worker_tool(
             on_progress=_emit_progress,
             timing_collector=timing_collector,
             doc_name=doc_name,
+            cancel_event=cancel_event,
         )
         logger.info(f"[Worker] Summarised to {len(result)} chars")
+
+        # Enforce the size cap here, BEFORE the phase nudges are appended, so a
+        # summary that still exceeds the threshold is trimmed without losing the
+        # nudges (the chat loop's own truncation would chop them off the tail).
+        threshold = get_summarise_threshold()
+        if len(result) > threshold:
+            logger.warning(
+                f"[Worker] Summarised result from '{name}' still exceeds threshold "
+                f"({len(result)} -> {threshold} chars)"
+            )
+            result = (
+                result[:threshold]
+                + "\n\n[Content truncated — summary exceeded context limit]"
+            )
 
         if parent_on_chunk:
             await call_chunk(parent_on_chunk, {

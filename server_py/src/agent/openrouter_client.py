@@ -122,8 +122,12 @@ async def chat_loop(
     t_send = time.perf_counter()
     first_content_time: Optional[float] = None
 
+    # No overall timeout (a long research answer can legitimately stream for
+    # minutes) but a per-read timeout so a provider that hangs mid-stream — no
+    # bytes for 180s — raises ReadTimeout instead of holding the request forever.
+    stream_timeout = httpx.Timeout(None, connect=30.0, read=180.0)
     try:
-        async with httpx.AsyncClient(timeout=None, verify=False, proxy=_get_proxy()) as client:
+        async with httpx.AsyncClient(timeout=stream_timeout, verify=False, proxy=_get_proxy()) as client:
             async with client.stream(
                 "POST",
                 f"{_base_url()}/chat/completions",
@@ -232,11 +236,12 @@ async def chat_loop(
 
         next_messages = [*messages, assistant_message]
 
-        # Cap each tool result at the summarisation threshold — results above this
-        # are summarised by run_worker_tool before reaching here, so truncation only
-        # fires as a last-resort safety net (e.g. model not in config list).
+        # Last-resort safety net: results above the summarisation threshold are
+        # summarised (and capped) by run_worker_tool before reaching here.  The
+        # +4K headroom leaves room for the phase nudges appended after
+        # summarisation so they are never truncated off the tail.
         from .provider_factory import get_summarise_threshold
-        MAX_TOOL_RESULT_CHARS = get_summarise_threshold()
+        MAX_TOOL_RESULT_CHARS = get_summarise_threshold() + 4_000
 
         async def _run_tool(tc):
             if cancel_event and cancel_event.is_set():
@@ -398,6 +403,24 @@ async def process_user_request(
 
 _model_list_cache: dict = {}
 _MODEL_LIST_CACHE_TTL = 300  # seconds
+
+
+def peek_cached_context_length(model_name: str, cfg: dict) -> Optional[int]:
+    """Return a model's context_length from the WARM cache without fetching.
+
+    Returns None if the OpenRouter model list has not been fetched yet, so this
+    never adds a network round-trip to the request hot path. The cache is warmed
+    by /api/models (frontend on login) and the admin /developer/openrouter-models
+    endpoint; until then callers fall back to the default summarise threshold.
+    """
+    base_url = (cfg.get("base_url") or settings.openrouter_base_url).rstrip("/")
+    api_key = cfg.get("api_key") or settings.openrouter_api_key
+    cached = _model_list_cache.get((base_url, api_key))
+    if not cached:
+        return None
+    _ts, models = cached
+    match = next((m for m in models if m["name"] == model_name), None)
+    return match.get("context_length") if match else None
 
 
 def make_list_models(cfg: dict):

@@ -6,10 +6,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("agent")
 
-# Basic stop words for keyword extraction
+# Basic stop words for keyword extraction. Includes common instruction verbs
+# ("give", "summary", "explain", ...) that carry no topical signal — without
+# them an OR-combined tsquery matches unrelated feedback examples that merely
+# share a filler word.
 _STOP_WORDS = frozenset({
     "the", "is", "at", "which", "on", "in", "a", "an", "and", "or",
     "to", "of", "for", "with", "what", "how", "does", "can", "about",
+    "give", "given", "gives", "summary", "summarise", "summarize",
+    "explain", "explains", "tell", "show", "find", "provide", "please",
+    "would", "could", "should", "there", "their", "this", "that", "these",
+    "those", "into", "from", "have", "has", "was", "were", "are", "any",
+    "its", "his", "her", "implications", "implication",
 })
 
 

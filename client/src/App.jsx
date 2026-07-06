@@ -125,6 +125,7 @@ function AppContent() {
   // ── Effects ──────────────────────────────────────────────────
 
   useEffect(() => {
+    if (!user) return; // /api/models requires auth — fetch once logged in
     getModels()
       .then(models => {
         if (models?.length) {
@@ -138,7 +139,7 @@ function AppContent() {
         console.warn('Failed to fetch model list, using fallback:', err);
         setSelectedModel('mistral-large-3:675b-cloud');
       });
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     const el = chatScrollRef.current;

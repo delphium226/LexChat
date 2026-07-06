@@ -38,8 +38,10 @@ async def consult(body: ConsultRequest, user: dict = Depends(get_current_user)):
     set_request_provider_config({
         **provider_config,
         "_provider": active_provider,
-        "_research_mode": "legislation_only",
-        "_depth": body.depth + 1,
+        # Respect this bot's own research mode (e.g. the parliament bot sets
+        # RESEARCH_MODE=parliamentary_records) — a consulted peer must answer
+        # with its specialised toolset, not the legislation default.
+        "_research_mode": settings.research_mode or "legislation_only",
     })
 
     resolved_model = provider_config.get("model") or settings.bot_id
@@ -54,6 +56,10 @@ async def consult(body: ConsultRequest, user: dict = Depends(get_current_user)):
             cancel_event=None,
             num_ctx=None,
             db_session=db_session,
+            # Carry the consultation depth into the manager so any onward
+            # consult_peer call sends depth+1 and the depth>=2 check actually
+            # stops A->B->C cascades (previously reset to 0 here).
+            depth=body.depth,
         )
 
     answer = result.get("content", "")

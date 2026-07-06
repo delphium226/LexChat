@@ -76,15 +76,25 @@ def _build_defaults(provider: str) -> dict:
 # ---------------------------------------------------------------------------
 
 async def get_active_provider(db: AsyncSession) -> str:
+    """Return the active provider name.
+
+    A genuine DB error is re-raised rather than swallowed: silently defaulting
+    to "ollama" on a transient failure would misroute the request to the wrong
+    provider (wrong model, wrong key) and answer as if nothing was wrong. The
+    caller (chat/consult endpoints) already surfaces the exception to the client
+    so the user gets a clear error and can retry.  Only a missing or unrecognised
+    setting falls back to the "ollama" default.
+    """
     try:
         result = await db.execute(
             select(AppSetting).where(AppSetting.key == "active_provider")
         )
-        setting = result.scalar_one_or_none()
-        if setting and setting.value in _SUPPORTED_PROVIDERS:
-            return setting.value
     except Exception as e:
         logger.error(f"[ProviderFactory] Failed to read active_provider: {e}")
+        raise
+    setting = result.scalar_one_or_none()
+    if setting and setting.value in _SUPPORTED_PROVIDERS:
+        return setting.value
     return "ollama"
 
 
@@ -120,7 +130,39 @@ async def get_provider_config(db: AsyncSession, provider: str) -> dict:
             config.update(db_config)
     except Exception as e:
         logger.error(f"[ProviderFactory] Failed to read provider config for {provider}: {e}")
+    config["_model_context_length"] = _resolve_model_context_length(provider, config)
     return config
+
+
+def _resolve_model_context_length(provider: str, config: dict):
+    """Return the configured model's context length in tokens, or None if unknown.
+
+    Checks the curated static lists first, then (for OpenRouter) the WARM dynamic
+    model-list cache. It never triggers a fetch, so config resolution adds no
+    network I/O to the request hot path — critical on the internet-restricted
+    target. If the cache is cold the caller falls back to the default summarise
+    threshold until /api/models warms it.
+    """
+    from ..config import MODEL_LIST, OPENROUTER_MODEL_LIST
+
+    model_name = config.get("model", "")
+    if not model_name:
+        return None
+
+    model_list = OPENROUTER_MODEL_LIST if provider == "openrouter" else MODEL_LIST
+    entry = next((m for m in model_list if m["name"] == model_name), None)
+    if entry:
+        return entry["contextLengthKB"] * 1024
+
+    if provider == "openrouter":
+        try:
+            from .openrouter_client import peek_cached_context_length
+            return peek_cached_context_length(model_name, config)
+        except Exception as e:
+            logger.warning(
+                f"[ProviderFactory] Could not resolve context length for '{model_name}': {e}"
+            )
+    return None
 
 
 async def save_provider_config(db: AsyncSession, provider: str, data: dict) -> None:
@@ -247,8 +289,11 @@ def get_summarise_threshold() -> int:
     """Return the char threshold above which a tool result is summarised.
 
     Scales with the active model's context window: 10% of total context chars,
-    clamped to [10_000, 200_000].  Falls back to SUMMARISE_THRESHOLD_CHARS if
-    the model is not found in the configured model list (e.g. dynamic OR models).
+    clamped to [10_000, 200_000].  The context length is resolved at request
+    start by get_provider_config (static lists first, then the dynamic
+    OpenRouter model list) and carried in the request config as
+    "_model_context_length" (tokens).  Falls back to SUMMARISE_THRESHOLD_CHARS
+    only when the model's context length could not be resolved at all.
 
     The threshold is based on the main model's context (the Worker accumulates
     results in that context), not the summarisation model.
@@ -260,16 +305,19 @@ def get_summarise_threshold() -> int:
     if not cfg:
         return SUMMARISE_THRESHOLD_CHARS
 
-    provider = cfg.get("_provider", "ollama")
-    model_name = cfg.get("model", "")
-    model_list = OPENROUTER_MODEL_LIST if provider == "openrouter" else MODEL_LIST
-    entry = next((m for m in model_list if m["name"] == model_name), None)
+    context_tokens = cfg.get("_model_context_length")
+    if not context_tokens:
+        # Legacy path: config set without get_provider_config enrichment
+        provider = cfg.get("_provider", "ollama")
+        model_name = cfg.get("model", "")
+        model_list = OPENROUTER_MODEL_LIST if provider == "openrouter" else MODEL_LIST
+        entry = next((m for m in model_list if m["name"] == model_name), None)
+        if entry is None:
+            return SUMMARISE_THRESHOLD_CHARS
+        context_tokens = entry["contextLengthKB"] * 1024
 
-    if entry is None:
-        return SUMMARISE_THRESHOLD_CHARS
-
-    # contextLengthKB is in thousands of tokens; convert to chars at ~4 chars/token
-    context_chars = entry["contextLengthKB"] * 1024 * 4
+    # ~4 chars/token
+    context_chars = context_tokens * 4
     return max(10_000, min(int(context_chars * 0.10), 200_000))
 
 

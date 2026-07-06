@@ -103,8 +103,12 @@ async def chat_loop(
     t_send = time.perf_counter()
     first_content_time: Optional[float] = None
 
+    # No overall timeout (a long research answer can legitimately stream for
+    # minutes) but a per-read timeout so a provider that hangs mid-stream — no
+    # bytes for 180s — raises ReadTimeout instead of holding the request forever.
+    stream_timeout = httpx.Timeout(None, connect=30.0, read=180.0)
     try:
-        async with httpx.AsyncClient(timeout=None, verify=False) as client:
+        async with httpx.AsyncClient(timeout=stream_timeout, verify=False) as client:
             async with client.stream(
                 "POST",
                 f"{_base_url()}/api/chat",
@@ -187,11 +191,12 @@ async def chat_loop(
 
         next_messages = [*messages, message]
 
-        # Cap each tool result at the summarisation threshold — results above this
-        # are summarised by run_worker_tool before reaching here, so truncation only
-        # fires as a last-resort safety net (e.g. model not in config list).
+        # Last-resort safety net: results above the summarisation threshold are
+        # summarised (and capped) by run_worker_tool before reaching here.  The
+        # +4K headroom leaves room for the phase nudges appended after
+        # summarisation so they are never truncated off the tail.
         from .provider_factory import get_summarise_threshold
-        MAX_TOOL_RESULT_CHARS = get_summarise_threshold()
+        MAX_TOOL_RESULT_CHARS = get_summarise_threshold() + 4_000
 
         # Execute all tool calls concurrently — they are independent of each
         # other so there is no reason to serialise them.  Results are reordered

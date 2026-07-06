@@ -3,7 +3,7 @@ import json
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -15,6 +15,7 @@ from ..agent.provider_factory import (
     set_request_provider_config,
 )
 from ..database import async_session_maker
+from ..dependencies import get_current_user
 
 logger = logging.getLogger("app")
 
@@ -27,7 +28,7 @@ class SystemChatRequest(BaseModel):
     # We could add more options here if needed for system systems
 
 @router.post("/api/system/chat")
-async def system_chat_endpoint(body: SystemChatRequest, request: Request):
+async def system_chat_endpoint(body: SystemChatRequest, request: Request, user: dict = Depends(get_current_user)):
     """
     System-to-system chat endpoint.
     Relays all detailed events (thinking, tool calls, results) to the caller.
@@ -39,9 +40,16 @@ async def system_chat_endpoint(body: SystemChatRequest, request: Request):
     cancel_event = asyncio.Event()
 
     async def event_stream():
-        async with async_session_maker() as _cfg_db:
-            active_provider = await get_active_provider(_cfg_db)
-            provider_config = await get_provider_config(_cfg_db, active_provider)
+        # get_active_provider re-raises on DB error; emit a clean SSE error event
+        # rather than letting the exception break the stream before the try block.
+        try:
+            async with async_session_maker() as _cfg_db:
+                active_provider = await get_active_provider(_cfg_db)
+                provider_config = await get_provider_config(_cfg_db, active_provider)
+        except Exception as e:
+            logger.error(f"[System] Provider resolution failed: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'error': 'Service temporarily unavailable. Please try again.'})}\n\n"
+            return
 
         set_request_provider_config({
             **provider_config,

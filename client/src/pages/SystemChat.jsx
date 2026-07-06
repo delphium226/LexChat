@@ -11,14 +11,16 @@ export default function SystemChat() {
   const abortControllerRef = useRef(null);
 
   useEffect(() => {
-    getModels().then(data => {
-      const filteredModels = data.filter(m => m.name.toLowerCase().includes('cloud'));
-      setModels(filteredModels);
-      if (filteredModels.length > 0) {
-        const preferredModel = filteredModels.find(m => m.name === 'mistral-large-3:675b-cloud');
-        setSelectedModel(preferredModel ? preferredModel.name : filteredModels[0].name);
-      }
-    });
+    getModels()
+      .then(data => {
+        const filteredModels = data.filter(m => m.name.toLowerCase().includes('cloud'));
+        setModels(filteredModels);
+        if (filteredModels.length > 0) {
+          const preferredModel = filteredModels.find(m => m.name === 'mistral-large-3:675b-cloud');
+          setSelectedModel(preferredModel ? preferredModel.name : filteredModels[0].name);
+        }
+      })
+      .catch(err => console.warn('Failed to fetch model list (login required):', err));
   }, []);
 
   useEffect(() => {

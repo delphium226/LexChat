@@ -72,6 +72,7 @@ async def run_worker_agent(
             timing_collector=timing_collector,
             source_accumulator=source_accumulator,
             search_budget=search_budget,
+            cancel_event=cancel_event,
         )
 
     result = await chat_loop_fn(
@@ -82,12 +83,63 @@ async def run_worker_agent(
     )
 
     if source_accumulator:
+        content = result.get("content", "") or ""
+        kept = [src for src in source_accumulator if _source_is_used(src, content)]
+        # If filtering removed everything (e.g. the model paraphrased without
+        # citing URLs), fall back to the full list rather than showing no sources.
+        if not kept:
+            kept = source_accumulator
         result["sources"] = [
             {**{k: v for k, v in src.items() if not k.startswith("_")}, "n": i + 1}
-            for i, src in enumerate(source_accumulator)
+            for i, src in enumerate(kept)
         ]
 
     return result
+
+
+def _is_duplicate_source(src: dict, existing: list) -> bool:
+    """Return True if src already appears in the accumulated source list.
+
+    Matches on url when present (most reliable), else on cite/title, so the
+    same case or Act reported by two separate delegate_research calls is not
+    listed twice in the References panel.
+    """
+    url = src.get("url")
+    cite = src.get("cite")
+    title = src.get("title")
+    for s in existing:
+        if url and s.get("url") == url:
+            return True
+        if not url and cite and s.get("cite") == cite:
+            return True
+        if not url and not cite and title and s.get("title") == title:
+            return True
+    return False
+
+
+def _source_is_used(src: dict, content: str) -> bool:
+    """Return True if a source was actually retrieved or cited in the answer.
+
+    Phase 1 search hits that were never followed up in Phase 2 and never
+    referenced in the final answer are noise — a References panel citing a
+    repealed Act the answer never discussed undermines trust.  We keep a source
+    when either:
+      - it carries an excerpt (Phase 2 section/text/judgment retrieval ran), or
+      - one of its identifying tokens (legislation_id, url, neutral citation)
+        appears in the answer text.
+    """
+    if src.get("excerpt"):
+        return True
+    tokens = [
+        src.get("_lid"),
+        src.get("url"),
+        src.get("cite"),
+        src.get("sub"),
+    ]
+    for tok in tokens:
+        if tok and len(str(tok)) >= 6 and str(tok) in content:
+            return True
+    return False
 
 
 # -----------------------------------------------------------------------
@@ -170,7 +222,12 @@ async def process_user_request(
             if on_chunk:
                 await call_chunk(on_chunk, {"type": "tool_end", "tool": "Research Agent", "id": research_id, "result": "Research Complete"})
 
-            accumulated_sources.extend(result.get("sources", []))
+            # Dedup across multiple delegate_research calls — the manager can
+            # delegate more than once, and each worker independently reports the
+            # same case/Act, producing duplicate entries in the References panel.
+            for src in result.get("sources", []):
+                if not _is_duplicate_source(src, accumulated_sources):
+                    accumulated_sources.append(src)
             return f"[Research Agent Result]\n{result['content']}"
 
         if name == "consult_peer":

@@ -16,13 +16,20 @@ from ..agent.provider_factory import (
 )
 from ..config import MODEL_LIST, settings
 from ..database import get_db
-from ..dependencies import get_current_user
+from ..dependencies import get_admin_user, get_current_user
 from ..models import ActivityLog, AppSetting, Chat, Message, ProductFeedback, RequestTiming, ServiceHealthStatus, User
 from ..services.synthetic_data import generate_synthetic_data
 
 logger = logging.getLogger("app")
 
 router = APIRouter(prefix="/api/developer", tags=["Developer"])
+
+# Admin-only sub-router: every route registered here inherits the admin check,
+# so admin is the DEFAULT for developer endpoints and a newly-added one cannot
+# accidentally ship unauthenticated. Only genuinely all-user reads (GET /features,
+# GET /activity-log) stay on `router` with a lighter dependency.
+# Included into `router` at the bottom of this module.
+admin_router = APIRouter(dependencies=[Depends(get_admin_user)])
 
 
 # -----------------------------------------------------------------------
@@ -54,7 +61,7 @@ class ActiveProviderUpdate(BaseModel):
     active_provider: str
 
 
-@router.get("/provider-config")
+@admin_router.get("/provider-config")
 async def get_provider_config_endpoint(db: AsyncSession = Depends(get_db)):
     """Return active provider and full config for all providers."""
     active = await get_active_provider(db)
@@ -72,7 +79,7 @@ async def get_provider_config_endpoint(db: AsyncSession = Depends(get_db)):
     return {"active_provider": active, "providers": providers}
 
 
-@router.post("/provider-config")
+@admin_router.post("/provider-config")
 async def save_provider_config_endpoint(
     body: ProviderConfigSave,
     db: AsyncSession = Depends(get_db),
@@ -86,7 +93,7 @@ async def save_provider_config_endpoint(
     return {"success": True}
 
 
-@router.post("/active-provider")
+@admin_router.post("/active-provider")
 async def set_active_provider_endpoint(
     body: ActiveProviderUpdate,
     db: AsyncSession = Depends(get_db),
@@ -100,7 +107,7 @@ async def set_active_provider_endpoint(
     return {"success": True, "active_provider": body.active_provider}
 
 
-@router.get("/openrouter-models")
+@admin_router.get("/openrouter-models")
 async def get_openrouter_models(db: AsyncSession = Depends(get_db)):
     """Fetch available models from OpenRouter dynamically (5-minute cache)."""
     cfg = await get_provider_config(db, "openrouter")
@@ -142,13 +149,13 @@ async def get_openrouter_models(db: AsyncSession = Depends(get_db)):
     return {"models": models}
 
 
-@router.post("/seed")
+@admin_router.post("/seed")
 async def seed_data(db: AsyncSession = Depends(get_db)):
     """Generate 100 synthetic users with 6 months of chat history."""
     return await generate_synthetic_data(db)
 
 
-@router.post("/reset")
+@admin_router.post("/reset")
 async def reset_database(db: AsyncSession = Depends(get_db)):
     """Delete all data except the admin user."""
     await db.execute(delete(Message))
@@ -163,7 +170,7 @@ async def reset_database(db: AsyncSession = Depends(get_db)):
     }
 
 
-@router.post("/clear-usage")
+@admin_router.post("/clear-usage")
 async def clear_usage_data(db: AsyncSession = Depends(get_db)):
     """Delete all chats and messages, keeping all user accounts."""
     await db.execute(delete(Message))
@@ -177,7 +184,7 @@ async def clear_usage_data(db: AsyncSession = Depends(get_db)):
     }
 
 
-@router.post("/clear-performance")
+@admin_router.post("/clear-performance")
 async def clear_performance_data(db: AsyncSession = Depends(get_db)):
     """Delete all request timing records."""
     await db.execute(delete(RequestTiming))
@@ -190,7 +197,7 @@ async def clear_performance_data(db: AsyncSession = Depends(get_db)):
     }
 
 
-@router.post("/clear-feedback")
+@admin_router.post("/clear-feedback")
 async def clear_feedback_data(db: AsyncSession = Depends(get_db)):
     """Delete all product feedback surveys and clear message ratings/comments."""
     await db.execute(delete(ProductFeedback))
@@ -226,8 +233,11 @@ async def _read_features(db: AsyncSession) -> dict:
 
 
 @router.get("/features")
-async def get_features(db: AsyncSession = Depends(get_db)):
-    """Return current feature flag settings."""
+async def get_features(
+    db: AsyncSession = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    """Return current feature flag settings (read by all authenticated users)."""
     return await _read_features(db)
 
 
@@ -235,8 +245,11 @@ class FeaturesUpdate(BaseModel):
     matters_enabled: bool
 
 
-@router.post("/features")
-async def save_features(body: FeaturesUpdate, db: AsyncSession = Depends(get_db)):
+@admin_router.post("/features")
+async def save_features(
+    body: FeaturesUpdate,
+    db: AsyncSession = Depends(get_db),
+):
     """Persist feature flag settings."""
     data = {"matters_enabled": body.matters_enabled}
     result = await db.execute(select(AppSetting).where(AppSetting.key == _FEATURES_KEY))
@@ -348,3 +361,9 @@ async def get_activity_log(
         }
         for row in rows
     ]
+
+
+# Mount the admin-only routes onto the main router. Defined last so every
+# @admin_router endpoint above is registered before it is included. The admin
+# routes inherit the /api/developer prefix and the router-level admin dependency.
+router.include_router(admin_router)
