@@ -2,8 +2,8 @@ import asyncio
 import os
 import sys
 
-# Add server_py to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "d:/Projects/LexChat/server_py")))
+# Add server_py to path (repo root is two levels up from scripts/dev/)
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "server_py")))
 
 from src.database import async_session_maker
 from src.models import Chat, User, Message
