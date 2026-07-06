@@ -54,7 +54,7 @@ Application is served over **HTTPS on port 443**.
 - Python 3.11
 - PostgreSQL 15 (`lexuser` / `lexpassword` / `lexchat`)
 - Ollama running locally, or an OpenRouter API key
-- Node.js v22 (portable install at `C:\Users\rhett\node_portable\node-v22.15.0-win-x64` on the dev machine)
+- Node.js v22 (a portable install is fine — `deployment/install_node.ps1` sets one up; dev-machine specifics live in `CLAUDE.md`)
 
 ### Run the backend
 
@@ -69,7 +69,7 @@ The backend runs on `http://localhost:8000` and serves the pre-built frontend fr
 ### Build the frontend (after source changes)
 
 ```bash
-export PATH="/c/Users/rhett/node_portable/node-v22.15.0-win-x64:$PATH"
+# Ensure Node.js v22 is on PATH (see CLAUDE.md for the dev-machine portable install)
 cd client
 npm install
 npm run build
