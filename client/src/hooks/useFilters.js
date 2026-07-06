@@ -20,50 +20,81 @@ export function useFilters(currentChatId) {
     const filters = { dateFrom, dateTo, jurisdiction, court: caseLawCourt, legislationType, currentOnly, ...overrides };
     localStorage.setItem(`filter_chat_${chatId}`, JSON.stringify(filters));
   };
-  const setJurisdictionPersist = (v) => {
+  const setJurisdictionPersist = v => {
     setJurisdiction(v);
     if (v) localStorage.setItem('filter_jurisdiction', v);
     else localStorage.removeItem('filter_jurisdiction');
     if (currentChatId) saveFiltersToChatStorage(currentChatId, { jurisdiction: v });
   };
-  const setDateFromPersist = (v) => { setDateFrom(v); localStorage.setItem('filter_dateFrom', v); if (currentChatId) saveFiltersToChatStorage(currentChatId, { dateFrom: v }); };
-  const setDateToPersist = (v) => { setDateTo(v); localStorage.setItem('filter_dateTo', v); if (currentChatId) saveFiltersToChatStorage(currentChatId, { dateTo: v }); };
-  const setCourtPersist = (v) => { setCaseLawCourt(v); localStorage.setItem('filter_caseLawCourt', v); if (currentChatId) saveFiltersToChatStorage(currentChatId, { court: v }); };
-  const setLegislationTypePersist = (v) => {
+  const setDateFromPersist = v => {
+    setDateFrom(v);
+    localStorage.setItem('filter_dateFrom', v);
+    if (currentChatId) saveFiltersToChatStorage(currentChatId, { dateFrom: v });
+  };
+  const setDateToPersist = v => {
+    setDateTo(v);
+    localStorage.setItem('filter_dateTo', v);
+    if (currentChatId) saveFiltersToChatStorage(currentChatId, { dateTo: v });
+  };
+  const setCourtPersist = v => {
+    setCaseLawCourt(v);
+    localStorage.setItem('filter_caseLawCourt', v);
+    if (currentChatId) saveFiltersToChatStorage(currentChatId, { court: v });
+  };
+  const setLegislationTypePersist = v => {
     setLegislationType(v);
     if (v) localStorage.setItem('filter_legislationType', v);
     else localStorage.removeItem('filter_legislationType');
     if (currentChatId) saveFiltersToChatStorage(currentChatId, { legislationType: v });
   };
-  const setCurrentOnlyPersist = (v) => {
+  const setCurrentOnlyPersist = v => {
     setCurrentOnly(v);
     localStorage.setItem('filter_currentOnly', String(v));
     if (currentChatId) saveFiltersToChatStorage(currentChatId, { currentOnly: v });
   };
   const clearAllFilters = () => {
     setJurisdictionPersist(null);
-    setDateFromPersist(''); setDateToPersist(thisYear);
+    setDateFromPersist('');
+    setDateToPersist(thisYear);
     setCourtPersist('');
     setLegislationTypePersist(null);
     setCurrentOnlyPersist(false);
   };
-  const hasActiveFilters = jurisdiction || dateFrom || dateTo !== thisYear || caseLawCourt || legislationType || currentOnly;
+  const hasActiveFilters =
+    jurisdiction || dateFrom || dateTo !== thisYear || caseLawCourt || legislationType || currentOnly;
 
   // Restore the per-chat filter snapshot when opening a chat; any filter not in
   // the snapshot falls back to the chat's matter-level defaults (if provided).
   const restoreFiltersForChat = (chatId, chatMatter = null) => {
     const saved = localStorage.getItem(`filter_chat_${chatId}`);
-    const savedFilters = saved ? (() => { try { return JSON.parse(saved); } catch { return {}; } })() : {};
+    const savedFilters = saved
+      ? (() => {
+          try {
+            return JSON.parse(saved);
+          } catch {
+            return {};
+          }
+        })()
+      : {};
     if (saved) {
       const f = savedFilters;
-      if (f.dateFrom !== undefined) { setDateFrom(f.dateFrom); localStorage.setItem('filter_dateFrom', f.dateFrom); }
-      if (f.dateTo !== undefined) { setDateTo(f.dateTo); localStorage.setItem('filter_dateTo', f.dateTo); }
+      if (f.dateFrom !== undefined) {
+        setDateFrom(f.dateFrom);
+        localStorage.setItem('filter_dateFrom', f.dateFrom);
+      }
+      if (f.dateTo !== undefined) {
+        setDateTo(f.dateTo);
+        localStorage.setItem('filter_dateTo', f.dateTo);
+      }
       if (f.jurisdiction !== undefined) {
         setJurisdiction(f.jurisdiction);
         if (f.jurisdiction) localStorage.setItem('filter_jurisdiction', f.jurisdiction);
         else localStorage.removeItem('filter_jurisdiction');
       }
-      if (f.court !== undefined) { setCaseLawCourt(f.court); localStorage.setItem('filter_caseLawCourt', f.court); }
+      if (f.court !== undefined) {
+        setCaseLawCourt(f.court);
+        localStorage.setItem('filter_caseLawCourt', f.court);
+      }
       if (f.legislationType !== undefined) {
         setLegislationType(f.legislationType);
         if (f.legislationType) localStorage.setItem('filter_legislationType', f.legislationType);
@@ -88,10 +119,27 @@ export function useFilters(currentChatId) {
 
   return {
     thisYear,
-    jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, currentOnly,
-    setJurisdiction, setDateFrom, setDateTo, setCaseLawCourt, setLegislationType, setCurrentOnly,
-    setJurisdictionPersist, setDateFromPersist, setDateToPersist, setCourtPersist,
-    setLegislationTypePersist, setCurrentOnlyPersist,
-    saveFiltersToChatStorage, clearAllFilters, hasActiveFilters, restoreFiltersForChat,
+    jurisdiction,
+    dateFrom,
+    dateTo,
+    caseLawCourt,
+    legislationType,
+    currentOnly,
+    setJurisdiction,
+    setDateFrom,
+    setDateTo,
+    setCaseLawCourt,
+    setLegislationType,
+    setCurrentOnly,
+    setJurisdictionPersist,
+    setDateFromPersist,
+    setDateToPersist,
+    setCourtPersist,
+    setLegislationTypePersist,
+    setCurrentOnlyPersist,
+    saveFiltersToChatStorage,
+    clearAllFilters,
+    hasActiveFilters,
+    restoreFiltersForChat,
   };
 }

@@ -22,4 +22,3 @@ export function formatRelativeTime(isoDate) {
   if (diffDays < 7) return date.toLocaleDateString('en-GB', { weekday: 'short' });
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
-
