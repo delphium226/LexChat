@@ -79,6 +79,12 @@ async def _load_bot_config() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    if settings.jwt_secret in ("dev_secret_key_change_me", "production_secret_key_change_me"):
+        logger.warning(
+            "[Security] JWT_SECRET is set to a well-known default value. "
+            "Set a unique JWT_SECRET in server_py/.env (or .env.native) before "
+            "exposing this server to users."
+        )
     await init_db()
     await _load_bot_config()
     health_task = asyncio.create_task(background_health_loop(300))
