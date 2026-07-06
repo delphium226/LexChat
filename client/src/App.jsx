@@ -236,6 +236,7 @@ function AppContent() {
   // ── Document state ───────────────────────────────────────────
   const [chatDocuments, setChatDocuments] = useState([]);
   const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
 
   // ── Refs ─────────────────────────────────────────────────────
   const messagesEndRef = useRef(null);
@@ -256,7 +257,7 @@ function AppContent() {
         setSelectedModelContext(active.context_length || 256 * 1024);
         setActiveProvider(active.provider || 'ollama');
       }
-    }).catch(() => setSelectedModel('mistral-large-3:675b-cloud'));
+    }).catch(err => { console.warn('Failed to fetch model list, using fallback:', err); setSelectedModel('mistral-large-3:675b-cloud'); });
   }, []);
 
   useEffect(() => {
@@ -287,7 +288,7 @@ function AppContent() {
         setBotLogoUrl(dataUrl);
       };
       img.src = '/api/bot/logo';
-    }).catch(() => {});
+    }).catch(err => console.warn('Failed to fetch bot info:', err));
   }, []);
 
   useEffect(() => {
@@ -313,14 +314,14 @@ function AppContent() {
   // Fetch feature flags once on login
   useEffect(() => {
     if (!user) return;
-    getFeatures().then(setFeatures).catch(() => {});
+    getFeatures().then(setFeatures).catch(err => console.warn('Failed to fetch feature flags:', err));
   }, [user]);
 
   // Reload chats and matters whenever active chat changes or user logs in
   useEffect(() => {
     if (!user) return;
-    getChats().then(setRecentChats).catch(() => {});
-    if (features.matters_enabled) getMatters().then(setMatters).catch(() => {});
+    getChats().then(setRecentChats).catch(err => console.warn('Failed to fetch chats:', err));
+    if (features.matters_enabled) getMatters().then(setMatters).catch(err => console.warn('Failed to fetch matters:', err));
   }, [user, currentChatId, features.matters_enabled]);
 
   // Auto-resize textarea
@@ -541,6 +542,7 @@ function AppContent() {
     fileInputRef.current.value = '';
 
     setUploadingDoc(true);
+    setUploadError(null);
     try {
       let activeChatId = currentChatId;
       if (!activeChatId) {
@@ -555,7 +557,7 @@ function AppContent() {
     } catch (err) {
       console.error('Document upload failed:', err);
       const msg = err.response?.data?.detail || err.message || 'Upload failed.';
-      alert(msg);
+      setUploadError(msg);
     } finally {
       setUploadingDoc(false);
     }
@@ -747,7 +749,7 @@ function AppContent() {
       setActiveCite(null);
       setActiveSourcesMsgId(null);
       setChatDocuments([]);
-      getChatDocuments(chatId).then(setChatDocuments).catch(() => {});
+      getChatDocuments(chatId).then(setChatDocuments).catch(err => console.warn('Failed to fetch chat documents:', err));
       const saved = localStorage.getItem(`filter_chat_${chatId}`);
       const savedFilters = saved ? (() => { try { return JSON.parse(saved); } catch { return {}; } })() : {};
       if (saved) {
@@ -1485,6 +1487,23 @@ function AppContent() {
                       borderBottom: '1px solid var(--ink-100)', marginBottom: 6,
                     }}>Uploading…</div>
                   )}
+                  {uploadError && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      fontSize: 12, color: 'var(--danger)', paddingBottom: 6,
+                      borderBottom: '1px solid var(--ink-100)', marginBottom: 6,
+                    }}>
+                      <span>{uploadError}</span>
+                      <button
+                        onClick={() => setUploadError(null)}
+                        style={{
+                          background: 'none', border: 'none', padding: 0,
+                          cursor: 'pointer', color: 'var(--ink-400)', fontSize: 14, lineHeight: 1,
+                        }}
+                        title="Dismiss"
+                      >×</button>
+                    </div>
+                  )}
 
                   <textarea
                     ref={textareaRef}
@@ -1620,7 +1639,7 @@ function AppContent() {
                     key={m.id}
                     onClick={async () => {
                       await assignChatToMatter(assigningChatId, isAssigned ? null : m.id);
-                      getChats().then(setRecentChats).catch(() => {});
+                      getChats().then(setRecentChats).catch(err => console.warn('Failed to fetch chats:', err));
                       getMatters().then(setMatters).catch(() => {});
                       setShowAssignModal(false);
                     }}
@@ -1642,7 +1661,7 @@ function AppContent() {
                 <div
                   onClick={async () => {
                     await assignChatToMatter(assigningChatId, null);
-                    getChats().then(setRecentChats).catch(() => {});
+                    getChats().then(setRecentChats).catch(err => console.warn('Failed to fetch chats:', err));
                     getMatters().then(setMatters).catch(() => {});
                     setShowAssignModal(false);
                   }}

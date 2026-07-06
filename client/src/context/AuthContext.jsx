@@ -19,7 +19,10 @@ export const AuthProvider = ({ children }) => {
                 const { data } = await axios.get('/api/auth/me');
                 setUser(data.user);
             } catch (error) {
-                // Not authenticated
+                // 401 = not logged in (expected on first load); anything else is a real problem
+                if (error.response?.status !== 401) {
+                    console.warn('Auth check failed:', error);
+                }
             } finally {
                 setLoading(false);
             }
