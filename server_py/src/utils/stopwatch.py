@@ -1,12 +1,35 @@
-class TimingCollector:
-    """Collects per-request timing data across the agent call stack.
+# Worker tool classification for the search:retrieval efficiency ratio.
+# Phase 1 = discovery searches; Phase 2 = retrieving full provisions/judgments.
+_PHASE1_SEARCH_TOOLS = frozenset({
+    "search_legislation", "search_case_law", "search_hansard",
+    "search_scottish_parliament", "search_scottish_committee_transcripts",
+})
+_PHASE2_RETRIEVAL_TOOLS = frozenset({
+    "search_legislation_sections", "get_legislation_text", "get_case_law_text",
+    "get_hansard_debate", "get_scottish_committee_transcript",
+})
+# Retrieval tools keyed by a legislation_id, used to count distinct Acts retrieved.
+_LEGISLATION_RETRIEVAL_TOOLS = frozenset({
+    "search_legislation_sections", "get_legislation_text",
+})
 
-    Passed through chat_loop, worker agent, and LEX API calls so every
-    stage can record its own elapsed time without touching the HTTP layer.
+
+class TimingCollector:
+    """Collects per-request timing AND algorithmic-efficiency data across the
+    agent call stack.
+
+    Passed through chat_loop, worker agent, summarisation, and LEX API calls so
+    every stage can record its own signals without touching the HTTP layer.
+
+    Timing fields answer "how long / how much did it cost?"; the efficiency
+    fields answer "is the Manager→Worker loop behaving correctly?" (delegating
+    once, searching minimally, retrieving each Act once, not fanning out or
+    duplicating, summarising only when needed, citing what it retrieved).
     """
 
     def __init__(self, request_id: str):
         self.request_id = request_id
+        # --- Timing / cost (existing) ---
         self.queue_wait_ms: float = 0.0
         self.learning_db_ms: float = 0.0
         self.llm_calls: int = 0
@@ -16,6 +39,33 @@ class TimingCollector:
         self.lex_api_total_ms: float = 0.0
         self.total_ms: float = 0.0
         self.total_cost_usd: float = 0.0
+
+        # --- Efficiency (new) ---
+        self.manager_delegations: int = 0
+        self.peer_consults: int = 0
+        self.worker_tool_calls: int = 0
+        self.react_turns_max: int = 0
+        self.max_turns_halted: int = 0
+        self.phase1_search_calls: int = 0
+        self.phase2_retrieval_calls: int = 0
+        self.distinct_legislation_ids_seen: int = 0
+        self.distinct_legislation_ids_retrieved: int = 0
+        self.redundant_tool_calls: int = 0
+        self.summarisation_calls: int = 0
+        self.summarisation_chars_in: int = 0
+        self.summarisation_chars_out: int = 0
+        self.summarisation_chunks: int = 0
+        self.truncation_events: int = 0
+        self.sources_extracted: int = 0
+        self.sources_kept: int = 0
+        self.source_filter_fallback: int = 0
+
+        # Internal sets (not persisted) backing the distinct/redundant counters.
+        self._seen_call_sigs: set = set()
+        self._seen_lids: set = set()
+        self._retrieved_lids: set = set()
+
+    # --- Timing / cost recorders (existing) ---
 
     def record_queue_wait(self, ms: float) -> None:
         self.queue_wait_ms = ms
@@ -39,6 +89,68 @@ class TimingCollector:
     def record_cost(self, usd: float) -> None:
         self.total_cost_usd += usd
 
+    # --- Efficiency recorders (new) ---
+
+    def record_delegation(self) -> None:
+        self.manager_delegations += 1
+
+    def record_peer_consult(self) -> None:
+        self.peer_consults += 1
+
+    def record_worker_tool(self, name: str, key_arg: str = None) -> None:
+        """Record one worker tool invocation: total count, phase classification,
+        redundant-call detection, and distinct-Act-retrieval tracking.
+
+        key_arg is the identifying argument (legislation_id / url / gid / meeting_id)
+        used to detect the same resource being fetched twice in one request.
+        """
+        self.worker_tool_calls += 1
+        if name in _PHASE1_SEARCH_TOOLS:
+            self.phase1_search_calls += 1
+        elif name in _PHASE2_RETRIEVAL_TOOLS:
+            self.phase2_retrieval_calls += 1
+
+        if key_arg:
+            sig = (name, key_arg)
+            if sig in self._seen_call_sigs:
+                self.redundant_tool_calls += 1
+            else:
+                self._seen_call_sigs.add(sig)
+            if name in _LEGISLATION_RETRIEVAL_TOOLS:
+                self._retrieved_lids.add(key_arg)
+                self.distinct_legislation_ids_retrieved = len(self._retrieved_lids)
+
+    def record_legislation_ids_seen(self, ids) -> None:
+        """Record legislation_ids returned by a search_legislation result."""
+        for lid in ids:
+            if lid:
+                self._seen_lids.add(lid)
+        self.distinct_legislation_ids_seen = len(self._seen_lids)
+
+    def record_react_turn(self, turn: int) -> None:
+        if turn > self.react_turns_max:
+            self.react_turns_max = turn
+
+    def record_max_turns_halt(self) -> None:
+        self.max_turns_halted = 1
+
+    def record_summarisation(self, chars_in: int, chars_out: int, chunks: int = 1) -> None:
+        self.summarisation_calls += 1
+        self.summarisation_chars_in += chars_in
+        self.summarisation_chars_out += chars_out
+        self.summarisation_chunks += chunks
+
+    def record_truncation(self) -> None:
+        self.truncation_events += 1
+
+    def record_source_stats(self, extracted: int, kept: int, fallback: bool) -> None:
+        """Accumulate source extract/keep counts (a request may delegate more
+        than once, each producing its own source list)."""
+        self.sources_extracted += extracted
+        self.sources_kept += kept
+        if fallback:
+            self.source_filter_fallback = 1
+
     def to_dict(self) -> dict:
         return {
             "request_id": self.request_id,
@@ -51,4 +163,23 @@ class TimingCollector:
             "lex_api_calls": self.lex_api_calls,
             "lex_api_total_ms": round(self.lex_api_total_ms),
             "total_cost_usd": self.total_cost_usd,
+            # Efficiency
+            "manager_delegations": self.manager_delegations,
+            "peer_consults": self.peer_consults,
+            "worker_tool_calls": self.worker_tool_calls,
+            "react_turns_max": self.react_turns_max,
+            "max_turns_halted": self.max_turns_halted,
+            "phase1_search_calls": self.phase1_search_calls,
+            "phase2_retrieval_calls": self.phase2_retrieval_calls,
+            "distinct_legislation_ids_seen": self.distinct_legislation_ids_seen,
+            "distinct_legislation_ids_retrieved": self.distinct_legislation_ids_retrieved,
+            "redundant_tool_calls": self.redundant_tool_calls,
+            "summarisation_calls": self.summarisation_calls,
+            "summarisation_chars_in": self.summarisation_chars_in,
+            "summarisation_chars_out": self.summarisation_chars_out,
+            "summarisation_chunks": self.summarisation_chunks,
+            "truncation_events": self.truncation_events,
+            "sources_extracted": self.sources_extracted,
+            "sources_kept": self.sources_kept,
+            "source_filter_fallback": self.source_filter_fallback,
         }

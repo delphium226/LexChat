@@ -87,8 +87,13 @@ async def run_worker_agent(
         kept = [src for src in source_accumulator if _source_is_used(src, content)]
         # If filtering removed everything (e.g. the model paraphrased without
         # citing URLs), fall back to the full list rather than showing no sources.
-        if not kept:
+        fallback = not kept
+        if fallback:
             kept = source_accumulator
+        if timing_collector:
+            timing_collector.record_source_stats(
+                extracted=len(source_accumulator), kept=len(kept), fallback=fallback
+            )
         result["sources"] = [
             {**{k: v for k, v in src.items() if not k.startswith("_")}, "n": i + 1}
             for i, src in enumerate(kept)
@@ -209,6 +214,8 @@ async def process_user_request(
 
     async def manager_tool_executor(name: str, args: dict) -> str:
         if name == "delegate_research":
+            if timing_collector:
+                timing_collector.record_delegation()
             research_id = uuid.uuid4().hex[:8]
             if on_chunk:
                 await call_chunk(on_chunk, {"type": "tool_start", "tool": "Research Agent", "id": research_id})
@@ -231,6 +238,8 @@ async def process_user_request(
             return f"[Research Agent Result]\n{result['content']}"
 
         if name == "consult_peer":
+            if timing_collector:
+                timing_collector.record_peer_consult()
             peer_id = args.get("peer_id", "")
             question = args.get("question", "")
             peer = next((p for p in peers if p.peer_id == peer_id), None)

@@ -91,8 +91,13 @@ async def chat_loop(
     if cancel_event and cancel_event.is_set():
         raise asyncio.CancelledError("Aborted")
 
+    if timing_collector:
+        timing_collector.record_react_turn(_turn)
+
     if _turn >= max_turns:
         logger.warning(f"[OpenRouter] Max turns ({max_turns}) reached — halting tool calls")
+        if timing_collector:
+            timing_collector.record_max_turns_halt()
         return {"role": "assistant", "content": f"[Research halted: exceeded {max_turns} tool-call steps]"}
 
     openai_messages = _convert_messages_to_openai(messages)
@@ -259,6 +264,8 @@ async def chat_loop(
                     f"[OpenRouter] Tool result from '{func_name}' truncated "
                     f"({len(result)} -> {MAX_TOOL_RESULT_CHARS} chars)"
                 )
+                if timing_collector:
+                    timing_collector.record_truncation()
                 result = (
                     result[:MAX_TOOL_RESULT_CHARS]
                     + "\n\n[Content truncated — result exceeded context limit]"

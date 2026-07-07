@@ -283,6 +283,16 @@ async def run_worker_tool(
             return stop_msg
         search_budget["remaining"] -= 1
 
+    # Efficiency: count the worker tool call, classify its phase, and flag a
+    # repeat fetch of the same resource (same Act sectioned twice, same case
+    # fetched twice). key_arg is the identifying argument for redundancy.
+    if timing_collector:
+        key_arg = (
+            args.get("legislation_id") or args.get("url")
+            or args.get("gid") or args.get("meeting_id")
+        )
+        timing_collector.record_worker_tool(name, key_arg)
+
     if parent_on_chunk:
         await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
 
@@ -418,6 +428,8 @@ async def run_worker_tool(
         try:
             raw_data = json.loads(result)
             id_pairs = extract_legislation_ids_from_search(raw_data)
+            if timing_collector:
+                timing_collector.record_legislation_ids_seen(lid for lid, _ in id_pairs)
             if id_pairs:
                 id_lines = "\n".join(
                     f'  - legislation_id: "{lid}"  ({title})'
@@ -466,6 +478,7 @@ async def run_worker_tool(
             if parent_on_chunk:
                 await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": msg})
 
+        _chars_in = len(result)
         result = await summarise_for_query(
             result, query, summarise_model,
             chunk_fn=chunk_fn,
@@ -476,6 +489,11 @@ async def run_worker_tool(
         )
         logger.info(f"[Worker] Summarised to {len(result)} chars")
 
+        if timing_collector:
+            from .summarisation import SUMMARISE_CHUNK_CHARS
+            _chunks = max(1, -(-_chars_in // SUMMARISE_CHUNK_CHARS))  # ceil division
+            timing_collector.record_summarisation(_chars_in, len(result), _chunks)
+
         # Enforce the size cap here, BEFORE the phase nudges are appended, so a
         # summary that still exceeds the threshold is trimmed without losing the
         # nudges (the chat loop's own truncation would chop them off the tail).
@@ -485,6 +503,8 @@ async def run_worker_tool(
                 f"[Worker] Summarised result from '{name}' still exceeds threshold "
                 f"({len(result)} -> {threshold} chars)"
             )
+            if timing_collector:
+                timing_collector.record_truncation()
             result = (
                 result[:threshold]
                 + "\n\n[Content truncated — summary exceeded context limit]"

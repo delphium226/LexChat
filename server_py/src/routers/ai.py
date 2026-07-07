@@ -17,10 +17,10 @@ from ..agent.provider_factory import (
     get_request_queue,
     set_request_provider_config,
 )
-from ..config import MAX_TOTAL_DOC_CHARS, settings
+from ..config import MAX_TOTAL_DOC_CHARS, evaluate_efficiency_breaches, settings
 from ..database import async_session_maker
 from ..dependencies import get_current_user
-from ..models import Chat, Document, Matter, RequestTiming
+from ..models import ActivityLog, Chat, Document, Matter, RequestTiming
 from ..utils.stopwatch import TimingCollector
 
 logger = logging.getLogger("app")
@@ -229,12 +229,32 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
             if timing.total_ms == 0:
                 timing.record_total((time.perf_counter() - t_request) * 1000)
 
-            # Persist timing to DB if we got at least as far as queue entry
+            # Persist timing + efficiency metrics if we got at least as far as queue entry
             if timing.queue_wait_ms > 0 or timing.llm_calls > 0:
+                metrics = timing.to_dict()
+                # One-line efficiency summary for grep-ability in the agent log.
+                logging.getLogger("agent").info(
+                    "[Efficiency] req=%s delegations=%s worker_tools=%s phase1=%s phase2=%s "
+                    "distinct_retrieved=%s redundant=%s summ=%s trunc=%s kept=%s/%s turns=%s cost=%.4f",
+                    metrics["request_id"], metrics["manager_delegations"], metrics["worker_tool_calls"],
+                    metrics["phase1_search_calls"], metrics["phase2_retrieval_calls"],
+                    metrics["distinct_legislation_ids_retrieved"], metrics["redundant_tool_calls"],
+                    metrics["summarisation_calls"], metrics["truncation_events"],
+                    metrics["sources_kept"], metrics["sources_extracted"],
+                    metrics["react_turns_max"], metrics["total_cost_usd"],
+                )
                 try:
                     async with async_session_maker() as db_save:
-                        row = RequestTiming(**timing.to_dict())
-                        db_save.add(row)
+                        db_save.add(RequestTiming(**metrics))
+                        # Automated alert: a per-request efficiency breach becomes an
+                        # ActivityLog row so it surfaces in the admin activity feed.
+                        breaches = evaluate_efficiency_breaches(metrics)
+                        if breaches:
+                            db_save.add(ActivityLog(
+                                event_type="EFFICIENCY",
+                                username=user.get("username", "system"),
+                                description=f"req {metrics['request_id']}: " + "; ".join(breaches),
+                            ))
                         await db_save.commit()
                 except Exception as save_err:
                     logger.error(f"[AI] Failed to persist request timing: {save_err}")

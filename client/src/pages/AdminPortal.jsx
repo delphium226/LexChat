@@ -6,6 +6,7 @@ import {
   getFeedbackStats,
   testLearningRetrieval,
   getPerformanceStats,
+  getEfficiencyStats,
   getUsageStats,
   clearUsageData,
   clearPerformanceData,
@@ -49,6 +50,7 @@ import Spinner from '../components/ui/Spinner';
 import InfoTip from '../components/ui/InfoTip';
 
 import { PerformanceTab } from './admin/PerformanceTab';
+import { EfficiencyTab } from './admin/EfficiencyTab';
 import { CostTab } from './admin/CostTab';
 import { ProviderConfigPanel } from './admin/ProviderConfigPanel';
 import { PERF_COLORS, COST_COLORS } from './admin/chartConfig';
@@ -82,6 +84,11 @@ const AdminPortal = ({ currentUser }) => {
   const [perfStats, setPerfStats] = useState(null);
   const [perfTimeframe, setPerfTimeframe] = useState('30');
   const [isPerfLoading, setIsPerfLoading] = useState(false);
+
+  // --- EFFICIENCY STATS STATE ---
+  const [effStats, setEffStats] = useState(null);
+  const [effTimeframe, setEffTimeframe] = useState('30');
+  const [isEffLoading, setIsEffLoading] = useState(false);
 
   // --- COST STATS STATE ---
   const [costStats, setCostStats] = useState(null);
@@ -133,6 +140,8 @@ const AdminPortal = ({ currentUser }) => {
       fetchUsageStats(timeframe);
     } else if (activeTab === 'performance') {
       fetchPerfStats(perfTimeframe);
+    } else if (activeTab === 'efficiency') {
+      fetchEffStats(effTimeframe);
     } else if (activeTab === 'cost') {
       fetchCostStats(costTimeframe);
     } else if (activeTab === 'health') {
@@ -150,7 +159,7 @@ const AdminPortal = ({ currentUser }) => {
         .catch(() => {})
         .finally(() => setIsPeersLoading(false));
     }
-  }, [activeTab, timeframe, learningTimeframe, perfTimeframe, costTimeframe, productFeedbackTimeframe]);
+  }, [activeTab, timeframe, learningTimeframe, perfTimeframe, effTimeframe, costTimeframe, productFeedbackTimeframe]);
 
   const fetchProductFeedback = async (days = '30') => {
     setIsProductFeedbackLoading(true);
@@ -325,6 +334,18 @@ const AdminPortal = ({ currentUser }) => {
     }
   };
 
+  const fetchEffStats = async days => {
+    setIsEffLoading(true);
+    try {
+      const data = await getEfficiencyStats(days);
+      setEffStats(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsEffLoading(false);
+    }
+  };
+
   // ==========================================
   // SERVICE HEALTH LOGIC
   // ==========================================
@@ -380,6 +401,7 @@ const AdminPortal = ({ currentUser }) => {
             { id: 'users', label: 'User Management' },
             { id: 'usage', label: 'Usage Stats' },
             { id: 'performance', label: 'Performance' },
+            { id: 'efficiency', label: 'Efficiency' },
             { id: 'cost', label: 'Cost' },
             { id: 'learning', label: 'Learning Monitor' },
             ...(currentUser?.username === 'admin' ? [{ id: 'developer', label: 'Developer' }] : []),
@@ -799,6 +821,21 @@ const AdminPortal = ({ currentUser }) => {
         {activeTab === 'performance' && !isPerfLoading && !perfStats && (
           <div className="flex justify-center items-center h-64 text-ink-500 text-sm">
             No performance data recorded yet. Run some queries to start collecting timings.
+          </div>
+        )}
+
+        {/* EFFICIENCY TAB */}
+        {activeTab === 'efficiency' && isEffLoading && (
+          <div className="flex justify-center items-center h-64">
+            <Spinner />
+          </div>
+        )}
+        {activeTab === 'efficiency' && !isEffLoading && effStats && (
+          <EfficiencyTab effStats={effStats} effTimeframe={effTimeframe} setEffTimeframe={setEffTimeframe} />
+        )}
+        {activeTab === 'efficiency' && !isEffLoading && !effStats && (
+          <div className="flex justify-center items-center h-64 text-ink-500 text-sm">
+            No efficiency data recorded yet. Run some research queries to start collecting metrics.
           </div>
         )}
 

@@ -8,7 +8,7 @@ const DAYS_OPTIONS = [
   { label: 'All time', value: 'all' },
 ];
 
-const ALL_EVENT_TYPES = ['LOGIN', 'QUERY', 'SURVEY', 'FEEDBACK', 'ERROR'];
+const ALL_EVENT_TYPES = ['LOGIN', 'QUERY', 'SURVEY', 'FEEDBACK', 'ERROR', 'EFFICIENCY'];
 
 const BADGE_CLASSES = {
   LOGIN: 'bg-brand text-white',
@@ -16,6 +16,7 @@ const BADGE_CLASSES = {
   SURVEY: 'bg-warn-soft text-warn',
   FEEDBACK: 'bg-accent-soft text-accent-ink',
   ERROR: 'bg-danger-soft text-danger',
+  EFFICIENCY: 'bg-warn-soft text-warn',
 };
 
 const BADGE_LABELS = {

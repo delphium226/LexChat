@@ -100,3 +100,46 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+# ---------------------------------------------------------------------------
+# Agent-loop efficiency thresholds
+# ---------------------------------------------------------------------------
+# Per-request breach rules for the Manager→Worker loop. When a request's metrics
+# breach any of these, an ActivityLog(event_type="EFFICIENCY") row is written so
+# regressions (fan-out, re-delegation, duplicate retrievals) surface in the admin
+# activity feed automatically. Tune here — values reflect the healthy baselines
+# measured for the legislation bot (delegate once, retrieve ~1-3 focused Acts).
+EFFICIENCY_THRESHOLDS = {
+    "max_delegations": 1,           # >1 = the manager re-delegated the same question
+    "max_redundant_tool_calls": 0,  # >0 = same Act/case fetched more than once
+    "fanout_abs": 5,                # phase-2 retrieval calls at/above this count, AND
+    "fanout_ratio": 3.0,            # retrievals-per-kept-source at/above this ratio → fan-out
+}
+
+
+def evaluate_efficiency_breaches(m: dict) -> list:
+    """Return a list of human-readable breach reasons for a request's metrics
+    dict (TimingCollector.to_dict()). Empty list = healthy."""
+    t = EFFICIENCY_THRESHOLDS
+    breaches = []
+
+    if m.get("manager_delegations", 0) > t["max_delegations"]:
+        breaches.append(f"re-delegation (delegations={m['manager_delegations']})")
+
+    if m.get("max_turns_halted", 0):
+        breaches.append(f"max-turns halt (turns={m.get('react_turns_max', 0)})")
+
+    if m.get("redundant_tool_calls", 0) > t["max_redundant_tool_calls"]:
+        breaches.append(f"redundant tool calls={m['redundant_tool_calls']}")
+
+    if m.get("source_filter_fallback", 0):
+        breaches.append("source-filter fallback (answer cited no retrieved source)")
+
+    phase2 = m.get("phase2_retrieval_calls", 0)
+    kept = m.get("sources_kept", 0)
+    ratio = phase2 / max(kept, 1)
+    if phase2 >= t["fanout_abs"] and ratio >= t["fanout_ratio"]:
+        breaches.append(f"Phase-2 fan-out (retrievals={phase2}, kept={kept}, ratio={ratio:.1f})")
+
+    return breaches

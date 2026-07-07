@@ -2,10 +2,29 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import EFFICIENCY_THRESHOLDS
 from ..database import get_db
 from ..dependencies import get_admin_user
 
 router = APIRouter(prefix="/api/stats", tags=["Statistics"])
+
+
+def _band(value, warn_at, bad_at, higher_is_worse=True):
+    """Classify a value into 'ok' | 'warn' | 'bad' against two cut points."""
+    if value is None:
+        return "ok"
+    if higher_is_worse:
+        if value >= bad_at:
+            return "bad"
+        if value >= warn_at:
+            return "warn"
+        return "ok"
+    # lower is worse (e.g. source precision)
+    if value <= bad_at:
+        return "bad"
+    if value <= warn_at:
+        return "warn"
+    return "ok"
 
 
 def _round_ms(val):
@@ -317,5 +336,193 @@ async def get_cost_stats(
                 "createdAt": row["created_at"].isoformat(),
             }
             for row in priciest_result.mappings()
+        ],
+    }
+
+
+@router.get("/efficiency")
+async def get_efficiency_stats(
+    days: str = "30",
+    admin: dict = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return Manager→Worker loop efficiency metrics + derived health indicators.
+
+    Answers "is the agent algorithm performing correctly?" — delegate once,
+    search minimally, retrieve focused Acts once each, no fan-out/duplication,
+    summarise only when needed, cite what was retrieved.
+    """
+    date_filter = _date_filter(days)
+    # Efficiency indicators describe the Manager→Worker loop, so scope to
+    # *research* requests (delegated at least once). This excludes pure-chat
+    # turns and pre-instrumentation rows (both have manager_delegations = 0),
+    # which would otherwise drag every average toward zero.
+    research_filter = (
+        f"{research_filter} AND manager_delegations > 0" if date_filter
+        else "WHERE manager_delegations > 0"
+    )
+
+    # Per-request fan-out and precision ratios are computed in SQL so avg/p95
+    # reflect per-request behaviour, not a ratio-of-averages.
+    kpi_result = await db.execute(text(f"""
+        SELECT
+            COUNT(*)                                                        AS total_requests,
+            COALESCE(AVG(manager_delegations), 0)                           AS avg_delegations,
+            COALESCE(AVG(worker_tool_calls), 0)                             AS avg_worker_tools,
+            COALESCE(AVG(phase1_search_calls), 0)                           AS avg_phase1,
+            COALESCE(AVG(phase2_retrieval_calls), 0)                        AS avg_phase2,
+            COALESCE(AVG(distinct_legislation_ids_retrieved), 0)            AS avg_distinct_retrieved,
+            COALESCE(SUM(redundant_tool_calls), 0)                          AS sum_redundant,
+            COALESCE(SUM(worker_tool_calls), 0)                             AS sum_worker_tools,
+            COALESCE(AVG(redundant_tool_calls), 0)                          AS avg_redundant,
+            COALESCE(AVG(summarisation_calls), 0)                           AS avg_summ_calls,
+            COALESCE(AVG(truncation_events), 0)                             AS avg_truncations,
+            COALESCE(SUM(max_turns_halted), 0)                              AS halt_count,
+            COALESCE(SUM(source_filter_fallback), 0)                        AS fallback_count,
+            COALESCE(AVG(phase2_retrieval_calls::float
+                     / GREATEST(sources_kept, 1)), 0)                       AS avg_fanout,
+            COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP
+                     (ORDER BY phase2_retrieval_calls::float
+                      / GREATEST(sources_kept, 1)), 0)                      AS p95_fanout,
+            COALESCE(AVG(CASE WHEN summarisation_chars_in > 0
+                     THEN summarisation_chars_out::float
+                          / summarisation_chars_in END), 0)                 AS avg_compression
+        FROM request_timings
+        {research_filter}
+    """))
+    k = kpi_result.mappings().first()
+
+    total = int(k["total_requests"]) or 0
+    avg_delegations = round(float(k["avg_delegations"]), 2)
+    sum_worker = float(k["sum_worker_tools"]) or 1.0
+    redundant_rate = round(float(k["sum_redundant"]) / sum_worker, 3)
+    avg_fanout = round(float(k["avg_fanout"]), 2)
+    p95_fanout = round(float(k["p95_fanout"]), 2)
+    halt_rate = round(int(k["halt_count"]) / total, 3) if total else 0.0
+    fallback_rate = round(int(k["fallback_count"]) / total, 3) if total else 0.0
+    compression = round(float(k["avg_compression"]), 2)
+
+    # Derived health indicators with red/amber/green bands.
+    indicators = [
+        {
+            "key": "delegation_efficiency",
+            "label": "Delegation efficiency",
+            "value": avg_delegations,
+            "unit": "avg delegations/query",
+            "target": "≈1.0",
+            "status": _band(avg_delegations, 1.05, 1.15),
+        },
+        {
+            "key": "fanout_ratio",
+            "label": "Phase-2 fan-out (p95)",
+            "value": p95_fanout,
+            "unit": "retrievals / kept source",
+            "target": "≤3",
+            "status": _band(p95_fanout, 2.0, 3.0),
+        },
+        {
+            "key": "redundant_rate",
+            "label": "Redundant-call rate",
+            "value": redundant_rate,
+            "unit": "redundant / tool calls",
+            "target": "≈0",
+            "status": _band(redundant_rate, 0.05, 0.10),
+        },
+        {
+            "key": "halt_rate",
+            "label": "Max-turns halt rate",
+            "value": halt_rate,
+            "unit": "% of queries",
+            "target": "0",
+            "status": _band(halt_rate, 0.001, 0.02),
+        },
+        {
+            "key": "fallback_rate",
+            "label": "Source-filter fallback rate",
+            "value": fallback_rate,
+            "unit": "% of queries",
+            "target": "low",
+            "status": _band(fallback_rate, 0.1, 0.25),
+        },
+    ]
+
+    # Daily trend for charts.
+    daily_result = await db.execute(text(f"""
+        SELECT
+            DATE(created_at)                                             AS date,
+            ROUND(AVG(manager_delegations)::numeric, 2)                  AS avg_delegations,
+            ROUND(AVG(phase2_retrieval_calls::float
+                  / GREATEST(sources_kept, 1))::numeric, 2)             AS avg_fanout,
+            ROUND(AVG(redundant_tool_calls)::numeric, 2)                 AS avg_redundant,
+            ROUND(AVG(worker_tool_calls)::numeric, 2)                    AS avg_worker_tools,
+            COUNT(*)                                                     AS request_count
+        FROM request_timings
+        {research_filter}
+        GROUP BY DATE(created_at)
+        ORDER BY DATE(created_at) ASC
+    """))
+
+    # Worst offenders — highest fan-out / redundancy, for drill-down.
+    worst_result = await db.execute(text(f"""
+        SELECT
+            request_id,
+            manager_delegations,
+            worker_tool_calls,
+            phase2_retrieval_calls,
+            redundant_tool_calls,
+            sources_extracted,
+            sources_kept,
+            truncation_events,
+            ROUND((phase2_retrieval_calls::float
+                  / GREATEST(sources_kept, 1))::numeric, 2)             AS fanout,
+            created_at
+        FROM request_timings
+        {research_filter}
+        ORDER BY redundant_tool_calls DESC,
+                 (phase2_retrieval_calls::float / GREATEST(sources_kept, 1)) DESC,
+                 manager_delegations DESC
+        LIMIT 10
+    """))
+
+    return {
+        "kpi": {
+            "totalRequests": total,
+            "avgDelegations": avg_delegations,
+            "avgWorkerTools": round(float(k["avg_worker_tools"]), 1),
+            "avgPhase1": round(float(k["avg_phase1"]), 1),
+            "avgPhase2": round(float(k["avg_phase2"]), 1),
+            "avgDistinctRetrieved": round(float(k["avg_distinct_retrieved"]), 1),
+            "avgSummCalls": round(float(k["avg_summ_calls"]), 1),
+            "avgTruncations": round(float(k["avg_truncations"]), 2),
+            "avgFanout": avg_fanout,
+            "summCompression": compression,
+        },
+        "indicators": indicators,
+        "thresholds": EFFICIENCY_THRESHOLDS,
+        "daily": [
+            {
+                "date": row["date"].isoformat(),
+                "avgDelegations": float(row["avg_delegations"]),
+                "avgFanout": float(row["avg_fanout"]),
+                "avgRedundant": float(row["avg_redundant"]),
+                "avgWorkerTools": float(row["avg_worker_tools"]),
+                "requestCount": int(row["request_count"]),
+            }
+            for row in daily_result.mappings()
+        ],
+        "worst": [
+            {
+                "requestId": row["request_id"],
+                "delegations": int(row["manager_delegations"]),
+                "workerTools": int(row["worker_tool_calls"]),
+                "phase2": int(row["phase2_retrieval_calls"]),
+                "redundant": int(row["redundant_tool_calls"]),
+                "extracted": int(row["sources_extracted"]),
+                "kept": int(row["sources_kept"]),
+                "truncations": int(row["truncation_events"]),
+                "fanout": float(row["fanout"]),
+                "createdAt": row["created_at"].isoformat(),
+            }
+            for row in worst_result.mappings()
         ],
     }
