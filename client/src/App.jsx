@@ -176,16 +176,14 @@ function AppContent() {
     ta.style.height = Math.min(ta.scrollHeight, 180) + 'px';
   }, [input]);
 
-  // Close filters popover on outside click
+  // Close filters modal on Escape
   useEffect(() => {
     if (!showFilters) return;
     const handler = e => {
-      if (composerRef.current && !composerRef.current.contains(e.target)) {
-        setShowFilters(false);
-      }
+      if (e.key === 'Escape') setShowFilters(false);
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
   }, [showFilters]);
 
   // Reset on logout
@@ -282,17 +280,27 @@ function AppContent() {
     caseLawCourt,
     legislationType,
     currentOnly,
+    recordType,
     setJurisdictionPersist,
     setDateFromPersist,
     setDateToPersist,
     setCourtPersist,
     setLegislationTypePersist,
     setCurrentOnlyPersist,
+    setRecordTypePersist,
     saveFiltersToChatStorage,
     clearAllFilters,
     hasActiveFilters,
     restoreFiltersForChat,
   } = useFilters(currentChatId);
+
+  const isParliament = botInfo.researchMode === 'parliamentary_records';
+  const RECORD_TYPE_OPTIONS = [
+    { value: null, label: 'All records' },
+    { value: 'debates', label: 'Chamber debates' },
+    { value: 'written_answers', label: 'Written answers' },
+    { value: 'committee', label: 'Committee transcripts' },
+  ];
 
   const JURISDICTION_OPTIONS = [
     { value: null, label: 'All jurisdictions' },
@@ -506,7 +514,16 @@ function AppContent() {
         controller.signal,
         chatMode,
         researchMode,
-        { jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, currentOnly, chatId: activeChatId }
+        {
+          jurisdiction,
+          dateFrom,
+          dateTo,
+          caseLawCourt,
+          legislationType,
+          currentOnly,
+          recordType,
+          chatId: activeChatId,
+        }
       );
 
       if (response.stats) setContextUsage(response.stats);
@@ -1309,20 +1326,37 @@ function AppContent() {
               <div style={{ maxWidth: '95%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
                 {/* Research context chips */}
                 {(() => {
-                  const chips = [
-                    {
-                      icon: <ScalesIcon />,
-                      label: chatMode === 'conversational' ? 'Conversational' : researchModeLabel,
-                    },
-                    { icon: <GavelIcon />, label: jurisdictionLabel },
-                    { icon: <CalendarIcon />, label: `In force · ${todayLabel}` },
-                  ];
+                  const chips = isParliament
+                    ? [
+                        {
+                          icon: <ScalesIcon />,
+                          label: chatMode === 'conversational' ? 'Conversational' : 'Parliamentary records',
+                        },
+                        {
+                          icon: <GavelIcon />,
+                          label: 'Scottish Parliament (Holyrood)',
+                        },
+                      ]
+                    : [
+                        {
+                          icon: <ScalesIcon />,
+                          label: chatMode === 'conversational' ? 'Conversational' : researchModeLabel,
+                        },
+                        { icon: <GavelIcon />, label: jurisdictionLabel },
+                        { icon: <CalendarIcon />, label: `In force · ${todayLabel}` },
+                      ];
+                  if (isParliament && recordType) {
+                    chips.push({
+                      icon: <GavelIcon />,
+                      label: RECORD_TYPE_OPTIONS.find(o => o.value === recordType)?.label || recordType,
+                    });
+                  }
                   if (dateFrom || dateTo !== thisYear) {
                     const dr =
                       dateFrom && dateTo ? `${dateFrom}–${dateTo}` : dateFrom ? `From ${dateFrom}` : `To ${dateTo}`;
                     chips.push({ icon: <CalendarIcon />, label: `Date: ${dr}` });
                   }
-                  if (courtLabel && researchMode !== 'legislation_only') {
+                  if (!isParliament && courtLabel && researchMode !== 'legislation_only') {
                     chips.push({ icon: <GavelIcon />, label: courtLabel });
                   }
                   return (
@@ -1541,22 +1575,82 @@ function AppContent() {
                     return (
                       <div
                         style={{
-                          position: 'absolute',
-                          bottom: '100%',
-                          left: 0,
-                          marginBottom: 8,
-                          background: 'var(--paper)',
-                          border: '1px solid var(--ink-200)',
-                          borderRadius: 10,
-                          boxShadow: 'var(--shadow-md)',
-                          paddingTop: 8,
-                          paddingBottom: 4,
-                          minWidth: 300,
-                          zIndex: 10,
-                          maxHeight: '80vh',
-                          overflowY: 'auto',
+                          position: 'fixed',
+                          inset: 0,
+                          background: 'rgba(11,18,32,0.45)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          zIndex: 50,
+                          padding: 16,
+                        }}
+                        onMouseDown={e => {
+                          if (e.target === e.currentTarget) setShowFilters(false);
                         }}
                       >
+                        <div
+                          style={{
+                            background: 'var(--paper)',
+                            border: '1px solid var(--ink-200)',
+                            borderRadius: 'var(--r-lg)',
+                            boxShadow: '0 8px 32px rgba(11,18,32,0.14)',
+                            width: '100%',
+                            maxWidth: 420,
+                            maxHeight: '85vh',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            fontFamily: 'var(--font-ui)',
+                          }}
+                        >
+                          {/* Header */}
+                          <div
+                            style={{
+                              padding: '16px 20px 12px',
+                              borderBottom: '1px solid var(--ink-200)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              flexShrink: 0,
+                            }}
+                          >
+                            <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink-900)' }}>
+                              Research filters
+                            </span>
+                            <button
+                              onClick={() => setShowFilters(false)}
+                              className="size-7 flex items-center justify-center rounded-md text-ink-500 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                              aria-label="Close"
+                            >
+                              <svg
+                                width={16}
+                                height={16}
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth={1.8}
+                                strokeLinecap="round"
+                              >
+                                <path d="M18 6 6 18M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+
+                          {/* Scrollable body */}
+                          <div style={{ overflowY: 'auto', padding: '8px 0 4px' }}>
+                        {/* ── Parliament bot filters (Scottish Parliament only) ── */}
+                        {isParliament && (
+                          <>
+                            {/* § Record type */}
+                            {secHead('Record type')}
+                            {RECORD_TYPE_OPTIONS.map(opt =>
+                              optBtn(recordType === opt.value, () => setRecordTypePersist(opt.value), opt.label)
+                            )}
+                          </>
+                        )}
+
+                        {/* ── Legislation bot filters ──────────────────── */}
+                        {!isParliament && (
+                          <>
                         {/* § Research type */}
                         {secHead('Research type')}
                         {[
@@ -1660,14 +1754,16 @@ function AppContent() {
                             </div>
                           </>
                         )}
+                          </>
+                        )}
 
-                        {/* § Date range */}
+                        {/* § Date range (common to both bots) */}
                         {divider()}
                         {secHead('Date range')}
                         {inputRow('From', dateFrom, setDateFromPersist, 'To', dateTo, setDateToPersist)}
 
                         {/* § Case law court */}
-                        {researchMode !== 'legislation_only' && (
+                        {!isParliament && researchMode !== 'legislation_only' && (
                           <>
                             {divider()}
                             {secHead('Case law court')}
@@ -1703,11 +1799,18 @@ function AppContent() {
                           </>
                         )}
 
-                        {/* Clear */}
-                        {hasActiveFilters && (
-                          <>
-                            {divider()}
-                            <div style={{ padding: '2px 8px 4px', textAlign: 'right' }}>
+                          </div>
+
+                          {/* Footer */}
+                          {hasActiveFilters && (
+                            <div
+                              style={{
+                                borderTop: '1px solid var(--ink-200)',
+                                padding: '10px 16px',
+                                textAlign: 'right',
+                                flexShrink: 0,
+                              }}
+                            >
                               <button
                                 onClick={clearAllFilters}
                                 className="font-ui text-xs text-ink-500 underline hover:text-ink-700 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
@@ -1715,8 +1818,8 @@ function AppContent() {
                                 Clear filters
                               </button>
                             </div>
-                          </>
-                        )}
+                          )}
+                        </div>
                       </div>
                     );
                   })()}

@@ -39,6 +39,7 @@ export const sendMessage = (
           court: filters.caseLawCourt || null,
           legislation_type: filters.legislationType || null,
           current_only: filters.currentOnly || false,
+          record_type: filters.recordType || null,
         }),
         signal,
       });

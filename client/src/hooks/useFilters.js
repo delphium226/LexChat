@@ -14,10 +14,21 @@ export function useFilters(currentChatId) {
   const [caseLawCourt, setCaseLawCourt] = useState(() => localStorage.getItem('filter_caseLawCourt') || '');
   const [legislationType, setLegislationType] = useState(() => localStorage.getItem('filter_legislationType') || null);
   const [currentOnly, setCurrentOnly] = useState(() => localStorage.getItem('filter_currentOnly') !== 'false');
+  // Parliament-mode filter (only surfaced when the bot is in parliamentary_records mode)
+  const [recordType, setRecordType] = useState(() => localStorage.getItem('filter_recordType') || null);
 
   const saveFiltersToChatStorage = (chatId, overrides = {}) => {
     if (!chatId) return;
-    const filters = { dateFrom, dateTo, jurisdiction, court: caseLawCourt, legislationType, currentOnly, ...overrides };
+    const filters = {
+      dateFrom,
+      dateTo,
+      jurisdiction,
+      court: caseLawCourt,
+      legislationType,
+      currentOnly,
+      recordType,
+      ...overrides,
+    };
     localStorage.setItem(`filter_chat_${chatId}`, JSON.stringify(filters));
   };
   const setJurisdictionPersist = v => {
@@ -52,6 +63,12 @@ export function useFilters(currentChatId) {
     localStorage.setItem('filter_currentOnly', String(v));
     if (currentChatId) saveFiltersToChatStorage(currentChatId, { currentOnly: v });
   };
+  const setRecordTypePersist = v => {
+    setRecordType(v);
+    if (v) localStorage.setItem('filter_recordType', v);
+    else localStorage.removeItem('filter_recordType');
+    if (currentChatId) saveFiltersToChatStorage(currentChatId, { recordType: v });
+  };
   const clearAllFilters = () => {
     setJurisdictionPersist(null);
     setDateFromPersist('');
@@ -59,9 +76,16 @@ export function useFilters(currentChatId) {
     setCourtPersist('');
     setLegislationTypePersist(null);
     setCurrentOnlyPersist(false);
+    setRecordTypePersist(null);
   };
   const hasActiveFilters =
-    jurisdiction || dateFrom || dateTo !== thisYear || caseLawCourt || legislationType || currentOnly;
+    jurisdiction ||
+    dateFrom ||
+    dateTo !== thisYear ||
+    caseLawCourt ||
+    legislationType ||
+    currentOnly ||
+    recordType;
 
   // Restore the per-chat filter snapshot when opening a chat; any filter not in
   // the snapshot falls back to the chat's matter-level defaults (if provided).
@@ -104,6 +128,11 @@ export function useFilters(currentChatId) {
         setCurrentOnly(f.currentOnly);
         localStorage.setItem('filter_currentOnly', String(f.currentOnly));
       }
+      if (f.recordType !== undefined) {
+        setRecordType(f.recordType);
+        if (f.recordType) localStorage.setItem('filter_recordType', f.recordType);
+        else localStorage.removeItem('filter_recordType');
+      }
     }
     if (chatMatter) {
       if (chatMatter.jurisdiction && savedFilters.jurisdiction === undefined) {
@@ -125,6 +154,7 @@ export function useFilters(currentChatId) {
     caseLawCourt,
     legislationType,
     currentOnly,
+    recordType,
     setJurisdiction,
     setDateFrom,
     setDateTo,
@@ -137,6 +167,7 @@ export function useFilters(currentChatId) {
     setCourtPersist,
     setLegislationTypePersist,
     setCurrentOnlyPersist,
+    setRecordTypePersist,
     saveFiltersToChatStorage,
     clearAllFilters,
     hasActiveFilters,

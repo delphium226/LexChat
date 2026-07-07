@@ -14,10 +14,14 @@ from .lex import (  # noqa: F401
 )
 from .parliament import (  # noqa: F401
     _SP_OR_BASE,
+    _fetch_sp_page_with_retry,
     _parse_sp_listing_meetings,
     _parse_sp_meeting_page,
+    _parse_sp_plenary_meetings,
+    _parse_sp_plenary_transcript,
     _parse_sp_transcript_page,
     _search_committee_transcripts_db,
+    _search_plenary_db,
     _slim_hansard_results,
     execute_parliament_tool,
 )

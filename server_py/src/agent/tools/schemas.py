@@ -223,77 +223,9 @@ PARLIAMENT_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "search_hansard",
-            "description": (
-                "Search UK Parliament Hansard for speeches, debates, and written questions. "
-                "Returns speech excerpts with speaker, date, debate title, and a gid (global ID). "
-                "Follow up with get_hansard_debate to retrieve the full text of a relevant speech."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Full-text search query (e.g., 'housing supply planning', 'immigration Rwanda policy').",
-                    },
-                    "debate_type": {
-                        "type": "string",
-                        "description": (
-                            "Optional type filter. One of: 'debates' (Commons chamber), "
-                            "'lords' (Lords chamber), 'wrans' (written answers), "
-                            "'wms' (written ministerial statements). Omit to search all types."
-                        ),
-                    },
-                    "speaker": {
-                        "type": "string",
-                        "description": "Optional: filter results to a specific speaker by name.",
-                    },
-                    "date_from": {
-                        "type": "string",
-                        "description": "Optional start date filter (YYYY-MM-DD).",
-                    },
-                    "date_to": {
-                        "type": "string",
-                        "description": "Optional end date filter (YYYY-MM-DD).",
-                    },
-                },
-                "required": ["query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_hansard_debate",
-            "description": (
-                "Retrieve the full text of a specific Hansard debate or speech using a gid returned by search_hansard. "
-                "Use this after search_hansard when an excerpt is directly relevant but truncated."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "gid": {
-                        "type": "string",
-                        "description": "The global ID (gid) of the debate or speech, as returned by search_hansard.",
-                    },
-                    "debate_type": {
-                        "type": "string",
-                        "description": (
-                            "The type of content this gid refers to: 'debates' (Commons), "
-                            "'lords', or 'wrans' (written answers). Defaults to 'debates' if omitted."
-                        ),
-                    },
-                },
-                "required": ["gid"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "get_member_info",
             "description": (
-                "Look up information about a UK Parliament member (MP or Lord) or Scottish Parliament MSP. "
+                "Look up information about a Scottish Parliament MSP. "
                 "Returns biography, party, constituency, and current roles."
             ),
             "parameters": {
@@ -301,11 +233,7 @@ PARLIAMENT_TOOLS = [
                 "properties": {
                     "name": {
                         "type": "string",
-                        "description": "The member's name (e.g., 'Keir Starmer', 'Angela Rayner').",
-                    },
-                    "parliament": {
-                        "type": "string",
-                        "description": "Which parliament to search: 'commons' (default), 'lords', or 'scotland'.",
+                        "description": "The MSP's name (e.g., 'Humza Yousaf', 'Kate Forbes').",
                     },
                 },
                 "required": ["name"],
@@ -317,19 +245,15 @@ PARLIAMENT_TOOLS = [
         "function": {
             "name": "search_bills",
             "description": (
-                "Search for parliamentary bills by topic, title, or keyword. "
-                "Returns bill title, current stage, house, and a link to the bill page."
+                "Search for Scottish Parliament (Holyrood) bills by topic, title, or keyword. "
+                "Returns bill title, current stage, and a link to the bill page on parliament.scot."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Search term (e.g., 'Renters Rights Bill', 'planning reform').",
-                    },
-                    "parliament": {
-                        "type": "string",
-                        "description": "Which parliament: 'uk' (Westminster, default) or 'scotland' (Holyrood).",
+                        "description": "Search term (e.g., 'Housing Bill', 'land reform').",
                     },
                 },
                 "required": ["query"],
@@ -367,6 +291,69 @@ PARLIAMENT_TOOLS = [
                     },
                 },
                 "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_scottish_plenary",
+            "description": (
+                "Full-text keyword search across Scottish Parliament PLENARY (chamber) debate transcripts — "
+                "ministerial statements, First Minister's Questions, named debates, and Decision Time. "
+                "This is the full-text plenary source: unlike search_scottish_parliament (excerpt-only), it "
+                "returns ranked agenda items you can then retrieve verbatim with get_scottish_plenary_debate. "
+                "Use this for any question needing the actual words a minister or MSP used in the chamber "
+                "(e.g. a statement of statutory purpose). For committee meetings use "
+                "search_scottish_committee_transcripts instead."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Full-text search query (e.g. 'phone-free classrooms', 'ministerial statement housing').",
+                    },
+                    "date_from": {
+                        "type": "string",
+                        "description": "Optional start date filter (YYYY-MM-DD).",
+                    },
+                    "date_to": {
+                        "type": "string",
+                        "description": "Optional end date filter (YYYY-MM-DD).",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_scottish_plenary_debate",
+            "description": (
+                "Retrieve the verbatim transcript of a specific plenary (chamber) agenda item — full attributed "
+                "speeches for a ministerial statement, FMQs exchange, or named debate. "
+                "Pass meeting_id, slug, and iob_id exactly as returned by search_scottish_plenary. "
+                "Returns the complete speeches so you can quote a minister's words directly."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "meeting_id": {
+                        "type": "string",
+                        "description": "The meeting ID as returned by search_scottish_plenary (e.g. '20164').",
+                    },
+                    "slug": {
+                        "type": "string",
+                        "description": "The meeting slug as returned by search_scottish_plenary (e.g. 'meeting-of-parliament-02-06-2026').",
+                    },
+                    "iob_id": {
+                        "type": "string",
+                        "description": "The agenda item IOB ID as returned by search_scottish_plenary (e.g. '223568').",
+                    },
+                },
+                "required": ["meeting_id", "slug", "iob_id"],
             },
         },
     },

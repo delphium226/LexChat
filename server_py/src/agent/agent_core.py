@@ -62,7 +62,7 @@ async def run_worker_agent(
     worker_tools = get_worker_tools(research_mode)
     source_accumulator: list = []
     # Limit parliamentary searches so the model proceeds to Phase 2 instead of looping.
-    # Budget covers search_hansard, search_scottish_parliament, and search_scottish_committee_transcripts.
+    # Budget covers search_scottish_parliament and search_scottish_committee_transcripts.
     search_budget = {"remaining": 3} if research_mode == "parliamentary_records" else None
 
     async def worker_tool_executor(name: str, args: dict) -> str:

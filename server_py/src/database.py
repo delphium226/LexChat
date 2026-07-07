@@ -171,6 +171,21 @@ async def init_db() -> None:
                 fetched_at TIMESTAMP,
                 CONSTRAINT uq_sp_meeting_iob UNIQUE (meeting_id, iob_id)
             )""",
+            """CREATE TABLE IF NOT EXISTS sp_plenary_items (
+                id SERIAL PRIMARY KEY,
+                meeting_id VARCHAR(32) NOT NULL,
+                slug VARCHAR(128) NOT NULL,
+                iob_id VARCHAR(32) NOT NULL,
+                committee_code VARCHAR(64),
+                committee_name VARCHAR(256),
+                meeting_date DATE,
+                agenda_item_title VARCHAR(512),
+                url VARCHAR(512) UNIQUE,
+                speeches JSONB,
+                full_text TEXT,
+                fetched_at TIMESTAMP,
+                CONSTRAINT uq_sp_plenary_meeting_iob UNIQUE (meeting_id, iob_id)
+            )""",
         ]
         async with engine.begin() as conn:
             for stmt in migration_statements:
@@ -197,6 +212,11 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_sp_items_committee_name ON sp_committee_items (committee_name)",
             "CREATE INDEX IF NOT EXISTS idx_sp_items_meeting_date ON sp_committee_items (meeting_date)",
             "CREATE INDEX IF NOT EXISTS idx_sp_items_full_text ON sp_committee_items USING GIN (to_tsvector('english', coalesce(full_text,'')))",
+            "CREATE INDEX IF NOT EXISTS idx_sp_plenary_meeting_id ON sp_plenary_items (meeting_id)",
+            "CREATE INDEX IF NOT EXISTS idx_sp_plenary_committee_code ON sp_plenary_items (committee_code)",
+            "CREATE INDEX IF NOT EXISTS idx_sp_plenary_committee_name ON sp_plenary_items (committee_name)",
+            "CREATE INDEX IF NOT EXISTS idx_sp_plenary_meeting_date ON sp_plenary_items (meeting_date)",
+            "CREATE INDEX IF NOT EXISTS idx_sp_plenary_full_text ON sp_plenary_items USING GIN (to_tsvector('english', coalesce(full_text,'')))",
         ]
         async with engine.begin() as conn:
             for stmt in index_statements:

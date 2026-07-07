@@ -15,7 +15,12 @@ from .database import init_db, async_session_maker
 from .routers import auth, users, chats, ai, learning, stats, developer, system, health, feedback, matters, documents
 from .routers import identity, federation, peers
 from .services.health_service import background_health_loop
-from .services.parliament_crawler import background_crawl_loop, backfill_session7
+from .services.parliament_crawler import (
+    background_crawl_loop,
+    background_plenary_crawl_loop,
+    backfill_plenary,
+    backfill_sessions,
+)
 from .utils.logger import setup_logging
 
 # Initialise structured logging before anything else
@@ -90,18 +95,27 @@ async def lifespan(app: FastAPI):
     # Only starts when the parliament bot research mode is active so the legislation
     # bot doesn't crawl unnecessarily.
     from .config import settings as _s
+    crawl_tasks = []
     if _s.research_mode == "parliamentary_records":
-        asyncio.create_task(backfill_session7())
-        crawl_task = asyncio.create_task(background_crawl_loop(86400))
-    else:
-        crawl_task = None
+        # Committee then plenary backfill, sequentially, so the two one-shot
+        # backfills don't hammer the SP origin concurrently. The daily plenary
+        # loop is self-staggered (see background_plenary_crawl_loop).
+        async def _backfill_all():
+            await backfill_sessions()
+            await backfill_plenary()
+
+        crawl_tasks = [
+            asyncio.create_task(_backfill_all()),
+            asyncio.create_task(background_crawl_loop(86400)),
+            asyncio.create_task(background_plenary_crawl_loop(86400)),
+        ]
 
     logger.info(f"[Main] Server running on http://{settings.host}:{settings.port}")
     yield
     # Shutdown
     health_task.cancel()
-    if crawl_task:
-        crawl_task.cancel()
+    for t in crawl_tasks:
+        t.cancel()
 
 
 app = FastAPI(

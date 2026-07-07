@@ -1968,7 +1968,7 @@ const AdminPortal = ({ currentUser }) => {
                   <textarea
                     value={peerForm.description}
                     onChange={e => setPeerForm(f => ({ ...f, description: e.target.value }))}
-                    placeholder="Searches UK Parliamentary records and debates"
+                    placeholder="Searches Scottish Parliamentary records and debates"
                     rows={2}
                     className="w-full rounded-md border border-ink-200 bg-paper px-3 py-2 text-sm text-ink-900 placeholder-ink-400 font-ui focus:outline-none focus:ring-2 focus:ring-accent resize-none"
                   />

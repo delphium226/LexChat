@@ -15,10 +15,15 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 @router.get("/api/bot-info")
 async def bot_info():
     bot_identity = get_bot_identity()
+    # Resolved research mode: the RESEARCH_MODE env override (settings.research_mode)
+    # is authoritative — it is what ai.py forces on every request for dedicated bots
+    # like the parliament bot. Blank means frontend-controlled (standard legislation
+    # bot). The frontend uses this to decide which filter set to show.
     result = {
         "bot_id": bot_identity.get("bot_id", settings.bot_id),
         "name": bot_identity.get("name", "AILA"),
         "tagline": bot_identity.get("tagline", "AI Legal Assistant"),
+        "research_mode": settings.research_mode or "",
     }
     if brand_color := bot_identity.get("brand_color"):
         result["brand_color"] = brand_color

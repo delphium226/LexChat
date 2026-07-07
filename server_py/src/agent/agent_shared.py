@@ -156,13 +156,13 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                 "url": url,
             })
 
-    elif name in ("search_hansard", "search_scottish_parliament"):
+    elif name == "search_scottish_parliament":
         for speech in data.get("results", []):
             url = speech.get("url", "")
             if url and any(s.get("url") == url for s in accumulator):
                 continue
             accumulator.append({
-                "kind": "Hansard",
+                "kind": "Scottish Parliament",
                 "title": speech.get("debate", ""),
                 "sub": speech.get("speaker", ""),
                 "meta": speech.get("hdate", ""),
@@ -179,7 +179,7 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                 "kind": "Bill",
                 "title": bill.get("shortTitle", ""),
                 "sub": bill.get("currentStage", ""),
-                "meta": bill.get("currentHouse", ""),
+                "meta": "",
                 "cite": bill.get("shortTitle", ""),
                 "url": url,
             })
@@ -233,6 +233,40 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                 "url": url,
             })
 
+    elif name == "search_scottish_plenary":
+        for item in data.get("results", []):
+            url = item.get("url", "")
+            if url and any(s.get("url") == url for s in accumulator):
+                continue
+            meeting_date = item.get("meeting_date", "")
+            agenda_title = item.get("agenda_item_title", "")
+            accumulator.append({
+                "kind": "Plenary",
+                "title": agenda_title or "Meeting of Parliament",
+                "sub": "Meeting of Parliament",
+                "meta": meeting_date,
+                "cite": f"Meeting of Parliament, {meeting_date} — {agenda_title}",
+                "url": url,
+            })
+
+    elif name == "get_scottish_plenary_debate":
+        url = data.get("url") or args.get("url") or ""
+        page_title = data.get("page_title") or ""
+        speeches = data.get("speeches") or []
+        excerpt = speeches[0].get("text", "")[:300] if speeches else ""
+        existing = next((s for s in accumulator if s.get("url") == url), None)
+        if existing:
+            if not existing.get("excerpt") and excerpt:
+                existing["excerpt"] = excerpt
+        else:
+            accumulator.append({
+                "kind": "Plenary",
+                "title": page_title or "Scottish Parliament Plenary",
+                "excerpt": excerpt,
+                "cite": page_title or url,
+                "url": url,
+            })
+
 
 async def run_worker_tool(
     name: str,
@@ -263,16 +297,19 @@ async def run_worker_tool(
 
     # Parliamentary search budget: after the allowed number of search/listing calls,
     # return a hard-stop so the model proceeds to retrieval instead of looping.
-    _PARLIAMENT_SEARCH_TOOLS = {"search_hansard", "search_scottish_parliament", "search_scottish_committee_transcripts"}
+    _PARLIAMENT_SEARCH_TOOLS = {"search_scottish_parliament", "search_scottish_committee_transcripts", "search_scottish_plenary"}
     if search_budget is not None and name in _PARLIAMENT_SEARCH_TOOLS:
         if search_budget["remaining"] <= 0:
             stop_msg = json.dumps({
                 "notice": "Search limit reached — you have already performed the maximum number of parliamentary searches.",
                 "instruction": (
-                    "STOP calling search_hansard, search_scottish_parliament, or search_scottish_committee_transcripts. "
-                    "You MUST now either: (a) call get_hansard_debate or get_scottish_committee_transcript with IDs "
-                    "from your previous results to retrieve full text, or (b) if no results were found at all, "
-                    "synthesize your answer stating that no relevant records were found."
+                    "STOP calling search_scottish_plenary, search_scottish_parliament, or "
+                    "search_scottish_committee_transcripts. "
+                    "You MUST now either: (a) call get_scottish_plenary_debate or "
+                    "get_scottish_committee_transcript with the IDs from your previous search results to "
+                    "retrieve full text (search_scottish_parliament results are excerpt-only and need no "
+                    "retrieval), or (b) if no results were found at all, synthesize your answer stating that "
+                    "no relevant records were found."
                 ),
                 "results": [],
                 "total": 0,
@@ -333,51 +370,21 @@ async def run_worker_tool(
         except Exception:
             pass
 
-    # For search_hansard / search_scottish_parliament: inject a mandatory Phase 2 nudge.
-    # The model must call get_hansard_debate before composing its answer. Without this
-    # nudge weaker models re-search instead of retrieving full text.
-    hansard_phase2_note = ""
-    if name == "search_hansard":
-        try:
-            raw_data = json.loads(result)
-            results = raw_data.get("results", [])
-            if results:
-                gid_lines = "\n".join(
-                    f'  - gid: "{r["gid"]}"  debate_type: "{r.get("debate_type","debates")}"  ({r.get("speaker", "Unknown")}, {r.get("hdate", "")} — {r.get("debate", "Unknown debate")})'
-                    for r in results[:5]
-                    if r.get("gid")
-                )
-                hansard_phase2_note = (
-                    f"\n\n[MANDATORY NEXT STEP — DO NOT call search_hansard again. "
-                    f"Call get_hansard_debate NOW for the 1-3 most relevant results below to retrieve full speech text. "
-                    f"Only call search_hansard again if you received ZERO results. "
-                    f"Pass the debate_type field alongside gid so the correct endpoint is used:\n{gid_lines}]"
-                )
-            else:
-                hansard_phase2_note = (
-                    "\n\n[This search returned 0 results. You may retry search_hansard with "
-                    "different or broader keywords. If after 2 searches you still have 0 results, "
-                    "state that no relevant Hansard records were found and compose your answer.]"
-                )
-        except Exception:
-            pass
-
+    # For search_scottish_parliament: the results are excerpt-only (TheyWorkForYou
+    # exposes no full-text retrieval endpoint for Holyrood plenary content), so nudge
+    # the model to synthesise from the excerpts rather than re-searching or trying to
+    # fetch full text.
     sp_phase2_note = ""
     if name == "search_scottish_parliament":
         try:
             raw_data = json.loads(result)
             results = raw_data.get("results", [])
             if results:
-                gid_lines = "\n".join(
-                    f'  - gid: "{r["gid"]}"  debate_type: "{r.get("debate_type","sp")}"  ({r.get("speaker", "Unknown")}, {r.get("hdate", "")} — {r.get("debate", "Unknown debate")})'
-                    for r in results[:5]
-                    if r.get("gid")
-                )
                 sp_phase2_note = (
-                    f"\n\n[MANDATORY NEXT STEP — DO NOT call search_scottish_parliament again. "
-                    f"Call get_hansard_debate NOW for the 1-3 most relevant results below to retrieve full speech text. "
-                    f"Only call search_scottish_parliament again if you received ZERO results. "
-                    f"Pass the debate_type field alongside gid so the correct endpoint is used:\n{gid_lines}]"
+                    "\n\n[These Scottish Parliament plenary results are EXCERPT-ONLY — there is no full-text "
+                    "retrieval tool for them. DO NOT call search_scottish_parliament again (unless you received "
+                    "ZERO results). Compose your answer from the excerpts above, citing the speaker, date, and URL "
+                    "of each. If the question concerns committee activity, call search_scottish_committee_transcripts.]"
                 )
             else:
                 sp_phase2_note = (
@@ -416,6 +423,38 @@ async def run_worker_tool(
                     "\n\n[No committee transcript results found. "
                     "Try search_scottish_committee_transcripts with different or broader keywords, "
                     "or use search_scottish_parliament for plenary debates.]"
+                )
+        except Exception:
+            pass
+
+    sp_plenary_phase2_note = ""
+    if name == "search_scottish_plenary":
+        try:
+            raw_data = json.loads(result)
+            items = raw_data.get("results", [])
+            note = raw_data.get("note", "")
+            if note and not items:
+                sp_plenary_phase2_note = f"\n\n[{note}]"
+            elif items:
+                item_lines = [
+                    f'  - meeting_id: "{r["meeting_id"]}"  slug: "{r["slug"]}"  iob_id: "{r["iob_id"]}"'
+                    f'  ({r.get("meeting_date", "")} — {r.get("agenda_item_title", "")})'
+                    for r in items[:8]
+                    if r.get("meeting_id") and r.get("iob_id")
+                ]
+                if item_lines:
+                    sp_plenary_phase2_note = (
+                        f"\n\n[MANDATORY NEXT STEP — Call get_scottish_plenary_debate for the most "
+                        f"relevant result(s) below to retrieve the full verbatim speeches before composing "
+                        f"your answer. Pass meeting_id, slug, and iob_id exactly as shown:\n"
+                        + "\n".join(item_lines)
+                        + "]"
+                    )
+            else:
+                sp_plenary_phase2_note = (
+                    "\n\n[No plenary debate results found. "
+                    "Try search_scottish_plenary with different or broader keywords, "
+                    "or use search_scottish_parliament for excerpt-only plenary content.]"
                 )
         except Exception:
             pass
@@ -521,9 +560,9 @@ async def run_worker_tool(
     # Append phase nudges after summarisation so they are not discarded
     # by the summariser and remain visible in the message the model receives.
     result += phase2_note
-    result += hansard_phase2_note
     result += sp_phase2_note
     result += sp_committee_phase2_note
+    result += sp_plenary_phase2_note
     result += case_law_note
 
     if parent_on_chunk:

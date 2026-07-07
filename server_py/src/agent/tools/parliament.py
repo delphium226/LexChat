@@ -10,6 +10,7 @@ from typing import Callable, Optional
 import httpx
 
 from ...config import settings
+from ..provider_factory import get_request_provider_config
 from ._util import _emit
 
 logger = logging.getLogger("agent")
@@ -55,6 +56,42 @@ def _parse_sp_listing_meetings(html: str) -> list[dict]:
             "slug": slug,
             "meeting_id": meeting_id,
             "committee_code": committee_code,
+            "date": date_str,
+            "url": f"{_SP_OR_BASE}/{slug}?meeting={meeting_id}",
+        }
+    return sorted(seen.values(), key=lambda x: x.get("date", ""), reverse=True)
+
+
+def _parse_sp_plenary_meetings(html: str) -> list[dict]:
+    """Extract plenary (chamber) meeting links from the SP Official Report listing page.
+
+    The committee listing parser (`_parse_sp_listing_meetings`) explicitly *excludes*
+    plenary sittings (slugs of the form `meeting-of-parliament-DD-MM-YYYY`). This variant
+    INCLUDES only those, for the plenary crawl pipeline.
+    """
+    pattern = _re.compile(
+        r'href="[^"]*?official-report/search-what-was-said-in-parliament/([^"?/\s]+)\?meeting=(\d+)"',
+        _re.IGNORECASE,
+    )
+    seen: dict[tuple, dict] = {}
+    for slug, meeting_id in pattern.findall(html):
+        if "meeting-of-parliament" not in slug.lower():
+            continue
+        key = (slug, meeting_id)
+        if key in seen:
+            continue
+        parts = slug.split("-")
+        if len(parts) >= 4:
+            day, month, year = parts[-3], parts[-2], parts[-1]
+            date_str = f"{year}-{month}-{day}"
+        else:
+            date_str = ""
+        seen[key] = {
+            "slug": slug,
+            "meeting_id": meeting_id,
+            # Plenary sittings have no committee; use a stable label for the DB column.
+            "committee_code": "MOP",
+            "committee_name": "Meeting of Parliament",
             "date": date_str,
             "url": f"{_SP_OR_BASE}/{slug}?meeting={meeting_id}",
         }
@@ -173,27 +210,212 @@ def _parse_sp_transcript_page(html: str, url: str) -> dict:
     }
 
 
-def _slim_hansard_results(resp, query: str, source_type: str = "hansard") -> dict:
-    """Slim a TheyWorkForYou getHansard response to the fields the model needs.
+def _parse_sp_plenary_transcript(html: str, url: str, agenda_title: str | None = None) -> dict:
+    """Parse a Scottish Parliament plenary Official Report page into attributed speeches.
 
-    source_type: "hansard" for UK Parliament results, "scottish_parliament" for SP results.
-    Passed explicitly because SP listurls don't match the UK listurl patterns and would
-    otherwise fall back to debate_type "debates" (the UK Commons endpoint), causing
-    get_hansard_debate to call the wrong TWFY endpoint.
+    Plenary markup differs from committee pages: each contribution is a
+    <p id="orscontributions_..."> element whose speaker is the first /msps/ anchor.
+    """
+    m = _re.search(r"<main[^>]*>(.*?)</main>", html, _re.S | _re.I)
+    main = m.group(1) if m else html
+
+    title_match = _re.search(r"<title[^>]*>([^<]+)</title>", html, _re.I)
+    page_title = _strip_html(title_match.group(1)).split("|")[0].strip() if title_match else ""
+
+    # Scope to the requested agenda item: from its <h2 class="h3"> to the next one
+    if agenda_title:
+        hm = _re.search(r'<h2[^>]*class="h3[^"]*"[^>]*>\s*' + _re.escape(agenda_title), main, _re.I)
+        if hm:
+            rest = main[hm.end():]
+            nxt = _re.search(r'<h2[^>]*class="h3', rest, _re.I)
+            main = rest[: nxt.start()] if nxt else rest
+
+    parts = _re.split(r'<p\s+id="orscontributions_[^"]*"[^>]*>', main)
+    speeches: list[dict] = []
+    for block in parts[1:]:  # parts[0] is preamble before the first contribution
+        spk = _re.search(r'<a\s[^>]*href="/msps/[^"]*"[^>]*>(.*?)</a>', block, _re.S | _re.I)
+        speaker = _strip_html(spk.group(1)) if spk else ""
+        body = block[spk.end():] if spk else block
+        body = _re.sub(r'<div class="share-float-right">.*?</div>\s*</div>\s*</div>\s*</div>',
+                       ' ', body, flags=_re.S | _re.I)
+        texts = []
+        for p in _re.findall(r'<p[^>]*>(.*?)</p>', body, _re.S | _re.I):
+            t = _strip_html(p)
+            if not t or _re.fullmatch(r'\d{1,2}:\d{2}', t):
+                continue
+            texts.append(t)
+        text = " ".join(texts).strip()
+        if text:
+            speeches.append({"speaker": speaker, "text": text[:3000]})
+
+    return {
+        "page_title": page_title,
+        "url": url,
+        "speeches": speeches,
+        "total_speeches": len(speeches),
+    }
+
+
+_MIN_TRANSCRIPT_BYTES = 20_000  # reject undersized Cloudflare 524 error pages
+
+
+async def _fetch_sp_page_with_retry(
+    client: httpx.AsyncClient,
+    url: str,
+    attempts: int = 4,
+    min_bytes: int = _MIN_TRANSCRIPT_BYTES,
+) -> str:
+    """Fetch an SP Official Report page, retrying on failure or undersized responses.
+
+    Large plenary item pages (200–700 KB) intermittently return an ~8 KB Cloudflare
+    524 error page. Retry with exponential backoff and reject any response smaller
+    than min_bytes so an error page is never treated as a real transcript.
+    Charset: honour the response's declared encoding but fall back to UTF-8 to avoid
+    replacement chars from origin mislabelling.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            resp = await client.get(
+                url, headers={"User-Agent": "Mozilla/5.0"},
+                follow_redirects=True, timeout=30.0,
+            )
+            resp.raise_for_status()
+            if not resp.encoding or resp.encoding.lower() in ("iso-8859-1", "latin-1", "ascii"):
+                resp.encoding = "utf-8"
+            body = resp.text
+            if len(body.encode("utf-8", "ignore")) >= min_bytes:
+                return body
+            logger.warning(
+                f"[Parliament] Undersized response ({len(body)} chars) for {url} "
+                f"(attempt {attempt + 1}/{attempts}) — likely a 524 error page, retrying"
+            )
+        except Exception as exc:
+            last_exc = exc
+            logger.warning(
+                f"[Parliament] Fetch failed for {url} "
+                f"(attempt {attempt + 1}/{attempts}): {exc}"
+            )
+        if attempt < attempts - 1:
+            import asyncio as _asyncio
+            await _asyncio.sleep(2 * (attempt + 1))
+    if last_exc:
+        raise last_exc
+    raise RuntimeError(f"Failed to fetch a full-size page for {url} after {attempts} attempts")
+
+
+async def _lookup_plenary_agenda_title(meeting_id: str, iob_id: str) -> Optional[str]:
+    """Fetch the stored agenda-item title for a plenary (meeting_id, iob_id), if crawled."""
+    from sqlalchemy import text as sa_text
+    from ...database import async_session_maker
+
+    try:
+        async with async_session_maker() as session:
+            row = await session.execute(
+                sa_text(
+                    "SELECT agenda_item_title FROM sp_plenary_items "
+                    "WHERE meeting_id = :m AND iob_id = :i LIMIT 1"
+                ),
+                {"m": meeting_id, "i": iob_id},
+            )
+            title = row.scalar()
+            return title or None
+    except Exception:
+        return None
+
+
+async def _search_plenary_db(
+    query: str,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+) -> dict:
+    """Run PostgreSQL FTS against sp_plenary_items and return slim results.
+
+    Mirrors `_search_committee_transcripts_db` but for plenary (chamber) sittings;
+    plenary has no committee filter.
+    """
+    from sqlalchemy import text as sa_text
+    from ...database import async_session_maker
+
+    async with async_session_maker() as session:
+        count_row = await session.execute(sa_text("SELECT COUNT(*) FROM sp_plenary_items"))
+        total_rows = count_row.scalar() or 0
+
+        if total_rows == 0:
+            return {
+                "results": [],
+                "total": 0,
+                "note": (
+                    "SP plenary transcript database is still being populated. "
+                    "Try again later or use search_scottish_parliament for excerpt-only plenary content."
+                ),
+            }
+
+        where_parts = [
+            "to_tsvector('english', coalesce(full_text,'')) @@ plainto_tsquery('english', :query)"
+        ]
+        params: dict = {"query": query}
+
+        if date_from:
+            from datetime import date as _date
+            try:
+                params["date_from"] = _date.fromisoformat(date_from)
+            except ValueError:
+                params["date_from"] = date_from
+            where_parts.append("meeting_date >= :date_from")
+        if date_to:
+            from datetime import date as _date
+            try:
+                params["date_to"] = _date.fromisoformat(date_to)
+            except ValueError:
+                params["date_to"] = date_to
+            where_parts.append("meeting_date <= :date_to")
+
+        where_sql = " AND ".join(where_parts)
+        sql = sa_text(f"""
+            SELECT meeting_id, slug, iob_id, meeting_date, agenda_item_title, url,
+                   ts_rank(to_tsvector('english', coalesce(full_text,'')),
+                           plainto_tsquery('english', :query)) AS rank,
+                   left(full_text, 300) AS excerpt
+            FROM sp_plenary_items
+            WHERE {where_sql}
+            ORDER BY rank DESC, meeting_date DESC
+            LIMIT 10
+        """)
+
+        rows = (await session.execute(sql, params)).fetchall()
+
+    results = [
+        {
+            "meeting_id": r.meeting_id,
+            "slug": r.slug,
+            "iob_id": r.iob_id,
+            "meeting_date": str(r.meeting_date) if r.meeting_date else "",
+            "agenda_item_title": r.agenda_item_title or "",
+            "url": r.url or "",
+            "excerpt": r.excerpt or "",
+        }
+        for r in rows
+    ]
+    return {"results": results, "total": len(results), "query": query}
+
+
+def _slim_hansard_results(resp, query: str) -> dict:
+    """Slim a TheyWorkForYou getHansard response (Scottish Parliament plenary) to
+    the fields the model needs.
+
+    TWFY type=sp is broken (returns Westminster debates regardless), so the caller
+    fetches without a type filter and we post-filter here to SP-specific listurls.
     """
     if isinstance(resp, dict) and "error" in resp:
         return {"error": resp["error"], "results": [], "total": 0, "query": query}
     rows = resp if isinstance(resp, list) else resp.get("rows", [])
 
-    # For Scottish Parliament queries, filter out Westminster content.
-    # TWFY type=sp is broken (returns Westminster debates regardless), so we
-    # fetch without a type filter and post-filter here to SP-specific listurls.
-    if source_type == "scottish_parliament":
-        rows = [
-            r for r in rows
-            if "/sp/" in (r.get("listurl", "")).lower()
-            or "/spwrans/" in (r.get("listurl", "")).lower()
-        ]
+    rows = [
+        r for r in rows
+        if "/sp/" in (r.get("listurl", "")).lower()
+        or "/spwrans/" in (r.get("listurl", "")).lower()
+    ]
 
     slimmed = []
     for speech in rows[:10]:
@@ -209,23 +431,11 @@ def _slim_hansard_results(resp, query: str, source_type: str = "hansard") -> dic
         debate_name = _strip_html(parent_body) if parent_body else ""
 
         listurl = speech.get("listurl", "")
-        if source_type == "scottish_parliament":
-            # SP written answers use spwrans; all other SP content uses getSP
-            debate_type_hint = "spwrans" if "wrans" in listurl.lower() else "sp"
-        elif "/lords/" in listurl:
-            debate_type_hint = "lords"
-        elif "/wrans/" in listurl:
-            debate_type_hint = "wrans"
-        elif "/wms/" in listurl:
-            debate_type_hint = "wms"
-        else:
-            debate_type_hint = "debates"
+        # SP written answers use spwrans; all other SP content uses sp
+        debate_type_hint = "spwrans" if "wrans" in listurl.lower() else "sp"
 
         gid = speech.get("gid", "")
-        if source_type == "scottish_parliament":
-            speech_url = f"https://www.theyworkforyou.com/sp/?id={gid}"
-        else:
-            speech_url = f"https://www.theyworkforyou.com/debate/?id={gid}"
+        speech_url = f"https://www.theyworkforyou.com/sp/?id={gid}"
         slimmed.append({
             "gid": gid,
             "hdate": speech.get("hdate", ""),
@@ -238,41 +448,6 @@ def _slim_hansard_results(resp, query: str, source_type: str = "hansard") -> dic
     return {"results": slimmed, "total": len(slimmed), "query": query}
 
 
-def _slim_members_results(resp: dict) -> dict:
-    """Slim a UK Parliament Members API response."""
-    items = resp.get("items", [])
-    slimmed = []
-    for item in items[:5]:
-        v = item.get("value", {})
-        membership = v.get("latestHouseMembership", {}) or {}
-        slimmed.append({
-            "id": v.get("id"),
-            "name": v.get("nameDisplayAs", ""),
-            "party": (v.get("latestParty") or {}).get("name", ""),
-            "constituency": membership.get("membershipFrom", ""),
-            "house": membership.get("house", ""),
-            "url": f"https://members.parliament.uk/member/{v.get('id')}/contact",
-        })
-    return {"results": slimmed, "total": resp.get("totalResults", len(slimmed))}
-
-
-def _slim_bills_results(resp: dict) -> dict:
-    """Slim a UK Parliament Bills API response."""
-    items = resp.get("items", [])
-    slimmed = []
-    for item in items[:10]:
-        stage = item.get("currentStage") or {}
-        slimmed.append({
-            "billId": item.get("billId"),
-            "shortTitle": item.get("shortTitle", ""),
-            "currentStage": stage.get("description", "") if isinstance(stage, dict) else str(stage),
-            "currentHouse": item.get("currentHouse", ""),
-            "lastUpdate": item.get("lastUpdate", ""),
-            "url": f"https://bills.parliament.uk/bills/{item.get('billId')}",
-        })
-    return {"results": slimmed, "total": resp.get("totalResults", len(slimmed))}
-
-
 async def _search_committee_transcripts_db(
     query: str,
     committee: Optional[str] = None,
@@ -281,7 +456,7 @@ async def _search_committee_transcripts_db(
 ) -> dict:
     """Run PostgreSQL FTS against sp_committee_items and return slim results."""
     from sqlalchemy import text as sa_text
-    from ..database import async_session_maker
+    from ...database import async_session_maker
 
     async with async_session_maker() as session:
         count_row = await session.execute(sa_text("SELECT COUNT(*) FROM sp_committee_items"))
@@ -353,6 +528,48 @@ async def _search_committee_transcripts_db(
     return {"results": results, "total": len(results), "query": query}
 
 
+def _apply_parliament_filters(name: str, args: dict) -> Optional[str]:
+    """Apply the user's parliamentary filters (record type, date range).
+
+    Mutates `args` in place to inject filter-derived arguments (debate_type, date
+    range) that the model omitted. Returns a redirect JSON string to short-circuit a
+    tool call that contradicts the active record-type filter, or None to let the call
+    proceed. Mirrors the prompt constraint block so the filter is honoured even when
+    the model does not follow the instruction.
+    """
+    cfg = get_request_provider_config()
+    record_type = cfg.get("_pt_record_type")
+    date_from = cfg.get("_date_from")
+    date_to = cfg.get("_date_to")
+
+    # Record type — set the debate_type the model omitted; redirect where the
+    # record type is unavailable for the requested tool.
+    if record_type and name == "search_scottish_parliament" and not args.get("debate_type"):
+        if record_type == "written_answers":
+            args["debate_type"] = "written_answers"
+        elif record_type == "committee":
+            return json.dumps({"results": [], "note": "Record type is set to committee transcripts. Use search_scottish_committee_transcripts."})
+        elif record_type == "debates":
+            # Plenary debates now have a full-text DB pipeline — prefer it over the
+            # excerpt-only TWFY search. search_scottish_parliament remains available
+            # as a breadth/older-session fallback but is not the primary route.
+            return json.dumps({"results": [], "note": "Record type is set to plenary debates. Use search_scottish_plenary for full-text plenary chamber debates (search_scottish_parliament is excerpt-only and covers older sessions as a fallback)."})
+
+    # A committee-record filter should not be satisfied by a plenary search.
+    if record_type == "committee" and name == "search_scottish_plenary":
+        return json.dumps({"results": [], "note": "Record type is set to committee transcripts. Use search_scottish_committee_transcripts, not search_scottish_plenary."})
+
+    # Date range — merge into the date-capable search tools (the SP committee DB,
+    # SP plenary DB, and SP plenary/TWFY search honour date_from/date_to).
+    if name in ("search_scottish_committee_transcripts", "search_scottish_parliament", "search_scottish_plenary"):
+        if date_from and not args.get("date_from"):
+            args["date_from"] = date_from
+        if date_to and not args.get("date_to"):
+            args["date_to"] = date_to
+
+    return None
+
+
 async def execute_parliament_tool(
     name: str,
     args: dict,
@@ -365,7 +582,11 @@ async def execute_parliament_tool(
     call_id = str(uuid.uuid4())
     twfy_key = settings.twfy_api_key or ""
 
-    if not twfy_key and name in {"search_hansard", "get_hansard_debate", "search_scottish_parliament"}:
+    redirect = _apply_parliament_filters(name, args)
+    if redirect is not None:
+        return redirect
+
+    if not twfy_key and name in {"search_scottish_parliament"}:
         return json.dumps({
             "error": (
                 "TWFY_API_KEY is not configured. "
@@ -378,23 +599,10 @@ async def execute_parliament_tool(
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
 
-            if name == "search_hansard":
-                url = f"{_TWFY_API_BASE}/getHansard"
-                params: dict = {
-                    "key": twfy_key,
-                    "output": "js",
-                    "search": args["query"],
-                    "num": 10,
-                }
-                if args.get("debate_type"):
-                    params["type"] = args["debate_type"]
-                if args.get("speaker"):
-                    params["person"] = args["speaker"]
-                # Note: TWFY getHansard does not support date range filtering.
-                # date_from/date_to are accepted by the tool schema for intent
-                # but are not forwarded to the API — results are ordered by date
-                # (most recent first) regardless of any date constraints.
-
+            if name == "get_member_info":
+                # getMSPInfo was removed from TWFY; getMSPs with search= is the replacement
+                url = f"{_TWFY_API_BASE}/getMSPs"
+                params = {"key": twfy_key, "output": "js", "search": args["name"]}
                 await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url, "method": "GET", "payload": params})
                 t0 = time.perf_counter()
                 resp = await client.get(url, params=params)
@@ -407,31 +615,11 @@ async def execute_parliament_tool(
                     resp_json = {"text": resp.text}
                 await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": url, "status": resp.status_code, "response": resp_json, "elapsed_ms": round(elapsed_ms)})
                 resp.raise_for_status()
-                return json.dumps(_slim_hansard_results(resp_json, args["query"]))
+                return json.dumps(resp_json)
 
-            elif name == "get_hansard_debate":
-                gid = args["gid"]
-                debate_type = args.get("debate_type", "debates")
-                gid_lower = gid.lower()
-
-                # TWFY API notes (verified 2026-06):
-                # - getDebates requires type= and uses gid= (not id=); type=commons works
-                # - getLords is a member-list endpoint, not debate retrieval; Lords full text unavailable via TWFY
-                # - getWrans requires date=, not gid=; per-gid wrans retrieval unavailable via TWFY
-                # - getSP was removed; SP full text unavailable via TWFY
-                # For the broken cases we return a message so the model can fall back to the search excerpt.
-                if "wrans" in gid_lower or debate_type == "wrans":
-                    return json.dumps({"error": "TWFY no longer supports written answer retrieval by gid. Use the excerpt from search_hansard."})
-                elif debate_type in ("sp", "spwrans"):
-                    return json.dumps({"error": "TWFY getSP endpoint has been removed. Use the excerpt from search_hansard."})
-                elif "lords" in gid_lower or debate_type == "lords":
-                    return json.dumps({"error": "TWFY getLords does not support debate retrieval by gid. Use the excerpt from search_hansard."})
-                else:
-                    endpoint = "getDebates"
-
-                url = f"{_TWFY_API_BASE}/{endpoint}"
-                params = {"key": twfy_key, "output": "js", "type": "commons", "gid": gid}
-
+            elif name == "search_bills":
+                url = "https://data.parliament.scot/api/bills"
+                params = {}
                 await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url, "method": "GET", "payload": params})
                 t0 = time.perf_counter()
                 resp = await client.get(url, params=params)
@@ -442,99 +630,23 @@ async def execute_parliament_tool(
                     resp_json = resp.json()
                 except Exception:
                     resp_json = {"text": resp.text}
-                await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": url, "status": resp.status_code, "response": {"preview": str(resp_json)[:300]}, "elapsed_ms": round(elapsed_ms)})
+                await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": url, "status": resp.status_code, "response": resp_json, "elapsed_ms": round(elapsed_ms)})
                 resp.raise_for_status()
-                return json.dumps(resp_json)
-
-            elif name == "get_member_info":
-                parliament = args.get("parliament", "commons")
-
-                if parliament == "scotland":
-                    # getMSPInfo was removed from TWFY; getMSPs with search= is the replacement
-                    url = f"{_TWFY_API_BASE}/getMSPs"
-                    params = {"key": twfy_key, "output": "js", "search": args["name"]}
-                    await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url, "method": "GET", "payload": params})
-                    t0 = time.perf_counter()
-                    resp = await client.get(url, params=params)
-                    elapsed_ms = (time.perf_counter() - t0) * 1000
-                    if timing_collector:
-                        timing_collector.record_lex_api_call(name, elapsed_ms)
-                    try:
-                        resp_json = resp.json()
-                    except Exception:
-                        resp_json = {"text": resp.text}
-                    await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": url, "status": resp.status_code, "response": resp_json, "elapsed_ms": round(elapsed_ms)})
-                    resp.raise_for_status()
-                    return json.dumps(resp_json)
-
-                else:
-                    house = 2 if parliament == "lords" else 1
-                    url = "https://members-api.parliament.uk/api/Members/Search"
-                    params = {"Name": args["name"], "House": house, "IsCurrentMember": "false", "Skip": 0, "Take": 5}
-                    await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url, "method": "GET", "payload": params})
-                    t0 = time.perf_counter()
-                    resp = await client.get(url, params=params)
-                    elapsed_ms = (time.perf_counter() - t0) * 1000
-                    if timing_collector:
-                        timing_collector.record_lex_api_call(name, elapsed_ms)
-                    try:
-                        resp_json = resp.json()
-                    except Exception:
-                        resp_json = {"text": resp.text}
-                    await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": url, "status": resp.status_code, "response": resp_json, "elapsed_ms": round(elapsed_ms)})
-                    resp.raise_for_status()
-                    return json.dumps(_slim_members_results(resp_json))
-
-            elif name == "search_bills":
-                parliament = args.get("parliament", "uk")
-
-                if parliament == "scotland":
-                    url = "https://data.parliament.scot/api/bills"
-                    params = {}
-                    await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url, "method": "GET", "payload": params})
-                    t0 = time.perf_counter()
-                    resp = await client.get(url, params=params)
-                    elapsed_ms = (time.perf_counter() - t0) * 1000
-                    if timing_collector:
-                        timing_collector.record_lex_api_call(name, elapsed_ms)
-                    try:
-                        resp_json = resp.json()
-                    except Exception:
-                        resp_json = {"text": resp.text}
-                    await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": url, "status": resp.status_code, "response": resp_json, "elapsed_ms": round(elapsed_ms)})
-                    resp.raise_for_status()
-                    # Filter Scottish bills by query keyword (no server-side search param)
-                    query_lower = args["query"].lower()
-                    bills = resp_json if isinstance(resp_json, list) else resp_json.get("items", [])
-                    filtered = [
-                        b for b in bills
-                        if query_lower in (b.get("ShortTitle") or b.get("title") or "").lower()
-                        or query_lower in (b.get("LongTitle") or "").lower()
-                    ][:10]
-                    slimmed = [{
-                        "billId": b.get("BillId") or b.get("id"),
-                        "shortTitle": b.get("ShortTitle") or b.get("title", ""),
-                        "currentStage": b.get("CurrentStage") or b.get("stage", ""),
-                        "url": f"https://www.parliament.scot/bills-and-laws/bills/{b.get('BillId') or b.get('id')}",
-                    } for b in filtered]
-                    return json.dumps({"results": slimmed, "total": len(slimmed), "parliament": "scotland"})
-
-                else:
-                    url = "https://bills-api.parliament.uk/api/v1/Bills"
-                    params = {"SearchTerm": args["query"], "SortOrder": "DateUpdatedDescending", "Take": 10, "Skip": 0}
-                    await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url, "method": "GET", "payload": params})
-                    t0 = time.perf_counter()
-                    resp = await client.get(url, params=params)
-                    elapsed_ms = (time.perf_counter() - t0) * 1000
-                    if timing_collector:
-                        timing_collector.record_lex_api_call(name, elapsed_ms)
-                    try:
-                        resp_json = resp.json()
-                    except Exception:
-                        resp_json = {"text": resp.text}
-                    await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": url, "status": resp.status_code, "response": resp_json, "elapsed_ms": round(elapsed_ms)})
-                    resp.raise_for_status()
-                    return json.dumps(_slim_bills_results(resp_json))
+                # Filter Scottish bills by query keyword (no server-side search param)
+                query_lower = args["query"].lower()
+                bills = resp_json if isinstance(resp_json, list) else resp_json.get("items", [])
+                filtered = [
+                    b for b in bills
+                    if query_lower in (b.get("ShortTitle") or b.get("title") or "").lower()
+                    or query_lower in (b.get("LongTitle") or "").lower()
+                ][:10]
+                slimmed = [{
+                    "billId": b.get("BillId") or b.get("id"),
+                    "shortTitle": b.get("ShortTitle") or b.get("title", ""),
+                    "currentStage": b.get("CurrentStage") or b.get("stage", ""),
+                    "url": f"https://www.parliament.scot/bills-and-laws/bills/{b.get('BillId') or b.get('id')}",
+                } for b in filtered]
+                return json.dumps({"results": slimmed, "total": len(slimmed), "parliament": "scotland"})
 
             elif name == "search_scottish_parliament":
                 url = f"{_TWFY_API_BASE}/getHansard"
@@ -565,7 +677,7 @@ async def execute_parliament_tool(
                     resp_json = {"text": resp.text}
                 await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": url, "status": resp.status_code, "response": resp_json, "elapsed_ms": round(elapsed_ms)})
                 resp.raise_for_status()
-                return json.dumps(_slim_hansard_results(resp_json, args["query"], source_type="scottish_parliament"))
+                return json.dumps(_slim_hansard_results(resp_json, args["query"]))
 
             elif name == "search_scottish_committee_transcripts":
                 t0 = time.perf_counter()
@@ -606,6 +718,49 @@ async def execute_parliament_tool(
                 await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": transcript_url, "status": resp.status_code, "response": {"preview": f"{len(resp.text)} chars"}, "elapsed_ms": round(elapsed_ms)})
                 resp.raise_for_status()
                 return json.dumps(_parse_sp_transcript_page(resp.text, transcript_url))
+
+            elif name == "search_scottish_plenary":
+                t0 = time.perf_counter()
+                await _emit(on_chunk, {
+                    "type": "api_call_start", "id": call_id,
+                    "url": "db:sp_plenary_items", "method": "FTS",
+                    "payload": {k: v for k, v in args.items() if v},
+                })
+                result_data = await _search_plenary_db(
+                    query=args.get("query", ""),
+                    date_from=args.get("date_from") or None,
+                    date_to=args.get("date_to") or None,
+                )
+                elapsed_ms = (time.perf_counter() - t0) * 1000
+                if timing_collector:
+                    timing_collector.record_lex_api_call(name, elapsed_ms)
+                await _emit(on_chunk, {
+                    "type": "api_call_end", "id": call_id,
+                    "url": "db:sp_plenary_items", "status": 200,
+                    "response": {"total": result_data.get("total", 0)},
+                    "elapsed_ms": round(elapsed_ms),
+                })
+                return json.dumps(result_data)
+
+            elif name == "get_scottish_plenary_debate":
+                meeting_id = str(args["meeting_id"])
+                slug = str(args["slug"])
+                iob_id = str(args["iob_id"])
+                transcript_url = f"{_SP_OR_BASE}/{slug}?meeting={meeting_id}&iob={iob_id}"
+
+                # Scope the parser to the requested agenda item using the stored title.
+                agenda_title = await _lookup_plenary_agenda_title(meeting_id, iob_id)
+
+                await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": transcript_url, "method": "GET", "payload": {}})
+                t0 = time.perf_counter()
+                # Plenary item pages are large (200–700 KB) and the origin intermittently
+                # serves an ~8 KB Cloudflare 524 error page — retry with backoff.
+                resp_text = await _fetch_sp_page_with_retry(client, transcript_url)
+                elapsed_ms = (time.perf_counter() - t0) * 1000
+                if timing_collector:
+                    timing_collector.record_lex_api_call(name, elapsed_ms)
+                await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": transcript_url, "status": 200, "response": {"preview": f"{len(resp_text)} chars"}, "elapsed_ms": round(elapsed_ms)})
+                return json.dumps(_parse_sp_plenary_transcript(resp_text, transcript_url, agenda_title))
 
             else:
                 return f"Error: Tool {name} not found in parliament toolset."

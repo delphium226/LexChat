@@ -11,6 +11,7 @@ export function useBotIdentity(loading) {
     tagline: 'AI Legal Assistant',
     brandColor: null,
     logoEmoji: null,
+    researchMode: '',
   });
   const [botLogoUrl, setBotLogoUrl] = useState(null);
 
@@ -23,6 +24,7 @@ export function useBotIdentity(loading) {
             tagline: info.tagline || '',
             brandColor: info.brand_color || null,
             logoEmoji: info.logo_emoji || null,
+            researchMode: info.research_mode || '',
           });
           document.title = info.name;
         }

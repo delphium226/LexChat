@@ -1,12 +1,12 @@
 # Worker tool classification for the search:retrieval efficiency ratio.
 # Phase 1 = discovery searches; Phase 2 = retrieving full provisions/judgments.
 _PHASE1_SEARCH_TOOLS = frozenset({
-    "search_legislation", "search_case_law", "search_hansard",
+    "search_legislation", "search_case_law",
     "search_scottish_parliament", "search_scottish_committee_transcripts",
 })
 _PHASE2_RETRIEVAL_TOOLS = frozenset({
     "search_legislation_sections", "get_legislation_text", "get_case_law_text",
-    "get_hansard_debate", "get_scottish_committee_transcript",
+    "get_scottish_committee_transcript",
 })
 # Retrieval tools keyed by a legislation_id, used to count distinct Acts retrieved.
 _LEGISLATION_RETRIEVAL_TOOLS = frozenset({

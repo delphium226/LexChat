@@ -262,6 +262,27 @@ class SpCommitteeItem(Base):
     )
 
 
+class SpPlenaryItem(Base):
+    __tablename__ = "sp_plenary_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    meeting_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    slug: Mapped[str] = mapped_column(String(128), nullable=False)
+    iob_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    committee_code: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    committee_name: Mapped[str | None] = mapped_column(String(256), nullable=True, index=True)
+    meeting_date: Mapped[Date | None] = mapped_column(Date, nullable=True, index=True)
+    agenda_item_title: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    url: Mapped[str | None] = mapped_column(String(512), nullable=True, unique=True)
+    speeches: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    full_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("meeting_id", "iob_id", name="uq_sp_plenary_meeting_iob"),
+    )
+
+
 class Document(Base):
     __tablename__ = "documents"
 

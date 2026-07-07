@@ -5,10 +5,11 @@
 .DESCRIPTION
     Reads LEX_API_URL and TWFY_API_KEY from server_py/.env.
     Tests are grouped by bot: legislation bot (LEX API + National Archives) first,
-    then parliament bot (TWFY + Parliament.uk APIs), then SP Official Report crawler.
+    then parliament bot (Scottish Parliament — TWFY + data.parliament.scot), then SP
+    Official Report crawler.
     TWFY-dependent tests are skipped (not failed) when TWFY_API_KEY is absent.
-    get_hansard_debate and get_scottish_committee_transcript tests chain from search
-    results to use real IDs without hardcoding.
+    The SP Official Report crawler tests chain from the listing page to use real IDs
+    without hardcoding.
     Exits 0 if all runnable tests pass, 1 if any fail.
 #>
 
@@ -38,8 +39,6 @@ foreach ($envPath in @($EnvFile, $ParliamentEnv)) {
 
 $CaseLawBase       = "https://caselaw.nationalarchives.gov.uk"
 $TwfyBase          = "https://www.theyworkforyou.com/api"
-$ParliamentMembers = "https://members-api.parliament.uk/api/Members/Search"
-$ParliamentBills   = "https://bills-api.parliament.uk/api/v1/Bills"
 $ScottishBills     = "https://data.parliament.scot/api/bills"
 $SpOrBase          = "https://www.parliament.scot/chamber-and-committees/official-report/search-what-was-said-in-parliament"
 
@@ -303,18 +302,6 @@ function Show-FailureDiagnostics {
     Write-Host ""
 }
 
-# Extract the first gid from a raw TWFY getHansard JSON response body.
-function Get-TwfyGid {
-    param([string]$Content)
-    if (-not $Content) { return $null }
-    try {
-        $parsed = $Content | ConvertFrom-Json
-        $rows   = if ($parsed -is [array]) { $parsed } else { $parsed.rows }
-        if ($rows -and $rows.Count -gt 0) { return $rows[0].gid }
-    } catch {}
-    return $null
-}
-
 # Extract the first case law judgment URL from a National Archives Atom XML response.
 # Atom entry <id> elements use an opaque GUID form (/id/d-<uuid>) that doesn't serve
 # /data.xml — the human-readable court path lives in the entry's <link href="..."> element
@@ -435,85 +422,14 @@ if ($CaseLawUrl) {
 # GROUP 2: PARLIAMENT BOT -- TWFY + Parliament.uk APIs
 # ===========================================================================
 
-Write-Host "--- GROUP 2: PARLIAMENT BOT ---"
+Write-Host "--- GROUP 2: PARLIAMENT BOT (Scottish Parliament) ---"
 Write-Host "    TheyWorkForYou API ($TwfyBase)"
-Write-Host "    Parliament Members API ($ParliamentMembers)"
-Write-Host "    Parliament Bills API ($ParliamentBills)"
 Write-Host "    Scottish Parliament Bills ($ScottishBills)"
 Write-Host ""
 
-# --- search_hansard ---
-# Capture results to chain into get_hansard_debate tests (valid gids without hardcoding)
+# --- get_member_info (Scottish Parliament MSPs) ---
 
-Write-Host "9. search_hansard -- Commons debates (TWFY getHansard)"
-$CommonsContent = $null
-if ($TwfyApiKey) {
-    $CommonsContent = Test-Endpoint `
-        -Label   "search_hansard (Commons)" `
-        -Url     "$TwfyBase/getHansard" `
-        -Method  GET `
-        -Query   @{ key = $TwfyApiKey; output = "js"; search = "housing supply planning"; num = 10 } `
-        -Capture
-} else {
-    Skip-Test -Label "search_hansard (Commons)" -Reason "TWFY_API_KEY not set"
-}
-
-Write-Host "10. search_hansard -- Lords (TWFY getHansard?type=lords)"
-if ($TwfyApiKey) {
-    Test-Endpoint `
-        -Label  "search_hansard (Lords)" `
-        -Url    "$TwfyBase/getHansard" `
-        -Method GET `
-        -Query  @{ key = $TwfyApiKey; output = "js"; search = "criminal justice sentencing"; type = "lords"; num = 10 }
-} else {
-    Skip-Test -Label "search_hansard (Lords)" -Reason "TWFY_API_KEY not set"
-}
-
-Write-Host "11. search_hansard -- Written answers (TWFY getHansard?type=wrans)"
-if ($TwfyApiKey) {
-    Test-Endpoint `
-        -Label  "search_hansard (Wrans)" `
-        -Url    "$TwfyBase/getHansard" `
-        -Method GET `
-        -Query  @{ key = $TwfyApiKey; output = "js"; search = "NHS waiting times"; type = "wrans"; num = 10 }
-} else {
-    Skip-Test -Label "search_hansard (Wrans)" -Reason "TWFY_API_KEY not set"
-}
-
-# --- get_hansard_debate (chains gids from the search_hansard calls above) ---
-
-Write-Host "12. get_hansard_debate -- Commons (TWFY getDebates type=commons gid=)"
-$CommonsGid = Get-TwfyGid -Content $CommonsContent
-if ($CommonsGid) {
-    Test-Endpoint `
-        -Label  "get_hansard_debate (Commons)" `
-        -Url    "$TwfyBase/getDebates" `
-        -Method GET `
-        -Query  @{ key = $TwfyApiKey; output = "js"; type = "commons"; gid = $CommonsGid }
-} elseif (-not $TwfyApiKey) {
-    Skip-Test -Label "get_hansard_debate (Commons)" -Reason "TWFY_API_KEY not set"
-} else {
-    Skip-Test -Label "get_hansard_debate (Commons)" -Reason "no gid returned by search_hansard (Commons)"
-}
-
-
-# --- get_member_info ---
-
-Write-Host "15. get_member_info -- Commons (Parliament Members API)"
-Test-Endpoint `
-    -Label  "get_member_info (Commons)" `
-    -Url    $ParliamentMembers `
-    -Method GET `
-    -Query  @{ Name = "Keir Starmer"; House = 1; IsCurrentMember = "false"; Skip = 0; Take = 3 }
-
-Write-Host "16. get_member_info -- Lords (Parliament Members API, House=2)"
-Test-Endpoint `
-    -Label  "get_member_info (Lords)" `
-    -Url    $ParliamentMembers `
-    -Method GET `
-    -Query  @{ Name = "Baroness Hale"; House = 2; IsCurrentMember = "false"; Skip = 0; Take = 3 }
-
-Write-Host "17. get_member_info -- Scotland MSP (TWFY getMSPs -- getMSPInfo was removed)"
+Write-Host "9. get_member_info -- Scotland MSP (TWFY getMSPs -- getMSPInfo was removed)"
 if ($TwfyApiKey) {
     Test-Endpoint `
         -Label  "get_member_info (Scotland)" `
@@ -524,16 +440,9 @@ if ($TwfyApiKey) {
     Skip-Test -Label "get_member_info (Scotland)" -Reason "TWFY_API_KEY not set"
 }
 
-# --- search_bills ---
+# --- search_bills (Scottish Parliament) ---
 
-Write-Host "18. search_bills -- UK Westminster (Parliament Bills API)"
-Test-Endpoint `
-    -Label  "search_bills (UK)" `
-    -Url    $ParliamentBills `
-    -Method GET `
-    -Query  @{ SearchTerm = "Renters Rights"; SortOrder = "DateUpdatedDescending"; Take = 5; Skip = 0 }
-
-Write-Host "19. search_bills -- Scotland (data.parliament.scot -- no search param, filtered client-side)"
+Write-Host "10. search_bills -- Scotland (data.parliament.scot -- no search param, filtered client-side)"
 Test-Endpoint `
     -Label  "search_bills (Scotland)" `
     -Url    $ScottishBills `
@@ -541,7 +450,7 @@ Test-Endpoint `
 
 # --- search_scottish_parliament ---
 
-Write-Host "20. search_scottish_parliament -- debates (TWFY getHansard)"
+Write-Host "11. search_scottish_parliament -- debates (TWFY getHansard)"
 if ($TwfyApiKey) {
     Test-Endpoint `
         -Label  "search_scottish_parliament" `
@@ -552,7 +461,7 @@ if ($TwfyApiKey) {
     Skip-Test -Label "search_scottish_parliament" -Reason "TWFY_API_KEY not set"
 }
 
-Write-Host "21. search_scottish_parliament -- written answers (TWFY getHansard?type=spwrans)"
+Write-Host "12. search_scottish_parliament -- written answers (TWFY getHansard?type=spwrans)"
 if ($TwfyApiKey) {
     Test-Endpoint `
         -Label  "search_scottish_parliament (wrans)" `
@@ -570,7 +479,7 @@ if ($TwfyApiKey) {
 #   (1) listing page  -- GET $SpOrBase?showCommittee=true
 #   (2) meeting page  -- GET $SpOrBase/{slug}?meeting={id}
 #   (3) transcript    -- GET $SpOrBase/{slug}?meeting={id}&iob={iob_id}
-# Tests 24 and 25 chain from the listing page result; both skip if no meeting
+# Tests 14 and 15 chain from the listing page result; both skip if no meeting
 # is found (e.g. parliament in recess) rather than failing.
 # ===========================================================================
 
@@ -578,7 +487,7 @@ Write-Host "--- GROUP 3: SP OFFICIAL REPORT CRAWLER ---"
 Write-Host "    Scottish Parliament Official Report ($SpOrBase)"
 Write-Host ""
 
-Write-Host "23. SP Official Report -- listing page (committee filter)"
+Write-Host "13. SP Official Report -- listing page (committee filter)"
 $SpListingContent = Test-Endpoint `
     -Label   "SP listing page" `
     -Url     $SpOrBase `
@@ -586,7 +495,7 @@ $SpListingContent = Test-Endpoint `
     -Query   @{ showCommittee = "true" } `
     -Capture
 
-Write-Host "24. SP Official Report -- meeting detail page (chained from test 23)"
+Write-Host "14. SP Official Report -- meeting detail page (chained from test 13)"
 $SpMeeting = Get-SpMeeting -Content $SpListingContent
 if ($SpMeeting) {
     $MeetingUrl = "$SpOrBase/$($SpMeeting.Slug)?meeting=$($SpMeeting.MeetingId)"
@@ -600,7 +509,7 @@ if ($SpMeeting) {
     Skip-Test -Label "SP meeting detail" -Reason "no committee meeting found in listing page (parliament may be in recess)"
 }
 
-Write-Host "25. SP Official Report -- transcript page (chained from test 24)"
+Write-Host "15. SP Official Report -- transcript page (chained from test 14)"
 $SpMeetingId = if ($SpMeeting) { $SpMeeting.MeetingId } else { "" }
 $SpIobId = Get-SpIobId -Content $SpMeetingContent -MeetingId $SpMeetingId
 if ($SpMeeting -and $SpIobId) {
@@ -610,7 +519,7 @@ if ($SpMeeting -and $SpIobId) {
         -Url    $TranscriptUrl `
         -Method GET
 } elseif (-not $SpMeeting) {
-    Skip-Test -Label "SP transcript" -Reason "no meeting found in listing page (skipped by test 24)"
+    Skip-Test -Label "SP transcript" -Reason "no meeting found in listing page (skipped by test 14)"
 } else {
     Skip-Test -Label "SP transcript" -Reason "no iob_id found in meeting page"
 }
