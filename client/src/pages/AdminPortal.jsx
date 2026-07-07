@@ -401,7 +401,7 @@ const AdminPortal = ({ currentUser }) => {
             { id: 'users', label: 'User Management' },
             { id: 'usage', label: 'Usage Stats' },
             { id: 'performance', label: 'Performance' },
-            { id: 'efficiency', label: 'Efficiency' },
+            ...(currentUser?.username === 'admin' ? [{ id: 'efficiency', label: 'Efficiency' }] : []),
             { id: 'cost', label: 'Cost' },
             { id: 'learning', label: 'Learning Monitor' },
             ...(currentUser?.username === 'admin' ? [{ id: 'developer', label: 'Developer' }] : []),
