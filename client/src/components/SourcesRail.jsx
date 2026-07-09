@@ -86,8 +86,10 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick, col
   const [showFilter, setShowFilter] = React.useState(false);
   const [filterTypes, setFilterTypes] = React.useState(new Set());
   const [filterJurisdictions, setFilterJurisdictions] = React.useState(new Set());
+  const [filterVideoOnly, setFilterVideoOnly] = React.useState(false);
 
-  const hasActiveFilters = filterTypes.size > 0 || filterJurisdictions.size > 0;
+  const hasVideoSources = sources.some(s => s.video);
+  const hasActiveFilters = filterTypes.size > 0 || filterJurisdictions.size > 0 || filterVideoOnly;
 
   const toggleType = id =>
     setFilterTypes(prev => {
@@ -108,9 +110,11 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick, col
   const clearFilters = () => {
     setFilterTypes(new Set());
     setFilterJurisdictions(new Set());
+    setFilterVideoOnly(false);
   };
 
   const visibleSources = sources.filter(s => {
+    if (filterVideoOnly && !s.video) return false;
     if (filterTypes.size > 0 && !filterTypes.has(sourceType(s))) return false;
     if (filterJurisdictions.size > 0) {
       const ext = s.extent || [];
@@ -266,6 +270,29 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick, col
               ))}
             </div>
           </div>
+          {hasVideoSources && (
+            <div style={{ marginTop: 10 }}>
+              <div
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  color: 'var(--ink-400)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  marginBottom: 6,
+                }}
+              >
+                Media
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <FilterPill
+                  label="▶ Video timestamp"
+                  active={filterVideoOnly}
+                  onClick={() => setFilterVideoOnly(v => !v)}
+                />
+              </div>
+            </div>
+          )}
           {hasActiveFilters && (
             <button
               onClick={clearFilters}
@@ -433,24 +460,45 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick, col
                   }}
                 >
                   <span style={{ fontFamily: 'var(--font-mono)' }}>{s.cite}</span>
-                  {s.url && (
-                    <a
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={e => e.stopPropagation()}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        color: 'var(--accent)',
-                        fontWeight: 500,
-                        textDecoration: 'none',
-                      }}
-                    >
-                      Open <ExternalLinkIcon />
-                    </a>
-                  )}
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+                    {s.video?.url && (
+                      <a
+                        href={s.video.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        title={s.video.clip_start ? `Watch on Scottish Parliament TV from ${s.video.clip_start}` : 'Watch on Scottish Parliament TV'}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          color: 'var(--accent)',
+                          fontWeight: 500,
+                          textDecoration: 'none',
+                        }}
+                      >
+                        ▶ {s.video.clip_start ? `Watch ${s.video.clip_start}` : 'Watch'}
+                      </a>
+                    )}
+                    {s.url && (
+                      <a
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          color: 'var(--accent)',
+                          fontWeight: 500,
+                          textDecoration: 'none',
+                        }}
+                      >
+                        Open <ExternalLinkIcon />
+                      </a>
+                    )}
+                  </span>
                 </div>
               </div>
             );

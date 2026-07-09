@@ -30,7 +30,7 @@ except Exception:  # noqa: BLE001 — tzdata missing; fall back to naive UTC (ra
 
 logger = logging.getLogger("sptv")
 
-MIN_CONFIDENCE = 0.5          # threshold for attaching a video link
+MIN_CONFIDENCE = 0.8          # threshold for attaching a video link
 CLIP_DURATION_SECONDS = 60    # length of the clip window (clip_end - clip_start)
 _MIN_WINDOW = 8               # shortest word-window to match on
 _MAX_WINDOW = 12              # longest word-window to match on

@@ -15,7 +15,7 @@ import os
 
 import pytest
 
-from src.services.caption_match import build_deeplink, match_speech
+from src.services.caption_match import annotate_speeches, build_deeplink, match_speech
 
 _FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "sptv_captions_20164.json.gz")
 
@@ -40,17 +40,18 @@ def test_minister_resolves_to_official_report_timestamp(caption_fixture):
 
 
 def test_matches_are_monotonic(caption_fixture):
-    """Later speeches in the item resolve to later (or equal) wall-clock times."""
+    """annotate_speeches links a substantial share of speeches, all monotonic."""
     row = caption_fixture["caption_row"]
-    speeches = caption_fixture["speeches"]
+    speeches = [dict(s) for s in caption_fixture["speeches"]]  # copy — annotate mutates
 
-    prev = None
-    for idx in (1, 3, 5):
-        dl = build_deeplink(row, speeches, cited_index=idx)
-        assert dl is not None, f"no deep link for speech {idx}"
-        if prev is not None:
-            assert dl["clip_start"] >= prev, f"speech {idx} not monotonic ({dl['clip_start']} < {prev})"
-        prev = dl["clip_start"]
+    n = annotate_speeches(row, speeches)
+    assert n >= len(speeches) // 2, f"only {n}/{len(speeches)} speeches linked"
+
+    starts = [s["video_deeplink"]["clip_start"] for s in speeches if s.get("video_deeplink")]
+    assert starts == sorted(starts), f"linked timestamps not monotonic: {starts}"
+    # every attached link clears the confidence threshold
+    confs = [s["video_deeplink"]["confidence"] for s in speeches if s.get("video_deeplink")]
+    assert all(c >= 0.8 for c in confs)
 
 
 def test_no_captions_returns_none(caption_fixture):
