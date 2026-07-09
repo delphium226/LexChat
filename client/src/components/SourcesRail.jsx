@@ -41,16 +41,25 @@ function formatExtent(extent) {
 
 const JURISDICTIONS = ['England', 'Wales', 'Scotland', 'Northern Ireland'];
 
-const TYPE_OPTIONS = [
-  { id: 'legislation', label: 'Legislation' },
-  { id: 'case', label: 'Case law' },
-  { id: 'draft', label: 'Draft instruments' },
+// Type filters are derived from the source kinds actually present, so the rail
+// adapts to the bot in use (legislation, parliament, or a federation mix) rather
+// than always showing legislation-only options.
+const TYPE_DEFS = [
+  { id: 'legislation', label: 'Legislation', kinds: ['Act', 'SI', 'Statute'] },
+  { id: 'draft', label: 'Draft instruments', kinds: ['Draft SI'] },
+  { id: 'case', label: 'Case law', kinds: ['Case', 'Article'] },
+  { id: 'plenary', label: 'Plenary', kinds: ['Plenary'] },
+  { id: 'committee', label: 'Committee', kinds: ['Committee', 'Transcript'] },
+  { id: 'debates', label: 'Debates', kinds: ['Scottish Parliament'] },
+  { id: 'bill', label: 'Bills', kinds: ['Bill'] },
+  { id: 'member', label: 'Members', kinds: ['Member'] },
 ];
 
+const KIND_TO_TYPE = {};
+TYPE_DEFS.forEach(t => t.kinds.forEach(k => { KIND_TO_TYPE[k] = t.id; }));
+
 function sourceType(s) {
-  if (s.kind === 'Case') return 'case';
-  if (s.kind === 'Draft SI') return 'draft';
-  return 'legislation';
+  return KIND_TO_TYPE[s.kind] || 'legislation';
 }
 
 function FilterPill({ label, active, onClick }) {
@@ -89,6 +98,10 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick, col
   const [filterVideoOnly, setFilterVideoOnly] = React.useState(false);
 
   const hasVideoSources = sources.some(s => s.video);
+  // Only offer the Type/Jurisdiction filters that are meaningful for the sources present.
+  const presentTypes = TYPE_DEFS.filter(t => sources.some(s => sourceType(s) === t.id));
+  const showTypeFilter = presentTypes.length > 1;
+  const showJurisdictionFilter = sources.some(s => (s.extent || []).length > 0);
   const hasActiveFilters = filterTypes.size > 0 || filterJurisdictions.size > 0 || filterVideoOnly;
 
   const toggleType = id =>
@@ -137,7 +150,9 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick, col
       ? 'No sources yet'
       : hasActiveFilters
         ? `${visibleSources.length} of ${sources.length} shown`
-        : `${primaryCount} primary · ${secondaryCount} secondary`;
+        : secondaryCount > 0
+          ? `${primaryCount} primary · ${secondaryCount} secondary`
+          : `${sources.length} source${sources.length === 1 ? '' : 's'}`;
 
   if (collapsed) {
     return (
@@ -208,9 +223,11 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick, col
           </div>
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
-          <IBtn label="Filter sources" onClick={() => setShowFilter(v => !v)} active={showFilter || hasActiveFilters}>
-            <FilterIcon />
-          </IBtn>
+          {(showTypeFilter || showJurisdictionFilter || hasVideoSources) && (
+            <IBtn label="Filter sources" onClick={() => setShowFilter(v => !v)} active={showFilter || hasActiveFilters}>
+              <FilterIcon />
+            </IBtn>
+          )}
           <IBtn label="Collapse sources" onClick={() => setCollapsed(true)}>
             <ChevronRightIcon />
           </IBtn>
@@ -227,49 +244,53 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick, col
             flex: '0 0 auto',
           }}
         >
-          <div style={{ marginBottom: 10 }}>
-            <div
-              style={{
-                fontSize: 10.5,
-                fontWeight: 600,
-                color: 'var(--ink-400)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-                marginBottom: 6,
-              }}
-            >
-              Type
+          {showTypeFilter && (
+            <div style={{ marginBottom: showJurisdictionFilter || hasVideoSources ? 10 : 0 }}>
+              <div
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  color: 'var(--ink-400)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  marginBottom: 6,
+                }}
+              >
+                Type
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {presentTypes.map(({ id, label }) => (
+                  <FilterPill key={id} label={label} active={filterTypes.has(id)} onClick={() => toggleType(id)} />
+                ))}
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {TYPE_OPTIONS.map(({ id, label }) => (
-                <FilterPill key={id} label={label} active={filterTypes.has(id)} onClick={() => toggleType(id)} />
-              ))}
+          )}
+          {showJurisdictionFilter && (
+            <div>
+              <div
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  color: 'var(--ink-400)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  marginBottom: 6,
+                }}
+              >
+                Jurisdiction
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {JURISDICTIONS.map(j => (
+                  <FilterPill
+                    key={j}
+                    label={j}
+                    active={filterJurisdictions.has(j)}
+                    onClick={() => toggleJurisdiction(j)}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: 10.5,
-                fontWeight: 600,
-                color: 'var(--ink-400)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-                marginBottom: 6,
-              }}
-            >
-              Jurisdiction
-            </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {JURISDICTIONS.map(j => (
-                <FilterPill
-                  key={j}
-                  label={j}
-                  active={filterJurisdictions.has(j)}
-                  onClick={() => toggleJurisdiction(j)}
-                />
-              ))}
-            </div>
-          </div>
+          )}
           {hasVideoSources && (
             <div style={{ marginTop: 10 }}>
               <div
