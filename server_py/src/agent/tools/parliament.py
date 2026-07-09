@@ -304,6 +304,32 @@ async def _fetch_sp_page_with_retry(
     raise RuntimeError(f"Failed to fetch a full-size page for {url} after {attempts} attempts")
 
 
+async def _lookup_video_captions(meeting_id: str):
+    """Return the cached SpVideoCaption row for a plenary meeting, or None.
+
+    Only consulted when ENABLE_VIDEO_DEEPLINKS is on. Returns a lightweight dict
+    (caption_ok, transcript, offset_index, slug, is_youtube, youtube_url,
+    start_time_utc) suitable for caption_match. Fail-soft: any error → None.
+    """
+    from sqlalchemy import text as sa_text
+    from ...database import async_session_maker
+
+    try:
+        async with async_session_maker() as session:
+            row = await session.execute(
+                sa_text(
+                    "SELECT caption_ok, transcript, offset_index, slug, is_youtube, "
+                    "       youtube_url, start_time_utc "
+                    "FROM sp_video_captions WHERE meeting_id = :m AND caption_ok = TRUE LIMIT 1"
+                ),
+                {"m": meeting_id},
+            )
+            r = row.mappings().first()
+            return dict(r) if r else None
+    except Exception:
+        return None
+
+
 async def _lookup_plenary_agenda_title(meeting_id: str, iob_id: str) -> Optional[str]:
     """Fetch the stored agenda-item title for a plenary (meeting_id, iob_id), if crawled."""
     from sqlalchemy import text as sa_text
@@ -760,7 +786,22 @@ async def execute_parliament_tool(
                 if timing_collector:
                     timing_collector.record_lex_api_call(name, elapsed_ms)
                 await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": transcript_url, "status": 200, "response": {"preview": f"{len(resp_text)} chars"}, "elapsed_ms": round(elapsed_ms)})
-                return json.dumps(_parse_sp_plenary_transcript(resp_text, transcript_url, agenda_title))
+                parsed = _parse_sp_plenary_transcript(resp_text, transcript_url, agenda_title)
+
+                # Optional enrichment: attach SP TV video deep links to matched speeches.
+                # Additive and fail-soft — never blocks or errors the citation.
+                if settings.enable_video_deeplinks:
+                    try:
+                        caption_row = await _lookup_video_captions(meeting_id)
+                        if caption_row:
+                            from ...services.caption_match import annotate_speeches
+                            n = annotate_speeches(caption_row, parsed.get("speeches") or [])
+                            if n:
+                                logger.info(f"[Parliament] Attached {n} video deep link(s) for meeting {meeting_id}")
+                    except Exception as exc:
+                        logger.warning(f"[Parliament] Video deep-link enrichment failed for {meeting_id}: {exc}")
+
+                return json.dumps(parsed)
 
             else:
                 return f"Error: Tool {name} not found in parliament toolset."

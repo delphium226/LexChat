@@ -18,7 +18,9 @@ from datetime import date, datetime, timedelta
 import httpx
 from sqlalchemy import text
 
+from ..config import settings
 from ..database import async_session_maker
+from . import sptv_client as _sptv
 from ..agent.tools import (
     _fetch_sp_page_with_retry,
     _parse_sp_listing_meetings,
@@ -382,6 +384,11 @@ async def _process_plenary_meeting(client: httpx.AsyncClient, meeting: dict) -> 
                 f"(meeting={meeting_id} iob={iob_id}, {len(speeches)} speeches)"
             )
 
+    # After the meeting's agenda items are stored, cache its SP TV captions once.
+    if inserted and settings.enable_video_deeplinks:
+        await asyncio.sleep(_REQ_DELAY)
+        await _capture_meeting_captions(client, meeting_id, meeting_date)
+
     return inserted
 
 
@@ -478,6 +485,124 @@ async def backfill_plenary() -> int:
 
     logger.info(f"[Crawler] Plenary backfill complete — {total} items stored")
     return total
+
+
+# ---------------------------------------------------------------------------
+# SP TV video captions — resolve plenary meeting → cache caption transcript
+# (gated behind ENABLE_VIDEO_DEEPLINKS; see bots/parliament/VIDEO_DEEPLINK_PLAN.md)
+# ---------------------------------------------------------------------------
+
+async def _video_caption_exists(session, meeting_id: str) -> bool:
+    result = await session.execute(
+        text("SELECT 1 FROM sp_video_captions WHERE meeting_id = :m LIMIT 1"),
+        {"m": meeting_id},
+    )
+    return result.scalar() is not None
+
+
+async def _capture_meeting_captions(
+    client: httpx.AsyncClient, meeting_id: str, meeting_date, slug: str | None = None
+) -> bool:
+    """Resolve a plenary meeting's SP TV event, cache its captions. Idempotent.
+
+    Stores one row per event (ON CONFLICT event_id DO NOTHING). Records a
+    caption_ok=False row when an event resolves but has no subtitle track, so it
+    isn't retried. Meetings with no resolvable event are simply skipped (retried
+    on the next backfill). Fail-soft — never raises.
+    """
+    if not meeting_date:
+        return False
+    try:
+        async with async_session_maker() as session:
+            if await _video_caption_exists(session, meeting_id):
+                return False
+
+        resolved = await _sptv.resolve_event(client, meeting_date, slug)
+        if not resolved:
+            return False
+        event_id, sptv_slug = resolved
+
+        pm = await _sptv.get_playback_model(client, event_id)
+        if not pm:
+            return False
+
+        cap = await _sptv.fetch_caption_transcript(client, pm)
+        start_utc = cap.start_time_utc.replace(tzinfo=None) if cap.start_time_utc else None
+
+        async with async_session_maker() as session:
+            await session.execute(
+                text(
+                    "INSERT INTO sp_video_captions "
+                    "(meeting_id, event_id, slug, meeting_date, start_time_utc, is_youtube, "
+                    " youtube_url, transcript, offset_index, caption_ok, fetched_at) "
+                    "VALUES (:meeting_id, :event_id, :slug, :meeting_date, :start_time_utc, "
+                    "        :is_youtube, :youtube_url, :transcript, CAST(:offset_index AS jsonb), "
+                    "        :caption_ok, :fetched_at) "
+                    "ON CONFLICT (event_id) DO NOTHING"
+                ),
+                {
+                    "meeting_id": meeting_id,
+                    "event_id": event_id,
+                    "slug": sptv_slug,
+                    "meeting_date": meeting_date,
+                    "start_time_utc": start_utc,
+                    "is_youtube": pm.is_youtube,
+                    "youtube_url": pm.youtube_url or None,
+                    "transcript": cap.transcript or None,
+                    "offset_index": json.dumps(cap.offset_index) if cap.offset_index else None,
+                    "caption_ok": cap.caption_ok,
+                    "fetched_at": datetime.utcnow(),
+                },
+            )
+            await session.commit()
+        logger.info(
+            f"[Crawler] Cached SP TV captions for meeting {meeting_id} "
+            f"(event {event_id}, caption_ok={cap.caption_ok})"
+        )
+        return cap.caption_ok
+    except Exception as exc:  # noqa: BLE001 — video is best-effort
+        logger.warning(f"[Crawler] Caption capture failed for meeting {meeting_id}: {exc}")
+        return False
+
+
+async def backfill_captions() -> int:
+    """One-shot: cache SP TV captions for every plenary meeting already crawled.
+
+    Iterates distinct (meeting_id, meeting_date) in sp_plenary_items not yet in
+    sp_video_captions. Rate-limited like the other backfills; runs after
+    backfill_plenary() so it doesn't hit the SP origin concurrently. No-op unless
+    ENABLE_VIDEO_DEEPLINKS is set.
+    """
+    if not settings.enable_video_deeplinks:
+        logger.info("[Crawler] Caption backfill skipped (ENABLE_VIDEO_DEEPLINKS off)")
+        return 0
+
+    logger.info("[Crawler] Caption backfill starting...")
+    captured = 0
+    try:
+        async with async_session_maker() as session:
+            rows = await session.execute(text(
+                "SELECT DISTINCT p.meeting_id, p.meeting_date, p.slug "
+                "FROM sp_plenary_items p "
+                "LEFT JOIN sp_video_captions v ON v.meeting_id = p.meeting_id "
+                "WHERE v.meeting_id IS NULL AND p.meeting_date IS NOT NULL "
+                "ORDER BY p.meeting_date"
+            ))
+            meetings = [(r[0], r[1]) for r in rows.all()]
+
+        logger.info(f"[Crawler] Caption backfill: {len(meetings)} plenary meetings to resolve")
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            for meeting_id, meeting_date in meetings:
+                await asyncio.sleep(_BACKFILL_DELAY)
+                # slug is derived from date inside _capture_meeting_captions;
+                # the sp_plenary_items slug is the Official Report slug, not SP TV's.
+                if await _capture_meeting_captions(client, str(meeting_id), meeting_date):
+                    captured += 1
+    except Exception as exc:
+        logger.error(f"[Crawler] Caption backfill error: {exc}")
+
+    logger.info(f"[Crawler] Caption backfill complete — {captured} meetings with captions cached")
+    return captured
 
 
 # ---------------------------------------------------------------------------

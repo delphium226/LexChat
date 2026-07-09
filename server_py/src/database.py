@@ -186,6 +186,20 @@ async def init_db() -> None:
                 fetched_at TIMESTAMP,
                 CONSTRAINT uq_sp_plenary_meeting_iob UNIQUE (meeting_id, iob_id)
             )""",
+            """CREATE TABLE IF NOT EXISTS sp_video_captions (
+                id SERIAL PRIMARY KEY,
+                meeting_id VARCHAR(32) NOT NULL,
+                event_id VARCHAR(64) NOT NULL UNIQUE,
+                slug VARCHAR(128),
+                meeting_date DATE,
+                start_time_utc TIMESTAMP,
+                is_youtube BOOLEAN NOT NULL DEFAULT FALSE,
+                youtube_url VARCHAR(512),
+                transcript TEXT,
+                offset_index JSONB,
+                caption_ok BOOLEAN NOT NULL DEFAULT FALSE,
+                fetched_at TIMESTAMP
+            )""",
         ]
         async with engine.begin() as conn:
             for stmt in migration_statements:
@@ -217,6 +231,8 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_sp_plenary_committee_name ON sp_plenary_items (committee_name)",
             "CREATE INDEX IF NOT EXISTS idx_sp_plenary_meeting_date ON sp_plenary_items (meeting_date)",
             "CREATE INDEX IF NOT EXISTS idx_sp_plenary_full_text ON sp_plenary_items USING GIN (to_tsvector('english', coalesce(full_text,'')))",
+            "CREATE INDEX IF NOT EXISTS idx_sp_video_captions_meeting_id ON sp_video_captions (meeting_id)",
+            "CREATE INDEX IF NOT EXISTS idx_sp_video_captions_meeting_date ON sp_video_captions (meeting_date)",
         ]
         async with engine.begin() as conn:
             for stmt in index_statements:

@@ -18,6 +18,7 @@ from .services.health_service import background_health_loop
 from .services.parliament_crawler import (
     background_crawl_loop,
     background_plenary_crawl_loop,
+    backfill_captions,
     backfill_plenary,
     backfill_sessions,
 )
@@ -103,6 +104,10 @@ async def lifespan(app: FastAPI):
         async def _backfill_all():
             await backfill_sessions()
             await backfill_plenary()
+            # Video captions last — staggered after plenary so the two one-shot
+            # backfills don't hit the SP origin concurrently. No-op when the
+            # ENABLE_VIDEO_DEEPLINKS flag is off (checked inside backfill_captions).
+            await backfill_captions()
 
         crawl_tasks = [
             asyncio.create_task(_backfill_all()),

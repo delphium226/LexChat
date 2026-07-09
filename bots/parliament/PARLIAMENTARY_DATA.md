@@ -4,12 +4,16 @@ Reference for how the parliament bot's data is structured and what is available 
 data type. **The parliament bot is Scotland-only (Scottish Parliament / Holyrood).** All
 Westminster (UK Parliament / Hansard) search and retrieval has been removed.
 
-The bot draws on four distinct data sources, each with a different structure, freshness
+The bot draws on four distinct textual data sources, each with a different structure, freshness
 model, and level of retrievable detail. The single most important distinction:
 
 > **Committee transcripts *and plenary (chamber) debates* are crawled into local databases
 > and are fully searchable and retrievable. Written answers, bills, and members are fetched
 > live at query time and are excerpt-only / metadata-only.**
+
+A fifth source — **Scottish Parliament TV video** — is not searched for content; it is an
+*enrichment layer* that turns a plenary citation into a timestamped video deep link (the exact
+moment the words were spoken). Feasibility is proven; see §8. It is planned, not yet built.
 
 ---
 
@@ -160,6 +164,7 @@ Written answers, bills, and members are **not** crawled — they are fetched liv
 | **Written answers** | TheyWorkForYou `getHansard` type=spwrans (live) | `search_scottish_parliament` (`debate_type=written_answers`) | ✅ | ❌ excerpt only | ⚠️ ignored | Whatever TWFY indexes |
 | **Bills** | `data.parliament.scot/api/bills` (live) | `search_bills` | ⚠️ client-side keyword filter | n/a (metadata) | ❌ | All Holyrood bills |
 | **Members (MSPs)** | TheyWorkForYou `getMSPs` (live) | `get_member_info` | by name | n/a (bio record) | ❌ | Current + historic MSPs |
+| **Video timestamps** *(built, dark-launched)* | Scottish Parliament TV (Vualto) — playback model + HLS WebVTT captions; `sp_video_captions` cache | *(enrichment on plenary citations, no tool)* | n/a (not searched) | n/a (produces a deep link, not text) | n/a | Plenary, Session 6+7 where captions exist (gated on `ENABLE_VIDEO_DEEPLINKS`) |
 
 ### Committee transcripts & plenary debates — the fully-retrievable sources
 
@@ -285,3 +290,75 @@ scrutiny research). None of these are bugs — they are coverage boundaries.
 | SP Official Report (committee + plenary crawl + transcript fetch) | `https://www.parliament.scot/chamber-and-committees/official-report/search-what-was-said-in-parliament` | none |
 | TheyWorkForYou (`getHansard`, `getMSPs`) | `https://www.theyworkforyou.com/api` | `TWFY_API_KEY` |
 | SP Bills | `https://data.parliament.scot/api/bills` | none |
+| SP TV meeting page + playback model *(video, dark-launched)* | `https://www.scottishparliament.tv/meeting/{slug}`, `https://www.scottishparliament.tv/Player/PlaybackModel/{eventId}` | none |
+| SP TV video/caption CDN *(video, dark-launched)* | `https://scotparl-live.cdn.vustreams.com/…` (HLS `.m3u8` + WebVTT segments) | none |
+
+> The two SP TV hosts must be reachable from the (internet-restricted) target for the video
+> feature to work — whitelisting has been confirmed available. If unreachable, the feature
+> auto-disables and citations fall back to the Official Report link.
+
+---
+
+## 8. Scottish Parliament TV — video timestamp deep links (planned)
+
+**Status:** **built (2026-07-09), dark-launched behind `ENABLE_VIDEO_DEEPLINKS` (default off).** Plenary
+only (v1). Full build brief: [`VIDEO_DEEPLINK_PLAN.md`](VIDEO_DEEPLINK_PLAN.md). Implemented in
+`services/sptv_client.py` (resolve + captions), `services/caption_match.py` (text→time match),
+`parliament_crawler.backfill_captions()` (caching), and `SpVideoCaption` / `sp_video_captions`.
+When enabled, `get_scottish_plenary_debate` attaches a `video_deeplink` to matched speeches. This
+section documents the *data source* — how SP TV video maps to our Official Report data.
+
+### What it adds
+When the bot cites a plenary speech, it can also link to the **exact moment** in the SP TV video where
+the words were spoken — e.g. *"the Cabinet Secretary said X — watch from 14:56:52"*. This is an
+enrichment on an existing citation, not a new search capability: video is never searched for content,
+and if a link can't be resolved the normal Official Report citation stands.
+
+### How the mapping works (the data chain)
+SP TV runs the **Vualto** player. There is no field linking an Official Report speech to a video time,
+so the link is *derived* through captions:
+
+1. **Meeting → event.** Plenary SP TV slug is derivable from the meeting date
+   (`meeting-of-the-parliament-{month}-{day}-{year}`). The meeting page HTML embeds the Vualto
+   `eventId` GUID (`Player.init({eventId})`).
+2. **Event → streams.** `GET /Player/PlaybackModel/{eventId}` returns JSON (no auth): `eventTitle`,
+   `eventDescription` (the agenda), `startTime` (broadcast start), `hlsStreamUrl`, `isYoutube` /
+   `youtubeUrl`.
+3. **Streams → captions.** The HLS manifest carries a WebVTT subtitle track (`textstream_eng`). The
+   caption playlist has one `#EXT-X-PROGRAM-DATE-TIME` anchor (matches `startTime` exactly) plus
+   ~6-second WebVTT segments (thousands per sitting).
+4. **Caption text → time.** Match a distinctive phrase from the stored `speeches` text (from
+   `sp_plenary_items`) against the caption cues; the cue's wall-clock = anchor + offset.
+5. **Time → link.** The player accepts `?clip_start=HH:MM:SS&clip_end=HH:MM:SS` where the times are
+   **local wall-clock (Europe/London)**. Final link:
+   `https://www.scottishparliament.tv/meeting/{slug}?clip_start=…&clip_end=…`.
+
+### Two hard-won implementation facts
+- **Caption timing = segment ordinal × 6s (`EXTINF`), using the TRUE HLS playlist index.** The
+  per-segment MPEGTS counter resets mid-stream, so global MPEGTS deltas produce garbage (negative)
+  offsets — only the single PROGRAM-DATE-TIME value anchors the timeline. **But the ordinal must be
+  each segment's real index in the HLS playlist, not the count of caption-stream MPEGTS transitions:**
+  ~7% of segments carry no captions (171 of 2317 in the validation sitting), so counting only
+  caption-bearing segments (as the original `poc_final2.js` did) undercounts and puts speeches minutes
+  too early. `sptv_client.fetch_caption_transcript` uses `seg_index` over the full playlist. (This
+  corrects the PoC, which reported `14:56:52` for the 2 June 2026 "Phone-free Classrooms" statement;
+  the correct time is `15:02:46`, verified against the Official Report's own embedded `15:02` marker.)
+- **Match on the rarest phrase, within the agenda-item window.** Boilerplate openings ("I thank the
+  cabinet secretary…") recur throughout a sitting and cause false matches to earlier occurrences.
+  Prefer the caption phrase with the fewest occurrences and constrain the search to at/after the
+  agenda item's first distinctive speech. `clip_start` is real Europe/London wall-clock (DST-correct
+  via `zoneinfo`), not the PoC's hard-coded +1h BST.
+
+### Coverage & limitations
+- **Plenary only (v1).** Plenary slug derives from date. **Committees are not yet supported** — several
+  committee videos share a date, so `date + committee → eventId` needs the SP TV archive/search
+  endpoint (unsolved; v2). Everything downstream is identical once `eventId` is known.
+- **Caption-dependent.** Confirmed for recent (June 2026) plenary. Older Session 6 sittings and
+  committees may lack a caption track — those get no video link. Backfill will reveal true coverage.
+- **Accuracy ±a few seconds.** Live captions are lightly garbled/rolling; distinctive 8–11 word
+  windows match cleanly, but very short or heavily paraphrased contributions fall back to the page
+  link.
+- **YouTube-hosted events.** Some events are served via `youtubeUrl` instead of HLS — handled with a
+  `&t={seconds}` deep link rather than `clip_start`.
+- **Undocumented contract.** `clip_start`, `/Player/PlaybackModel/`, and the HLS layout are unofficial
+  and could change without notice; all parsing must fail soft (omit the link, never error a response).

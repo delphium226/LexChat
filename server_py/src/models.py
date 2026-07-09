@@ -283,6 +283,31 @@ class SpPlenaryItem(Base):
     )
 
 
+class SpVideoCaption(Base):
+    """One row per Scottish Parliament TV event (i.e. per plenary meeting).
+
+    Stores the cached caption transcript + a char-offset → wall-clock index so a
+    plenary citation can be enriched with a `?clip_start=…` video deep link.
+    Keyed to plenary meetings by `meeting_id` (the Official Report `?meeting=` id).
+    See bots/parliament/VIDEO_DEEPLINK_PLAN.md §4.
+    """
+    __tablename__ = "sp_video_captions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    meeting_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    event_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    slug: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    meeting_date: Mapped[Date | None] = mapped_column(Date, nullable=True, index=True)
+    start_time_utc: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    is_youtube: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    youtube_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # [[char_offset, wall_clock_ms], …] — monotonic, for offset→time lookup
+    offset_index: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    caption_ok: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class Document(Base):
     __tablename__ = "documents"
 
