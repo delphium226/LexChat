@@ -1,18 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  sendMessage,
   createChat,
-  getChatMessages,
-  saveMessage,
   updatePreferences,
-  getModels,
   getChats,
   getMatters,
   updateMatter,
   assignChatToMatter,
-  getFeatures,
   uploadDocument,
-  getChatDocuments,
   deleteDocument,
   updateChatTitle,
 } from './services/api';
@@ -52,22 +46,18 @@ import { getInitials, formatRelativeTime } from './utils/format';
 import { useBotIdentity } from './hooks/useBotIdentity';
 import { useFilters } from './hooks/useFilters';
 import { usePreferences } from './hooks/usePreferences';
+import { useModals } from './hooks/useModals';
+import { useMatters } from './hooks/useMatters';
+import { useChat } from './hooks/useChat';
 
 // ── Main app ───────────────────────────────────────────────────
 
 function AppContent() {
   const { user, logout, logoutWithExpiry } = useAuth();
 
-  // ── Chat state ───────────────────────────────────────────────
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [selectedModel, setSelectedModel] = useState('');
-  const [selectedModelContext, setSelectedModelContext] = useState(256 * 1024);
-  const [activeProvider, setActiveProvider] = useState('ollama');
-  const [loading, setLoading] = useState(false);
-  const [agentStatus, setAgentStatus] = useState('');
-  const [activities, setActivities] = useState(new Map());
-  const [contextUsage, setContextUsage] = useState(null);
+  // ── Chat identity keys ───────────────────────────────────────
+  // Shared with the filters/matters hooks as a coordination key; the rest of
+  // the chat state lives in useChat, wired up below once its inputs exist.
   const [currentChatId, setCurrentChatId] = useState(null);
   const [currentChatTitle, setCurrentChatTitle] = useState(null);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -83,30 +73,32 @@ function AppContent() {
   const [showFilters, setShowFilters] = useState(false);
 
   // ── Modal state ──────────────────────────────────────────────
+  const modals = useModals();
   const [noticeAcknowledged, setNoticeAcknowledged] = useState(false);
-  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
-  const [showAdminModal, setShowAdminModal] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [showAbout, setShowAbout] = useState(false);
-  const [showDataSources, setShowDataSources] = useState(false);
-  const [showWeeklyBanner, setShowWeeklyBanner] = useState(false);
   const [surveyDue, setSurveyDue] = useState(false);
   const weeklyBannerCheckedRef = useRef(false);
 
   // ── Matters state ────────────────────────────────────────────
-  const [features, setFeatures] = useState({ matters_enabled: true });
-  const [matters, setMatters] = useState([]);
-  const [closedMatters, setClosedMatters] = useState([]);
-  const [showClosedMatters, setShowClosedMatters] = useState(false);
-  const [expandedMatterIds, setExpandedMatterIds] = useState(new Set());
-  const [showCreateMatterModal, setShowCreateMatterModal] = useState(false);
-  const [notesModalMatter, setNotesModalMatter] = useState(null);
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [assigningChatId, setAssigningChatId] = useState(null);
-
-  // ── Bot identity (name/branding/favicon) ─────────────────────
-  const { botInfo } = useBotIdentity(loading);
+  const {
+    features,
+    matters,
+    setMatters,
+    closedMatters,
+    setClosedMatters,
+    showClosedMatters,
+    setShowClosedMatters,
+    expandedMatterIds,
+    setExpandedMatterIds,
+    showCreateMatterModal,
+    setShowCreateMatterModal,
+    notesModalMatter,
+    setNotesModalMatter,
+    showAssignModal,
+    setShowAssignModal,
+    assigningChatId,
+    setAssigningChatId,
+    resetMatters,
+  } = useMatters(user, currentChatId);
 
   // ── Document state ───────────────────────────────────────────
   const [chatDocuments, setChatDocuments] = useState([]);
@@ -115,66 +107,18 @@ function AppContent() {
 
   // ── Refs ─────────────────────────────────────────────────────
   const messagesEndRef = useRef(null);
-  const chatScrollRef = useRef(null);
-  const abortControllerRef = useRef(null);
-  const sendingRef = useRef(false);
-  const textareaRef = useRef(null);
   const composerRef = useRef(null);
   const fileInputRef = useRef(null);
 
   // ── Effects ──────────────────────────────────────────────────
 
-  useEffect(() => {
-    if (!user) return; // /api/models requires auth — fetch once logged in
-    getModels()
-      .then(models => {
-        if (models?.length) {
-          const active = models.find(m => m.active) || models[0];
-          setSelectedModel(active.name);
-          setSelectedModelContext(active.context_length || 256 * 1024);
-          setActiveProvider(active.provider || 'ollama');
-        }
-      })
-      .catch(err => {
-        console.warn('Failed to fetch model list, using fallback:', err);
-        setSelectedModel('mistral-large-3:675b-cloud');
-      });
-  }, [user]);
-
-  useEffect(() => {
-    const el = chatScrollRef.current;
-    if (!el) return;
-    const target = el.scrollHeight - el.clientHeight;
-    if (target > el.scrollTop) el.scrollTo({ top: target, behavior: 'smooth' });
-  }, [messages, agentStatus]);
-
-  // Fetch feature flags once on login
-  useEffect(() => {
-    if (!user) return;
-    getFeatures()
-      .then(setFeatures)
-      .catch(err => console.warn('Failed to fetch feature flags:', err));
-  }, [user]);
-
-  // Reload chats and matters whenever active chat changes or user logs in
+  // Reload the recent chat list whenever the active chat changes or user logs in
   useEffect(() => {
     if (!user) return;
     getChats()
       .then(setRecentChats)
       .catch(err => console.warn('Failed to fetch chats:', err));
-    if (features.matters_enabled)
-      getMatters()
-        .then(setMatters)
-        .catch(err => console.warn('Failed to fetch matters:', err));
-  }, [user, currentChatId, features.matters_enabled]);
-
-  // Auto-resize textarea
-  useEffect(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    ta.style.height = 'auto';
-    ta.style.height = Math.min(ta.scrollHeight, 180) + 'px';
-  }, [input]);
+  }, [user, currentChatId]);
 
   // Close filters modal on Escape
   useEffect(() => {
@@ -189,28 +133,16 @@ function AppContent() {
   // Reset on logout
   useEffect(() => {
     if (!user) {
-      setMessages([]);
-      setInput('');
-      setCurrentChatId(null);
-      setCurrentChatTitle(null);
-      setContextUsage(null);
-      setAgentStatus('');
-      setActivities(new Map());
-      setLoading(false);
-      setShowSettingsMenu(false);
-      setShowHistoryModal(false);
-      setShowAdminModal(false);
-      setShowSettingsModal(false);
+      resetChat();
+      modals.closeAll();
       setChatMode('research');
       setResearchMode('legislation_only');
-      setMatters([]);
-      setClosedMatters([]);
-      setShowClosedMatters(false);
-      setExpandedMatterIds(new Set());
-      setShowWeeklyBanner(false);
+      resetMatters();
       weeklyBannerCheckedRef.current = false;
       setNoticeAcknowledged(false);
     }
+    // reset helpers are recreated each render; run this only on auth change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, setChatMode, setResearchMode]);
 
   // Weekly feedback — show banner once per week, button whenever survey not yet submitted this week.
@@ -229,37 +161,14 @@ function AppContent() {
       const shownKey = `weeklyFeedbackLastShown_${user.id}`;
       const last = localStorage.getItem(shownKey);
       if (!last || Date.now() - parseInt(last, 10) > week) {
-        setShowWeeklyBanner(true);
+        modals.open('weeklyBanner');
       }
     }, 2000);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // ── Derived ──────────────────────────────────────────────────
-
-  // ID of the last assistant message that has sources (used for default highlight)
-  const latestSourceMsgId = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'assistant' && messages[i].sources?.length && messages[i].id) {
-        return messages[i].id;
-      }
-    }
-    return null;
-  }, [messages]);
-
-  // Sources for the rail — shows explicitly selected turn, else the latest turn
-  const activeSources = useMemo(() => {
-    if (activeSourcesMsgId != null) {
-      const msg = messages.find(m => m.id === activeSourcesMsgId);
-      if (msg?.sources?.length) return msg.sources;
-    }
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'assistant' && messages[i].sources?.length) {
-        return messages[i].sources;
-      }
-    }
-    return [];
-  }, [messages, activeSourcesMsgId]);
 
   const researchModeLabel =
     {
@@ -293,6 +202,70 @@ function AppContent() {
     hasActiveFilters,
     restoreFiltersForChat,
   } = useFilters(currentChatId);
+
+  // ── Chat flow (messages, composer, streaming, handlers) ──────
+  // Declared here, after its inputs (filters/preferences/chat keys) exist.
+  const {
+    messages,
+    input,
+    setInput,
+    selectedModel,
+    activeProvider,
+    loading,
+    agentStatus,
+    activities,
+    chatScrollRef,
+    textareaRef,
+    handleSend,
+    handleStop,
+    handleNewChat,
+    loadChat,
+    resetChat,
+  } = useChat({
+    user,
+    logoutWithExpiry,
+    chatMode,
+    researchMode,
+    filters: { jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, currentOnly, recordType },
+    saveFiltersToChatStorage,
+    restoreFiltersForChat,
+    currentChatId,
+    setCurrentChatId,
+    setCurrentChatTitle,
+    setActiveCite,
+    setActiveSourcesMsgId,
+    setChatDocuments,
+    closeHistoryModal: () => modals.close('history'),
+    recentChats,
+    matters,
+  });
+
+  // ── Bot identity (name/branding/favicon) — needs `loading` from useChat ──
+  const { botInfo } = useBotIdentity(loading);
+
+  // ID of the last assistant message that has sources (used for default highlight)
+  const latestSourceMsgId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'assistant' && messages[i].sources?.length && messages[i].id) {
+        return messages[i].id;
+      }
+    }
+    return null;
+  }, [messages]);
+
+  // Sources for the rail — shows explicitly selected turn, else the latest turn
+  const activeSources = useMemo(() => {
+    if (activeSourcesMsgId != null) {
+      const msg = messages.find(m => m.id === activeSourcesMsgId);
+      if (msg?.sources?.length) return msg.sources;
+    }
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'assistant' && messages[i].sources?.length) {
+        return messages[i].sources;
+      }
+    }
+    return [];
+  }, [messages, activeSourcesMsgId]);
 
   const isParliament = botInfo.researchMode === 'parliamentary_records';
   const RECORD_TYPE_OPTIONS = [
@@ -414,238 +387,6 @@ function AppContent() {
     }
   };
 
-  const handleStop = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-      setLoading(false);
-      sendingRef.current = false;
-      setAgentStatus('Stopped by user.');
-      setActivities(new Map());
-    }
-  };
-
-  const handleSend = async (manualContent = null) => {
-    if (sendingRef.current) return;
-    const contentToSend = typeof manualContent === 'string' ? manualContent : input;
-    if (!contentToSend.trim() || !selectedModel) return;
-    sendingRef.current = true;
-
-    if (abortControllerRef.current) abortControllerRef.current.abort();
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    const userMsg = { role: 'user', content: contentToSend };
-    setMessages(prev => [...prev, userMsg]);
-    if (typeof manualContent !== 'string') setInput('');
-    setLoading(true);
-    setAgentStatus('Thinking…');
-    setActivities(new Map());
-    const requestStartTime = Date.now();
-    let activeChatId = currentChatId;
-
-    try {
-      if (!activeChatId) {
-        const title = contentToSend.slice(0, 80) + (contentToSend.length > 80 ? '…' : '');
-        const newChat = await createChat(title, selectedModel, activeProvider);
-        activeChatId = newChat.id;
-        setCurrentChatId(activeChatId);
-        setCurrentChatTitle(title);
-        saveFiltersToChatStorage(activeChatId);
-      }
-
-      if (activeChatId) {
-        await saveMessage(activeChatId, 'user', contentToSend).catch(err =>
-          console.error('Failed to save user message:', err)
-        );
-      }
-
-      const messagesToSend = [...messages, userMsg];
-      const response = await sendMessage(
-        messagesToSend,
-        selectedModel,
-        selectedModelContext,
-        status => {
-          const toolLabel = tool =>
-            ({
-              'Research Agent': 'Researching…',
-              'Worker: search_legislation': 'Querying legislation database…',
-              'Worker: search_legislation_sections': 'Retrieving statutory sections…',
-              'Worker: get_legislation_text': 'Reviewing statutory text…',
-              'Worker: search_case_law': 'Searching case law database…',
-              'Worker: get_case_law_text': 'Retrieving case law judgment…',
-              'Extracting the relevant sections from a large document': 'Summarising document…',
-            })[tool] || `${tool}…`;
-
-          if (status.type === 'tool_start') {
-            const label = toolLabel(status.tool);
-            if (status.id) {
-              setActivities(prev => new Map(prev).set(status.id, label));
-            }
-            setAgentStatus(label);
-          } else if (status.type === 'tool_end') {
-            if (status.id) {
-              setActivities(prev => {
-                const next = new Map(prev);
-                next.delete(status.id);
-                return next;
-              });
-            }
-            setAgentStatus('Analysing findings…');
-          } else if (status.type === 'token') {
-            setActivities(new Map());
-            setAgentStatus('Typing…');
-            setMessages(prev => {
-              const updated = [...prev];
-              const last = updated[updated.length - 1];
-              if (last.role === 'assistant') {
-                updated[updated.length - 1] = { ...last, content: last.content + status.content };
-              } else {
-                updated.push({ role: 'assistant', content: status.content });
-              }
-              return updated;
-            });
-          } else if (status.type === 'queue') {
-            setAgentStatus(status.message);
-          } else if (status.type === 'warning') {
-            setAgentStatus(status.message);
-          }
-        },
-        controller.signal,
-        chatMode,
-        researchMode,
-        {
-          jurisdiction,
-          dateFrom,
-          dateTo,
-          caseLawCourt,
-          legislationType,
-          currentOnly,
-          recordType,
-          chatId: activeChatId,
-        }
-      );
-
-      if (response.stats) setContextUsage(response.stats);
-
-      const withTiming = {
-        ...response,
-        responseTimeMs: Date.now() - requestStartTime,
-        costUsd: response.timing?.total_cost_usd || null,
-      };
-      setMessages(prev => {
-        const updated = [...prev];
-        const last = updated[updated.length - 1];
-        if (last.role === 'assistant') {
-          updated[updated.length - 1] = withTiming;
-          return updated;
-        }
-        return [...updated, withTiming];
-      });
-
-      if (activeChatId) {
-        const saved = await saveMessage(
-          activeChatId,
-          'assistant',
-          response.content,
-          response.model,
-          response.provider,
-          response.timing?.total_cost_usd ?? null,
-          response.sources ?? null
-        ).catch(err => {
-          console.error('Failed to save assistant message:', err);
-          return null;
-        });
-        if (saved) {
-          setMessages(prev => {
-            const updated = [...prev];
-            for (let i = updated.length - 1; i >= 0; i--) {
-              if (updated[i].role === 'assistant' && !updated[i].id) {
-                updated[i] = {
-                  ...saved,
-                  responseTimeMs: updated[i].responseTimeMs,
-                  costUsd: updated[i].costUsd,
-                  sources: updated[i].sources,
-                };
-                break;
-              }
-            }
-            return updated;
-          });
-          if (response.sources?.length) setActiveSourcesMsgId(saved.id);
-        }
-      }
-    } catch (error) {
-      if (error.name === 'AbortError' || error.message.includes('aborted') || error.message.includes('canceled')) {
-        // stopped by user
-      } else if (error.status === 401) {
-        logoutWithExpiry();
-      } else {
-        console.error('Error sending message:', error);
-        const match = error.message.match(/status code (\d{3})/);
-        const errText = match
-          ? `Error: ${{ 400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 408: 'Request Timeout', 429: 'Too Many Requests', 500: 'Internal Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable', 504: 'Gateway Timeout' }[parseInt(match[1])] || 'Unknown Error'} (${match[1]})`
-          : `Error: ${error.message}`;
-        setMessages(prev => {
-          const updated = [...prev];
-          const last = updated[updated.length - 1];
-          const errMsg = { role: 'assistant', content: errText };
-          if (last.role === 'assistant') {
-            updated[updated.length - 1] = errMsg;
-            return updated;
-          }
-          return [...updated, errMsg];
-        });
-      }
-    } finally {
-      if (abortControllerRef.current === controller) {
-        setLoading(false);
-        setAgentStatus('');
-        setActivities(new Map());
-        abortControllerRef.current = null;
-        sendingRef.current = false;
-        setTimeout(() => textareaRef.current?.focus(), 0);
-      }
-    }
-  };
-
-  const handleNewChat = () => {
-    if (abortControllerRef.current) abortControllerRef.current.abort();
-    setMessages([]);
-    setInput('');
-    setContextUsage(null);
-    setCurrentChatId(null);
-    setCurrentChatTitle(null);
-    setActiveCite(null);
-    setActiveSourcesMsgId(null);
-    setChatDocuments([]);
-  };
-
-  const loadChat = async (chatId, model) => {
-    try {
-      setLoading(true);
-      const msgs = await getChatMessages(chatId);
-      setMessages(msgs);
-      setCurrentChatId(chatId);
-      setCurrentChatTitle(recentChats.find(c => c.id === chatId)?.title || null);
-      setShowHistoryModal(false);
-      setContextUsage(null);
-      setActiveCite(null);
-      setActiveSourcesMsgId(null);
-      setChatDocuments([]);
-      getChatDocuments(chatId)
-        .then(setChatDocuments)
-        .catch(err => console.warn('Failed to fetch chat documents:', err));
-      const chatMatterId = recentChats.find(c => c.id === chatId)?.matter_id;
-      const chatMatter = chatMatterId ? matters.find(m => m.id === chatMatterId) : null;
-      restoreFiltersForChat(chatId, chatMatter);
-    } catch (err) {
-      console.error('Failed to load chat', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const toggleSidebar = () => {
     const next = !sidebarCollapsed;
     setSidebarCollapsed(next);
@@ -735,12 +476,12 @@ function AppContent() {
             <IBtn label="New research thread" onClick={handleNewChat}>
               <PlusIcon />
             </IBtn>
-            <IBtn label="Search threads" onClick={() => setShowHistoryModal(true)}>
+            <IBtn label="Search threads" onClick={() => modals.open('history')}>
               <SearchIcon />
             </IBtn>
             <div style={{ flex: 1 }} />
             <button
-              onClick={() => setShowSettingsMenu(true)}
+              onClick={() => modals.open('settingsMenu')}
               aria-label="Settings"
               style={{
                 width: 28,
@@ -776,7 +517,7 @@ function AppContent() {
             {/* Search threads */}
             <div style={{ padding: '0 10px 10px', flexShrink: 0 }}>
               <button
-                onClick={() => setShowHistoryModal(true)}
+                onClick={() => modals.open('history')}
                 className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-accent-ink font-ui text-sm hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <SearchIcon />
@@ -1206,7 +947,7 @@ function AppContent() {
                   {user.role === 'admin' ? 'Admin' : 'Lawyer'}
                 </div>
               </div>
-              <IBtn label="Settings" onClick={() => setShowSettingsMenu(true)}>
+              <IBtn label="Settings" onClick={() => modals.open('settingsMenu')}>
                 <SettingsIcon />
               </IBtn>
             </div>
@@ -1309,7 +1050,7 @@ function AppContent() {
                 Save to matter
               </GhostBtn>
             )}
-            {surveyDue && <GhostBtn onClick={() => setShowWeeklyBanner(true)}>Take weekly survey</GhostBtn>}
+            {surveyDue && <GhostBtn onClick={() => modals.open('weeklyBanner')}>Take weekly survey</GhostBtn>}
           </div>
         </div>
 
@@ -2202,10 +1943,10 @@ function AppContent() {
         </div>
       )}
 
-      {showDataSources && (
+      {modals.dataSources && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
-          onClick={() => setShowDataSources(false)}
+          onClick={() => modals.close('dataSources')}
         >
           <div
             className="bg-paper rounded-lg shadow-xl border border-ink-200 max-w-3xl w-full max-h-[90vh] flex flex-col"
@@ -2214,7 +1955,7 @@ function AppContent() {
             <div className="flex justify-between items-center p-6 border-b border-ink-200 flex-shrink-0">
               <h2 className="text-xl font-bold text-ink-900">Data Sources</h2>
               <button
-                onClick={() => setShowDataSources(false)}
+                onClick={() => modals.close('dataSources')}
                 className="size-[30px] flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 aria-label="Close"
               >
@@ -2413,7 +2154,7 @@ function AppContent() {
             </div>
             <div className="flex justify-end p-4 border-t border-ink-200 flex-shrink-0">
               <button
-                onClick={() => setShowDataSources(false)}
+                onClick={() => modals.close('dataSources')}
                 className="bg-brand text-white font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
               >
                 Close
@@ -2423,7 +2164,7 @@ function AppContent() {
         </div>
       )}
 
-      {showAbout && (
+      {modals.about && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-paper rounded-lg p-6 max-w-2xl w-full shadow-xl border border-ink-200">
             <div className="flex items-center justify-center gap-2 mb-4">
@@ -2441,7 +2182,7 @@ function AppContent() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-ink-900">About {botInfo.name}</h2>
               <button
-                onClick={() => setShowAbout(false)}
+                onClick={() => modals.close('about')}
                 className="size-[30px] flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 aria-label="Close"
               >
@@ -2480,7 +2221,7 @@ function AppContent() {
             </div>
             <div className="mt-6 flex justify-end">
               <button
-                onClick={() => setShowAbout(false)}
+                onClick={() => modals.close('about')}
                 className="bg-brand text-white font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
               >
                 Close
@@ -2490,11 +2231,11 @@ function AppContent() {
         </div>
       )}
 
-      {showAdminModal && (
+      {modals.admin && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-paper rounded-lg p-6 w-[95vw] h-[95vh] overflow-y-auto shadow-xl border border-ink-200 relative">
             <button
-              onClick={() => setShowAdminModal(false)}
+              onClick={() => modals.close('admin')}
               className="absolute top-4 right-4 size-[30px] flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               aria-label="Close"
             >
@@ -2514,11 +2255,11 @@ function AppContent() {
         </div>
       )}
 
-      {showSettingsModal && (
+      {modals.settings && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-paper rounded-lg p-6 max-w-lg w-full shadow-xl border border-ink-200 relative">
             <button
-              onClick={() => setShowSettingsModal(false)}
+              onClick={() => modals.close('settings')}
               className="absolute top-4 right-4 size-[30px] flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               aria-label="Close"
             >
@@ -2538,11 +2279,11 @@ function AppContent() {
         </div>
       )}
 
-      {showWeeklyBanner && (
+      {modals.weeklyBanner && (
         <WeeklyFeedbackBanner
           userId={user.id}
           botName={botInfo.name}
-          onClose={() => setShowWeeklyBanner(false)}
+          onClose={() => modals.close('weeklyBanner')}
           onSubmitted={() => {
             localStorage.setItem(`weeklyFeedbackSubmitted_${user.id}`, Date.now().toString());
             setSurveyDue(false);
@@ -2550,17 +2291,17 @@ function AppContent() {
         />
       )}
 
-      {showHistoryModal && (
+      {modals.history && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-paper rounded-lg max-w-2xl w-full h-[80vh] shadow-xl border border-ink-200 relative overflow-hidden">
-            <HistoryModal onClose={() => setShowHistoryModal(false)} onSelectChat={loadChat} />
+            <HistoryModal onClose={() => modals.close('history')} onSelectChat={loadChat} />
           </div>
         </div>
       )}
 
       <SettingsMenuModal
-        isOpen={showSettingsMenu}
-        onClose={() => setShowSettingsMenu(false)}
+        isOpen={modals.settingsMenu}
+        onClose={() => modals.close('settingsMenu')}
         user={user}
         botName={botInfo.name}
         darkMode={darkMode}
@@ -2569,10 +2310,10 @@ function AppContent() {
           setDarkMode(next);
           await updatePreferences({ dark_mode: next }).catch(e => console.error('Failed to save preference', e));
         }}
-        onOpenAccountSettings={() => setShowSettingsModal(true)}
-        onOpenAdminPortal={() => setShowAdminModal(true)}
-        onOpenAbout={() => setShowAbout(true)}
-        onOpenDataSources={() => setShowDataSources(true)}
+        onOpenAccountSettings={() => modals.open('settings')}
+        onOpenAdminPortal={() => modals.open('admin')}
+        onOpenAbout={() => modals.open('about')}
+        onOpenDataSources={() => modals.open('dataSources')}
         onLogout={logout}
       />
 
