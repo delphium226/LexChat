@@ -9,6 +9,7 @@ import Typography from '@tiptap/extension-typography';
 import { Markdown } from 'tiptap-markdown';
 import DOMPurify from 'dompurify';
 import { addMatterNote, deleteMatterNote, generateMatterBrief, getMatterNotes } from '../services/api';
+import Modal from './ui/Modal';
 
 function formatDate(iso) {
   if (!iso) return '';
@@ -267,34 +268,7 @@ const MatterNotesModal = ({ matter, onClose }) => {
         .note-rich-content em { font-style: italic; }
         .note-rich-content a { color: var(--accent); text-decoration: underline; }
       `}</style>
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(11,18,32,0.45)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 50,
-          padding: 16,
-        }}
-        onMouseDown={e => {
-          if (e.target === e.currentTarget) onClose();
-        }}
-      >
-        <div
-          style={{
-            background: 'var(--paper)',
-            borderRadius: 'var(--r-lg)',
-            width: '80vw',
-            height: '80vh',
-            display: 'flex',
-            flexDirection: 'column',
-            boxShadow: '0 8px 32px rgba(11,18,32,0.14)',
-            border: '1px solid var(--ink-200)',
-            fontFamily: 'var(--font-ui)',
-          }}
-        >
+      <Modal onClose={onClose} className="w-[80vw] h-[80vh] flex flex-col font-ui">
           {/* Header */}
           <div
             style={{
@@ -703,8 +677,7 @@ const MatterNotesModal = ({ matter, onClose }) => {
               )}
             </div>
           )}
-        </div>
-      </div>
+      </Modal>
     </>
   );
 };

@@ -42,6 +42,7 @@ import {
   ChevRightIcon,
 } from './components/ui/icons';
 import { IBtn, GhostBtn } from './components/ui/buttons';
+import Modal from './components/ui/Modal';
 import { getInitials, formatRelativeTime } from './utils/format';
 import { useBotIdentity } from './hooks/useBotIdentity';
 import { useFilters } from './hooks/useFilters';
@@ -119,16 +120,6 @@ function AppContent() {
       .then(setRecentChats)
       .catch(err => console.warn('Failed to fetch chats:', err));
   }, [user, currentChatId]);
-
-  // Close filters modal on Escape
-  useEffect(() => {
-    if (!showFilters) return;
-    const handler = e => {
-      if (e.key === 'Escape') setShowFilters(false);
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showFilters]);
 
   // Reset on logout
   useEffect(() => {
@@ -1314,35 +1305,10 @@ function AppContent() {
                     );
 
                     return (
-                      <div
-                        style={{
-                          position: 'fixed',
-                          inset: 0,
-                          background: 'rgba(11,18,32,0.45)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          zIndex: 50,
-                          padding: 16,
-                        }}
-                        onMouseDown={e => {
-                          if (e.target === e.currentTarget) setShowFilters(false);
-                        }}
+                      <Modal
+                        onClose={() => setShowFilters(false)}
+                        className="w-full max-w-[420px] max-h-[85vh] flex flex-col font-ui"
                       >
-                        <div
-                          style={{
-                            background: 'var(--paper)',
-                            border: '1px solid var(--ink-200)',
-                            borderRadius: 'var(--r-lg)',
-                            boxShadow: '0 8px 32px rgba(11,18,32,0.14)',
-                            width: '100%',
-                            maxWidth: 420,
-                            maxHeight: '85vh',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            fontFamily: 'var(--font-ui)',
-                          }}
-                        >
                           {/* Header */}
                           <div
                             style={{
@@ -1560,8 +1526,7 @@ function AppContent() {
                               </button>
                             </div>
                           )}
-                        </div>
-                      </div>
+                      </Modal>
                     );
                   })()}
 
@@ -1816,32 +1781,7 @@ function AppContent() {
       )}
 
       {features.matters_enabled && showAssignModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 50,
-            padding: 16,
-          }}
-          onMouseDown={e => {
-            if (e.target === e.currentTarget) setShowAssignModal(false);
-          }}
-        >
-          <div
-            style={{
-              background: 'var(--paper)',
-              borderRadius: 'var(--r-lg)',
-              width: '100%',
-              maxWidth: 380,
-              boxShadow: '0 8px 32px rgba(11,18,32,0.14)',
-              border: '1px solid var(--ink-200)',
-              fontFamily: 'var(--font-ui)',
-            }}
-          >
+        <Modal onClose={() => setShowAssignModal(false)} className="w-full max-w-[380px] font-ui">
             <div
               style={{
                 padding: '16px 20px 12px',
@@ -1939,19 +1879,11 @@ function AppContent() {
               )}
             </div>
             <div style={{ height: 8 }} />
-          </div>
-        </div>
+        </Modal>
       )}
 
       {modals.dataSources && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
-          onClick={() => modals.close('dataSources')}
-        >
-          <div
-            className="bg-paper rounded-lg shadow-xl border border-ink-200 max-w-3xl w-full max-h-[90vh] flex flex-col"
-            onClick={e => e.stopPropagation()}
-          >
+        <Modal onClose={() => modals.close('dataSources')} className="max-w-3xl w-full max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-center p-6 border-b border-ink-200 flex-shrink-0">
               <h2 className="text-xl font-bold text-ink-900">Data Sources</h2>
               <button
@@ -2160,13 +2092,11 @@ function AppContent() {
                 Close
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {modals.about && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-paper rounded-lg p-6 max-w-2xl w-full shadow-xl border border-ink-200">
+        <Modal onClose={() => modals.close('about')} className="p-6 max-w-2xl w-full">
             <div className="flex items-center justify-center gap-2 mb-4">
               {botInfo.logoEmoji ? (
                 <span style={{ fontSize: 32, lineHeight: 1, userSelect: 'none' }} aria-hidden="true">
@@ -2227,13 +2157,11 @@ function AppContent() {
                 Close
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {modals.admin && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-paper rounded-lg p-6 w-[95vw] h-[95vh] overflow-y-auto shadow-xl border border-ink-200 relative">
+        <Modal onClose={() => modals.close('admin')} className="p-6 w-[95vw] h-[95vh] overflow-y-auto relative">
             <button
               onClick={() => modals.close('admin')}
               className="absolute top-4 right-4 size-[30px] flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
@@ -2251,13 +2179,11 @@ function AppContent() {
               </svg>
             </button>
             <AdminPortal currentUser={user} />
-          </div>
-        </div>
+        </Modal>
       )}
 
       {modals.settings && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-paper rounded-lg p-6 max-w-lg w-full shadow-xl border border-ink-200 relative">
+        <Modal onClose={() => modals.close('settings')} className="p-6 max-w-lg w-full relative">
             <button
               onClick={() => modals.close('settings')}
               className="absolute top-4 right-4 size-[30px] flex items-center justify-center rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
@@ -2275,8 +2201,7 @@ function AppContent() {
               </svg>
             </button>
             <Settings />
-          </div>
-        </div>
+        </Modal>
       )}
 
       {modals.weeklyBanner && (
@@ -2292,11 +2217,9 @@ function AppContent() {
       )}
 
       {modals.history && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-paper rounded-lg max-w-2xl w-full h-[80vh] shadow-xl border border-ink-200 relative overflow-hidden">
-            <HistoryModal onClose={() => modals.close('history')} onSelectChat={loadChat} />
-          </div>
-        </div>
+        <Modal onClose={() => modals.close('history')} className="max-w-2xl w-full h-[80vh] relative overflow-hidden">
+          <HistoryModal onClose={() => modals.close('history')} onSelectChat={loadChat} />
+        </Modal>
       )}
 
       <SettingsMenuModal

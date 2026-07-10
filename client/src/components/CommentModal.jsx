@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Modal from './ui/Modal';
 
 const CommentModal = ({ isOpen, onClose, onSubmit, initialComment = '', rating = 0, onRate }) => {
   const [comment, setComment] = useState(initialComment);
@@ -10,9 +11,8 @@ const CommentModal = ({ isOpen, onClose, onSubmit, initialComment = '', rating =
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-paper rounded-xl p-6 max-w-lg w-full shadow-md border border-ink-200 relative">
-        <div className="flex justify-between items-center mb-4">
+    <Modal onClose={onClose} className="max-w-lg w-full p-6">
+      <div className="flex justify-between items-center mb-4">
           <h3 className="font-ui text-xl font-semibold text-ink-900">Rate & Feedback</h3>
           <button
             onClick={onClose}
@@ -79,8 +79,7 @@ const CommentModal = ({ isOpen, onClose, onSubmit, initialComment = '', rating =
             Submit Feedback
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

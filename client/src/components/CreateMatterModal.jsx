@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createMatter } from '../services/api';
+import Modal from './ui/Modal';
 
 const JURISDICTION_OPTIONS = [
   { value: '', label: 'All UK jurisdictions' },
@@ -68,32 +69,7 @@ const CreateMatterModal = ({ onClose, onCreated }) => {
   };
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(11,18,32,0.45)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 50,
-        padding: 16,
-      }}
-      onMouseDown={e => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        style={{
-          background: 'var(--paper)',
-          borderRadius: 'var(--r-lg)',
-          width: '100%',
-          maxWidth: 440,
-          boxShadow: '0 8px 32px rgba(11,18,32,0.14)',
-          border: '1px solid var(--ink-200)',
-          fontFamily: 'var(--font-ui)',
-        }}
-      >
+    <Modal onClose={onClose} className="w-full max-w-[440px] font-ui">
         <div
           style={{
             padding: '18px 20px 14px',
@@ -228,8 +204,7 @@ const CreateMatterModal = ({ onClose, onCreated }) => {
             {saving ? 'Creating…' : 'Create matter'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

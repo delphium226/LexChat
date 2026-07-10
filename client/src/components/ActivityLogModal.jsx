@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getActivityLog } from '../services/api';
+import Modal from './ui/Modal';
 
 const DAYS_OPTIONS = [
   { label: 'Last 24h', value: '1' },
@@ -126,8 +127,7 @@ export default function ActivityLogModal({ open, onClose }) {
   );
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-paper rounded-xl shadow-2xl border border-ink-200 w-[90vw] h-[90vh] flex flex-col">
+    <Modal onClose={onClose} className="w-[90vw] h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-ink-200 shrink-0">
           <div>
@@ -280,7 +280,6 @@ export default function ActivityLogModal({ open, onClose }) {
             {entries.length === 500 && ' (limit reached — narrow the time range for older records)'}
           </p>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
