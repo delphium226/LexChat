@@ -119,6 +119,16 @@ def setup_logging(bot_id: str = ""):
     http_logger.setLevel(logging.INFO)
     http_logger.addHandler(_create_file_handler(f"{prefix}http.log"))
 
+    # Crawler logger — the SP Official Report / SP TV background crawler. Long-running
+    # and chatty (backfills, daily deltas, caption capture), so it gets its own file
+    # to keep app.log readable; errors also go to the shared error.log. Only the
+    # parliament bot writes here (delay=True → no file until first crawl log line).
+    crawler_logger = logging.getLogger("crawler")
+    crawler_logger.setLevel(logging.INFO)
+    crawler_logger.addHandler(_create_file_handler(f"{prefix}crawler.log"))
+    crawler_logger.addHandler(_create_file_handler(f"{prefix}error.log", logging.ERROR))
+    crawler_logger.addHandler(_create_console_handler())
+
     # Suppress noisy third-party loggers
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
