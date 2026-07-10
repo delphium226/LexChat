@@ -80,6 +80,14 @@ class MatterNoteOut(BaseModel):
         from_attributes = True
 
 
+class MessageResponse(BaseModel):
+    message: str
+
+
+class BriefResponse(BaseModel):
+    content: str
+
+
 # --- Helpers ---
 
 async def _get_owned_matter(matter_id: int, user_id: int, db: AsyncSession) -> Matter:
@@ -191,7 +199,7 @@ async def update_matter(
     )
 
 
-@router.delete("/{matter_id}")
+@router.delete("/{matter_id}", response_model=MessageResponse)
 async def delete_matter(
     matter_id: int,
     user: dict = Depends(get_current_user),
@@ -254,7 +262,7 @@ async def add_note(
     )
 
 
-@router.delete("/{matter_id}/notes/{note_id}")
+@router.delete("/{matter_id}/notes/{note_id}", response_model=MessageResponse)
 async def delete_note(
     matter_id: int,
     note_id: int,
@@ -280,7 +288,7 @@ class MatterBriefRequest(BaseModel):
     mode: str = "brief"  # "brief" or "gaps"
 
 
-@router.post("/{matter_id}/brief")
+@router.post("/{matter_id}/brief", response_model=BriefResponse)
 async def generate_brief(
     matter_id: int,
     body: MatterBriefRequest,

@@ -46,6 +46,10 @@ class MessageRatingOut(BaseModel):
     created_at: str
 
 
+class StatusResponse(BaseModel):
+    status: str
+
+
 def _week_bounds(weeks_ago: int) -> tuple[datetime, datetime]:
     today = date.today()
     this_monday = today - timedelta(days=today.weekday())
@@ -69,7 +73,7 @@ def _week_label(weeks_ago: int) -> str:
     return f"{start.day} {start.strftime('%b')}–{end.day} {end.strftime('%b')}"
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, response_model=StatusResponse)
 async def submit_feedback(
     body: FeedbackCreate,
     user: dict = Depends(get_current_user),

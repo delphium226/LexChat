@@ -1,18 +1,29 @@
 import os
+from typing import Optional
 
 from fastapi import APIRouter
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 
 from ..bot_state import get_bot_identity
 from ..config import settings
 
 router = APIRouter(tags=["Identity"])
 
+
+class BotInfoOut(BaseModel):
+    bot_id: str
+    name: str
+    tagline: str
+    research_mode: str
+    brand_color: Optional[str] = None
+    logo_emoji: Optional[str] = None
+
 # identity.py lives at server_py/src/routers/ — three dirname calls reach the project root
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-@router.get("/api/bot-info")
+@router.get("/api/bot-info", response_model=BotInfoOut, response_model_exclude_none=True)
 async def bot_info():
     bot_identity = get_bot_identity()
     # Resolved research mode: the RESEARCH_MODE env override (settings.research_mode)

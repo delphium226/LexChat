@@ -1,6 +1,8 @@
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +13,20 @@ from ..services.health_service import perform_health_checks
 logger = logging.getLogger("app")
 
 router = APIRouter(tags=["Health"])
+
+
+class HealthEntry(BaseModel):
+    is_healthy: Optional[bool]
+    error_message: Optional[str]
+    latency_ms: Optional[int]
+    checked_at: Optional[str]
+
+
+class HealthStatusOut(BaseModel):
+    database: HealthEntry
+    lex_api: HealthEntry
+    llm: HealthEntry
+    active_llm_provider: str
 
 
 async def _get_active_provider(db: AsyncSession) -> str:
@@ -24,7 +40,7 @@ async def _get_active_provider(db: AsyncSession) -> str:
     return "ollama"
 
 
-@router.get("/api/health/status")
+@router.get("/api/health/status", response_model=HealthStatusOut)
 async def get_latest_health_status(db: AsyncSession = Depends(get_db)):
     """Returns the most recent health record for all tracked services."""
     active_llm = await _get_active_provider(db)
@@ -86,7 +102,7 @@ async def get_latest_health_status(db: AsyncSession = Depends(get_db)):
     return results
 
 
-@router.get("/api/health/history")
+@router.get("/api/health/history", response_model=list[HealthEntry])
 async def get_health_history(service: str, limit: int = 100, db: AsyncSession = Depends(get_db)):
     """Returns the last `limit` health checks for a specific service."""
     try:
@@ -113,7 +129,7 @@ async def get_health_history(service: str, limit: int = 100, db: AsyncSession = 
         return []
 
 
-@router.post("/api/health/trigger")
+@router.post("/api/health/trigger", response_model=HealthStatusOut)
 async def trigger_immediate_health_check(db: AsyncSession = Depends(get_db)):
     """Manually triggers an immediate health check across all services, bypassing the schedule."""
     try:

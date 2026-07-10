@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +17,18 @@ logger = logging.getLogger("app")
 router = APIRouter(tags=["Documents"])
 
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".text"}
+
+
+class DocumentOut(BaseModel):
+    id: int
+    filename: str
+    size_bytes: int
+    char_count: int
+    created_at: str
+
+
+class DocumentUploadOut(DocumentOut):
+    excerpt: str
 
 
 def _extract_text(filename: str, data: bytes) -> str:
@@ -53,7 +66,7 @@ def _extract_text(filename: str, data: bytes) -> str:
         )
 
 
-@router.post("/api/chats/{chat_id}/documents")
+@router.post("/api/chats/{chat_id}/documents", response_model=DocumentUploadOut)
 async def upload_document(
     chat_id: int,
     file: UploadFile = File(...),
@@ -100,7 +113,7 @@ async def upload_document(
     }
 
 
-@router.get("/api/chats/{chat_id}/documents")
+@router.get("/api/chats/{chat_id}/documents", response_model=list[DocumentOut])
 async def list_documents(
     chat_id: int,
     user: dict = Depends(get_current_user),

@@ -32,6 +32,19 @@ class PeerUpdate(BaseModel):
     enabled: Optional[bool] = None
 
 
+class PeerOut(BaseModel):
+    # Deliberately has no api_key field — the response model enforces that the
+    # key can never be serialised out, matching _safe() (defence in depth).
+    id: int
+    peer_id: str
+    name: str
+    base_url: str
+    has_api_key: bool
+    description: str
+    enabled: bool
+    created_at: str
+
+
 def _safe(peer: PeerBot) -> dict:
     """Serialise a PeerBot without ever returning the api_key."""
     return {
@@ -46,7 +59,7 @@ def _safe(peer: PeerBot) -> dict:
     }
 
 
-@router.get("")
+@router.get("", response_model=list[PeerOut])
 async def list_peers(
     db: AsyncSession = Depends(get_db),
     _admin: dict = Depends(get_admin_user),
@@ -55,7 +68,7 @@ async def list_peers(
     return [_safe(p) for p in result.scalars().all()]
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, response_model=PeerOut)
 async def create_peer(
     body: PeerCreate,
     db: AsyncSession = Depends(get_db),
@@ -79,7 +92,7 @@ async def create_peer(
     return _safe(peer)
 
 
-@router.put("/{peer_id}")
+@router.put("/{peer_id}", response_model=PeerOut)
 async def update_peer(
     peer_id: str,
     body: PeerUpdate,

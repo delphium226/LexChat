@@ -41,9 +41,33 @@ class ResetPasswordRequest(BaseModel):
     username: str
 
 
+# --- Response schemas ---
+
+class AuthUser(BaseModel):
+    id: int
+    username: str
+    role: str
+    dark_mode: Optional[bool] = None
+    research_mode: Optional[str] = None
+    chat_mode: Optional[str] = None
+
+
+class LoginResponse(BaseModel):
+    token: str
+    user: AuthUser
+
+
+class UserWrapper(BaseModel):
+    user: AuthUser
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
 # --- Endpoints ---
 
-@router.post("/login")
+@router.post("/login", response_model=LoginResponse)
 async def login(
     response: Response,
     creds: LoginRequest,
@@ -95,13 +119,13 @@ async def login(
     }
 
 
-@router.post("/logout")
+@router.post("/logout", response_model=MessageResponse)
 async def logout(response: Response):
     response.delete_cookie("token")
     return {"message": "Logged out successfully"}
 
 
-@router.get("/me")
+@router.get("/me", response_model=UserWrapper)
 async def get_me(
     db_user: User = Depends(get_current_db_user),
 ):
@@ -117,7 +141,7 @@ async def get_me(
     }
 
 
-@router.post("/reset-password-request")
+@router.post("/reset-password-request", response_model=MessageResponse)
 async def reset_password_request(
     body: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db),
@@ -135,7 +159,7 @@ async def reset_password_request(
     return {"message": "If user exists, a password reset email has been sent."}
 
 
-@router.post("/change-password")
+@router.post("/change-password", response_model=MessageResponse)
 async def change_password(
     body: ChangePasswordRequest,
     db_user: User = Depends(get_current_db_user),
@@ -152,7 +176,7 @@ async def change_password(
     return {"message": "Password updated successfully"}
 
 
-@router.put("/preferences")
+@router.put("/preferences", response_model=MessageResponse)
 async def update_preferences(
     body: PreferencesRequest,
     db_user: User = Depends(get_current_db_user),

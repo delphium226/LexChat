@@ -43,6 +43,10 @@ class UserOut(BaseModel):
         from_attributes = True
 
 
+class MessageResponse(BaseModel):
+    message: str
+
+
 # --- Endpoints ---
 
 @router.get("", response_model=List[UserOut])
@@ -144,7 +148,7 @@ async def update_user(
     )
 
 
-@router.delete("/{user_id}")
+@router.delete("/{user_id}", response_model=MessageResponse)
 async def delete_user(
     user_id: int,
     admin: dict = Depends(get_admin_user),
