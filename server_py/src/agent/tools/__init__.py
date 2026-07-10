@@ -19,7 +19,6 @@ from .parliament import (  # noqa: F401
     _parse_sp_meeting_page,
     _parse_sp_plenary_meetings,
     _parse_sp_plenary_transcript,
-    _parse_sp_transcript_page,
     _search_committee_transcripts_db,
     _search_plenary_db,
     _slim_hansard_results,

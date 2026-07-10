@@ -131,85 +131,6 @@ def _parse_sp_meeting_page(html: str, slug: str, meeting_id: str) -> dict:
     return {"committee_name": committee_name, "agenda_items": agenda_items}
 
 
-def _parse_sp_transcript_page(html: str, url: str) -> dict:
-    """Extract speech content from a SP Official Report transcript page."""
-    title_match = _re.search(r"<title[^>]*>([^<]+)</title>", html, _re.IGNORECASE)
-    page_title = _strip_html(title_match.group(1)).strip() if title_match else ""
-    if "|" in page_title:
-        page_title = page_title.split("|")[0].strip()
-
-    h1_match = _re.search(r"<h1[^>]*>(.*?)</h1>", html, _re.IGNORECASE | _re.DOTALL)
-    committee_name = _strip_html(h1_match.group(1)).strip() if h1_match else ""
-    committee_name = _re.sub(r",?\s*Meeting date:.*", "", committee_name, flags=_re.IGNORECASE).strip()
-
-    main_match = _re.search(r"<main[^>]*>(.*?)</main>", html, _re.DOTALL | _re.IGNORECASE)
-    content_html = main_match.group(1) if main_match else html
-
-    speeches: list[dict] = []
-
-    # Try structured contribution/speech divs first
-    contrib_pattern = _re.compile(
-        r'<(?:div|article|section)[^>]*class="[^"]*(?:contribution|or-contribution|member-speech|speech-contribution)[^"]*"[^>]*>(.*?)</(?:div|article|section)>',
-        _re.DOTALL | _re.IGNORECASE,
-    )
-    blocks = contrib_pattern.findall(content_html)
-    if blocks:
-        for block in blocks:
-            spk_match = _re.search(
-                r'<(?:strong|h[2-4]|span[^>]*class="[^"]*speaker[^"]*")[^>]*>(.*?)</(?:strong|h[2-4]|span)>',
-                block, _re.IGNORECASE | _re.DOTALL,
-            )
-            speaker = _strip_html(spk_match.group(1)).strip() if spk_match else ""
-            text = _strip_html(block).strip()
-            if speaker and text.startswith(speaker):
-                text = text[len(speaker):].lstrip(":").strip()
-            if text and len(text) > 15:
-                speeches.append({"speaker": speaker, "text": text[:3000]})
-
-    # Fallback: speaker-colon pattern in paragraph text
-    if not speeches:
-        para_pattern = _re.compile(r"<p[^>]*>(.*?)</p>", _re.DOTALL | _re.IGNORECASE)
-        current_speaker = ""
-        current_parts: list[str] = []
-        for m in para_pattern.finditer(content_html):
-            text = _strip_html(m.group(1)).strip()
-            if not text:
-                continue
-            spk_match = _re.match(
-                r"^([A-Z][A-Za-z'\-]+(?: [A-Z][A-Za-z'\-]+){0,4}(?:\s*\([^)]{0,40}\))*)\s*:\s*(.*)",
-                text, _re.DOTALL,
-            )
-            if spk_match:
-                if current_parts:
-                    speeches.append({"speaker": current_speaker, "text": " ".join(current_parts)[:3000]})
-                current_speaker = spk_match.group(1).strip()
-                rest = spk_match.group(2).strip()
-                current_parts = [rest] if rest else []
-            else:
-                current_parts.append(text)
-        if current_parts:
-            speeches.append({"speaker": current_speaker, "text": " ".join(current_parts)[:3000]})
-
-    # Last resort: all paragraph text as a single block
-    if not speeches:
-        para_pattern = _re.compile(r"<p[^>]*>(.*?)</p>", _re.DOTALL | _re.IGNORECASE)
-        all_paras = [
-            _strip_html(m.group(1)).strip()
-            for m in para_pattern.finditer(content_html)
-            if len(_strip_html(m.group(1)).strip()) > 20
-        ]
-        if all_paras:
-            speeches.append({"speaker": "", "text": "\n\n".join(all_paras)[:8000]})
-
-    return {
-        "page_title": page_title,
-        "committee_name": committee_name,
-        "url": url,
-        "speeches": speeches[:30],
-        "total_speeches": len(speeches),
-    }
-
-
 def _parse_sp_plenary_transcript(html: str, url: str, agenda_title: str | None = None) -> dict:
     """Parse a Scottish Parliament plenary Official Report page into attributed speeches.
 
@@ -340,6 +261,26 @@ async def _lookup_plenary_agenda_title(meeting_id: str, iob_id: str) -> Optional
             row = await session.execute(
                 sa_text(
                     "SELECT agenda_item_title FROM sp_plenary_items "
+                    "WHERE meeting_id = :m AND iob_id = :i LIMIT 1"
+                ),
+                {"m": meeting_id, "i": iob_id},
+            )
+            title = row.scalar()
+            return title or None
+    except Exception:
+        return None
+
+
+async def _lookup_committee_agenda_title(meeting_id: str, iob_id: str) -> Optional[str]:
+    """Fetch the stored agenda-item title for a committee (meeting_id, iob_id), if crawled."""
+    from sqlalchemy import text as sa_text
+    from ...database import async_session_maker
+
+    try:
+        async with async_session_maker() as session:
+            row = await session.execute(
+                sa_text(
+                    "SELECT agenda_item_title FROM sp_committee_items "
                     "WHERE meeting_id = :m AND iob_id = :i LIMIT 1"
                 ),
                 {"m": meeting_id, "i": iob_id},
@@ -735,6 +676,9 @@ async def execute_parliament_tool(
                 iob_id = str(args["iob_id"])
                 transcript_url = f"{_SP_OR_BASE}/{slug}?meeting={meeting_id}&iob={iob_id}"
 
+                # Scope the parser to the requested agenda item using the stored title.
+                agenda_title = await _lookup_committee_agenda_title(meeting_id, iob_id)
+
                 await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": transcript_url, "method": "GET", "payload": {}})
                 t0 = time.perf_counter()
                 resp = await client.get(transcript_url, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"}, timeout=20.0)
@@ -743,7 +687,25 @@ async def execute_parliament_tool(
                     timing_collector.record_lex_api_call(name, elapsed_ms)
                 await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": transcript_url, "status": resp.status_code, "response": {"preview": f"{len(resp.text)} chars"}, "elapsed_ms": round(elapsed_ms)})
                 resp.raise_for_status()
-                return json.dumps(_parse_sp_transcript_page(resp.text, transcript_url))
+                # Committee item pages use the same <p id="orscontributions_..."> markup as
+                # plenary; the plenary parser attributes speakers correctly where the older
+                # _parse_sp_transcript_page returns a single unnamed blob.
+                parsed = _parse_sp_plenary_transcript(resp.text, transcript_url, agenda_title)
+
+                # Optional enrichment: attach SP TV video deep links to matched speeches.
+                # Additive and fail-soft — never blocks or errors the citation.
+                if settings.enable_video_deeplinks:
+                    try:
+                        caption_row = await _lookup_video_captions(meeting_id)
+                        if caption_row:
+                            from ...services.caption_match import annotate_speeches
+                            n = annotate_speeches(caption_row, parsed.get("speeches") or [])
+                            if n:
+                                logger.info(f"[Parliament] Attached {n} video deep link(s) for committee meeting {meeting_id}")
+                    except Exception as exc:
+                        logger.warning(f"[Parliament] Video deep-link enrichment failed for committee {meeting_id}: {exc}")
+
+                return json.dumps(parsed)
 
             elif name == "search_scottish_plenary":
                 t0 = time.perf_counter()

@@ -134,21 +134,35 @@ committee).
 `server_py/src/services/parliament_crawler.py`, started on app startup **only when
 `RESEARCH_MODE=parliamentary_records`**:
 
-1. **`backfill_sessions()`** — one-shot (committee). Iterates two-week windows from
-   `_BACKFILL_START` (Session 6 start) to today, requesting the Official Report listing
-   with `showCommittee=true&dateSelect=custom&dtDateFrom=X&dtDateTo=Y`. For each meeting
-   found it fetches the meeting page (→ committee name + agenda items) and then each
-   agenda item's transcript page (→ speeches). Rate-limited to ~1.5 req/s.
+1. **`backfill_sessions()`** — one-shot at startup (committee). Requests the Official Report
+   listing with `showCommittee=true&dateSelect=custom&dtDateFrom=X&dtDateTo=Y` in two-week
+   windows. For each meeting found it fetches the meeting page (→ committee name + agenda
+   items) and then each agenda item's transcript page, parsed with **`_parse_sp_plenary_transcript`**
+   (committee and plenary pages share the same `<p id="orscontributions_...">` markup — the old
+   committee-specific `_parse_sp_transcript_page` was removed after it was found to collapse
+   every meeting into a single unnamed blob; see §8). **Start point is adaptive
+   (`_backfill_window_start`):** on an empty DB it walks from `_BACKFILL_START` (Session 6
+   start); on a populated DB it starts ~2 weeks before the newest stored meeting, so a normal
+   restart re-scans only recent windows instead of re-walking five years. Empty (not-yet-
+   published) items are skipped, not stored, so the daily delta retries them. Rate-limited to
+   ~1.5 req/s.
 2. **`backfill_plenary()`** — one-shot (plenary). Same as above but with `showPlenary=true`
    and `_parse_sp_plenary_meetings` (which *includes* the `meeting-of-parliament-*` slugs the
    committee parser excludes); item pages are parsed with `_parse_sp_plenary_transcript`.
-   Runs **after** `backfill_sessions()` so the two don't hit the origin concurrently.
-   Transcript fetches use `_fetch_sp_page_with_retry` (retry/backoff, reject <20 KB) because
-   the large plenary pages intermittently return a Cloudflare 524 error page.
+   Uses the same adaptive high-water-mark start. Runs **after** `backfill_sessions()` so the
+   two don't hit the origin concurrently. Transcript fetches use `_fetch_sp_page_with_retry`
+   (retry/backoff, reject <20 KB) because the large plenary pages intermittently return a
+   Cloudflare 524 error page.
 3. **`background_crawl_loop()`** / **`background_plenary_crawl_loop()`** — run
-   `crawl_sp_new_meetings()` / `crawl_sp_new_plenary()` daily against the current listing
-   page to pick up new sittings. The plenary loop is self-staggered (first run ~5 min after
-   startup) to avoid overlapping the committee crawl.
+   `crawl_sp_new_meetings()` / `crawl_sp_new_plenary()` daily as a **trailing-window delta**:
+   they re-scan the last `_DELTA_WINDOW_DAYS` (30) and *reprocess* every meeting in that window,
+   not just brand-new `meeting_id`s. This is how new sittings **and** late-published transcripts
+   / newly-added agenda items on already-seen meetings are picked up — the source sends no
+   `Last-Modified`/`ETag` (Cloudflare `no-cache, no-store`), so a recency-window re-scan against
+   our stored state is the only way to detect updates. Per-item `(meeting_id, iob_id)` existence
+   checks keep completed transcripts from being re-fetched, so steady-state cost is ~one
+   meeting-page GET per recent meeting per day. The plenary loop is self-staggered (first run
+   ~5 min after startup) to avoid overlapping the committee crawl.
 
 Written answers, bills, and members are **not** crawled — they are fetched live per query.
 
@@ -164,7 +178,7 @@ Written answers, bills, and members are **not** crawled — they are fetched liv
 | **Written answers** | TheyWorkForYou `getHansard` type=spwrans (live) | `search_scottish_parliament` (`debate_type=written_answers`) | ✅ | ❌ excerpt only | ⚠️ ignored | Whatever TWFY indexes |
 | **Bills** | `data.parliament.scot/api/bills` (live) | `search_bills` | ⚠️ client-side keyword filter | n/a (metadata) | ❌ | All Holyrood bills |
 | **Members (MSPs)** | TheyWorkForYou `getMSPs` (live) | `get_member_info` | by name | n/a (bio record) | ❌ | Current + historic MSPs |
-| **Video timestamps** *(built, dark-launched)* | Scottish Parliament TV (Vualto) — playback model + HLS WebVTT captions; `sp_video_captions` cache | *(enrichment on plenary citations, no tool)* | n/a (not searched) | n/a (produces a deep link, not text) | n/a | Plenary, Session 6+7 where captions exist (gated on `ENABLE_VIDEO_DEEPLINKS`) |
+| **Video timestamps** *(built, dark-launched)* | Scottish Parliament TV (Vualto) — playback model + HLS WebVTT captions; `sp_video_captions` cache | *(enrichment on plenary **and committee** citations, no tool)* | n/a (not searched) | n/a (produces a deep link, not text) | n/a | Plenary + committee, Session 6+7 where captions exist (gated on `ENABLE_VIDEO_DEEPLINKS`) |
 
 ### Committee transcripts & plenary debates — the fully-retrievable sources
 
@@ -302,11 +316,14 @@ scrutiny research). None of these are bugs — they are coverage boundaries.
 ## 8. Scottish Parliament TV — video timestamp deep links (planned)
 
 **Status:** **built (2026-07-09), dark-launched behind `ENABLE_VIDEO_DEEPLINKS` (default off).** Plenary
-only (v1). Full build brief: [`VIDEO_DEEPLINK_PLAN.md`](VIDEO_DEEPLINK_PLAN.md). Implemented in
-`services/sptv_client.py` (resolve + captions), `services/caption_match.py` (text→time match),
-`parliament_crawler.backfill_captions()` (caching), and `SpVideoCaption` / `sp_video_captions`.
-When enabled, `get_scottish_plenary_debate` attaches a `video_deeplink` to matched speeches. This
-section documents the *data source* — how SP TV video maps to our Official Report data.
+(v1) **and committee (v2)**. Full build brief: [`VIDEO_DEEPLINK_PLAN.md`](VIDEO_DEEPLINK_PLAN.md);
+committee spike: [`VIDEO_COMMITTEE_SPIKE.md`](VIDEO_COMMITTEE_SPIKE.md). Implemented in
+`services/sptv_client.py` (resolve — `resolve_event` for plenary, `resolve_committee_event` for
+committee — + captions), `services/caption_match.py` (text→time match),
+`parliament_crawler.backfill_captions()` / `backfill_committee_captions()` (caching), and
+`SpVideoCaption` / `sp_video_captions`. When enabled, `get_scottish_plenary_debate` **and
+`get_scottish_committee_transcript`** attach a `video_deeplink` to matched speeches. This section
+documents the *data source* — how SP TV video maps to our Official Report data.
 
 ### What it adds
 When the bot cites a plenary speech, it can also link to the **exact moment** in the SP TV video where
@@ -350,11 +367,24 @@ so the link is *derived* through captions:
   via `zoneinfo`), not the PoC's hard-coded +1h BST.
 
 ### Coverage & limitations
-- **Plenary only (v1).** Plenary slug derives from date. **Committees are not yet supported** — several
-  committee videos share a date, so `date + committee → eventId` needs the SP TV archive/search
-  endpoint (unsolved; v2). Everything downstream is identical once `eventId` is known.
-- **Caption-dependent.** Confirmed for recent (June 2026) plenary. Older Session 6 sittings and
-  committees may lack a caption track — those get no video link. Backfill will reveal true coverage.
+- **Plenary (v1) and committee (v2) both supported.** Plenary slug derives from the date; committees
+  can't (several meet the same day), so committee events are resolved via the **SP TV archive
+  date-filter** (`GET /archive?DateFrom=DD/MM/YYYY&DateTo=…`), which lists every event that day with
+  the committee name in the link text — matched on `committee_name` to disambiguate, then the meeting
+  page yields the eventId. Implemented as `sptv_client.resolve_committee_event`; captions are cached
+  by `parliament_crawler.backfill_committee_captions()` (+ the rolling committee crawl hook) and
+  `get_scottish_committee_transcript` attaches the deep links. Everything downstream of `eventId`
+  (playback model, HLS captions, matcher) is identical to plenary. **Committee note:** the retrieval
+  tool **and the committee crawler** now parse committee pages with `_parse_sp_plenary_transcript`
+  (the same `orscontributions` markup as plenary); the older `_parse_sp_transcript_page` returned a
+  single unnamed blob and was deleted. Session 6+7 committee data was re-crawled under the fixed
+  parser (attribution ~1 → ~13 speeches/item).
+- **Caption coverage (measured, full Session 6+7 backfill Jul 2026).** ~1,140 SP TV events cached in
+  `sp_video_captions`; **~540 (~47%) have a usable caption track** (`caption_ok=true`) and can yield a
+  video link. The remainder are older sittings with no subtitle track (`caption_ok=false`) — no link,
+  fail-soft. Availability skews strongly to recent sittings: most June-2026 plenary and committee
+  events are captioned, while many pre-2024 events are not. A `caption_ok=false` row is still stored
+  so the event isn't retried.
 - **Accuracy ±a few seconds.** Live captions are lightly garbled/rolling; distinctive 8–11 word
   windows match cleanly, but very short or heavily paraphrased contributions fall back to the page
   link.

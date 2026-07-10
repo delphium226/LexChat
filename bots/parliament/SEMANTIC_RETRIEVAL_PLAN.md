@@ -67,12 +67,16 @@ embedding backfill through local Ollama, must be resumable). This is why pgvecto
   (`vector.dll` → `<pg>/lib`, `vector.control` + `vector--*.sql` → `<pg>/share/extension`), then
   `CREATE EXTENSION vector;`. **Prove it drops into local Postgres first.** If this fails, the whole design
   changes — do it before anything else.
-- **P0b — fix committee speech parsing.** 1.1 speeches/item is a parser bug (the plenary-vs-committee parser
-  asymmetry noted in `CLAUDE.md`). Semantic recall is only as good as the parsed speeches, so fix
-  `_parse_sp_*_transcript` for committee pages before the backfill, else half the corpus is empty.
-- **P0c — Session 6 plenary backfill.** Crawler supports `dateSelect=custom`; `backfill_plenary()` just hasn't
-  run the full Session 6 range (2021-05-13 →). This is crawl time (~hours), not dev work, but it gates the
-  embedding backfill. Run after P0b so committee re-parse and plenary backfill land together.
+- ~~**P0b — fix committee speech parsing.**~~ **DONE (Jul 2026).** The 1.1 speeches/item bug was the old
+  committee parser (`_parse_sp_transcript_page`) collapsing each meeting into one unnamed blob. Committee
+  pages actually use the same `<p id="orscontributions_...">` markup as plenary, so both the crawler and the
+  retrieval tool now use `_parse_sp_plenary_transcript`; the old parser was deleted. Session 6+7 committee
+  data was re-crawled — attribution ~1 → ~13 speeches/item, all named. The corpus is now properly populated
+  for embedding.
+- ~~**P0c — Session 6 plenary backfill.**~~ **DONE (Jul 2026).** Full Session 6+7 has been backfilled for
+  both committee (~2,400 items) and plenary (~3,600 items), 2021→2026. (SP TV captions were also cached
+  across both sessions: ~1,140 events, ~47% with a usable track.) The corpus is ready for the embedding
+  backfill.
 
 ---
 
@@ -217,7 +221,7 @@ Inside `_search_plenary_db` and `_search_committee_transcripts_db` in `parliamen
 ---
 
 ## 7. Suggested order of execution
-P0a (pgvector spike) → P0b (committee parse fix) → P0c (Session 6 backfill) →
+P0a (pgvector spike) → ~~P0b (committee parse fix)~~ ✅ → ~~P0c (Session 6 backfill)~~ ✅ →
 Phase 1 → 2 → 3 → 4 (backfill) → 5 → 6 → tests.
 ```
 ```

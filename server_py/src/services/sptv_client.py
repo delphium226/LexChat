@@ -129,6 +129,49 @@ async def resolve_event(
     return m.group(1), sptv_slug
 
 
+_MEETING_LINK_RE = re.compile(r'<a[^>]*href="(/meeting/[^"]+)"[^>]*>(.*?)</a>', re.S | re.I)
+
+
+def _norm_committee_name(s: str) -> str:
+    """Lowercase, keep alnum only, collapse runs — for committee-title matching."""
+    return re.sub(r'[^a-z0-9]+', ' ', (s or "").lower()).strip()
+
+
+async def resolve_committee_event(
+    client: httpx.AsyncClient,
+    meeting_date: date,
+    committee_name: str,
+) -> Optional[tuple[str, str]]:
+    """Resolve a committee meeting to (event_id, sptv_slug) via the SP TV archive.
+
+    Plenary has one chamber sitting per day, so its slug derives from the date alone.
+    Committees don't — several meet on the same day, each with its own video — so we
+    query the SP TV archive date-filter (`/archive?DateFrom=DD/MM/YYYY&DateTo=…`),
+    which lists every event that day with the committee name in the link text, and
+    match on the committee name to disambiguate. Then reuse `resolve_event` (with the
+    discovered slug) to pull the Vualto eventId off the meeting page.
+
+    Fail-soft: returns None if the archive can't be fetched or no listing matches.
+    """
+    from urllib.parse import quote
+
+    want = _norm_committee_name(committee_name)
+    if not want:
+        return None
+    ds = quote(meeting_date.strftime("%d/%m/%Y"), safe="")
+    url = f"{settings.sptv_base_url}/archive?DateFrom={ds}&DateTo={ds}"
+    html = await _get(client, url)
+    if not html:
+        return None
+    for mm in _MEETING_LINK_RE.finditer(html):
+        title = _norm_committee_name(re.sub(r'<[^>]+>', ' ', mm.group(2)))
+        if want in title:
+            slug = mm.group(1).split("/meeting/", 1)[1]
+            return await resolve_event(client, meeting_date, slug=slug)
+    logger.info(f"[SPTV] No committee archive match for '{committee_name}' on {meeting_date}")
+    return None
+
+
 async def get_playback_model(
     client: httpx.AsyncClient, event_id: str
 ) -> Optional[PlaybackModel]:

@@ -5,10 +5,20 @@ Populates sp_committee_items with agenda items + full speech text,
 enabling FTS-backed search_scottish_committee_transcripts.
 
 Two modes:
-  crawl_sp_new_meetings  — rolling, runs daily, fetches recent listing page
-  backfill_sessions      — one-shot, fetches date-windowed listing pages
-                           back to Session 6 start (2021-05-13), covering
-                           Session 6 and Session 7
+  backfill_sessions      — one-shot at startup. On an empty DB, fetches date-windowed
+                           listing pages back to Session 6 start (2021-05-13). On a
+                           populated DB, starts from a high-water mark (~2 weeks before
+                           the newest stored meeting) so a restart doesn't re-walk years.
+  crawl_sp_new_meetings  — daily delta. Re-scans a trailing _DELTA_WINDOW_DAYS window
+                           and reprocesses each meeting in it, so new sittings AND
+                           late-published transcripts / newly-added agenda items on
+                           already-seen meetings are picked up. The source exposes no
+                           Last-Modified/ETag, so a recency-window re-scan against our
+                           stored state is the only way to detect updates.
+
+Both committee and plenary have a backfill + delta pair (backfill_plenary /
+crawl_sp_new_plenary). Per-item existence checks make reprocessing cheap: complete
+transcripts are skipped, only missing/late items are fetched.
 """
 import asyncio
 import json
@@ -27,7 +37,6 @@ from ..agent.tools import (
     _parse_sp_meeting_page,
     _parse_sp_plenary_meetings,
     _parse_sp_plenary_transcript,
-    _parse_sp_transcript_page,
     _SP_OR_BASE,
 )
 
@@ -39,6 +48,12 @@ _BACKFILL_DELAY = 1.5     # slightly slower during backfill
 _SESSION6_START = date(2021, 5, 13)  # Holyrood first met after May 2021 election
 _SESSION7_START = date(2026, 5, 6)   # Holyrood reassembly after May 2026 election
 _BACKFILL_START = _SESSION6_START    # earliest session to backfill
+
+# Incremental crawl tuning. The source exposes no Last-Modified/ETag (Cloudflare
+# no-cache, no-store), so "recently updated" can only be detected by re-scanning a
+# recent date window against our own stored state — not via HTTP conditional GETs.
+_DELTA_WINDOW_DAYS = 30        # trailing window the daily delta loop re-scans
+_HIGH_WATER_OVERLAP_DAYS = 14  # backfill re-scan margin before the newest stored meeting
 
 
 # ---------------------------------------------------------------------------
@@ -67,6 +82,43 @@ async def _meeting_iob_exists(session, meeting_id: str, iob_id: str) -> bool:
         {"m": meeting_id, "i": iob_id},
     )
     return result.scalar() is not None
+
+
+async def _backfill_window_start(table: str) -> date:
+    """Resolve where a one-shot backfill should begin.
+
+    Empty table → full backfill from Session 6 (`_BACKFILL_START`). Populated table
+    → only a short re-scan from shortly before the newest stored meeting, so a normal
+    restart doesn't re-walk five years of listing pages. Recency (new + late-published
+    content) is handled by the daily delta loop, not the backfill.
+
+    `table` is an internal constant (`sp_committee_items` / `sp_plenary_items`), never
+    user input, so interpolating it into the query is safe.
+    """
+    async with async_session_maker() as session:
+        newest = (
+            await session.execute(text(f"SELECT max(meeting_date) FROM {table}"))
+        ).scalar()
+    if newest is None:
+        return _BACKFILL_START
+    return max(_BACKFILL_START, newest - timedelta(days=_HIGH_WATER_OVERLAP_DAYS))
+
+
+async def _fetch_window_meetings(client, *, show_param: str, parser, window_start: date, window_end: date):
+    """GET the date-windowed Official Report listing and parse out its meetings.
+
+    `dateSelect=custom` is mandatory — without it the endpoint defaults to the current
+    session and ignores dtDateFrom/dtDateTo. Shared by the backfills and delta loops.
+    """
+    params = {
+        show_param: "true",
+        "dateSelect": "custom",
+        "dtDateFrom": window_start.strftime("%Y-%m-%d"),
+        "dtDateTo": window_end.strftime("%Y-%m-%d"),
+    }
+    resp = await client.get(_SP_OR_BASE, params=params, headers=_HEADERS, follow_redirects=True)
+    resp.raise_for_status()
+    return parser(resp.text)
 
 
 async def _insert_item(session, row: dict) -> None:
@@ -144,9 +196,18 @@ async def _process_meeting(client: httpx.AsyncClient, meeting: dict) -> int:
                 logger.warning(f"[Crawler] Failed to fetch transcript {transcript_url}: {exc}")
                 continue
 
-            parsed = _parse_sp_transcript_page(tr.text, transcript_url)
-            speeches = parsed.get("speeches") or []
             agenda_title = item.get("title", "")
+            # Committee item pages use the same <p id="orscontributions_..."> markup as
+            # plenary; _parse_sp_plenary_transcript attributes speakers correctly where the
+            # older _parse_sp_transcript_page returned a single unnamed blob.
+            parsed = _parse_sp_plenary_transcript(tr.text, transcript_url, agenda_title or None)
+            speeches = parsed.get("speeches") or []
+            if not speeches:
+                # No parseable contributions yet — usually a transcript the Official
+                # Report hasn't published (it lags the sitting by days). Don't store an
+                # empty row, so the daily delta retries this item until it's published.
+                logger.debug(f"[Crawler] No speeches parsed for committee {transcript_url}; skipping")
+                continue
             full_text = _build_full_text(committee_name, agenda_title, speeches)
 
             row = {
@@ -170,6 +231,14 @@ async def _process_meeting(client: httpx.AsyncClient, meeting: dict) -> int:
                 f"(meeting={meeting_id} iob={iob_id})"
             )
 
+    # After the meeting's agenda items are stored, cache its SP TV captions once.
+    # Committee events are disambiguated by name via the SP TV archive.
+    if inserted and settings.enable_video_deeplinks and committee_name:
+        await asyncio.sleep(_REQ_DELAY)
+        await _capture_meeting_captions(
+            client, meeting_id, meeting_date, committee_name=committee_name
+        )
+
     return inserted
 
 
@@ -178,37 +247,45 @@ async def _process_meeting(client: httpx.AsyncClient, meeting: dict) -> int:
 # ---------------------------------------------------------------------------
 
 async def crawl_sp_new_meetings() -> int:
-    """Fetch the current SP OR listing page and store any unseen committee meetings."""
-    logger.info("[Crawler] Rolling crawl starting...")
+    """Daily committee delta: re-scan the last _DELTA_WINDOW_DAYS and (re)process each
+    meeting in that window.
+
+    This is not a pure 'new meeting_id' crawl. It reprocesses every recent meeting so
+    that late-published transcripts and newly-added agenda items on already-seen
+    meetings are picked up — the source has no Last-Modified/ETag, so a recency-window
+    re-scan is the only way to catch updates to existing meetings. The per-item
+    existence check inside _process_meeting keeps already-stored transcripts from being
+    re-fetched, so steady-state cost is roughly one meeting-page GET per recent meeting
+    per day; empty (not-yet-published) items are retried until they appear.
+    """
+    logger.info("[Crawler] Committee delta crawl starting...")
     total = 0
+    today = date.today()
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(_SP_OR_BASE, headers=_HEADERS, follow_redirects=True)
-            resp.raise_for_status()
-            meetings = _parse_sp_listing_meetings(resp.text)
-            logger.info(f"[Crawler] Listing page returned {len(meetings)} committee meetings")
-
-            # Filter out meetings already fully stored (check by meeting_id presence)
-            async with async_session_maker() as session:
-                new_meetings = []
-                for m in meetings:
-                    result = await session.execute(
-                        text("SELECT COUNT(*) FROM sp_committee_items WHERE meeting_id = :m"),
-                        {"m": m["meeting_id"]},
+            window_start = today - timedelta(days=_DELTA_WINDOW_DAYS)
+            while window_start < today:
+                window_end = min(window_start + timedelta(days=13), today)
+                try:
+                    await asyncio.sleep(_REQ_DELAY)
+                    meetings = await _fetch_window_meetings(
+                        client, show_param="showCommittee", parser=_parse_sp_listing_meetings,
+                        window_start=window_start, window_end=window_end,
                     )
-                    if (result.scalar() or 0) == 0:
-                        new_meetings.append(m)
-
-            logger.info(f"[Crawler] {len(new_meetings)} meetings not yet in DB")
-            for meeting in new_meetings:
-                await asyncio.sleep(_REQ_DELAY)
-                n = await _process_meeting(client, meeting)
-                total += n
+                    logger.info(
+                        f"[Crawler] Committee delta {window_start}→{window_end}: {len(meetings)} meetings"
+                    )
+                    for meeting in meetings:
+                        await asyncio.sleep(_REQ_DELAY)
+                        total += await _process_meeting(client, meeting)
+                except Exception as exc:
+                    logger.warning(f"[Crawler] Committee delta window {window_start}→{window_end} error: {exc}")
+                window_start = window_end + timedelta(days=1)
 
     except Exception as exc:
-        logger.error(f"[Crawler] Rolling crawl error: {exc}")
+        logger.error(f"[Crawler] Committee delta crawl error: {exc}")
 
-    logger.info(f"[Crawler] Rolling crawl complete — {total} items stored")
+    logger.info(f"[Crawler] Committee delta crawl complete — {total} items stored")
     return total
 
 
@@ -217,21 +294,23 @@ async def crawl_sp_new_meetings() -> int:
 # ---------------------------------------------------------------------------
 
 async def backfill_sessions() -> int:
-    """Backfill all committee meetings via date-windowed listing pages.
+    """Backfill committee meetings via date-windowed listing pages.
 
-    Iterates two-week windows from _BACKFILL_START (Session 6 start) to today,
-    fetching the listing page with showCommittee=true&dtDateFrom=X&dtDateTo=Y
-    for each window. Covers Session 6 and Session 7; the inter-session
-    dissolution gap simply returns empty windows.
-    Known-to-work approach for the SP Official Report listing.
+    On an empty DB, iterates two-week windows from _BACKFILL_START (Session 6 start)
+    to today, fetching showCommittee=true&dtDateFrom=X&dtDateTo=Y per window (covers
+    Session 6 + 7; the inter-session dissolution gap returns empty windows). On a
+    populated DB, starts from a high-water mark (~2 weeks before the newest stored
+    meeting) so a normal restart doesn't re-walk years of listings — recency is the
+    daily delta loop's job.
     """
-    logger.info("[Crawler] Session backfill starting...")
     total = 0
     today = date.today()
+    start = await _backfill_window_start("sp_committee_items")
+    logger.info(f"[Crawler] Session backfill starting from {start} (to {today})...")
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            window_start = _BACKFILL_START
+            window_start = start
             while window_start < today:
                 window_end = min(window_start + timedelta(days=13), today)
                 date_from = window_start.strftime("%Y-%m-%d")
@@ -393,52 +472,60 @@ async def _process_plenary_meeting(client: httpx.AsyncClient, meeting: dict) -> 
 
 
 async def crawl_sp_new_plenary() -> int:
-    """Fetch the current SP OR listing page and store any unseen plenary sittings."""
-    logger.info("[Crawler] Rolling plenary crawl starting...")
+    """Daily plenary delta: re-scan the last _DELTA_WINDOW_DAYS and (re)process each
+    sitting in that window.
+
+    Mirror of crawl_sp_new_meetings for plenary — reprocesses recent sittings so late
+    Official Report transcripts and newly-added agenda items are picked up. Per-item
+    existence checks keep stored transcripts from being re-fetched; _process_plenary_meeting
+    already skips empty items, so not-yet-published ones retry until they appear.
+    """
+    logger.info("[Crawler] Plenary delta crawl starting...")
     total = 0
+    today = date.today()
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            params = {"showPlenary": "true"}
-            resp = await client.get(_SP_OR_BASE, params=params, headers=_HEADERS, follow_redirects=True)
-            resp.raise_for_status()
-            meetings = _parse_sp_plenary_meetings(resp.text)
-            logger.info(f"[Crawler] Listing page returned {len(meetings)} plenary sittings")
-
-            async with async_session_maker() as session:
-                new_meetings = []
-                for m in meetings:
-                    result = await session.execute(
-                        text("SELECT COUNT(*) FROM sp_plenary_items WHERE meeting_id = :m"),
-                        {"m": m["meeting_id"]},
+            window_start = today - timedelta(days=_DELTA_WINDOW_DAYS)
+            while window_start < today:
+                window_end = min(window_start + timedelta(days=13), today)
+                try:
+                    await asyncio.sleep(_REQ_DELAY)
+                    meetings = await _fetch_window_meetings(
+                        client, show_param="showPlenary", parser=_parse_sp_plenary_meetings,
+                        window_start=window_start, window_end=window_end,
                     )
-                    if (result.scalar() or 0) == 0:
-                        new_meetings.append(m)
-
-            logger.info(f"[Crawler] {len(new_meetings)} plenary sittings not yet in DB")
-            for meeting in new_meetings:
-                await asyncio.sleep(_REQ_DELAY)
-                total += await _process_plenary_meeting(client, meeting)
+                    logger.info(
+                        f"[Crawler] Plenary delta {window_start}→{window_end}: {len(meetings)} sittings"
+                    )
+                    for meeting in meetings:
+                        await asyncio.sleep(_REQ_DELAY)
+                        total += await _process_plenary_meeting(client, meeting)
+                except Exception as exc:
+                    logger.warning(f"[Crawler] Plenary delta window {window_start}→{window_end} error: {exc}")
+                window_start = window_end + timedelta(days=1)
 
     except Exception as exc:
-        logger.error(f"[Crawler] Rolling plenary crawl error: {exc}")
+        logger.error(f"[Crawler] Plenary delta crawl error: {exc}")
 
-    logger.info(f"[Crawler] Rolling plenary crawl complete — {total} items stored")
+    logger.info(f"[Crawler] Plenary delta crawl complete — {total} items stored")
     return total
 
 
 async def backfill_plenary() -> int:
-    """Backfill all plenary (chamber) sittings via date-windowed listing pages.
+    """Backfill plenary (chamber) sittings via date-windowed listing pages.
 
     Near-copy of backfill_sessions() using showPlenary=true. dateSelect=custom is
-    mandatory or the endpoint silently returns only the current session.
+    mandatory or the endpoint silently returns only the current session. Uses the
+    same high-water-mark start so a populated restart re-scans only recent windows.
     """
-    logger.info("[Crawler] Plenary backfill starting...")
     total = 0
     today = date.today()
+    start = await _backfill_window_start("sp_plenary_items")
+    logger.info(f"[Crawler] Plenary backfill starting from {start} (to {today})...")
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            window_start = _BACKFILL_START
+            window_start = start
             while window_start < today:
                 window_end = min(window_start + timedelta(days=13), today)
                 date_from = window_start.strftime("%Y-%m-%d")
@@ -501,14 +588,17 @@ async def _video_caption_exists(session, meeting_id: str) -> bool:
 
 
 async def _capture_meeting_captions(
-    client: httpx.AsyncClient, meeting_id: str, meeting_date, slug: str | None = None
+    client: httpx.AsyncClient, meeting_id: str, meeting_date, slug: str | None = None,
+    committee_name: str | None = None,
 ) -> bool:
-    """Resolve a plenary meeting's SP TV event, cache its captions. Idempotent.
+    """Resolve a meeting's SP TV event, cache its captions. Idempotent.
 
-    Stores one row per event (ON CONFLICT event_id DO NOTHING). Records a
-    caption_ok=False row when an event resolves but has no subtitle track, so it
-    isn't retried. Meetings with no resolvable event are simply skipped (retried
-    on the next backfill). Fail-soft — never raises.
+    Plenary events resolve from the date-derived slug; committee events are
+    disambiguated by name via the SP TV archive (`committee_name` set). Stores one
+    row per event (ON CONFLICT event_id DO NOTHING). Records a caption_ok=False row
+    when an event resolves but has no subtitle track, so it isn't retried. Meetings
+    with no resolvable event are simply skipped (retried on the next backfill).
+    Fail-soft — never raises.
     """
     if not meeting_date:
         return False
@@ -517,7 +607,10 @@ async def _capture_meeting_captions(
             if await _video_caption_exists(session, meeting_id):
                 return False
 
-        resolved = await _sptv.resolve_event(client, meeting_date, slug)
+        if committee_name:
+            resolved = await _sptv.resolve_committee_event(client, meeting_date, committee_name)
+        else:
+            resolved = await _sptv.resolve_event(client, meeting_date, slug)
         if not resolved:
             return False
         event_id, sptv_slug = resolved
@@ -602,6 +695,48 @@ async def backfill_captions() -> int:
         logger.error(f"[Crawler] Caption backfill error: {exc}")
 
     logger.info(f"[Crawler] Caption backfill complete — {captured} meetings with captions cached")
+    return captured
+
+
+async def backfill_committee_captions() -> int:
+    """One-shot: cache SP TV captions for every committee meeting already crawled.
+
+    Mirrors backfill_captions() but iterates distinct committee meetings in
+    sp_committee_items, resolving each via the SP TV archive (date + committee name,
+    since several committees share a date). Rate-limited; runs after the plenary
+    caption backfill so the two don't hit the SP origin concurrently. No-op unless
+    ENABLE_VIDEO_DEEPLINKS is set.
+    """
+    if not settings.enable_video_deeplinks:
+        logger.info("[Crawler] Committee caption backfill skipped (ENABLE_VIDEO_DEEPLINKS off)")
+        return 0
+
+    logger.info("[Crawler] Committee caption backfill starting...")
+    captured = 0
+    try:
+        async with async_session_maker() as session:
+            rows = await session.execute(text(
+                "SELECT DISTINCT c.meeting_id, c.meeting_date, c.committee_name "
+                "FROM sp_committee_items c "
+                "LEFT JOIN sp_video_captions v ON v.meeting_id = c.meeting_id "
+                "WHERE v.meeting_id IS NULL AND c.meeting_date IS NOT NULL "
+                "  AND c.committee_name IS NOT NULL AND c.committee_name <> '' "
+                "ORDER BY c.meeting_date"
+            ))
+            meetings = [(r[0], r[1], r[2]) for r in rows.all()]
+
+        logger.info(f"[Crawler] Committee caption backfill: {len(meetings)} meetings to resolve")
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            for meeting_id, meeting_date, committee_name in meetings:
+                await asyncio.sleep(_BACKFILL_DELAY)
+                if await _capture_meeting_captions(
+                    client, str(meeting_id), meeting_date, committee_name=committee_name
+                ):
+                    captured += 1
+    except Exception as exc:
+        logger.error(f"[Crawler] Committee caption backfill error: {exc}")
+
+    logger.info(f"[Crawler] Committee caption backfill complete — {captured} meetings with captions cached")
     return captured
 
 

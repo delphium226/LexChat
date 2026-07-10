@@ -167,9 +167,11 @@ known.
 - **Whitelist. RESOLVED (2026-07-09).** Deployment owner confirmed the required URLs
   (`scottishparliament.tv`, `*.vustreams.com`, and the meeting/HLS hosts) can be whitelisted on the
   target. Capture the final exact host list during Phase 1 and hand it over for whitelisting.
-- **Caption coverage.** Confirmed for a June 2026 plenary. Unknown for older Session 6 sittings and
-  for committees — some events may have `caption_ok=False`. Backfill will reveal the true coverage;
-  the build already degrades gracefully.
+- **Caption coverage. MEASURED (full Session 6+7 backfill, Jul 2026).** ~1,140 SP TV events cached;
+  **~540 (~47%) have a usable caption track** (`caption_ok=true`), the rest `caption_ok=False` (no
+  subtitle track). Coverage skews strongly to recent sittings — most June-2026 plenary and committee
+  events are captioned; many pre-2024 events are not. The build degrades gracefully (no track → no
+  link, plain citation).
 - **Match reliability.** Distinctive 8–11 word windows matched cleanly in the PoC, but live captions
   are lightly garbled/rolling. Very short or heavily paraphrased contributions will fall back to the
   page link. Acceptable, but set user expectations: timestamp is **±a few seconds**.

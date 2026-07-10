@@ -220,18 +220,31 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
         page_title = data.get("page_title") or data.get("committee_name") or ""
         speeches = data.get("speeches") or []
         excerpt = speeches[0].get("text", "")[:300] if speeches else ""
+        # Item-level video entry point: the first speech with a confident deep link
+        # marks where this agenda item starts on SP TV (mirrors the plenary branch).
+        video = None
+        for sp in speeches:
+            dl = sp.get("video_deeplink")
+            if dl and dl.get("url"):
+                video = {"url": dl["url"], "clip_start": dl.get("clip_start")}
+                break
         existing = next((s for s in accumulator if s.get("url") == url), None)
         if existing:
             if not existing.get("excerpt") and excerpt:
                 existing["excerpt"] = excerpt
+            if video and not existing.get("video"):
+                existing["video"] = video
         else:
-            accumulator.append({
+            src = {
                 "kind": "Transcript",
                 "title": page_title or "Scottish Parliament Committee",
                 "excerpt": excerpt,
                 "cite": page_title or url,
                 "url": url,
-            })
+            }
+            if video:
+                src["video"] = video
+            accumulator.append(src)
 
     elif name == "search_scottish_plenary":
         for item in data.get("results", []):

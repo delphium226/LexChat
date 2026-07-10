@@ -1,6 +1,18 @@
 # Parliament Bot — Video Deep-Links v2: Committee Spike Brief
 
-> Status: **planned, not started.** Written 2026-07-09 as a cold-start handoff for a new session.
+> Status: **DONE (2026-07-09).** Spike proven and built on `chore/tidy-up`, behind
+> `ENABLE_VIDEO_DEEPLINKS`. The unsolved piece — committee → SP TV `event_id` — is resolved via the
+> **SP TV archive date-filter** (`GET /archive?DateFrom=DD/MM/YYYY&DateTo=…`): it lists every event
+> that day with the committee name in the link text, matched on `committee_name` to disambiguate
+> same-day committees, then the meeting page yields the eventId (`sptv_client.resolve_committee_event`).
+> Validated end-to-end against Climate Action Committee 2026-06-25 (`meeting_id=20187`): the Convener's
+> opening resolved to `clip_start=10:34:11` (confidence 1.0) against the Official Report's embedded
+> `10:34` marker. Everything downstream of eventId reused unchanged. **Build note:** the committee
+> retrieval tool was switched from `_parse_sp_transcript_page` (returned a single unnamed blob on
+> current committee pages) to `_parse_sp_plenary_transcript` (same `orscontributions` markup, correct
+> speaker attribution) — required for per-speech matching. The committee *crawler* still uses the old
+> parser for `sp_committee_items` (re-crawl-gated follow-up). Original cold-start brief preserved below.
+>
 > v1 (plenary video deep-links) is **built, tested locally, and merged on `chore/tidy-up`.** This
 > brief covers the one deferred piece: extending video deep-links to **committee** meetings.
 > Read alongside `VIDEO_DEEPLINK_PLAN.md` (the v1 build brief) and `PARLIAMENTARY_DATA.md` §8.
@@ -119,4 +131,7 @@ speech (same acceptance bar as the v1 plenary smoke test).
 - Keep everything **additive and fail-soft** — no committee video link must ever block or error a
   committee transcript response.
 - Stay behind `ENABLE_VIDEO_DEEPLINKS`. Land on `chore/tidy-up` (or a follow-on branch) — not main.
-- Session 6 caption coverage remains out of scope (Session 7 only, matching the crawl).
+- ~~Session 6 caption coverage remains out of scope (Session 7 only, matching the crawl).~~
+  **Superseded (Jul 2026):** full Session 6+7 was re-crawled (committee data deleted + rebuilt under
+  the fixed `_parse_sp_plenary_transcript`) and captions were backfilled across both sessions —
+  ~1,140 events cached, ~540 (~47%) with a usable caption track, skewed to recent sittings.
