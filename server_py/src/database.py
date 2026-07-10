@@ -190,7 +190,7 @@ async def init_db() -> None:
                 id SERIAL PRIMARY KEY,
                 meeting_id VARCHAR(32) NOT NULL,
                 event_id VARCHAR(64) NOT NULL UNIQUE,
-                slug VARCHAR(128),
+                slug TEXT,
                 meeting_date DATE,
                 start_time_utc TIMESTAMP,
                 is_youtube BOOLEAN NOT NULL DEFAULT FALSE,
@@ -200,6 +200,18 @@ async def init_db() -> None:
                 caption_ok BOOLEAN NOT NULL DEFAULT FALSE,
                 fetched_at TIMESTAMP
             )""",
+            # Committee SP TV slugs can exceed 128 chars (they embed the full debate
+            # title), so widen slug from the original VARCHAR(128) to TEXT on existing
+            # DBs. Guarded so it only runs while the column is still varchar.
+            """DO $$ BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='sp_video_captions' AND column_name='slug'
+                      AND data_type='character varying'
+                ) THEN
+                    ALTER TABLE sp_video_captions ALTER COLUMN slug TYPE TEXT;
+                END IF;
+            END $$""",
         ]
         async with engine.begin() as conn:
             for stmt in migration_statements:

@@ -296,7 +296,10 @@ class SpVideoCaption(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     meeting_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     event_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    slug: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Committee SP TV slugs embed the full debate title and can exceed 128 chars
+    # (e.g. "standards-...-committee-debate-shaping-parliamentary-...-2021"), so this
+    # is unbounded Text. It builds the deep-link URL and must not be truncated.
+    slug: Mapped[str | None] = mapped_column(Text, nullable=True)
     meeting_date: Mapped[Date | None] = mapped_column(Date, nullable=True, index=True)
     start_time_utc: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     is_youtube: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
