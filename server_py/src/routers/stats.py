@@ -358,7 +358,7 @@ async def get_efficiency_stats(
     # turns and pre-instrumentation rows (both have manager_delegations = 0),
     # which would otherwise drag every average toward zero.
     research_filter = (
-        f"{research_filter} AND manager_delegations > 0" if date_filter
+        f"{date_filter} AND manager_delegations > 0" if date_filter
         else "WHERE manager_delegations > 0"
     )
 
