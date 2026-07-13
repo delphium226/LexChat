@@ -1,5 +1,3 @@
-import asyncio
-
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -24,13 +22,6 @@ TestSessionLocal = sessionmaker(
 )
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_db():
     """Create all tables once for the test session."""
@@ -40,6 +31,21 @@ async def setup_db():
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
     await test_engine.dispose()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _clean_tables():
+    """Empty every table before each test.
+
+    Tables are created once per session (setup_db) and the app commits real
+    transactions through the shared session, so without this the function-scoped
+    seed_admin/seed_user fixtures collide on the unique username column on the
+    second test that uses them (and on rows left behind by a crashed prior run).
+    """
+    async with test_engine.begin() as conn:
+        for table in reversed(Base.metadata.sorted_tables):
+            await conn.execute(table.delete())
+    yield
 
 
 @pytest_asyncio.fixture

@@ -13,7 +13,7 @@ async def test_list_users_unauthorized(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_list_users_non_admin(client: AsyncClient, user_token: str):
     response = await client.get(
-        "/api/users/",
+        "/api/users",
         headers={"Authorization": f"Bearer {user_token}"},
     )
     assert response.status_code == 403
@@ -22,7 +22,7 @@ async def test_list_users_non_admin(client: AsyncClient, user_token: str):
 @pytest.mark.asyncio
 async def test_list_users_admin(client: AsyncClient, admin_token: str, seed_admin: User):
     response = await client.get(
-        "/api/users/",
+        "/api/users",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert response.status_code == 200
@@ -34,7 +34,7 @@ async def test_list_users_admin(client: AsyncClient, admin_token: str, seed_admi
 @pytest.mark.asyncio
 async def test_create_user(client: AsyncClient, admin_token: str, seed_admin: User):
     response = await client.post(
-        "/api/users/",
+        "/api/users",
         json={
             "username": "newuser",
             "password": "password123",
@@ -54,13 +54,13 @@ async def test_create_user(client: AsyncClient, admin_token: str, seed_admin: Us
 async def test_create_user_duplicate(client: AsyncClient, admin_token: str, seed_admin: User):
     # Create first
     await client.post(
-        "/api/users/",
+        "/api/users",
         json={"username": "dupuser", "password": "pass123"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     # Try duplicate
     response = await client.post(
-        "/api/users/",
+        "/api/users",
         json={"username": "dupuser", "password": "pass123"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
