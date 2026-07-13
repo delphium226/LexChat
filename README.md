@@ -23,7 +23,7 @@ A locally-hosted AI assistant for UK government legal departments. Powered by a 
 - Python 3.11 + FastAPI + uvicorn
 - PostgreSQL 15 for persistence
 - Async throughout (SQLAlchemy asyncpg, httpx, asyncio)
-- Agent pipeline: `provider_factory.py` → `ollama_client.py` or `openrouter_client.py` → `agent_shared.py` → `tools.py` (LEX API)
+- Agent pipeline: `provider_factory.py` → `ollama_client.py` or `openrouter_client.py` → `agent_shared.py` → `agent/tools/` package (LEX API, case law, Scottish Parliament)
 
 ### LLM Providers
 | Provider | How it works |
@@ -32,6 +32,27 @@ A locally-hosted AI assistant for UK government legal departments. Powered by a 
 | **OpenRouter** | Direct HTTPS to `openrouter.ai` via an OpenAI-compatible API. Requires outbound internet to `openrouter.ai`. |
 
 Active provider and all per-provider settings (base URL, API key, model, temperature, concurrency) are stored in the database and configurable at runtime via Admin Portal → Developer tab.
+
+### Architecture: one codebase, many bots
+
+There is **one** backend codebase (`server_py/`). Every bot — the legislation assistant, the Scottish Parliament bot, and any future bot — runs the *same* `uvicorn src.main:app`; they are differentiated by **configuration, not forked code**.
+
+**Shared (common code):** the entire backend and frontend — agent pipeline (`agent/`), tools, routers, DB models, and the React app. No bot has its own copy.
+
+**Bot-specific (config, not code):** each bot has a directory under `bots/<id>/` holding only config:
+- `bot_config.json` — identity (`bot_id`, `name`, `tagline`, `logo_path`) plus an optional `peer_registry_seed`. Loaded at startup via the `BOT_CONFIG_PATH` env var; drives dynamic branding through `GET /api/bot-info` and `GET /api/bot/logo`.
+- `.env` — per-bot overrides: its own `DATABASE_URL` (**separate database per bot**), `PORT`, `RESEARCH_MODE`, and any API keys.
+
+**How one codebase behaves as different bots** — behaviour is switched at runtime by config:
+- `RESEARCH_MODE` (env) → `research_mode` selects the Worker's toolset (`tools/schemas.py::get_worker_tools`) and system prompt: `legislation_only`, `case_law_only`, `legislation_and_case_law`, or `parliamentary_records`.
+- Each bot is an **independent process** with its own DB and port, and can consult siblings via **federation** (`POST /api/consult`; the Manager gains a `consult_peer` tool when peers are registered). The peer registry is per-bot (`peer_bots` table / Admin Portal → Federation tab).
+
+| Bot | `research_mode` | Database | Port (dev) | Worker toolset |
+|---|---|---|---|---|
+| Legislation (default) | `legislation_only` (+ case law) | `lexchat` | 8000 | LEX API legislation & National Archives case law |
+| Parliament | `parliamentary_records` | `lexchat_parliament` | 8001 | Scottish Parliament (plenary, committee, bills, MSPs) |
+
+Provision a new bot by copying `bots/legislation/` as a template (`shared/scripts/new_bot.ps1`). See [deployment/LOCAL_SETUP.md](deployment/LOCAL_SETUP.md) for running several bots locally.
 
 ## Deployment
 

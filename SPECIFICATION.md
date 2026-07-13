@@ -1,20 +1,21 @@
 # LexChat UK - Project Specification
 
 ## 1. Executive Summary
-LexChat UK is a specialized, locally-hosted AI coding assistant designed for UK government legal departments. It leverages a Manager-Worker agent architecture to provide precise, legally-grounded answers to queries about UK legislation and case law. The system prioritizes data privacy (local hosting), accuracy (RAG + LEX API), and continuous improvement (Few-Shot Learning via user feedback).
+LexChat (product name **AILA — AI Legal Assistant**) is a specialised, locally-hosted AI legal research assistant for UK government legal departments. It uses a Manager-Worker agent architecture to provide precise, legally-grounded answers about UK legislation and case law. Sibling deployments (e.g. the Scottish Parliament bot) run the **same codebase** with different configuration, and bots can consult each other via **federation**. The system prioritises data privacy (local hosting), accuracy (LEX API + RAG), and continuous improvement (few-shot learning from user feedback).
 
 ## 2. Core Architecture
 
 ### 2.1 Technology Stack
--   **Frontend**: React 19 (Vite), served via Nginx (Alpine).
--   **Backend**: Python (FastAPI), PostgreSQL (Data persistence).
--   **AI Core**: Ollama (Local LLM inference), `google-sr` (Web Search).
--   **External Data**: LEX API (Authoritative legal text).
--   **Deployment**: Native Windows Installation.
+-   **Frontend**: React 19 + Vite + Tailwind CSS. Pre-built on the dev machine and committed; served as static files by the FastAPI backend (no runtime Node.js, no separate web server).
+-   **Backend**: Python 3.11 + FastAPI + uvicorn. PostgreSQL 15 for persistence. Async throughout (SQLAlchemy asyncpg, httpx, asyncio).
+-   **AI Core**: dual LLM provider — **Ollama** (local process proxying cloud-hosted models) or **OpenRouter** (OpenAI-compatible API) — switchable at runtime via the Admin Portal; per-provider settings persisted in the DB.
+-   **External Data**: **LEX API** (UK legislation), **National Archives** caselaw.nationalarchives.gov.uk (UK case law), and Scottish Parliament sources (TheyWorkForYou, SP Official Report crawler, SP Bills) for the parliament bot.
+-   **Deployment**: native Windows Server 2022 (no Docker/WSL), HTTPS on port 443; git-pull update workflow.
+-   **Multi-bot**: one shared `server_py/` codebase runs every bot; per-bot identity and config live in `bots/<id>/`. See the "Architecture: one codebase, many bots" section of the README.
 
 ### 2.2 Manager-Worker Agent System
 
-Both agents share the same underlying ReAct (Reason + Act) loop (`ollama_client.py → chat_loop`). They differ in their system prompts, toolsets, and position in the call chain.
+Both agents share the same underlying ReAct (Reason + Act) loop. Two provider clients implement it — `ollama_client.py` and `openrouter_client.py` — over a shared tool-execution and summarisation pipeline in `agent_shared.py`; the active provider is resolved per request and carried through the call chain via a `ContextVar`. The two agents differ in their system prompts, toolsets, and position in the call chain.
 
 #### The shared engine: `chat_loop`
 
@@ -64,7 +65,7 @@ The Manager then composes its final reply around that result, preserving all cit
 
 #### Step 4 — Worker Agent (`run_worker_agent`)
 
-**Toolset:** three tools — `search_legislation`, `search_legislation_sections`, `get_legislation_text`
+**Toolset (varies by `research_mode`, wired in `tools/schemas.py::get_worker_tools`):** the legislation bot uses `search_legislation`, `search_legislation_sections`, `get_legislation_text`; case-law mode adds/swaps `search_case_law` and `get_case_law_text`; the parliament bot uses the Scottish Parliament tool set (`search_scottish_plenary`, `get_scottish_plenary_debate`, `search_scottish_committee_transcripts`, `get_scottish_committee_transcript`, `search_scottish_parliament`, `get_member_info`, `search_bills`). The five-phase process below describes the **legislation** flow; the parliament flow is analogous (discover → retrieve verbatim transcript → synthesise) and is detailed in `CLAUDE.md`.
 
 The Worker starts with a fresh message history (system prompt + the research brief only). It follows a prescribed five-phase research process:
 
@@ -122,16 +123,19 @@ Total elapsed for a complex multi-Act query is typically 5–12 minutes, dominat
 | Worker has no conversation history | Forces the Manager to craft a complete brief; prevents the Worker from hallucinating context it hasn't been given |
 | Worker does not stream | Its output is intermediate research reasoning — only the Manager's polished answer is shown to the user |
 | Phase 2 nudge appended after summarisation | Ensures the navigation hint survives the summarisation step and is visible in the message the model reasons over |
-| Tool results capped at 40,000 chars | Hard safety ceiling after summarisation to prevent context window overflow regardless of summarisation outcome |
+| Tool results capped after summarisation | Hard ceiling of `summarise_threshold + 4,000` chars (default ~12K) applied after summarisation, to prevent context-window overflow regardless of summarisation outcome |
 | Parallel tool execution within a turn | All tool calls in a single turn run via `asyncio.gather` — important when the Worker issues 8–11 searches simultaneously |
 | Summarisation serialised | The cloud-routed LLM endpoint cannot reliably handle concurrent large-context inference jobs; the semaphore prevents HTTP 500s |
 
 ## 3. Key Features
 
 ### 3.1 Legal Research Engine
--   **Deep Research**: Iterative web scraping and analysis for complex topics.
--   **LEX API Integration**: Direct retrieval of statutes and judgments.
--   **Strict Citation**: All answers must include URLs to `legislation.gov.uk` or official case law repositories.
+-   **Deep Research**: iterative, multi-phase retrieval over the LEX API (Act discovery → section-level retrieval → full-text fallback), with query-focused summarisation of large results. No web scraping — the former `google-sr`/`web_search`/`deep_research` web-search path has been removed.
+-   **LEX API Integration**: direct retrieval of UK statutes; **case-law mode** retrieves judgments from the National Archives (Atom search + LegalDocML/AKN full text).
+-   **Parliamentary research** (parliament bot): full-text search and verbatim retrieval of Scottish Parliament plenary and committee transcripts, backed by a local crawler-populated DB.
+-   **Federation**: when peers are registered, the Manager gains a `consult_peer` tool to ask a sibling bot (e.g. legislation ↔ parliament) via `POST /api/consult`.
+-   **Strict Citation**: all answers must include URLs to `legislation.gov.uk`, official case-law repositories, or parliament.scot.
+-   **Document upload**: users can attach PDFs/DOCX to a chat; extracted text is injected as context.
 
 ### 3.2 Self-Improvement (Learning Mode)
 -   **Feedback Loop**: Users rate answers (1-5 stars) and add comments.
@@ -141,16 +145,21 @@ Total elapsed for a complex multi-Act query is typically 5–12 minutes, dominat
 
 ### 3.3 Security & Administration
 -   **Auth**: JWT-based authentication with bcrypt password hashing.
--   **Admin Portal**:
+-   **Admin Portal** (admin user only):
     -   User management.
-    -   **Usage Analytics**: Visual graphs of token consumption and query volume.
-    -   **Learning Monitor**: View and manage user feedback/memories.
+    -   **Usage / Performance / Cost analytics**: query volume, latency, and per-query cost tracking.
+    -   **Activity Log**: unified feed of logins, queries, feedback, surveys, and service-health errors.
+    -   **Developer tab**: LLM provider/model configuration (both providers), synthetic-data generation, danger-zone data wipe.
+    -   **Federation tab**: peer-registry CRUD (`api_key` write-only, never returned).
 
 ## 4. Deployment & Infrastructure
--   **Target Environment**: Windows Server 2022 (Air-gapped or restricted internet access).
--   **Automation**: PowerShell scripts (`install_native_offline.ps1`) for one-click deployment.
+-   **Target Environment**: Windows Server 2022, internet-restricted (whitelist-only outbound), no Docker/WSL — everything runs natively. HTTPS on port 443 with organisational certs.
+-   **Automation**: PowerShell scripts (`deployment/install_native_offline.ps1`, `start_native.cmd`/`stop_native.cmd`); offline wheel bundle for air-gapped install.
+-   **Updates**: the target does a `git pull` from `origin/main` — the frontend is pre-built and committed (`client/dist/`); there is no zip/file-transfer deployment.
 
 ## 5. Future Roadmap
--   **Local RAG ingestion**: Ability to upload internal PDFs/Docs.
--   **Barrister Agent**: A third tier for specialized court strategy.
--   **Voice Mode**: Speech-to-text input.
+-   **Barrister Agent**: a third tier for specialised court strategy.
+-   **Voice Mode**: speech-to-text input.
+-   **Semantic (embedding) retrieval** for the parliament bot — currently **deferred/NO-GO** (FTS-only hit-rate + cheap OR-fallback/reformulation wins proved sufficient; see `bots/parliament/SEMANTIC_RETRIEVAL_PLAN.md`).
+
+*(Delivered since the original draft: dual-provider support, case-law mode, the Scottish Parliament bot + federation, document upload, and the Matters workspace.)*
