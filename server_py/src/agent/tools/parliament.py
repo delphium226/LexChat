@@ -291,6 +291,29 @@ async def _lookup_committee_agenda_title(meeting_id: str, iob_id: str) -> Option
         return None
 
 
+# Stopword set for the OR-fallback tsquery (mirrors orq.py in the FTS eval harness).
+_OR_TSQUERY_STOP = frozenset(
+    "the a an of for in on to and or is are with about said has what which people use".split()
+)
+
+
+def _or_tsquery(query: str) -> str:
+    """Build an OR-combined to_tsquery string from a free-text query.
+
+    Lowercases, tokenises on [a-z0-9]+, drops tokens <=2 chars and a small stopword
+    set, dedups (order-preserving), and joins with ' | '. Returns '' when nothing
+    survives — callers MUST skip the fallback in that case (never call
+    to_tsquery('english', '')).
+    """
+    seen: list[str] = []
+    for tok in _re.findall(r"[a-z0-9]+", query.lower()):
+        if len(tok) <= 2 or tok in _OR_TSQUERY_STOP:
+            continue
+        if tok not in seen:
+            seen.append(tok)
+    return " | ".join(seen)
+
+
 async def _search_plenary_db(
     query: str,
     date_from: Optional[str] = None,
@@ -352,6 +375,35 @@ async def _search_plenary_db(
 
         rows = (await session.execute(sql, params)).fetchall()
 
+        fallback_note = None
+        if not rows:
+            orquery = _or_tsquery(query)
+            if orquery:
+                # plainto ANDs all terms, so one absent term (e.g. "unhoused" when
+                # the corpus says "homeless") returns 0 rows. Re-run the SAME query
+                # (same filters, same ranking) with an OR-combined to_tsquery. Fired
+                # ONLY on an empty exact result, so precision on working queries is
+                # untouched.
+                or_where_sql = " AND ".join(
+                    ["to_tsvector('english', coalesce(full_text,'')) @@ to_tsquery('english', :orquery)"]
+                    + where_parts[1:]
+                )
+                or_sql = sa_text(f"""
+                    SELECT meeting_id, slug, iob_id, meeting_date, agenda_item_title, url,
+                           ts_rank(to_tsvector('english', coalesce(full_text,'')),
+                                   to_tsquery('english', :orquery)) AS rank,
+                           left(full_text, 300) AS excerpt
+                    FROM sp_plenary_items
+                    WHERE {or_where_sql}
+                    ORDER BY rank DESC, meeting_date DESC
+                    LIMIT 10
+                """)
+                or_params = dict(params)
+                or_params["orquery"] = orquery
+                rows = (await session.execute(or_sql, or_params)).fetchall()
+                if rows:
+                    fallback_note = "No exact (all-terms) match; broadened to any-term search."
+
     results = [
         {
             "meeting_id": r.meeting_id,
@@ -364,7 +416,10 @@ async def _search_plenary_db(
         }
         for r in rows
     ]
-    return {"results": results, "total": len(results), "query": query}
+    out = {"results": results, "total": len(results), "query": query}
+    if fallback_note:
+        out["note"] = fallback_note
+    return out
 
 
 def _slim_hansard_results(resp, query: str) -> dict:
@@ -479,6 +534,33 @@ async def _search_committee_transcripts_db(
 
         rows = (await session.execute(sql, params)).fetchall()
 
+        fallback_note = None
+        if not rows:
+            orquery = _or_tsquery(query)
+            if orquery:
+                # See _search_plenary_db: OR-fallback to escape plainto's AND-cliff.
+                # Fired only on an empty exact result; committee/date filters preserved.
+                or_where_sql = " AND ".join(
+                    ["to_tsvector('english', coalesce(full_text,'')) @@ to_tsquery('english', :orquery)"]
+                    + where_parts[1:]
+                )
+                or_sql = sa_text(f"""
+                    SELECT meeting_id, slug, iob_id, committee_code, committee_name,
+                           meeting_date, agenda_item_title, url,
+                           ts_rank(to_tsvector('english', coalesce(full_text,'')),
+                                   to_tsquery('english', :orquery)) AS rank,
+                           left(full_text, 300) AS excerpt
+                    FROM sp_committee_items
+                    WHERE {or_where_sql}
+                    ORDER BY rank DESC, meeting_date DESC
+                    LIMIT 10
+                """)
+                or_params = dict(params)
+                or_params["orquery"] = orquery
+                rows = (await session.execute(or_sql, or_params)).fetchall()
+                if rows:
+                    fallback_note = "No exact (all-terms) match; broadened to any-term search."
+
     results = [
         {
             "meeting_id": r.meeting_id,
@@ -492,7 +574,10 @@ async def _search_committee_transcripts_db(
         }
         for r in rows
     ]
-    return {"results": results, "total": len(results), "query": query}
+    out = {"results": results, "total": len(results), "query": query}
+    if fallback_note:
+        out["note"] = fallback_note
+    return out
 
 
 def _apply_parliament_filters(name: str, args: dict) -> Optional[str]:

@@ -551,9 +551,20 @@ Choose the right search tool for the question type:
 - Scottish Parliament committee evidence, scrutiny, committee reports → search_scottish_committee_transcripts(query=...)
 Issue all Phase 1 searches in a single turn. Phase 1 results are excerpts only.
 
+QUERY WORDING — the search tools are full-text (word-matching), so wording matters:
+- Use the term Holyrood actually uses, NOT a colloquial or US variant. For example:
+  "quango" → "public body"; "unhoused" → "homeless"; "neurodiversity" → "additional support needs";
+  "poll tax" → "council tax" or "community charge". Prefer the official/British term.
+- Search on the distinctive TOPIC words only. Do NOT pad the query with procedural boilerplate
+  ("stage 1", "debate", "bill", "motion", "question") — those words are dense across the corpus and
+  dilute the ranking, burying the item you want.
+- Put the most distinctive nouns first (e.g. "National Care Service", not "stage 1 debate on the bill").
+
 STOP-SEARCH RULE — CRITICAL:
-After Phase 1, move on. Do NOT call a search tool again unless you received ZERO results.
-Maximum searches: 1 (or 2 if the first returned 0 results).
+After Phase 1, move on. Do NOT call a search tool again unless you received ZERO results OR the
+results are clearly off-topic. You get at most ONE retry: reformulate to the official Holyrood term
+and drop any procedural boilerplate before re-searching.
+Maximum searches: 1 (or 2 if the first returned zero or off-topic results).
 
 PHASE 2 — RETRIEVE FULL CONTENT:
 - For search_scottish_plenary results: call get_scottish_plenary_debate with the meeting_id, slug, and iob_id for the most relevant agenda item(s) to obtain the full verbatim speeches (this is how you quote a minister's exact words).
