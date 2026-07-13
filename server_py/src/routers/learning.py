@@ -1,4 +1,5 @@
 import logging
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -18,7 +19,24 @@ class TestQuery(BaseModel):
     query: str
 
 
-@router.get("/feedback")
+class FeedbackRow(BaseModel):
+    id: int
+    assistant_response: Optional[str] = None
+    rating: Optional[int] = None
+    feedback_comment: Optional[str] = None
+    created_at: Optional[str] = None
+    chat_title: Optional[str] = None
+    username: Optional[str] = None
+
+
+class FeedbackStatRow(BaseModel):
+    date: Optional[str] = None
+    model: Optional[str] = None
+    avg_rating: Optional[float] = None
+    feedback_count: Optional[int] = None
+
+
+@router.get("/feedback", response_model=List[FeedbackRow])
 async def get_feedback(
     admin: dict = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
@@ -47,7 +65,7 @@ async def get_feedback(
     return rows
 
 
-@router.get("/stats")
+@router.get("/stats", response_model=List[FeedbackStatRow])
 async def get_stats(
     days: str = "30",
     admin: dict = Depends(get_admin_user),

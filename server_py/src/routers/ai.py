@@ -28,7 +28,14 @@ logger = logging.getLogger("app")
 router = APIRouter(tags=["AI"])
 
 
-@router.get("/api/models")
+class ModelInfo(BaseModel):
+    name: str
+    context_length: int
+    provider: str
+    active: bool
+
+
+@router.get("/api/models", response_model=List[ModelInfo])
 async def get_models(user: dict = Depends(get_current_user)):
     async with async_session_maker() as db:
         active_provider = await get_active_provider(db)

@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from typing import List, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -267,7 +268,14 @@ async def save_features(
 # Activity log
 # -----------------------------------------------------------------------
 
-@router.get("/activity-log")
+class ActivityLogEntry(BaseModel):
+    event_type: str
+    username: Optional[str] = None
+    description: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+@router.get("/activity-log", response_model=List[ActivityLogEntry])
 async def get_activity_log(
     days: str = "7",
     limit: int = 500,
