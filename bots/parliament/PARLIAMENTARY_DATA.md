@@ -128,6 +128,14 @@ committee).
 - **Full-text search** runs `to_tsvector('english', full_text) @@ plainto_tsquery(...)`,
   ranked by `ts_rank`, optionally filtered by committee (committee table only, ILIKE on
   name/code) and date range.
+- **OR-fallback (2026-07-13)** — `plainto_tsquery` ANDs every term, so one truly-absent
+  query term (e.g. "unhoused" when the corpus says "homeless") returns **0 rows**. When
+  the exact search returns zero rows, both `_search_*_db` re-run the *same* query (same
+  filters, same `ts_rank`) with an OR-combined `to_tsquery` (`_or_tsquery` builds it:
+  lowercase, tokenise, drop short/stopword tokens, join with ` | `) and set
+  `note: "No exact (all-terms) match; broadened to any-term search."`. Fires **only** on
+  zero rows — precision on the queries that already match is untouched. Empty/stopword-only
+  token set skips the fallback.
 
 ### How the crawler populates them
 

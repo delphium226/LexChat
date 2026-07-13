@@ -1,7 +1,19 @@
 # Parliament Bot — Semantic Retrieval Implementation Plan
 
-> Status: **planned, not started.** Written 2026-07-07. This is a self-contained brief:
-> a cold session should be able to implement from this document plus the referenced files.
+> Status: **DEFERRED — NO-GO for now (gate measured 2026-07-13).** Written 2026-07-07.
+> Before building this, the go/no-go gate was measured: FTS-only hit-rate over 33 realistic
+> Holyrood queries was **~85% raw / ~97%+ with Worker reformulation**. The synonym gap this
+> plan targets (canine≠dog) largely does not occur in these long full-item transcripts (the
+> synonym co-occurs with the query term, so `plainto`'s AND still matches). The real misses
+> were `plainto`'s AND-cliff and `ts_rank` density dilution — both cheaper to fix without
+> embeddings. Those **two cheap wins shipped 2026-07-13 (commit `589667c`)** and re-measured:
+> raw ~85% → ~88% (OR-fallback removed the 0-result cliff); all residual misses recovered
+> with Worker reformulation to Holyrood-official terms; **no reformulation-resistant miss
+> survived.** See `C:\Temp\fts_eval\FTS_HITRATE_REPORT.md` and the `PARLIAMENTARY_DATA.md`
+> FTS note. **Reopen this plan only if future real usage shows queries that miss *even after*
+> the OR-fallback + official-term reformulation** — i.e. a genuine concept match with no shared
+> vocabulary in a *short* document. The rest of this document is the (still-valid) implementation
+> brief if that trigger fires.
 
 ---
 
