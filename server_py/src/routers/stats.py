@@ -1,4 +1,7 @@
+from typing import Any, Dict, List, Optional
+
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,6 +10,179 @@ from ..database import get_db
 from ..dependencies import get_admin_user
 
 router = APIRouter(prefix="/api/stats", tags=["Statistics"])
+
+
+# --------------------------------------------------------------------------- #
+# Response models (inline, per-router). Each enumerates EVERY key its handler
+# builds so response_model filters nothing; nullable-uncertain columns are
+# Optional so a NULL row can't 500.
+# --------------------------------------------------------------------------- #
+
+# --- /usage ---
+class UsageKpi(BaseModel):
+    users: int
+    chats: int
+    messages: int
+    activeUsers: int
+
+
+class ActivityPoint(BaseModel):
+    date: str
+    count: int
+
+
+class ModelCount(BaseModel):
+    model: Optional[str] = None  # chats.model is nullable
+    count: int
+
+
+class TopUser(BaseModel):
+    username: str
+    msg_count: int
+
+
+class UsageResponse(BaseModel):
+    kpi: UsageKpi
+    activity: List[ActivityPoint]
+    models: List[ModelCount]
+    topUsers: List[TopUser]
+
+
+# --- /performance ---
+class PerformanceKpi(BaseModel):
+    totalRequests: int
+    avgTotalMs: int
+    p95TotalMs: int
+    avgLlmCalls: float
+    avgLexCalls: float
+    avgLlmMs: int
+    avgLexMs: int
+    avgTtftMs: int
+    avgQueueMs: int
+
+
+class PerformanceDaily(BaseModel):
+    date: str
+    avgTotalMs: int
+    avgLlmMs: int
+    avgLexMs: int
+    avgQueueMs: int
+    avgTtftMs: int
+    requestCount: int
+
+
+class LlmDistPoint(BaseModel):
+    llmCalls: int
+    count: int
+
+
+class SlowestRow(BaseModel):
+    requestId: str
+    totalMs: int
+    llmCalls: int
+    llmMs: int
+    lexCalls: int
+    lexMs: int
+    ttftMs: int
+    createdAt: str
+
+
+class PerformanceResponse(BaseModel):
+    kpi: PerformanceKpi
+    daily: List[PerformanceDaily]
+    llmDistribution: List[LlmDistPoint]
+    slowest: List[SlowestRow]
+
+
+# --- /cost ---
+class CostKpi(BaseModel):
+    paidRequests: int
+    totalCost: float
+    avgCost: float
+    maxCost: float
+
+
+class CostDaily(BaseModel):
+    date: str
+    dailyCost: float
+    paidCount: int
+    label: str
+
+
+class CostPerUser(BaseModel):
+    username: str
+    totalCost: float
+    queryCount: int
+
+
+class PriciestRow(BaseModel):
+    requestId: str
+    costUsd: float
+    totalMs: int
+    llmCalls: int
+    createdAt: str
+
+
+class CostResponse(BaseModel):
+    kpi: CostKpi
+    daily: List[CostDaily]
+    perUser: List[CostPerUser]
+    priciest: List[PriciestRow]
+
+
+# --- /efficiency ---
+class EfficiencyKpi(BaseModel):
+    totalRequests: int
+    avgDelegations: float
+    avgWorkerTools: float
+    avgPhase1: float
+    avgPhase2: float
+    avgDistinctRetrieved: float
+    avgSummCalls: float
+    avgTruncations: float
+    avgFanout: float
+    summCompression: float
+
+
+class EfficiencyIndicator(BaseModel):
+    key: str
+    label: str
+    value: float
+    unit: str
+    target: str
+    status: str
+
+
+class EfficiencyDaily(BaseModel):
+    date: str
+    avgDelegations: float
+    avgFanout: float
+    avgRedundant: float
+    avgWorkerTools: float
+    requestCount: int
+
+
+class EfficiencyWorst(BaseModel):
+    requestId: str
+    delegations: int
+    workerTools: int
+    phase2: int
+    redundant: int
+    extracted: int
+    kept: int
+    truncations: int
+    fanout: float
+    createdAt: str
+
+
+class EfficiencyResponse(BaseModel):
+    kpi: EfficiencyKpi
+    indicators: List[EfficiencyIndicator]
+    # EFFICIENCY_THRESHOLDS is an arbitrary config dict — modelled as free-form
+    # rather than enumerated so tuning it never requires touching this schema.
+    thresholds: Dict[str, Any]
+    daily: List[EfficiencyDaily]
+    worst: List[EfficiencyWorst]
 
 
 def _band(value, warn_at, bad_at, higher_is_worse=True):
@@ -50,7 +226,7 @@ def _date_filter(days: str, col: str = "created_at", keyword: str = "WHERE") -> 
     return f"{keyword} {col} > NOW() - INTERVAL '{n} days'"
 
 
-@router.get("/usage")
+@router.get("/usage", response_model=UsageResponse)
 async def get_usage_stats(
     days: str = "30",
     admin: dict = Depends(get_admin_user),
@@ -119,7 +295,7 @@ async def get_usage_stats(
     }
 
 
-@router.get("/performance")
+@router.get("/performance", response_model=PerformanceResponse)
 async def get_performance_stats(
     days: str = "30",
     admin: dict = Depends(get_admin_user),
@@ -232,7 +408,7 @@ async def get_performance_stats(
     }
 
 
-@router.get("/cost")
+@router.get("/cost", response_model=CostResponse)
 async def get_cost_stats(
     days: str = "30",
     admin: dict = Depends(get_admin_user),
@@ -340,7 +516,7 @@ async def get_cost_stats(
     }
 
 
-@router.get("/efficiency")
+@router.get("/efficiency", response_model=EfficiencyResponse)
 async def get_efficiency_stats(
     days: str = "30",
     admin: dict = Depends(get_admin_user),

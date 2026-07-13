@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -34,6 +35,30 @@ class FeedbackStatRow(BaseModel):
     model: Optional[str] = None
     avg_rating: Optional[float] = None
     feedback_count: Optional[int] = None
+
+
+class RetrievalExample(BaseModel):
+    """One positive example row from get_relevant_examples (SELECT * of the
+    relevant_chats CTE). Nullable-uncertain columns are Optional so NULL rows
+    (e.g. an un-commented answer) don't 500."""
+    chat_id: Optional[int] = None
+    question_time: Optional[datetime] = None
+    question: Optional[str] = None
+    answer: Optional[str] = None
+    rating: Optional[int] = None
+    feedback_comment: Optional[str] = None
+
+
+class RetrievalCritique(BaseModel):
+    """One critique row (SELECT * of the relevant_critiques CTE)."""
+    question: Optional[str] = None
+    rating: Optional[int] = None
+    feedback_comment: Optional[str] = None
+
+
+class RetrievalResult(BaseModel):
+    examples: List[RetrievalExample]
+    critiques: List[RetrievalCritique]
 
 
 @router.get("/feedback", response_model=List[FeedbackRow])
@@ -107,7 +132,7 @@ async def get_stats(
     return rows
 
 
-@router.post("/test")
+@router.post("/test", response_model=RetrievalResult)
 async def test_retrieval(
     body: TestQuery,
     admin: dict = Depends(get_admin_user),
