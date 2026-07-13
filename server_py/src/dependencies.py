@@ -13,13 +13,25 @@ from .models import User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+def create_access_token(
+    data: dict,
+    expires_delta: Optional[timedelta] = None,
+    no_expiry: bool = False,
+):
+    """Mint a signed JWT.
+
+    Set ``no_expiry=True`` to omit the ``exp`` claim entirely, producing a token
+    that never expires. This is used for federation peer credentials so the bots
+    don't need periodic re-wiring. python-jose only validates ``exp`` when the
+    claim is present, so such tokens pass ``get_current_user`` indefinitely.
+    """
     to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    to_encode.update({"exp": expire})
+    if not no_expiry:
+        if expires_delta:
+            expire = datetime.now(timezone.utc) + expires_delta
+        else:
+            expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
+        to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
     return encoded_jwt
 

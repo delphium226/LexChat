@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
 from ..database import get_db
-from ..dependencies import create_access_token, get_current_db_user
+from ..dependencies import create_access_token, get_admin_user, get_current_db_user
 from ..models import ActivityLog, User
 
 logger = logging.getLogger("app")
@@ -123,6 +123,24 @@ async def login(
 async def logout(response: Response):
     response.delete_cookie("token")
     return {"message": "Logged out successfully"}
+
+
+@router.post("/federation-token")
+async def federation_token(admin: dict = Depends(get_admin_user)):
+    """Mint a non-expiring admin token for use as a federation peer credential.
+
+    Admin-only. The returned token has no ``exp`` claim, so it never needs
+    re-issuing — peers registered with it stay wired up indefinitely.
+    """
+    token_data = {
+        "sub": admin["username"],
+        "id": admin["id"],
+        "role": admin["role"],
+        "scope": "federation",
+    }
+    token = create_access_token(data=token_data, no_expiry=True)
+    logger.info(f"[Auth] Minted non-expiring federation token for {admin['username']!r}")
+    return {"token": token}
 
 
 @router.get("/me", response_model=UserWrapper)

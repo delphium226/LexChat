@@ -147,6 +147,16 @@ function Get-AdminToken([string]$BaseUrl) {
     return $r.token
 }
 
+# Federation peer credentials must not expire, or the bots need periodic
+# re-wiring. Exchange the (short-lived) admin login token for a non-expiring
+# federation token and store THAT as the peer api_key.
+function Get-FederationToken([string]$BaseUrl, [string]$AdminToken) {
+    $headers = @{ Authorization = "Bearer $AdminToken" }
+    $r = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/auth/federation-token" `
+        -Headers $headers -ContentType 'application/json'
+    return $r.token
+}
+
 function Register-Peer([string]$CallerUrl, [string]$Token,
                         [string]$PeerId, [string]$PeerName,
                         [string]$PeerUrl, [string]$PeerToken,
@@ -178,14 +188,19 @@ Write-Host '   Fetching admin tokens...'
 $t1 = Get-AdminToken 'http://localhost:8000'
 $t2 = Get-AdminToken 'http://localhost:8001'
 
+# Peer api_keys must be non-expiring so federation never needs re-wiring.
+Write-Host '   Minting non-expiring federation tokens...'
+$f1 = Get-FederationToken 'http://localhost:8000' $t1
+$f2 = Get-FederationToken 'http://localhost:8001' $t2
+
 Register-Peer 'http://localhost:8000' $t1 `
     'parliament_bot' 'Parliament Bot' `
-    'http://localhost:8001' $t2 `
+    'http://localhost:8001' $f2 `
     'Searches UK Parliamentary records, Hansard debates, and committee proceedings'
 
 Register-Peer 'http://localhost:8001' $t2 `
     'legislation_bot' 'Legislation Bot' `
-    'http://localhost:8000' $t1 `
+    'http://localhost:8000' $f1 `
     'Searches UK legislation, statutory instruments, and regulatory guidance'
 
 Write-Host ''
