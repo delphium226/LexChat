@@ -96,6 +96,23 @@ async def seed_user(db_session: AsyncSession) -> User:
 
 
 @pytest.fixture
+def auth_token() -> str:
+    """A valid JWT for a fictitious user — DB-free.
+
+    `get_current_user` only decodes the token; it never loads the user row, so
+    endpoints gated solely on authentication (not on a DB-resolved user) can be
+    exercised without a live Postgres.
+    """
+    return create_access_token(data={"sub": "testuser", "id": 1, "role": "user"})
+
+
+@pytest.fixture
+def auth_headers(auth_token: str) -> dict:
+    """Authorization header carrying the DB-free auth token."""
+    return {"Authorization": f"Bearer {auth_token}"}
+
+
+@pytest.fixture
 def admin_token(seed_admin: User) -> str:
     """JWT token for the admin user."""
     return create_access_token(
