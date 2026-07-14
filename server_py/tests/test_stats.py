@@ -147,15 +147,18 @@ async def test_efficiency_empty(client, admin_token):
     r = await client.get("/api/stats/efficiency", headers={"Authorization": f"Bearer {admin_token}"})
     assert r.status_code == 200
     body = r.json()
-    assert set(body) == {"kpi", "indicators", "thresholds", "daily", "worst"}
+    assert set(body) == {"kpi", "indicators", "thresholds", "researchMode", "daily", "worst"}
     assert set(body["kpi"]) == {
         "totalRequests", "avgDelegations", "avgWorkerTools", "avgPhase1", "avgPhase2",
         "avgDistinctRetrieved", "avgSummCalls", "avgTruncations", "avgFanout", "summCompression",
+        "avgBudgetBlocked",
     }
-    # indicators are static (5 bands) even with no data; thresholds is the config dict
+    # indicators are static (5 bands on the legislation profile) even with no data;
+    # thresholds is the selected profile dict
     assert len(body["indicators"]) == 5
     assert set(body["indicators"][0]) == {"key", "label", "value", "unit", "target", "status"}
     assert isinstance(body["thresholds"], dict)
+    assert body["researchMode"] == "legislation"
     assert body["daily"] == [] and body["worst"] == []
 
 
@@ -170,5 +173,30 @@ async def test_efficiency_seeded(client, admin_token, db_session):
     }
     assert set(body["worst"][0]) == {
         "requestId", "delegations", "workerTools", "phase2", "redundant",
-        "extracted", "kept", "truncations", "fanout", "createdAt",
+        "extracted", "kept", "truncations", "fanout", "budgetBlocked", "createdAt",
     }
+
+
+async def test_efficiency_parliamentary_profile(client, admin_token, db_session, monkeypatch):
+    """On a parliament-bot process the endpoint selects the parliamentary profile:
+    a budget-exhaustion indicator appears, researchMode reflects the mode, and
+    fan-out is computed against distinct retrievals (not sources_kept)."""
+    from src.config import settings
+
+    monkeypatch.setattr(settings, "research_mode", "parliamentary_records")
+    # Fan-out here is phase2 / distinct_retrieved = 4 / 2 = 2.0 (NOT 4 / 20 = 0.2).
+    await _seed_timing_row(
+        db_session,
+        phase2_retrieval_calls=4,
+        distinct_legislation_ids_retrieved=2,
+        sources_kept=20,
+        search_budget_blocked=1,
+    )
+    r = await client.get("/api/stats/efficiency", headers={"Authorization": f"Bearer {admin_token}"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["researchMode"] == "parliamentary_records"
+    keys = {ind["key"] for ind in body["indicators"]}
+    assert "budget_exhaustion" in keys
+    assert body["kpi"]["avgFanout"] == 2.0
+    assert body["worst"][0]["budgetBlocked"] == 1

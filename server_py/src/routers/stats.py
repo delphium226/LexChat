@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..config import EFFICIENCY_THRESHOLDS
+from ..config import get_efficiency_profile, settings
 from ..database import get_db
 from ..dependencies import get_admin_user
 
@@ -142,6 +142,7 @@ class EfficiencyKpi(BaseModel):
     avgTruncations: float
     avgFanout: float
     summCompression: float
+    avgBudgetBlocked: float
 
 
 class EfficiencyIndicator(BaseModel):
@@ -172,15 +173,18 @@ class EfficiencyWorst(BaseModel):
     kept: int
     truncations: int
     fanout: float
+    budgetBlocked: int
     createdAt: str
 
 
 class EfficiencyResponse(BaseModel):
     kpi: EfficiencyKpi
     indicators: List[EfficiencyIndicator]
-    # EFFICIENCY_THRESHOLDS is an arbitrary config dict — modelled as free-form
-    # rather than enumerated so tuning it never requires touching this schema.
+    # The selected efficiency profile is an arbitrary config dict (nested bands
+    # tuples serialise as lists) — modelled as free-form rather than enumerated
+    # so tuning it never requires touching this schema.
     thresholds: Dict[str, Any]
+    researchMode: str
     daily: List[EfficiencyDaily]
     worst: List[EfficiencyWorst]
 
@@ -525,9 +529,26 @@ async def get_efficiency_stats(
     """Return Manager→Worker loop efficiency metrics + derived health indicators.
 
     Answers "is the agent algorithm performing correctly?" — delegate once,
-    search minimally, retrieve focused Acts once each, no fan-out/duplication,
-    summarise only when needed, cite what was retrieved.
+    search minimally, retrieve focused primary resources once each, no
+    fan-out/duplication, summarise only when needed, cite what was retrieved.
+
+    Mode-aware: the bot's research mode (settings.research_mode) selects an
+    efficiency profile (config.EFFICIENCY_PROFILES) that determines the fan-out
+    denominator (sources_kept for legislation, distinct_legislation_ids_retrieved
+    for parliamentary), the indicator bands, and — on the parliament bot — an
+    extra search-budget-exhaustion indicator. With RESEARCH_MODE unset the output
+    is numerically identical to the legislation baseline (bar additive keys).
     """
+    profile = get_efficiency_profile()
+    # Fan-out denominator is interpolated into f-string SQL below, so it MUST be
+    # validated against a fixed allowlist — never trust the raw profile string.
+    _FANOUT_DENOM_ALLOWLIST = {"sources_kept", "distinct_legislation_ids_retrieved"}
+    fanout_denom_col = profile["fanout_denominator"]
+    if fanout_denom_col not in _FANOUT_DENOM_ALLOWLIST:
+        fanout_denom_col = "sources_kept"
+    bands = profile["bands"]
+    research_mode = settings.research_mode or "legislation"
+
     date_filter = _date_filter(days)
     # Efficiency indicators describe the Manager→Worker loop, so scope to
     # *research* requests (delegated at least once). This excludes pure-chat
@@ -555,11 +576,14 @@ async def get_efficiency_stats(
             COALESCE(AVG(truncation_events), 0)                             AS avg_truncations,
             COALESCE(SUM(max_turns_halted), 0)                              AS halt_count,
             COALESCE(SUM(source_filter_fallback), 0)                        AS fallback_count,
+            COALESCE(AVG(search_budget_blocked), 0)                         AS avg_budget_blocked,
+            COALESCE(SUM(CASE WHEN search_budget_blocked > 0
+                     THEN 1 ELSE 0 END), 0)                                 AS budget_hit_count,
             COALESCE(AVG(phase2_retrieval_calls::float
-                     / GREATEST(sources_kept, 1)), 0)                       AS avg_fanout,
+                     / GREATEST({fanout_denom_col}, 1)), 0)                 AS avg_fanout,
             COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP
                      (ORDER BY phase2_retrieval_calls::float
-                      / GREATEST(sources_kept, 1)), 0)                      AS p95_fanout,
+                      / GREATEST({fanout_denom_col}, 1)), 0)                AS p95_fanout,
             COALESCE(AVG(CASE WHEN summarisation_chars_in > 0
                      THEN summarisation_chars_out::float
                           / summarisation_chars_in END), 0)                 AS avg_compression
@@ -577,8 +601,16 @@ async def get_efficiency_stats(
     halt_rate = round(int(k["halt_count"]) / total, 3) if total else 0.0
     fallback_rate = round(int(k["fallback_count"]) / total, 3) if total else 0.0
     compression = round(float(k["avg_compression"]), 2)
+    avg_budget_blocked = round(float(k["avg_budget_blocked"]), 2)
+    budget_hit_rate = round(int(k["budget_hit_count"]) / total, 3) if total else 0.0
 
-    # Derived health indicators with red/amber/green bands.
+    # Fan-out indicator text depends on the profile's denominator.
+    is_parliamentary = research_mode == "parliamentary_records"
+    fanout_unit = "retrievals / distinct transcript" if is_parliamentary else "retrievals / kept source"
+    fanout_target = "≈1" if is_parliamentary else "≤3"
+
+    # Derived health indicators with red/amber/green bands (cut-points from the
+    # selected profile so each bot grades against its own baseline).
     indicators = [
         {
             "key": "delegation_efficiency",
@@ -586,15 +618,15 @@ async def get_efficiency_stats(
             "value": avg_delegations,
             "unit": "avg delegations/query",
             "target": "≈1.0",
-            "status": _band(avg_delegations, 1.05, 1.15),
+            "status": _band(avg_delegations, *bands["delegation"]),
         },
         {
             "key": "fanout_ratio",
             "label": "Phase-2 fan-out (p95)",
             "value": p95_fanout,
-            "unit": "retrievals / kept source",
-            "target": "≤3",
-            "status": _band(p95_fanout, 2.0, 3.0),
+            "unit": fanout_unit,
+            "target": fanout_target,
+            "status": _band(p95_fanout, *bands["fanout"]),
         },
         {
             "key": "redundant_rate",
@@ -602,7 +634,7 @@ async def get_efficiency_stats(
             "value": redundant_rate,
             "unit": "redundant / tool calls",
             "target": "≈0",
-            "status": _band(redundant_rate, 0.05, 0.10),
+            "status": _band(redundant_rate, *bands["redundant"]),
         },
         {
             "key": "halt_rate",
@@ -610,7 +642,7 @@ async def get_efficiency_stats(
             "value": halt_rate,
             "unit": "% of queries",
             "target": "0",
-            "status": _band(halt_rate, 0.001, 0.02),
+            "status": _band(halt_rate, *bands["halt"]),
         },
         {
             "key": "fallback_rate",
@@ -618,9 +650,20 @@ async def get_efficiency_stats(
             "value": fallback_rate,
             "unit": "% of queries",
             "target": "low",
-            "status": _band(fallback_rate, 0.1, 0.25),
+            "status": _band(fallback_rate, *bands["fallback"]),
         },
     ]
+
+    # Parliament bot only: how often the model exhausts the search budget.
+    if "budget_blocked" in bands:
+        indicators.append({
+            "key": "budget_exhaustion",
+            "label": "Search-budget exhaustion",
+            "value": budget_hit_rate,
+            "unit": "% of queries hitting the search cap",
+            "target": "≈0",
+            "status": _band(budget_hit_rate, *bands["budget_blocked"]),
+        })
 
     # Daily trend for charts.
     daily_result = await db.execute(text(f"""
@@ -628,7 +671,7 @@ async def get_efficiency_stats(
             DATE(created_at)                                             AS date,
             ROUND(AVG(manager_delegations)::numeric, 2)                  AS avg_delegations,
             ROUND(AVG(phase2_retrieval_calls::float
-                  / GREATEST(sources_kept, 1))::numeric, 2)             AS avg_fanout,
+                  / GREATEST({fanout_denom_col}, 1))::numeric, 2)       AS avg_fanout,
             ROUND(AVG(redundant_tool_calls)::numeric, 2)                 AS avg_redundant,
             ROUND(AVG(worker_tool_calls)::numeric, 2)                    AS avg_worker_tools,
             COUNT(*)                                                     AS request_count
@@ -638,7 +681,13 @@ async def get_efficiency_stats(
         ORDER BY DATE(created_at) ASC
     """))
 
-    # Worst offenders — highest fan-out / redundancy, for drill-down.
+    # Worst offenders — highest fan-out / redundancy, for drill-down. On the
+    # parliament bot, a budget-exhausted request is the most interesting failure,
+    # so it leads the ordering there.
+    _worst_order = (
+        "search_budget_blocked DESC, redundant_tool_calls DESC, "
+        if "budget_blocked" in bands else "redundant_tool_calls DESC, "
+    )
     worst_result = await db.execute(text(f"""
         SELECT
             request_id,
@@ -649,13 +698,14 @@ async def get_efficiency_stats(
             sources_extracted,
             sources_kept,
             truncation_events,
+            search_budget_blocked,
             ROUND((phase2_retrieval_calls::float
-                  / GREATEST(sources_kept, 1))::numeric, 2)             AS fanout,
+                  / GREATEST({fanout_denom_col}, 1))::numeric, 2)       AS fanout,
             created_at
         FROM request_timings
         {research_filter}
-        ORDER BY redundant_tool_calls DESC,
-                 (phase2_retrieval_calls::float / GREATEST(sources_kept, 1)) DESC,
+        ORDER BY {_worst_order}
+                 (phase2_retrieval_calls::float / GREATEST({fanout_denom_col}, 1)) DESC,
                  manager_delegations DESC
         LIMIT 10
     """))
@@ -672,9 +722,11 @@ async def get_efficiency_stats(
             "avgTruncations": round(float(k["avg_truncations"]), 2),
             "avgFanout": avg_fanout,
             "summCompression": compression,
+            "avgBudgetBlocked": avg_budget_blocked,
         },
         "indicators": indicators,
-        "thresholds": EFFICIENCY_THRESHOLDS,
+        "thresholds": profile,
+        "researchMode": research_mode,
         "daily": [
             {
                 "date": row["date"].isoformat(),
@@ -697,6 +749,7 @@ async def get_efficiency_stats(
                 "kept": int(row["sources_kept"]),
                 "truncations": int(row["truncation_events"]),
                 "fanout": float(row["fanout"]),
+                "budgetBlocked": int(row["search_budget_blocked"]),
                 "createdAt": row["created_at"].isoformat(),
             }
             for row in worst_result.mappings()

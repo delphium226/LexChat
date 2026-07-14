@@ -3,14 +3,25 @@
 _PHASE1_SEARCH_TOOLS = frozenset({
     "search_legislation", "search_case_law",
     "search_scottish_parliament", "search_scottish_committee_transcripts",
+    "search_scottish_plenary", "search_bills",
 })
 _PHASE2_RETRIEVAL_TOOLS = frozenset({
     "search_legislation_sections", "get_legislation_text", "get_case_law_text",
-    "get_scottish_committee_transcript",
+    "get_scottish_committee_transcript", "get_scottish_plenary_debate",
 })
-# Retrieval tools keyed by a legislation_id, used to count distinct Acts retrieved.
+# get_member_info is intentionally unclassified — it is a metadata lookup (MSP
+# details), neither a discovery search nor primary-source retrieval.
+
+# Primary-resource retrieval tools whose key_arg identifies a distinct resource,
+# used to count "distinct primary resources retrieved" (see _retrieved_lids /
+# distinct_legislation_ids_retrieved). Legislation Acts + case-law judgments.
 _LEGISLATION_RETRIEVAL_TOOLS = frozenset({
     "search_legislation_sections", "get_legislation_text",
+})
+# SP transcript retrieval tools. After WI-2's composite-key fix, their key_arg is
+# "meeting_id:iob_id", so the same distinct-resource set counts distinct transcripts.
+_TRANSCRIPT_RETRIEVAL_TOOLS = frozenset({
+    "get_scottish_plenary_debate", "get_scottish_committee_transcript",
 })
 
 
@@ -23,8 +34,13 @@ class TimingCollector:
 
     Timing fields answer "how long / how much did it cost?"; the efficiency
     fields answer "is the Manager→Worker loop behaving correctly?" (delegating
-    once, searching minimally, retrieving each Act once, not fanning out or
-    duplicating, summarising only when needed, citing what it retrieved).
+    once, searching minimally, retrieving each primary resource once, not fanning
+    out or duplicating, summarising only when needed, citing what it retrieved).
+
+    distinct_legislation_ids_retrieved is a generic "distinct primary resources
+    retrieved" counter — Acts / judgments (by redundancy key) on the legislation
+    bot, SP transcripts (keyed meeting_id:iob_id) on the parliament bot. The DB
+    column name is kept for backward compatibility.
     """
 
     def __init__(self, request_id: str):
@@ -59,6 +75,9 @@ class TimingCollector:
         self.sources_extracted: int = 0
         self.sources_kept: int = 0
         self.source_filter_fallback: int = 0
+        # Parliamentary search budget: count of search calls hard-stopped because
+        # the per-request budget was already exhausted (the model looped on search).
+        self.search_budget_blocked: int = 0
 
         # Internal sets (not persisted) backing the distinct/redundant counters.
         self._seen_call_sigs: set = set()
@@ -116,7 +135,7 @@ class TimingCollector:
                 self.redundant_tool_calls += 1
             else:
                 self._seen_call_sigs.add(sig)
-            if name in _LEGISLATION_RETRIEVAL_TOOLS:
+            if name in _LEGISLATION_RETRIEVAL_TOOLS or name in _TRANSCRIPT_RETRIEVAL_TOOLS:
                 self._retrieved_lids.add(key_arg)
                 self.distinct_legislation_ids_retrieved = len(self._retrieved_lids)
 
@@ -151,6 +170,9 @@ class TimingCollector:
         if fallback:
             self.source_filter_fallback = 1
 
+    def record_search_budget_blocked(self) -> None:
+        self.search_budget_blocked += 1
+
     def to_dict(self) -> dict:
         return {
             "request_id": self.request_id,
@@ -182,4 +204,5 @@ class TimingCollector:
             "sources_extracted": self.sources_extracted,
             "sources_kept": self.sources_kept,
             "source_filter_fallback": self.source_filter_fallback,
+            "search_budget_blocked": self.search_budget_blocked,
         }

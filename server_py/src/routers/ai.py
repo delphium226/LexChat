@@ -242,6 +242,12 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
             # Persist timing + efficiency metrics if we got at least as far as queue entry
             if timing.queue_wait_ms > 0 or timing.llm_calls > 0:
                 metrics = timing.to_dict()
+                # Effective per-request research mode (bot override wins, then the
+                # frontend value). Persisted for future per-mode filtering; not
+                # consumed by the efficiency queries (those key on the bot profile).
+                metrics["research_mode"] = (
+                    settings.research_mode or body.research_mode or "legislation_only"
+                )
                 # One-line efficiency summary for grep-ability in the agent log.
                 logging.getLogger("agent").info(
                     "[Efficiency] req=%s delegations=%s worker_tools=%s phase1=%s phase2=%s "

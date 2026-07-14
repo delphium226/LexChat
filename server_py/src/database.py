@@ -87,6 +87,8 @@ async def init_db() -> None:
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS sources_extracted INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS sources_kept INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS source_filter_fallback INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS search_budget_blocked INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS research_mode VARCHAR(50)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS research_mode VARCHAR(50) NOT NULL DEFAULT 'legislation_only'",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS chat_mode VARCHAR(50) NOT NULL DEFAULT 'research'",
             "ALTER TABLE matters ADD COLUMN IF NOT EXISTS jurisdiction VARCHAR(100)",

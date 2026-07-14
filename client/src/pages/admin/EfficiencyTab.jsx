@@ -12,6 +12,13 @@ import {
 import InfoTip from '../../components/ui/InfoTip';
 import { PERF_COLORS } from './chartConfig';
 
+// Ship date of the per-bot efficiency recalibration (phase classification,
+// composite redundancy key, distinct-transcript counting). Parliament-bot rows
+// recorded before this release carry the old miscounted values — the deployment
+// target may pull later than this date, so it is worded "on/after". Legislation
+// metrics are historically unchanged, so this marker is shown for parliament only.
+const METRICS_RECALIBRATED = '14 Jul 2026';
+
 // Red/amber/green styling for a health-band status.
 const STATUS_STYLE = {
   ok: { dot: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400', label: 'Healthy' },
@@ -20,8 +27,15 @@ const STATUS_STYLE = {
 };
 
 export const EfficiencyTab = ({ effStats, effTimeframe, setEffTimeframe }) => {
-  const { kpi, indicators, daily, worst } = effStats;
+  const { kpi, indicators, daily, worst, researchMode } = effStats;
   const timeframeLabel = effTimeframe === 'all' ? 'All Time' : `Last ${effTimeframe} Days`;
+  const isParliamentary = researchMode === 'parliamentary_records';
+  const fanoutCaption = isParliamentary ? 'retrievals / distinct transcript' : 'retrievals / kept source';
+  const distinctLabel = isParliamentary ? 'Distinct Transcripts Retrieved' : 'Distinct Acts Retrieved';
+  const distinctResource = isParliamentary ? 'Scottish Parliament transcripts' : 'Acts / judgments';
+  const fanoutTip = isParliamentary
+    ? 'Average Phase-2 retrievals divided by distinct transcripts retrieved. ≈1 means the Worker retrieved each agenda-item transcript once. A high value means it re-fetched transcripts or over-retrieved — the dominant cost/latency regression this metric catches.'
+    : 'Average Phase-2 retrievals divided by sources actually kept in the answer. ≈1 means the Worker retrieved only what it cited. A high value means it pulled full text for many Acts/cases it never used — the dominant cost/latency regression this metric was built to catch.';
 
   const dailyChart = (daily || []).map(d => ({
     ...d,
@@ -37,6 +51,11 @@ export const EfficiencyTab = ({ effStats, effTimeframe, setEffTimeframe }) => {
           <p className="text-xs text-ink-500 mt-0.5">
             Is the Manager→Worker research loop behaving correctly? Scoped to research queries (those that delegated).
           </p>
+          {isParliamentary && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+              ⚠ Phase &amp; redundancy metrics were recalibrated on/after {METRICS_RECALIBRATED}; rows recorded before this release may be miscounted — trust trends from that date onward.
+            </p>
+          )}
         </div>
         <div className="flex items-center space-x-2">
           <label className="text-sm text-ink-500 font-medium">Timeframe:</label>
@@ -58,7 +77,7 @@ export const EfficiencyTab = ({ effStats, effTimeframe, setEffTimeframe }) => {
       <div className="bg-paper p-6 rounded-lg shadow">
         <h2 className="text-sm font-bold mb-4 flex items-center">
           Health Indicators ({timeframeLabel})
-          <InfoTip text="Derived indicators of the agent loop's health, each compared against a target band. Green = behaving as designed (delegate once, retrieve focused provisions, no fan-out or duplication). Amber = drifting. Red = a regression to investigate — e.g. a prompt change or a weaker model causing the Worker to fan out its Phase-2 retrievals across many Acts." />
+          <InfoTip text="Derived indicators of the agent loop's health, each compared against a target band. Green = behaving as designed (delegate once, retrieve focused provisions, no fan-out or duplication). Amber = drifting. Red = a regression to investigate — e.g. a prompt change or a weaker model causing the Worker to fan out its Phase-2 retrievals across many sources." />
         </h2>
         {indicators && indicators.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -87,7 +106,7 @@ export const EfficiencyTab = ({ effStats, effTimeframe, setEffTimeframe }) => {
       </div>
 
       {/* KPI CARDS — raw per-request counters */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div className="bg-paper p-4 rounded-lg shadow">
           <h3 className="text-ink-500 text-xs font-bold uppercase flex items-center">
             Research Queries
@@ -109,10 +128,18 @@ export const EfficiencyTab = ({ effStats, effTimeframe, setEffTimeframe }) => {
         <div className="bg-paper p-4 rounded-lg shadow">
           <h3 className="text-ink-500 text-xs font-bold uppercase flex items-center">
             Avg Fan-out
-            <InfoTip text="Average Phase-2 retrievals divided by sources actually kept in the answer. ≈1 means the Worker retrieved only what it cited. A high value means it pulled full text for many Acts/cases it never used — the dominant cost/latency regression this metric was built to catch." />
+            <InfoTip text={fanoutTip} />
           </h3>
           <p className="text-2xl font-bold text-amber-600">{kpi.avgFanout}</p>
-          <p className="text-xs text-ink-400 mt-1">retrievals / kept source</p>
+          <p className="text-xs text-ink-400 mt-1">{fanoutCaption}</p>
+        </div>
+        <div className="bg-paper p-4 rounded-lg shadow">
+          <h3 className="text-ink-500 text-xs font-bold uppercase flex items-center">
+            {distinctLabel}
+            <InfoTip text={`Average number of distinct primary resources the Worker retrieved full text for, per query (${distinctResource}). This is the denominator of the fan-out ratio — comparing it with Phase-2 retrievals shows whether the Worker re-fetched the same resource.`} />
+          </h3>
+          <p className="text-2xl font-bold text-sky-600">{kpi.avgDistinctRetrieved}</p>
+          <p className="text-xs text-ink-400 mt-1">avg per query</p>
         </div>
         <div className="bg-paper p-4 rounded-lg shadow">
           <h3 className="text-ink-500 text-xs font-bold uppercase flex items-center">

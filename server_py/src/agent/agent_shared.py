@@ -327,6 +327,11 @@ async def run_worker_tool(
     _PARLIAMENT_SEARCH_TOOLS = {"search_scottish_parliament", "search_scottish_committee_transcripts", "search_scottish_plenary"}
     if search_budget is not None and name in _PARLIAMENT_SEARCH_TOOLS:
         if search_budget["remaining"] <= 0:
+            # The parliament bot's defining constraint: a budget-blocked search
+            # means the model looped on discovery instead of retrieving. Count it
+            # on its own counter (NOT worker_tool_calls / phase counts).
+            if timing_collector:
+                timing_collector.record_search_budget_blocked()
             stop_msg = json.dumps({
                 "notice": "Search limit reached — you have already performed the maximum number of parliamentary searches.",
                 "instruction": (
@@ -351,10 +356,12 @@ async def run_worker_tool(
     # repeat fetch of the same resource (same Act sectioned twice, same case
     # fetched twice). key_arg is the identifying argument for redundancy.
     if timing_collector:
-        key_arg = (
-            args.get("legislation_id") or args.get("url")
-            or args.get("gid") or args.get("meeting_id")
-        )
+        # A transcript's identity is (meeting_id, iob_id) — two different agenda
+        # items of one meeting are legitimate distinct retrievals, not redundant.
+        # slug is derivable and must NOT be part of the key.
+        key_arg = args.get("legislation_id") or args.get("url") or args.get("gid")
+        if not key_arg and args.get("meeting_id"):
+            key_arg = f"{args['meeting_id']}:{args.get('iob_id', '')}"
         timing_collector.record_worker_tool(name, key_arg)
 
     if parent_on_chunk:

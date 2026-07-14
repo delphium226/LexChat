@@ -127,6 +127,10 @@ class RequestTiming(Base):
     sources_extracted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     sources_kept: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     source_filter_fallback: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Parliamentary search-budget wall hits (model looped on discovery search).
+    search_budget_blocked: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Effective per-request research mode (future-proofs per-mode filtering).
+    research_mode: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (

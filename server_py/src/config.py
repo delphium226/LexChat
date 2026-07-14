@@ -108,25 +108,72 @@ settings = Settings()
 
 
 # ---------------------------------------------------------------------------
-# Agent-loop efficiency thresholds
+# Agent-loop efficiency profiles (per bot / research mode)
 # ---------------------------------------------------------------------------
-# Per-request breach rules for the Manager→Worker loop. When a request's metrics
-# breach any of these, an ActivityLog(event_type="EFFICIENCY") row is written so
-# regressions (fan-out, re-delegation, duplicate retrievals) surface in the admin
-# activity feed automatically. Tune here — values reflect the healthy baselines
-# measured for the legislation bot (delegate once, retrieve ~1-3 focused Acts).
-EFFICIENCY_THRESHOLDS = {
-    "max_delegations": 1,           # >1 = the manager re-delegated the same question
-    "max_redundant_tool_calls": 0,  # >0 = same Act/case fetched more than once
-    "fanout_abs": 5,                # phase-2 retrieval calls at/above this count, AND
-    "fanout_ratio": 3.0,            # retrievals-per-kept-source at/above this ratio → fan-out
+# Per-request breach rules AND dashboard indicator bands for the Manager→Worker
+# loop, keyed by the bot's research mode (RESEARCH_MODE env → settings.research_mode).
+# When a request's metrics breach a rule, an ActivityLog(event_type="EFFICIENCY")
+# row is written so regressions surface in the admin activity feed automatically.
+#
+# The two bots run the same codebase but have different healthy baselines:
+#   - "legislation" — delegate once, retrieve ~1-3 focused Acts; fan-out measured
+#     against sources_kept. These values reflect measured legislation-bot baselines.
+#   - "parliamentary_records" — retrieve distinct SP transcripts (fan-out measured
+#     against distinct_legislation_ids_retrieved, ≈1 retrieval per transcript) and
+#     honour the search budget. The parliamentary band/threshold values below are
+#     STARTING POINTS, not measured baselines — re-tune once real parliament
+#     traffic accumulates.
+#
+# "fanout_denominator" names the SQL column used as the fan-out denominator in
+# stats.py; it is allowlist-validated there before interpolation.
+# "bands" values are (warn_at, bad_at) cut points for stats.py _band().
+EFFICIENCY_PROFILES = {
+    "legislation": {
+        # per-request breach rules (evaluate_efficiency_breaches)
+        "max_delegations": 1,           # >1 = the manager re-delegated the same question
+        "max_redundant_tool_calls": 0,  # >0 = same Act/case fetched more than once
+        "fanout_abs": 5,                # phase-2 retrieval calls at/above this count, AND
+        "fanout_ratio": 3.0,            # retrievals-per-kept-source at/above this ratio → fan-out
+        "fanout_denominator": "sources_kept",
+        # dashboard indicator bands: (warn_at, bad_at) for _band()
+        "bands": {
+            "delegation": (1.05, 1.15),
+            "fanout": (2.0, 3.0),
+            "redundant": (0.05, 0.10),
+            "halt": (0.001, 0.02),
+            "fallback": (0.1, 0.25),
+        },
+    },
+    "parliamentary_records": {
+        "max_delegations": 1,
+        "max_redundant_tool_calls": 0,             # legitimate after the composite-key fix
+        "fanout_abs": 5,
+        "fanout_ratio": 2.0,                       # retrievals per distinct transcript ≈ 1
+        "fanout_denominator": "distinct_legislation_ids_retrieved",
+        "max_budget_blocked": 0,                   # any blocked search = model looped on search
+        "bands": {
+            "delegation": (1.05, 1.15),
+            "fanout": (1.3, 2.0),
+            "redundant": (0.05, 0.10),
+            "halt": (0.001, 0.02),
+            "fallback": (0.15, 0.35),              # excerpt-heavy answers cite less precisely
+            "budget_blocked": (0.05, 0.15),        # share of requests hitting the budget wall
+        },
+    },
 }
+
+
+def get_efficiency_profile() -> dict:
+    """Return the efficiency profile for this bot process, selected by
+    settings.research_mode. Blank / unknown mode → the legislation profile."""
+    mode = settings.research_mode or "legislation"
+    return EFFICIENCY_PROFILES.get(mode, EFFICIENCY_PROFILES["legislation"])
 
 
 def evaluate_efficiency_breaches(m: dict) -> list:
     """Return a list of human-readable breach reasons for a request's metrics
     dict (TimingCollector.to_dict()). Empty list = healthy."""
-    t = EFFICIENCY_THRESHOLDS
+    t = get_efficiency_profile()
     breaches = []
 
     if m.get("manager_delegations", 0) > t["max_delegations"]:
@@ -142,9 +189,12 @@ def evaluate_efficiency_breaches(m: dict) -> list:
         breaches.append("source-filter fallback (answer cited no retrieved source)")
 
     phase2 = m.get("phase2_retrieval_calls", 0)
-    kept = m.get("sources_kept", 0)
-    ratio = phase2 / max(kept, 1)
+    denom = m.get(t["fanout_denominator"], 0)
+    ratio = phase2 / max(denom, 1)
     if phase2 >= t["fanout_abs"] and ratio >= t["fanout_ratio"]:
-        breaches.append(f"Phase-2 fan-out (retrievals={phase2}, kept={kept}, ratio={ratio:.1f})")
+        breaches.append(f"Phase-2 fan-out (retrievals={phase2}, denom={denom}, ratio={ratio:.1f})")
+
+    if "max_budget_blocked" in t and m.get("search_budget_blocked", 0) > t["max_budget_blocked"]:
+        breaches.append(f"search budget exhausted (blocked={m['search_budget_blocked']})")
 
     return breaches
