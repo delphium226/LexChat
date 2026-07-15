@@ -2,7 +2,7 @@
 Scottish Parliament TV client — resolve a plenary meeting to its SP TV video and
 build a cached caption transcript for text→timestamp matching.
 
-The data chain (see bots/parliament/VIDEO_DEEPLINK_PLAN.md §2):
+The data chain (see docs/parliament/VIDEO_DEEPLINK_PLAN.md §2):
 
     meeting_date ──► SP TV slug ──► meeting page ──► eventId
     eventId ──► /Player/PlaybackModel/{eventId} ──► hlsStreamUrl, startTime, isYoutube

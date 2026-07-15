@@ -293,7 +293,7 @@ class SpVideoCaption(Base):
     Stores the cached caption transcript + a char-offset → wall-clock index so a
     plenary citation can be enriched with a `?clip_start=…` video deep link.
     Keyed to plenary meetings by `meeting_id` (the Official Report `?meeting=` id).
-    See bots/parliament/VIDEO_DEEPLINK_PLAN.md §4.
+    See docs/parliament/VIDEO_DEEPLINK_PLAN.md §4.
     """
     __tablename__ = "sp_video_captions"
 

@@ -576,7 +576,7 @@ async def backfill_plenary() -> int:
 
 # ---------------------------------------------------------------------------
 # SP TV video captions — resolve plenary meeting → cache caption transcript
-# (gated behind ENABLE_VIDEO_DEEPLINKS; see bots/parliament/VIDEO_DEEPLINK_PLAN.md)
+# (gated behind ENABLE_VIDEO_DEEPLINKS; see docs/parliament/VIDEO_DEEPLINK_PLAN.md)
 # ---------------------------------------------------------------------------
 
 async def _video_caption_exists(session, meeting_id: str) -> bool:

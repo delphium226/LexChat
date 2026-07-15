@@ -168,7 +168,7 @@ Inside `_search_plenary_db` and `_search_committee_transcripts_db` in `parliamen
   ([`routers/developer.py`](../../server_py/src/routers/developer.py)). Frontend
   ([`client/src/pages/AdminPortal.jsx`](../../client/src/pages/AdminPortal.jsx)) — reuse the existing provider
   form components; rebuild `client/dist` and force-add per the deploy workflow.
-- Update `CLAUDE.md` (parliament section + Key Files), `bots/parliament/PARLIAMENTARY_DATA.md` (add embeddings
+- Update `CLAUDE.md` (parliament section + Key Files), `docs/parliament/PARLIAMENTARY_DATA.md` (add embeddings
   to the availability matrix), and `deployment/NATIVE_DEPLOYMENT.md` (pgvector install + offline-bundle note).
 
 ---
@@ -228,7 +228,7 @@ Inside `_search_plenary_db` and `_search_committee_transcripts_db` in `parliamen
 | `server_py/src/services/parliament_crawler.py` | committee parse fix (P0b); incremental embed hook |
 | `server_py/scripts/backfill_embeddings.py` | **new** — resumable backfill |
 | `client/src/pages/AdminPortal.jsx` | Embedding config panel; rebuild `client/dist` |
-| `CLAUDE.md`, `bots/parliament/PARLIAMENTARY_DATA.md` | docs |
+| `CLAUDE.md`, `docs/parliament/PARLIAMENTARY_DATA.md` | docs |
 
 ---
 

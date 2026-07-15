@@ -12,6 +12,40 @@ A locally-hosted AI assistant for UK government legal departments. Powered by a 
 - **Self-improvement loop** — user ratings (1–5 stars) and comments are stored and injected as few-shot examples or warnings for similar future queries (RAG)
 - **Dark mode** — persisted per user
 
+## Documents
+
+All project documentation lives under [`docs/`](docs/). `CLAUDE.md` (agent/contributor context) and this `README.md` remain at the repository root.
+
+| Document | Purpose |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture reference — context, container, agent-pipeline, federation, data-model, and deployment views (with Mermaid diagrams) |
+| [docs/SPECIFICATION.md](docs/SPECIFICATION.md) | Product specification — executive summary, Manager-Worker agent system, features, deployment, roadmap |
+| [docs/DESIGN.md](docs/DESIGN.md) | Low-level design — database schema, agent flow, frontend structure |
+| [docs/NETWORK_AND_DEPENDENCIES.md](docs/NETWORK_AND_DEPENDENCIES.md) | Network access & dependency reference for firewall/proxy allowlisting (installation + runtime endpoints and ports) |
+| [docs/TODO.md](docs/TODO.md) | Canonical project todo list — deferred work and open chores |
+| **API** | |
+| [docs/api/ServerAPISpec.md](docs/api/ServerAPISpec.md) | Server REST/SSE API reference — every `/api` endpoint, request/response shapes, auth |
+| [docs/api/LexAPISpec.md](docs/api/LexAPISpec.md) | External LEX API specification (UK legislation search/section/text endpoints) |
+| **Deployment** | |
+| [docs/deployment/NATIVE_DEPLOYMENT.md](docs/deployment/NATIVE_DEPLOYMENT.md) | Native Windows Server 2022 deployment guide — air-gapped install + git-pull updates |
+| [docs/deployment/LOCAL_SETUP.md](docs/deployment/LOCAL_SETUP.md) | Local multi-bot (federation) development setup |
+| [docs/deployment/README.md](docs/deployment/README.md) | Index of every script in the `deployment/` directory |
+| **Frontend** | |
+| [docs/frontend/design-system.md](docs/frontend/design-system.md) | Design-token & component reference — read before writing new UI |
+| [docs/frontend/README.md](docs/frontend/README.md) | React + Vite client template notes |
+| **Parliament bot** | |
+| [docs/parliament/PARLIAMENTARY_DATA.md](docs/parliament/PARLIAMENTARY_DATA.md) | Scottish Parliament data model — sessions, transcript hierarchy, availability matrix |
+| [docs/parliament/SEMANTIC_RETRIEVAL_PLAN.md](docs/parliament/SEMANTIC_RETRIEVAL_PLAN.md) | Semantic (embedding) retrieval plan — **deferred / NO-GO** |
+| [docs/parliament/VIDEO_DEEPLINK_PLAN.md](docs/parliament/VIDEO_DEEPLINK_PLAN.md) | SP TV video deep-link implementation brief (plenary v1) |
+| [docs/parliament/VIDEO_COMMITTEE_SPIKE.md](docs/parliament/VIDEO_COMMITTEE_SPIKE.md) | SP TV video deep-links v2 — committee spike brief |
+| **Evaluation** | |
+| [docs/evals/GOLDEN_QUESTIONS_LEGISLATION.md](docs/evals/GOLDEN_QUESTIONS_LEGISLATION.md) | Golden-question eval set for the legislation bot (DRAFT) |
+| [docs/evals/GOLDEN_QUESTIONS_PARLIAMENT.md](docs/evals/GOLDEN_QUESTIONS_PARLIAMENT.md) | Golden-question eval set for the parliament bot (DRAFT) |
+| **Planning** | |
+| [docs/planning/EFFICIENCY_PER_BOT_PLAN.md](docs/planning/EFFICIENCY_PER_BOT_PLAN.md) | Per-bot efficiency measurement plan (shipped) |
+| [docs/planning/PER_REQUEST_EFFICIENCY_PROFILE_PLAN.md](docs/planning/PER_REQUEST_EFFICIENCY_PROFILE_PLAN.md) | Per-request efficiency profiles follow-up (scoped) |
+| [docs/planning/agent_performance_analysis.md](docs/planning/agent_performance_analysis.md) | Prompt for generating comparative agent performance tables from logs |
+
 ## Architecture
 
 ### Frontend (`client/`)
@@ -52,13 +86,13 @@ There is **one** backend codebase (`server_py/`). Every bot — the legislation 
 | Legislation (default) | `legislation_only` (+ case law) | `lexchat` | 8000 | LEX API legislation & National Archives case law |
 | Parliament | `parliamentary_records` | `lexchat_parliament` | 8001 | Scottish Parliament (plenary, committee, bills, MSPs) |
 
-Provision a new bot by copying `bots/legislation/` as a template (`shared/scripts/new_bot.ps1`). See [deployment/LOCAL_SETUP.md](deployment/LOCAL_SETUP.md) for running several bots locally.
+Provision a new bot by copying `bots/legislation/` as a template (`shared/scripts/new_bot.ps1`). See [docs/deployment/LOCAL_SETUP.md](docs/deployment/LOCAL_SETUP.md) for running several bots locally.
 
 ## Deployment
 
 The application runs natively on **Windows Server 2022** (no Docker, no WSL). The frontend is pre-built on the dev machine and committed to the repository; the target server requires only Python and PostgreSQL.
 
-See [deployment/NATIVE_DEPLOYMENT.md](deployment/NATIVE_DEPLOYMENT.md) for full deployment instructions (air-gapped installation and the git-pull update workflow), and [deployment/README.md](deployment/README.md) for an index of every deployment script.
+See [docs/deployment/NATIVE_DEPLOYMENT.md](docs/deployment/NATIVE_DEPLOYMENT.md) for full deployment instructions (air-gapped installation and the git-pull update workflow), and [docs/deployment/README.md](docs/deployment/README.md) for an index of every deployment script.
 
 ### Quick start
 
@@ -129,4 +163,4 @@ When running locally, interactive API docs are available at:
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
 
-See [ServerAPISpec.md](ServerAPISpec.md) for the full endpoint reference.
+See [docs/api/ServerAPISpec.md](docs/api/ServerAPISpec.md) for the full endpoint reference.

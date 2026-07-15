@@ -2,7 +2,12 @@
 
 ## 1. Database Schema (PostgreSQL)
 
-The application uses a relational database with three primary tables.
+The three tables below are the **core** conversational schema. The full schema (defined in
+`server_py/src/models.py`) also includes `app_settings` (runtime provider config), `activity_log`,
+`peer_bots` (federation registry), `product_feedback`, `service_health_logs`, `matters` /
+`matter_notes`, `documents`, `request_timings`, and the parliament-bot FTS tables
+`sp_committee_items` / `sp_plenary_items` / `sp_video_captions`. See `ARCHITECTURE.md` for the
+entity overview.
 
 ### `users`
 | Column | Type | Constraints | Description |
@@ -21,7 +26,9 @@ The application uses a relational database with three primary tables.
 | `id` | SERIAL | PRIMARY KEY | Unique chat identifier |
 | `user_id` | INTEGER | FK -> users(id) | Owner of the chat |
 | `title` | TEXT | | Chat title (auto-generated or user set) |
-| `model` | VARCHAR(255) | | LLM model used for the chat |
+| `model` | VARCHAR(255) | | LLM model selected at chat creation |
+| `provider` | VARCHAR(50) | | LLM provider at chat creation (`ollama`/`openrouter`) |
+| `matter_id` | INTEGER | FK -> matters(id), NULL | Optional owning matter (workspace) |
 | `created_at` | TIMESTAMP | DEFAULT NOW() | Chat creation time |
 
 ### `messages`
@@ -31,6 +38,9 @@ The application uses a relational database with three primary tables.
 | `chat_id` | INTEGER | FK -> chats(id) | Parent chat |
 | `role` | VARCHAR(50) | NOT NULL | 'user' or 'assistant' |
 | `content` | TEXT | NOT NULL | The message text |
+| `model` | VARCHAR(255) | | Model actually used at inference time (assistant messages) |
+| `provider` | VARCHAR(50) | | Provider actually used at inference time (assistant messages) |
+| `cost_usd` | NUMERIC | | Estimated inference cost for the message |
 | `rating` | INTEGER | CHECK (1-5) | User feedback score |
 | `feedback_comment`| TEXT | | User feedback text |
 | `created_at` | TIMESTAMP | DEFAULT NOW() | Timestamp |
@@ -39,11 +49,17 @@ The application uses a relational database with three primary tables.
 
 ## 2. API Specification (REST)
 
-All API routes (except `/auth`) require a valid JWT in the `Authorization` header (`Bearer <token>`).
+> This is a high-level sketch. **`docs/api/ServerAPISpec.md` is the authoritative, up-to-date
+> endpoint reference** (auth rules, request/response shapes, and the newer federation, peers,
+> identity, matters, documents, and activity-log endpoints).
 
-### Auth (`/auth`)
--   `POST /signup`: Register a new user.
--   `POST /login`: Authenticate and receive JWT.
+All API routes (except `/api/auth/login`, `/api/health`, and the identity endpoints) require a
+valid JWT — supplied as an HTTP-only cookie on login or an `Authorization: Bearer <token>` header.
+
+### Auth (`/api/auth`)
+-   `POST /login`: Authenticate and receive JWT (also sets an HTTP-only cookie).
+-   `POST /logout`, `GET /me`, `POST /change-password`, `PUT /preferences`.
+-   There is **no public signup** — the seeded `admin` account creates users via the Admin Portal.
 
 ### Chats (`/api/chats`)
 -   `GET /`: List all chats for current user.
@@ -82,7 +98,7 @@ The backend implements a **Manager-Worker** pattern to handle complex queries.
 
 ### 3.2 Worker Agent
 -   **System Prompt**: Defined in `server_py/src/config.py` (`WORKER_SYSTEM_PROMPT`). Strict citation and source-grounding rules; ephemeral context (no conversation history).
--   **Tools** (defined in `server_py/src/agent/tools.py`):
+-   **Tools** (defined in the `server_py/src/agent/tools/` package — `schemas.py`, `lex.py`, `parliament.py`, `caselaw.py`, `executor.py`). The legislation toolset is:
     -   `search_legislation(query, year_from?, year_to?)`: Search UK Acts and SIs by title or keyword. Returns metadata and short excerpts; does **not** download full text.
     -   `search_legislation_sections(query, legislation_id)`: Search for specific sections within a known Act. **Preferred over `get_legislation_text`** for targeted questions — avoids downloading the entire Act.
     -   `get_legislation_text(legislation_id)`: Retrieve the full text of an Act. Fallback only — used when section search returns insufficient results, or when the full structure of an Act is required.
@@ -123,31 +139,33 @@ The backend implements a **Manager-Worker** pattern to handle complex queries.
 
 ## 5. Deployment Architecture
 
-The application is deployed as a set of Docker containers orchestrated by Docker Compose.
+The application is deployed **natively on Windows Server 2022 — no Docker, no WSL, no nginx.**
+Everything runs as native processes/services. See `docs/deployment/NATIVE_DEPLOYMENT.md` for the
+full guide and `ARCHITECTURE.md` for the deployment view.
 
-### 5.1 Services
-1.  **Frontend (`lexchat-frontend`)**:
-    -   **Base Image**: `nginx:alpine`
-    -   **Role**: Serves the static React application build (`/usr/share/nginx/html`) and proxies API requests.
-    -   **Configuration**: `nginx.conf` defines routing rules.
-    -   **Port**: Exposed on host port 80.
+### 5.1 Processes / services
+1.  **FastAPI backend (uvicorn)** — the single application entry point. Serves the pre-built React
+    frontend (`client/dist/`) as static files **and** the `/api` backend from one process. Listens
+    on **HTTPS port 443** in production (organisational TLS certs in `deployment/certs/`); HTTP
+    port 8000 in local dev.
+2.  **PostgreSQL 15** — runs as a Windows service; listens on `localhost:5432` only.
+3.  **Ollama** — local inference process/proxy on `localhost:11434`; forwards `:cloud`-tagged models
+    to remote inference providers. Only used when Ollama is the active provider (OpenRouter calls
+    `openrouter.ai` directly).
 
-2.  **Backend (`lexchat-backend`)**:
-    -   **Base Image**: `python:3.11-slim`
-    -   **Role**: Hosts the FastAPI application.
-    -   **Port**: Exposed on host port 8000 (for direct API access/Swagger UI).
-    -   **Dependencies**: Connects to `db` and `ollama`.
+The frontend is **pre-built on the dev machine and committed** (`client/dist/`); the target server
+needs no Node.js. Start/stop is scripted via `deployment/start_native.cmd` /
+`deployment/stop_native.cmd` (PostgreSQL → Ollama → uvicorn).
 
-3.  **Database (`lexchat-db`)**:
-    -   **Image**: `postgres:15`
-    -   **Role**: Persistent data storage.
+### 5.2 Traffic flow
+1.  **User request** → HTTPS port 443 → **uvicorn**.
+2.  **Static asset** → uvicorn serves the file from `client/dist/`.
+3.  **API request (`/api/*`)** → handled in-process by FastAPI, which queries PostgreSQL and the
+    active LLM provider (Ollama or OpenRouter) plus external research APIs (LEX, National Archives,
+    Scottish Parliament sources).
 
-4.  **AI Inference (`lexchat-ollama`)**:
-    -   **Image**: `ollama/ollama`
-    -   **Role**: Local LLM inference engine.
-
-### 5.2 Traffic Flow
-1.  **User Request** -> Host Port 80 -> **Nginx (Frontend)**.
-2.  **Static Asset** -> Nginx serves file from local volume.
-3.  **API Request (`/api/*`)** -> Nginx proxies to `http://backend:8000`.
-4.  **Backend Processing** -> FastAPI handles request, queries DB/Ollama.
+### 5.3 Multi-bot & updates
+Each bot is an **independent uvicorn process** with its own database and port, differentiated by
+configuration (`bots/<id>/`), not forked code; bots can consult each other via federation
+(`POST /api/consult`). Updates are delivered by `git pull` from `origin/main` (there is no
+zip/file-transfer deployment).

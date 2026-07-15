@@ -160,6 +160,6 @@ Total elapsed for a complex multi-Act query is typically 5–12 minutes, dominat
 ## 5. Future Roadmap
 -   **Barrister Agent**: a third tier for specialised court strategy.
 -   **Voice Mode**: speech-to-text input.
--   **Semantic (embedding) retrieval** for the parliament bot — currently **deferred/NO-GO** (FTS-only hit-rate + cheap OR-fallback/reformulation wins proved sufficient; see `bots/parliament/SEMANTIC_RETRIEVAL_PLAN.md`).
+-   **Semantic (embedding) retrieval** for the parliament bot — currently **deferred/NO-GO** (FTS-only hit-rate + cheap OR-fallback/reformulation wins proved sufficient; see `docs/parliament/SEMANTIC_RETRIEVAL_PLAN.md`).
 
 *(Delivered since the original draft: dual-provider support, case-law mode, the Scottish Parliament bot + federation, document upload, and the Matters workspace.)*

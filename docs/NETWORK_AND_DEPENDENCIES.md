@@ -67,10 +67,10 @@ APIs marked **legislation bot** are used by the default legislation bot. APIs ma
 | **OpenRouter** | `https://openrouter.ai/api/v1` | 443 | HTTPS | Both | Alternative LLM provider. If OpenRouter is set as the active provider in the Admin Portal, all AI requests route here instead of Ollama. Also a long-lived streaming connection. Requires `OPENROUTER_API_KEY`. Only needed if OpenRouter provider is used. |
 | **LEX API** | `https://lex.lab.i.ai.gov.uk` | 443 | HTTPS | Legislation | Worker agent calls this API to search UK legislation and retrieve section text. Invoked by `search_legislation`, `search_legislation_sections`, and `get_legislation_text` tools. JSON POST requests; responses can be large (full Act text). |
 | **National Archives case law** | `https://caselaw.nationalarchives.gov.uk` | 443 | HTTPS | Legislation | Searched when research mode includes case law (`legislation_and_case_law` or `case_law_only`). GET requests to `/atom.xml` with query, court, and date params; returns Atom XML feed of judgment metadata. |
-| **TheyWorkForYou (TWFY)** | `https://www.theyworkforyou.com/api` | 443 | HTTPS | Parliament | Hansard search and retrieval. Endpoints used: `getHansard` (search), `getDebates`, `getLords`, `getWrans`, `getSP` (full debate text), `getMSPInfo` (MSP lookup). Requires `TWFY_API_KEY`. GET requests with JSON output. |
-| **Parliament Members API** | `https://members-api.parliament.uk` | 443 | HTTPS | Parliament | MP and Lord lookup (`get_member_info` tool). GET requests to `/api/Members/Search` with name and house parameters. No authentication required. |
-| **Parliament Bills API** | `https://bills-api.parliament.uk` | 443 | HTTPS | Parliament | UK Westminster bill search (`search_bills` tool). GET requests to `/api/v1/Bills` with keyword search. No authentication required. |
-| **Scottish Parliament Bills** | `https://data.parliament.scot` | 443 | HTTPS | Parliament | Scottish Parliament bill search (`search_bills` tool, Scotland mode). GET request to `/api/bills` returns all bills; filtering is done client-side. No authentication required. |
+| **TheyWorkForYou (TWFY)** | `https://www.theyworkforyou.com/api` | 443 | HTTPS | Parliament | **Scotland only.** `getHansard` (Scottish Parliament plenary + written answers; post-filtered to `/sp/` listurls) and `getMSPs` (`get_member_info` — MSP lookup). Requires `TWFY_API_KEY`. Westminster endpoints are no longer used. GET requests, JSON output. |
+| **SP Official Report** | `https://www.parliament.scot` | 443 | HTTPS | Parliament | Scottish Parliament plenary & committee transcripts. Crawled at startup and daily by `parliament_crawler.py` (listing/meeting/transcript pages) and fetched live at query time by `get_scottish_plenary_debate` / `get_scottish_committee_transcript`. No authentication. |
+| **Scottish Parliament Bills** | `https://data.parliament.scot` | 443 | HTTPS | Parliament | Scottish Parliament (Holyrood) bill search (`search_bills` tool). GET request to `/api/bills` returns all bills; filtering is done client-side. No authentication required. |
+| **Scottish Parliament TV** | `https://www.scottishparliament.tv` + `https://scotparl-live.cdn.vustreams.com` | 443 | HTTPS | Parliament | Video deep links — only when `ENABLE_VIDEO_DEEPLINKS=true`. Meeting pages → eventId → HLS `.m3u8` + WebVTT caption segments. Fails soft (feature auto-disables) if unreachable. No authentication. |
 | **Gmail SMTP** | `smtp.gmail.com` | 465 | SMTPS | Both | Password reset emails (if `EMAIL_USER` and `EMAIL_PASS` are configured). Not configured by default in government deployment. |
 
 > **Ollama Cloud Inference note:** When using `:cloud` models, Ollama proxies to third-party AI inference providers whose exact hostnames are managed by Ollama and not statically defined in LexChat. Allowlisting `*.ollama.ai` covers the Ollama registry; actual inference traffic may route to additional provider-specific endpoints. Monitor initial connections with logging enabled to capture resolved FQDNs, or contact Ollama for their current provider domain list.
@@ -105,10 +105,10 @@ APIs marked **legislation bot** are used by the default legislation bot. APIs ma
 | OpenRouter | `openrouter.ai` | 443 | **Yes** — if using OpenRouter provider. Core AI functionality. |
 | LEX Legislation API | `lex.lab.i.ai.gov.uk` | 443 | **Yes** — required for all legislation research (legislation bot). |
 | National Archives case law | `caselaw.nationalarchives.gov.uk` | 443 | **Yes** — required for case law research modes (legislation bot). |
-| TheyWorkForYou (TWFY) | `www.theyworkforyou.com` | 443 | **Yes** — required for Hansard/parliamentary research (parliament bot). |
-| Parliament Members API | `members-api.parliament.uk` | 443 | **Yes** — required for MP/Lord lookups (parliament bot). |
-| Parliament Bills API | `bills-api.parliament.uk` | 443 | **Yes** — required for Westminster bill search (parliament bot). |
+| TheyWorkForYou (TWFY) | `www.theyworkforyou.com` | 443 | **Yes** — required for SP plenary/written-answer search & MSP lookup (parliament bot). |
+| SP Official Report | `www.parliament.scot` | 443 | **Yes** — required for SP transcript crawl & retrieval (parliament bot). |
 | Scottish Parliament Bills | `data.parliament.scot` | 443 | **Yes** — required for Scottish bill search (parliament bot). |
+| Scottish Parliament TV | `www.scottishparliament.tv`, `scotparl-live.cdn.vustreams.com` | 443 | **Optional** — only if `ENABLE_VIDEO_DEEPLINKS=true` (parliament bot). |
 | Gmail SMTP | `smtp.gmail.com` | 465 | **Optional** — only if email notifications are configured. |
 
 ### 3.3 Minimum Required Inbound Access
@@ -131,8 +131,9 @@ APIs marked **legislation bot** are used by the default legislation bot. APIs ma
 | **LEX API** | Standard HTTPS REST API. | Bypass TLS inspection for `lex.lab.i.ai.gov.uk`. |
 | **National Archives case law** | Standard HTTPS GET; returns Atom XML. | Bypass TLS inspection for `caselaw.nationalarchives.gov.uk`. |
 | **TheyWorkForYou (TWFY)** | Standard HTTPS REST API. Carries `TWFY_API_KEY` as a query parameter. | Bypass TLS inspection for `www.theyworkforyou.com`. |
-| **Parliament Members & Bills APIs** | Standard HTTPS REST APIs. No authentication. | Bypass TLS inspection for `members-api.parliament.uk` and `bills-api.parliament.uk`. |
+| **SP Official Report** | HTML pages (crawler + live retrieval). Cloudflare-fronted; no `Last-Modified`/`ETag`. | Bypass TLS inspection for `www.parliament.scot`. |
 | **Scottish Parliament Bills** | Standard HTTPS REST API. No authentication. | Bypass TLS inspection for `data.parliament.scot`. |
+| **Scottish Parliament TV** | HTML + HLS `.m3u8`/WebVTT. Only when video deep links are enabled. | Bypass TLS inspection for `www.scottishparliament.tv` and `scotparl-live.cdn.vustreams.com`. |
 
 ---
 

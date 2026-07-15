@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     # Parliament APIs
     twfy_api_key: Optional[str] = None  # TheyWorkForYou API key (free at theyworkforyou.com/api/key)
 
-    # Scottish Parliament TV video deep-links (see bots/parliament/VIDEO_DEEPLINK_PLAN.md).
+    # Scottish Parliament TV video deep-links (see docs/parliament/VIDEO_DEEPLINK_PLAN.md).
     # Dark-launched: when off, no captions are crawled and no video links are attached.
     enable_video_deeplinks: bool = False
     sptv_base_url: str = "https://www.scottishparliament.tv"

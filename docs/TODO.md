@@ -13,7 +13,7 @@ Agreed sequencing: triage working tree → merge → regenerate bundle LAST.
 
 ### T1. Triage uncommitted working-tree changes — DONE 2026-07-15 (commit `fc8b02d`)
 The in-progress change was parliament-aware copy (splash, chat empty state, sources
-rail) — committed with rebuilt dist, plus `evals/GOLDEN_QUESTIONS_PARLIAMENT.md`.
+rail) — committed with rebuilt dist, plus `docs/evals/GOLDEN_QUESTIONS_PARLIAMENT.md`.
 Working tree clean; branch ready for the T2 merge smoke.
 
 ### T2. Merge `chore/tidy-up` → `main`
@@ -65,7 +65,7 @@ it]` to the tool result.
 ### A3. Golden-question eval harness
 **Problem:** variance is eyeballed from single runs; format/citation compliance needs
 to be a measured metric before changing the streaming path.
-**Fix:** thin harness — loop over `evals/GOLDEN_QUESTIONS_*.md`, call `/api/chat` per
+**Fix:** thin harness — loop over `docs/evals/GOLDEN_QUESTIONS_*.md`, call `/api/chat` per
 question with n≥3 samples, parse the SSE token stream, regex-check required citations
 and automatic-fail conditions, emit CSV with per-question grade spread. Published
 metric: % A/B, % D separately (per the rubric in the golden-question files).
@@ -205,7 +205,7 @@ Scoped 2026-07-14, not started. The legislation bot serves three retrieval shape
 (`legislation_only` / `case_law_only` / `legislation_and_case_law`) but grades all
 against the legislation-only baseline. Groundwork laid (`request_timings.research_mode`
 column persisted, profile machinery extensible). **Full self-contained plan:
-`server_py/PER_REQUEST_EFFICIENCY_PROFILE_PLAN.md`** — includes the open decisions
+`docs/planning/PER_REQUEST_EFFICIENCY_PROFILE_PLAN.md`** — includes the open decisions
 (dashboard segmentation vs per-mode bands; process-level vs per-request profile
 composition; `get_case_law_text` missing from the distinct-retrieval set).
 
@@ -216,4 +216,4 @@ The parliament profile's dashboard indicator bands in `EFFICIENCY_PROFILES`
 ### D3. Semantic retrieval (pgvector) — NO-GO, revisit only on new evidence
 Measured 2026-07-13: FTS ~85% raw / ~97%+ with Worker reformulation; cheap wins
 shipped (`589667c`). Revisit only if a reformulation-resistant miss class emerges.
-Plan: `bots/parliament/SEMANTIC_RETRIEVAL_PLAN.md` (DEFERRED/NO-GO).
+Plan: `docs/parliament/SEMANTIC_RETRIEVAL_PLAN.md` (DEFERRED/NO-GO).

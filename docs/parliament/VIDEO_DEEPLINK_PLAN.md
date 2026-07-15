@@ -1,6 +1,7 @@
 # Parliament Bot — Video Deep-Link Implementation Plan
 
-> Status: **planned, not started.** Written 2026-07-09. Feasibility spike + PoC **done and passing**
+> Status: **IMPLEMENTED** (plenary v1 + committee v2), dark-launched behind `ENABLE_VIDEO_DEEPLINKS`
+> (off by default). Written 2026-07-09; retained as the design record. Feasibility spike + PoC **done and passing**
 > (see §2). This is a self-contained brief: a cold session should be able to implement from this
 > document plus the referenced files. Companion to `SEMANTIC_RETRIEVAL_PLAN.md` — the two are
 > independent and can ship in either order.

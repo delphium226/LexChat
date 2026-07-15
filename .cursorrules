@@ -84,4 +84,4 @@ Before requesting user review or marking a task complete, verify:
 -   **Orchestration**: Use `docker-compose.yml` as the source of truth for service configuration.
 
 ## Documentation
-- **API Specification**: Refer to `c:\Users\User\Documents\LexChat\ServerAPISpec.md` for detailed server API endpoints and requirements.
+- **API Specification**: Refer to `docs/api/ServerAPISpec.md` for detailed server API endpoints and requirements.

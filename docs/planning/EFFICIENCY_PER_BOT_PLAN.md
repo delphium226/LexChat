@@ -1,6 +1,6 @@
 # Per-Bot Efficiency Measurement — Implementation Plan
 
-**Status:** PLANNED (not started)
+**Status:** SHIPPED. (Mode-aware `EFFICIENCY_PROFILES` are implemented — see the "Per-Bot Efficiency Measurement" section of `CLAUDE.md`. This document is retained as the design record. The per-request follow-up is scoped in `PER_REQUEST_EFFICIENCY_PROFILE_PLAN.md`.)
 **Audience:** coding agent in a fresh session — this document is self-contained; read it fully before touching code.
 **Scope:** backend `server_py/` + one small frontend change. No new external dependencies.
 

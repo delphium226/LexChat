@@ -118,13 +118,13 @@ Returns array of message objects ordered by `created_at ASC`.
 
 ## 3. AI (`/api`)
 
-### GET `/api/models` — Public
+### GET `/api/models` — Auth required
 Returns the active provider's model list with `active: true` on the configured default model.
 ```json
 [{ "name": "mistral-large-3:675b-cloud", "label": "Mistral Large 3", "active": true }]
 ```
 
-### POST `/api/chat` — Public (auth not enforced at API level; conversation filtering is client-side)
+### POST `/api/chat` — Auth required
 SSE streaming endpoint. Each event is `data: {...}\n\n`.
 ```json
 // Request
@@ -149,7 +149,7 @@ SSE event types:
 
 ---
 
-## 4. System Chat (`/api/system`) — Public
+## 4. System Chat (`/api/system`) — Auth required
 
 ### POST `/api/system/chat`
 Machine-to-machine variant of `/api/chat`. Relays all internal SSE events including tool calls and API call start/end events. Same request shape as `/api/chat`. Additional event types:
@@ -239,6 +239,13 @@ Returns current settings for both providers:
 ### GET `/api/developer/openrouter-models`
 Returns the curated OpenRouter model list from `config.py`.
 
+### GET `/api/developer/features`
+Returns feature-flag state for this bot instance (e.g. `research_mode`, video deep links).
+
+### GET `/api/developer/activity-log`
+Query params: `days` (integer or `"all"`), `limit` (default 500). Returns a unified feed of
+logins, queries, feedback, survey responses, and service-health errors.
+
 ### POST `/api/developer/seed`
 Generates ~100 synthetic users with 6 months of chat history. Returns `{ "success": true, "stats": { ... } }`.
 
@@ -281,3 +288,69 @@ Triggers an immediate health check cycle for all services.
 
 ### GET `/api/feedback` — Admin only
 Returns all product feedback messages with user info.
+
+---
+
+## 11. Identity (`/api`) — Public
+
+Used by the frontend for dynamic per-bot branding. No authentication.
+
+### GET `/api/bot-info`
+Returns `{ "bot_id": "...", "name": "...", "tagline": "..." }` from the bot's `bot_config.json`
+(loaded at startup via `BOT_CONFIG_PATH`). Fields are omitted when not configured.
+
+### GET `/api/bot/logo`
+Streams the configured logo file (`bot_identity.logo_path`). `404` if not configured or missing.
+
+---
+
+## 12. Federation (`/api/consult`) — Peer/auth
+
+Machine-to-machine endpoint by which a sibling bot's Manager consults this bot. Synchronous JSON
+(not SSE) — the caller blocks until the full answer is returned.
+
+### POST `/api/consult`
+```json
+// Request
+{ "query": "string", "depth": 1 }
+// Response 200
+{ "answer": "string", "bot_id": "string", ... }
+```
+A request arriving with `depth >= 2` is rejected with `422` to prevent A→B→C cascade loops.
+
+---
+
+## 13. Peers (`/api/peers`) — Admin only
+
+Federation peer registry CRUD (Admin Portal → Federation tab). `api_key` is **write-only** — it is
+never returned by any response; a `has_api_key: true/false` indicator is returned instead.
+
+- `GET /api/peers` — list registered peers.
+- `POST /api/peers` — register a peer (`peer_id`, `name`, `base_url`, `api_key`, `description`, `enabled`). `201`.
+- `PUT /api/peers/{peer_id}` — update a peer (uses the **string** `peer_id`, e.g. `parliament_bot`, not the numeric row id).
+- `DELETE /api/peers/{peer_id}` — remove a peer. `204`.
+
+---
+
+## 14. Matters (`/api/matters`) — Auth required
+
+Matter (workspace) management and per-matter notes/brief.
+
+- `GET /api/matters` — list the user's matters.
+- `POST /api/matters` — create a matter.
+- `PUT /api/matters/{id}` — update a matter.
+- `DELETE /api/matters/{id}` — delete a matter.
+- `GET /api/matters/{id}/notes` — list notes for a matter.
+- `POST /api/matters/{id}/notes` — add a note.
+- `DELETE /api/matters/{id}/notes/{note_id}` — delete a note.
+- `POST /api/matters/{id}/brief` — generate a brief for the matter.
+
+---
+
+## 15. Documents (`/api/chats` / `/api/documents`) — Auth required
+
+Per-chat document upload; extracted text is injected as context for the agent.
+
+- `POST /api/chats/{chat_id}/documents` — upload a document (PDF/DOCX). Returns the stored document.
+- `GET /api/chats/{chat_id}/documents` — list documents attached to a chat.
+- `DELETE /api/documents/{doc_id}` — delete a document. `204`.
