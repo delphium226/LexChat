@@ -571,7 +571,9 @@ function AppContent() {
                     <p style={{ fontSize: 14, margin: 0 }}>
                       {chatMode === 'conversational'
                         ? 'Ask a legal question to begin.'
-                        : 'Ask about UK legislation or case law to begin.'}
+                        : isParliament
+                          ? 'Ask about Scottish Parliament debates, committee scrutiny, or bill progress to begin.'
+                          : 'Ask about UK legislation or case law to begin.'}
                     </p>
                   </div>
                 )}
@@ -735,6 +737,7 @@ function AppContent() {
             onCiteClick={setActiveCite}
             collapsed={sourcesCollapsed}
             onCollapsedChange={setSourcesCollapsed}
+            isParliament={isParliament}
           />
         </div>
       </div>
@@ -872,6 +875,7 @@ function AppContent() {
           onAcknowledge={() => setNoticeAcknowledged(true)}
           botName={botInfo.name}
           botLogoEmoji={botInfo.logoEmoji}
+          isParliament={isParliament}
         />
       )}
     </div>

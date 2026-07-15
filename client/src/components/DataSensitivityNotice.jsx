@@ -17,7 +17,7 @@ const ShieldIcon = () => (
   </svg>
 );
 
-export default function DataSensitivityNotice({ onAcknowledge, botName = 'AILA', botLogoEmoji = null }) {
+export default function DataSensitivityNotice({ onAcknowledge, botName = 'AILA', botLogoEmoji = null, isParliament = false }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-paper rounded-xl shadow-md border border-ink-200 w-full max-w-2xl max-h-[90vh] flex flex-col">
@@ -87,8 +87,11 @@ export default function DataSensitivityNotice({ onAcknowledge, botName = 'AILA',
             <div>
               <h2 className="font-ui text-sm font-semibold text-ink-900 mb-2">Permitted Use</h2>
               <p className="font-ui text-sm text-ink-700 leading-relaxed">
-                {botName} is suitable for general legal research using publicly available UK legislation and case law.
-                Queries should be framed in general, hypothetical, or anonymised terms. It must not be used as a
+                {botName} is suitable for general research using publicly available{' '}
+                {isParliament
+                  ? 'Scottish Parliament records — plenary and committee debates, official reports, and bills'
+                  : 'UK legislation and case law'}
+                . Queries should be framed in general, hypothetical, or anonymised terms. It must not be used as a
                 substitute for independent legal advice or judgment on a specific matter.
               </p>
             </div>
