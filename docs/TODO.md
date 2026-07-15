@@ -16,10 +16,12 @@ The in-progress change was parliament-aware copy (splash, chat empty state, sour
 rail) — committed with rebuilt dist, plus `docs/evals/GOLDEN_QUESTIONS_PARLIAMENT.md`.
 Working tree clean; branch ready for the T2 merge smoke.
 
-### T2. Merge `chore/tidy-up` → `main`
-Merge smoke: both bots (legislation :8000, parliament :8001) × both providers
-(Ollama, OpenRouter). Nothing on this branch is live until merged — the target
-deploys via `git pull origin main`.
+### T2. Merge `chore/tidy-up` → `main` — DONE 2026-07-15 (main at `f6f6c61`)
+Final docs-reorg commit `f6f6c61` (moved `.md` files under `docs/`, updated path
+references), then fast-forwarded `main` (52 commits, no conflicts) and pushed.
+Rollback tag `pre-tidy-up-merge` (annotated, at pre-merge `6bd5fbc`) pushed to origin.
+`chore/tidy-up` kept for now (not deleted); active work continues on `main`.
+Note: not yet deployed — the target still needs `git pull origin main` + restart.
 
 ### T3. Regenerate the offline bundle (LAST, after merge)
 `package_offline_native.ps1`. The current bundle predates the doc-upload feature and
