@@ -86,6 +86,36 @@ not a latency play.
 
 ---
 
+## Product backlog (imported from GitHub issues, 2026-07-15)
+
+GitHub issues are no longer used for todo tracking; these two were the only open ones.
+Full specs remain on the issues — close them once these land (or once closed as wontfix).
+
+### B1. Silent error handlers give users no feedback — [issue #9](https://github.com/delphium226/LexChat/issues/9) (bug)
+Two `.catch(() => {})` handlers swallow errors users need to see:
+1. **Chat history load** — sidebar shows an empty thread list on failure (network/auth/DB)
+   with no indication anything went wrong. Fix: inline "Could not load threads" + retry.
+2. **Research-mode preference save** — UI reflects the new selection but it isn't
+   persisted; reverts silently on next login. Fix: capture previous value, revert the
+   UI on error, show brief feedback.
+Note: the issue's `App.jsx:319`/`App.jsx:881` references predate the App.jsx split.
+Current homes: `getChats()` load at `App.jsx:116`/`App.jsx:776`, preference saves at
+`App.jsx:348` (chat_mode) and `App.jsx:684` (research_mode). While in there, consider
+the same treatment for the other bare `.catch(() => {})`s (title rename at 413/424;
+AdminPortal.jsx 154/159/1860; MatterNotesModal.jsx 144). A toast system would handle
+all of these cleanly; an inline error banner is sufficient otherwise.
+
+### B2. Matters: AI proactive research gap detection — [issue #17](https://github.com/delphium226/LexChat/issues/17) (feature)
+"Find research gaps" action on a matter: analyse all research chats (user queries =
+scope attempted, assistant findings = what was resolved) and return up to 8 specific,
+paste-ready next research queries with one-line rationales. New
+`POST /api/matters/{matter_id}/gaps` (one-shot LLM call via `get_summarise_model()`,
+non-streaming, returns `{"suggestions": "<markdown>"}`), button in the matter notes
+modal with save-as-note, disabled state when the matter has no chats. Full prompt
+sketch and acceptance criteria on the issue.
+
+---
+
 ## Deferred / scoped follow-ups
 
 ### D1. Per-request efficiency profiles on the legislation bot
