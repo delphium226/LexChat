@@ -11,11 +11,10 @@ work previously tracked across auto-memory notes, `*_PLAN.md` docs, and GitHub i
 All fixes-queue items are closed (test suite green at 56 passed; visual smoke done).
 Agreed sequencing: triage working tree → merge → regenerate bundle LAST.
 
-### T1. Triage uncommitted working-tree changes
-`client/src/App.jsx`, `components/DataSensitivityNotice.jsx`, `components/SourcesRail.jsx`
-are modified (plus corresponding `client/dist` changes) and
-`evals/GOLDEN_QUESTIONS_PARLIAMENT.md` is untracked. Commit or discard before merge —
-uncommitted work is invisible to the target.
+### T1. Triage uncommitted working-tree changes — DONE 2026-07-15 (commit `fc8b02d`)
+The in-progress change was parliament-aware copy (splash, chat empty state, sources
+rail) — committed with rebuilt dist, plus `evals/GOLDEN_QUESTIONS_PARLIAMENT.md`.
+Working tree clean; branch ready for the T2 merge smoke.
 
 ### T2. Merge `chore/tidy-up` → `main`
 Merge smoke: both bots (legislation :8000, parliament :8001) × both providers
