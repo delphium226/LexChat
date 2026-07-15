@@ -86,33 +86,116 @@ not a latency play.
 
 ---
 
-## Product backlog (imported from GitHub issues, 2026-07-15)
+## Product backlog (migrated from GitHub issues, 2026-07-15)
 
-GitHub issues are no longer used for todo tracking; these two were the only open ones.
-Full specs remain on the issues — close them once these land (or once closed as wontfix).
+GitHub issues are no longer used for todo tracking. The two open issues (#9, #17)
+were migrated here in full and closed; these entries are the canonical specs.
 
-### B1. Silent error handlers give users no feedback — [issue #9](https://github.com/delphium226/LexChat/issues/9) (bug)
-Two `.catch(() => {})` handlers swallow errors users need to see:
-1. **Chat history load** — sidebar shows an empty thread list on failure (network/auth/DB)
-   with no indication anything went wrong. Fix: inline "Could not load threads" + retry.
-2. **Research-mode preference save** — UI reflects the new selection but it isn't
-   persisted; reverts silently on next login. Fix: capture previous value, revert the
-   UI on error, show brief feedback.
-Note: the issue's `App.jsx:319`/`App.jsx:881` references predate the App.jsx split.
-Current homes: `getChats()` load at `App.jsx:116`/`App.jsx:776`, preference saves at
-`App.jsx:348` (chat_mode) and `App.jsx:684` (research_mode). While in there, consider
-the same treatment for the other bare `.catch(() => {})`s (title rename at 413/424;
-AdminPortal.jsx 154/159/1860; MatterNotesModal.jsx 144). A toast system would handle
-all of these cleanly; an inline error banner is sufficient otherwise.
+### B1. Silent error handlers give users no feedback (bug; was issue #9)
+Bare `.catch(() => {})` handlers swallow errors users need to see:
+1. **Chat history load** (`getChats()` at `App.jsx:116` and `App.jsx:776`): on failure
+   (network error, auth expiry, DB issue) the sidebar shows an empty thread list with
+   no indication anything went wrong — users may assume they have no history.
+   **Fix:** inline error state in the sidebar, e.g. a small "Could not load threads"
+   message with a retry link.
+2. **Preference saves** (`research_mode` at `App.jsx:684`, `chat_mode` at
+   `App.jsx:348`): on failure the UI reflects the new selection but it isn't
+   persisted — reverts silently on next login.
+   **Fix:** capture the previous value before the optimistic update; on error revert
+   the UI selection and show brief feedback:
+   ```js
+   const previousMode = researchMode;
+   setResearchMode(opt.value);
+   updatePreferences({ research_mode: opt.value }).catch(() => {
+       setResearchMode(previousMode);
+       // show error feedback
+   });
+   ```
+Also consider the same treatment for the other bare `.catch(() => {})` sites found
+2026-07-15: chat title rename (`App.jsx:413`/`424`), `AdminPortal.jsx:154`/`159`/`1860`,
+`MatterNotesModal.jsx:144`. A toast notification system would handle all of these
+cleanly; if none is added, an inline `useState`-based error banner is sufficient.
+(The original issue referenced `App.jsx:319`/`881` — stale since the App.jsx
+component split; locations above are current.)
 
-### B2. Matters: AI proactive research gap detection — [issue #17](https://github.com/delphium226/LexChat/issues/17) (feature)
-"Find research gaps" action on a matter: analyse all research chats (user queries =
-scope attempted, assistant findings = what was resolved) and return up to 8 specific,
-paste-ready next research queries with one-line rationales. New
-`POST /api/matters/{matter_id}/gaps` (one-shot LLM call via `get_summarise_model()`,
-non-streaming, returns `{"suggestions": "<markdown>"}`), button in the matter notes
-modal with save-as-note, disabled state when the matter has no chats. Full prompt
-sketch and acceptance criteria on the issue.
+### B2. Matters: AI proactive research gap detection (feature; was issue #17)
+After multiple research chats on a matter, lawyers may not know what angles they have
+missed. Adds a "Find research gaps" action that analyses all research done on a matter
+and suggests specific queries the lawyer has not yet investigated. Conceptually
+similar to the research brief (issue #15) but forward-looking: instead of summarising
+what was found, it identifies what was *not* asked. Output is a ranked list of
+suggested next research queries, actionable enough to paste directly into a new chat.
+
+**1. New backend endpoint** — `POST /api/matters/{matter_id}/gaps` in
+`server_py/src/routers/matters.py`:
+1. Load all chats where `Chat.matter_id == matter_id` and `Chat.user_id == current_user["id"]`.
+2. Per chat, collect all `user` messages (the research questions asked) and all
+   `assistant` messages (findings — brief extract only, e.g. first 500 chars, to keep
+   prompt size down).
+3. Build a structured prompt:
+   ```
+   You are a senior UK government lawyer reviewing research conducted on a legal matter.
+
+   MATTER: {matter.title}
+   DESCRIPTION: {matter.description or "(none)"}
+   {optional legal_area/extent lines if issue #16 fields exist}
+
+   RESEARCH CONDUCTED SO FAR:
+   {for each chat, numbered list of user queries and brief finding extracts}
+
+   ---
+
+   Your task: identify gaps in the research coverage.
+
+   A thorough legal analysis of this matter would typically require investigating:
+   - Relevant primary legislation and any amendments
+   - Statutory instruments and subordinate legislation
+   - Key case law applying or interpreting the legislation
+   - Procedural requirements and timescales
+   - Extent and territorial scope considerations
+   - Any pending legislation or recent amendments
+
+   Based on what has been researched so far, list up to 8 specific research queries
+   the lawyer should run next. For each:
+   - Write the query as a complete question, ready to paste into a research chat
+   - Add a one-line explanation of why this gap matters
+
+   Only suggest queries that have NOT already been covered. Be specific — generic
+   suggestions like "research the Act" are not helpful.
+   ```
+4. Call the LLM via `get_summarise_model()` (one-shot, non-streaming; same call
+   pattern as `summarisation.py` — it returns `(model_name, client_function)`).
+5. Return `{"suggestions": "<markdown text>"}` — do not save as a note automatically.
+
+**2. Frontend** — in `MatterNotesModal.jsx` (or a new `MatterGapsModal.jsx`): a
+"Find research gaps" button alongside "Generate research brief"; on click call the
+endpoint and display the response in a modal/expandable panel; a "Save as note"
+button posting the text to `POST /api/matters/{matter_id}/notes`; loading state
+(call may take 15–30 s).
+
+**3. API helper** in `client/src/services/api.js`:
+```js
+export async function getMatterGaps(matterId) {
+  const res = await fetch(`/api/matters/${matterId}/gaps`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error('Gap analysis failed');
+  return res.json();
+}
+```
+
+**Acceptance criteria:**
+- On a matter with ≥1 research chat, returns specific, actionable queries within 60 s.
+- Suggestions are clearly distinct from what was already asked.
+- Result can be saved as a matter note with one click.
+- On a matter with no chats, the button is disabled with tooltip "No research chats yet".
+- Endpoint returns HTTP 200 with `{"suggestions": ""}` rather than an error when
+  there is nothing to suggest.
+
+**Notes:** does not require issue #14/#16 but benefits from #16's structured metadata;
+suggestion quality is model-dependent (generic output on weak models is a model
+problem, not a bug); do not stream — a single completion displayed at once.
 
 ---
 
