@@ -12,7 +12,12 @@ import logging
 import uuid
 from typing import Callable, Optional
 
-from ..prompts import get_manager_system_prompt, get_worker_system_prompt
+from ..prompts import (
+    DEEP_RESEARCH_SYNTHESIS_PROMPT,
+    get_manager_system_prompt,
+    get_planner_system_prompt,
+    get_worker_system_prompt,
+)
 from .agent_shared import run_worker_tool
 from .federation_client import (
     build_peer_descriptions,
@@ -21,7 +26,7 @@ from .federation_client import (
 )
 from .learning import format_learning_context, get_relevant_examples
 from .summarisation import call_chunk
-from .tools import get_manager_tools, get_worker_tools
+from .tools import get_manager_tools, get_planner_tools, get_worker_tools
 
 logger = logging.getLogger("agent")
 
@@ -148,6 +153,132 @@ def _source_is_used(src: dict, content: str) -> bool:
 
 
 # -----------------------------------------------------------------------
+# Deep Research — Phase A: Planner Agent
+# -----------------------------------------------------------------------
+
+_MAX_PLAN_STEPS = 8
+
+
+def _normalise_plan_args(args: dict):
+    """Validate and normalise a submit_research_plan payload.
+
+    Returns (plan_dict, None) on success or (None, error_message) when the
+    payload is unusable — the error message goes back to the model as the tool
+    result so it can retry within the same ReAct loop.
+    """
+    import json as _json
+
+    steps = args.get("steps")
+    if isinstance(steps, str):
+        # Weaker models sometimes double-encode the array as a JSON string.
+        try:
+            steps = _json.loads(steps)
+        except (ValueError, TypeError):
+            steps = None
+    if not isinstance(steps, list):
+        return None, "Error: `steps` must be an array of {title, detail} objects. Call submit_research_plan again."
+
+    clean_steps = []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        title = str(step.get("title") or "").strip()
+        detail = str(step.get("detail") or "").strip()
+        if not title:
+            continue
+        clean_steps.append({"title": title, "detail": detail})
+
+    if not clean_steps:
+        return None, "Error: the plan contained no usable steps. Each step needs a non-empty `title` and a `detail`. Call submit_research_plan again."
+    clean_steps = clean_steps[:_MAX_PLAN_STEPS]
+
+    plan = {
+        "scope_note": str(args.get("scope_note") or "").strip(),
+        "steps": [{"id": i + 1, **s} for i, s in enumerate(clean_steps)],
+    }
+    return plan, None
+
+
+async def draft_research_plan(
+    chat_loop_fn: Callable,
+    messages: list,
+    model: str,
+    cancel_event: Optional[asyncio.Event],
+    num_ctx: int,
+    timing_collector=None,
+) -> dict:
+    """Deep Research Phase A: draft a structured research plan (no research tools).
+
+    Returns {"plan": {"scope_note": str, "steps": [{"id","title","detail"}]}}
+    or {"needs_clarification": True, "question": str}
+    or {"error": str} when the model failed to call either planner tool.
+    """
+    cfg = _get_cfg()
+    research_mode = cfg.get("_research_mode", "legislation_only")
+    logger.info(f"[Planner] Drafting research plan (mode={research_mode})")
+
+    system_message = {"role": "system", "content": get_planner_system_prompt(research_mode, cfg)}
+    final_messages = list(messages)
+    if final_messages and final_messages[0].get("role") == "system":
+        final_messages[0] = system_message
+    else:
+        final_messages = [system_message, *final_messages]
+
+    captured: dict = {}
+
+    async def planner_tool_executor(name: str, args: dict) -> str:
+        if name == "submit_research_plan":
+            plan, err = _normalise_plan_args(args or {})
+            if err:
+                return err
+            captured["plan"] = plan
+            return "Plan received. Reply with the single word: Done."
+        if name == "request_clarification":
+            question = str((args or {}).get("question") or "").strip()
+            if not question:
+                return "Error: `question` must be a non-empty string. Call request_clarification again."
+            captured["question"] = question
+            return "Clarification request recorded. Reply with the single word: Done."
+        return f"Error: Unknown planner tool {name}"
+
+    result = await chat_loop_fn(
+        final_messages, model, cancel_event, num_ctx,
+        get_planner_tools(), planner_tool_executor, None,
+        timing_collector=timing_collector,
+    )
+
+    if not captured:
+        # One corrective retry: the model answered in prose instead of calling a tool.
+        logger.warning("[Planner] No planner tool called — retrying with explicit instruction")
+        retry_messages = [
+            *final_messages,
+            result if isinstance(result, dict) and result.get("content") else {"role": "assistant", "content": ""},
+            {
+                "role": "user",
+                "content": (
+                    "You did not call a tool. You MUST call either submit_research_plan "
+                    "(with scope_note and steps) or request_clarification (with one question). "
+                    "Do not answer in prose."
+                ),
+            },
+        ]
+        await chat_loop_fn(
+            retry_messages, model, cancel_event, num_ctx,
+            get_planner_tools(), planner_tool_executor, None,
+            timing_collector=timing_collector,
+        )
+
+    if "plan" in captured:
+        logger.info(f"[Planner] Plan drafted with {len(captured['plan']['steps'])} steps")
+        return {"plan": captured["plan"]}
+    if "question" in captured:
+        logger.info("[Planner] Clarification requested")
+        return {"needs_clarification": True, "question": captured["question"]}
+    logger.error("[Planner] Model failed to produce a plan or clarification")
+    return {"error": "The planner did not produce a research plan. Please try rephrasing your question."}
+
+
+# -----------------------------------------------------------------------
 # Manager Agent (Main Chat Interface)
 # -----------------------------------------------------------------------
 
@@ -261,6 +392,140 @@ async def process_user_request(
     final = await chat_loop_fn(
         final_messages, model, cancel_event, num_ctx,
         manager_tools, manager_tool_executor, on_chunk,
+        emit_tool_details=emit_tool_details,
+        timing_collector=timing_collector,
+    )
+
+    if accumulated_sources:
+        final["sources"] = [
+            {**{k: v for k, v in s.items() if k != "n"}, "n": i + 1}
+            for i, s in enumerate(accumulated_sources)
+        ]
+
+    return final
+
+
+# -----------------------------------------------------------------------
+# Deep Research — Phase B: code-orchestrated executor
+# -----------------------------------------------------------------------
+
+def _last_user_content(messages: list) -> str:
+    for msg in reversed(messages or []):
+        if msg.get("role") == "user":
+            return str(msg.get("content") or "")
+    return ""
+
+
+def _build_step_brief(step: dict, approved_plan: dict, user_query: str) -> str:
+    """Build a self-contained worker brief for one approved plan step.
+
+    The Worker has no access to the conversation or the rest of the plan, so the
+    brief carries the original question and the plan's scope note as context.
+    Identifiers in the step text are passed through verbatim (NO SPECULATION —
+    the planner was instructed to copy them exactly as the user gave them).
+    """
+    parts = [f"RESEARCH TASK: {step['title']}"]
+    detail = step.get("detail") or ""
+    if detail:
+        parts.append(detail)
+    scope_note = approved_plan.get("scope_note") or ""
+    if scope_note:
+        parts.append(f"SCOPE: {scope_note}")
+    if user_query:
+        parts.append(
+            "CONTEXT: This task is one step of a wider research plan answering the "
+            f"user's question: \"{user_query}\". Research ONLY this step's task — "
+            "the other aspects are covered by separate steps."
+        )
+    return "\n\n".join(parts)
+
+
+async def run_deep_research(
+    chat_loop_fn: Callable,
+    run_worker_agent_fn: Callable,
+    approved_plan: dict,
+    messages: list,
+    model: str,
+    on_chunk: Optional[Callable],
+    cancel_event: Optional[asyncio.Event],
+    num_ctx: int,
+    db_session=None,
+    emit_tool_details: bool = False,
+    timing_collector=None,
+) -> dict:
+    """Deep Research Phase B: execute an approved plan, code-orchestrated.
+
+    Loops over the approved steps in Python — one run_worker_agent call per step
+    (deterministic 1:1 mapping between approved steps and work done, unlike
+    prompt-driven Manager delegation) — then composes an integrated report via a
+    single tool-free synthesis call. Sources are deduped across steps.
+    """
+    steps = list(approved_plan.get("steps") or [])
+    user_query = _last_user_content(messages)
+    logger.info(f"[DeepResearch] Executing approved plan: {len(steps)} steps")
+
+    step_findings: list = []
+    accumulated_sources: list = []
+
+    for i, step in enumerate(steps, 1):
+        if cancel_event and cancel_event.is_set():
+            raise asyncio.CancelledError("Aborted")
+
+        title = step.get("title") or f"Step {i}"
+        label = f"Research Agent — Step {i}: {title}"
+        step_id = uuid.uuid4().hex[:8]
+        if on_chunk:
+            await call_chunk(on_chunk, {"type": "tool_start", "tool": label, "id": step_id})
+
+        if timing_collector:
+            timing_collector.record_delegation()
+
+        brief = _build_step_brief(step, approved_plan, user_query)
+        logger.info(f"[DeepResearch] Step {i}/{len(steps)}: {title}")
+        result = await run_worker_agent_fn(
+            brief, model, cancel_event, num_ctx, on_chunk,
+            emit_tool_details=emit_tool_details,
+            timing_collector=timing_collector,
+        )
+
+        if on_chunk:
+            await call_chunk(on_chunk, {"type": "tool_end", "tool": label, "id": step_id, "result": "Step complete"})
+
+        step_findings.append({
+            "title": title,
+            "detail": step.get("detail") or "",
+            "content": result.get("content", "") or "",
+        })
+        for src in result.get("sources", []):
+            if not _is_duplicate_source(src, accumulated_sources):
+                accumulated_sources.append(src)
+
+    if cancel_event and cancel_event.is_set():
+        raise asyncio.CancelledError("Aborted")
+
+    # Synthesis: one tool-free call composing the integrated report.
+    findings_blocks = [
+        f"### Step {i}: {f['title']}\n{f['detail']}\n\nFINDINGS:\n{f['content']}"
+        for i, f in enumerate(step_findings, 1)
+    ]
+    scope_note = approved_plan.get("scope_note") or ""
+    synthesis_user = (
+        f"USER'S ORIGINAL QUESTION:\n{user_query}\n\n"
+        f"APPROVED RESEARCH PLAN SCOPE:\n{scope_note}\n\n"
+        f"STEP FINDINGS:\n\n" + "\n\n---\n\n".join(findings_blocks)
+    )
+    synthesis_messages = [
+        {"role": "system", "content": DEEP_RESEARCH_SYNTHESIS_PROMPT},
+        {"role": "user", "content": synthesis_user},
+    ]
+
+    async def _no_tools_executor(name: str, args: dict) -> str:
+        return f"Error: Unknown tool {name}"
+
+    logger.info("[DeepResearch] Synthesising final report")
+    final = await chat_loop_fn(
+        synthesis_messages, model, cancel_event, num_ctx,
+        [], _no_tools_executor, on_chunk,
         emit_tool_details=emit_tool_details,
         timing_collector=timing_collector,
     )

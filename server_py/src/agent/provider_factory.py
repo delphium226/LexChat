@@ -285,6 +285,29 @@ def get_process_user_request_from_context() -> Callable:
     return process_user_request
 
 
+def get_draft_research_plan_from_context() -> Callable:
+    """Return draft_research_plan (Deep Research Phase A) for the active provider
+    from the current request context. Same pattern as
+    get_process_user_request_from_context."""
+    provider = _provider_config_ctx.get({}).get("_provider", "ollama")
+    if provider == "openrouter":
+        from .openrouter_client import draft_research_plan
+    else:
+        from .ollama_client import draft_research_plan
+    return draft_research_plan
+
+
+def get_run_deep_research_from_context() -> Callable:
+    """Return run_deep_research (Deep Research Phase B) for the active provider
+    from the current request context."""
+    provider = _provider_config_ctx.get({}).get("_provider", "ollama")
+    if provider == "openrouter":
+        from .openrouter_client import run_deep_research
+    else:
+        from .ollama_client import run_deep_research
+    return run_deep_research
+
+
 def get_summarise_threshold() -> int:
     """Return the char threshold above which a tool result is summarised.
 

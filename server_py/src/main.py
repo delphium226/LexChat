@@ -13,7 +13,7 @@ from .bot_state import set_bot_identity
 from .config import settings
 from .database import init_db, async_session_maker
 from .routers import auth, users, chats, ai, learning, stats, developer, system, health, feedback, matters, documents
-from .routers import identity, federation, peers
+from .routers import identity, federation, peers, research
 from .services.health_service import background_health_loop
 from .services.parliament_crawler import (
     background_crawl_loop,
@@ -173,6 +173,7 @@ app.include_router(documents.router)
 app.include_router(identity.router)
 app.include_router(federation.router)
 app.include_router(peers.router)
+app.include_router(research.router)
 
 
 import os

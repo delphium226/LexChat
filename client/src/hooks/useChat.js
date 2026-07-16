@@ -4,6 +4,7 @@ import {
   createChat,
   saveMessage,
   sendMessage,
+  getResearchPlan,
   getChatMessages,
   getChatDocuments,
 } from '../services/api';
@@ -45,6 +46,8 @@ export function useChat({
   const [loading, setLoading] = useState(false);
   const [agentStatus, setAgentStatus] = useState('');
   const [activities, setActivities] = useState(new Map());
+  // Deep Research: drafted plan awaiting user review/approval (null = none)
+  const [pendingPlan, setPendingPlan] = useState(null);
   // context usage is written from the response but not currently read anywhere
   const [, setContextUsage] = useState(null);
 
@@ -98,43 +101,12 @@ export function useChat({
     }
   };
 
-  const handleSend = async (manualContent = null) => {
-    if (sendingRef.current) return;
-    const contentToSend = typeof manualContent === 'string' ? manualContent : input;
-    if (!contentToSend.trim() || !selectedModel) return;
-    sendingRef.current = true;
-
-    if (abortControllerRef.current) abortControllerRef.current.abort();
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    const userMsg = { role: 'user', content: contentToSend };
-    setMessages(prev => [...prev, userMsg]);
-    if (typeof manualContent !== 'string') setInput('');
-    setLoading(true);
-    setAgentStatus('Thinking…');
-    setActivities(new Map());
+  // The execution exchange shared by the standard modes and Deep Research
+  // Phase B: stream /api/chat, render tokens/progress, persist the assistant
+  // result (with the approved plan attached in Deep Research for audit).
+  const runExchange = async (messagesToSend, activeChatId, controller, deepResearchPlan = null) => {
     const requestStartTime = Date.now();
-    let activeChatId = currentChatId;
-
-    try {
-      if (!activeChatId) {
-        const title = contentToSend.slice(0, 80) + (contentToSend.length > 80 ? '…' : '');
-        const newChat = await createChat(title, selectedModel, activeProvider);
-        activeChatId = newChat.id;
-        setCurrentChatId(activeChatId);
-        setCurrentChatTitle(title);
-        saveFiltersToChatStorage(activeChatId);
-      }
-
-      if (activeChatId) {
-        await saveMessage(activeChatId, 'user', contentToSend).catch(err =>
-          console.error('Failed to save user message:', err)
-        );
-      }
-
-      const messagesToSend = [...messages, userMsg];
-      const response = await sendMessage(
+    const response = await sendMessage(
         messagesToSend,
         selectedModel,
         selectedModelContext,
@@ -196,7 +168,8 @@ export function useChat({
           currentOnly: filters.currentOnly,
           recordType: filters.recordType,
           chatId: activeChatId,
-        }
+        },
+        deepResearchPlan
       );
 
       if (response.stats) setContextUsage(response.stats);
@@ -224,7 +197,8 @@ export function useChat({
           response.model,
           response.provider,
           response.timing?.total_cost_usd ?? null,
-          response.sources ?? null
+          response.sources ?? null,
+          deepResearchPlan
         ).catch(err => {
           console.error('Failed to save assistant message:', err);
           return null;
@@ -248,39 +222,148 @@ export function useChat({
           if (response.sources?.length) setActiveSourcesMsgId(saved.id);
         }
       }
-    } catch (error) {
-      if (error.name === 'AbortError' || error.message.includes('aborted') || error.message.includes('canceled')) {
-        // stopped by user
-      } else if (error.status === 401) {
-        logoutWithExpiry();
-      } else {
-        console.error('Error sending message:', error);
-        const match = error.message.match(/status code (\d{3})/);
-        const errText = match
+  };
+
+  // Shared error rendering for handleSend / handleRunPlan
+  const handleSendError = error => {
+    if (error.name === 'AbortError' || error.message.includes('aborted') || error.message.includes('canceled')) {
+      // stopped by user
+    } else if (error.status === 401 || error.response?.status === 401) {
+      logoutWithExpiry();
+    } else {
+      console.error('Error sending message:', error);
+      const detail = error.response?.data?.detail;
+      const match = error.message.match(/status code (\d{3})/);
+      const errText = detail
+        ? `Error: ${detail}`
+        : match
           ? `Error: ${{ 400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 408: 'Request Timeout', 429: 'Too Many Requests', 500: 'Internal Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable', 504: 'Gateway Timeout' }[parseInt(match[1])] || 'Unknown Error'} (${match[1]})`
           : `Error: ${error.message}`;
-        setMessages(prev => {
-          const updated = [...prev];
-          const last = updated[updated.length - 1];
-          const errMsg = { role: 'assistant', content: errText };
-          if (last.role === 'assistant') {
-            updated[updated.length - 1] = errMsg;
-            return updated;
-          }
-          return [...updated, errMsg];
-        });
-      }
-    } finally {
-      if (abortControllerRef.current === controller) {
-        setLoading(false);
-        setAgentStatus('');
-        setActivities(new Map());
-        abortControllerRef.current = null;
-        sendingRef.current = false;
-        setTimeout(() => textareaRef.current?.focus(), 0);
-      }
+      setMessages(prev => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        const errMsg = { role: 'assistant', content: errText };
+        if (last.role === 'assistant') {
+          updated[updated.length - 1] = errMsg;
+          return updated;
+        }
+        return [...updated, errMsg];
+      });
     }
   };
+
+  // Shared cleanup for handleSend / handleRunPlan
+  const finalizeSend = controller => {
+    if (abortControllerRef.current === controller) {
+      setLoading(false);
+      setAgentStatus('');
+      setActivities(new Map());
+      abortControllerRef.current = null;
+      sendingRef.current = false;
+      setTimeout(() => textareaRef.current?.focus(), 0);
+    }
+  };
+
+  const handleSend = async (manualContent = null) => {
+    if (sendingRef.current) return;
+    const contentToSend = typeof manualContent === 'string' ? manualContent : input;
+    if (!contentToSend.trim() || !selectedModel) return;
+    sendingRef.current = true;
+
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    const userMsg = { role: 'user', content: contentToSend };
+    setMessages(prev => [...prev, userMsg]);
+    if (typeof manualContent !== 'string') setInput('');
+    setPendingPlan(null); // a new message supersedes any unapproved plan
+    setLoading(true);
+    setAgentStatus(chatMode === 'deep_research' ? 'Drafting research plan…' : 'Thinking…');
+    setActivities(new Map());
+    let activeChatId = currentChatId;
+
+    try {
+      if (!activeChatId) {
+        const title = contentToSend.slice(0, 80) + (contentToSend.length > 80 ? '…' : '');
+        const newChat = await createChat(title, selectedModel, activeProvider);
+        activeChatId = newChat.id;
+        setCurrentChatId(activeChatId);
+        setCurrentChatTitle(title);
+        saveFiltersToChatStorage(activeChatId);
+      }
+
+      if (activeChatId) {
+        await saveMessage(activeChatId, 'user', contentToSend).catch(err =>
+          console.error('Failed to save user message:', err)
+        );
+      }
+
+      const messagesToSend = [...messages, userMsg];
+
+      if (chatMode === 'deep_research') {
+        // Phase A: draft the plan; execution waits for explicit user approval.
+        const draft = await getResearchPlan(
+          messagesToSend,
+          selectedModel,
+          researchMode,
+          {
+            jurisdiction: filters.jurisdiction,
+            dateFrom: filters.dateFrom,
+            dateTo: filters.dateTo,
+            caseLawCourt: filters.caseLawCourt,
+            legislationType: filters.legislationType,
+            currentOnly: filters.currentOnly,
+            recordType: filters.recordType,
+            chatId: activeChatId,
+          },
+          controller.signal
+        );
+        if (draft.needs_clarification) {
+          const question = draft.question;
+          setMessages(prev => [...prev, { role: 'assistant', content: question }]);
+          if (activeChatId) {
+            await saveMessage(activeChatId, 'assistant', question).catch(err =>
+              console.error('Failed to save clarification message:', err)
+            );
+          }
+        } else if (draft.plan) {
+          setPendingPlan(draft.plan);
+        }
+      } else {
+        await runExchange(messagesToSend, activeChatId, controller);
+      }
+    } catch (error) {
+      handleSendError(error);
+    } finally {
+      finalizeSend(controller);
+    }
+  };
+
+  // Deep Research Phase B: execute the user-approved (possibly edited) plan.
+  const handleRunPlan = async approvedPlan => {
+    if (sendingRef.current) return;
+    sendingRef.current = true;
+
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setPendingPlan(null);
+    setLoading(true);
+    setAgentStatus('Executing research plan…');
+    setActivities(new Map());
+
+    try {
+      await runExchange([...messages], currentChatId, controller, approvedPlan);
+    } catch (error) {
+      handleSendError(error);
+    } finally {
+      finalizeSend(controller);
+    }
+  };
+
+  const handleCancelPlan = () => setPendingPlan(null);
 
   const handleNewChat = () => {
     if (abortControllerRef.current) abortControllerRef.current.abort();
@@ -292,11 +375,13 @@ export function useChat({
     setActiveCite(null);
     setActiveSourcesMsgId(null);
     setChatDocuments([]);
+    setPendingPlan(null);
   };
 
   const loadChat = async chatId => {
     try {
       setLoading(true);
+      setPendingPlan(null);
       const msgs = await getChatMessages(chatId);
       setMessages(msgs);
       setCurrentChatId(chatId);
@@ -330,6 +415,7 @@ export function useChat({
     setAgentStatus('');
     setActivities(new Map());
     setLoading(false);
+    setPendingPlan(null);
   };
 
   return {
@@ -348,5 +434,8 @@ export function useChat({
     handleNewChat,
     loadChat,
     resetChat,
+    pendingPlan,
+    handleRunPlan,
+    handleCancelPlan,
   };
 }

@@ -404,6 +404,40 @@ async def process_user_request(
     )
 
 
+async def draft_research_plan(
+    messages: list,
+    model: str,
+    cancel_event: Optional[asyncio.Event],
+    num_ctx: int,
+    timing_collector=None,
+) -> dict:
+    return await agent_core.draft_research_plan(
+        chat_loop,
+        messages, model, cancel_event, num_ctx,
+        timing_collector=timing_collector,
+    )
+
+
+async def run_deep_research(
+    approved_plan: dict,
+    messages: list,
+    model: str,
+    on_chunk: Optional[Callable],
+    cancel_event: Optional[asyncio.Event],
+    num_ctx: int,
+    db_session=None,
+    emit_tool_details: bool = False,
+    timing_collector=None,
+) -> dict:
+    return await agent_core.run_deep_research(
+        chat_loop, run_worker_agent,
+        approved_plan, messages, model, on_chunk, cancel_event, num_ctx,
+        db_session=db_session,
+        emit_tool_details=emit_tool_details,
+        timing_collector=timing_collector,
+    )
+
+
 # -----------------------------------------------------------------------
 # Model Listing
 # -----------------------------------------------------------------------

@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..agent.provider_factory import (
     get_active_provider,
@@ -15,6 +15,7 @@ from ..agent.provider_factory import (
     get_process_user_request_from_context,
     get_provider_config,
     get_request_queue,
+    get_run_deep_research_from_context,
     set_request_provider_config,
 )
 from ..config import MAX_TOTAL_DOC_CHARS, evaluate_efficiency_breaches, settings
@@ -53,6 +54,20 @@ async def get_models(user: dict = Depends(get_current_user)):
     return models
 
 
+class ResearchPlanStep(BaseModel):
+    """One approved Deep Research plan step (user-editable, so validated here)."""
+    id: Optional[int] = None
+    title: str = Field(..., min_length=1, max_length=500)
+    detail: str = Field("", max_length=4000)
+
+
+class DeepResearchPlan(BaseModel):
+    """The approved plan sent back for execution. Each step is a full worker
+    run (real cost), so the step count is hard-capped server-side."""
+    scope_note: str = Field("", max_length=2000)
+    steps: List[ResearchPlanStep] = Field(..., min_length=1, max_length=8)
+
+
 class ChatRequest(BaseModel):
     messages: List[dict]
     model: str
@@ -70,6 +85,8 @@ class ChatRequest(BaseModel):
     # Parliamentary-mode filters (parliament bot only)
     record_type: Optional[str] = None
     chat_id: Optional[int] = None
+    # Deep Research execution: the user-approved plan (chat_mode="deep_research")
+    deep_research_plan: Optional[DeepResearchPlan] = None
 
 
 @router.post("/api/chat")
@@ -79,6 +96,12 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
     if not body.messages or not body.model:
         return StreamingResponse(
             _error_stream("Missing messages or model"),
+            media_type="text/event-stream",
+        )
+
+    if body.chat_mode == "deep_research" and body.deep_research_plan is None:
+        return StreamingResponse(
+            _error_stream("Deep Research execution requires an approved plan (deep_research_plan)."),
             media_type="text/event-stream",
         )
 
@@ -150,10 +173,26 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
                 # Resolve the provider function from the ContextVar set above — this
                 # avoids a second DB read and eliminates the TOCTOU race where the
                 # active provider could be switched between config resolution and dispatch.
-                process_user_request = get_process_user_request_from_context()
+                deep_research = (
+                    body.chat_mode == "deep_research" and body.deep_research_plan is not None
+                )
 
                 async with async_session_maker() as db_session:
-                    result = await process_user_request(
+                    if deep_research:
+                        run_deep_research = get_run_deep_research_from_context()
+                        result = await run_deep_research(
+                            body.deep_research_plan.model_dump(),
+                            list(body.messages),
+                            resolved_model,
+                            on_chunk,
+                            cancel_event,
+                            body.num_ctx or 0,
+                            db_session=db_session,
+                            timing_collector=timing,
+                        )
+                    else:
+                        process_user_request = get_process_user_request_from_context()
+                        result = await process_user_request(
                             list(body.messages),
                             resolved_model,
                             on_chunk,
@@ -248,6 +287,9 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
                 metrics["research_mode"] = (
                     settings.research_mode or body.research_mode or "legislation_only"
                 )
+                # Segments Deep Research (N delegations by design) from standard
+                # requests; evaluate_efficiency_breaches skips deep_research rows.
+                metrics["chat_mode"] = body.chat_mode or "research"
                 # One-line efficiency summary for grep-ability in the agent log.
                 logging.getLogger("agent").info(
                     "[Efficiency] req=%s delegations=%s worker_tools=%s phase1=%s phase2=%s "

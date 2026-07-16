@@ -182,6 +182,7 @@ export default function Sidebar({
             >
               <option value="conversational">Conversational</option>
               <option value="research">Research</option>
+              <option value="deep_research">Deep Research</option>
             </select>
           </div>
 

@@ -52,6 +52,8 @@ class MessageCreate(BaseModel):
     provider: Optional[str] = None
     cost_usd: Optional[float] = None
     sources: Optional[List] = None
+    # Deep Research audit: the approved plan (assistant result messages only)
+    research_plan: Optional[dict] = None
 
 
 class RatingUpdate(BaseModel):
@@ -70,6 +72,7 @@ class MessageOut(BaseModel):
     feedback_comment: Optional[str] = None
     cost_usd: Optional[float] = None
     sources: Optional[List] = None
+    research_plan: Optional[dict] = None
     created_at: datetime
 
     class Config:
@@ -183,7 +186,8 @@ async def get_messages(
             id=m.id, chat_id=m.chat_id, role=m.role, content=m.content,
             model=m.model, provider=m.provider,
             rating=m.rating, feedback_comment=m.feedback_comment,
-            cost_usd=m.cost_usd, sources=m.sources, created_at=m.created_at
+            cost_usd=m.cost_usd, sources=m.sources,
+            research_plan=m.research_plan, created_at=m.created_at
         ) for m in msgs
     ]
 
@@ -204,6 +208,7 @@ async def add_message(
         provider=body.provider,
         cost_usd=body.cost_usd,
         sources=body.sources,
+        research_plan=body.research_plan,
     )
     db.add(new_msg)
     await db.commit()
@@ -212,7 +217,8 @@ async def add_message(
         id=new_msg.id, chat_id=new_msg.chat_id, role=new_msg.role, content=new_msg.content,
         model=new_msg.model, provider=new_msg.provider,
         rating=new_msg.rating, feedback_comment=new_msg.feedback_comment,
-        cost_usd=new_msg.cost_usd, sources=new_msg.sources, created_at=new_msg.created_at
+        cost_usd=new_msg.cost_usd, sources=new_msg.sources,
+        research_plan=new_msg.research_plan, created_at=new_msg.created_at
     )
 
 

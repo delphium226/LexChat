@@ -427,6 +427,87 @@ PARLIAMENT_TOOLS = [
     },
 ]
 
+# -----------------------------------------------------------------------
+# Deep Research planner tools (Phase A — no research tools, plan only)
+# -----------------------------------------------------------------------
+
+PLANNER_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "submit_research_plan",
+            "description": (
+                "Submit the drafted research plan. Call this exactly once when the user's question "
+                "is clear enough to plan against. Steps must be scoped legal sub-questions in domain "
+                "terms, each independently researchable."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "scope_note": {
+                        "type": "string",
+                        "description": (
+                            "1-2 sentences stating what the plan covers and any deliberate exclusions "
+                            "(e.g. jurisdiction or date limits from active filters)."
+                        ),
+                    },
+                    "steps": {
+                        "type": "array",
+                        "description": "2-6 research steps, in execution order.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {
+                                    "type": "string",
+                                    "description": "Short imperative title for the step (one line).",
+                                },
+                                "detail": {
+                                    "type": "string",
+                                    "description": (
+                                        "What exactly to find, in domain terms — Acts, provisions, "
+                                        "duties, issues, authorities. Include any identifiers the "
+                                        "user gave (Act names, years, section numbers, citations) "
+                                        "verbatim."
+                                    ),
+                                },
+                            },
+                            "required": ["title", "detail"],
+                        },
+                    },
+                },
+                "required": ["scope_note", "steps"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "request_clarification",
+            "description": (
+                "Ask the user ONE neutral clarifying question when their request is too ambiguous to "
+                "plan without guessing. Do not suggest or list specific Acts, cases, or references "
+                "from your own knowledge."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "A single, neutral clarifying question for the user.",
+                    },
+                },
+                "required": ["question"],
+            },
+        },
+    },
+]
+
+
+def get_planner_tools() -> list:
+    """Return the Deep Research planner tool list (plan submission + clarification only)."""
+    return list(PLANNER_TOOLS)
+
+
 _PARLIAMENT_TOOL_NAMES = {t["function"]["name"] for t in PARLIAMENT_TOOLS}
 
 

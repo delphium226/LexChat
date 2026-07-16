@@ -37,6 +37,7 @@ import { Routes, Route } from 'react-router-dom';
 import SystemChat from './pages/SystemChat';
 import WeeklyFeedbackBanner from './components/WeeklyFeedbackBanner';
 import DataSensitivityNotice from './components/DataSensitivityNotice';
+import DeepResearchPlan from './components/DeepResearchPlan';
 import { BookmarkIcon, ScalesIcon, GavelIcon, CalendarIcon } from './components/ui/icons';
 import { GhostBtn } from './components/ui/buttons';
 import Modal from './components/ui/Modal';
@@ -209,6 +210,9 @@ function AppContent() {
     handleNewChat,
     loadChat,
     resetChat,
+    pendingPlan,
+    handleRunPlan,
+    handleCancelPlan,
   } = useChat({
     user,
     logoutWithExpiry,
@@ -494,11 +498,12 @@ function AppContent() {
               <div style={{ maxWidth: '95%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
                 {/* Research context chips */}
                 {(() => {
+                  const modePrefix = chatMode === 'deep_research' ? 'Deep Research · ' : '';
                   const chips = isParliament
                     ? [
                         {
                           icon: <ScalesIcon />,
-                          label: chatMode === 'conversational' ? 'Conversational' : 'Parliamentary records',
+                          label: chatMode === 'conversational' ? 'Conversational' : `${modePrefix}Parliamentary records`,
                         },
                         {
                           icon: <GavelIcon />,
@@ -508,7 +513,7 @@ function AppContent() {
                     : [
                         {
                           icon: <ScalesIcon />,
-                          label: chatMode === 'conversational' ? 'Conversational' : researchModeLabel,
+                          label: chatMode === 'conversational' ? 'Conversational' : `${modePrefix}${researchModeLabel}`,
                         },
                         { icon: <GavelIcon />, label: jurisdictionLabel },
                         { icon: <CalendarIcon />, label: `In force · ${todayLabel}` },
@@ -571,9 +576,11 @@ function AppContent() {
                     <p style={{ fontSize: 14, margin: 0 }}>
                       {chatMode === 'conversational'
                         ? 'Ask a legal question to begin.'
-                        : isParliament
-                          ? 'Ask about Scottish Parliament debates, committee scrutiny, or bill progress to begin.'
-                          : 'Ask about UK legislation or case law to begin.'}
+                        : chatMode === 'deep_research'
+                          ? 'Describe your research question — a plan will be drafted for your review before any research runs.'
+                          : isParliament
+                            ? 'Ask about Scottish Parliament debates, committee scrutiny, or bill progress to begin.'
+                            : 'Ask about UK legislation or case law to begin.'}
                     </p>
                   </div>
                 )}
@@ -633,6 +640,17 @@ function AppContent() {
                     />
                   );
                 })}
+
+                {/* Deep Research: plan review card */}
+                {pendingPlan && (
+                  <DeepResearchPlan
+                    key={currentChatId ?? 'draft'}
+                    plan={pendingPlan}
+                    onRun={handleRunPlan}
+                    onCancel={handleCancelPlan}
+                    disabled={loading}
+                  />
+                )}
 
                 {/* Loading indicator */}
                 {loading &&

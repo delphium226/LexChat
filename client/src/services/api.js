@@ -15,7 +15,8 @@ export const sendMessage = (
   signal,
   chat_mode = 'research',
   research_mode = 'legislation_only',
-  filters = {}
+  filters = {},
+  deep_research_plan = null
 ) => {
   return new Promise(async (resolve, reject) => {
     try {
@@ -30,6 +31,7 @@ export const sendMessage = (
           num_ctx,
           chat_mode,
           research_mode,
+          deep_research_plan,
           chat_id: filters.chatId || null,
           jurisdiction: filters.jurisdiction || null,
           year_from: filters.dateFrom ? parseInt(filters.dateFrom, 10) : null,
@@ -100,6 +102,37 @@ export const sendMessage = (
       reject(error);
     }
   });
+};
+
+// Deep Research Phase A: draft an editable research plan (plain JSON, no SSE).
+// Resolves to {plan: {scope_note, steps}} or {needs_clarification, question}.
+export const getResearchPlan = async (
+  messages,
+  model,
+  research_mode = 'legislation_only',
+  filters = {},
+  signal = null
+) => {
+  const response = await axios.post(
+    `${API_URL}/research/plan`,
+    {
+      messages,
+      model,
+      research_mode,
+      chat_id: filters.chatId || null,
+      jurisdiction: filters.jurisdiction || null,
+      year_from: filters.dateFrom ? parseInt(filters.dateFrom, 10) : null,
+      year_to: filters.dateTo ? parseInt(filters.dateTo, 10) : null,
+      date_from: filters.dateFrom ? `${filters.dateFrom}-01-01` : null,
+      date_to: filters.dateTo ? `${filters.dateTo}-12-31` : null,
+      court: filters.caseLawCourt || null,
+      legislation_type: filters.legislationType || null,
+      current_only: filters.currentOnly || false,
+      record_type: filters.recordType || null,
+    },
+    { signal }
+  );
+  return response.data;
 };
 
 export const sendSystemMessage = (messages, model, num_ctx, onUpdate, signal) => {
@@ -184,7 +217,8 @@ export const saveMessage = async (
   model = null,
   provider = null,
   cost_usd = null,
-  sources = null
+  sources = null,
+  research_plan = null
 ) => {
   const response = await axios.post(`${API_URL}/chats/${chatId}/messages`, {
     role,
@@ -193,6 +227,7 @@ export const saveMessage = async (
     provider,
     cost_usd,
     sources,
+    research_plan,
   });
   return response.data;
 };

@@ -82,6 +82,9 @@ class Message(Base):
     feedback_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
     sources: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Deep Research audit: the approved plan this assistant message answered
+    # ({"scope_note", "steps": [{"id","title","detail"}]}); NULL otherwise.
+    research_plan: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     chat: Mapped["Chat"] = relationship(back_populates="messages")
@@ -131,6 +134,9 @@ class RequestTiming(Base):
     search_budget_blocked: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Effective per-request research mode (future-proofs per-mode filtering).
     research_mode: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Per-request chat mode ("research"/"conversational"/"deep_research") —
+    # lets the efficiency view segment Deep Research (N delegations by design).
+    chat_mode: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (

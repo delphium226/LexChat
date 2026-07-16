@@ -173,6 +173,12 @@ def get_efficiency_profile() -> dict:
 def evaluate_efficiency_breaches(m: dict) -> list:
     """Return a list of human-readable breach reasons for a request's metrics
     dict (TimingCollector.to_dict()). Empty list = healthy."""
+    # Deep Research is code-orchestrated: one worker run per approved plan step
+    # plus a synthesis call, so N delegations / wide fan-out is the design, not
+    # a breach. The thresholds above describe the standard Manager→Worker loop.
+    if m.get("chat_mode") == "deep_research":
+        return []
+
     t = get_efficiency_profile()
     breaches = []
 

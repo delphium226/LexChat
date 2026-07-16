@@ -166,7 +166,13 @@ export default function Composer({
         }}
         disabled={loading}
         rows={1}
-        placeholder={chatMode === 'conversational' ? 'Ask a legal question…' : 'Ask about UK legislation or case law…'}
+        placeholder={
+          chatMode === 'conversational'
+            ? 'Ask a legal question…'
+            : chatMode === 'deep_research'
+              ? 'Describe your research question — a plan will be drafted for review…'
+              : 'Ask about UK legislation or case law…'
+        }
         style={{
           width: '100%',
           resize: 'none',

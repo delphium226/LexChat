@@ -554,9 +554,16 @@ async def get_efficiency_stats(
     # *research* requests (delegated at least once). This excludes pure-chat
     # turns and pre-instrumentation rows (both have manager_delegations = 0),
     # which would otherwise drag every average toward zero.
+    # Deep Research rows are excluded: they run one worker per approved plan
+    # step, so their delegation/fan-out numbers are by design, not loop health —
+    # including them would skew every average against the single-delegation
+    # baselines the indicator bands describe.
+    _loop_health = (
+        "manager_delegations > 0 AND chat_mode IS DISTINCT FROM 'deep_research'"
+    )
     research_filter = (
-        f"{date_filter} AND manager_delegations > 0" if date_filter
-        else "WHERE manager_delegations > 0"
+        f"{date_filter} AND {_loop_health}" if date_filter
+        else f"WHERE {_loop_health}"
     )
 
     # Per-request fan-out and precision ratios are computed in SQL so avg/p95

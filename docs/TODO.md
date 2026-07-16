@@ -198,6 +198,28 @@ export async function getMatterGaps(matterId) {
 suggestion quality is model-dependent (generic output on weak models is a model
 problem, not a bug); do not stream — a single completion displayed at once.
 
+### B3. Deep Research mode (feature; scoped 2026-07-16 — BUILT 2026-07-16 on `feature/deep-research`, uncommitted)
+**Status:** implemented per the build spec, all layers. 22 new tests (97 total green);
+live E2E verified via Ollama (plan → edit → 5-step execution → integrated report with
+persisted `messages.research_plan`; clarification path; carve-out confirmed — no breach
+alert on a 5-delegation deep-research run, while a same-session conversational request
+still alerted). Synthesis prompt includes a Key-findings bullet block in the BLUF with
+material gaps surfaced in the summary. Awaiting review/commit; rebuild `client/dist`
++ force-add at ship time. Original scope below.
+New opt-in `chat_mode = "deep_research"` that drafts an editable research plan, lets
+the lawyer add/remove/reorder/edit steps, then on approval executes the plan
+autonomously (code-orchestrated: one worker run per step + a synthesis call) and
+returns an integrated report. Plan-first improves scoping/steerability and yields an
+auditable approved-plan artifact — a good fit for the government-lawyer users. **L2
+only** (plan → approve → run); L3 (pause-and-review between steps) explicitly excluded.
+Two-phase flow: new `POST /api/research/plan` (JSON, planner-only agent) → editable
+plan card → existing `POST /api/chat` with an added `deep_research_plan` field for
+execution. **Full self-contained build spec:
+`docs/deep-research/IMPLEMENTATION_PLAN.md`** — includes the code-orchestration
+decision, efficiency-breach carve-out for the fan-out, additive `messages.research_plan`
+audit column, and file-by-file changes across backend + frontend. Relates to A3 (the
+plan-first strategy is a candidate for the eval harness once both exist).
+
 ---
 
 ## Deferred / scoped follow-ups
@@ -219,3 +241,10 @@ The parliament profile's dashboard indicator bands in `EFFICIENCY_PROFILES`
 Measured 2026-07-13: FTS ~85% raw / ~97%+ with Worker reformulation; cheap wins
 shipped (`589667c`). Revisit only if a reformulation-resistant miss class emerges.
 Plan: `docs/parliament/SEMANTIC_RETRIEVAL_PLAN.md` (DEFERRED/NO-GO).
+
+### D4. Give the test suite its own database (`TEST_DATABASE_URL`)
+`tests/conftest.py` points at the same `lexchat` DB as local dev and **drops all
+tables at session end**, so every `pytest` run wipes local chats, provider settings,
+and admin config (bit three times in one session, 2026-07-16). Add a
+`TEST_DATABASE_URL` env var (fallback: `DATABASE_URL` + `_test` suffix), create the
+test DB on demand, and refuse to run against a DB that already holds non-test data.
