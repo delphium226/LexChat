@@ -83,7 +83,7 @@ no tools re-run. Skip if A1 lands first.
 Response cache keyed on (endpoint, payload) with TTL; legislation text is highly
 cacheable. Doesn't reduce variance for novel queries but makes eval re-runs (A3)
 cheaper and more repeatable. LLM time dominates ~30:1, so this is an eval-cost play,
-not a latency play.
+not a latency play. See also D5 (token-cost caching) — this is D5's sub-item 3.
 
 ---
 
@@ -248,3 +248,46 @@ tables at session end**, so every `pytest` run wipes local chats, provider setti
 and admin config (bit three times in one session, 2026-07-16). Add a
 `TEST_DATABASE_URL` env var (fallback: `DATABASE_URL` + `_test` suffix), create the
 test DB on demand, and refuse to run against a DB that already holds non-test data.
+
+### D5. Token-cost caching (scoped 2026-07-16, not started)
+**Context.** The dominant token cost is the ReAct loop re-sending the full
+conversation (system prompt + all accumulated tool results) as input tokens on
+*every* turn — a worker that makes 6 tool calls pays for its retrieved legislation
+text ~6×. Deep Research (B3) multiplies this by plan-step count (each step is a full
+worker run), so caching matters more now than when first discussed. Tuned hybrid
+query ≈ $0.18 on OpenRouter; a 5-step deep-research run is ~N× that. Earlier
+conclusion still holds: summarisation-output caching is a poor fit (summaries are
+query-dependent → near-zero hit rate).
+
+Three sub-items, in ROI order:
+
+1. **Provider prompt caching on the OpenRouter path (highest ROI, small change).**
+   OpenAI/Gemini models cache automatically (we may already get partial discounts);
+   Anthropic models need explicit `cache_control` breakpoints in the request payload.
+   Change: in `openrouter_client.py` `chat_loop`, mark the system prompt (stable
+   across turns) and the message prefix with `cache_control` when the model is
+   Anthropic. Typical agent-loop saving: 50–90% of repeated input tokens. Ollama
+   cloud exposes no caching mechanism — nothing to do on that provider.
+   Verify via OpenRouter usage stats / `cache_discount` fields in the response.
+
+2. **Per-request tool-result memo for Deep Research (trivial, targets measured
+   waste).** Plan steps run as isolated workers, so two steps that retrieve the same
+   Act each pay fetch + summarise (observed in the first live run:
+   `redundant_tool_calls=1` — two steps both fetched the Acquisition of Land Act
+   1981). Change: `run_deep_research` passes a per-request dict
+   `(tool_name, canonical_args) → result` into `run_worker_tool` (alongside the
+   existing `search_budget` pattern); exact-match repeats short-circuit, skipping the
+   API call *and* the duplicate summarisation. No TTL/invalidation questions — the
+   memo dies with the request. Exact-arg matches only; do not fuzzy-match queries.
+
+3. **LEX / case-law response cache — already scoped as A5; build only on evidence.**
+   Saves latency + eval-rerun cost more than tokens (the LLM still reads the text
+   either way; token savings only where the summarise threshold is re-tripped for the
+   same oversized doc). Before building, size it from existing metrics:
+   `lex_api_total_ms` (is LEX latency material? A5 says LLM dominates ~30:1) and
+   `summarisation_chars_in` (is the same doc being re-summarised often?).
+
+**Measurement first for #1/#3:** the Efficiency tab already records per-request
+`total_cost_usd`, `summarisation_chars_in/out`, and `lex_api_total_ms` — a week of
+real traffic quantifies the ceiling before any code is written. #2 needs no
+measurement; the redundancy counter already proves it.
