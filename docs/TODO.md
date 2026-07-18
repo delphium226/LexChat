@@ -242,14 +242,26 @@ Measured 2026-07-13: FTS ~85% raw / ~97%+ with Worker reformulation; cheap wins
 shipped (`589667c`). Revisit only if a reformulation-resistant miss class emerges.
 Plan: `docs/parliament/SEMANTIC_RETRIEVAL_PLAN.md` (DEFERRED/NO-GO).
 
-### D4. Give the test suite its own database (`TEST_DATABASE_URL`)
+### D4. Give the test suite its own database (`TEST_DATABASE_URL`) — DONE 2026-07-17
 `tests/conftest.py` points at the same `lexchat` DB as local dev and **drops all
 tables at session end**, so every `pytest` run wipes local chats, provider settings,
 and admin config (bit three times in one session, 2026-07-16). Add a
 `TEST_DATABASE_URL` env var (fallback: `DATABASE_URL` + `_test` suffix), create the
 test DB on demand, and refuse to run against a DB that already holds non-test data.
 
-### D5. Token-cost caching (scoped 2026-07-16, not started)
+**Done 2026-07-17 (on `feature/token-cost-caching`):** conftest resolves
+`TEST_DATABASE_URL` (fallback `<dev-db>_test` → `lexchat_test`), exports it as
+`DATABASE_URL` **before any `src` import** so `src.database`'s import-time engine
+(and `async_session_maker`, used directly by `/api/chat` etc.) targets the test DB
+too — not just the `get_db` override; env vars beat `.env` in pydantic-settings,
+with an assert that the override took. Auto-creates the DB via the `postgres`
+maintenance DB; two refusal guards (both verified): same-name-as-dev → exit, and
+tables-present-but-no-`test_db_marker` → exit before anything is dropped (guard
+runs pre-create_all; teardown never reached). Verified: 119 tests green against
+auto-created `lexchat_test`; dev-DB canary row + provider seed + admin user all
+survived the run; `lexchat` and `lexchat_parliament` both refused.
+
+### D5. Token-cost caching (scoped 2026-07-16; #1 and #2 BUILT 2026-07-16 on `feature/token-cost-caching`; #3 analysed → NOT built)
 **Context.** The dominant token cost is the ReAct loop re-sending the full
 conversation (system prompt + all accumulated tool results) as input tokens on
 *every* turn — a worker that makes 6 tool calls pays for its retrieved legislation
@@ -291,3 +303,86 @@ Three sub-items, in ROI order:
 `total_cost_usd`, `summarisation_chars_in/out`, and `lex_api_total_ms` — a week of
 real traffic quantifies the ceiling before any code is written. #2 needs no
 measurement; the redundancy counter already proves it.
+
+**Follow-up scoped 2026-07-17 (not started): D6 below — cache feature toggles +
+Admin Portal Cache stats tab. Plan: `docs/CACHE_ADMIN_UI_PLAN.md`.**
+
+**Status 2026-07-16 (`feature/token-cost-caching`, off `feature/deep-research`):**
+- **#1 built** — `_apply_anthropic_cache_control` in `openrouter_client.py` marks the
+  system prompt + last text-bearing message with `cache_control` for `anthropic/*`
+  models only (non-Anthropic payloads byte-identical). Cached-token usage
+  (`prompt_tokens_details.cached_tokens`, `cache_discount`) is logged and persisted
+  as additive `request_timings` columns `cached_prompt_tokens` / `cache_discount_usd`.
+  Live verification against OpenRouter is OUTSTANDING — no OpenRouter API key exists
+  on the dev machine (it lived in the `AppSetting` row wiped by the D4 conftest bug);
+  verify the tool-role breakpoint is accepted once a key is available.
+  **Update 2026-07-17 (key restored):** provider-side caching verified live on the
+  configured `google/gemini-3.1-pro-preview` — implicit (automatic) caching, no
+  cache_control needed: a heavy 3-Act query (16 worker tools, 12 ReAct turns,
+  $0.258) recorded **30,345 cached prompt tokens across 7 of ~13 LLM calls**
+  (~3.4K→6.7K/turn as context grew); a small query (turns ≈1.5–3K tokens) got 0 —
+  Gemini's implicit-cache minimum prefix (~4K tokens) is the threshold. Gotcha:
+  OpenRouter reports `cache_discount` **only for Anthropic**; for Gemini the
+  saving is baked into the billed cost, so `cache_discount_usd` stays 0 even on
+  hits (Cache tab small print explains this). The Anthropic `cache_control` path
+  (incl. tool-role breakpoint acceptance) remains unverified live — the user runs
+  Gemini models on OpenRouter.
+- **#2 built** — `run_deep_research` threads a per-request `tool_memo` dict through
+  `run_worker_agent` → `run_worker_tool` (same pattern as `search_budget`). Exact
+  `(tool_name, canonical-args-JSON)` repeats return the cached final result, skip the
+  API call + re-summarisation, re-extract sources from the stored raw result into the
+  reusing step's accumulator, and count only in the new `memo_hits` metric (not
+  worker/phase/redundant counts, no budget consumption). Standard/conversational
+  modes pass `tool_memo=None` — behaviour unchanged.
+- **#3 NOT built (evidence does not justify it).** Legislation-bot `request_timings`
+  history was destroyed by D4 conftest wipes, so sized from the parliament bot's 66
+  surviving rows (2026-06-03→07-14) as a proxy: LLM time dominates external-API time
+  ~16:1 (avg 73.6s vs 4.7s; p50 API 1,629 ms, p90 16.6s), and only 6/66 requests
+  tripped the summarisation threshold (heavily skewed: p90 chars_in = 0, max 632K).
+  A response cache would shave seconds off a ~80s request and rarely dodge a
+  re-summarisation → defer until target traffic shows otherwise (re-measure after D4
+  gives tests their own DB so legislation-bot history survives).
+
+### D7. "Local prompt caching" — cross-user/cross-provider summary cache, exact-match (PLANNED 2026-07-18, not started)
+Cross-user cache of Worker document summaries (LEX text is static; at ~200 users
+query demand over the same Acts will be heavily correlated — the second lawyer
+asking the same question of the same section skips the summarisation LLM call).
+**No embeddings** — the earlier embedding-based variant (discussed 2026-07-17) was
+rejected because semantic near-miss reuse risks silent incompleteness; this design
+uses exact (canonicalised) prompt/summary pairs keyed on
+`(content_hash of retrieved text, canonicalised-query hash)`, which eliminates
+that risk by construction and makes staleness impossible (amended text → new hash
+→ miss). Cross-provider by design (`summarise_model` stored for provenance, NOT in
+the key). New `local_prompt_cache` table, `local_cache_hits` metric,
+`local_prompt_cache_enabled` flag, Cache-tab surfacing — all following the D5/D6
+patterns. **Full implementation plan for a fresh session:
+`docs/LOCAL_PROMPT_CACHE_PLAN.md`.** Build on a new branch after
+`feature/token-cost-caching` merges.
+
+### D6. Cache admin UI: feature toggles + Cache stats tab (scoped 2026-07-17, BUILT 2026-07-17)
+Two feature flags in Developer tab → Feature flags (`prompt_caching_enabled`,
+`tool_memo_enabled`, both default ON = current behaviour), consumed via the request
+provider-config ContextVar (same pattern as `_research_mode`); plus a new Admin
+Portal "Cache" tab backed by `GET /api/stats/cache` over the D5 `request_timings`
+columns (`memo_hits`, `cached_prompt_tokens`, `cache_discount_usd`): KPI row, daily
+series, recent-hits table, and current flag state. Full plan with file references
+and suggested order: `docs/CACHE_ADMIN_UI_PLAN.md`. Work on
+`feature/token-cost-caching`.
+
+**Status 2026-07-17 (built, uncommitted on `feature/token-cost-caching`):**
+- Flags live in `_DEFAULT_FEATURES`/`FeaturesUpdate` (developer.py) — old saved
+  features JSON and old client POST bodies stay valid (merge-over-defaults +
+  defaulted Pydantic fields). Consumed via `_prompt_caching_enabled` /
+  `_tool_memo_enabled` in the request config ContextVar (set in routers/ai.py);
+  gate `_apply_anthropic_cache_control` and `run_deep_research`'s `tool_memo`.
+  Absent key = enabled, so direct callers/tests/parliament bot unchanged.
+- `GET /api/stats/cache?days=N` (admin-only, stats.py) — KPI row, daily series,
+  recent-hits table (last 20 with memo_hits>0 OR cached_prompt_tokens>0), and
+  flag-state echo. "OpenRouter-eligible" proxied by `total_cost_usd > 0` (no
+  provider column on request_timings). New Cache tab (`admin/CacheTab.jsx`) +
+  two extra Feature-flag toggle rows in AdminPortal.jsx; dist rebuilt.
+- Verified: 119 tests green (12 new); live A/B on identical 2-step deep-research
+  runs — flag ON: step 2 `search_legislation` served from memo (memo_hits=1);
+  flag OFF: same call re-executed, memo_hits=0; Cache tab endpoint returned the
+  real hit row. Prompt-caching toggle unit-tested only (no OpenRouter key on dev
+  machine — live payload check still outstanding, same as D5).
