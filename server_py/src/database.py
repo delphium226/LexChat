@@ -226,6 +226,9 @@ async def init_db() -> None:
             )""",
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS local_cache_hits INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS local_cache_chars_saved INTEGER NOT NULL DEFAULT 0",
+            # Resolved active provider per request (D8, additive, no backfill —
+            # pre-column rows stay NULL and fall back to the cost>0 proxy in stats).
+            "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS provider VARCHAR(32)",
             # Committee SP TV slugs can exceed 128 chars (they embed the full debate
             # title), so widen slug from the original VARCHAR(128) to TEXT on existing
             # DBs. Guarded so it only runs while the column is still varchar.

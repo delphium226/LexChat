@@ -364,7 +364,10 @@ export const CacheTab = ({ cacheStats, cacheTimeframe, setCacheTimeframe, refetc
         Per-request total prompt tokens are not persisted, so a cached-token ratio cannot be shown — only absolute
         cached tokens and the provider-reported discount. Note: OpenRouter itemises an explicit cache discount for
         Anthropic models only; for Gemini/OpenAI models the saving is applied inside the billed cost, so Cache
-        Discount reads $0.00 there even when Cached Prompt Tokens shows hits.
+        Discount reads $0.00 there even when Cached Prompt Tokens shows hits. The local-cache hit rate compares
+        hits against all summarisations in the window — periods where the local cache was switched off still count
+        their summarisations in the denominator, so the rate reads lower than the cache's true effectiveness across
+        such windows.
       </p>
     </div>
   );

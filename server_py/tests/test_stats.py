@@ -320,6 +320,19 @@ async def test_cache_requires_admin(client, user_token):
     assert r.status_code == 403
 
 
+async def test_cache_openrouter_eligible_uses_provider_column(client, admin_token, db_session):
+    """provider='openrouter' counts as eligible even at zero cost (free-tier
+    model); provider IS NULL falls back to the old total_cost_usd > 0 proxy;
+    provider='ollama' is excluded regardless of cost."""
+    await _seed_timing_row(db_session, request_id="req_or_free", provider="openrouter", total_cost_usd=0.0)
+    await _seed_timing_row(db_session, request_id="req_legacy", provider=None, total_cost_usd=0.10)
+    await _seed_timing_row(db_session, request_id="req_ollama", provider="ollama", total_cost_usd=0.0)
+
+    r = await client.get("/api/stats/cache", headers={"Authorization": f"Bearer {admin_token}"})
+    assert r.status_code == 200
+    assert r.json()["kpi"]["openrouterEligibleRequests"] == 2
+
+
 async def test_cache_purge_local(client, admin_token, db_session):
     """DELETE /api/stats/cache/local empties the table and reports the count."""
     from src.services import local_prompt_cache as lpc

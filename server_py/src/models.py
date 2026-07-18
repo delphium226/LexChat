@@ -146,6 +146,9 @@ class RequestTiming(Base):
     # Per-request chat mode ("research"/"conversational"/"deep_research") —
     # lets the efficiency view segment Deep Research (N delegations by design).
     chat_mode: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Resolved active provider ("ollama"/"openrouter") — additive (D8), NULL on
+    # pre-column rows (stats fall back to the total_cost_usd > 0 proxy).
+    provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (

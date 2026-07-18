@@ -309,6 +309,9 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
                 # Segments Deep Research (N delegations by design) from standard
                 # requests; evaluate_efficiency_breaches skips deep_research rows.
                 metrics["chat_mode"] = body.chat_mode or "research"
+                # Resolved active provider (D8) — replaces the cost>0 proxy for
+                # "OpenRouter-eligible" in the Cache tab going forward.
+                metrics["provider"] = active_provider
                 # One-line efficiency summary for grep-ability in the agent log.
                 logging.getLogger("agent").info(
                     "[Efficiency] req=%s delegations=%s worker_tools=%s phase1=%s phase2=%s "

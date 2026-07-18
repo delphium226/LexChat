@@ -858,8 +858,10 @@ async def get_cache_stats(
     prompt caching (cached_prompt_tokens + provider-reported cache_discount_usd),
     and the local prompt cache (local_cache_hits + local_cache_chars_saved,
     plus timeframe-independent content stats read from local_prompt_cache itself).
-    "OpenRouter-eligible" is proxied by total_cost_usd > 0 — only OpenRouter
-    reports cost, and only paid OpenRouter requests can see a provider cache hit.
+    "OpenRouter-eligible" reads the request_timings.provider column (D8);
+    pre-column rows (provider IS NULL) fall back to the old total_cost_usd > 0
+    proxy — only OpenRouter reports cost, and only paid OpenRouter requests can
+    see a provider cache hit.
     Current flag state is echoed so an all-zero dashboard is self-explanatory.
     """
     date_filter = _date_filter(days)
@@ -872,7 +874,8 @@ async def get_cache_stats(
             COALESCE(SUM(cached_prompt_tokens), 0)                      AS cached_prompt_tokens,
             COALESCE(SUM(cache_discount_usd), 0)                        AS cache_discount_usd,
             COUNT(*) FILTER (WHERE cached_prompt_tokens > 0)            AS cache_hit_requests,
-            COUNT(*) FILTER (WHERE total_cost_usd > 0)                  AS openrouter_eligible_requests,
+            COUNT(*) FILTER (WHERE provider = 'openrouter'
+                             OR (provider IS NULL AND total_cost_usd > 0)) AS openrouter_eligible_requests,
             COALESCE(SUM(total_cost_usd), 0)                            AS total_cost_usd,
             COALESCE(SUM(local_cache_hits), 0)                          AS local_cache_hits,
             COUNT(*) FILTER (WHERE local_cache_hits > 0)                AS local_cache_hit_requests,
