@@ -200,3 +200,102 @@ async def test_efficiency_parliamentary_profile(client, admin_token, db_session,
     assert "budget_exhaustion" in keys
     assert body["kpi"]["avgFanout"] == 2.0
     assert body["worst"][0]["budgetBlocked"] == 1
+
+
+# --------------------------------------------------------------------------- #
+# /cache
+# --------------------------------------------------------------------------- #
+
+CACHE_KPI_KEYS = {
+    "deepResearchRequests", "memoHits", "memoHitRequests", "cachedPromptTokens",
+    "cacheDiscountUsd", "cacheHitRequests", "openrouterEligibleRequests", "totalCostUsd",
+}
+
+
+async def test_cache_empty(client, admin_token):
+    r = await client.get("/api/stats/cache", headers={"Authorization": f"Bearer {admin_token}"})
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body) == {"kpi", "daily", "recentHits", "flags"}
+    assert set(body["kpi"]) == CACHE_KPI_KEYS
+    assert body["kpi"]["memoHits"] == 0
+    assert body["daily"] == [] and body["recentHits"] == []
+    # Flags default ON when no features row exists
+    assert body["flags"] == {"prompt_caching_enabled": True, "tool_memo_enabled": True}
+
+
+async def test_cache_seeded(client, admin_token, db_session):
+    # A deep-research request with memo hits, and a paid request with a
+    # provider cache hit; a third plain row must not appear in recentHits.
+    await _seed_timing_row(
+        db_session, request_id="req_memo", chat_mode="deep_research",
+        memo_hits=3, total_cost_usd=0.0,
+    )
+    await _seed_timing_row(
+        db_session, request_id="req_or",
+        cached_prompt_tokens=1500, cache_discount_usd=0.0042, total_cost_usd=0.10,
+    )
+    await _seed_timing_row(db_session, request_id="req_plain", total_cost_usd=0.0)
+
+    r = await client.get("/api/stats/cache", headers={"Authorization": f"Bearer {admin_token}"})
+    assert r.status_code == 200
+    body = r.json()
+    kpi = body["kpi"]
+    assert kpi["deepResearchRequests"] == 1
+    assert kpi["memoHits"] == 3
+    assert kpi["memoHitRequests"] == 1
+    assert kpi["cachedPromptTokens"] == 1500
+    assert kpi["cacheDiscountUsd"] == pytest.approx(0.0042)
+    assert kpi["cacheHitRequests"] == 1
+    assert kpi["openrouterEligibleRequests"] == 1
+    assert kpi["totalCostUsd"] == pytest.approx(0.10)
+
+    assert len(body["daily"]) == 1  # all three rows share today's date
+    assert set(body["daily"][0]) == {
+        "date", "memoHits", "cachedPromptTokens", "cacheDiscountUsd", "totalCostUsd",
+    }
+    assert body["daily"][0]["memoHits"] == 3
+
+    hits = body["recentHits"]
+    assert {h["requestId"] for h in hits} == {"req_memo", "req_or"}
+    assert set(hits[0]) == {
+        "createdAt", "requestId", "chatMode", "memoHits",
+        "cachedPromptTokens", "cacheDiscountUsd", "totalCostUsd",
+    }
+
+
+async def test_cache_timeframe_filter(client, admin_token, db_session):
+    """A row older than the window is excluded; days=all includes it."""
+    await _seed_timing_row(db_session, request_id="req_old", memo_hits=2, chat_mode="deep_research")
+    await db_session.execute(text(
+        "UPDATE request_timings SET created_at = NOW() - INTERVAL '40 days' "
+        "WHERE request_id = 'req_old'"
+    ))
+    await db_session.commit()
+
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    r = await client.get("/api/stats/cache?days=30", headers=headers)
+    assert r.json()["kpi"]["memoHits"] == 0
+
+    r = await client.get("/api/stats/cache?days=all", headers=headers)
+    body = r.json()
+    assert body["kpi"]["memoHits"] == 2
+    assert body["recentHits"][0]["requestId"] == "req_old"
+
+
+async def test_cache_echoes_flag_state(client, admin_token, db_session):
+    import json as _json
+    from src.models import AppSetting
+    db_session.add(AppSetting(key="features", value=_json.dumps({
+        "matters_enabled": True,
+        "prompt_caching_enabled": False,
+        "tool_memo_enabled": True,
+    })))
+    await db_session.commit()
+    r = await client.get("/api/stats/cache", headers={"Authorization": f"Bearer {admin_token}"})
+    assert r.json()["flags"] == {"prompt_caching_enabled": False, "tool_memo_enabled": True}
+
+
+async def test_cache_requires_admin(client, user_token):
+    r = await client.get("/api/stats/cache", headers={"Authorization": f"Bearer {user_token}"})
+    assert r.status_code == 403

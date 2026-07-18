@@ -70,6 +70,52 @@ def _convert_messages_to_openai(messages: list) -> list:
     return converted
 
 
+def _apply_anthropic_cache_control(openai_messages: list, model: str) -> list:
+    """Add Anthropic prompt-cache breakpoints when the model supports them.
+
+    OpenAI/Gemini models cache automatically on OpenRouter; Anthropic models
+    need explicit cache_control markers. For anthropic/* models we mark two
+    breakpoints (Anthropic allows up to 4): the system prompt and the last
+    message with text content. Everything up to the last breakpoint becomes
+    the cached prefix for the NEXT ReAct turn — which is where the agent loop
+    re-sends the full conversation and pays the repeated-input-token cost.
+
+    Non-Anthropic models get the input list back unchanged (same objects), so
+    their payloads stay byte-for-byte identical.
+    """
+    if not model.startswith("anthropic/"):
+        return openai_messages
+    # Admin kill-switch (Developer tab → Feature flags). Absent key = enabled,
+    # so direct callers/tests outside a request context are unaffected.
+    if not _get_cfg().get("_prompt_caching_enabled", True):
+        return openai_messages
+
+    def _mark(msg: dict) -> dict:
+        content = msg.get("content")
+        if not isinstance(content, str) or not content:
+            return msg
+        return {
+            **msg,
+            "content": [{
+                "type": "text",
+                "text": content,
+                "cache_control": {"type": "ephemeral"},
+            }],
+        }
+
+    marked = list(openai_messages)
+    if marked and marked[0].get("role") == "system":
+        marked[0] = _mark(marked[0])
+    # Walk back to the last message with a non-empty string content (skips
+    # e.g. an assistant message whose content is None with tool_calls only).
+    for i in range(len(marked) - 1, 0, -1):
+        candidate = _mark(marked[i])
+        if candidate is not marked[i]:
+            marked[i] = candidate
+            break
+    return marked
+
+
 # -----------------------------------------------------------------------
 # Generic Chat Loop (ReAct pattern — OpenAI/OpenRouter format)
 # -----------------------------------------------------------------------
@@ -100,7 +146,9 @@ async def chat_loop(
             timing_collector.record_max_turns_halt()
         return {"role": "assistant", "content": f"[Research halted: exceeded {max_turns} tool-call steps]"}
 
-    openai_messages = _convert_messages_to_openai(messages)
+    openai_messages = _apply_anthropic_cache_control(
+        _convert_messages_to_openai(messages), model
+    )
     openai_tools = _convert_tools_to_openai(tools)
 
     payload = {
@@ -217,6 +265,19 @@ async def chat_loop(
         cost = (usage_stats.get("cost") or 0) if usage_stats else 0
         if cost:
             timing_collector.record_cost(float(cost))
+
+    # Prompt-cache visibility: OpenRouter reports cached input tokens in
+    # prompt_tokens_details.cached_tokens and (for Anthropic) a cache_discount.
+    if usage_stats:
+        _cached = (usage_stats.get("prompt_tokens_details") or {}).get("cached_tokens") or 0
+        _discount = usage_stats.get("cache_discount") or 0
+        if _cached or _discount:
+            logger.info(
+                f"[OpenRouter] Prompt cache hit: cached_tokens={_cached}, "
+                f"cache_discount={_discount} (model={model})"
+            )
+            if timing_collector:
+                timing_collector.record_cached_tokens(_cached, _discount)
 
     # Convert accumulated tool calls to a list in index order
     tool_calls = [tool_calls_map[i] for i in sorted(tool_calls_map.keys())]
@@ -373,6 +434,7 @@ async def run_worker_agent(
     parent_on_chunk: Optional[Callable] = None,
     emit_tool_details: bool = False,
     timing_collector=None,
+    tool_memo: Optional[dict] = None,
 ) -> dict:
     return await agent_core.run_worker_agent(
         chat_loop, _summarise_chunk,
@@ -380,6 +442,7 @@ async def run_worker_agent(
         parent_on_chunk=parent_on_chunk,
         emit_tool_details=emit_tool_details,
         timing_collector=timing_collector,
+        tool_memo=tool_memo,
     )
 
 

@@ -88,6 +88,10 @@ async def init_db() -> None:
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS sources_kept INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS source_filter_fallback INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS search_budget_blocked INTEGER NOT NULL DEFAULT 0",
+            # Token-cost caching (D5, additive): memo hits + provider prompt-cache stats
+            "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS memo_hits INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS cached_prompt_tokens INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS cache_discount_usd FLOAT NOT NULL DEFAULT 0.0",
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS research_mode VARCHAR(50)",
             # Deep Research (additive): per-request chat mode + approved-plan audit column
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS chat_mode VARCHAR(50)",

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_efficiency_profile, settings
 from ..database import get_db
 from ..dependencies import get_admin_user
+from .developer import _read_features
 
 router = APIRouter(prefix="/api/stats", tags=["Statistics"])
 
@@ -175,6 +176,43 @@ class EfficiencyWorst(BaseModel):
     fanout: float
     budgetBlocked: int
     createdAt: str
+
+
+# --- /cache ---
+class CacheKpi(BaseModel):
+    deepResearchRequests: int
+    memoHits: int
+    memoHitRequests: int
+    cachedPromptTokens: int
+    cacheDiscountUsd: float
+    cacheHitRequests: int
+    openrouterEligibleRequests: int
+    totalCostUsd: float
+
+
+class CacheDaily(BaseModel):
+    date: str
+    memoHits: int
+    cachedPromptTokens: int
+    cacheDiscountUsd: float
+    totalCostUsd: float
+
+
+class CacheRecentHit(BaseModel):
+    createdAt: str
+    requestId: str
+    chatMode: Optional[str] = None
+    memoHits: int
+    cachedPromptTokens: int
+    cacheDiscountUsd: float
+    totalCostUsd: float
+
+
+class CacheResponse(BaseModel):
+    kpi: CacheKpi
+    daily: List[CacheDaily]
+    recentHits: List[CacheRecentHit]
+    flags: Dict[str, bool]
 
 
 class EfficiencyResponse(BaseModel):
@@ -761,4 +799,110 @@ async def get_efficiency_stats(
             }
             for row in worst_result.mappings()
         ],
+    }
+
+
+@router.get("/cache", response_model=CacheResponse)
+async def get_cache_stats(
+    days: str = "30",
+    admin: dict = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return D5 caching savings for the Cache dashboard.
+
+    Two independent mechanisms, both persisted per-request in request_timings:
+    the Deep Research tool-result memo (memo_hits) and OpenRouter/Anthropic
+    prompt caching (cached_prompt_tokens + provider-reported cache_discount_usd).
+    "OpenRouter-eligible" is proxied by total_cost_usd > 0 — only OpenRouter
+    reports cost, and only paid OpenRouter requests can see a provider cache hit.
+    Current flag state is echoed so an all-zero dashboard is self-explanatory.
+    """
+    date_filter = _date_filter(days)
+
+    kpi_result = await db.execute(text(f"""
+        SELECT
+            COUNT(*) FILTER (WHERE chat_mode = 'deep_research')         AS deep_research_requests,
+            COALESCE(SUM(memo_hits), 0)                                 AS memo_hits,
+            COUNT(*) FILTER (WHERE memo_hits > 0)                       AS memo_hit_requests,
+            COALESCE(SUM(cached_prompt_tokens), 0)                      AS cached_prompt_tokens,
+            COALESCE(SUM(cache_discount_usd), 0)                        AS cache_discount_usd,
+            COUNT(*) FILTER (WHERE cached_prompt_tokens > 0)            AS cache_hit_requests,
+            COUNT(*) FILTER (WHERE total_cost_usd > 0)                  AS openrouter_eligible_requests,
+            COALESCE(SUM(total_cost_usd), 0)                            AS total_cost_usd
+        FROM request_timings
+        {date_filter}
+    """))
+    k = kpi_result.mappings().first()
+
+    daily_result = await db.execute(text(f"""
+        SELECT
+            DATE(created_at)                                            AS date,
+            COALESCE(SUM(memo_hits), 0)                                 AS memo_hits,
+            COALESCE(SUM(cached_prompt_tokens), 0)                      AS cached_prompt_tokens,
+            COALESCE(SUM(cache_discount_usd), 0)                        AS cache_discount_usd,
+            COALESCE(SUM(total_cost_usd), 0)                            AS total_cost_usd
+        FROM request_timings
+        {date_filter}
+        GROUP BY DATE(created_at)
+        ORDER BY DATE(created_at) ASC
+    """))
+
+    recent_result = await db.execute(text(f"""
+        SELECT
+            created_at,
+            request_id,
+            chat_mode,
+            memo_hits,
+            cached_prompt_tokens,
+            ROUND(cache_discount_usd::numeric, 6)                       AS cache_discount_usd,
+            ROUND(total_cost_usd::numeric, 6)                           AS total_cost_usd
+        FROM request_timings
+        WHERE (memo_hits > 0 OR cached_prompt_tokens > 0)
+        {_date_filter(days, keyword="AND")}
+        ORDER BY created_at DESC
+        LIMIT 20
+    """))
+
+    features = await _read_features(db)
+
+    def _usd(v):
+        return round(float(v), 6) if v is not None else 0.0
+
+    return {
+        "kpi": {
+            "deepResearchRequests": int(k["deep_research_requests"]),
+            "memoHits": int(k["memo_hits"]),
+            "memoHitRequests": int(k["memo_hit_requests"]),
+            "cachedPromptTokens": int(k["cached_prompt_tokens"]),
+            "cacheDiscountUsd": _usd(k["cache_discount_usd"]),
+            "cacheHitRequests": int(k["cache_hit_requests"]),
+            "openrouterEligibleRequests": int(k["openrouter_eligible_requests"]),
+            "totalCostUsd": _usd(k["total_cost_usd"]),
+        },
+        "daily": [
+            {
+                "date": row["date"].isoformat(),
+                "memoHits": int(row["memo_hits"]),
+                "cachedPromptTokens": int(row["cached_prompt_tokens"]),
+                "cacheDiscountUsd": _usd(row["cache_discount_usd"]),
+                "totalCostUsd": _usd(row["total_cost_usd"]),
+            }
+            for row in daily_result.mappings()
+        ],
+        "recentHits": [
+            {
+                "createdAt": row["created_at"].isoformat(),
+                "requestId": row["request_id"],
+                "chatMode": row["chat_mode"],
+                "memoHits": int(row["memo_hits"]),
+                "cachedPromptTokens": int(row["cached_prompt_tokens"]),
+                "cacheDiscountUsd": _usd(row["cache_discount_usd"]),
+                "totalCostUsd": _usd(row["total_cost_usd"]),
+            }
+            for row in recent_result.mappings()
+        ],
+        "flags": {
+            "prompt_caching_enabled": bool(features.get("prompt_caching_enabled", True)),
+            "tool_memo_enabled": bool(features.get("tool_memo_enabled", True)),
+        },
     }

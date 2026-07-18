@@ -23,6 +23,7 @@ from ..database import async_session_maker
 from ..dependencies import get_current_user
 from ..models import ActivityLog, Chat, Document, Matter, RequestTiming
 from ..utils.stopwatch import TimingCollector
+from .developer import _read_features
 
 logger = logging.getLogger("app")
 
@@ -119,6 +120,7 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
             async with async_session_maker() as _cfg_db:
                 active_provider = await get_active_provider(_cfg_db)
                 provider_config = await get_provider_config(_cfg_db, active_provider)
+                features = await _read_features(_cfg_db)
         except Exception as e:
             logger.error(f"[AI] Provider resolution failed: {e}")
             yield f"data: {json.dumps({'type': 'error', 'error': 'Service temporarily unavailable. Please try again.'})}\n\n"
@@ -143,6 +145,8 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
             "_pt_record_type": body.record_type or None,
             "_doc_context": doc_context,
             "_matter_context": matter_context,
+            "_prompt_caching_enabled": features.get("prompt_caching_enabled", True),
+            "_tool_memo_enabled": features.get("tool_memo_enabled", True),
         })
         # Always use the server-side configured model — the frontend may be stale
         # (e.g. user switched provider via Dev tab without refreshing the page).

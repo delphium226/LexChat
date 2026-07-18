@@ -306,6 +306,7 @@ async def run_worker_tool(
     source_accumulator: Optional[list] = None,
     search_budget: Optional[dict] = None,
     cancel_event=None,
+    tool_memo: Optional[dict] = None,
 ) -> str:
     """Execute a single Worker tool call and return the (possibly summarised) result.
 
@@ -319,8 +320,36 @@ async def run_worker_tool(
         timing_collector: Optional timing collector for metrics.
         source_accumulator: If provided, structured sources are extracted from the
             raw result (before summarisation) and appended here.
+        tool_memo: Per-request memo dict (Deep Research only) keyed
+            (tool_name, canonical args JSON) → {"raw", "final"}. Exact-match
+            repeats return the cached final result without the API call or
+            re-summarisation; the memo dies with the request.
     """
     activity_id = uuid.uuid4().hex[:8]
+
+    # Deep Research tool-result memo: exact-arg repeats across plan steps are
+    # served from the per-request memo. Counted only as memo_hits — NOT as a
+    # worker tool call / phase call / redundant call (it's a saving, not a
+    # loop-health signal) — and the hit does not consume the search budget.
+    memo_key = None
+    if tool_memo is not None:
+        try:
+            memo_key = (name, json.dumps(args, sort_keys=True))
+        except (TypeError, ValueError):
+            memo_key = None
+        if memo_key is not None and memo_key in tool_memo:
+            hit = tool_memo[memo_key]
+            logger.info(f"[Worker] Memo hit for '{name}' — returning cached result")
+            if timing_collector:
+                timing_collector.record_memo_hit()
+            # The reusing step must still get this retrieval's sources: re-run
+            # extraction on the stored RAW result against this step's accumulator.
+            if source_accumulator is not None:
+                _extract_sources_from_tool(name, args, hit["raw"], source_accumulator)
+            if parent_on_chunk:
+                await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
+                await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done (cached)"})
+            return hit["final"]
 
     # Parliamentary search budget: after the allowed number of search/listing calls,
     # return a hard-stop so the model proceeds to retrieval instead of looping.
@@ -371,6 +400,10 @@ async def run_worker_tool(
         result = await execute_parliament_tool(name, args, on_chunk=parent_on_chunk, timing_collector=timing_collector)
     else:
         result = await execute_worker_tool(name, args, on_chunk=parent_on_chunk, timing_collector=timing_collector)
+
+    # Kept for the memo: source extraction on a memo hit re-parses the raw
+    # (pre-summarisation) response, not the summarised final string.
+    raw_result = result
 
     # Extract sources from the raw structured response BEFORE summarisation compresses it.
     if source_accumulator is not None:
@@ -601,5 +634,8 @@ async def run_worker_tool(
 
     if parent_on_chunk:
         await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done"})
+
+    if tool_memo is not None and memo_key is not None:
+        tool_memo[memo_key] = {"raw": raw_result, "final": result}
 
     return result

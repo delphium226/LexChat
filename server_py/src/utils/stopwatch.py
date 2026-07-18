@@ -78,6 +78,14 @@ class TimingCollector:
         # Parliamentary search budget: count of search calls hard-stopped because
         # the per-request budget was already exhausted (the model looped on search).
         self.search_budget_blocked: int = 0
+        # Deep Research tool-result memo: exact-repeat tool calls served from the
+        # per-request memo (a saving, NOT a loop-health signal — deliberately kept
+        # out of worker_tool_calls / phase counts / redundant_tool_calls).
+        self.memo_hits: int = 0
+        # Provider prompt caching (OpenRouter): input tokens served from the
+        # provider's prompt cache, and the discount OpenRouter reports for them.
+        self.cached_prompt_tokens: int = 0
+        self.cache_discount_usd: float = 0.0
 
         # Internal sets (not persisted) backing the distinct/redundant counters.
         self._seen_call_sigs: set = set()
@@ -173,6 +181,16 @@ class TimingCollector:
     def record_search_budget_blocked(self) -> None:
         self.search_budget_blocked += 1
 
+    def record_memo_hit(self) -> None:
+        self.memo_hits += 1
+
+    def record_cached_tokens(self, tokens: int, discount_usd: float = 0.0) -> None:
+        self.cached_prompt_tokens += int(tokens or 0)
+        # OpenRouter reports cache_discount as a negative delta on cost for
+        # Anthropic cache reads; store its absolute value as "money saved".
+        if discount_usd:
+            self.cache_discount_usd += abs(float(discount_usd))
+
     def to_dict(self) -> dict:
         return {
             "request_id": self.request_id,
@@ -205,4 +223,7 @@ class TimingCollector:
             "sources_kept": self.sources_kept,
             "source_filter_fallback": self.source_filter_fallback,
             "search_budget_blocked": self.search_budget_blocked,
+            "memo_hits": self.memo_hits,
+            "cached_prompt_tokens": self.cached_prompt_tokens,
+            "cache_discount_usd": self.cache_discount_usd,
         }

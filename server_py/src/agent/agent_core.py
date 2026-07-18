@@ -51,6 +51,7 @@ async def run_worker_agent(
     parent_on_chunk: Optional[Callable] = None,
     emit_tool_details: bool = False,
     timing_collector=None,
+    tool_memo: Optional[dict] = None,
 ) -> dict:
     """Run the Worker agent with a fresh context for legal research."""
     logger.info(f"[Worker] Starting research on: {query}")
@@ -78,6 +79,7 @@ async def run_worker_agent(
             source_accumulator=source_accumulator,
             search_budget=search_budget,
             cancel_event=cancel_event,
+            tool_memo=tool_memo,
         )
 
     result = await chat_loop_fn(
@@ -466,6 +468,15 @@ async def run_deep_research(
 
     step_findings: list = []
     accumulated_sources: list = []
+    # Per-request tool-result memo: plan steps run as isolated workers, so two
+    # steps that retrieve the same Act would each pay fetch + summarise. Exact
+    # (tool_name, canonical args) repeats are served from this dict instead.
+    # Dies with the request — no TTL/invalidation. See run_worker_tool.
+    # Admin kill-switch (Developer tab → Feature flags): None = memo disabled,
+    # which run_worker_tool already treats as "no memo". Absent key = enabled.
+    tool_memo: Optional[dict] = (
+        {} if _get_cfg().get("_tool_memo_enabled", True) else None
+    )
 
     for i, step in enumerate(steps, 1):
         if cancel_event and cancel_event.is_set():
@@ -486,6 +497,7 @@ async def run_deep_research(
             brief, model, cancel_event, num_ctx, on_chunk,
             emit_tool_details=emit_tool_details,
             timing_collector=timing_collector,
+            tool_memo=tool_memo,
         )
 
         if on_chunk:

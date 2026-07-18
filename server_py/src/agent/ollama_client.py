@@ -327,6 +327,7 @@ async def run_worker_agent(
     parent_on_chunk: Optional[Callable] = None,
     emit_tool_details: bool = False,
     timing_collector=None,
+    tool_memo: Optional[dict] = None,
 ) -> dict:
     return await agent_core.run_worker_agent(
         chat_loop, _summarise_chunk,
@@ -334,6 +335,7 @@ async def run_worker_agent(
         parent_on_chunk=parent_on_chunk,
         emit_tool_details=emit_tool_details,
         timing_collector=timing_collector,
+        tool_memo=tool_memo,
     )
 
 

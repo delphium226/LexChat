@@ -132,6 +132,11 @@ class RequestTiming(Base):
     source_filter_fallback: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Parliamentary search-budget wall hits (model looped on discovery search).
     search_budget_blocked: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Deep Research tool-result memo hits (repeat tool call served without API/summarise).
+    memo_hits: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Provider prompt caching (OpenRouter): cached input tokens + reported discount.
+    cached_prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cache_discount_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     # Effective per-request research mode (future-proofs per-mode filtering).
     research_mode: Mapped[str | None] = mapped_column(String(50), nullable=True)
     # Per-request chat mode ("research"/"conversational"/"deep_research") —

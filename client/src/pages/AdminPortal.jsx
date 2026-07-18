@@ -23,6 +23,7 @@ import {
   setActiveProvider,
   getOpenRouterModels,
   getCostStats,
+  getCacheStats,
   getFeatures,
   saveFeatures,
   getPeers,
@@ -52,6 +53,7 @@ import InfoTip from '../components/ui/InfoTip';
 import { PerformanceTab } from './admin/PerformanceTab';
 import { EfficiencyTab } from './admin/EfficiencyTab';
 import { CostTab } from './admin/CostTab';
+import { CacheTab } from './admin/CacheTab';
 import { ProviderConfigPanel } from './admin/ProviderConfigPanel';
 import { PERF_COLORS, COST_COLORS } from './admin/chartConfig';
 import { WeeklySurveyComplianceChart } from './admin/surveyCharts';
@@ -95,6 +97,11 @@ const AdminPortal = ({ currentUser }) => {
   const [costTimeframe, setCostTimeframe] = useState('30');
   const [isCostLoading, setIsCostLoading] = useState(false);
 
+  // --- CACHE STATS STATE ---
+  const [cacheStats, setCacheStats] = useState(null);
+  const [cacheTimeframe, setCacheTimeframe] = useState('30');
+  const [isCacheLoading, setIsCacheLoading] = useState(false);
+
   // --- SERVICE HEALTH STATE ---
   const [healthStatus, setHealthStatus] = useState(null);
   const [isTriggeringHealth, setIsTriggeringHealth] = useState(false);
@@ -111,7 +118,11 @@ const AdminPortal = ({ currentUser }) => {
   const [productFeedbackTimeframe, setProductFeedbackTimeframe] = useState('30');
 
   // --- FEATURE FLAGS STATE ---
-  const [features, setFeatures] = useState({ matters_enabled: true });
+  const [features, setFeatures] = useState({
+    matters_enabled: true,
+    prompt_caching_enabled: true,
+    tool_memo_enabled: true,
+  });
   const [isSavingFeatures, setIsSavingFeatures] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
 
@@ -144,6 +155,8 @@ const AdminPortal = ({ currentUser }) => {
       fetchEffStats(effTimeframe);
     } else if (activeTab === 'cost') {
       fetchCostStats(costTimeframe);
+    } else if (activeTab === 'cache') {
+      fetchCacheStats(cacheTimeframe);
     } else if (activeTab === 'health') {
       fetchHealthStatus();
     } else if (activeTab === 'product-feedback') {
@@ -159,7 +172,7 @@ const AdminPortal = ({ currentUser }) => {
         .catch(() => {})
         .finally(() => setIsPeersLoading(false));
     }
-  }, [activeTab, timeframe, learningTimeframe, perfTimeframe, effTimeframe, costTimeframe, productFeedbackTimeframe]);
+  }, [activeTab, timeframe, learningTimeframe, perfTimeframe, effTimeframe, costTimeframe, cacheTimeframe, productFeedbackTimeframe]);
 
   const fetchProductFeedback = async (days = '30') => {
     setIsProductFeedbackLoading(true);
@@ -334,6 +347,18 @@ const AdminPortal = ({ currentUser }) => {
     }
   };
 
+  const fetchCacheStats = async days => {
+    setIsCacheLoading(true);
+    try {
+      const data = await getCacheStats(days);
+      setCacheStats(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsCacheLoading(false);
+    }
+  };
+
   const fetchEffStats = async days => {
     setIsEffLoading(true);
     try {
@@ -403,6 +428,7 @@ const AdminPortal = ({ currentUser }) => {
             { id: 'performance', label: 'Performance' },
             ...(currentUser?.username === 'admin' ? [{ id: 'efficiency', label: 'Efficiency' }] : []),
             { id: 'cost', label: 'Cost' },
+            ...(currentUser?.username === 'admin' ? [{ id: 'cache', label: 'Cache' }] : []),
             { id: 'learning', label: 'Learning Monitor' },
             ...(currentUser?.username === 'admin' ? [{ id: 'developer', label: 'Developer' }] : []),
             ...(currentUser?.username === 'admin' ? [{ id: 'federation', label: 'Federation' }] : []),
@@ -852,6 +878,19 @@ const AdminPortal = ({ currentUser }) => {
           <div className="flex justify-center items-center h-64 text-ink-500 text-sm">No cost data available yet.</div>
         )}
 
+        {/* CACHE TAB */}
+        {activeTab === 'cache' && isCacheLoading && (
+          <div className="flex justify-center items-center h-64">
+            <Spinner />
+          </div>
+        )}
+        {activeTab === 'cache' && !isCacheLoading && cacheStats && (
+          <CacheTab cacheStats={cacheStats} cacheTimeframe={cacheTimeframe} setCacheTimeframe={setCacheTimeframe} />
+        )}
+        {activeTab === 'cache' && !isCacheLoading && !cacheStats && (
+          <div className="flex justify-center items-center h-64 text-ink-500 text-sm">No cache data available yet.</div>
+        )}
+
         {/* LEARNING DASHBOARD TAB */}
         {activeTab === 'learning' && (
           <div className="space-y-6">
@@ -1107,34 +1146,52 @@ const AdminPortal = ({ currentUser }) => {
               <p className="text-sm text-ink-500 mb-5">
                 Toggle features on or off for all users. Changes take effect immediately.
               </p>
-              <div className="flex items-center justify-between py-3 border-b border-ink-100">
-                <div>
-                  <p className="text-sm font-medium">Matters</p>
-                  <p className="text-xs text-ink-500">Lets users organise threads into named matters with notes.</p>
+              {[
+                {
+                  flag: 'matters_enabled',
+                  label: 'Matters',
+                  desc: 'Lets users organise threads into named matters with notes.',
+                },
+                {
+                  flag: 'prompt_caching_enabled',
+                  label: 'Prompt caching (Anthropic via OpenRouter)',
+                  desc: 'Marks cache breakpoints on Anthropic models so repeated agent-loop context is billed at the cached rate.',
+                },
+                {
+                  flag: 'tool_memo_enabled',
+                  label: 'Deep Research tool-result memo',
+                  desc: 'Serves exact repeat tool calls across Deep Research steps from memory instead of re-fetching and re-summarising.',
+                },
+              ].map(({ flag, label, desc }) => (
+                <div key={flag} className="flex items-center justify-between py-3 border-b border-ink-100">
+                  <div>
+                    <p className="text-sm font-medium">{label}</p>
+                    <p className="text-xs text-ink-500">{desc}</p>
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={features[flag]}
+                    disabled={isSavingFeatures}
+                    onClick={async () => {
+                      const next = { ...features, [flag]: !features[flag] };
+                      setIsSavingFeatures(true);
+                      try {
+                        const saved = await saveFeatures(next);
+                        setFeatures(saved.features);
+                      } catch {
+                        setMessage('Failed to save feature flags.');
+                      } finally {
+                        setIsSavingFeatures(false);
+                      }
+                    }}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${features[flag] ? 'bg-accent' : 'bg-ink-300'} ${isSavingFeatures ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-paper shadow transition-transform ${features[flag] ? 'translate-x-6' : 'translate-x-1'}`}
+                    />
+                  </button>
                 </div>
-                <button
-                  role="switch"
-                  aria-checked={features.matters_enabled}
-                  disabled={isSavingFeatures}
-                  onClick={async () => {
-                    const next = { ...features, matters_enabled: !features.matters_enabled };
-                    setIsSavingFeatures(true);
-                    try {
-                      const saved = await saveFeatures(next);
-                      setFeatures(saved.features);
-                    } catch {
-                      setMessage('Failed to save feature flags.');
-                    } finally {
-                      setIsSavingFeatures(false);
-                    }
-                  }}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${features.matters_enabled ? 'bg-accent' : 'bg-ink-300'} ${isSavingFeatures ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-paper shadow transition-transform ${features.matters_enabled ? 'translate-x-6' : 'translate-x-1'}`}
-                  />
-                </button>
-              </div>
+              ))}
             </div>
 
             {/* Activity Log */}

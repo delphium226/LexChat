@@ -219,7 +219,11 @@ async def clear_feedback_data(db: AsyncSession = Depends(get_db)):
 # -----------------------------------------------------------------------
 
 _FEATURES_KEY = "features"
-_DEFAULT_FEATURES = {"matters_enabled": True}
+_DEFAULT_FEATURES = {
+    "matters_enabled": True,
+    "prompt_caching_enabled": True,
+    "tool_memo_enabled": True,
+}
 
 
 async def _read_features(db: AsyncSession) -> dict:
@@ -228,7 +232,9 @@ async def _read_features(db: AsyncSession) -> dict:
     if not row:
         return dict(_DEFAULT_FEATURES)
     try:
-        return json.loads(row.value)
+        # Merge over defaults so a features JSON saved before a flag existed
+        # still reports that flag at its default value.
+        return {**_DEFAULT_FEATURES, **json.loads(row.value)}
     except (json.JSONDecodeError, ValueError):
         return dict(_DEFAULT_FEATURES)
 
@@ -244,6 +250,9 @@ async def get_features(
 
 class FeaturesUpdate(BaseModel):
     matters_enabled: bool
+    # Defaulted so an old client POST body (matters_enabled only) stays valid.
+    prompt_caching_enabled: bool = True
+    tool_memo_enabled: bool = True
 
 
 @admin_router.post("/features")
@@ -252,7 +261,11 @@ async def save_features(
     db: AsyncSession = Depends(get_db),
 ):
     """Persist feature flag settings."""
-    data = {"matters_enabled": body.matters_enabled}
+    data = {
+        "matters_enabled": body.matters_enabled,
+        "prompt_caching_enabled": body.prompt_caching_enabled,
+        "tool_memo_enabled": body.tool_memo_enabled,
+    }
     result = await db.execute(select(AppSetting).where(AppSetting.key == _FEATURES_KEY))
     row = result.scalar_one_or_none()
     if row:

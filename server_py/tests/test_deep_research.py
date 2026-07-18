@@ -183,9 +183,12 @@ def _make_worker_stub(results):
     briefs = []
 
     async def run_worker(query, model, cancel_event, num_ctx, parent_on_chunk=None,
-                         emit_tool_details=False, timing_collector=None):
+                         emit_tool_details=False, timing_collector=None, tool_memo=None):
         briefs.append(query)
+        run_worker.memos.append(tool_memo)
         return results[len(briefs) - 1]
+
+    run_worker.memos = []
 
     run_worker.briefs = briefs
     return run_worker
@@ -266,11 +269,52 @@ async def test_run_deep_research_records_delegations():
 
 
 @pytest.mark.asyncio
+async def test_run_deep_research_shares_one_tool_memo_across_steps():
+    """Every step's worker gets the SAME per-request memo dict (D5 sub-item 2),
+    so an Act retrieved in step 1 is served from memory in step 2."""
+    worker = _make_worker_stub([
+        {"content": "f1", "sources": []},
+        {"content": "f2", "sources": []},
+    ])
+    await run_deep_research(
+        _make_synthesis_chat_loop(), worker, APPROVED_PLAN,
+        [{"role": "user", "content": "q"}],
+        "test-model", None, None, 0,
+    )
+    assert len(worker.memos) == 2
+    assert isinstance(worker.memos[0], dict)
+    assert worker.memos[0] is worker.memos[1]  # shared, not per-step
+
+
+@pytest.mark.asyncio
+async def test_run_deep_research_tool_memo_flag_off_passes_none():
+    """With tool_memo_enabled=False in the request config, every step's worker
+    gets tool_memo=None — run_worker_tool then behaves exactly as before D5."""
+    worker = _make_worker_stub([
+        {"content": "f1", "sources": []},
+        {"content": "f2", "sources": []},
+    ])
+    set_request_provider_config({
+        "_provider": "ollama",
+        "_chat_mode": "deep_research",
+        "_research_mode": "legislation_only",
+        "model": "test-model",
+        "_tool_memo_enabled": False,
+    })
+    await run_deep_research(
+        _make_synthesis_chat_loop(), worker, APPROVED_PLAN,
+        [{"role": "user", "content": "q"}],
+        "test-model", None, None, 0,
+    )
+    assert worker.memos == [None, None]
+
+
+@pytest.mark.asyncio
 async def test_run_deep_research_respects_cancel_between_steps():
     cancel_event = asyncio.Event()
 
     async def run_worker(query, model, cancel, num_ctx, parent_on_chunk=None,
-                         emit_tool_details=False, timing_collector=None):
+                         emit_tool_details=False, timing_collector=None, tool_memo=None):
         cancel_event.set()  # client disconnects during step 1
         return {"content": "f1", "sources": []}
 
