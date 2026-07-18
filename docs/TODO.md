@@ -366,7 +366,7 @@ delegation wording varies between models, so cross-provider hits on standard
 research queries need canonicalisation-equivalent phrasing — Deep Research
 briefs (user-approved plan text) are deterministic and always key identically.
 
-### D8. Cache review fixes (scoped 2026-07-18 from full caching-stack review; not started)
+### D8. Cache review fixes (scoped 2026-07-18; BUILT 2026-07-18, all 7 phases on feature/local-prompt-cache, one commit per phase, 145 tests green)
 A review of the D5/D6/D7 caching stack found one real bug and a set of
 improvements. **Full self-contained plan: `docs/CACHE_REVIEW_FIXES_PLAN.md`.**
 Phases in priority order:
