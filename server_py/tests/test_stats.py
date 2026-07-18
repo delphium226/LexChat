@@ -320,6 +320,31 @@ async def test_cache_requires_admin(client, user_token):
     assert r.status_code == 403
 
 
+async def test_cache_purge_local(client, admin_token, db_session):
+    """DELETE /api/stats/cache/local empties the table and reports the count."""
+    from src.services import local_prompt_cache as lpc
+    await lpc.store(lpc.content_hash("doc-a"), "query one", "summary a")
+    await lpc.store(lpc.content_hash("doc-b"), "query two", "summary b")
+
+    r = await client.delete(
+        "/api/stats/cache/local", headers={"Authorization": f"Bearer {admin_token}"}
+    )
+    assert r.status_code == 200
+    assert r.json() == {"deleted": 2}
+
+    count = (await db_session.execute(
+        text("SELECT COUNT(*) FROM local_prompt_cache")
+    )).scalar()
+    assert count == 0
+
+
+async def test_cache_purge_local_requires_admin(client, user_token):
+    r = await client.delete(
+        "/api/stats/cache/local", headers={"Authorization": f"Bearer {user_token}"}
+    )
+    assert r.status_code == 403
+
+
 # --------------------------------------------------------------------------- #
 # /cache — local prompt cache (D7)
 # --------------------------------------------------------------------------- #

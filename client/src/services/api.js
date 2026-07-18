@@ -292,6 +292,11 @@ export const getCacheStats = async (days = 30) => {
   return response.data;
 };
 
+export const purgeLocalCache = async () => {
+  const response = await axios.delete(`${API_URL}/stats/cache/local`);
+  return response.data;
+};
+
 export const resetDatabase = async () => {
   const response = await axios.post(`${API_URL}/developer/reset`);
   return response.data;

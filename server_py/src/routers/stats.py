@@ -829,6 +829,22 @@ async def get_efficiency_stats(
     }
 
 
+@router.delete("/cache/local")
+async def purge_local_cache(
+    admin: dict = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Purge the entire local prompt cache (D8 Phase 3).
+
+    The escape hatch for a poisoned or suspect entry — the feature flag only
+    stops new reads, it cannot evict data. Whole-table only; summaries are
+    cheap to regenerate.
+    """
+    result = await db.execute(text("DELETE FROM local_prompt_cache"))
+    await db.commit()
+    return {"deleted": result.rowcount or 0}
+
+
 @router.get("/cache", response_model=CacheResponse)
 async def get_cache_stats(
     days: str = "30",

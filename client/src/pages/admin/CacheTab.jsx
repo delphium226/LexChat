@@ -11,6 +11,7 @@ import {
   Bar,
 } from 'recharts';
 import { fmtUsd } from './chartConfig';
+import { purgeLocalCache } from '../../services/api';
 
 const CACHE_COLORS = {
   memo: '#6366f1', // indigo
@@ -43,7 +44,7 @@ const FlagBadge = ({ label, on }) => (
   </span>
 );
 
-export const CacheTab = ({ cacheStats, cacheTimeframe, setCacheTimeframe }) => {
+export const CacheTab = ({ cacheStats, cacheTimeframe, setCacheTimeframe, refetchCacheStats }) => {
   const { kpi, daily, recentHits, flags } = cacheStats;
   const localCache = cacheStats.localCache || { entries: 0, distinctDocuments: 0, totalHitsServed: 0, oldestEntry: null };
   const localCacheTop = cacheStats.localCacheTop || [];
@@ -257,12 +258,33 @@ export const CacheTab = ({ cacheStats, cacheTimeframe, setCacheTimeframe }) => {
 
       {/* LOCAL PROMPT CACHING (D7) — cross-user/cross-provider summary reuse */}
       <div className="space-y-4">
-        <div className="bg-paper p-4 rounded-lg shadow">
-          <h2 className="text-lg font-bold">Local prompt caching</h2>
-          <p className="text-sm text-ink-500 mt-1">
-            Cross-user, cross-provider reuse of document summaries — the second lawyer asking the same
-            question of the same text skips the summarisation call entirely. Exact-match only.
-          </p>
+        <div className="bg-paper p-4 rounded-lg shadow flex justify-between items-start gap-4">
+          <div>
+            <h2 className="text-lg font-bold">Local prompt caching</h2>
+            <p className="text-sm text-ink-500 mt-1">
+              Cross-user, cross-provider reuse of document summaries — the second lawyer asking the same
+              question of the same text skips the summarisation call entirely. Exact-match only.
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              if (
+                !window.confirm(
+                  `Delete all ${localCache.entries} cached summaries? They will be regenerated on demand. This cannot be undone.`
+                )
+              )
+                return;
+              try {
+                await purgeLocalCache();
+                if (refetchCacheStats) refetchCacheStats();
+              } catch (err) {
+                console.error(err);
+              }
+            }}
+            className="bg-danger text-white font-ui text-sm font-medium rounded-md px-4 py-2 hover:opacity-90 focus-visible:ring-2 focus-visible:ring-danger whitespace-nowrap shrink-0"
+          >
+            Clear local cache
+          </button>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

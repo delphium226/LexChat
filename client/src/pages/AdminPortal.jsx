@@ -886,7 +886,12 @@ const AdminPortal = ({ currentUser }) => {
           </div>
         )}
         {activeTab === 'cache' && !isCacheLoading && cacheStats && (
-          <CacheTab cacheStats={cacheStats} cacheTimeframe={cacheTimeframe} setCacheTimeframe={setCacheTimeframe} />
+          <CacheTab
+            cacheStats={cacheStats}
+            cacheTimeframe={cacheTimeframe}
+            setCacheTimeframe={setCacheTimeframe}
+            refetchCacheStats={() => fetchCacheStats(cacheTimeframe)}
+          />
         )}
         {activeTab === 'cache' && !isCacheLoading && !cacheStats && (
           <div className="flex justify-center items-center h-64 text-ink-500 text-sm">No cache data available yet.</div>
