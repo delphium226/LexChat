@@ -295,6 +295,19 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
             accumulator.append(src)
 
 
+def _worker_tool_key_arg(args: dict) -> Optional[str]:
+    """Identifying argument for redundancy detection (record_worker_tool).
+
+    A transcript's identity is (meeting_id, iob_id) — two different agenda
+    items of one meeting are legitimate distinct retrievals, not redundant.
+    slug is derivable and must NOT be part of the key.
+    """
+    key_arg = args.get("legislation_id") or args.get("url") or args.get("gid")
+    if not key_arg and args.get("meeting_id"):
+        key_arg = f"{args['meeting_id']}:{args.get('iob_id', '')}"
+    return key_arg
+
+
 async def run_worker_tool(
     name: str,
     args: dict,
@@ -307,6 +320,7 @@ async def run_worker_tool(
     search_budget: Optional[dict] = None,
     cancel_event=None,
     tool_memo: Optional[dict] = None,
+    memo_count_redundant: bool = False,
 ) -> str:
     """Execute a single Worker tool call and return the (possibly summarised) result.
 
@@ -320,17 +334,23 @@ async def run_worker_tool(
         timing_collector: Optional timing collector for metrics.
         source_accumulator: If provided, structured sources are extracted from the
             raw result (before summarisation) and appended here.
-        tool_memo: Per-request memo dict (Deep Research only) keyed
+        tool_memo: Per-request memo dict keyed
             (tool_name, canonical args JSON) → {"raw", "final"}. Exact-match
             repeats return the cached final result without the API call or
             re-summarisation; the memo dies with the request.
+        memo_count_redundant: If True (standard research mode), a memo hit is
+            ALSO counted via record_worker_tool so the "model re-fetched the
+            same Act" loop-health signal survives — the hit costs nothing but
+            still reflects model behaviour. Deep Research leaves this False:
+            cross-step reuse there is by design, not misbehaviour.
     """
     activity_id = uuid.uuid4().hex[:8]
 
-    # Deep Research tool-result memo: exact-arg repeats across plan steps are
-    # served from the per-request memo. Counted only as memo_hits — NOT as a
-    # worker tool call / phase call / redundant call (it's a saving, not a
-    # loop-health signal) — and the hit does not consume the search budget.
+    # Tool-result memo: exact-arg repeats within one request are served from
+    # the per-request memo. In Deep Research, counted only as memo_hits — NOT
+    # as a worker tool call / phase call / redundant call (it's a saving, not
+    # a loop-health signal); standard mode also counts redundancy (see
+    # memo_count_redundant). A hit never consumes the search budget.
     memo_key = None
     if tool_memo is not None:
         try:
@@ -342,6 +362,8 @@ async def run_worker_tool(
             logger.info(f"[Worker] Memo hit for '{name}' — returning cached result")
             if timing_collector:
                 timing_collector.record_memo_hit()
+                if memo_count_redundant:
+                    timing_collector.record_worker_tool(name, _worker_tool_key_arg(args))
             # The reusing step must still get this retrieval's sources: re-run
             # extraction on the stored RAW result against this step's accumulator.
             if source_accumulator is not None:
@@ -385,13 +407,7 @@ async def run_worker_tool(
     # repeat fetch of the same resource (same Act sectioned twice, same case
     # fetched twice). key_arg is the identifying argument for redundancy.
     if timing_collector:
-        # A transcript's identity is (meeting_id, iob_id) — two different agenda
-        # items of one meeting are legitimate distinct retrievals, not redundant.
-        # slug is derivable and must NOT be part of the key.
-        key_arg = args.get("legislation_id") or args.get("url") or args.get("gid")
-        if not key_arg and args.get("meeting_id"):
-            key_arg = f"{args['meeting_id']}:{args.get('iob_id', '')}"
-        timing_collector.record_worker_tool(name, key_arg)
+        timing_collector.record_worker_tool(name, _worker_tool_key_arg(args))
 
     if parent_on_chunk:
         await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})

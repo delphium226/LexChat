@@ -328,6 +328,7 @@ async def run_worker_agent(
     emit_tool_details: bool = False,
     timing_collector=None,
     tool_memo: Optional[dict] = None,
+    memo_count_redundant: bool = False,
 ) -> dict:
     return await agent_core.run_worker_agent(
         chat_loop, _summarise_chunk,
@@ -336,6 +337,7 @@ async def run_worker_agent(
         emit_tool_details=emit_tool_details,
         timing_collector=timing_collector,
         tool_memo=tool_memo,
+        memo_count_redundant=memo_count_redundant,
     )
 
 

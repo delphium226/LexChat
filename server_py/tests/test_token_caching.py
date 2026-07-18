@@ -145,13 +145,14 @@ async def _noop_chunk(*a, **k):
     return None
 
 
-def _call(tool_memo, timing, source_accumulator, args=TOOL_ARGS):
+def _call(tool_memo, timing, source_accumulator, args=TOOL_ARGS, memo_count_redundant=False):
     return run_worker_tool(
         "search_legislation_sections", dict(args), "confirmation procedure",
         _noop_chunk, "test-model",
         timing_collector=timing,
         source_accumulator=source_accumulator,
         tool_memo=tool_memo,
+        memo_count_redundant=memo_count_redundant,
     )
 
 
@@ -213,3 +214,85 @@ async def test_no_memo_preserves_existing_redundancy_counting():
     assert timing.worker_tool_calls == 2
     assert timing.redundant_tool_calls == 1
     assert timing.memo_hits == 0
+
+
+# ---------------------------------------------------------------------------
+# Standard-mode memo (D8 Phase 4): hit is free but still counted redundant
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_standard_mode_memo_hit_counts_redundancy():
+    """With memo_count_redundant=True (standard research mode), a repeat is
+    served from the memo (one API call) but STILL flagged redundant so the
+    Efficiency tab's loop-health signal survives."""
+    memo = {}
+    timing = TimingCollector("req1")
+    with patch(
+        "src.agent.agent_shared.execute_worker_tool",
+        new=AsyncMock(return_value=RAW_SECTIONS_RESULT),
+    ) as mock_exec:
+        first = await _call(memo, timing, None, memo_count_redundant=True)
+        second = await _call(memo, timing, None, memo_count_redundant=True)
+
+    assert mock_exec.await_count == 1  # served from memo
+    assert second == first
+    assert timing.memo_hits == 1
+    # Unlike Deep Research, the hit is also a counted (redundant) tool call.
+    assert timing.worker_tool_calls == 2
+    assert timing.redundant_tool_calls == 1
+
+
+async def _run_manager_with_two_delegations():
+    """Drive process_user_request with a chat loop that delegates twice;
+    return the kwargs each run_worker_agent_fn call received."""
+    from src.agent import agent_core
+
+    captured = []
+
+    async def fake_worker(query, model, cancel_event, num_ctx, on_chunk, **kwargs):
+        captured.append(kwargs)
+        return {"content": "findings", "sources": []}
+
+    async def fake_chat_loop(messages, model, cancel_event, num_ctx,
+                             tools, tool_executor, on_chunk, **kwargs):
+        await tool_executor("delegate_research", {"query": "first aspect"})
+        await tool_executor("delegate_research", {"query": "second aspect"})
+        return {"content": "final answer"}
+
+    await agent_core.process_user_request(
+        fake_chat_loop, fake_worker,
+        [{"role": "user", "content": "the question"}],
+        "test-model", None, None, 4096,
+    )
+    return captured
+
+
+@pytest.mark.asyncio
+async def test_standard_manager_creates_shared_memo():
+    """process_user_request creates ONE memo per request and passes it to
+    every delegation with memo_count_redundant=True."""
+    from src.agent.provider_factory import set_request_provider_config
+    set_request_provider_config({})
+    try:
+        captured = await _run_manager_with_two_delegations()
+    finally:
+        set_request_provider_config({})
+
+    assert len(captured) == 2
+    assert captured[0]["memo_count_redundant"] is True
+    assert captured[0]["tool_memo"] == {}
+    # Same dict object shared across both delegations
+    assert captured[0]["tool_memo"] is captured[1]["tool_memo"]
+
+
+@pytest.mark.asyncio
+async def test_standard_manager_memo_flag_off():
+    """tool_memo_enabled=False → the manager passes tool_memo=None (disabled)."""
+    from src.agent.provider_factory import set_request_provider_config
+    set_request_provider_config({"_tool_memo_enabled": False})
+    try:
+        captured = await _run_manager_with_two_delegations()
+    finally:
+        set_request_provider_config({})
+
+    assert captured[0]["tool_memo"] is None

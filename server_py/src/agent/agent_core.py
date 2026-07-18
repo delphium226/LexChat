@@ -52,6 +52,7 @@ async def run_worker_agent(
     emit_tool_details: bool = False,
     timing_collector=None,
     tool_memo: Optional[dict] = None,
+    memo_count_redundant: bool = False,
 ) -> dict:
     """Run the Worker agent with a fresh context for legal research."""
     logger.info(f"[Worker] Starting research on: {query}")
@@ -80,6 +81,7 @@ async def run_worker_agent(
             search_budget=search_budget,
             cancel_event=cancel_event,
             tool_memo=tool_memo,
+            memo_count_redundant=memo_count_redundant,
         )
 
     result = await chat_loop_fn(
@@ -345,6 +347,18 @@ async def process_user_request(
 
     accumulated_sources: list = []
 
+    # Per-request tool-result memo (D8 Phase 4) — same mechanism as Deep
+    # Research (see run_deep_research): exact (tool_name, canonical args)
+    # repeats are served from this dict instead of re-fetching + re-summarising.
+    # Created ONCE per request, outside the executor, so multiple
+    # delegate_research calls share it. Unlike DR, standard-mode memo hits are
+    # also counted as redundant tool calls (memo_count_redundant=True) — the
+    # Efficiency tab's "model re-fetched the same Act" signal must survive
+    # even though the repeat now costs nothing.
+    tool_memo: Optional[dict] = (
+        {} if _cfg.get("_tool_memo_enabled", True) else None
+    )
+
     async def manager_tool_executor(name: str, args: dict) -> str:
         if name == "delegate_research":
             if timing_collector:
@@ -357,6 +371,8 @@ async def process_user_request(
                 args["query"], model, cancel_event, num_ctx, on_chunk,
                 emit_tool_details=emit_tool_details,
                 timing_collector=timing_collector,
+                tool_memo=tool_memo,
+                memo_count_redundant=True,
             )
 
             if on_chunk:
