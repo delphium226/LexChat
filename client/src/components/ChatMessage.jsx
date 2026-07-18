@@ -247,6 +247,7 @@ const ChatMessage = ({
   const [thumbsSubmitting, setThumbsSubmitting] = useState(false);
   const [showUpgradeConfirm, setShowUpgradeConfirm] = useState(false);
   const [showPinPopover, setShowPinPopover] = useState(false);
+  const [showPlan, setShowPlan] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [pinError, setPinError] = useState(false);
   const pinRef = useRef(null);
@@ -257,6 +258,7 @@ const ChatMessage = ({
     setShowThumbsDownForm(false);
     setThumbsDownText('');
     setShowUpgradeConfirm(false);
+    setShowPlan(false);
   }, [message.id]);
 
   useEffect(() => {
@@ -411,6 +413,11 @@ const ChatMessage = ({
       : null;
   const cost = formatCost(message.costUsd ?? message.cost_usd);
 
+  // Deep Research: the approved plan persisted with this answer (read-only)
+  const plan = message.research_plan;
+  const planSteps = Array.isArray(plan?.steps) ? plan.steps.filter(s => s && s.title) : [];
+  const hasPlan = planSteps.length > 0 || Boolean(plan?.scope_note);
+
   return (
     <>
       <div
@@ -423,6 +430,105 @@ const ChatMessage = ({
           fontFamily: 'var(--font-ui)',
         }}
       >
+        {hasPlan && (
+          <div
+            style={{
+              border: '1px solid var(--ink-200)',
+              borderRadius: 8,
+              marginBottom: 16,
+              fontFamily: 'var(--font-ui)',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setShowPlan(v => !v)}
+              aria-expanded={showPlan}
+              className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 12px',
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                borderRadius: 8,
+                textAlign: 'left',
+              }}
+            >
+              <span className="bg-accent-soft text-accent-ink rounded-full px-2 py-0.5 font-ui text-label uppercase tracking-wide">
+                Deep Research
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-700)' }}>
+                Research plan ({planSteps.length} step{planSteps.length === 1 ? '' : 's'})
+              </span>
+              <svg
+                width={14}
+                height={14}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--ink-500)"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{
+                  marginLeft: 'auto',
+                  transform: showPlan ? 'rotate(180deg)' : 'none',
+                  transition: 'transform 120ms',
+                }}
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+            {showPlan && (
+              <div style={{ padding: '0 12px 12px' }}>
+                {plan?.scope_note && (
+                  <p style={{ fontSize: 12, color: 'var(--ink-600)', margin: '0 0 10px', lineHeight: 1.5 }}>
+                    {plan.scope_note}
+                  </p>
+                )}
+                <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {planSteps.map((step, index) => (
+                    <li
+                      key={step.id ?? index}
+                      style={{
+                        border: '1px solid var(--ink-200)',
+                        borderRadius: 6,
+                        padding: '8px 10px',
+                        display: 'flex',
+                        gap: 10,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: 'var(--ink-500)',
+                          width: 16,
+                          textAlign: 'right',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {index + 1}
+                      </span>
+                      <span style={{ minWidth: 0 }}>
+                        <span style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-900)' }}>
+                          {step.title}
+                        </span>
+                        {step.detail && (
+                          <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-600)', lineHeight: 1.5 }}>
+                            {step.detail}
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+          </div>
+        )}
         <div
           style={{
             fontFamily: 'var(--font-serif)',

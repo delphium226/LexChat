@@ -37,6 +37,7 @@ export function useChat({
   closeHistoryModal,
   recentChats,
   matters,
+  onDeepResearchComplete,
 }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -178,6 +179,7 @@ export function useChat({
         ...response,
         responseTimeMs: Date.now() - requestStartTime,
         costUsd: response.timing?.total_cost_usd || null,
+        ...(deepResearchPlan ? { research_plan: deepResearchPlan } : {}),
       };
       setMessages(prev => {
         const updated = [...prev];
@@ -356,6 +358,9 @@ export function useChat({
 
     try {
       await runExchange([...messages], currentChatId, controller, approvedPlan);
+      // Deep Research is a one-shot: once the first query/answer pair has
+      // completed, drop the chat back to conversational mode.
+      onDeepResearchComplete?.();
     } catch (error) {
       handleSendError(error);
     } finally {

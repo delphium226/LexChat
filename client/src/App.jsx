@@ -230,6 +230,10 @@ function AppContent() {
     closeHistoryModal: () => modals.close('history'),
     recentChats,
     matters,
+    onDeepResearchComplete: () => {
+      setChatMode('conversational');
+      updatePreferences({ chat_mode: 'conversational' }).catch(() => {});
+    },
   });
 
   // ── Bot identity (name/branding/favicon) — needs `loading` from useChat ──
