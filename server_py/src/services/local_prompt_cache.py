@@ -13,8 +13,8 @@ See docs/LOCAL_PROMPT_CACHE_PLAN.md.
 """
 import hashlib
 import logging
+import random
 import re
-from datetime import datetime
 
 from sqlalchemy import text
 
@@ -28,9 +28,19 @@ _STOPWORDS = frozenset(
 )
 
 # On store, if the table exceeds this many rows, prune never-hit entries older
-# than 90 days. Cheap hygiene only — no eviction is needed for correctness.
+# than 90 days and any row (hits or not) idle for over a year — amended
+# legislation strands old-content-hash rows forever otherwise. Cheap hygiene
+# only — no eviction is needed for correctness, so the count-and-prune check
+# is only sampled on ~2% of stores (the 20K threshold is soft).
 _PRUNE_ROW_THRESHOLD = 20_000
 _PRUNE_UNUSED_DAYS = 90
+_PRUNE_IDLE_DAYS = 365
+_PRUNE_SAMPLE_RATE = 0.02
+
+# Bump this on ANY change to canonicalise_query or _STOPWORDS — it is baked
+# into every stored query_hash, so bumping is an explicit full-cache
+# invalidation (old rows become unreachable and age out via the prune).
+_CANON_VERSION = "v1"
 
 
 def canonicalise_query(query: str) -> str:
@@ -55,13 +65,16 @@ def content_hash(raw_result: str) -> str:
 
 
 def _query_hash(query: str) -> str:
-    return hashlib.sha256(canonicalise_query(query).encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        f"{_CANON_VERSION}|{canonicalise_query(query)}".encode("utf-8")
+    ).hexdigest()
 
 
 async def lookup(content_hash_hex: str, query: str) -> dict | None:
     """Return {"summary", "chars_in"} on an exact key match, else None.
 
-    Bumps hit_count/last_hit_at on hit. Any failure is treated as a miss.
+    Bumps hit_count/last_hit_at on hit — atomically, in the same statement as
+    the read (UPDATE ... RETURNING). Any failure is treated as a miss.
     """
     try:
         from ..database import async_session_maker
@@ -69,21 +82,16 @@ async def lookup(content_hash_hex: str, query: str) -> dict | None:
         async with async_session_maker() as session:
             row = (await session.execute(
                 text(
-                    "SELECT id, summary, chars_in FROM local_prompt_cache "
-                    "WHERE content_hash = :ch AND query_hash = :qh"
+                    "UPDATE local_prompt_cache "
+                    "SET hit_count = hit_count + 1, last_hit_at = NOW() "
+                    "WHERE content_hash = :ch AND query_hash = :qh "
+                    "RETURNING summary, chars_in"
                 ),
                 {"ch": content_hash_hex, "qh": _query_hash(query)},
             )).mappings().first()
+            await session.commit()
             if row is None:
                 return None
-            await session.execute(
-                text(
-                    "UPDATE local_prompt_cache "
-                    "SET hit_count = hit_count + 1, last_hit_at = :now WHERE id = :id"
-                ),
-                {"now": datetime.utcnow(), "id": row["id"]},
-            )
-            await session.commit()
             return {"summary": row["summary"], "chars_in": int(row["chars_in"] or 0)}
     except Exception as e:
         logger.debug(f"[LocalCache] Lookup failed (treated as miss): {e}")
@@ -108,7 +116,7 @@ async def store(
                     "INSERT INTO local_prompt_cache "
                     "(content_hash, query_hash, query_text, summary, summarise_model, "
                     " doc_name, chars_in, hit_count, created_at) "
-                    "VALUES (:ch, :qh, :qt, :s, :m, :d, :ci, 0, :now) "
+                    "VALUES (:ch, :qh, :qt, :s, :m, :d, :ci, 0, NOW()) "
                     "ON CONFLICT (content_hash, query_hash) DO NOTHING"
                 ),
                 {
@@ -119,19 +127,22 @@ async def store(
                     "m": summarise_model,
                     "d": doc_name,
                     "ci": chars_in,
-                    "now": datetime.utcnow(),
                 },
             )
-            total = (await session.execute(
-                text("SELECT COUNT(*) FROM local_prompt_cache")
-            )).scalar() or 0
-            if total > _PRUNE_ROW_THRESHOLD:
-                await session.execute(
-                    text(
-                        "DELETE FROM local_prompt_cache WHERE hit_count = 0 "
-                        f"AND created_at < NOW() - INTERVAL '{_PRUNE_UNUSED_DAYS} days'"
+            # Hygiene sampling, not correctness — a full COUNT(*) on every
+            # store is wasteful, and the 20K threshold is soft.
+            if random.random() < _PRUNE_SAMPLE_RATE:
+                total = (await session.execute(
+                    text("SELECT COUNT(*) FROM local_prompt_cache")
+                )).scalar() or 0
+                if total > _PRUNE_ROW_THRESHOLD:
+                    await session.execute(
+                        text(
+                            "DELETE FROM local_prompt_cache "
+                            f"WHERE (hit_count = 0 AND created_at < NOW() - INTERVAL '{_PRUNE_UNUSED_DAYS} days') "
+                            f"OR (COALESCE(last_hit_at, created_at) < NOW() - INTERVAL '{_PRUNE_IDLE_DAYS} days')"
+                        )
                     )
-                )
             await session.commit()
     except Exception as e:
         logger.debug(f"[LocalCache] Store failed (ignored): {e}")

@@ -344,7 +344,9 @@ class LocalPromptCache(Base):
     __tablename__ = "local_prompt_cache"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # No standalone index — lookups go through uq_local_prompt_cache_key
+    # (content_hash, query_hash), whose leading column covers this.
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     query_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     query_text: Mapped[str] = mapped_column(Text, nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)

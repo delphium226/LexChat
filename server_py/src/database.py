@@ -271,7 +271,9 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_sp_plenary_full_text ON sp_plenary_items USING GIN (to_tsvector('english', coalesce(full_text,'')))",
             "CREATE INDEX IF NOT EXISTS idx_sp_video_captions_meeting_id ON sp_video_captions (meeting_id)",
             "CREATE INDEX IF NOT EXISTS idx_sp_video_captions_meeting_date ON sp_video_captions (meeting_date)",
-            "CREATE INDEX IF NOT EXISTS ix_local_prompt_cache_content_hash ON local_prompt_cache (content_hash)",
+            # One-shot cleanup (D8): this index duplicated the leading column of
+            # uq_local_prompt_cache_key (content_hash, query_hash).
+            "DROP INDEX IF EXISTS ix_local_prompt_cache_content_hash",
         ]
         async with engine.begin() as conn:
             for stmt in index_statements:
