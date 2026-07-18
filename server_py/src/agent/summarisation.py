@@ -45,8 +45,14 @@ async def summarise_for_query(
     timing_collector=None,
     doc_name: str = "document",
     cancel_event=None,
-) -> str:
+) -> tuple[str, bool]:
     """Produce a query-focused summary of a legislation text.
+
+    Returns (text, degraded). degraded is True when any fallback path fired —
+    a failed single-chunk call (raw text returned), any failed chunk in the
+    multi-chunk path (raw head substituted), or a failed final consolidation
+    (concatenated partials returned). Degraded output is still usable for the
+    current request but must NOT be cached for reuse.
 
     chunk_fn is the provider-specific summarise_chunk callable with signature:
         async (text, query, model, *, timing_collector=None) -> Optional[str]
@@ -70,8 +76,8 @@ async def summarise_for_query(
         result = await chunk_fn(text, query, model, timing_collector=timing_collector)
         if result is None:
             logger.warning("[Summarise] Single-chunk summarisation failed, returning original text")
-            return text
-        return result
+            return text, True
+        return result, False
 
     # Split into chunks and summarise each.
     chunks = [
@@ -90,6 +96,7 @@ async def summarise_for_query(
         *[chunk_fn(chunk, query, model, timing_collector=timing_collector) for chunk in chunks]
     )
     partial_summaries = []
+    degraded = False
     for i, (summary, chunk) in enumerate(zip(raw_summaries, chunks)):
         if summary is None:
             logger.warning(
@@ -97,6 +104,7 @@ async def summarise_for_query(
                 f"{SUMMARISE_CHUNK_FALLBACK_CHARS} chars of chunk"
             )
             partial_summaries.append(chunk[:SUMMARISE_CHUNK_FALLBACK_CHARS])
+            degraded = True
         else:
             partial_summaries.append(summary)
 
@@ -112,8 +120,8 @@ async def summarise_for_query(
         final = await chunk_fn(combined, query, model, timing_collector=timing_collector)
         if final is None:
             logger.warning("[Summarise] Final consolidation failed — returning combined partials")
-            return combined
+            return combined, True
         logger.info(f"[Summarise] Consolidated to {len(final)} chars")
-        return final
+        return final, degraded
 
-    return combined
+    return combined, degraded

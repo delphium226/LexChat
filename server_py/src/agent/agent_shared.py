@@ -580,41 +580,81 @@ async def run_worker_tool(
                 "id": summarise_id,
             })
 
-        async def _emit_progress(msg: str) -> None:
-            if parent_on_chunk:
-                await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": msg})
+        # Local prompt cache (D7): cross-user/cross-provider summary reuse,
+        # exact (content_hash, canonicalised-query) match only. Flag-gated;
+        # every cache operation is fail-soft (a DB error is just a miss).
+        from .provider_factory import get_request_provider_config
+        _local_cache_on = get_request_provider_config().get("_local_prompt_cache_enabled", True)
+        _content_hash = None
+        _cached = None
+        if _local_cache_on:
+            from ..services import local_prompt_cache as _local_cache
+            _content_hash = _local_cache.content_hash(result)
+            _cached = await _local_cache.lookup(_content_hash, query)
 
-        _chars_in = len(result)
-        result = await summarise_for_query(
-            result, query, summarise_model,
-            chunk_fn=chunk_fn,
-            on_progress=_emit_progress,
-            timing_collector=timing_collector,
-            doc_name=doc_name,
-            cancel_event=cancel_event,
-        )
-        logger.info(f"[Worker] Summarised to {len(result)} chars")
-
-        if timing_collector:
-            from .summarisation import SUMMARISE_CHUNK_CHARS
-            _chunks = max(1, -(-_chars_in // SUMMARISE_CHUNK_CHARS))  # ceil division
-            timing_collector.record_summarisation(_chars_in, len(result), _chunks)
-
-        # Enforce the size cap here, BEFORE the phase nudges are appended, so a
-        # summary that still exceeds the threshold is trimmed without losing the
-        # nudges (the chat loop's own truncation would chop them off the tail).
-        threshold = get_summarise_threshold()
-        if len(result) > threshold:
-            logger.warning(
-                f"[Worker] Summarised result from '{name}' still exceeds threshold "
-                f"({len(result)} -> {threshold} chars)"
+        if _cached is not None:
+            logger.info(
+                f"[Worker] Local cache hit for '{name}' ({len(result)} chars) — "
+                f"skipping summarisation"
             )
+            # A hit is a saving, not a summarisation: no record_summarisation.
             if timing_collector:
-                timing_collector.record_truncation()
-            result = (
-                result[:threshold]
-                + "\n\n[Content truncated — summary exceeded context limit]"
+                timing_collector.record_local_cache_hit(_cached["chars_in"] or len(result))
+            result = _cached["summary"]
+        else:
+            async def _emit_progress(msg: str) -> None:
+                if parent_on_chunk:
+                    await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": msg})
+
+            _chars_in = len(result)
+            result, _degraded = await summarise_for_query(
+                result, query, summarise_model,
+                chunk_fn=chunk_fn,
+                on_progress=_emit_progress,
+                timing_collector=timing_collector,
+                doc_name=doc_name,
+                cancel_event=cancel_event,
             )
+            logger.info(f"[Worker] Summarised to {len(result)} chars")
+
+            if timing_collector:
+                from .summarisation import SUMMARISE_CHUNK_CHARS
+                _chunks = max(1, -(-_chars_in // SUMMARISE_CHUNK_CHARS))  # ceil division
+                timing_collector.record_summarisation(_chars_in, len(result), _chunks)
+
+            # Enforce the size cap here, BEFORE the phase nudges are appended, so a
+            # summary that still exceeds the threshold is trimmed without losing the
+            # nudges (the chat loop's own truncation would chop them off the tail).
+            threshold = get_summarise_threshold()
+            _truncated = False
+            if len(result) > threshold:
+                logger.warning(
+                    f"[Worker] Summarised result from '{name}' still exceeds threshold "
+                    f"({len(result)} -> {threshold} chars)"
+                )
+                if timing_collector:
+                    timing_collector.record_truncation()
+                _truncated = True
+                result = (
+                    result[:threshold]
+                    + "\n\n[Content truncated — summary exceeded context limit]"
+                )
+
+            # Store post-cap, pre-nudge (nudges are request-contextual). Fail-soft.
+            # Never store degraded (summariser fell back to raw/partial text) or
+            # truncated output — it would poison the key cross-user permanently.
+            if _local_cache_on and _content_hash is not None:
+                if _degraded or _truncated:
+                    logger.info(
+                        f"[LocalCache] Not storing degraded/truncated summary for '{doc_name}'"
+                    )
+                else:
+                    await _local_cache.store(
+                        _content_hash, query, result,
+                        summarise_model=summarise_model,
+                        doc_name=str(doc_name) if doc_name else None,
+                        chars_in=_chars_in,
+                    )
 
         if parent_on_chunk:
             await call_chunk(parent_on_chunk, {
