@@ -237,6 +237,39 @@ async def test_truncated_summary_not_stored(db_session):
 
 
 # ---------------------------------------------------------------------------
+# Phase 7 (D8): cross-user safety allowlist
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_non_allowlisted_tool_never_touches_cache(db_session):
+    """A tool off CACHEABLE_TOOLS is summarised normally but never cached —
+    the cache is cross-user, so only public-source tools may enter it."""
+    assert "hypothetical_matter_tool" not in lpc.CACHEABLE_TOOLS
+    p_exec, p_summ = _patched_exec_and_summarise()
+    with p_exec, p_summ as mock_summ, \
+         patch.object(lpc, "lookup", new=AsyncMock()) as mock_lookup, \
+         patch.object(lpc, "store", new=AsyncMock()) as mock_store:
+        t = TimingCollector("req1")
+        result = await run_worker_tool(
+            "hypothetical_matter_tool", dict(TOOL_ARGS), "confirmation procedure",
+            _noop_chunk, "test-model",
+            timing_collector=t,
+        )
+
+    assert "SUMMARY OF CONFIRMATION PROCEDURE" in result  # still summarised
+    assert t.summarisation_calls == 1
+    mock_lookup.assert_not_awaited()
+    mock_store.assert_not_awaited()
+
+
+def test_allowlist_covers_current_worker_tools():
+    """Every phase-classified worker tool is on the allowlist (all are
+    public-source today); additions must be deliberate."""
+    from src.utils.stopwatch import _PHASE1_SEARCH_TOOLS, _PHASE2_RETRIEVAL_TOOLS
+    assert (_PHASE1_SEARCH_TOOLS | _PHASE2_RETRIEVAL_TOOLS) <= lpc.CACHEABLE_TOOLS
+
+
+# ---------------------------------------------------------------------------
 # Phase 5 (D8): standard mode keys on the raw user query, not the brief
 # ---------------------------------------------------------------------------
 

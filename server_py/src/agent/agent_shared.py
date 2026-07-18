@@ -611,8 +611,13 @@ async def run_worker_tool(
         _cached = None
         if _local_cache_on:
             from ..services import local_prompt_cache as _local_cache
-            _content_hash = _local_cache.content_hash(result)
-            _cached = await _local_cache.lookup(_content_hash, _cache_key_query)
+            # Cross-user safety invariant: only allowlisted (public-source)
+            # tools may enter the shared cache — see local_prompt_cache docstring.
+            if name not in _local_cache.CACHEABLE_TOOLS:
+                _local_cache_on = False
+            else:
+                _content_hash = _local_cache.content_hash(result)
+                _cached = await _local_cache.lookup(_content_hash, _cache_key_query)
 
         if _cached is not None:
             logger.info(

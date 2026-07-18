@@ -25,6 +25,13 @@ retrievals (get_case_law_text); the one-delegation rule makes multi-delegation
 rare, and the summary was produced for this user's question in the common case.
 If it proves harmful, revert to brief-keying — a one-line change in
 agent_shared.py.
+
+Cross-user safety invariant (D8 Phase 7): only tool results derived purely
+from PUBLIC sources (LEX, Find Case Law, Official Report, TWFY, SP bills) may
+enter this cache — it is shared across users, so a tool returning user- or
+matter-scoped data would leak it cross-user. CACHEABLE_TOOLS is the explicit
+allowlist enforced in run_worker_tool; new tools must be added deliberately
+after confirming their output is public-source only.
 """
 import hashlib
 import logging
@@ -38,6 +45,21 @@ logger = logging.getLogger("app")
 # Same recipe as _or_tsquery in agent/tools/parliament.py, deliberately
 # reimplemented locally (plus a sort — tsquery is order-sensitive, a cache key
 # is not) rather than imported from the parliament module.
+# Cross-user safety allowlist — see module docstring. Every current worker
+# retrieval/search tool returns public-source data only. A tool absent from
+# this set is summarised normally but never cached.
+CACHEABLE_TOOLS = frozenset({
+    # Legislation (LEX)
+    "search_legislation", "search_legislation_sections", "get_legislation_text",
+    # Case law (Find Case Law)
+    "search_case_law", "get_case_law_text",
+    # Scottish Parliament (Official Report / TWFY / bills API)
+    "search_scottish_parliament", "search_scottish_plenary",
+    "search_scottish_committee_transcripts",
+    "get_scottish_plenary_debate", "get_scottish_committee_transcript",
+    "search_bills", "get_member_info",
+})
+
 _STOPWORDS = frozenset(
     "the a an of for in on to and or is are with about said has what which people use".split()
 )
