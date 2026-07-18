@@ -236,6 +236,48 @@ async def test_truncated_summary_not_stored(db_session):
     assert count == 0
 
 
+# ---------------------------------------------------------------------------
+# Phase 5 (D8): standard mode keys on the raw user query, not the brief
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_raw_query_keying_hits_across_different_briefs(db_session):
+    """Same user question, differently-phrased delegation briefs → same key
+    (standard mode sets _cache_key_query to the raw user message)."""
+    set_request_provider_config(
+        {"_cache_key_query": "What is the confirmation procedure for CPOs?"}
+    )
+    try:
+        p_exec, p_summ = _patched_exec_and_summarise()
+        with p_exec, p_summ as mock_summ:
+            t1 = TimingCollector("req1")
+            await _call(t1, query="research the confirmation procedure under the 1981 Act")
+            t2 = TimingCollector("req2")
+            await _call(t2, query="confirmation of compulsory purchase orders — procedure")
+    finally:
+        set_request_provider_config({})
+
+    assert mock_summ.await_count == 1  # second brief hit despite different wording
+    assert t2.local_cache_hits == 1
+
+    # The stored row is keyed/recorded against the raw user query
+    row = (await db_session.execute(
+        text("SELECT query_text FROM local_prompt_cache")
+    )).first()
+    assert row.query_text == "What is the confirmation procedure for CPOs?"
+
+
+@pytest.mark.asyncio
+async def test_no_cache_key_query_keys_on_brief(db_session):
+    """Deep Research (no _cache_key_query) keys on the step brief as before —
+    different briefs must not collide."""
+    p_exec, p_summ = _patched_exec_and_summarise()
+    with p_exec, p_summ as mock_summ:
+        await _call(TimingCollector("req1"), query="confirmation procedure")
+        await _call(TimingCollector("req2"), query="compensation for severance")
+    assert mock_summ.await_count == 2
+
+
 @pytest.mark.asyncio
 async def test_cache_db_failure_is_fail_soft(db_session):
     """A broken DB never breaks the research request — it just always misses."""

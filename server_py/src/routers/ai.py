@@ -145,6 +145,20 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
             "_pt_record_type": body.record_type or None,
             "_doc_context": doc_context,
             "_matter_context": matter_context,
+            # Local-cache key source (D8 Phase 5): in standard mode the cache
+            # keys on the RAW user query, not the LLM-paraphrased delegation
+            # brief (which varies per model/run and makes cross-user hits
+            # luck). Deep Research must NOT set this — each step's approved
+            # plan text is the right key; steps with different intents must
+            # not collide.
+            "_cache_key_query": (
+                "" if body.chat_mode == "deep_research"
+                else next(
+                    (m.get("content", "") for m in reversed(body.messages)
+                     if m.get("role") == "user"),
+                    "",
+                )
+            ),
             "_prompt_caching_enabled": features.get("prompt_caching_enabled", True),
             "_tool_memo_enabled": features.get("tool_memo_enabled", True),
             "_local_prompt_cache_enabled": features.get("local_prompt_cache_enabled", True),

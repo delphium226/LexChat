@@ -600,13 +600,19 @@ async def run_worker_tool(
         # exact (content_hash, canonicalised-query) match only. Flag-gated;
         # every cache operation is fail-soft (a DB error is just a miss).
         from .provider_factory import get_request_provider_config
-        _local_cache_on = get_request_provider_config().get("_local_prompt_cache_enabled", True)
+        _req_cfg = get_request_provider_config()
+        _local_cache_on = _req_cfg.get("_local_prompt_cache_enabled", True)
+        # Cache-key query (D8 Phase 5): standard mode keys on the raw user
+        # question (deterministic across models/runs) rather than the Manager's
+        # paraphrased delegation brief. Deep Research leaves _cache_key_query
+        # unset/empty, so each step's plan text keys as before.
+        _cache_key_query = _req_cfg.get("_cache_key_query") or query
         _content_hash = None
         _cached = None
         if _local_cache_on:
             from ..services import local_prompt_cache as _local_cache
             _content_hash = _local_cache.content_hash(result)
-            _cached = await _local_cache.lookup(_content_hash, query)
+            _cached = await _local_cache.lookup(_content_hash, _cache_key_query)
 
         if _cached is not None:
             logger.info(
@@ -666,7 +672,7 @@ async def run_worker_tool(
                     )
                 else:
                     await _local_cache.store(
-                        _content_hash, query, result,
+                        _content_hash, _cache_key_query, result,
                         summarise_model=summarise_model,
                         doc_name=str(doc_name) if doc_name else None,
                         chars_in=_chars_in,

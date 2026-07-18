@@ -10,6 +10,21 @@ deliberately NOT part of the key, which is what makes the cache cross-provider.
 Every operation is fail-soft: a DB error must never break a research request —
 lookup errors return None (a miss), store errors are logged and swallowed.
 See docs/LOCAL_PROMPT_CACHE_PLAN.md.
+
+Key-query source (D8 Phase 5): in standard research mode the key query is the
+RAW user question (stashed as _cache_key_query in the request provider config),
+not the Manager's LLM-paraphrased delegation brief — briefs vary per model/run,
+making cross-user hits luck. Deep Research keys on each step's approved plan
+text (deterministic already; steps with different intents must not collide).
+Known residual risk (documented, not solved): if the Manager delegates twice in
+one request with different sub-aspects and both retrieve byte-identical text,
+the second reuses the first's summary despite a different intent. In practice
+section retrievals vary text with the query (different intent → different
+content_hash), so the exposure is mostly query-independent full-document
+retrievals (get_case_law_text); the one-delegation rule makes multi-delegation
+rare, and the summary was produced for this user's question in the common case.
+If it proves harmful, revert to brief-keying — a one-line change in
+agent_shared.py.
 """
 import hashlib
 import logging
