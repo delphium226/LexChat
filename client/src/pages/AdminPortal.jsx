@@ -122,6 +122,7 @@ const AdminPortal = ({ currentUser }) => {
     matters_enabled: true,
     prompt_caching_enabled: true,
     tool_memo_enabled: true,
+    local_prompt_cache_enabled: true,
   });
   const [isSavingFeatures, setIsSavingFeatures] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
@@ -1159,8 +1160,13 @@ const AdminPortal = ({ currentUser }) => {
                 },
                 {
                   flag: 'tool_memo_enabled',
-                  label: 'Deep Research tool-result memo',
+                  label: 'Tool-call caching (Deep Research)',
                   desc: 'Serves exact repeat tool calls across Deep Research steps from memory instead of re-fetching and re-summarising.',
+                },
+                {
+                  flag: 'local_prompt_cache_enabled',
+                  label: 'Local prompt caching',
+                  desc: 'Reuses document summaries across users and providers when the same text is researched with the same question — exact match only.',
                 },
               ].map(({ flag, label, desc }) => (
                 <div key={flag} className="flex items-center justify-between py-3 border-b border-ink-100">

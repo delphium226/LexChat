@@ -188,11 +188,17 @@ class CacheKpi(BaseModel):
     cacheHitRequests: int
     openrouterEligibleRequests: int
     totalCostUsd: float
+    # Local prompt cache (D7)
+    localCacheHits: int
+    localCacheHitRequests: int
+    localCacheHitRate: float
+    localCacheCharsSaved: int
 
 
 class CacheDaily(BaseModel):
     date: str
     memoHits: int
+    localCacheHits: int
     cachedPromptTokens: int
     cacheDiscountUsd: float
     totalCostUsd: float
@@ -203,15 +209,36 @@ class CacheRecentHit(BaseModel):
     requestId: str
     chatMode: Optional[str] = None
     memoHits: int
+    localCacheHits: int
+    localCacheCharsSaved: int
     cachedPromptTokens: int
     cacheDiscountUsd: float
     totalCostUsd: float
+
+
+class LocalCacheContent(BaseModel):
+    """Timeframe-independent stats from the local_prompt_cache table itself."""
+    entries: int
+    distinctDocuments: int
+    totalHitsServed: int
+    oldestEntry: Optional[str] = None
+
+
+class LocalCacheTopEntry(BaseModel):
+    docName: Optional[str] = None
+    queryText: str
+    hitCount: int
+    charsIn: int
+    lastHitAt: Optional[str] = None
+    createdAt: str
 
 
 class CacheResponse(BaseModel):
     kpi: CacheKpi
     daily: List[CacheDaily]
     recentHits: List[CacheRecentHit]
+    localCache: LocalCacheContent
+    localCacheTop: List[LocalCacheTopEntry]
     flags: Dict[str, bool]
 
 
@@ -810,9 +837,11 @@ async def get_cache_stats(
 ):
     """Return D5 caching savings for the Cache dashboard.
 
-    Two independent mechanisms, both persisted per-request in request_timings:
-    the Deep Research tool-result memo (memo_hits) and OpenRouter/Anthropic
-    prompt caching (cached_prompt_tokens + provider-reported cache_discount_usd).
+    Three independent mechanisms, all persisted per-request in request_timings:
+    the Deep Research tool-result memo (memo_hits), OpenRouter/Anthropic
+    prompt caching (cached_prompt_tokens + provider-reported cache_discount_usd),
+    and the local prompt cache (local_cache_hits + local_cache_chars_saved,
+    plus timeframe-independent content stats read from local_prompt_cache itself).
     "OpenRouter-eligible" is proxied by total_cost_usd > 0 — only OpenRouter
     reports cost, and only paid OpenRouter requests can see a provider cache hit.
     Current flag state is echoed so an all-zero dashboard is self-explanatory.
@@ -828,16 +857,44 @@ async def get_cache_stats(
             COALESCE(SUM(cache_discount_usd), 0)                        AS cache_discount_usd,
             COUNT(*) FILTER (WHERE cached_prompt_tokens > 0)            AS cache_hit_requests,
             COUNT(*) FILTER (WHERE total_cost_usd > 0)                  AS openrouter_eligible_requests,
-            COALESCE(SUM(total_cost_usd), 0)                            AS total_cost_usd
+            COALESCE(SUM(total_cost_usd), 0)                            AS total_cost_usd,
+            COALESCE(SUM(local_cache_hits), 0)                          AS local_cache_hits,
+            COUNT(*) FILTER (WHERE local_cache_hits > 0)                AS local_cache_hit_requests,
+            COALESCE(SUM(local_cache_chars_saved), 0)                   AS local_cache_chars_saved,
+            COALESCE(SUM(summarisation_calls), 0)                       AS summarisation_calls
         FROM request_timings
         {date_filter}
     """))
     k = kpi_result.mappings().first()
 
+    # Every miss that mattered performed a summarisation, so summarisation_calls
+    # IS the miss count — hits / (hits + summarisations), 0 when no denominator.
+    _lc_hits = int(k["local_cache_hits"])
+    _lc_denom = _lc_hits + int(k["summarisation_calls"])
+    local_cache_hit_rate = (_lc_hits / _lc_denom) if _lc_denom > 0 else 0.0
+
+    local_content_row = (await db.execute(text("""
+        SELECT
+            COUNT(*)                        AS entries,
+            COUNT(DISTINCT content_hash)    AS distinct_documents,
+            COALESCE(SUM(hit_count), 0)     AS total_hits_served,
+            MIN(created_at)                 AS oldest_entry
+        FROM local_prompt_cache
+    """))).mappings().first()
+
+    local_top_result = await db.execute(text("""
+        SELECT doc_name, query_text, hit_count, chars_in, last_hit_at, created_at
+        FROM local_prompt_cache
+        WHERE hit_count > 0
+        ORDER BY hit_count DESC, last_hit_at DESC
+        LIMIT 10
+    """))
+
     daily_result = await db.execute(text(f"""
         SELECT
             DATE(created_at)                                            AS date,
             COALESCE(SUM(memo_hits), 0)                                 AS memo_hits,
+            COALESCE(SUM(local_cache_hits), 0)                          AS local_cache_hits,
             COALESCE(SUM(cached_prompt_tokens), 0)                      AS cached_prompt_tokens,
             COALESCE(SUM(cache_discount_usd), 0)                        AS cache_discount_usd,
             COALESCE(SUM(total_cost_usd), 0)                            AS total_cost_usd
@@ -853,11 +910,13 @@ async def get_cache_stats(
             request_id,
             chat_mode,
             memo_hits,
+            local_cache_hits,
+            local_cache_chars_saved,
             cached_prompt_tokens,
             ROUND(cache_discount_usd::numeric, 6)                       AS cache_discount_usd,
             ROUND(total_cost_usd::numeric, 6)                           AS total_cost_usd
         FROM request_timings
-        WHERE (memo_hits > 0 OR cached_prompt_tokens > 0)
+        WHERE (memo_hits > 0 OR cached_prompt_tokens > 0 OR local_cache_hits > 0)
         {_date_filter(days, keyword="AND")}
         ORDER BY created_at DESC
         LIMIT 20
@@ -878,11 +937,16 @@ async def get_cache_stats(
             "cacheHitRequests": int(k["cache_hit_requests"]),
             "openrouterEligibleRequests": int(k["openrouter_eligible_requests"]),
             "totalCostUsd": _usd(k["total_cost_usd"]),
+            "localCacheHits": _lc_hits,
+            "localCacheHitRequests": int(k["local_cache_hit_requests"]),
+            "localCacheHitRate": round(local_cache_hit_rate, 4),
+            "localCacheCharsSaved": int(k["local_cache_chars_saved"]),
         },
         "daily": [
             {
                 "date": row["date"].isoformat(),
                 "memoHits": int(row["memo_hits"]),
+                "localCacheHits": int(row["local_cache_hits"]),
                 "cachedPromptTokens": int(row["cached_prompt_tokens"]),
                 "cacheDiscountUsd": _usd(row["cache_discount_usd"]),
                 "totalCostUsd": _usd(row["total_cost_usd"]),
@@ -895,14 +959,37 @@ async def get_cache_stats(
                 "requestId": row["request_id"],
                 "chatMode": row["chat_mode"],
                 "memoHits": int(row["memo_hits"]),
+                "localCacheHits": int(row["local_cache_hits"]),
+                "localCacheCharsSaved": int(row["local_cache_chars_saved"]),
                 "cachedPromptTokens": int(row["cached_prompt_tokens"]),
                 "cacheDiscountUsd": _usd(row["cache_discount_usd"]),
                 "totalCostUsd": _usd(row["total_cost_usd"]),
             }
             for row in recent_result.mappings()
         ],
+        "localCache": {
+            "entries": int(local_content_row["entries"]),
+            "distinctDocuments": int(local_content_row["distinct_documents"]),
+            "totalHitsServed": int(local_content_row["total_hits_served"]),
+            "oldestEntry": (
+                local_content_row["oldest_entry"].isoformat()
+                if local_content_row["oldest_entry"] else None
+            ),
+        },
+        "localCacheTop": [
+            {
+                "docName": row["doc_name"],
+                "queryText": row["query_text"],
+                "hitCount": int(row["hit_count"]),
+                "charsIn": int(row["chars_in"] or 0),
+                "lastHitAt": row["last_hit_at"].isoformat() if row["last_hit_at"] else None,
+                "createdAt": row["created_at"].isoformat(),
+            }
+            for row in local_top_result.mappings()
+        ],
         "flags": {
             "prompt_caching_enabled": bool(features.get("prompt_caching_enabled", True)),
             "tool_memo_enabled": bool(features.get("tool_memo_enabled", True)),
+            "local_prompt_cache_enabled": bool(features.get("local_prompt_cache_enabled", True)),
         },
     }

@@ -21,6 +21,7 @@ async def test_get_features_defaults(client, auth_headers):
         "matters_enabled": True,
         "prompt_caching_enabled": True,
         "tool_memo_enabled": True,
+        "local_prompt_cache_enabled": True,
     }
 
 
@@ -36,6 +37,7 @@ async def test_get_features_merges_old_saved_json(client, auth_headers, db_sessi
         "matters_enabled": False,
         "prompt_caching_enabled": True,
         "tool_memo_enabled": True,
+        "local_prompt_cache_enabled": True,
     }
 
 
@@ -46,6 +48,7 @@ async def test_save_features_round_trips_new_keys(client, admin_token):
         "matters_enabled": True,
         "prompt_caching_enabled": False,
         "tool_memo_enabled": False,
+        "local_prompt_cache_enabled": False,
     }
     response = await client.post(FEATURES_URL, json=body, headers=headers)
     assert response.status_code == 200
@@ -65,6 +68,7 @@ async def test_save_features_accepts_old_client_body(client, admin_token):
         "matters_enabled": False,
         "prompt_caching_enabled": True,
         "tool_memo_enabled": True,
+        "local_prompt_cache_enabled": True,
     }
 
 

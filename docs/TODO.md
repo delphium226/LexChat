@@ -343,7 +343,7 @@ Admin Portal Cache stats tab. Plan: `docs/CACHE_ADMIN_UI_PLAN.md`.**
   re-summarisation → defer until target traffic shows otherwise (re-measure after D4
   gives tests their own DB so legislation-bot history survives).
 
-### D7. "Local prompt caching" — cross-user/cross-provider summary cache, exact-match (PLANNED 2026-07-18, not started)
+### D7. "Local prompt caching" — cross-user/cross-provider summary cache, exact-match (BUILT 2026-07-18 on feature/local-prompt-cache, live-verified)
 Cross-user cache of Worker document summaries (LEX text is static; at ~200 users
 query demand over the same Acts will be heavily correlated — the second lawyer
 asking the same question of the same section skips the summarisation LLM call).
@@ -355,9 +355,41 @@ that risk by construction and makes staleness impossible (amended text → new h
 → miss). Cross-provider by design (`summarise_model` stored for provenance, NOT in
 the key). New `local_prompt_cache` table, `local_cache_hits` metric,
 `local_prompt_cache_enabled` flag, Cache-tab surfacing — all following the D5/D6
-patterns. **Full implementation plan for a fresh session:
-`docs/LOCAL_PROMPT_CACHE_PLAN.md`.** Build on a new branch after
-`feature/token-cost-caching` merges.
+patterns. **Implementation plan (now implemented): `docs/LOCAL_PROMPT_CACHE_PLAN.md`.**
+Built on `feature/local-prompt-cache` (off `feature/token-cost-caching`);
+133 tests green. Live-verified 2026-07-18: second identical run served from
+cache (159s→84s, `local_cache_hits=1`, 194,822 chars saved); flag-off A/B
+re-summarised as before; cross-provider hit demonstrated via a fixed Deep
+Research plan (summary stored under mistral-large-3/Ollama served under
+gemini-3.1-pro/OpenRouter, 141s→38s). Observed caveat: prompt-driven Manager
+delegation wording varies between models, so cross-provider hits on standard
+research queries need canonicalisation-equivalent phrasing — Deep Research
+briefs (user-approved plan text) are deterministic and always key identically.
+
+### D8. Cache review fixes (scoped 2026-07-18 from full caching-stack review; not started)
+A review of the D5/D6/D7 caching stack found one real bug and a set of
+improvements. **Full self-contained plan: `docs/CACHE_REVIEW_FIXES_PLAN.md`.**
+Phases in priority order:
+1. **BUG (merge blocker for `feature/local-prompt-cache`):** `summarise_for_query`
+   falls back to raw/partial text on failure, and that degraded (then truncated)
+   output is stored in `local_prompt_cache` — one transient summariser error
+   permanently poisons the key cross-user/cross-provider. Fix: degraded flag +
+   skip store on degradation or truncation.
+2. Storage hygiene: atomic `UPDATE...RETURNING` lookup, drop redundant
+   content_hash index, sample the prune COUNT, 365-day retention for hit rows,
+   version the canonicalisation (`v1|` hash prefix).
+3. Admin purge endpoint + Cache-tab "Clear local cache" button (no escape hatch
+   exists today for a poisoned entry).
+4. Extend the tool memo to standard research mode (redundant_tool_calls proves
+   the waste; keep recording redundancy on memo hits for loop health).
+5. Key the local cache on the raw user query in standard mode (delegation-brief
+   wording varies per model — the biggest hit-rate lever); Deep Research keeps
+   step-brief keys. Residual full-doc collision caveat documented in the plan.
+6. `request_timings.provider` column (retire the `total_cost_usd > 0` proxy) +
+   Cache-tab hit-rate small print.
+7. `CACHEABLE_TOOLS` allowlist — write down the public-sources-only invariant.
+Out of scope (decided): Anthropic cache_control live check stays dormant until
+an Anthropic model is configured; D5#3/A5 NO-GO stands; no fuzzy keying/TTLs.
 
 ### D6. Cache admin UI: feature toggles + Cache stats tab (scoped 2026-07-17, BUILT 2026-07-17)
 Two feature flags in Developer tab → Feature flags (`prompt_caching_enabled`,

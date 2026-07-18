@@ -209,6 +209,7 @@ async def test_efficiency_parliamentary_profile(client, admin_token, db_session,
 CACHE_KPI_KEYS = {
     "deepResearchRequests", "memoHits", "memoHitRequests", "cachedPromptTokens",
     "cacheDiscountUsd", "cacheHitRequests", "openrouterEligibleRequests", "totalCostUsd",
+    "localCacheHits", "localCacheHitRequests", "localCacheHitRate", "localCacheCharsSaved",
 }
 
 
@@ -216,12 +217,23 @@ async def test_cache_empty(client, admin_token):
     r = await client.get("/api/stats/cache", headers={"Authorization": f"Bearer {admin_token}"})
     assert r.status_code == 200
     body = r.json()
-    assert set(body) == {"kpi", "daily", "recentHits", "flags"}
+    assert set(body) == {"kpi", "daily", "recentHits", "localCache", "localCacheTop", "flags"}
     assert set(body["kpi"]) == CACHE_KPI_KEYS
     assert body["kpi"]["memoHits"] == 0
+    # 0-denominator case: no hits AND no summarisations → rate is 0, not an error
+    assert body["kpi"]["localCacheHits"] == 0
+    assert body["kpi"]["localCacheHitRate"] == 0
     assert body["daily"] == [] and body["recentHits"] == []
+    assert body["localCache"] == {
+        "entries": 0, "distinctDocuments": 0, "totalHitsServed": 0, "oldestEntry": None,
+    }
+    assert body["localCacheTop"] == []
     # Flags default ON when no features row exists
-    assert body["flags"] == {"prompt_caching_enabled": True, "tool_memo_enabled": True}
+    assert body["flags"] == {
+        "prompt_caching_enabled": True,
+        "tool_memo_enabled": True,
+        "local_prompt_cache_enabled": True,
+    }
 
 
 async def test_cache_seeded(client, admin_token, db_session):
@@ -252,7 +264,8 @@ async def test_cache_seeded(client, admin_token, db_session):
 
     assert len(body["daily"]) == 1  # all three rows share today's date
     assert set(body["daily"][0]) == {
-        "date", "memoHits", "cachedPromptTokens", "cacheDiscountUsd", "totalCostUsd",
+        "date", "memoHits", "localCacheHits", "cachedPromptTokens",
+        "cacheDiscountUsd", "totalCostUsd",
     }
     assert body["daily"][0]["memoHits"] == 3
 
@@ -260,6 +273,7 @@ async def test_cache_seeded(client, admin_token, db_session):
     assert {h["requestId"] for h in hits} == {"req_memo", "req_or"}
     assert set(hits[0]) == {
         "createdAt", "requestId", "chatMode", "memoHits",
+        "localCacheHits", "localCacheCharsSaved",
         "cachedPromptTokens", "cacheDiscountUsd", "totalCostUsd",
     }
 
@@ -293,9 +307,73 @@ async def test_cache_echoes_flag_state(client, admin_token, db_session):
     })))
     await db_session.commit()
     r = await client.get("/api/stats/cache", headers={"Authorization": f"Bearer {admin_token}"})
-    assert r.json()["flags"] == {"prompt_caching_enabled": False, "tool_memo_enabled": True}
+    # local_prompt_cache_enabled was not in the saved JSON → reported at its default
+    assert r.json()["flags"] == {
+        "prompt_caching_enabled": False,
+        "tool_memo_enabled": True,
+        "local_prompt_cache_enabled": True,
+    }
 
 
 async def test_cache_requires_admin(client, user_token):
     r = await client.get("/api/stats/cache", headers={"Authorization": f"Bearer {user_token}"})
     assert r.status_code == 403
+
+
+# --------------------------------------------------------------------------- #
+# /cache — local prompt cache (D7)
+# --------------------------------------------------------------------------- #
+
+async def test_cache_local_hit_rate_seeded(client, admin_token, db_session):
+    """rate = hits / (hits + summarisations): 3 hits, 2+1 summarisations → 0.5."""
+    await _seed_timing_row(
+        db_session, request_id="req_lc1", local_cache_hits=3,
+        local_cache_chars_saved=60_000, summarisation_calls=2,
+    )
+    await _seed_timing_row(db_session, request_id="req_lc2", summarisation_calls=1)
+
+    r = await client.get("/api/stats/cache", headers={"Authorization": f"Bearer {admin_token}"})
+    kpi = r.json()["kpi"]
+    assert kpi["localCacheHits"] == 3
+    assert kpi["localCacheHitRequests"] == 1
+    assert kpi["localCacheHitRate"] == pytest.approx(0.5)
+    assert kpi["localCacheCharsSaved"] == 60_000
+    assert r.json()["daily"][0]["localCacheHits"] == 3
+
+
+async def test_cache_local_only_row_appears_in_recent_hits(client, admin_token, db_session):
+    """A request with only local cache hits (no memo, no provider tokens) is listed."""
+    await _seed_timing_row(
+        db_session, request_id="req_local_only",
+        local_cache_hits=1, local_cache_chars_saved=25_000,
+        memo_hits=0, cached_prompt_tokens=0,
+    )
+    r = await client.get("/api/stats/cache", headers={"Authorization": f"Bearer {admin_token}"})
+    hits = r.json()["recentHits"]
+    assert [h["requestId"] for h in hits] == ["req_local_only"]
+    assert hits[0]["localCacheHits"] == 1
+    assert hits[0]["localCacheCharsSaved"] == 25_000
+
+
+async def test_cache_local_top_ordering_and_filter(client, admin_token, db_session):
+    """localCacheTop is hit_count DESC and excludes never-hit entries."""
+    from src.models import LocalPromptCache
+    for i, hit_count in enumerate([0, 5, 2]):
+        db_session.add(LocalPromptCache(
+            content_hash=f"ch{i}", query_hash="qh", query_text=f"query {i}",
+            summary="s", doc_name=f"Doc {i}", chars_in=1000 * (i + 1),
+            hit_count=hit_count,
+        ))
+    await db_session.commit()
+
+    r = await client.get("/api/stats/cache", headers={"Authorization": f"Bearer {admin_token}"})
+    body = r.json()
+    top = body["localCacheTop"]
+    assert [t["docName"] for t in top] == ["Doc 1", "Doc 2"]  # 5 hits, then 2; Doc 0 excluded
+    assert top[0]["hitCount"] == 5
+    assert top[0]["charsIn"] == 2000
+    # Content stats are timeframe-independent and count all three entries
+    assert body["localCache"]["entries"] == 3
+    assert body["localCache"]["distinctDocuments"] == 3
+    assert body["localCache"]["totalHitsServed"] == 7
+    assert body["localCache"]["oldestEntry"] is not None

@@ -134,6 +134,10 @@ class RequestTiming(Base):
     search_budget_blocked: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Deep Research tool-result memo hits (repeat tool call served without API/summarise).
     memo_hits: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Local prompt cache (D7): summaries served from local_prompt_cache, and the
+    # summarisation input chars those hits avoided sending to the flash model.
+    local_cache_hits: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    local_cache_chars_saved: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Provider prompt caching (OpenRouter): cached input tokens + reported discount.
     cached_prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     cache_discount_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
@@ -324,6 +328,36 @@ class SpVideoCaption(Base):
     offset_index: Mapped[list | None] = mapped_column(JSON, nullable=True)
     caption_ok: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     fetched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class LocalPromptCache(Base):
+    """Cross-user, cross-provider cache of Worker document summaries (D7).
+
+    Keyed on (content_hash of the raw oversized tool result, canonicalised-query
+    hash) — exact match only, no semantic similarity. `summarise_model` is
+    provenance only and deliberately NOT part of the key: a good extraction of
+    the same text for the same question is provider-agnostic, which is what
+    makes the cache cross-provider. Staleness is impossible by construction —
+    amended LEX text changes the content hash and misses.
+    See docs/LOCAL_PROMPT_CACHE_PLAN.md.
+    """
+    __tablename__ = "local_prompt_cache"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    query_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    query_text: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    summarise_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    doc_name: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    chars_in: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    hit_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_hit_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("content_hash", "query_hash", name="uq_local_prompt_cache_key"),
+    )
 
 
 class Document(Base):

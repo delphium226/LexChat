@@ -147,6 +147,7 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
             "_matter_context": matter_context,
             "_prompt_caching_enabled": features.get("prompt_caching_enabled", True),
             "_tool_memo_enabled": features.get("tool_memo_enabled", True),
+            "_local_prompt_cache_enabled": features.get("local_prompt_cache_enabled", True),
         })
         # Always use the server-side configured model — the frontend may be stale
         # (e.g. user switched provider via Dev tab without refreshing the page).

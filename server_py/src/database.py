@@ -209,6 +209,23 @@ async def init_db() -> None:
                 caption_ok BOOLEAN NOT NULL DEFAULT FALSE,
                 fetched_at TIMESTAMP
             )""",
+            # Local prompt cache (D7, additive): cross-user summary cache + per-request hit metrics
+            """CREATE TABLE IF NOT EXISTS local_prompt_cache (
+                id SERIAL PRIMARY KEY,
+                content_hash VARCHAR(64) NOT NULL,
+                query_hash VARCHAR(64) NOT NULL,
+                query_text TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                summarise_model VARCHAR(255),
+                doc_name VARCHAR(512),
+                chars_in INTEGER,
+                hit_count INTEGER NOT NULL DEFAULT 0,
+                last_hit_at TIMESTAMP,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                CONSTRAINT uq_local_prompt_cache_key UNIQUE (content_hash, query_hash)
+            )""",
+            "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS local_cache_hits INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS local_cache_chars_saved INTEGER NOT NULL DEFAULT 0",
             # Committee SP TV slugs can exceed 128 chars (they embed the full debate
             # title), so widen slug from the original VARCHAR(128) to TEXT on existing
             # DBs. Guarded so it only runs while the column is still varchar.
@@ -254,6 +271,7 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_sp_plenary_full_text ON sp_plenary_items USING GIN (to_tsvector('english', coalesce(full_text,'')))",
             "CREATE INDEX IF NOT EXISTS idx_sp_video_captions_meeting_id ON sp_video_captions (meeting_id)",
             "CREATE INDEX IF NOT EXISTS idx_sp_video_captions_meeting_date ON sp_video_captions (meeting_date)",
+            "CREATE INDEX IF NOT EXISTS ix_local_prompt_cache_content_hash ON local_prompt_cache (content_hash)",
         ]
         async with engine.begin() as conn:
             for stmt in index_statements:

@@ -223,6 +223,7 @@ _DEFAULT_FEATURES = {
     "matters_enabled": True,
     "prompt_caching_enabled": True,
     "tool_memo_enabled": True,
+    "local_prompt_cache_enabled": True,
 }
 
 
@@ -253,6 +254,7 @@ class FeaturesUpdate(BaseModel):
     # Defaulted so an old client POST body (matters_enabled only) stays valid.
     prompt_caching_enabled: bool = True
     tool_memo_enabled: bool = True
+    local_prompt_cache_enabled: bool = True
 
 
 @admin_router.post("/features")
@@ -265,6 +267,7 @@ async def save_features(
         "matters_enabled": body.matters_enabled,
         "prompt_caching_enabled": body.prompt_caching_enabled,
         "tool_memo_enabled": body.tool_memo_enabled,
+        "local_prompt_cache_enabled": body.local_prompt_cache_enabled,
     }
     result = await db.execute(select(AppSetting).where(AppSetting.key == _FEATURES_KEY))
     row = result.scalar_one_or_none()

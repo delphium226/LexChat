@@ -82,6 +82,12 @@ class TimingCollector:
         # per-request memo (a saving, NOT a loop-health signal — deliberately kept
         # out of worker_tool_calls / phase counts / redundant_tool_calls).
         self.memo_hits: int = 0
+        # Local prompt cache (D7): summaries served from local_prompt_cache
+        # instead of calling the summarisation model, and the summarisation
+        # input chars those hits avoided. Savings, NOT loop-health — kept out
+        # of worker_tool_calls / phase counts, and a hit records NO summarisation.
+        self.local_cache_hits: int = 0
+        self.local_cache_chars_saved: int = 0
         # Provider prompt caching (OpenRouter): input tokens served from the
         # provider's prompt cache, and the discount OpenRouter reports for them.
         self.cached_prompt_tokens: int = 0
@@ -184,6 +190,10 @@ class TimingCollector:
     def record_memo_hit(self) -> None:
         self.memo_hits += 1
 
+    def record_local_cache_hit(self, chars_saved: int = 0) -> None:
+        self.local_cache_hits += 1
+        self.local_cache_chars_saved += int(chars_saved or 0)
+
     def record_cached_tokens(self, tokens: int, discount_usd: float = 0.0) -> None:
         self.cached_prompt_tokens += int(tokens or 0)
         # OpenRouter reports cache_discount as a negative delta on cost for
@@ -224,6 +234,8 @@ class TimingCollector:
             "source_filter_fallback": self.source_filter_fallback,
             "search_budget_blocked": self.search_budget_blocked,
             "memo_hits": self.memo_hits,
+            "local_cache_hits": self.local_cache_hits,
+            "local_cache_chars_saved": self.local_cache_chars_saved,
             "cached_prompt_tokens": self.cached_prompt_tokens,
             "cache_discount_usd": self.cache_discount_usd,
         }
