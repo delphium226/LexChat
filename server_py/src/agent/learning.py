@@ -108,7 +108,7 @@ async def get_relevant_examples(
         return {"examples": examples, "critiques": critiques}
 
     except Exception as e:
-        logger.error(f"[Learning] Error fetching examples: {e}")
+        logger.error(f"[Learning] Error fetching examples: {e}", exc_info=True)
         return {"examples": [], "critiques": []}
 
 

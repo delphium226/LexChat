@@ -11,6 +11,19 @@ os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
+
+def _resolve_level(env_var: str, default: int = logging.INFO) -> int:
+    """Resolve a logging level from an env var name (e.g. "INFO", "DEBUG").
+
+    Read straight from the environment rather than importing `settings` — this
+    module is initialised before most of the app, so importing config here risks
+    an import cycle. An unrecognised value falls back to `default`.
+    """
+    name = os.getenv(env_var, "").strip().upper()
+    if not name:
+        return default
+    return getattr(logging, name, default) if isinstance(getattr(logging, name, None), int) else default
+
 # ANSI colour codes — applied per level, reset after the line
 _RESET  = "\033[0m"
 _GREY   = "\033[90m"
@@ -100,34 +113,53 @@ def setup_logging(bot_id: str = ""):
     _enable_windows_ansi()
     prefix = f"{bot_id}_" if bot_id else ""
 
+    # Base level for all app loggers — overridable at runtime via LOG_LEVEL
+    # (e.g. LOG_LEVEL=DEBUG) without a code change. Console can be tuned
+    # independently via CONSOLE_LOG_LEVEL; blank = same as LOG_LEVEL.
+    base_level = _resolve_level("LOG_LEVEL", logging.INFO)
+    console_level = _resolve_level("CONSOLE_LOG_LEVEL", base_level)
+
     # App logger
     app_logger = logging.getLogger("app")
-    app_logger.setLevel(logging.INFO)
-    app_logger.addHandler(_create_file_handler(f"{prefix}app.log"))
+    app_logger.setLevel(base_level)
+    app_logger.addHandler(_create_file_handler(f"{prefix}app.log", base_level))
     app_logger.addHandler(_create_file_handler(f"{prefix}error.log", logging.ERROR))
-    app_logger.addHandler(_create_console_handler())
+    app_logger.addHandler(_create_console_handler(console_level))
 
     # Agent logger
     agent_logger = logging.getLogger("agent")
-    agent_logger.setLevel(logging.INFO)
-    agent_logger.addHandler(_create_file_handler(f"{prefix}agent.log"))
+    agent_logger.setLevel(base_level)
+    agent_logger.addHandler(_create_file_handler(f"{prefix}agent.log", base_level))
     agent_logger.addHandler(_create_file_handler(f"{prefix}error.log", logging.ERROR))
-    agent_logger.addHandler(_create_console_handler())
+    agent_logger.addHandler(_create_console_handler(console_level))
 
-    # HTTP logger
+    # HTTP logger — access log. Also fans 5xx into the shared error.log so server
+    # errors are recoverable from one place (the middleware logs 5xx at ERROR).
     http_logger = logging.getLogger("http")
-    http_logger.setLevel(logging.INFO)
-    http_logger.addHandler(_create_file_handler(f"{prefix}http.log"))
+    http_logger.setLevel(base_level)
+    http_logger.addHandler(_create_file_handler(f"{prefix}http.log", base_level))
+    http_logger.addHandler(_create_file_handler(f"{prefix}error.log", logging.ERROR))
 
     # Crawler logger — the SP Official Report / SP TV background crawler. Long-running
     # and chatty (backfills, daily deltas, caption capture), so it gets its own file
     # to keep app.log readable; errors also go to the shared error.log. Only the
     # parliament bot writes here (delay=True → no file until first crawl log line).
     crawler_logger = logging.getLogger("crawler")
-    crawler_logger.setLevel(logging.INFO)
-    crawler_logger.addHandler(_create_file_handler(f"{prefix}crawler.log"))
+    crawler_logger.setLevel(base_level)
+    crawler_logger.addHandler(_create_file_handler(f"{prefix}crawler.log", base_level))
     crawler_logger.addHandler(_create_file_handler(f"{prefix}error.log", logging.ERROR))
-    crawler_logger.addHandler(_create_console_handler())
+    crawler_logger.addHandler(_create_console_handler(console_level))
+
+    # SP TV video deep-link resolver (sptv_client, caption_match). Parliament-bot
+    # only and fail-soft — previously logged to an unconfigured "sptv" logger that
+    # propagated to the handler-less root, so INFO was dropped and WARNING+ went to
+    # bare stderr. Give it its own file (+ shared error.log) so caption diagnostics
+    # are recoverable. delay=True → no file until the first line is written.
+    sptv_logger = logging.getLogger("sptv")
+    sptv_logger.setLevel(base_level)
+    sptv_logger.addHandler(_create_file_handler(f"{prefix}sptv.log", base_level))
+    sptv_logger.addHandler(_create_file_handler(f"{prefix}error.log", logging.ERROR))
+    sptv_logger.addHandler(_create_console_handler(console_level))
 
     # Suppress noisy third-party loggers
     logging.getLogger("httpx").setLevel(logging.WARNING)

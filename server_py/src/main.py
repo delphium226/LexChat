@@ -150,11 +150,22 @@ app.add_middleware(
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start = time.time()
-    response = await call_next(request)
-    duration_ms = int((time.time() - start) * 1000)
-    log = http_logger.warning if response.status_code >= 400 else http_logger.info
-    log(f"{request.method} {request.url.path} {response.status_code} {duration_ms}ms")
-    return response
+    status = 500  # default if call_next raises before returning a response
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        return response
+    finally:
+        # try/finally so an unhandled exception in call_next is still logged
+        # (and timed) rather than skipping the access line entirely.
+        duration_ms = int((time.time() - start) * 1000)
+        if status >= 500:
+            log = http_logger.error
+        elif status >= 400:
+            log = http_logger.warning
+        else:
+            log = http_logger.info
+        log(f"{request.method} {request.url.path} {status} {duration_ms}ms")
 
 
 # Routers

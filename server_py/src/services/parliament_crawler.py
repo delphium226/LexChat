@@ -283,7 +283,7 @@ async def crawl_sp_new_meetings() -> int:
                 window_start = window_end + timedelta(days=1)
 
     except Exception as exc:
-        logger.error(f"[Crawler] Committee delta crawl error: {exc}")
+        logger.error(f"[Crawler] Committee delta crawl error: {exc}", exc_info=True)
 
     logger.info(f"[Crawler] Committee delta crawl complete — {total} items stored")
     return total
@@ -356,7 +356,7 @@ async def backfill_sessions() -> int:
                 window_start = window_end + timedelta(days=1)
 
     except Exception as exc:
-        logger.error(f"[Crawler] Backfill error: {exc}")
+        logger.error(f"[Crawler] Backfill error: {exc}", exc_info=True)
 
     logger.info(f"[Crawler] Session backfill complete — {total} items stored")
     return total
@@ -505,7 +505,7 @@ async def crawl_sp_new_plenary() -> int:
                 window_start = window_end + timedelta(days=1)
 
     except Exception as exc:
-        logger.error(f"[Crawler] Plenary delta crawl error: {exc}")
+        logger.error(f"[Crawler] Plenary delta crawl error: {exc}", exc_info=True)
 
     logger.info(f"[Crawler] Plenary delta crawl complete — {total} items stored")
     return total
@@ -568,7 +568,7 @@ async def backfill_plenary() -> int:
                 window_start = window_end + timedelta(days=1)
 
     except Exception as exc:
-        logger.error(f"[Crawler] Plenary backfill error: {exc}")
+        logger.error(f"[Crawler] Plenary backfill error: {exc}", exc_info=True)
 
     logger.info(f"[Crawler] Plenary backfill complete — {total} items stored")
     return total
@@ -692,7 +692,7 @@ async def backfill_captions() -> int:
                 if await _capture_meeting_captions(client, str(meeting_id), meeting_date):
                     captured += 1
     except Exception as exc:
-        logger.error(f"[Crawler] Caption backfill error: {exc}")
+        logger.error(f"[Crawler] Caption backfill error: {exc}", exc_info=True)
 
     logger.info(f"[Crawler] Caption backfill complete — {captured} meetings with captions cached")
     return captured
@@ -734,7 +734,7 @@ async def backfill_committee_captions() -> int:
                 ):
                     captured += 1
     except Exception as exc:
-        logger.error(f"[Crawler] Committee caption backfill error: {exc}")
+        logger.error(f"[Crawler] Committee caption backfill error: {exc}", exc_info=True)
 
     logger.info(f"[Crawler] Committee caption backfill complete — {captured} meetings with captions cached")
     return captured
@@ -750,7 +750,7 @@ async def background_crawl_loop(interval_seconds: int = 86400) -> None:
         try:
             await crawl_sp_new_meetings()
         except Exception as exc:
-            logger.error(f"[Crawler] Unhandled error in crawl loop: {exc}")
+            logger.error(f"[Crawler] Unhandled error in crawl loop: {exc}", exc_info=True)
         await asyncio.sleep(interval_seconds)
 
 
@@ -765,5 +765,5 @@ async def background_plenary_crawl_loop(interval_seconds: int = 86400) -> None:
         try:
             await crawl_sp_new_plenary()
         except Exception as exc:
-            logger.error(f"[Crawler] Unhandled error in plenary crawl loop: {exc}")
+            logger.error(f"[Crawler] Unhandled error in plenary crawl loop: {exc}", exc_info=True)
         await asyncio.sleep(interval_seconds)

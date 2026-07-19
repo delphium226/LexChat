@@ -391,6 +391,34 @@ Phases in priority order:
 Out of scope (decided): Anthropic cache_control live check stays dormant until
 an Anthropic model is configured; D5#3/A5 NO-GO stands; no fuzzy keying/TTLs.
 
+### D9. Logging improvements (reviewed + scoped 2026-07-19; PR A & PR B BUILT, PR C & PR D deferred)
+Review of the backend logging strategy. **Full self-contained plan with per-item
+Problem/Change/Files/Verify and PR slicing: `docs/LOGGING_IMPROVEMENTS_PLAN.md`.**
+- **PR A — DONE 2026-07-19.** `LOG_LEVEL`/`CONSOLE_LOG_LEVEL` runtime level control
+  (Item 3); `sptv` logger configured — was logging to a handler-less root, so INFO
+  dropped and WARNING+ went to bare stderr (Item 1); HTTP middleware try/finally +
+  5xx→ERROR (Item 7a); `error.log` handler on the `http` logger (Item 7c). Files:
+  `utils/logger.py`, `config.py`, `main.py`, `CLAUDE.md`. Verified via smoke test.
+- **PR B — DONE 2026-07-19.** Traceback pass (Item 2): `exc_info=True` on ~24
+  genuine-fault handlers (agent layer, services, crawler loop-level catch-alls,
+  `database.py`, `ai.py`/`research.py`); fail-soft/high-volume paths left terse.
+  145 tests green.
+- **PR C — DEFERRED.** Sensitive-data redaction (Item 4): full user query text is
+  logged at INFO (`agent_core.py:58`, `learning.py:145`) and email addresses at
+  `auth.py:174` + `email_service.py` — a concern for OFFICIAL-SENSITIVE / government-
+  lawyer users given 14-day log retention. Plan adds `redact_text()`/`redact_email()`
+  helpers, redact at INFO, full text only at DEBUG. **Open decision for the deploying
+  org:** whether query text may appear even at DEBUG. Record the decision in
+  `CLAUDE.md` when built.
+- **PR D — DEFERRED (observability nice-to-haves), now Items 5 + 7b only.**
+  Correlation/request IDs across all loggers (Item 5, ContextVar + `logging.Filter`,
+  same pattern as the provider-config ContextVar); align/disable uvicorn's own access
+  logger to avoid duplicate access lines (Item 7b).
+- **Item 6 — DEFERRED separately (2026-07-19).** Optional JSON/structured file output
+  for a SIEM (no new dependency; toggled by `LOG_FORMAT_JSON`). Split out of PR D and
+  parked — build only if the deployment gains a central log aggregator. Depends on
+  Item 5 (so `request_id` is a first-class JSON field).
+
 ### D6. Cache admin UI: feature toggles + Cache stats tab (scoped 2026-07-17, BUILT 2026-07-17)
 Two feature flags in Developer tab → Feature flags (`prompt_caching_enabled`,
 `tool_memo_enabled`, both default ON = current behaviour), consumed via the request

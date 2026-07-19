@@ -99,6 +99,12 @@ class Settings(BaseSettings):
     # RESEARCH_MODE=parliamentary_records in their .env).
     research_mode: str = ""
 
+    # Logging — base level for the app/agent/http/crawler/sptv loggers. Read
+    # directly from the environment in utils/logger.py (before settings import);
+    # declared here so it is documented and validated as a known setting.
+    log_level: str = "INFO"
+    console_log_level: str = ""  # blank = same as log_level
+
     class Config:
         env_file = ".env"
         env_case_sensitive = False

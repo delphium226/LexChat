@@ -60,7 +60,7 @@ async def draft_plan(body: ResearchPlanRequest, user: dict = Depends(get_current
             active_provider = await get_active_provider(db)
             provider_config = await get_provider_config(db, active_provider)
     except Exception as e:
-        logger.error(f"[Research] Provider resolution failed: {e}")
+        logger.error(f"[Research] Provider resolution failed: {e}", exc_info=True)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again.")
 
     set_request_provider_config({
@@ -102,7 +102,7 @@ async def draft_plan(body: ResearchPlanRequest, user: dict = Depends(get_current
     except ConnectionError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
-        logger.error(f"[Research] Planner failed: {e}")
+        logger.error(f"[Research] Planner failed: {e}", exc_info=True)
         raise HTTPException(status_code=502, detail="The planner failed. Please try again.")
 
     timing.record_total((time.perf_counter() - t_start) * 1000)

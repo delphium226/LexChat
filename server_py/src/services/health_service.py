@@ -71,7 +71,7 @@ async def _get_active_llm_check():
                 return "openrouter", check_openrouter(base_url, api_key)
 
     except Exception as e:
-        logger.error(f"[Health] Failed to read active provider for health check: {e}")
+        logger.error(f"[Health] Failed to read active provider for health check: {e}", exc_info=True)
 
     return "ollama", check_ollama()
 
@@ -97,7 +97,7 @@ async def perform_health_checks():
                 session.add(status)
             await session.commit()
     except Exception as db_err:
-        logger.error(f"[Health] Failed to write health checks to DB: {db_err}")
+        logger.error(f"[Health] Failed to write health checks to DB: {db_err}", exc_info=True)
 
     return results
 

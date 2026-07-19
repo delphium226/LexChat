@@ -168,6 +168,8 @@ The Admin Portal → Efficiency tab and the per-request EFFICIENCY breach alerts
 | `TWFY_API_KEY` | TheyWorkForYou API key for the Scottish Parliament tools; free at theyworkforyou.com/api/key | *(blank)* |
 | `ENABLE_VIDEO_DEEPLINKS` | Parliament bot only: enable SP TV video timestamp deep links (caption crawl + link enrichment on plenary citations). Dark-launched — off by default | `false` |
 | `SPTV_BASE_URL` | Scottish Parliament TV base URL (meeting pages + playback model) | `https://www.scottishparliament.tv` |
+| `LOG_LEVEL` | Base level for the app/agent/http/crawler/sptv loggers (e.g. `DEBUG`, `INFO`, `WARNING`). Read directly by `utils/logger.py` at startup — no code change needed to raise verbosity on the target | `INFO` |
+| `CONSOLE_LOG_LEVEL` | Optional override for console output only; blank = same as `LOG_LEVEL` | *(blank)* |
 
 All `.env` values are startup defaults only. Provider-specific settings (base URL, API key, model, temperature, concurrency) can be overridden at runtime via Admin Portal → Developer tab and are persisted in the DB.
 

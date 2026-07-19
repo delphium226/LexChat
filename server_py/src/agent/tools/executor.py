@@ -312,5 +312,5 @@ async def execute_worker_tool(
         logger.error(f"[Tool Error] {name}: {e.response.text}")
         return f"Error executing tool: {e.response.text}"
     except Exception as e:
-        logger.error(f"[Tool Error] {name}: {e}")
+        logger.error(f"[Tool Error] {name}: {e}", exc_info=True)
         return f"Error executing tool: {str(e)}"

@@ -788,7 +788,7 @@ async def execute_parliament_tool(
                             if n:
                                 logger.info(f"[Parliament] Attached {n} video deep link(s) for committee meeting {meeting_id}")
                     except Exception as exc:
-                        logger.warning(f"[Parliament] Video deep-link enrichment failed for committee {meeting_id}: {exc}")
+                        logger.warning(f"[Parliament] Video deep-link enrichment failed for committee {meeting_id}: {exc}", exc_info=True)
 
                 return json.dumps(parsed)
 
@@ -846,7 +846,7 @@ async def execute_parliament_tool(
                             if n:
                                 logger.info(f"[Parliament] Attached {n} video deep link(s) for meeting {meeting_id}")
                     except Exception as exc:
-                        logger.warning(f"[Parliament] Video deep-link enrichment failed for {meeting_id}: {exc}")
+                        logger.warning(f"[Parliament] Video deep-link enrichment failed for {meeting_id}: {exc}", exc_info=True)
 
                 return json.dumps(parsed)
 
@@ -857,6 +857,6 @@ async def execute_parliament_tool(
         logger.error(f"[Parliament Tool Error] {name}: {e.response.text}")
         return f"Error executing tool: {e.response.text}"
     except Exception as e:
-        logger.error(f"[Parliament Tool Error] {name}: {e}")
+        logger.error(f"[Parliament Tool Error] {name}: {e}", exc_info=True)
         return f"Error executing tool: {str(e)}"
 

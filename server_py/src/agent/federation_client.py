@@ -69,5 +69,5 @@ async def consult_peer(peer: PeerBot, question: str, depth: int) -> str:
         logger.error(f"[Federation] Peer {peer.peer_id} returned HTTP {e.response.status_code}")
         raise
     except Exception as e:
-        logger.error(f"[Federation] Failed to consult peer {peer.peer_id}: {e}")
+        logger.error(f"[Federation] Failed to consult peer {peer.peer_id}: {e}", exc_info=True)
         raise

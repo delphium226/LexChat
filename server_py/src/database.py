@@ -315,4 +315,4 @@ async def init_db() -> None:
 
         logger.info("[Database] Initialised successfully.")
     except Exception as e:
-        logger.error(f"[Database] Initialisation failed: {e}. The server will start, but database-dependent features will fail.")
+        logger.error(f"[Database] Initialisation failed: {e}. The server will start, but database-dependent features will fail.", exc_info=True)

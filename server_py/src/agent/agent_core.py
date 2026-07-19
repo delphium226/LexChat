@@ -325,7 +325,7 @@ async def process_user_request(
                     logger.info("[Learning] Injecting feedback context into System Prompt.")
                     system_content += f"\n\n{context_injection}"
         except Exception as e:
-            logger.error(f"[Learning] Failed to inject context: {e}")
+            logger.error(f"[Learning] Failed to inject context: {e}", exc_info=True)
 
     system_message = {"role": "system", "content": system_content}
 
@@ -341,7 +341,7 @@ async def process_user_request(
         try:
             peers = await load_peer_registry(db_session)
         except Exception as e:
-            logger.warning(f"[Federation] Could not load peer registry: {e}")
+            logger.warning(f"[Federation] Could not load peer registry: {e}", exc_info=True)
     peer_descriptions = build_peer_descriptions(peers)
     manager_tools = get_manager_tools(peer_descriptions)
 

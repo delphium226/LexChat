@@ -46,7 +46,7 @@ async def send_welcome_email(to: str, username: str, password: str) -> None:
             server.sendmail(email_user, to, msg.as_string())
         logger.info(f"[Email] Welcome email sent to {to}")
     except Exception as e:
-        logger.error(f"[Email] Failed to send welcome email to {to}: {e}")
+        logger.error(f"[Email] Failed to send welcome email to {to}: {e}", exc_info=True)
 
 
 async def send_password_reset_email(to: str, username: str, reset_token: str) -> None:
@@ -81,4 +81,4 @@ async def send_password_reset_email(to: str, username: str, reset_token: str) ->
             server.sendmail(email_user, to, msg.as_string())
         logger.info(f"[Email] Password reset email sent to {to}")
     except Exception as e:
-        logger.error(f"[Email] Failed to send reset email to {to}: {e}")
+        logger.error(f"[Email] Failed to send reset email to {to}: {e}", exc_info=True)

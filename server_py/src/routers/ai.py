@@ -122,7 +122,7 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
                 provider_config = await get_provider_config(_cfg_db, active_provider)
                 features = await _read_features(_cfg_db)
         except Exception as e:
-            logger.error(f"[AI] Provider resolution failed: {e}")
+            logger.error(f"[AI] Provider resolution failed: {e}", exc_info=True)
             yield f"data: {json.dumps({'type': 'error', 'error': 'Service temporarily unavailable. Please try again.'})}\n\n"
             return
 
@@ -284,7 +284,7 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
         except ConnectionError as e:
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
         except Exception as e:
-            logger.error(f"[AI] Chat error: {e}")
+            logger.error(f"[AI] Chat error: {e}", exc_info=True)
             error_msg = str(e)
             if "ECONNREFUSED" in error_msg or "ConnectError" in error_msg:
                 error_msg = "Agent Service (Ollama) is not reachable. Please ensure it is running."
@@ -337,7 +337,7 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
                             ))
                         await db_save.commit()
                 except Exception as save_err:
-                    logger.error(f"[AI] Failed to persist request timing: {save_err}")
+                    logger.error(f"[AI] Failed to persist request timing: {save_err}", exc_info=True)
 
     return StreamingResponse(
         event_stream(),
@@ -361,7 +361,7 @@ async def _load_doc_context(chat_id: int) -> str:
             )
             docs = rows.scalars().all()
     except Exception as e:
-        logger.error(f"[AI] Failed to load documents for chat {chat_id}: {e}")
+        logger.error(f"[AI] Failed to load documents for chat {chat_id}: {e}", exc_info=True)
         return ""
 
     if not docs:
@@ -400,7 +400,7 @@ async def _load_matter_context(chat_id: int) -> str:
             if matter is None:
                 return ""
     except Exception as e:
-        logger.error(f"[AI] Failed to load matter context for chat {chat_id}: {e}")
+        logger.error(f"[AI] Failed to load matter context for chat {chat_id}: {e}", exc_info=True)
         return ""
 
     parts = [f"Title: {matter.title}"]

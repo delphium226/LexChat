@@ -90,7 +90,7 @@ async def get_active_provider(db: AsyncSession) -> str:
             select(AppSetting).where(AppSetting.key == "active_provider")
         )
     except Exception as e:
-        logger.error(f"[ProviderFactory] Failed to read active_provider: {e}")
+        logger.error(f"[ProviderFactory] Failed to read active_provider: {e}", exc_info=True)
         raise
     setting = result.scalar_one_or_none()
     if setting and setting.value in _SUPPORTED_PROVIDERS:
@@ -129,7 +129,7 @@ async def get_provider_config(db: AsyncSession, provider: str) -> dict:
             db_config = json.loads(setting.value)
             config.update(db_config)
     except Exception as e:
-        logger.error(f"[ProviderFactory] Failed to read provider config for {provider}: {e}")
+        logger.error(f"[ProviderFactory] Failed to read provider config for {provider}: {e}", exc_info=True)
     config["_model_context_length"] = _resolve_model_context_length(provider, config)
     return config
 
