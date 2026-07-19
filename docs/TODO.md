@@ -391,7 +391,7 @@ Phases in priority order:
 Out of scope (decided): Anthropic cache_control live check stays dormant until
 an Anthropic model is configured; D5#3/A5 NO-GO stands; no fuzzy keying/TTLs.
 
-### D9. Logging improvements (reviewed + scoped 2026-07-19; PR A & PR B BUILT, PR C & PR D deferred)
+### D9. Logging improvements (reviewed + scoped 2026-07-19; PR A, PR B & PR D BUILT, PR C deferred, Item 6 deferred)
 Review of the backend logging strategy. **Full self-contained plan with per-item
 Problem/Change/Files/Verify and PR slicing: `docs/LOGGING_IMPROVEMENTS_PLAN.md`.**
 - **PR A — DONE 2026-07-19.** `LOG_LEVEL`/`CONSOLE_LOG_LEVEL` runtime level control
@@ -410,10 +410,19 @@ Problem/Change/Files/Verify and PR slicing: `docs/LOGGING_IMPROVEMENTS_PLAN.md`.
   helpers, redact at INFO, full text only at DEBUG. **Open decision for the deploying
   org:** whether query text may appear even at DEBUG. Record the decision in
   `CLAUDE.md` when built.
-- **PR D — DEFERRED (observability nice-to-haves), now Items 5 + 7b only.**
-  Correlation/request IDs across all loggers (Item 5, ContextVar + `logging.Filter`,
-  same pattern as the provider-config ContextVar); align/disable uvicorn's own access
-  logger to avoid duplicate access lines (Item 7b).
+- **PR D — DONE 2026-07-19 (Items 5 + 7b).**
+  Correlation/request IDs across all loggers (Item 5): new `utils/log_context.py`
+  (`request_id_var` ContextVar, default `-`, + `RequestIdFilter`); `[%(request_id)s]`
+  added to `LOG_FORMAT` with the filter attached inside both handler factories (so
+  every record has the attribute — guards `KeyError: 'request_id'`); the id is
+  minted/accepted (inbound `X-Request-ID`) and set/reset in the `log_requests`
+  middleware, and echoed on the response. Propagation verified through the endpoint's
+  `create_task` (ai.py:235 pattern) to `agent` lines — no signature changes, same
+  mechanism as the provider-config ContextVar. Align/disable uvicorn's access logger
+  (Item 7b): `--no-access-log` added to all three launch scripts, and `uvicorn.error`
+  adopted into the app handlers so startup/lifecycle errors reach `error.log`. Unit
+  tests in `tests/test_log_context.py`; 150 tests green. Backend-only (no dist
+  rebuild). Build plan: `docs/LOGGING_PR_D_PLAN.md`.
 - **Item 6 — DEFERRED separately (2026-07-19).** Optional JSON/structured file output
   for a SIEM (no new dependency; toggled by `LOG_FORMAT_JSON`). Split out of PR D and
   parked — build only if the deployment gains a central log aggregator. Depends on

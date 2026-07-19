@@ -94,7 +94,7 @@ echo    SSL certificates found. Running on HTTPS port 443.
 :mode_done
 
 set BOT_CONFIG_PATH=%~dp0..\bots\legislation\bot_config.json
-start "LexChat Backend" cmd /k "python -m uvicorn src.main:app --host 0.0.0.0 !SSL_ARGS!"
+start "LexChat Backend" cmd /k "python -m uvicorn src.main:app --host 0.0.0.0 --no-access-log !SSL_ARGS!"
 
 :: 3b. Start Nginx (only in --nginx mode)
 if !USE_NGINX!==0 goto :nginx_skip

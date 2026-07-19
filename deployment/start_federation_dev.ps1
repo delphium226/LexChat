@@ -79,7 +79,7 @@ foreach ($port in 8000, 8001) {
 # Write a small temp .cmd for each bot — avoids all ArgumentList quote-escaping issues.
 # BOT_CONFIG_PATH must be absolute because uvicorn CWD is server_py/.
 
-$legScript = "@echo off`r`ncd /d `"$serverDir`"`r`nset BOT_ID=legislation_bot`r`nset BOT_CONFIG_PATH=$legConfigPath`r`npython -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload`r`n"
+$legScript = "@echo off`r`ncd /d `"$serverDir`"`r`nset BOT_ID=legislation_bot`r`nset BOT_CONFIG_PATH=$legConfigPath`r`npython -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --no-access-log --reload`r`n"
 $legFile = "$env:TEMP\run_legislation_bot.cmd"
 [System.IO.File]::WriteAllText($legFile, $legScript, [System.Text.Encoding]::ASCII)
 Start-Process cmd.exe -ArgumentList @('/k', $legFile) -WindowStyle Normal
@@ -96,7 +96,7 @@ if (Test-Path $parEnvFile) {
 
 # Load .env first, then override BOT_ID and BOT_CONFIG_PATH with absolute values so
 # the relative path in bots/parliament/.env does not win.
-$parScript = "@echo off`r`ncd /d `"$serverDir`"`r`n$($parEnvExtra)set BOT_ID=parliament_bot`r`nset BOT_CONFIG_PATH=$parConfigPath`r`npython -m uvicorn src.main:app --host 0.0.0.0 --port 8001 --reload`r`n"
+$parScript = "@echo off`r`ncd /d `"$serverDir`"`r`n$($parEnvExtra)set BOT_ID=parliament_bot`r`nset BOT_CONFIG_PATH=$parConfigPath`r`npython -m uvicorn src.main:app --host 0.0.0.0 --port 8001 --no-access-log --reload`r`n"
 $parFile = "$env:TEMP\run_parliament_bot.cmd"
 [System.IO.File]::WriteAllText($parFile, $parScript, [System.Text.Encoding]::ASCII)
 Start-Process cmd.exe -ArgumentList @('/k', $parFile) -WindowStyle Normal

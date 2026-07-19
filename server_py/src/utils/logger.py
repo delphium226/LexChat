@@ -5,10 +5,12 @@ import os
 import sys
 from logging.handlers import TimedRotatingFileHandler
 
+from .log_context import RequestIdFilter
+
 LOG_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 
-LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s [%(request_id)s]: %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -87,6 +89,7 @@ def _create_file_handler(filename: str, level=logging.INFO) -> _WindowsSafeRotat
     )
     handler.setLevel(level)
     handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT))
+    handler.addFilter(RequestIdFilter())
     handler.suffix = "%Y-%m-%d"
     return handler
 
@@ -95,6 +98,7 @@ def _create_console_handler(level=logging.INFO) -> logging.StreamHandler:
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(level)
     handler.setFormatter(_ColourFormatter(LOG_FORMAT, datefmt=DATE_FORMAT))
+    handler.addFilter(RequestIdFilter())
     return handler
 
 
@@ -160,6 +164,19 @@ def setup_logging(bot_id: str = ""):
     sptv_logger.addHandler(_create_file_handler(f"{prefix}sptv.log", base_level))
     sptv_logger.addHandler(_create_file_handler(f"{prefix}error.log", logging.ERROR))
     sptv_logger.addHandler(_create_console_handler(console_level))
+
+    # Adopt uvicorn's own error logger (startup/shutdown/lifecycle errors) into our
+    # handler set so they land in app.log + the shared error.log rather than only on
+    # uvicorn's default console handler. uvicorn.access is silenced at the process
+    # level via --no-access-log in the launch scripts (our http middleware covers it),
+    # so it is left untouched here.
+    uvicorn_error = logging.getLogger("uvicorn.error")
+    uvicorn_error.handlers.clear()          # drop uvicorn's default handler
+    uvicorn_error.setLevel(base_level)
+    uvicorn_error.addHandler(_create_file_handler(f"{prefix}app.log", base_level))
+    uvicorn_error.addHandler(_create_file_handler(f"{prefix}error.log", logging.ERROR))
+    uvicorn_error.addHandler(_create_console_handler(console_level))
+    uvicorn_error.propagate = False         # avoid double emit if root ever gets handlers
 
     # Suppress noisy third-party loggers
     logging.getLogger("httpx").setLevel(logging.WARNING)

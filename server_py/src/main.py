@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import time
+import uuid
 import asyncio
 from contextlib import asynccontextmanager
 
@@ -24,6 +25,7 @@ from .services.parliament_crawler import (
     backfill_sessions,
 )
 from .utils.logger import setup_logging
+from .utils.log_context import request_id_var
 
 # Initialise structured logging before anything else
 setup_logging(bot_id=settings.bot_id)
@@ -149,11 +151,19 @@ app.add_middleware(
 # HTTP request logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
+    # Accept an inbound X-Request-ID (reverse proxy / federation caller) or mint one.
+    # Setting the ContextVar here propagates the id to every coroutine awaited from
+    # this handler (agent pipeline, summarisation, deep-research steps), so all log
+    # lines for one request share it. reset(token) in finally prevents leaking the id
+    # across reused worker tasks.
+    rid = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:12]
+    token = request_id_var.set(rid)
     start = time.time()
     status = 500  # default if call_next raises before returning a response
     try:
         response = await call_next(request)
         status = response.status_code
+        response.headers["X-Request-ID"] = rid  # echo for client correlation
         return response
     finally:
         # try/finally so an unhandled exception in call_next is still logged
@@ -166,6 +176,7 @@ async def log_requests(request: Request, call_next):
         else:
             log = http_logger.info
         log(f"{request.method} {request.url.path} {status} {duration_ms}ms")
+        request_id_var.reset(token)
 
 
 # Routers

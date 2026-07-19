@@ -88,12 +88,12 @@ $certFile = "$PSScriptRoot\certs\lexchat.crt"
 $keyFile  = "$PSScriptRoot\certs\lexchat.key"
 if ((Test-Path $certFile) -and (Test-Path $keyFile)) {
     $uvicornArgs = @("-m", "uvicorn", "src.main:app", "--host", "0.0.0.0",
-                     "--port", "443",
+                     "--port", "443", "--no-access-log",
                      "--ssl-certfile", $certFile,
                      "--ssl-keyfile",  $keyFile)
     Log "SSL certs found — starting on HTTPS port 443."
 } else {
-    $uvicornArgs = @("-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000")
+    $uvicornArgs = @("-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log")
     Log "No SSL certs — starting on HTTP port 8000."
 }
 
