@@ -295,17 +295,37 @@ class ActivityLogEntry(BaseModel):
 async def get_activity_log(
     days: str = "7",
     limit: int = 500,
+    event_types: str = "",
+    username: str = "",
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return a unified activity feed for the admin activity log screen."""
+    """Return a unified activity feed for the admin activity log screen.
+
+    Event-type and user filtering are applied in SQL (in the outer query,
+    before the LIMIT) so a narrowed view does not lose older records to the
+    row cap — the LIMIT applies to the already-filtered set.
+    """
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin access required.")
 
-    outer_date_filter = ""
+    params: dict = {"limit": limit}
+    conditions: list[str] = []
+
     if days != "all":
         days_num = int(days) if days.isdigit() else 7
-        outer_date_filter = f"WHERE created_at >= NOW() - INTERVAL '{days_num} days'"
+        conditions.append(f"created_at >= NOW() - INTERVAL '{days_num} days'")
+
+    types = [t.strip() for t in event_types.split(",") if t.strip()]
+    if types:
+        conditions.append("event_type = ANY(:event_types)")
+        params["event_types"] = types
+
+    if username:
+        conditions.append("username = :username")
+        params["username"] = username
+
+    outer_date_filter = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
     query = text(f"""
         SELECT event_type, username, description, created_at FROM (
@@ -374,7 +394,7 @@ async def get_activity_log(
         LIMIT :limit
     """)
 
-    result = await db.execute(query, {"limit": limit})
+    result = await db.execute(query, params)
     rows = result.mappings().all()
     return [
         {

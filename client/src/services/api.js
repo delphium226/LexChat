@@ -453,10 +453,15 @@ export const saveFeatures = async features => {
   return response.data;
 };
 
-export const getActivityLog = async (days = '7', limit = 500) => {
-  const response = await axios.get(`${API_URL}/developer/activity-log`, {
-    params: { days, limit },
-  });
+export const getActivityLog = async (days = '7', limit = 500, eventTypes = [], username = '') => {
+  const params = { days, limit };
+  if (Array.isArray(eventTypes) && eventTypes.length > 0) {
+    params.event_types = eventTypes.join(',');
+  }
+  if (username) {
+    params.username = username;
+  }
+  const response = await axios.get(`${API_URL}/developer/activity-log`, { params });
   return response.data;
 };
 

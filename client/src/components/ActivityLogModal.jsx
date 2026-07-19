@@ -67,6 +67,7 @@ function fmtTimestamp(iso) {
 
 export default function ActivityLogModal({ open, onClose }) {
   const [entries, setEntries] = useState([]);
+  const [userOptions, setUserOptions] = useState([]);
   const [days, setDays] = useState('7');
   const [selectedTypes, setSelectedTypes] = useState(loadSavedTypes);
   const [selectedUser, setSelectedUser] = useState('');
@@ -92,7 +93,7 @@ export default function ActivityLogModal({ open, onClose }) {
     setLoading(true);
     setError(null);
     try {
-      const data = await getActivityLog(days);
+      const data = await getActivityLog(days, 500, selectedTypes, selectedUser);
       setEntries(Array.isArray(data) ? data : []);
       setLastRefreshed(new Date());
     } catch (err) {
@@ -100,7 +101,7 @@ export default function ActivityLogModal({ open, onClose }) {
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [days, selectedTypes, selectedUser]);
 
   useEffect(() => {
     if (!open) return;
@@ -108,6 +109,24 @@ export default function ActivityLogModal({ open, onClose }) {
     const interval = setInterval(fetchLog, 10 * 60 * 1000);
     return () => clearInterval(interval);
   }, [open, fetchLog]);
+
+  // Populate the user dropdown from an unfiltered fetch (all types, all users)
+  // so selecting a user never collapses the list of choices. Re-runs only when
+  // the period changes.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    getActivityLog(days)
+      .then(data => {
+        if (cancelled) return;
+        const users = [...new Set((Array.isArray(data) ? data : []).map(e => e.username).filter(Boolean))].sort();
+        setUserOptions(users);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open, days]);
 
   // Close on Escape
   useEffect(() => {
@@ -121,10 +140,9 @@ export default function ActivityLogModal({ open, onClose }) {
 
   if (!open) return null;
 
-  const uniqueUsers = [...new Set(entries.map(e => e.username).filter(Boolean))].sort();
-  const filteredEntries = entries.filter(
-    e => selectedTypes.includes(e.event_type) && (selectedUser === '' || e.username === selectedUser)
-  );
+  // Filtering by event type and user is done server-side (in SQL), so `entries`
+  // is already the filtered set — the LIMIT applies after filtering, not before.
+  const filteredEntries = entries;
 
   return (
     <Modal onClose={onClose} className="w-[90vw] h-[90vh] flex flex-col">
@@ -210,7 +228,7 @@ export default function ActivityLogModal({ open, onClose }) {
               className="font-ui text-xs text-ink-800 bg-paper border border-ink-200 rounded-md px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               <option value="">All users</option>
-              {uniqueUsers.map(u => (
+              {userOptions.map(u => (
                 <option key={u} value={u}>
                   {u}
                 </option>
