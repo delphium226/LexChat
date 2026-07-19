@@ -262,12 +262,10 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_matter_notes_matter ON matter_notes (matter_id, created_at)",
             "CREATE INDEX IF NOT EXISTS idx_documents_chat ON documents (chat_id)",
             "CREATE INDEX IF NOT EXISTS idx_activity_log_created_at ON activity_log (created_at)",
-            "CREATE INDEX IF NOT EXISTS idx_sp_items_meeting_id ON sp_committee_items (meeting_id)",
             "CREATE INDEX IF NOT EXISTS idx_sp_items_committee_code ON sp_committee_items (committee_code)",
             "CREATE INDEX IF NOT EXISTS idx_sp_items_committee_name ON sp_committee_items (committee_name)",
             "CREATE INDEX IF NOT EXISTS idx_sp_items_meeting_date ON sp_committee_items (meeting_date)",
             "CREATE INDEX IF NOT EXISTS idx_sp_items_full_text ON sp_committee_items USING GIN (to_tsvector('english', coalesce(full_text,'')))",
-            "CREATE INDEX IF NOT EXISTS idx_sp_plenary_meeting_id ON sp_plenary_items (meeting_id)",
             "CREATE INDEX IF NOT EXISTS idx_sp_plenary_committee_code ON sp_plenary_items (committee_code)",
             "CREATE INDEX IF NOT EXISTS idx_sp_plenary_committee_name ON sp_plenary_items (committee_name)",
             "CREATE INDEX IF NOT EXISTS idx_sp_plenary_meeting_date ON sp_plenary_items (meeting_date)",
@@ -277,6 +275,11 @@ async def init_db() -> None:
             # One-shot cleanup (D8): this index duplicated the leading column of
             # uq_local_prompt_cache_key (content_hash, query_hash).
             "DROP INDEX IF EXISTS ix_local_prompt_cache_content_hash",
+            # One-shot cleanup: these single-column meeting_id indexes duplicated
+            # the leading column of uq_sp_meeting_iob / uq_sp_plenary_meeting_iob
+            # (meeting_id, iob_id), which serves every (meeting_id, iob_id) lookup.
+            "DROP INDEX IF EXISTS idx_sp_items_meeting_id",
+            "DROP INDEX IF EXISTS idx_sp_plenary_meeting_id",
         ]
         async with engine.begin() as conn:
             for stmt in index_statements:

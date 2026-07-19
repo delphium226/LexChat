@@ -267,7 +267,9 @@ class SpCommitteeItem(Base):
     __tablename__ = "sp_committee_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    meeting_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    # No standalone index: the uq_sp_meeting_iob (meeting_id, iob_id) unique
+    # constraint's leading column already covers all meeting_id lookups.
+    meeting_id: Mapped[str] = mapped_column(String(32), nullable=False)
     slug: Mapped[str] = mapped_column(String(128), nullable=False)
     iob_id: Mapped[str] = mapped_column(String(32), nullable=False)
     committee_code: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
@@ -288,7 +290,9 @@ class SpPlenaryItem(Base):
     __tablename__ = "sp_plenary_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    meeting_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    # No standalone index: the uq_sp_plenary_meeting_iob (meeting_id, iob_id)
+    # unique constraint's leading column already covers all meeting_id lookups.
+    meeting_id: Mapped[str] = mapped_column(String(32), nullable=False)
     slug: Mapped[str] = mapped_column(String(128), nullable=False)
     iob_id: Mapped[str] = mapped_column(String(32), nullable=False)
     committee_code: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
