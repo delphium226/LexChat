@@ -28,16 +28,21 @@ export function useBotIdentity(loading) {
           });
           document.title = info.name;
         }
-        // Swap favicon to bot logo; fall back to emoji canvas; leave as /favicon.svg if neither
+        // Swap favicon to match the logo the app shows everywhere else — the
+        // emoji (🏛️/⚖). Fall back to the SVG logo file, then to /favicon.svg.
         const favicon = document.querySelector("link[rel='icon']");
         const emoji = info?.logo_emoji || null;
-        const img = new Image();
-        img.onload = () => {
-          if (favicon) favicon.href = '/api/bot/logo';
-          setBotLogoUrl('/api/bot/logo');
+
+        const useSvgLogo = () => {
+          const img = new Image();
+          img.onload = () => {
+            if (favicon) favicon.href = '/api/bot/logo';
+            setBotLogoUrl('/api/bot/logo');
+          };
+          img.src = '/api/bot/logo';
         };
-        img.onerror = () => {
-          if (!emoji) return;
+
+        if (emoji) {
           const canvas = document.createElement('canvas');
           canvas.width = 32;
           canvas.height = 32;
@@ -49,8 +54,9 @@ export function useBotIdentity(loading) {
           const dataUrl = canvas.toDataURL('image/png');
           if (favicon) favicon.href = dataUrl;
           setBotLogoUrl(dataUrl);
-        };
-        img.src = '/api/bot/logo';
+        } else {
+          useSvgLogo();
+        }
       })
       .catch(err => console.warn('Failed to fetch bot info:', err));
   }, []);
