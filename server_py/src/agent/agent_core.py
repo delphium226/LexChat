@@ -396,11 +396,12 @@ async def process_user_request(
                 return f"Error: Unknown peer '{peer_id}'"
             try:
                 consult_id = uuid.uuid4().hex[:8]
+                consult_label = f'Querying {peer.name} - "{question}"'
                 if on_chunk:
-                    await call_chunk(on_chunk, {"type": "tool_start", "tool": f"Peer: {peer.name}", "id": consult_id})
+                    await call_chunk(on_chunk, {"type": "tool_start", "tool": consult_label, "id": consult_id})
                 answer = await consult_peer(peer, question, depth=depth + 1)
                 if on_chunk:
-                    await call_chunk(on_chunk, {"type": "tool_end", "tool": f"Peer: {peer.name}", "id": consult_id, "result": "Peer consult complete"})
+                    await call_chunk(on_chunk, {"type": "tool_end", "tool": consult_label, "id": consult_id, "result": "Peer consult complete"})
                 return f"[Peer Bot: {peer.name}]\n{answer}"
             except Exception as e:
                 return f"Error consulting peer '{peer_id}': {e}"
