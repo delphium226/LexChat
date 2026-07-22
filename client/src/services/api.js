@@ -302,6 +302,11 @@ export const resetDatabase = async () => {
   return response.data;
 };
 
+export const exportUsers = async () => {
+  const response = await axios.get(`${API_URL}/developer/users-export`);
+  return response.data;
+};
+
 export const clearUsageData = async () => {
   const response = await axios.post(`${API_URL}/developer/clear-usage`);
   return response.data;

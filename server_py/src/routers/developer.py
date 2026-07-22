@@ -185,6 +185,28 @@ async def clear_usage_data(db: AsyncSession = Depends(get_db)):
     }
 
 
+@admin_router.get("/users-export")
+async def export_users(db: AsyncSession = Depends(get_db)):
+    """Return all user accounts as a CSV string (name, email, role) for copy/paste."""
+    result = await db.execute(select(User).order_by(User.username))
+    users = result.scalars().all()
+
+    def _csv_field(value) -> str:
+        s = "" if value is None else str(value)
+        if any(ch in s for ch in [',', '"', '\n', '\r']):
+            return '"' + s.replace('"', '""') + '"'
+        return s
+
+    lines = ["name,email,role"]
+    for u in users:
+        lines.append(
+            ",".join([_csv_field(u.username), _csv_field(u.email), _csv_field(u.role)])
+        )
+    csv = "\r\n".join(lines)
+
+    return {"csv": csv, "count": len(users)}
+
+
 @admin_router.post("/clear-performance")
 async def clear_performance_data(db: AsyncSession = Depends(get_db)):
     """Delete all request timing records."""

@@ -9,6 +9,7 @@ import {
   getEfficiencyStats,
   getUsageStats,
   clearUsageData,
+  exportUsers,
   clearPerformanceData,
   clearFeedbackData,
   getLatestHealthStatus,
@@ -126,6 +127,12 @@ const AdminPortal = ({ currentUser }) => {
   });
   const [isSavingFeatures, setIsSavingFeatures] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
+  const [showUserExport, setShowUserExport] = useState(false);
+  const [userExportCsv, setUserExportCsv] = useState('');
+  const [userExportCount, setUserExportCount] = useState(0);
+  const [userExportLoading, setUserExportLoading] = useState(false);
+  const [userExportError, setUserExportError] = useState('');
+  const [userExportCopied, setUserExportCopied] = useState(false);
 
   // --- FEDERATION STATE ---
   const [peers, setPeers] = useState([]);
@@ -1220,6 +1227,34 @@ const AdminPortal = ({ currentUser }) => {
               </button>
             </div>
 
+            {/* User Export */}
+            <div className="bg-paper p-6 rounded-lg shadow">
+              <h2 className="font-ui text-base font-semibold text-ink-900 mb-1">Export Users</h2>
+              <p className="font-ui text-sm text-ink-500 mb-4">
+                Generate a CSV list of all user accounts (name, email, role) to copy and paste.
+              </p>
+              <button
+                onClick={async () => {
+                  setShowUserExport(true);
+                  setUserExportLoading(true);
+                  setUserExportError('');
+                  setUserExportCopied(false);
+                  try {
+                    const res = await exportUsers();
+                    setUserExportCsv(res.csv || '');
+                    setUserExportCount(res.count || 0);
+                  } catch (err) {
+                    setUserExportError('Error exporting users: ' + err.message);
+                  } finally {
+                    setUserExportLoading(false);
+                  }
+                }}
+                className="bg-brand hover:bg-brand-hover text-white font-ui text-sm font-medium rounded-md px-4 py-2 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
+              >
+                Export Users (CSV)
+              </button>
+            </div>
+
             <div className="bg-paper p-6 rounded-lg shadow border border-red-200 dark:border-red-900">
               <h2 className="text-lg font-bold mb-4 text-red-600 dark:text-red-400">Danger Zone</h2>
               <p className="mb-2 text-sm text-ink-600">
@@ -2097,6 +2132,71 @@ const AdminPortal = ({ currentUser }) => {
       </div>
 
       <ActivityLogModal open={showActivityLog} onClose={() => setShowActivityLog(false)} />
+
+      {showUserExport && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setShowUserExport(false)}
+        >
+          <div
+            className="bg-paper rounded-lg shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-5 border-b border-ink-200">
+              <div>
+                <h2 className="font-ui text-base font-semibold text-ink-900">User Export</h2>
+                <p className="font-ui text-sm text-ink-500">
+                  {userExportLoading
+                    ? 'Loading…'
+                    : `${userExportCount} user${userExportCount === 1 ? '' : 's'} — CSV (name, email, role)`}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowUserExport(false)}
+                className="size-[30px] flex items-center justify-center rounded-md text-ink-500 hover:bg-ink-100 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-accent"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-5 overflow-auto">
+              {userExportError ? (
+                <p className="font-ui text-sm text-danger">{userExportError}</p>
+              ) : (
+                <textarea
+                  readOnly
+                  value={userExportLoading ? '' : userExportCsv}
+                  onFocus={e => e.target.select()}
+                  className="w-full h-72 font-mono text-xs bg-ink-50 border border-ink-200 rounded-md p-3 text-ink-900 resize-none focus-visible:ring-2 focus-visible:ring-accent"
+                />
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-3 p-5 border-t border-ink-200">
+              <button
+                onClick={() => setShowUserExport(false)}
+                className="bg-paper border border-ink-200 text-ink-900 font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-ink-50 focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                Close
+              </button>
+              <button
+                disabled={userExportLoading || !userExportCsv}
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(userExportCsv);
+                    setUserExportCopied(true);
+                    setTimeout(() => setUserExportCopied(false), 2000);
+                  } catch {
+                    // Clipboard API unavailable — user can still select the text manually.
+                  }
+                }}
+                className="bg-brand hover:bg-brand-hover text-white font-ui text-sm font-medium rounded-md px-4 py-2 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {userExportCopied ? 'Copied!' : 'Copy to clipboard'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
