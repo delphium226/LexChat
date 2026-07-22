@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import random
 import time
 import uuid
 from typing import Callable, Optional
@@ -22,6 +23,90 @@ from .lex import (
 )
 
 logger = logging.getLogger("agent")
+
+# -----------------------------------------------------------------------
+# Retry / backoff for the (rate-limited) LEX API
+# -----------------------------------------------------------------------
+# The LEX API is rate limited and the deployment shares a single outbound IP
+# across all users, so under load a burst of worker calls can draw a 429. Without
+# a retry the 429 surfaces as raise_for_status() -> a dropped retrieval -> a
+# silently incomplete answer. These retryable statuses get a bounded exponential
+# backoff (honouring Retry-After); everything else returns to the caller unchanged.
+_RETRY_STATUS = {429, 502, 503, 504}
+_MAX_RETRIES = 3            # up to 3 retries => 4 attempts total
+_BASE_BACKOFF_S = 0.5       # computed backoff: 0.5s, 1s, 2s (+ jitter), capped
+_MAX_BACKOFF_S = 8.0        # cap on computed exponential backoff
+_MAX_RETRY_AFTER_S = 30.0   # cap on an honoured server Retry-After value
+
+
+def _retry_after_seconds(resp: httpx.Response) -> Optional[float]:
+    """Parse a Retry-After header (delta-seconds or HTTP-date) into seconds, if present."""
+    raw = (resp.headers.get("Retry-After") or "").strip()
+    if not raw:
+        return None
+    if raw.isdigit():
+        return float(raw)
+    try:
+        from datetime import datetime, timezone
+        from email.utils import parsedate_to_datetime
+        dt = parsedate_to_datetime(raw)
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return max(0.0, (dt - datetime.now(timezone.utc)).total_seconds())
+    except Exception:
+        return None
+
+
+def _backoff_delay(attempt: int) -> float:
+    """Exponential backoff for the given 0-based attempt, capped, with jitter."""
+    delay = min(_BASE_BACKOFF_S * (2 ** attempt), _MAX_BACKOFF_S)
+    return delay + random.uniform(0, delay * 0.25)
+
+
+async def _request_with_retry(
+    client: httpx.AsyncClient, method: str, url: str, *, name: str = "", **kwargs
+) -> httpx.Response:
+    """Issue an httpx request with bounded backoff on 429 / transient 5xx.
+
+    Honours Retry-After on rate-limit responses; falls back to exponential backoff
+    otherwise. Network-level errors (timeouts, transport errors) are retried too.
+    Returns the final response — the caller still handles non-retryable statuses
+    (e.g. the case-law 400) and calls raise_for_status() as before. Retries are
+    exhausted quietly (the last response/exception is returned/raised) so behaviour
+    on a persistent failure is identical to today, just later.
+    """
+    attempt = 0
+    while True:
+        try:
+            resp = await client.request(method, url, **kwargs)
+        except (httpx.TimeoutException, httpx.TransportError) as e:
+            if attempt >= _MAX_RETRIES:
+                raise
+            delay = _backoff_delay(attempt)
+            logger.warning(
+                f"[LEX Retry] {name or url} network error ({e!r}); "
+                f"retry {attempt + 1}/{_MAX_RETRIES} in {delay:.1f}s"
+            )
+            await asyncio.sleep(delay)
+            attempt += 1
+            continue
+
+        if resp.status_code in _RETRY_STATUS and attempt < _MAX_RETRIES:
+            ra = _retry_after_seconds(resp)
+            delay = min(ra, _MAX_RETRY_AFTER_S) if ra is not None else _backoff_delay(attempt)
+            logger.warning(
+                f"[LEX Retry] {name or url} HTTP {resp.status_code}; "
+                f"retry {attempt + 1}/{_MAX_RETRIES} in {delay:.1f}s"
+                + (" (Retry-After)" if ra is not None else "")
+            )
+            await asyncio.sleep(delay)
+            attempt += 1
+            continue
+
+        return resp
+
 
 # -----------------------------------------------------------------------
 # Tool execution (LEX API client)
@@ -82,7 +167,7 @@ async def execute_worker_tool(
                 })
 
                 t0 = time.perf_counter()
-                resp = await client.post(url, json=payload)
+                resp = await _request_with_retry(client, "POST", url, name=name, json=payload)
                 elapsed_ms = (time.perf_counter() - t0) * 1000
 
                 if timing_collector:
@@ -152,7 +237,7 @@ async def execute_worker_tool(
                 })
 
                 t0 = time.perf_counter()
-                resp = await client.post(url, json=payload)
+                resp = await _request_with_retry(client, "POST", url, name=name, json=payload)
                 elapsed_ms = (time.perf_counter() - t0) * 1000
 
                 if timing_collector:
@@ -188,7 +273,7 @@ async def execute_worker_tool(
                 })
 
                 t0 = time.perf_counter()
-                resp = await client.post(url, json=payload)
+                resp = await _request_with_retry(client, "POST", url, name=name, json=payload)
                 elapsed_ms = (time.perf_counter() - t0) * 1000
 
                 if timing_collector:

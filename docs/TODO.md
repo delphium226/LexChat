@@ -54,7 +54,7 @@ question). Same philosophy as the Phase-2 nudges / search budget: code enforceme
 prompt. Touches the SSE streaming path in `chat_loop` — land after A3 exists so
 regressions are measurable. Supersedes A4.
 
-### A2. Appeals nudge on case-law search results
+### A2. Appeals nudge on case-law search results — DONE 2026-07-22
 **Problem:** retrieving the appellate decision of a case is search luck — some L31
 runs got only the first-instance *Coulthard* [2024] EWHC 3252 (Admin) and missed
 [2025] EWCA Civ 1671. The prompt rule (fb88b41) is soft.
@@ -63,6 +63,22 @@ slimmed, detect citations with matching party names across court levels (EWHC �
 and append `[NOTE: an appellate decision of this case is in the results — retrieve
 it]` to the tool result.
 **Home:** `agent/tools/caselaw.py` (slimming) + `agent_shared.py` (nudge injection).
+
+**Done 2026-07-22:** pure helper `detect_appellate_decisions(results)` in
+`caselaw.py` — ranks each result by court (`_COURT_RANK`: EWHC/CSOH/UKUT=2,
+EWCA/CSIH/NICA=3, UKSC/UKPC=4) and flags any appellate-court result that shares a
+*distinctive* party token with a lower-court result. Distinctiveness = alphabetic
+token ≥4 chars, minus an institutional/department stopword set (so unrelated JRs
+against the same "Secretary of State … Home Department" don't link) and minus tokens
+appearing in >3 results. Matches on both party sides, so it survives party-order
+flips on appeal. Wired into the existing `search_case_law` `n>0` branch in
+`agent_shared.py` as an appended `[NOTE — APPELLATE DECISION PRESENT: …]` nudge
+(only when both levels are in the result set — the real L31 case). 6 unit tests in
+`test_caselaw_parsers.py` (Coulthard EWHC→EWCA, Miller EWCA→UKSC, boilerplate
+false-positive guard, same-level guard, first-instance-only, no-url). 156 tests green.
+Backend-only, no dist rebuild. Live single-query verification against the National
+Archives still worth doing once a provider key/session is handy, but the logic is
+deterministic (pure function + string append) and fully unit-covered.
 
 ### A3. Golden-question eval harness
 **Problem:** variance is eyeballed from single runs; format/citation compliance needs
@@ -73,17 +89,64 @@ and automatic-fail conditions, emit CSV with per-question grade spread. Publishe
 metric: % A/B, % D separately (per the rubric in the golden-question files).
 Reuses the SSE parsing from the 2026-07-15 test runs.
 
-### A4. Worker report structure validation + one reformat retry
+### A4. Worker report structure validation + one reformat retry — DONE 2026-07-22
 Cheaper mitigation for A1's problem: after the Worker returns, check the report has
 the five section headers and ≥1 link under References; if not, issue ONE follow-up
 call ("reformat your findings into the required structure; do not redo research") —
 no tools re-run. Skip if A1 lands first.
+
+**Done 2026-07-22 (A1 not yet built, so A4 is the active mitigation):** in
+`run_worker_agent` (`agent_core.py`), after the worker chat loop and BEFORE source
+filtering (so the filter sees the reformatted content). `_report_needs_reformat`
+is a high-precision structural check (avoids wasting the retry on well-formed
+reports): fails only when the report has <2 recognisable section headers (flat
+blob — the observed regression), OR has no References section, OR retrieved sources
+but cites no link. A source-less "nothing found" answer is NOT required to carry a
+link. `_reformat_worker_report` issues one no-tools `chat_loop_fn` call (empty tools
+list) with a reformat-only system prompt built from the mode's required section
+labels (`_REPORT_SECTIONS`, mirroring each worker prompt's OUTPUT STRUCTURE) — adds
+NO new content, pure reorganise; fail-soft (any error keeps the original). Skipped
+entirely in conversational chat mode (deliberately unstructured). Header detection
+(`_extract_section_headers`) handles ATX (`## Foo`) and numbered/bold labels
+(`1. **Foo:**`). 11 unit tests in `test_worker_report_structure.py` (pure-check
+cases + retry-wiring integration via a stub chat_loop: malformed→1 reformat with
+empty tools, well-formed→no retry, conversational→skipped). 167 tests green.
+Backend-only, no dist rebuild.
 
 ### A5. LEX / case-law API response cache (pre-existing idea, re-scoped)
 Response cache keyed on (endpoint, payload) with TTL; legislation text is highly
 cacheable. Doesn't reduce variance for novel queries but makes eval re-runs (A3)
 cheaper and more repeatable. LLM time dominates ~30:1, so this is an eval-cost play,
 not a latency play. See also D5 (token-cost caching) — this is D5's sub-item 3.
+
+**Rate-limit reframing (2026-07-22):** the LLM:API latency argument was measured at
+low concurrency and misses the real driver — the LEX API is **rate limited** and the
+deployment shares a single outbound IP across ~200 users. None of the existing cache
+layers reduce cross-user LEX *call volume* (tool memo is per-request; the local
+prompt cache D7 keys on the hash of the raw result, so it must fetch from LEX first —
+it saves summarisation, not the API call). So A5 is the only layer that would cut
+call volume and keep the shared IP under the ceiling. Moves A5 from NO-GO toward a
+conditional GO as a **throughput** play — but still gated on knowing the actual limit
+(req/s, per-IP vs per-key; not documented in-repo) and expected peak concurrency.
+The cheaper, higher-priority companion fix (LEX backoff, below) is now done.
+
+### A5a. LEX API backoff + Retry-After retry — DONE 2026-07-22
+The three LEX POST endpoints (`search_legislation`, `search_legislation_sections`,
+`get_legislation_text` in `agent/tools/executor.py`) went straight to
+`raise_for_status()`, so a 429 under load became a dropped retrieval → a silently
+incomplete answer (a correctness bug, independent of whether A5 is built). Added
+`_request_with_retry` (+ `_retry_after_seconds`, `_backoff_delay`): retries 429 and
+transient 5xx (502/503/504) and network timeouts/transport errors with bounded
+exponential backoff (0.5→1→2s, +jitter, cap 8s; up to 3 retries / 4 attempts),
+honouring `Retry-After` capped at 30s. Non-retryable statuses (e.g. the case-law 400)
+and exhausted retries return unchanged, so persistent-failure behaviour matches today
+(just later). Case-law/National-Archives GETs left untouched (different host, not the
+rate-limited concern — trivial to extend later). The per-call `record_lex_api_call`
+timing now spans retries+backoff, so rate-limit pain shows up in `lex_api_total_ms`
+rather than hiding. 10 unit tests (`test_lex_retry.py`) with an httpx MockTransport +
+stubbed sleep (429→200 honours Retry-After, transient 503, persistent 429 exhausts to
+4 attempts, non-retryable 400 passes through, network-error retry, Retry-After cap).
+177 tests green. Backend-only, no dist rebuild.
 
 ---
 
