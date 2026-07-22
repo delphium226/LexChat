@@ -134,6 +134,19 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, setChatMode, setResearchMode]);
 
+  // If an admin disables the user's active chat mode, fall back to Conversational
+  // (always available) so the mode selector never sits on a hidden option.
+  useEffect(() => {
+    if (!user) return;
+    const disabled =
+      (chatMode === 'research' && !features.research_mode_enabled) ||
+      (chatMode === 'deep_research' && !features.deep_research_mode_enabled);
+    if (disabled) {
+      setChatMode('conversational');
+      updatePreferences({ chat_mode: 'conversational' }).catch(() => {});
+    }
+  }, [user, chatMode, features.research_mode_enabled, features.deep_research_mode_enabled, setChatMode]);
+
   // Weekly feedback — show banner once per week, button whenever survey not yet submitted this week.
   // Uses a ref (not state) for the checked flag so setting it doesn't trigger
   // a re-render that would cancel the timer via effect cleanup.

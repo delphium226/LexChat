@@ -181,8 +181,8 @@ export default function Sidebar({
               }}
             >
               <option value="conversational">Conversational</option>
-              <option value="research">Research</option>
-              <option value="deep_research">Deep Research</option>
+              {features.research_mode_enabled && <option value="research">Research</option>}
+              {features.deep_research_mode_enabled && <option value="deep_research">Deep Research</option>}
             </select>
           </div>
 

@@ -9,7 +9,13 @@ import { getFeatures, getMatters } from '../services/api';
 //
 // Destructured to the same names the JSX already used, so no call sites change.
 export function useMatters(user, currentChatId) {
-  const [features, setFeatures] = useState({ matters_enabled: true });
+  // Default new flags to true so mode options don't flash off before the flags
+  // load; the API response replaces this whole object on login.
+  const [features, setFeatures] = useState({
+    matters_enabled: true,
+    research_mode_enabled: true,
+    deep_research_mode_enabled: true,
+  });
   const [matters, setMatters] = useState([]);
   const [closedMatters, setClosedMatters] = useState([]);
   const [showClosedMatters, setShowClosedMatters] = useState(false);

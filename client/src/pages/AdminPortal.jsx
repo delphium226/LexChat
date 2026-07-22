@@ -124,6 +124,8 @@ const AdminPortal = ({ currentUser }) => {
     prompt_caching_enabled: true,
     tool_memo_enabled: true,
     local_prompt_cache_enabled: true,
+    research_mode_enabled: true,
+    deep_research_mode_enabled: true,
   });
   const [isSavingFeatures, setIsSavingFeatures] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
@@ -1164,6 +1166,16 @@ const AdminPortal = ({ currentUser }) => {
                   flag: 'matters_enabled',
                   label: 'Matters',
                   desc: 'Lets users organise threads into named matters with notes.',
+                },
+                {
+                  flag: 'research_mode_enabled',
+                  label: 'Research mode',
+                  desc: 'Offers the "Research" chat mode (deep single-query research via the Worker) in the mode selector.',
+                },
+                {
+                  flag: 'deep_research_mode_enabled',
+                  label: 'Deep Research mode',
+                  desc: 'Offers the "Deep Research" chat mode (editable multi-step research plan) in the mode selector.',
                 },
                 {
                   flag: 'prompt_caching_enabled',

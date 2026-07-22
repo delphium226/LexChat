@@ -246,6 +246,8 @@ _DEFAULT_FEATURES = {
     "prompt_caching_enabled": True,
     "tool_memo_enabled": True,
     "local_prompt_cache_enabled": True,
+    "research_mode_enabled": True,
+    "deep_research_mode_enabled": True,
 }
 
 
@@ -277,6 +279,8 @@ class FeaturesUpdate(BaseModel):
     prompt_caching_enabled: bool = True
     tool_memo_enabled: bool = True
     local_prompt_cache_enabled: bool = True
+    research_mode_enabled: bool = True
+    deep_research_mode_enabled: bool = True
 
 
 @admin_router.post("/features")
@@ -290,6 +294,8 @@ async def save_features(
         "prompt_caching_enabled": body.prompt_caching_enabled,
         "tool_memo_enabled": body.tool_memo_enabled,
         "local_prompt_cache_enabled": body.local_prompt_cache_enabled,
+        "research_mode_enabled": body.research_mode_enabled,
+        "deep_research_mode_enabled": body.deep_research_mode_enabled,
     }
     result = await db.execute(select(AppSetting).where(AppSetting.key == _FEATURES_KEY))
     row = result.scalar_one_or_none()
