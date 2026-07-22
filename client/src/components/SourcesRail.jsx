@@ -447,28 +447,11 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick, col
                     style={{
                       fontSize: 11,
                       color: 'var(--ink-400)',
-                      marginBottom: s.excerpt ? 8 : 0,
+                      marginBottom: 0,
                       fontFamily: 'var(--font-mono)',
                     }}
                   >
                     {displayMeta}
-                  </div>
-                )}
-
-                {s.excerpt && (
-                  <div
-                    style={{
-                      fontFamily: 'var(--font-serif)',
-                      fontSize: 12.5,
-                      color: 'var(--ink-700)',
-                      lineHeight: 1.55,
-                      borderLeft: `3px solid ${active ? 'var(--accent)' : 'var(--ink-200)'}`,
-                      paddingLeft: 10,
-                      fontStyle: 'italic',
-                      marginBottom: 8,
-                    }}
-                  >
-                    &ldquo;{s.excerpt}&rdquo;
                   </div>
                 )}
 
