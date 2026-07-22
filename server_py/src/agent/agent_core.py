@@ -9,6 +9,7 @@ parse, and per-provider options).
 
 import asyncio
 import logging
+import re
 import uuid
 from typing import Callable, Optional
 
@@ -35,6 +36,118 @@ def _get_cfg() -> dict:
     """Return the current request's provider config (set by provider_factory)."""
     from .provider_factory import get_request_provider_config
     return get_request_provider_config()
+
+
+# -----------------------------------------------------------------------
+# Worker report structure validation (A4)
+# -----------------------------------------------------------------------
+# The required Markdown section labels per research mode, mirroring the
+# OUTPUT STRUCTURE block in each worker system prompt (prompts.py). Used both
+# to grade a returned report and to tell the model the target shape on a
+# reformat retry. Conversational chat mode is deliberately unstructured and is
+# never validated.
+_REPORT_SECTIONS = {
+    "legislation_only": [
+        "Summary Answer (BLUF)", "Detailed Analysis", "Jurisdiction & Status", "References",
+    ],
+    "case_law_only": [
+        "Summary Answer (BLUF)", "Key Cases", "Analysis", "Jurisdiction & Currency", "References",
+    ],
+    "legislation_and_case_law": [
+        "Summary Answer (BLUF)", "Statutory Framework", "Key Cases", "Jurisdiction & Status", "References",
+    ],
+    "parliamentary_records": [
+        "Summary (BLUF)", "Key Speeches / Evidence", "Source & Date", "References",
+    ],
+}
+
+# A section header line: an ATX header (`## Foo`) or a bold label at the start of
+# a line, optionally list-numbered (`1. **Foo:**` / `- **Foo**`). Captures the
+# label text so we can look for the mandatory References section.
+_HEADER_RE = re.compile(
+    r"^\s*(?:#{1,6}\s+(?P<atx>.+?)\s*$|(?:\d+\.\s*|[-*]\s*)?\*\*(?P<bold>[^*]+?)\*\*)",
+    re.MULTILINE,
+)
+_MARKDOWN_LINK_RE = re.compile(r"\[[^\]]+\]\([^)]+\)")
+
+
+def _extract_section_headers(content: str) -> list[str]:
+    """Return the section-header labels found in a Markdown report (lower-cased, stripped)."""
+    headers = []
+    for m in _HEADER_RE.finditer(content):
+        label = (m.group("atx") or m.group("bold") or "").strip().rstrip(":").strip()
+        if label:
+            headers.append(label.lower())
+    return headers
+
+
+def _report_needs_reformat(content: str, has_sources: bool) -> bool:
+    """Return True if a worker report is missing the structure a graded answer needs.
+
+    Targets the observed regression where a worker loses its section headers and/or
+    References section despite the prompt rule. High-precision by design — it fires
+    only on genuinely malformed output so the one reformat retry is not wasted on a
+    well-formed report:
+      - fewer than two recognisable section headers (a flat prose blob), OR
+      - no References section, OR
+      - sources were retrieved but the report cites no link.
+    A report with no retrieved sources is not required to carry a link.
+    """
+    if not content or len(content.strip()) < 40:
+        return False  # nothing meaningful to reformat
+    headers = _extract_section_headers(content)
+    if len(headers) < 2:
+        return True
+    if not any("reference" in h for h in headers):
+        return True
+    if has_sources and not _MARKDOWN_LINK_RE.search(content):
+        return True
+    return False
+
+
+async def _reformat_worker_report(
+    chat_loop_fn: Callable,
+    content: str,
+    research_mode: str,
+    model: str,
+    cancel_event: Optional[asyncio.Event],
+    num_ctx: int,
+    timing_collector=None,
+) -> str:
+    """One no-tools LLM call that reorganises an existing report into the required
+    structure. Adds/changes NO legal content — pure reformat. Fail-soft: any error
+    returns the original content unchanged."""
+    sections = _REPORT_SECTIONS.get(research_mode, _REPORT_SECTIONS["legislation_only"])
+    section_list = "\n".join(f"{i}. **{s}:**" for i, s in enumerate(sections, 1))
+    system = (
+        "You are reformatting an existing UK legal research report into the required "
+        "structure. Do NOT perform any new research. Do NOT add, remove, or alter any "
+        "legal content, findings, citations, or URLs — only reorganise what is already "
+        "present under the required Markdown section headers. Every source already cited "
+        "in the report MUST appear under References with its existing link. If the report "
+        "contains no sources, write 'None found' under References.\n\n"
+        f"REQUIRED STRUCTURE (Markdown):\n{section_list}"
+    )
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": content},
+    ]
+
+    async def _no_tools(name: str, args: dict) -> str:  # pragma: no cover - never called
+        return "No tools are available during reformatting."
+
+    try:
+        reformatted = await chat_loop_fn(
+            messages, model, cancel_event, num_ctx,
+            [], _no_tools, None,
+            emit_tool_details=False,
+            timing_collector=timing_collector,
+        )
+        new_content = (reformatted.get("content") or "").strip()
+        return new_content or content
+    except Exception as e:
+        logger.warning(f"[Worker] Report reformat retry failed, keeping original: {e}")
+        return content
 
 
 # -----------------------------------------------------------------------
@@ -90,6 +203,18 @@ async def run_worker_agent(
         emit_tool_details=emit_tool_details,
         timing_collector=timing_collector,
     )
+
+    # A4: validate the report structure and, if malformed, issue ONE no-tools
+    # reformat retry. Skipped in conversational chat mode (deliberately unstructured).
+    # Runs before source filtering so the filter sees the reformatted content.
+    if cfg.get("_chat_mode") != "conversational":
+        content = result.get("content", "") or ""
+        if _report_needs_reformat(content, has_sources=bool(source_accumulator)):
+            logger.info("[Worker] Report failed structure check — issuing one reformat retry")
+            result["content"] = await _reformat_worker_report(
+                chat_loop_fn, content, research_mode, model,
+                cancel_event, num_ctx, timing_collector=timing_collector,
+            )
 
     if source_accumulator:
         content = result.get("content", "") or ""
