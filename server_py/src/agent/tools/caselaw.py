@@ -7,7 +7,12 @@ import httpx
 
 
 _ATOM_NS = "http://www.w3.org/2005/Atom"
-_UK_NS = "https://caselaw.nationalarchives.gov.uk/terms/v1"
+# The Atom feed's TNA extension elements (<tna:identifier>, etc.) live on the bare
+# host namespace. (Earlier code read <uk:ncn>/<uk:court> from a /terms/v1 URI that the
+# feed never uses, so ncn/court came back empty on every live result.)
+_TNA_NS = "https://caselaw.nationalarchives.gov.uk"
+# The judgment data.xml carries the neutral citation in <uk:cite> on the AKN namespace.
+_TNA_AKN_NS = "https://caselaw.nationalarchives.gov.uk/akn"
 
 
 # Court-level ranks for appeal detection. Higher rank = higher (appellate) court.
@@ -47,9 +52,16 @@ _PARTY_STOPWORDS = {
 }
 
 
-def _court_rank(ncn: str, court: str) -> int:
-    """Return the court-hierarchy rank for a result from its NCN/court fields (0 = unknown)."""
-    text = f"{ncn} {court}".upper()
+def _court_rank(ncn: str, court: str, url: str = "") -> int:
+    """Return the court-hierarchy rank for a result (0 = unknown).
+
+    Derives the court code from the NCN/court fields *and* the judgment URL. Live
+    National Archives Atom feeds do not populate <uk:ncn>/<uk:court>, but the court
+    is always in the URL path (e.g. .../ewca/civ/2025/1671 -> EWCA), so scanning the
+    URL is what makes appeal detection work on real search results, not just on
+    hand-built test dicts.
+    """
+    text = f"{ncn} {court} {url}".upper()
     for code, rank in _COURT_RANK.items():
         if code in text:
             return rank
@@ -81,7 +93,7 @@ def detect_appellate_decisions(results: list[dict]) -> list[dict]:
             continue
         enriched.append({
             "r": r,
-            "rank": _court_rank(r.get("ncn", ""), r.get("court", "")),
+            "rank": _court_rank(r.get("ncn", ""), r.get("court", ""), r.get("url", "")),
             "tokens": _party_tokens(r.get("title", "")),
         })
 
@@ -130,8 +142,20 @@ def _parse_case_law_atom(xml_text: str) -> list[dict]:
             else entry.findtext(f"{{{_ATOM_NS}}}id", "")
         )
         published = entry.findtext(f"{{{_ATOM_NS}}}published", "")
-        ncn = entry.findtext(f"{{{_UK_NS}}}ncn", "")
-        court = entry.findtext(f"{{{_UK_NS}}}court", "")
+        # The neutral citation is the text of <tna:identifier type="ukncn"> and its
+        # court path is that element's slug attribute, e.g.
+        #   <tna:identifier slug="ewca/civ/2025/1671" type="ukncn">[2025] EWCA Civ 1671</...>
+        # (namespace https://caselaw.nationalarchives.gov.uk — NOT the /terms/v1 URI, and
+        # there is no <court> element at all: earlier code read both from the wrong
+        # namespace and got empty strings, so ncn/court were blank on every live result).
+        ncn = ""
+        court = ""
+        for ident in entry.findall(f"{{{_TNA_NS}}}identifier"):
+            if ident.get("type") == "ukncn":
+                ncn = (ident.text or "").strip()
+                slug = ident.get("slug", "")
+                court = slug.rsplit("/", 2)[0] if slug else ""  # "ewca/civ/2025/1671" -> "ewca/civ"
+                break
         entries.append({
             "title": title,
             "ncn": ncn,
@@ -164,10 +188,12 @@ async def _fetch_judgment_text(url: str) -> dict:
         resp = await client.get(data_url)
         resp.raise_for_status()
     text = _extract_judgment_text(resp.text)
-    # Extract title and NCN from the Atom entry we already have (best effort from XML)
+    # Extract title (FRBRname/@value) and neutral citation (<uk:cite> text) from the
+    # AKN judgment XML. Earlier code read the NCN from a non-existent /terms/v1 element,
+    # so it always returned "".
     try:
         root = ET.fromstring(resp.text)
-        ncn = root.findtext(f"{{{_UK_NS}}}ncn") or ""
+        ncn = (root.findtext(f".//{{{_TNA_AKN_NS}}}cite") or "").strip()
         title_el = root.find(".//{http://docs.oasis-open.org/legaldocml/ns/akn/3.0}FRBRname")
         title = title_el.get("value", "") if title_el is not None else ""
     except Exception:

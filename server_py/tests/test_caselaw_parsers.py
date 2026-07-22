@@ -13,25 +13,29 @@ from src.agent.tools.caselaw import (
 )
 
 
+# Mirrors the real National Archives feed: the neutral citation is the TEXT of a
+# <uk:identifier type="ukncn"> element (there are several identifier elements, only one
+# is the ukncn) on the bare host namespace, and its slug attribute carries the court
+# path. There is NO <uk:ncn>/<uk:court> element — an earlier fixture invented those,
+# which is why the parser bug (reading a non-existent element) went unnoticed.
 _ATOM_FEED = """<?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom"
-      xmlns:uk="https://caselaw.nationalarchives.gov.uk/terms/v1">
+      xmlns:uk="https://caselaw.nationalarchives.gov.uk">
   <title>Search results</title>
   <entry>
     <title>R (on the application of Miller) v The Prime Minister</title>
     <link rel="alternate" href="https://caselaw.nationalarchives.gov.uk/uksc/2019/41"/>
     <id>https://caselaw.nationalarchives.gov.uk/uksc/2019/41</id>
     <published>2019-09-24T00:00:00Z</published>
-    <uk:ncn>[2019] UKSC 41</uk:ncn>
-    <uk:court>UKSC</uk:court>
+    <uk:identifier slug="uksc/2019/41" type="ukncn">[2019] UKSC 41</uk:identifier>
+    <uk:identifier slug="tna.abcd1234" type="fclid">abcd1234</uk:identifier>
   </entry>
   <entry>
     <title>Fixture Two v Example</title>
     <id>https://caselaw.nationalarchives.gov.uk/ewca/civ/2020/1</id>
     <link href="https://caselaw.nationalarchives.gov.uk/ewca/civ/2020/1"/>
     <published>2020-01-15T09:30:00Z</published>
-    <uk:ncn>[2020] EWCA Civ 1</uk:ncn>
-    <uk:court>EWCA-Civil</uk:court>
+    <uk:identifier slug="ewca/civ/2020/1" type="ukncn">[2020] EWCA Civ 1</uk:identifier>
   </entry>
 </feed>
 """
@@ -54,10 +58,11 @@ def test_atom_parses_entries_with_all_fields():
     assert len(entries) == 2
     first = entries[0]
     assert first["title"] == "R (on the application of Miller) v The Prime Minister"
-    assert first["ncn"] == "[2019] UKSC 41"
-    assert first["court"] == "UKSC"
+    assert first["ncn"] == "[2019] UKSC 41"  # text of the ukncn identifier
+    assert first["court"] == "uksc"  # court path from the ukncn slug (year/number stripped)
     assert first["date"] == "2019-09-24"  # published truncated to the date
     assert first["url"] == "https://caselaw.nationalarchives.gov.uk/uksc/2019/41"
+    assert entries[1]["court"] == "ewca/civ"  # multi-segment court path preserved
 
 
 def test_atom_falls_back_to_plain_link_when_no_alternate():
@@ -143,6 +148,24 @@ def test_detect_appeal_uksc_over_ewca():
     ]
     appeals = detect_appellate_decisions(results)
     assert [a["ncn"] for a in appeals] == ["[2019] UKSC 41"]
+
+
+def test_detect_appeal_ranks_court_from_url_when_ncn_and_court_blank():
+    # Live National Archives Atom feeds do NOT populate <uk:ncn>/<uk:court>, so the
+    # court level is only in the URL path. Rank derivation must use the URL, or A2
+    # never fires on real search results (regression: it silently returned []).
+    results = [
+        _r("Sophie Coulthard & Anor, R (on the application of) v Secretary of State "
+           "for the Environment, Food and Rural Affairs",
+           "", "", "https://caselaw.nationalarchives.gov.uk/ewhc/admin/2024/3252"),
+        _r("Sophie Coulthard & Anor, R (on the application of) v Secretary of State "
+           "for the Environment, Food and Rural Affairs",
+           "", "", "https://caselaw.nationalarchives.gov.uk/ewca/civ/2025/1671"),
+    ]
+    appeals = detect_appellate_decisions(results)
+    assert [a["url"] for a in appeals] == [
+        "https://caselaw.nationalarchives.gov.uk/ewca/civ/2025/1671"
+    ]
 
 
 def test_detect_appeal_skips_results_without_url():

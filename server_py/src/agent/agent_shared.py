@@ -456,6 +456,11 @@ async def run_worker_tool(
                 # appear in the results, cite the higher court, not only the lower one.
                 appeals = detect_appellate_decisions(results)
                 if appeals:
+                    logger.info(
+                        "[Worker] A2 appellate nudge fired: flagged %d appellate decision(s) — %s",
+                        len(appeals),
+                        ", ".join(r.get("url", "") for r in appeals[:3]),
+                    )
                     appeal_lines = "\n".join(
                         f'  - url: "{r["url"]}"  ({r.get("title", "")} {r.get("ncn", "")})'
                         for r in appeals[:3]
