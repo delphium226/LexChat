@@ -54,7 +54,7 @@ question). Same philosophy as the Phase-2 nudges / search budget: code enforceme
 prompt. Touches the SSE streaming path in `chat_loop` — land after A3 exists so
 regressions are measurable. Supersedes A4.
 
-### A2. Appeals nudge on case-law search results — DONE 2026-07-22
+### A2. Appeals nudge on case-law search results — DONE + LIVE-VERIFIED 2026-07-22
 **Problem:** retrieving the appellate decision of a case is search luck — some L31
 runs got only the first-instance *Coulthard* [2024] EWHC 3252 (Admin) and missed
 [2025] EWCA Civ 1671. The prompt rule (fb88b41) is soft.
@@ -79,6 +79,24 @@ false-positive guard, same-level guard, first-instance-only, no-url). 156 tests 
 Backend-only, no dist rebuild. Live single-query verification against the National
 Archives still worth doing once a provider key/session is handy, but the logic is
 deterministic (pure function + string append) and fully unit-covered.
+
+**LIVE VERIFICATION 2026-07-22 (commit `f189fc8`) — found A2 was silently DEAD on
+live data, then fixed it.** The live *Coulthard* query returned "no results" under
+Ollama (that model emitted garbage tool calls — separate weak-model issue) and, under
+OpenRouter/Gemini, Gemini cited both levels on its own — but `detect_appellate_decisions`
+returned `[]`. Root cause: `_court_rank` derived the court solely from the parsed
+`ncn`/`court` fields, which were **always blank** because `_parse_case_law_atom` read
+`<uk:ncn>`/`<uk:court>` from a `/terms/v1` namespace the National Archives feed never
+uses (real ncn is the text of `<uk:identifier type="ukncn">`; court is its slug; there
+is no `<court>` element). So every result had rank 0 → the `rank < 3` guard skipped all
+→ nudge never fired. The unit tests passed only because their fixtures hand-filled `ncn`
+— classic tests-green/live-broken. Fixes in `f189fc8`: (1) `_court_rank` also derives
+the court from the judgment URL path; (2) `_parse_case_law_atom` reads ncn/court from the
+real feed elements; (3) `_fetch_judgment_text` reads ncn from `<uk:cite>` on the `/akn`
+namespace (same blind spot); (4) an INFO log when the nudge fires (auditable in prod);
+(5) test fixture rewritten to the real feed shape + URL-only regression test. 178 tests
+green. **Live-verified end to end:** nudge now fires (`A2 appellate nudge fired: flagged
+… ewca/civ/2025/1671`) and both decisions are cited. Committed + pushed to `main`.
 
 ### A3. Golden-question eval harness
 **Problem:** variance is eyeballed from single runs; format/citation compliance needs
