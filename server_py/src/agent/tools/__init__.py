@@ -4,7 +4,7 @@ Split from the former 1,500-line tools.py. The public surface is re-exported
 here so existing `from .tools import X` imports keep working unchanged.
 """
 
-from .caselaw import _fetch_judgment_text, _parse_case_law_atom  # noqa: F401
+from .caselaw import _fetch_judgment_text, _parse_case_law_atom, detect_appellate_decisions  # noqa: F401
 from .executor import execute_worker_tool  # noqa: F401
 from .lex import (  # noqa: F401
     LEX_API_URL,

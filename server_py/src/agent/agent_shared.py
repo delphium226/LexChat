@@ -16,6 +16,7 @@ from .tools import (
     execute_worker_tool,
     execute_parliament_tool,
     extract_legislation_ids_from_search,
+    detect_appellate_decisions,
     _PARLIAMENT_TOOL_NAMES,
 )
 
@@ -440,9 +441,10 @@ async def run_worker_tool(
                     "and compose your answer noting that no directly relevant case law was found in this database.]"
                 )
             elif n > 0:
+                results = raw_data.get("results", [])
                 url_lines = "\n".join(
                     f'  - url: "{r["url"]}"  ({r.get("title", "")} {r.get("ncn", "")})'
-                    for r in raw_data.get("results", [])[:3]
+                    for r in results[:3]
                     if r.get("url")
                 )
                 case_law_note = (
@@ -450,6 +452,20 @@ async def run_worker_tool(
                     f"Call get_case_law_text for the 1–3 most relevant cases below to retrieve the full judgment text "
                     f"before composing your answer. Pass the exact url field:\n{url_lines}]"
                 )
+                # Appeals nudge: when both a first-instance judgment and its appeal
+                # appear in the results, cite the higher court, not only the lower one.
+                appeals = detect_appellate_decisions(results)
+                if appeals:
+                    appeal_lines = "\n".join(
+                        f'  - url: "{r["url"]}"  ({r.get("title", "")} {r.get("ncn", "")})'
+                        for r in appeals[:3]
+                    )
+                    case_law_note += (
+                        f"\n\n[NOTE — APPELLATE DECISION PRESENT: the results include an appeal "
+                        f"of a case that also appears at a lower court level. You MUST retrieve and "
+                        f"cite the appellate (higher-court) decision below via get_case_law_text — "
+                        f"do not rely on the first-instance judgment alone:\n{appeal_lines}]"
+                    )
         except Exception:
             pass
 
