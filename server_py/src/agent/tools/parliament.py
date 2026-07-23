@@ -649,7 +649,7 @@ async def execute_parliament_tool(
         })
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
 
             if name == "get_member_info":
                 # getMSPInfo was removed from TWFY; getMSPs with search= is the replacement

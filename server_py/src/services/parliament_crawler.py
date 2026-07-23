@@ -262,7 +262,7 @@ async def crawl_sp_new_meetings() -> int:
     total = 0
     today = date.today()
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
             window_start = today - timedelta(days=_DELTA_WINDOW_DAYS)
             while window_start < today:
                 window_end = min(window_start + timedelta(days=13), today)
@@ -309,7 +309,7 @@ async def backfill_sessions() -> int:
     logger.info(f"[Crawler] Session backfill starting from {start} (to {today})...")
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
             window_start = start
             while window_start < today:
                 window_end = min(window_start + timedelta(days=13), today)
@@ -484,7 +484,7 @@ async def crawl_sp_new_plenary() -> int:
     total = 0
     today = date.today()
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
             window_start = today - timedelta(days=_DELTA_WINDOW_DAYS)
             while window_start < today:
                 window_end = min(window_start + timedelta(days=13), today)
@@ -524,7 +524,7 @@ async def backfill_plenary() -> int:
     logger.info(f"[Crawler] Plenary backfill starting from {start} (to {today})...")
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
             window_start = start
             while window_start < today:
                 window_end = min(window_start + timedelta(days=13), today)
@@ -684,7 +684,7 @@ async def backfill_captions() -> int:
             meetings = [(r[0], r[1]) for r in rows.all()]
 
         logger.info(f"[Crawler] Caption backfill: {len(meetings)} plenary meetings to resolve")
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=60.0, verify=False) as client:
             for meeting_id, meeting_date in meetings:
                 await asyncio.sleep(_BACKFILL_DELAY)
                 # slug is derived from date inside _capture_meeting_captions;
@@ -726,7 +726,7 @@ async def backfill_committee_captions() -> int:
             meetings = [(r[0], r[1], r[2]) for r in rows.all()]
 
         logger.info(f"[Crawler] Committee caption backfill: {len(meetings)} meetings to resolve")
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=60.0, verify=False) as client:
             for meeting_id, meeting_date, committee_name in meetings:
                 await asyncio.sleep(_BACKFILL_DELAY)
                 if await _capture_meeting_captions(
