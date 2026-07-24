@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Modal from './ui/Modal';
 import {
   RECORD_TYPE_OPTIONS,
@@ -6,35 +7,54 @@ import {
   COURT_GROUPS,
 } from '../constants/research';
 
-// Research-filters popover. Presentational — all filter state and persistence
-// lives in useFilters (passed in via the `filters` bag) and usePreferences
-// (research mode). Rendered as a centered Modal from the composer.
+// Research-filters dialog. Draft-and-apply: all edits mutate a local draft and
+// are only committed to the persisted filter state (useFilters) / research mode
+// (usePreferences) when the user clicks Apply. Cancel / backdrop / ESC discard
+// the draft. `initial` seeds the draft from the currently-applied values on open.
 export default function ResearchFiltersModal({
   isParliament,
-  researchMode,
-  onResearchModeChange,
-  showScotlandNINote,
-  filters,
+  thisYear,
+  initial,
+  onApply,
   onClose,
 }) {
+  const [draft, setDraft] = useState(() => ({ ...initial }));
+  const set = (key, value) => setDraft(d => ({ ...d, [key]: value }));
+
   const {
+    researchMode,
     recordType,
-    setRecordTypePersist,
     jurisdiction,
-    setJurisdictionPersist,
     legislationType,
-    setLegislationTypePersist,
     currentOnly,
-    setCurrentOnlyPersist,
     dateFrom,
-    setDateFromPersist,
     dateTo,
-    setDateToPersist,
     caseLawCourt,
-    setCourtPersist,
-    hasActiveFilters,
-    clearAllFilters,
-  } = filters;
+  } = draft;
+
+  const showScotlandNINote =
+    (jurisdiction === 'scotland' || jurisdiction === 'northern_ireland') && researchMode !== 'legislation_only';
+
+  const hasActiveFilters =
+    jurisdiction ||
+    dateFrom ||
+    dateTo !== thisYear ||
+    caseLawCourt ||
+    legislationType ||
+    currentOnly ||
+    recordType;
+
+  const clearAllFilters = () =>
+    setDraft(d => ({
+      ...d,
+      jurisdiction: null,
+      dateFrom: '',
+      dateTo: thisYear,
+      caseLawCourt: '',
+      legislationType: null,
+      currentOnly: false,
+      recordType: null,
+    }));
 
   const secHead = label => (
     <div
@@ -54,7 +74,8 @@ export default function ResearchFiltersModal({
   const optBtn = (isActive, onClick, label) => (
     <button
       onClick={onClick}
-      className={`block w-full text-left px-[10px] py-[6px] rounded-md font-ui text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isActive ? 'bg-accent-soft text-accent-ink font-semibold' : 'text-ink-700 hover:bg-ink-50'}`}
+      style={isActive ? { background: 'var(--accent-soft-strong)' } : undefined}
+      className={`block w-full text-left px-[10px] py-[6px] rounded-md font-ui text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isActive ? 'text-accent-ink font-semibold' : 'text-ink-700 hover:bg-ink-50'}`}
     >
       {label}
     </button>
@@ -102,7 +123,10 @@ export default function ResearchFiltersModal({
   );
 
   return (
-    <Modal onClose={onClose} className="w-full max-w-[420px] max-h-[85vh] flex flex-col font-ui">
+    <Modal
+      onClose={onClose}
+      className={`w-full ${isParliament ? 'max-w-[420px]' : 'max-w-[680px]'} max-h-[85vh] flex flex-col font-ui`}
+    >
       {/* Header */}
       <div
         style={{
@@ -127,61 +151,81 @@ export default function ResearchFiltersModal({
       </div>
 
       {/* Scrollable body */}
-      <div style={{ overflowY: 'auto', padding: '8px 0 4px' }}>
-        {/* ── Parliament bot filters (Scottish Parliament only) ── */}
+      <div style={{ overflowY: 'auto' }}>
+        {/* ── Parliament bot filters — narrow single column ── */}
         {isParliament && (
-          <>
+          <div style={{ padding: '8px 0 4px' }}>
             {/* § Record type */}
             {secHead('Record type')}
             {RECORD_TYPE_OPTIONS.map(opt =>
-              optBtn(recordType === opt.value, () => setRecordTypePersist(opt.value), opt.label)
+              optBtn(recordType === opt.value, () => set('recordType', opt.value), opt.label)
             )}
-          </>
+
+            {/* § Date range */}
+            {divider()}
+            {secHead('Date range')}
+            {inputRow('From', dateFrom, v => set('dateFrom', v), 'To', dateTo, v => set('dateTo', v))}
+          </div>
         )}
 
-        {/* ── Legislation bot filters ──────────────────── */}
+        {/* ── Legislation bot filters — landscape two-column grid ── */}
         {!isParliament && (
-          <>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              columnGap: 20,
+              rowGap: 4,
+              padding: '12px 16px 8px',
+              alignItems: 'start',
+            }}
+          >
             {/* § Research type */}
-            {secHead('Research type')}
-            {[
-              { value: 'legislation_only', label: 'Legislation only' },
-              { value: 'case_law_only', label: 'Case law only' },
-              { value: 'legislation_and_case_law', label: 'Legislation & case law' },
-            ].map(opt => optBtn(researchMode === opt.value, () => onResearchModeChange(opt.value), opt.label))}
-
-            {divider()}
+            <div>
+              {secHead('Research type')}
+              {[
+                { value: 'legislation_only', label: 'Legislation only' },
+                { value: 'case_law_only', label: 'Case law only' },
+                { value: 'legislation_and_case_law', label: 'Legislation & case law' },
+              ].map(opt => optBtn(researchMode === opt.value, () => set('researchMode', opt.value), opt.label))}
+            </div>
 
             {/* § Jurisdiction */}
-            {secHead('Jurisdiction')}
-            {JURISDICTION_OPTIONS.map(opt =>
-              optBtn(jurisdiction === opt.value, () => setJurisdictionPersist(opt.value), opt.label)
-            )}
-            {showScotlandNINote && (
-              <div
-                style={{
-                  margin: '2px 8px 4px',
-                  padding: '5px 8px',
-                  borderRadius: 6,
-                  background: 'var(--accent-soft)',
-                  fontSize: 11,
-                  color: 'var(--accent-ink)',
-                  lineHeight: 1.4,
-                }}
-              >
-                Case law database covers E&amp;W and UK-wide courts only — Scottish and NI courts are not indexed.
-              </div>
-            )}
+            <div>
+              {secHead('Jurisdiction')}
+              {JURISDICTION_OPTIONS.map(opt =>
+                optBtn(jurisdiction === opt.value, () => set('jurisdiction', opt.value), opt.label)
+              )}
+              {showScotlandNINote && (
+                <div
+                  style={{
+                    margin: '2px 8px 4px',
+                    padding: '5px 8px',
+                    borderRadius: 6,
+                    background: 'var(--accent-soft)',
+                    fontSize: 11,
+                    color: 'var(--accent-ink)',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  Case law database covers E&amp;W and UK-wide courts only — Scottish and NI courts are not indexed.
+                </div>
+              )}
+            </div>
 
             {/* § Legislation type */}
             {researchMode !== 'case_law_only' && (
-              <>
-                {divider()}
+              <div>
                 {secHead('Legislation type')}
                 {LEGISLATION_TYPE_OPTIONS.map(opt =>
-                  optBtn(legislationType === opt.value, () => setLegislationTypePersist(opt.value), opt.label)
+                  optBtn(legislationType === opt.value, () => set('legislationType', opt.value), opt.label)
                 )}
-                {divider()}
+              </div>
+            )}
+
+            {/* § Status */}
+            {researchMode !== 'case_law_only' && (
+              <div>
                 {secHead('Status')}
                 <div
                   style={{
@@ -191,7 +235,7 @@ export default function ResearchFiltersModal({
                     gap: 8,
                     cursor: 'pointer',
                   }}
-                  onClick={() => setCurrentOnlyPersist(!currentOnly)}
+                  onClick={() => set('currentOnly', !currentOnly)}
                 >
                   <div
                     style={{
@@ -229,72 +273,88 @@ export default function ResearchFiltersModal({
                     Current legislation only
                   </span>
                 </div>
-              </>
+              </div>
             )}
-          </>
-        )}
 
-        {/* § Date range (common to both bots) */}
-        {divider()}
-        {secHead('Date range')}
-        {inputRow('From', dateFrom, setDateFromPersist, 'To', dateTo, setDateToPersist)}
-
-        {/* § Case law court */}
-        {!isParliament && researchMode !== 'legislation_only' && (
-          <>
-            {divider()}
-            {secHead('Case law court')}
-            <div style={{ padding: '0 8px 6px' }}>
-              <select
-                value={caseLawCourt}
-                onChange={e => setCourtPersist(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '5px 7px',
-                  borderRadius: 6,
-                  border: '1px solid var(--ink-200)',
-                  fontSize: 12,
-                  fontFamily: 'var(--font-ui)',
-                  background: 'var(--paper)',
-                  color: 'var(--ink-700)',
-                  cursor: 'pointer',
-                  outline: 'none',
-                }}
-              >
-                <option value="">All courts</option>
-                {COURT_GROUPS.map(g => (
-                  <optgroup key={g.group} label={g.group}>
-                    {g.courts.map(c => (
-                      <option key={c.value} value={c.value}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
+            {/* § Date range */}
+            <div>
+              {secHead('Date range')}
+              {inputRow('From', dateFrom, v => set('dateFrom', v), 'To', dateTo, v => set('dateTo', v))}
             </div>
-          </>
+
+            {/* § Case law court */}
+            {researchMode !== 'legislation_only' && (
+              <div>
+                {secHead('Case law court')}
+                <div style={{ padding: '0 8px 6px' }}>
+                  <select
+                    value={caseLawCourt}
+                    onChange={e => set('caseLawCourt', e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '5px 7px',
+                      borderRadius: 6,
+                      border: '1px solid var(--ink-200)',
+                      fontSize: 12,
+                      fontFamily: 'var(--font-ui)',
+                      background: 'var(--paper)',
+                      color: 'var(--ink-700)',
+                      cursor: 'pointer',
+                      outline: 'none',
+                    }}
+                  >
+                    <option value="">All courts</option>
+                    {COURT_GROUPS.map(g => (
+                      <optgroup key={g.group} label={g.group}>
+                        {g.courts.map(c => (
+                          <option key={c.value} value={c.value}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
-      {/* Footer */}
-      {hasActiveFilters && (
-        <div
-          style={{
-            borderTop: '1px solid var(--ink-200)',
-            padding: '10px 16px',
-            textAlign: 'right',
-            flexShrink: 0,
-          }}
+      {/* Footer — Clear (left) + Cancel / Apply (right) */}
+      <div
+        style={{
+          borderTop: '1px solid var(--ink-200)',
+          padding: '10px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          flexShrink: 0,
+        }}
+      >
+        <button
+          onClick={clearAllFilters}
+          disabled={!hasActiveFilters}
+          className="font-ui text-xs text-ink-500 underline hover:text-ink-700 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed"
         >
+          Clear filters
+        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
           <button
-            onClick={clearAllFilters}
-            className="font-ui text-xs text-ink-500 underline hover:text-ink-700 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
+            onClick={onClose}
+            className="bg-paper border border-ink-200 text-ink-900 font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            Clear filters
+            Cancel
+          </button>
+          <button
+            onClick={() => onApply(draft)}
+            className="bg-brand hover:bg-brand-hover text-white font-ui text-sm font-medium rounded-md px-4 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
+          >
+            Apply
           </button>
         </div>
-      )}
+      </div>
     </Modal>
   );
 }

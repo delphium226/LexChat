@@ -1,5 +1,5 @@
 import { IBtn } from './ui/buttons';
-import { PaperclipIcon, SlidersIcon, SendIcon, StopIcon } from './ui/icons';
+import { PaperclipIcon, SendIcon, StopIcon } from './ui/icons';
 
 // The message composer card: attached-document chips, the textarea, and the
 // action row (attach / filters toggle / send-or-stop). Presentational — all
@@ -19,9 +19,6 @@ export default function Composer({
   onSend,
   onStop,
   chatMode,
-  jurisdictionShort,
-  todayISO,
-  onToggleFilters,
 }) {
   return (
     <div
@@ -201,12 +198,6 @@ export default function Composer({
           <IBtn label="Attach file (PDF, DOCX, TXT)" onClick={() => fileInputRef.current?.click()} disabled={uploadingDoc}>
             <PaperclipIcon />
           </IBtn>
-          <IBtn label="Research filters" onClick={onToggleFilters}>
-            <SlidersIcon />
-          </IBtn>
-          <span style={{ fontSize: 12, color: 'var(--ink-500)', marginLeft: 6, fontFamily: 'var(--font-mono)' }}>
-            {jurisdictionShort} · {todayISO}
-          </span>
         </div>
 
         {loading ? (

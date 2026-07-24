@@ -31,6 +31,8 @@ export function useChat({
   currentChatId,
   setCurrentChatId,
   setCurrentChatTitle,
+  pendingTitle,
+  setTitleUserSet,
   setActiveCite,
   setActiveSourcesMsgId,
   setChatDocuments,
@@ -287,7 +289,9 @@ export function useChat({
 
     try {
       if (!activeChatId) {
-        const title = contentToSend.slice(0, 80) + (contentToSend.length > 80 ? '…' : '');
+        // Honour a title the user typed before sending; otherwise derive one from
+        // the first question.
+        const title = pendingTitle || contentToSend.slice(0, 80) + (contentToSend.length > 80 ? '…' : '');
         const newChat = await createChat(title, selectedModel, activeProvider);
         activeChatId = newChat.id;
         setCurrentChatId(activeChatId);
@@ -377,6 +381,7 @@ export function useChat({
     setContextUsage(null);
     setCurrentChatId(null);
     setCurrentChatTitle(null);
+    setTitleUserSet(false);
     setActiveCite(null);
     setActiveSourcesMsgId(null);
     setChatDocuments([]);
@@ -391,6 +396,7 @@ export function useChat({
       setMessages(msgs);
       setCurrentChatId(chatId);
       setCurrentChatTitle(recentChats.find(c => c.id === chatId)?.title || null);
+      setTitleUserSet(false);
       closeHistoryModal();
       setContextUsage(null);
       setActiveCite(null);
@@ -416,6 +422,7 @@ export function useChat({
     setInput('');
     setCurrentChatId(null);
     setCurrentChatTitle(null);
+    setTitleUserSet(false);
     setContextUsage(null);
     setAgentStatus('');
     setActivities(new Map());

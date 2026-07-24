@@ -279,6 +279,49 @@ export async function getMatterGaps(matterId) {
 suggestion quality is model-dependent (generic output on weak models is a model
 problem, not a bug); do not stream — a single completion displayed at once.
 
+### B4. Re-work the filter feature (feature; added 2026-07-24 — DONE 2026-07-24, frontend-only, uncommitted)
+Reworked the research-filters UX (client-side only; no change to filter semantics
+or the backend `_apply_parliament_filters` mapping). Changes:
+- **Filter pills lifted into a fixed header bar** — the research-context pills used
+  to live inside the scrollable chat area and scrolled away. They now sit in a bar
+  directly under the session-title bar (`App.jsx`), outside `.lex-scroll`, so they
+  stay in place as the chat scrolls. The title bar's bottom border was removed so
+  the two rows read as one continuous header; the pills bar carries the border.
+- **Pills rationalised** — one pill per filter category, single value each (no more
+  concatenations like `Deep Research · Legislation & case law` or `In force · date`).
+  Fixed categorical order: **Mode first** (`Conversational` / `Research` /
+  `Deep Research`, always shown), then Region, Research type, Record type, Court,
+  Date range, In-force date.
+- **"Filters" button** — a bordered button at the left of the pills bar (sliders
+  icon) opens the modal; the old filters button was removed from the composer, along
+  with the `SCO · 2026-07-24` jurisdiction/date text at the bottom of the query box
+  (superseded by the pills).
+- **Modal is now draft-and-apply** — `ResearchFiltersModal` holds a local draft
+  seeded from the applied values; edits only commit on **Apply** (Cancel / backdrop /
+  ESC discard). Footer: Clear filters (left) + Cancel / Apply (right).
+- **Landscape legislation modal** — the legislation-bot modal widened to
+  `max-w-[680px]` with a two-column grid so it no longer needs vertical scrolling
+  (parliament bot keeps its narrow single-column layout).
+- **Styling** — pills bar background = `--paper` (matches title bar); individual
+  pills = `--bg-app` (matches chat area) with `--ink-800` text; selected filter
+  option uses a new slightly-darker-blue token `--accent-soft-strong` (light + dark).
+- **Thread title made fully editable** (related fix landed in the same pass) — you
+  can name a thread before sending; a user-set title is never overwritten by the
+  automatic first-question title (`titleUserSet` flag threaded through `useChat`).
+
+Files: `client/src/App.jsx`, `client/src/components/ResearchFiltersModal.jsx`,
+`client/src/components/Composer.jsx`, `client/src/hooks/useChat.js`,
+`client/src/index.css`. `client/dist/` rebuilt. **Uncommitted** — commit with
+force-added `client/dist/` and push when ready to deploy.
+
+### B5. Add a 'Data coverage' tab to the parliament bot (feature; added 2026-07-24, unscoped)
+Add a **Data coverage** tab (Admin Portal, parliament bot only) surfacing what the
+crawler has actually ingested — e.g. session/date-range coverage for
+`sp_committee_items` and `sp_plenary_items`, per-committee counts, video-caption
+availability (`sp_video_captions`, `caption_ok`), and last-crawl high-water marks.
+Gives operators a way to see gaps in the crawled back-catalogue. Not yet scoped —
+decide the exact metrics and whether it's a new tab or a panel on an existing one.
+
 ### B3. Deep Research mode (feature; scoped 2026-07-16 — BUILT 2026-07-16 on `feature/deep-research`, uncommitted)
 **Status:** implemented per the build spec, all layers. 22 new tests (97 total green);
 live E2E verified via Ollama (plan → edit → 5-step execution → integrated report with

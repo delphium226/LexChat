@@ -27,6 +27,7 @@
   --accent:       oklch(0.50 0.10 240);
   --accent-hover: oklch(0.44 0.11 240);
   --accent-soft:  oklch(0.96 0.02 240);
+  --accent-soft-strong: oklch(0.88 0.05 240);
   --accent-ink:   oklch(0.28 0.08 255);
 
   --cite:         oklch(0.55 0.12 200);
@@ -76,6 +77,7 @@
   --accent:       oklch(0.62 0.12 240);
   --accent-hover: oklch(0.56 0.13 240);
   --accent-soft:  oklch(0.22 0.06 240);
+  --accent-soft-strong: oklch(0.32 0.08 240);
   --accent-ink:   oklch(0.75 0.10 255);
 
   --cite:         oklch(0.65 0.12 200);

@@ -30,7 +30,6 @@ import Sidebar from './components/Sidebar';
 import {
   RECORD_TYPE_OPTIONS,
   JURISDICTION_OPTIONS,
-  JURISDICTION_SHORT,
   COURT_GROUPS,
 } from './constants/research';
 import { Routes, Route } from 'react-router-dom';
@@ -38,7 +37,7 @@ import SystemChat from './pages/SystemChat';
 import WeeklyFeedbackBanner from './components/WeeklyFeedbackBanner';
 import DataSensitivityNotice from './components/DataSensitivityNotice';
 import DeepResearchPlan from './components/DeepResearchPlan';
-import { BookmarkIcon, ScalesIcon, GavelIcon, CalendarIcon } from './components/ui/icons';
+import { BookmarkIcon, ScalesIcon, GavelIcon, CalendarIcon, SlidersIcon } from './components/ui/icons';
 import { GhostBtn } from './components/ui/buttons';
 import Modal from './components/ui/Modal';
 import { getInitials } from './utils/format';
@@ -59,6 +58,9 @@ function AppContent() {
   // the chat state lives in useChat, wired up below once its inputs exist.
   const [currentChatId, setCurrentChatId] = useState(null);
   const [currentChatTitle, setCurrentChatTitle] = useState(null);
+  // True once the user has manually named this thread — suppresses the automatic
+  // first-question title so their chosen name is never overwritten.
+  const [titleUserSet, setTitleUserSet] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState('');
   const { chatMode, setChatMode, researchMode, setResearchMode, darkMode, setDarkMode } = usePreferences(user);
@@ -179,7 +181,6 @@ function AppContent() {
       legislation_and_case_law: 'Legislation & case law',
     }[researchMode] || 'Legislation only';
 
-  const todayISO = new Date().toISOString().slice(0, 10);
   const todayLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   // ── Research filters (state + persistence in useFilters) ─────
@@ -200,8 +201,6 @@ function AppContent() {
     setCurrentOnlyPersist,
     setRecordTypePersist,
     saveFiltersToChatStorage,
-    clearAllFilters,
-    hasActiveFilters,
     restoreFiltersForChat,
   } = useFilters(currentChatId);
 
@@ -237,6 +236,8 @@ function AppContent() {
     currentChatId,
     setCurrentChatId,
     setCurrentChatTitle,
+    pendingTitle: titleUserSet ? currentChatTitle?.trim() || null : null,
+    setTitleUserSet,
     setActiveCite,
     setActiveSourcesMsgId,
     setChatDocuments,
@@ -280,18 +281,26 @@ function AppContent() {
   const jurisdictionLabel = jurisdiction
     ? JURISDICTION_OPTIONS.find(o => o.value === jurisdiction)?.label || 'All jurisdictions'
     : 'All jurisdictions';
-  const jurisdictionShort = jurisdiction ? JURISDICTION_SHORT[jurisdiction] || 'All UK' : 'All UK';
 
   const courtLabel = caseLawCourt
     ? COURT_GROUPS.flatMap(g => g.courts).find(c => c.value === caseLawCourt)?.label || caseLawCourt
     : '';
 
-  const showScotlandNINote =
-    (jurisdiction === 'scotland' || jurisdiction === 'northern_ireland') && researchMode !== 'legislation_only';
-
   const userInitials = getInitials(user?.username);
 
   // ── Handlers ─────────────────────────────────────────────────
+
+  // Commit an edited thread title. Marks the title as user-set so the automatic
+  // first-question title won't overwrite it, and persists to the backend when a
+  // chat already exists (a not-yet-created thread keeps the name until first send).
+  const commitTitle = async () => {
+    const trimmed = editTitleValue.trim();
+    setEditingTitle(false);
+    if (!trimmed || trimmed === currentChatTitle) return;
+    setCurrentChatTitle(trimmed);
+    setTitleUserSet(true);
+    if (currentChatId) await updateChatTitle(currentChatId, trimmed).catch(() => {});
+  };
 
   const handleFileUpload = async e => {
     const file = e.target.files[0];
@@ -412,7 +421,6 @@ function AppContent() {
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '12px 24px',
-            borderBottom: '1px solid var(--ink-200)',
             background: 'var(--paper)',
             height: 52,
             flex: '0 0 52px',
@@ -426,27 +434,16 @@ function AppContent() {
                 autoFocus
                 value={editTitleValue}
                 onChange={e => setEditTitleValue(e.target.value)}
+                placeholder="Name this thread…"
                 onKeyDown={async e => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    const trimmed = editTitleValue.trim();
-                    if (trimmed && trimmed !== currentChatTitle && currentChatId) {
-                      await updateChatTitle(currentChatId, trimmed).catch(() => {});
-                      setCurrentChatTitle(trimmed);
-                    }
-                    setEditingTitle(false);
+                    await commitTitle();
                   } else if (e.key === 'Escape') {
                     setEditingTitle(false);
                   }
                 }}
-                onBlur={async () => {
-                  const trimmed = editTitleValue.trim();
-                  if (trimmed && trimmed !== currentChatTitle && currentChatId) {
-                    await updateChatTitle(currentChatId, trimmed).catch(() => {});
-                    setCurrentChatTitle(trimmed);
-                  }
-                  setEditingTitle(false);
-                }}
+                onBlur={commitTitle}
                 style={{
                   fontSize: 14,
                   fontWeight: 500,
@@ -464,11 +461,10 @@ function AppContent() {
             ) : (
               <span
                 onClick={() => {
-                  if (!currentChatId) return;
                   setEditTitleValue(currentChatTitle || '');
                   setEditingTitle(true);
                 }}
-                title={currentChatId ? 'Click to rename' : undefined}
+                title="Click to rename"
                 style={{
                   fontSize: 14,
                   fontWeight: 500,
@@ -476,8 +472,8 @@ function AppContent() {
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
-                  cursor: currentChatId ? 'text' : 'default',
-                  borderBottom: currentChatId ? '1px dotted var(--ink-300, #9ca3af)' : 'none',
+                  cursor: 'text',
+                  borderBottom: '1px dotted var(--ink-300, #9ca3af)',
                 }}
               >
                 {currentChatTitle || 'New thread'}
@@ -502,6 +498,121 @@ function AppContent() {
           </div>
         </div>
 
+        {/* Research context pills — part of the fixed header; stays in place as the chat scrolls */}
+        <div
+          style={{
+            padding: '10px 24px',
+            borderBottom: '1px solid var(--ink-200)',
+            background: 'var(--paper)',
+            flexShrink: 0,
+          }}
+        >
+          {(() => {
+            // One pill per filter category, always in the same categorical order
+            // (region first). Each pill carries a single value — never a
+            // concatenation of two different filters.
+            const chips = [];
+
+            // 1. Mode — always the first pill
+            chips.push({
+              icon: <ScalesIcon />,
+              label:
+                chatMode === 'conversational'
+                  ? 'Conversational'
+                  : chatMode === 'deep_research'
+                    ? 'Deep Research'
+                    : 'Research',
+            });
+
+            // 2. Region
+            chips.push({
+              icon: <GavelIcon />,
+              label: isParliament ? 'Scottish Parliament (Holyrood)' : jurisdictionLabel,
+            });
+
+            // 3. Research type (implied context in conversational mode, so omitted there)
+            if (chatMode !== 'conversational') {
+              chips.push({
+                icon: <ScalesIcon />,
+                label: isParliament ? 'Parliamentary records' : researchModeLabel,
+              });
+            }
+
+            // 4. Record type (Parliament)
+            if (isParliament && recordType) {
+              chips.push({
+                icon: <GavelIcon />,
+                label: RECORD_TYPE_OPTIONS.find(o => o.value === recordType)?.label || recordType,
+              });
+            }
+
+            // 5. Court (legislation, when case law is in scope)
+            if (!isParliament && courtLabel && researchMode !== 'legislation_only') {
+              chips.push({ icon: <GavelIcon />, label: courtLabel });
+            }
+
+            // 6. Date range
+            if (dateFrom || dateTo !== thisYear) {
+              const dr = dateFrom && dateTo ? `${dateFrom}–${dateTo}` : dateFrom ? `From ${dateFrom}` : `To ${dateTo}`;
+              chips.push({ icon: <CalendarIcon />, label: `Date: ${dr}` });
+            }
+
+            // 7. In-force date (legislation)
+            if (!isParliament) {
+              chips.push({ icon: <CalendarIcon />, label: `In force as at ${todayLabel}` });
+            }
+
+            const filtersLabel = 'Filters';
+            return (
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <button
+                  onClick={() => setShowFilters(true)}
+                  title="Edit research filters"
+                  className="inline-flex items-center gap-1 rounded-md hover:bg-ink-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--ink-700)',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    padding: '4px 8px',
+                    background: 'none',
+                    border: '1px solid var(--ink-200)',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-ui)',
+                  }}
+                >
+                  <SlidersIcon size={13} />
+                  {filtersLabel}
+                </button>
+                <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--ink-200)', flexShrink: 0 }} />
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', flex: 1, minWidth: 0 }}>
+                {chips.map((chip, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '3px 10px',
+                      borderRadius: 999,
+                      fontSize: 12,
+                      fontWeight: 500,
+                      background: 'var(--bg-app)',
+                      border: '1px solid var(--ink-200)',
+                      color: 'var(--ink-800)',
+                    }}
+                  >
+                    <span style={{ color: 'var(--ink-400)', display: 'inline-flex' }}>{chip.icon}</span>
+                    {chip.label}
+                  </span>
+                ))}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+
         {/* Content area: chat column + sources rail */}
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           {/* Chat column */}
@@ -513,68 +624,6 @@ function AppContent() {
               style={{ flex: 1, overflow: 'auto', padding: '20px 28px 140px' }}
             >
               <div style={{ maxWidth: '95%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
-                {/* Research context chips */}
-                {(() => {
-                  const modePrefix = chatMode === 'deep_research' ? 'Deep Research · ' : '';
-                  const chips = isParliament
-                    ? [
-                        {
-                          icon: <ScalesIcon />,
-                          label: chatMode === 'conversational' ? 'Conversational' : `${modePrefix}Parliamentary records`,
-                        },
-                        {
-                          icon: <GavelIcon />,
-                          label: 'Scottish Parliament (Holyrood)',
-                        },
-                      ]
-                    : [
-                        {
-                          icon: <ScalesIcon />,
-                          label: chatMode === 'conversational' ? 'Conversational' : `${modePrefix}${researchModeLabel}`,
-                        },
-                        { icon: <GavelIcon />, label: jurisdictionLabel },
-                        { icon: <CalendarIcon />, label: `In force · ${todayLabel}` },
-                      ];
-                  if (isParliament && recordType) {
-                    chips.push({
-                      icon: <GavelIcon />,
-                      label: RECORD_TYPE_OPTIONS.find(o => o.value === recordType)?.label || recordType,
-                    });
-                  }
-                  if (dateFrom || dateTo !== thisYear) {
-                    const dr =
-                      dateFrom && dateTo ? `${dateFrom}–${dateTo}` : dateFrom ? `From ${dateFrom}` : `To ${dateTo}`;
-                    chips.push({ icon: <CalendarIcon />, label: `Date: ${dr}` });
-                  }
-                  if (!isParliament && courtLabel && researchMode !== 'legislation_only') {
-                    chips.push({ icon: <GavelIcon />, label: courtLabel });
-                  }
-                  return (
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', paddingBottom: 4 }}>
-                      {chips.map((chip, i) => (
-                        <span
-                          key={i}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            padding: '3px 10px',
-                            borderRadius: 999,
-                            fontSize: 12,
-                            fontWeight: 500,
-                            background: 'var(--paper)',
-                            border: '1px solid var(--ink-200)',
-                            color: 'var(--ink-600)',
-                          }}
-                        >
-                          <span style={{ color: 'var(--ink-400)', display: 'inline-flex' }}>{chip.icon}</span>
-                          {chip.label}
-                        </span>
-                      ))}
-                    </div>
-                  );
-                })()}
-
                 {/* Empty state */}
                 {messages.length === 0 && !loading && (
                   <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--ink-400)' }}>
@@ -709,33 +758,34 @@ function AppContent() {
               }}
             >
               <div style={{ maxWidth: '95%', margin: '0 auto', position: 'relative' }}>
-                {/* Filters popover */}
+                {/* Filters modal */}
                 {showFilters && (
                   <ResearchFiltersModal
                     isParliament={isParliament}
-                    researchMode={researchMode}
-                    onResearchModeChange={value => {
-                      setResearchMode(value);
-                      updatePreferences({ research_mode: value }).catch(() => {});
-                    }}
-                    showScotlandNINote={showScotlandNINote}
-                    filters={{
+                    thisYear={thisYear}
+                    initial={{
+                      researchMode,
                       recordType,
-                      setRecordTypePersist,
                       jurisdiction,
-                      setJurisdictionPersist,
                       legislationType,
-                      setLegislationTypePersist,
                       currentOnly,
-                      setCurrentOnlyPersist,
                       dateFrom,
-                      setDateFromPersist,
                       dateTo,
-                      setDateToPersist,
                       caseLawCourt,
-                      setCourtPersist,
-                      hasActiveFilters,
-                      clearAllFilters,
+                    }}
+                    onApply={draft => {
+                      if (!isParliament && draft.researchMode !== researchMode) {
+                        setResearchMode(draft.researchMode);
+                        updatePreferences({ research_mode: draft.researchMode }).catch(() => {});
+                      }
+                      setRecordTypePersist(draft.recordType);
+                      setJurisdictionPersist(draft.jurisdiction);
+                      setLegislationTypePersist(draft.legislationType);
+                      setCurrentOnlyPersist(draft.currentOnly);
+                      setDateFromPersist(draft.dateFrom);
+                      setDateToPersist(draft.dateTo);
+                      setCourtPersist(draft.caseLawCourt);
+                      setShowFilters(false);
                     }}
                     onClose={() => setShowFilters(false)}
                   />
@@ -757,9 +807,6 @@ function AppContent() {
                   onSend={handleSend}
                   onStop={handleStop}
                   chatMode={chatMode}
-                  jurisdictionShort={jurisdictionShort}
-                  todayISO={todayISO}
-                  onToggleFilters={() => setShowFilters(f => !f)}
                 />
               </div>
             </div>
