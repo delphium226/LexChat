@@ -85,6 +85,7 @@ class ChatRequest(BaseModel):
     current_only: Optional[bool] = False
     # Parliamentary-mode filters (parliament bot only)
     record_type: Optional[str] = None
+    sessions: Optional[List[int]] = None
     chat_id: Optional[int] = None
     # Deep Research execution: the user-approved plan (chat_mode="deep_research")
     deep_research_plan: Optional[DeepResearchPlan] = None
@@ -143,6 +144,7 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
             "_legislation_type": body.legislation_type or None,
             "_current_only": body.current_only or False,
             "_pt_record_type": body.record_type or None,
+            "_pt_sessions": body.sessions or None,
             "_doc_context": doc_context,
             "_matter_context": matter_context,
             # Local-cache key source (D8 Phase 5): in standard mode the cache

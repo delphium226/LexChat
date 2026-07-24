@@ -380,8 +380,19 @@ def build_parliament_filter_constraint_block(cfg: dict) -> str:
     record_type = cfg.get("_pt_record_type")
     date_from = cfg.get("_date_from")
     date_to = cfg.get("_date_to")
+    sessions = cfg.get("_pt_sessions")
 
-    if not any([record_type, date_from, date_to]):
+    # Fold the selected Holyrood sessions into the effective date window (mirrors
+    # _apply_parliament_filters) so the model's stated scope matches enforcement.
+    if sessions:
+        from .agent.tools.parliament import _sessions_date_window
+        s_from, s_to = _sessions_date_window(sessions)
+        if s_from:
+            date_from = max(date_from, s_from) if date_from else s_from
+        if s_to:
+            date_to = min(date_to, s_to) if date_to else s_to
+
+    if not any([record_type, date_from, date_to, sessions]):
         return ""
 
     lines = ["ACTIVE RESEARCH FILTERS (applied by the system — respect these when choosing tools and arguments):"]
@@ -396,6 +407,10 @@ def build_parliament_filter_constraint_block(cfg: dict) -> str:
             lines.append(f"- Record type: {label}. Use search_scottish_committee_transcripts.")
         else:
             lines.append(f"- Record type: {label}.")
+
+    if sessions:
+        session_label = ", ".join(f"Session {s}" for s in sorted(sessions))
+        lines.append(f"- Parliamentary session(s): {session_label} (applied as the date window below). Only retrieve records within this window.")
 
     if date_from and date_to:
         lines.append(f"- Date range: {date_from} to {date_to}. Pass date_from/date_to to any tool that accepts them.")

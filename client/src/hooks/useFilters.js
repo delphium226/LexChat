@@ -1,4 +1,18 @@
 import { useState } from 'react';
+import { LATEST_SESSION } from '../constants/research';
+
+// Parse the persisted `filter_sessions` JSON array; fall back to the latest
+// session so the parliament session filter defaults to the current term.
+function readSessions() {
+  const raw = localStorage.getItem('filter_sessions');
+  if (!raw) return [LATEST_SESSION];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [LATEST_SESSION];
+  } catch {
+    return [LATEST_SESSION];
+  }
+}
 
 // Research filter state (jurisdiction, dates, court, legislation type,
 // current-only), moved from App.jsx. Filters persist in two layers:
@@ -14,8 +28,11 @@ export function useFilters(currentChatId) {
   const [caseLawCourt, setCaseLawCourt] = useState(() => localStorage.getItem('filter_caseLawCourt') || '');
   const [legislationType, setLegislationType] = useState(() => localStorage.getItem('filter_legislationType') || null);
   const [currentOnly, setCurrentOnly] = useState(() => localStorage.getItem('filter_currentOnly') !== 'false');
-  // Parliament-mode filter (only surfaced when the bot is in parliamentary_records mode)
+  // Parliament-mode filters (only surfaced when the bot is in parliamentary_records mode)
   const [recordType, setRecordType] = useState(() => localStorage.getItem('filter_recordType') || null);
+  // Session filter — multiselect array of Holyrood session numbers; defaults to
+  // the latest session. Empty array = no session restriction (all sessions).
+  const [sessions, setSessions] = useState(readSessions);
 
   const saveFiltersToChatStorage = (chatId, overrides = {}) => {
     if (!chatId) return;
@@ -27,6 +44,7 @@ export function useFilters(currentChatId) {
       legislationType,
       currentOnly,
       recordType,
+      sessions,
       ...overrides,
     };
     localStorage.setItem(`filter_chat_${chatId}`, JSON.stringify(filters));
@@ -69,6 +87,12 @@ export function useFilters(currentChatId) {
     else localStorage.removeItem('filter_recordType');
     if (currentChatId) saveFiltersToChatStorage(currentChatId, { recordType: v });
   };
+  const setSessionsPersist = v => {
+    const arr = Array.isArray(v) ? v : [];
+    setSessions(arr);
+    localStorage.setItem('filter_sessions', JSON.stringify(arr));
+    if (currentChatId) saveFiltersToChatStorage(currentChatId, { sessions: arr });
+  };
   const clearAllFilters = () => {
     setJurisdictionPersist(null);
     setDateFromPersist('');
@@ -77,7 +101,9 @@ export function useFilters(currentChatId) {
     setLegislationTypePersist(null);
     setCurrentOnlyPersist(false);
     setRecordTypePersist(null);
+    setSessionsPersist([LATEST_SESSION]);
   };
+  const sessionsAreDefault = sessions.length === 1 && sessions[0] === LATEST_SESSION;
   const hasActiveFilters =
     jurisdiction ||
     dateFrom ||
@@ -85,7 +111,8 @@ export function useFilters(currentChatId) {
     caseLawCourt ||
     legislationType ||
     currentOnly ||
-    recordType;
+    recordType ||
+    !sessionsAreDefault;
 
   // Restore the per-chat filter snapshot when opening a chat; any filter not in
   // the snapshot falls back to the chat's matter-level defaults (if provided).
@@ -133,6 +160,10 @@ export function useFilters(currentChatId) {
         if (f.recordType) localStorage.setItem('filter_recordType', f.recordType);
         else localStorage.removeItem('filter_recordType');
       }
+      if (Array.isArray(f.sessions)) {
+        setSessions(f.sessions);
+        localStorage.setItem('filter_sessions', JSON.stringify(f.sessions));
+      }
     }
     if (chatMatter) {
       if (chatMatter.jurisdiction && savedFilters.jurisdiction === undefined) {
@@ -155,6 +186,7 @@ export function useFilters(currentChatId) {
     legislationType,
     currentOnly,
     recordType,
+    sessions,
     setJurisdiction,
     setDateFrom,
     setDateTo,
@@ -168,6 +200,7 @@ export function useFilters(currentChatId) {
     setLegislationTypePersist,
     setCurrentOnlyPersist,
     setRecordTypePersist,
+    setSessionsPersist,
     saveFiltersToChatStorage,
     clearAllFilters,
     hasActiveFilters,

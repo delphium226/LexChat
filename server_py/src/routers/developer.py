@@ -309,6 +309,82 @@ async def save_features(
 
 
 # -----------------------------------------------------------------------
+# Parliamentary data refresh (parliament bot only)
+# -----------------------------------------------------------------------
+
+# Holyrood sessions offered in the refresh dropdown (most-recent first). Windows
+# are resolved crawler-side from the authoritative SP_SESSIONS map. Older sessions
+# (1–5) are largely un-crawled, so a refresh there is a first ingest.
+_REFRESH_SESSIONS = [
+    {"id": "all", "label": "All sessions"},
+    {"id": "7", "label": "Session 7 (2026– )"},
+    {"id": "6", "label": "Session 6 (2021–2026)"},
+    {"id": "5", "label": "Session 5 (2016–2021)"},
+    {"id": "4", "label": "Session 4 (2011–2016)"},
+    {"id": "3", "label": "Session 3 (2007–2011)"},
+    {"id": "2", "label": "Session 2 (2003–2007)"},
+    {"id": "1", "label": "Session 1 (1999–2003)"},
+]
+
+
+def _is_parliamentary() -> bool:
+    return (settings.research_mode or "").strip() == "parliamentary_records"
+
+
+class ParliamentRefreshRequest(BaseModel):
+    session: str
+
+
+@admin_router.get("/parliament-refresh")
+async def get_parliament_refresh():
+    """Report whether this bot supports data refresh and the last refresh status.
+
+    `research_mode` lets the admin UI show the refresh panel only on a
+    parliament bot; `sessions` populates the dropdown; `status` reflects the
+    most recent (or in-flight) manual refresh.
+    """
+    from ..services.parliament_crawler import get_refresh_status
+
+    return {
+        "research_mode": settings.research_mode or "",
+        "supported": _is_parliamentary(),
+        "sessions": _REFRESH_SESSIONS,
+        "status": get_refresh_status(),
+    }
+
+
+@admin_router.post("/parliament-refresh")
+async def trigger_parliament_refresh(body: ParliamentRefreshRequest):
+    """Kick off a background re-crawl of one Holyrood session's data.
+
+    Fire-and-forget: launches the crawler's refresh as an asyncio task and
+    returns immediately. Progress is polled via GET /parliament-refresh. Only
+    valid on a bot running in parliamentary_records mode.
+    """
+    if not _is_parliamentary():
+        raise HTTPException(
+            status_code=400,
+            detail="Data refresh is only available on a bot in parliamentary_records mode.",
+        )
+
+    from ..services.parliament_crawler import get_refresh_status, refresh_session_data
+
+    valid_ids = {s["id"] for s in _REFRESH_SESSIONS}
+    if body.session not in valid_ids:
+        raise HTTPException(status_code=400, detail=f"Unknown session: {body.session!r}")
+
+    status = get_refresh_status()
+    if status.get("running"):
+        raise HTTPException(status_code=409, detail="A refresh is already running.")
+
+    import asyncio
+
+    asyncio.create_task(refresh_session_data(body.session))
+    logger.info(f"[Developer] Parliamentary data refresh triggered for session {body.session!r}")
+    return {"success": True, "session": body.session}
+
+
+# -----------------------------------------------------------------------
 # Activity log
 # -----------------------------------------------------------------------
 

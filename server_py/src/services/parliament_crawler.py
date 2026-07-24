@@ -39,6 +39,7 @@ from ..agent.tools import (
     _parse_sp_plenary_transcript,
     _SP_OR_BASE,
 )
+from ..agent.tools.parliament import SP_SESSIONS
 
 logger = logging.getLogger("crawler")
 
@@ -54,6 +55,19 @@ _BACKFILL_START = _SESSION6_START    # earliest session to backfill
 # recent date window against our own stored state — not via HTTP conditional GETs.
 _DELTA_WINDOW_DAYS = 30        # trailing window the daily delta loop re-scans
 _HIGH_WATER_OVERLAP_DAYS = 14  # backfill re-scan margin before the newest stored meeting
+
+# Holyrood session date windows, by meeting_date, for the admin-triggered manual
+# refresh. Derived from the authoritative SP_SESSIONS map (sessions 1–7) so the
+# refresh can bound a re-scan to any session — including the older, largely
+# un-crawled ones (end=None → today).
+def _sp_session_windows() -> dict[str, tuple[date, date | None]]:
+    windows: dict[str, tuple[date, date | None]] = {}
+    for num, (start, end) in SP_SESSIONS.items():
+        windows[str(num)] = (
+            _parse_date(start),
+            _parse_date(end) if end else None,
+        )
+    return windows
 
 
 # ---------------------------------------------------------------------------
@@ -738,6 +752,132 @@ async def backfill_committee_captions() -> int:
 
     logger.info(f"[Crawler] Committee caption backfill complete — {captured} meetings with captions cached")
     return captured
+
+
+# ---------------------------------------------------------------------------
+# Admin-triggered manual refresh (by Holyrood session)
+# ---------------------------------------------------------------------------
+
+# In-process status of the most recent manual refresh, surfaced to the admin UI.
+# A single refresh runs at a time; the endpoint polls this to show progress.
+_refresh_status: dict = {
+    "running": False,
+    "session": None,
+    "started_at": None,
+    "finished_at": None,
+    "result": None,   # {"committee": int, "plenary": int, "captions": int}
+    "error": None,
+}
+
+
+def get_refresh_status() -> dict:
+    """Return a copy of the current/last manual-refresh status."""
+    return dict(_refresh_status)
+
+
+def _session_window(session_id: str):
+    """Resolve a Holyrood session id to a (start, end) meeting_date window.
+
+    'all' → Session 6 start to today. Unknown id → None. Open-ended current-term
+    windows are capped at today.
+    """
+    today = date.today()
+    if session_id == "all":
+        return _BACKFILL_START, today
+    win = _sp_session_windows().get(session_id)
+    if not win or win[0] is None:
+        return None
+    start, end = win
+    return start, (min(end, today) if end else today)
+
+
+async def _reprocess_window(client, *, show_param, parser, process_fn, start, end) -> int:
+    """Re-scan a date window's listing pages and (re)process every meeting in it.
+
+    Unlike the backfills (which skip already-seen meeting_ids), this reprocesses
+    each meeting so late-published transcripts and newly-added agenda items are
+    picked up. Per-item existence checks inside process_fn keep completed
+    transcripts from being re-fetched, so a re-run is cheap.
+    """
+    total = 0
+    window_start = start
+    while window_start < end:
+        window_end = min(window_start + timedelta(days=13), end)
+        try:
+            await asyncio.sleep(_BACKFILL_DELAY)
+            meetings = await _fetch_window_meetings(
+                client, show_param=show_param, parser=parser,
+                window_start=window_start, window_end=window_end,
+            )
+            logger.info(
+                f"[Crawler] Refresh {show_param} {window_start}→{window_end}: {len(meetings)} meetings"
+            )
+            for meeting in meetings:
+                await asyncio.sleep(_BACKFILL_DELAY)
+                total += await process_fn(client, meeting)
+        except Exception as exc:
+            logger.warning(f"[Crawler] Refresh window {window_start}→{window_end} error: {exc}")
+        window_start = window_end + timedelta(days=1)
+    return total
+
+
+async def refresh_session_data(session_id: str) -> dict:
+    """Re-scan committee + plenary (and captions) for one Holyrood session.
+
+    Admin-triggered manual refresh. Reprocesses every meeting in the session's
+    date window so new sittings, late-published Official Report transcripts, and
+    newly-added agenda items are ingested without waiting for the daily delta.
+    Serialised via _refresh_status: a second call while one is running is a no-op
+    that returns the in-flight status.
+    """
+    if _refresh_status["running"]:
+        logger.info("[Crawler] Manual refresh already running; ignoring new request")
+        return get_refresh_status()
+
+    window = _session_window(session_id)
+    if window is None:
+        raise ValueError(f"Unknown session id: {session_id!r}")
+
+    start, end = window
+    _refresh_status.update(
+        running=True, session=session_id,
+        started_at=datetime.utcnow().isoformat(), finished_at=None,
+        result=None, error=None,
+    )
+    logger.info(f"[Crawler] Manual refresh starting for session {session_id} ({start}→{end})")
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
+            committee = await _reprocess_window(
+                client, show_param="showCommittee", parser=_parse_sp_listing_meetings,
+                process_fn=_process_meeting, start=start, end=end,
+            )
+            plenary = await _reprocess_window(
+                client, show_param="showPlenary", parser=_parse_sp_plenary_meetings,
+                process_fn=_process_plenary_meeting, start=start, end=end,
+            )
+
+        # Fill any missing video captions for the newly-ingested meetings. Both
+        # backfills self-skip when ENABLE_VIDEO_DEEPLINKS is off and only touch
+        # meetings not yet cached, so this is cheap in steady state.
+        captions = 0
+        if settings.enable_video_deeplinks:
+            captions += await backfill_captions()
+            captions += await backfill_committee_captions()
+
+        result = {"committee": committee, "plenary": plenary, "captions": captions}
+        _refresh_status.update(
+            running=False, finished_at=datetime.utcnow().isoformat(), result=result,
+        )
+        logger.info(f"[Crawler] Manual refresh complete for session {session_id}: {result}")
+        return get_refresh_status()
+
+    except Exception as exc:
+        logger.error(f"[Crawler] Manual refresh error: {exc}", exc_info=True)
+        _refresh_status.update(
+            running=False, finished_at=datetime.utcnow().isoformat(), error=str(exc),
+        )
+        return get_refresh_status()
 
 
 # ---------------------------------------------------------------------------

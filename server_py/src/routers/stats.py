@@ -1012,3 +1012,202 @@ async def get_cache_stats(
             "local_prompt_cache_enabled": bool(features.get("local_prompt_cache_enabled", True)),
         },
     }
+
+
+# --------------------------------------------------------------------------- #
+# Parliamentary data coverage (parliament bot). Reports what the crawler has
+# ingested into sp_committee_items / sp_plenary_items / sp_video_captions and
+# where the gaps are, grouped by Holyrood session. Reads this process's own DB,
+# so on a non-parliament bot every table is empty and the numbers read zero.
+# --------------------------------------------------------------------------- #
+
+# Holyrood sessions, by meeting_date. Session 6 opened after the May 2021
+# election; Session 7 after the May 2026 election. Keep in sync with
+# parliament_crawler._SESSION6_START / _SESSION7_START.
+_SESSIONS = [
+    {"id": "6", "label": "Session 6 (2021–2026)", "start": "2021-05-13", "end": "2026-05-05"},
+    {"id": "7", "label": "Session 7 (2026– )", "start": "2026-05-06", "end": None},
+]
+
+
+def _session_clause(session: str, col: str = "meeting_date", keyword: str = "WHERE") -> str:
+    """Return a meeting_date range clause for a session id ('all' → no filter).
+
+    Only the fixed constants in `_SESSIONS` are ever interpolated — the incoming
+    `session` param is matched against that allowlist, so no user value reaches
+    the SQL text.
+    """
+    if session == "all":
+        return ""
+    match = next((s for s in _SESSIONS if s["id"] == session), None)
+    if not match:
+        return ""
+    parts = [f"{col} >= DATE '{match['start']}'"]
+    if match["end"]:
+        parts.append(f"{col} <= DATE '{match['end']}'")
+    return f"{keyword} " + " AND ".join(parts)
+
+
+class CoverageDataType(BaseModel):
+    meetings: int
+    items: int
+    itemsWithText: int
+    itemsEmpty: int
+    distinctCommittees: Optional[int] = None
+    earliest: Optional[str] = None
+    latest: Optional[str] = None
+
+
+class CoverageVideo(BaseModel):
+    events: int
+    captionOk: int
+    captionMissing: int
+    youtube: int
+    plenaryMeetings: int
+    plenaryWithVideo: int
+    committeeMeetings: int
+    committeeWithVideo: int
+
+
+class CoverageSessionRow(BaseModel):
+    id: str
+    label: str
+    committeeMeetings: int
+    committeeItems: int
+    plenaryMeetings: int
+    plenaryItems: int
+    videoEvents: int
+
+
+class ParliamentCoverageResponse(BaseModel):
+    session: str
+    sessions: List[Dict[str, Optional[str]]]
+    committee: CoverageDataType
+    plenary: CoverageDataType
+    video: CoverageVideo
+    perSession: List[CoverageSessionRow]
+
+
+async def _coverage_for_table(db, table: str, session: str, with_committees: bool):
+    """Aggregate ingest coverage for one SP items table under a session filter."""
+    clause = _session_clause(session)
+    committee_expr = (
+        "COUNT(DISTINCT committee_name) FILTER (WHERE committee_name IS NOT NULL)"
+        if with_committees else "NULL::bigint"
+    )
+    row = (await db.execute(text(f"""
+        SELECT
+            COUNT(DISTINCT meeting_id)                                       AS meetings,
+            COUNT(*)                                                         AS items,
+            COUNT(*) FILTER (WHERE COALESCE(TRIM(full_text), '') <> '')      AS items_with_text,
+            COUNT(*) FILTER (WHERE COALESCE(TRIM(full_text), '') = '')       AS items_empty,
+            {committee_expr}                                                 AS distinct_committees,
+            MIN(meeting_date)                                                AS earliest,
+            MAX(meeting_date)                                                AS latest
+        FROM {table}
+        {clause}
+    """))).mappings().first()
+    return {
+        "meetings": int(row["meetings"] or 0),
+        "items": int(row["items"] or 0),
+        "itemsWithText": int(row["items_with_text"] or 0),
+        "itemsEmpty": int(row["items_empty"] or 0),
+        "distinctCommittees": (int(row["distinct_committees"]) if row["distinct_committees"] is not None else None),
+        "earliest": row["earliest"].isoformat() if row["earliest"] else None,
+        "latest": row["latest"].isoformat() if row["latest"] else None,
+    }
+
+
+@router.get("/parliament-coverage", response_model=ParliamentCoverageResponse)
+async def get_parliament_coverage(
+    session: str = "all",
+    admin: dict = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Report parliamentary-data ingest coverage grouped by Holyrood session.
+
+    Surfaces, per data type (committee transcripts, plenary/chamber debates,
+    SP TV video captions), what the crawler has stored and what is still
+    missing (agenda items with no published Official Report text yet, meetings
+    with no usable video-caption track). All figures read this bot's own DB.
+    """
+    if session != "all" and not any(s["id"] == session for s in _SESSIONS):
+        session = "all"
+
+    committee = await _coverage_for_table(db, "sp_committee_items", session, with_committees=True)
+    plenary = await _coverage_for_table(db, "sp_plenary_items", session, with_committees=False)
+
+    # Video captions — keyed to meetings by meeting_id.
+    vclause = _session_clause(session)
+    video_row = (await db.execute(text(f"""
+        SELECT
+            COUNT(*)                                    AS events,
+            COUNT(*) FILTER (WHERE caption_ok)          AS caption_ok,
+            COUNT(*) FILTER (WHERE NOT caption_ok)      AS caption_missing,
+            COUNT(*) FILTER (WHERE is_youtube)          AS youtube
+        FROM sp_video_captions
+        {vclause}
+    """))).mappings().first()
+
+    # How many plenary / committee meetings have a matching cached video event.
+    p_meet = _session_clause(session, col="p.meeting_date", keyword="WHERE")
+    plenary_video = (await db.execute(text(f"""
+        SELECT
+            COUNT(DISTINCT p.meeting_id)                                    AS meetings,
+            COUNT(DISTINCT p.meeting_id) FILTER (WHERE v.meeting_id IS NOT NULL) AS with_video
+        FROM sp_plenary_items p
+        LEFT JOIN sp_video_captions v ON v.meeting_id = p.meeting_id
+        {p_meet}
+    """))).mappings().first()
+    c_meet = _session_clause(session, col="c.meeting_date", keyword="WHERE")
+    committee_video = (await db.execute(text(f"""
+        SELECT
+            COUNT(DISTINCT c.meeting_id)                                    AS meetings,
+            COUNT(DISTINCT c.meeting_id) FILTER (WHERE v.meeting_id IS NOT NULL) AS with_video
+        FROM sp_committee_items c
+        LEFT JOIN sp_video_captions v ON v.meeting_id = c.meeting_id
+        {c_meet}
+    """))).mappings().first()
+
+    # Per-session breakdown table (always the full set, ignores the selected filter).
+    per_session = []
+    for s in _SESSIONS:
+        sc = _session_clause(s["id"])
+        cr = (await db.execute(text(f"""
+            SELECT COUNT(DISTINCT meeting_id) AS m, COUNT(*) AS i
+            FROM sp_committee_items {sc}
+        """))).mappings().first()
+        pr = (await db.execute(text(f"""
+            SELECT COUNT(DISTINCT meeting_id) AS m, COUNT(*) AS i
+            FROM sp_plenary_items {sc}
+        """))).mappings().first()
+        vr = (await db.execute(text(f"""
+            SELECT COUNT(*) AS e FROM sp_video_captions {sc}
+        """))).mappings().first()
+        per_session.append({
+            "id": s["id"],
+            "label": s["label"],
+            "committeeMeetings": int(cr["m"] or 0),
+            "committeeItems": int(cr["i"] or 0),
+            "plenaryMeetings": int(pr["m"] or 0),
+            "plenaryItems": int(pr["i"] or 0),
+            "videoEvents": int(vr["e"] or 0),
+        })
+
+    return {
+        "session": session,
+        "sessions": [{"id": s["id"], "label": s["label"]} for s in _SESSIONS],
+        "committee": committee,
+        "plenary": plenary,
+        "video": {
+            "events": int(video_row["events"] or 0),
+            "captionOk": int(video_row["caption_ok"] or 0),
+            "captionMissing": int(video_row["caption_missing"] or 0),
+            "youtube": int(video_row["youtube"] or 0),
+            "plenaryMeetings": int(plenary_video["meetings"] or 0),
+            "plenaryWithVideo": int(plenary_video["with_video"] or 0),
+            "committeeMeetings": int(committee_video["meetings"] or 0),
+            "committeeWithVideo": int(committee_video["with_video"] or 0),
+        },
+        "perSession": per_session,
+    }

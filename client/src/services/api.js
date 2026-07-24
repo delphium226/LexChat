@@ -42,6 +42,7 @@ export const sendMessage = (
           legislation_type: filters.legislationType || null,
           current_only: filters.currentOnly || false,
           record_type: filters.recordType || null,
+          sessions: filters.sessions || null,
         }),
         signal,
       });
@@ -129,6 +130,7 @@ export const getResearchPlan = async (
       legislation_type: filters.legislationType || null,
       current_only: filters.currentOnly || false,
       record_type: filters.recordType || null,
+      sessions: filters.sessions || null,
     },
     { signal }
   );
@@ -294,6 +296,21 @@ export const getCacheStats = async (days = 30) => {
 
 export const purgeLocalCache = async () => {
   const response = await axios.delete(`${API_URL}/stats/cache/local`);
+  return response.data;
+};
+
+export const getParliamentCoverage = async (session = 'all') => {
+  const response = await axios.get(`${API_URL}/stats/parliament-coverage`, { params: { session } });
+  return response.data;
+};
+
+export const getParliamentRefresh = async () => {
+  const response = await axios.get(`${API_URL}/developer/parliament-refresh`);
+  return response.data;
+};
+
+export const triggerParliamentRefresh = async session => {
+  const response = await axios.post(`${API_URL}/developer/parliament-refresh`, { session });
   return response.data;
 };
 

@@ -25,6 +25,9 @@ import {
   getOpenRouterModels,
   getCostStats,
   getCacheStats,
+  getParliamentCoverage,
+  getParliamentRefresh,
+  triggerParliamentRefresh,
   getFeatures,
   saveFeatures,
   getPeers,
@@ -55,6 +58,7 @@ import { PerformanceTab } from './admin/PerformanceTab';
 import { EfficiencyTab } from './admin/EfficiencyTab';
 import { CostTab } from './admin/CostTab';
 import { CacheTab } from './admin/CacheTab';
+import { ParliamentCoverageTab } from './admin/ParliamentCoverageTab';
 import { ProviderConfigPanel } from './admin/ProviderConfigPanel';
 import { PERF_COLORS, COST_COLORS } from './admin/chartConfig';
 import { WeeklySurveyComplianceChart } from './admin/surveyCharts';
@@ -103,6 +107,11 @@ const AdminPortal = ({ currentUser }) => {
   const [cacheTimeframe, setCacheTimeframe] = useState('30');
   const [isCacheLoading, setIsCacheLoading] = useState(false);
 
+  // --- PARLIAMENTARY COVERAGE STATE ---
+  const [coverage, setCoverage] = useState(null);
+  const [coverageSession, setCoverageSession] = useState('all');
+  const [isCoverageLoading, setIsCoverageLoading] = useState(false);
+
   // --- SERVICE HEALTH STATE ---
   const [healthStatus, setHealthStatus] = useState(null);
   const [isTriggeringHealth, setIsTriggeringHealth] = useState(false);
@@ -128,6 +137,12 @@ const AdminPortal = ({ currentUser }) => {
     deep_research_mode_enabled: true,
   });
   const [isSavingFeatures, setIsSavingFeatures] = useState(false);
+
+  // --- PARLIAMENTARY DATA REFRESH STATE (parliament bot only) ---
+  const [parliamentRefresh, setParliamentRefresh] = useState(null);
+  const [refreshSession, setRefreshSession] = useState('all');
+  const [isTriggeringRefresh, setIsTriggeringRefresh] = useState(false);
+
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [showUserExport, setShowUserExport] = useState(false);
   const [userExportCsv, setUserExportCsv] = useState('');
@@ -167,6 +182,8 @@ const AdminPortal = ({ currentUser }) => {
       fetchCostStats(costTimeframe);
     } else if (activeTab === 'cache') {
       fetchCacheStats(cacheTimeframe);
+    } else if (activeTab === 'coverage') {
+      fetchCoverage(coverageSession);
     } else if (activeTab === 'health') {
       fetchHealthStatus();
     } else if (activeTab === 'product-feedback') {
@@ -175,6 +192,9 @@ const AdminPortal = ({ currentUser }) => {
       getFeatures()
         .then(setFeatures)
         .catch(() => {});
+      getParliamentRefresh()
+        .then(setParliamentRefresh)
+        .catch(() => {});
     } else if (activeTab === 'federation') {
       setIsPeersLoading(true);
       getPeers()
@@ -182,7 +202,19 @@ const AdminPortal = ({ currentUser }) => {
         .catch(() => {})
         .finally(() => setIsPeersLoading(false));
     }
-  }, [activeTab, timeframe, learningTimeframe, perfTimeframe, effTimeframe, costTimeframe, cacheTimeframe, productFeedbackTimeframe]);
+  }, [activeTab, timeframe, learningTimeframe, perfTimeframe, effTimeframe, costTimeframe, cacheTimeframe, coverageSession, productFeedbackTimeframe]);
+
+  // Poll the parliamentary-refresh status while a refresh is in flight so the
+  // admin sees progress and the final result without reloading the tab.
+  useEffect(() => {
+    if (activeTab !== 'developer' || !parliamentRefresh?.status?.running) return;
+    const id = setInterval(() => {
+      getParliamentRefresh()
+        .then(setParliamentRefresh)
+        .catch(() => {});
+    }, 5000);
+    return () => clearInterval(id);
+  }, [activeTab, parliamentRefresh?.status?.running]);
 
   const fetchProductFeedback = async (days = '30') => {
     setIsProductFeedbackLoading(true);
@@ -369,6 +401,18 @@ const AdminPortal = ({ currentUser }) => {
     }
   };
 
+  const fetchCoverage = async session => {
+    setIsCoverageLoading(true);
+    try {
+      const data = await getParliamentCoverage(session);
+      setCoverage(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsCoverageLoading(false);
+    }
+  };
+
   const fetchEffStats = async days => {
     setIsEffLoading(true);
     try {
@@ -439,6 +483,7 @@ const AdminPortal = ({ currentUser }) => {
             ...(currentUser?.username === 'admin' ? [{ id: 'efficiency', label: 'Efficiency' }] : []),
             { id: 'cost', label: 'Cost' },
             ...(currentUser?.username === 'admin' ? [{ id: 'cache', label: 'Cache' }] : []),
+            ...(currentUser?.username === 'admin' ? [{ id: 'coverage', label: 'Data Coverage' }] : []),
             { id: 'learning', label: 'Learning Monitor' },
             ...(currentUser?.username === 'admin' ? [{ id: 'developer', label: 'Developer' }] : []),
             ...(currentUser?.username === 'admin' ? [{ id: 'federation', label: 'Federation' }] : []),
@@ -906,6 +951,25 @@ const AdminPortal = ({ currentUser }) => {
           <div className="flex justify-center items-center h-64 text-ink-500 text-sm">No cache data available yet.</div>
         )}
 
+        {/* DATA COVERAGE TAB */}
+        {activeTab === 'coverage' && isCoverageLoading && (
+          <div className="flex justify-center items-center h-64">
+            <Spinner />
+          </div>
+        )}
+        {activeTab === 'coverage' && !isCoverageLoading && coverage && (
+          <ParliamentCoverageTab
+            coverage={coverage}
+            session={coverageSession}
+            setSession={setCoverageSession}
+          />
+        )}
+        {activeTab === 'coverage' && !isCoverageLoading && !coverage && (
+          <div className="flex justify-center items-center h-64 text-ink-500 text-sm">
+            No coverage data available yet.
+          </div>
+        )}
+
         {/* LEARNING DASHBOARD TAB */}
         {activeTab === 'learning' && (
           <div className="space-y-6">
@@ -1223,6 +1287,82 @@ const AdminPortal = ({ currentUser }) => {
                 </div>
               ))}
             </div>
+
+            {/* Parliamentary Data Refresh — parliament bot only */}
+            {parliamentRefresh?.supported && (
+              <div className="bg-paper p-6 rounded-lg shadow">
+                <h2 className="text-lg font-bold mb-1">Parliamentary Data Refresh</h2>
+                <p className="text-sm text-ink-500 mb-5">
+                  Re-crawl the Scottish Parliament Official Report for a Holyrood session. Reprocesses every meeting in
+                  the session's date range, ingesting new sittings, late-published transcripts, and newly-added agenda
+                  items. Runs in the background — completed transcripts are skipped, so a re-run is cheap.
+                </p>
+
+                <div className="flex flex-wrap items-end gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-ink-500 mb-1">Session</label>
+                    <select
+                      value={refreshSession}
+                      onChange={e => setRefreshSession(e.target.value)}
+                      disabled={parliamentRefresh?.status?.running}
+                      className="p-2 border rounded-md text-sm focus:ring-2 focus:ring-accent disabled:opacity-50"
+                    >
+                      {(parliamentRefresh.sessions || []).map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    disabled={isTriggeringRefresh || parliamentRefresh?.status?.running}
+                    onClick={async () => {
+                      setIsTriggeringRefresh(true);
+                      try {
+                        await triggerParliamentRefresh(refreshSession);
+                        const status = await getParliamentRefresh();
+                        setParliamentRefresh(status);
+                      } catch (err) {
+                        setMessage(err?.response?.data?.detail || 'Failed to start data refresh.');
+                      } finally {
+                        setIsTriggeringRefresh(false);
+                      }
+                    }}
+                    className="bg-brand hover:bg-brand-hover text-white font-ui text-sm font-medium rounded-md px-4 py-2 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {parliamentRefresh?.status?.running ? 'Refresh running…' : 'Refresh now'}
+                  </button>
+                </div>
+
+                {parliamentRefresh?.status && (parliamentRefresh.status.running || parliamentRefresh.status.finished_at) && (
+                  <div className="mt-4 text-sm">
+                    {parliamentRefresh.status.running ? (
+                      <div className="flex items-center gap-2 text-ink-600">
+                        <Spinner />
+                        <span>
+                          Refreshing session {parliamentRefresh.status.session}… this can take several minutes. You can
+                          leave this tab.
+                        </span>
+                      </div>
+                    ) : parliamentRefresh.status.error ? (
+                      <p className="text-red-600 dark:text-red-400">
+                        Last refresh (session {parliamentRefresh.status.session}) failed: {parliamentRefresh.status.error}
+                      </p>
+                    ) : parliamentRefresh.status.result ? (
+                      <p className="text-ink-600">
+                        Last refresh (session {parliamentRefresh.status.session}) stored{' '}
+                        <span className="font-medium">{parliamentRefresh.status.result.committee}</span> committee and{' '}
+                        <span className="font-medium">{parliamentRefresh.status.result.plenary}</span> plenary items
+                        {parliamentRefresh.status.result.captions > 0 && (
+                          <> · {parliamentRefresh.status.result.captions} video-caption meetings cached</>
+                        )}
+                        .
+                      </p>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Activity Log */}
             <div className="bg-paper p-6 rounded-lg shadow">

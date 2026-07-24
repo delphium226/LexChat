@@ -29,6 +29,7 @@ import Composer from './components/Composer';
 import Sidebar from './components/Sidebar';
 import {
   RECORD_TYPE_OPTIONS,
+  SESSION_OPTIONS,
   JURISDICTION_OPTIONS,
   COURT_GROUPS,
 } from './constants/research';
@@ -193,6 +194,7 @@ function AppContent() {
     legislationType,
     currentOnly,
     recordType,
+    sessions,
     setJurisdictionPersist,
     setDateFromPersist,
     setDateToPersist,
@@ -200,6 +202,7 @@ function AppContent() {
     setLegislationTypePersist,
     setCurrentOnlyPersist,
     setRecordTypePersist,
+    setSessionsPersist,
     saveFiltersToChatStorage,
     restoreFiltersForChat,
   } = useFilters(currentChatId);
@@ -230,7 +233,7 @@ function AppContent() {
     logoutWithExpiry,
     chatMode,
     researchMode,
-    filters: { jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, currentOnly, recordType },
+    filters: { jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, currentOnly, recordType, sessions },
     saveFiltersToChatStorage,
     restoreFiltersForChat,
     currentChatId,
@@ -546,6 +549,18 @@ function AppContent() {
               });
             }
 
+            // 4b. Session (Parliament) — multiselect
+            if (isParliament && Array.isArray(sessions) && sessions.length) {
+              const sorted = [...sessions].sort((a, b) => a - b);
+              const sessionLabel =
+                sorted.length === SESSION_OPTIONS.length
+                  ? 'All sessions'
+                  : sorted.length === 1
+                    ? `Session ${sorted[0]}`
+                    : `Sessions ${sorted.join(', ')}`;
+              chips.push({ icon: <CalendarIcon />, label: sessionLabel });
+            }
+
             // 5. Court (legislation, when case law is in scope)
             if (!isParliament && courtLabel && researchMode !== 'legislation_only') {
               chips.push({ icon: <GavelIcon />, label: courtLabel });
@@ -766,6 +781,7 @@ function AppContent() {
                     initial={{
                       researchMode,
                       recordType,
+                      sessions,
                       jurisdiction,
                       legislationType,
                       currentOnly,
@@ -779,6 +795,7 @@ function AppContent() {
                         updatePreferences({ research_mode: draft.researchMode }).catch(() => {});
                       }
                       setRecordTypePersist(draft.recordType);
+                      setSessionsPersist(draft.sessions);
                       setJurisdictionPersist(draft.jurisdiction);
                       setLegislationTypePersist(draft.legislationType);
                       setCurrentOnlyPersist(draft.currentOnly);

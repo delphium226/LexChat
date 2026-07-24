@@ -9,6 +9,23 @@ export const RECORD_TYPE_OPTIONS = [
   { value: 'committee', label: 'Committee transcripts' },
 ];
 
+// Scottish Parliament (Holyrood) sessions — each spans one parliamentary term
+// between elections. `value` is the session number sent to the backend, which
+// maps it onto a meeting-date window (see SP_SESSIONS in parliament.py).
+// Newest-first for display. The session filter is multiselect and defaults to
+// the latest session (LATEST_SESSION).
+export const SESSION_OPTIONS = [
+  { value: 7, label: 'Session 7 (2026–current)' },
+  { value: 6, label: 'Session 6 (2021–2026)' },
+  { value: 5, label: 'Session 5 (2016–2021)' },
+  { value: 4, label: 'Session 4 (2011–2016)' },
+  { value: 3, label: 'Session 3 (2007–2011)' },
+  { value: 2, label: 'Session 2 (2003–2007)' },
+  { value: 1, label: 'Session 1 (1999–2003)' },
+];
+
+export const LATEST_SESSION = 7;
+
 export const JURISDICTION_OPTIONS = [
   { value: null, label: 'All jurisdictions' },
   { value: 'england_and_wales', label: 'England & Wales' },

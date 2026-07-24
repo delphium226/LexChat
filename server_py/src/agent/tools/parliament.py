@@ -20,6 +20,47 @@ import re as _re
 _TWFY_API_BASE = "https://www.theyworkforyou.com/api"
 _SP_OR_BASE = "https://www.parliament.scot/chamber-and-committees/official-report/search-what-was-said-in-parliament"
 
+# Scottish Parliament (Holyrood) session → meeting-date window (inclusive).
+# Each session spans one parliamentary term between elections; boundaries use the
+# election / dissolution dates so adjacent sessions don't overlap. The current
+# session has an open upper bound (None). Used to translate the frontend session
+# filter into date_from/date_to on the date-capable SP search tools.
+SP_SESSIONS: dict[int, tuple[str, Optional[str]]] = {
+    1: ("1999-05-06", "2003-05-06"),
+    2: ("2003-05-07", "2007-05-02"),
+    3: ("2007-05-03", "2011-05-04"),
+    4: ("2011-05-05", "2016-05-04"),
+    5: ("2016-05-05", "2021-05-05"),
+    6: ("2021-05-06", "2026-05-05"),
+    7: ("2026-05-06", None),  # current term — open-ended
+}
+
+
+def _sessions_date_window(sessions) -> tuple[Optional[str], Optional[str]]:
+    """Collapse a list of selected session numbers into a single (from, to) window.
+
+    Returns the earliest start and latest end across the selected sessions. If any
+    selected session is open-ended (the current term), the upper bound is None.
+    Unknown session numbers are ignored; an empty/invalid selection yields (None, None).
+    """
+    if not sessions:
+        return None, None
+    starts, ends, open_ended = [], [], False
+    for s in sessions:
+        rng = SP_SESSIONS.get(s)
+        if not rng:
+            continue
+        starts.append(rng[0])
+        if rng[1] is None:
+            open_ended = True
+        else:
+            ends.append(rng[1])
+    if not starts:
+        return None, None
+    date_from = min(starts)
+    date_to = None if open_ended else (max(ends) if ends else None)
+    return date_from, date_to
+
 
 def _strip_html(text: str) -> str:
     import html as _html
@@ -593,6 +634,15 @@ def _apply_parliament_filters(name: str, args: dict) -> Optional[str]:
     record_type = cfg.get("_pt_record_type")
     date_from = cfg.get("_date_from")
     date_to = cfg.get("_date_to")
+
+    # Session filter → date window. Intersect with any explicit date range so the
+    # tighter of the two bounds wins (both are ISO "YYYY-MM-DD", so lexical compare
+    # == chronological). The merged window is applied to the date-capable tools below.
+    session_from, session_to = _sessions_date_window(cfg.get("_pt_sessions"))
+    if session_from:
+        date_from = max(date_from, session_from) if date_from else session_from
+    if session_to:
+        date_to = min(date_to, session_to) if date_to else session_to
 
     # Record type — set the debate_type the model omitted; redirect where the
     # record type is unavailable for the requested tool.

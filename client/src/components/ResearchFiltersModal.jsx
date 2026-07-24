@@ -2,6 +2,8 @@ import { useState } from 'react';
 import Modal from './ui/Modal';
 import {
   RECORD_TYPE_OPTIONS,
+  SESSION_OPTIONS,
+  LATEST_SESSION,
   JURISDICTION_OPTIONS,
   LEGISLATION_TYPE_OPTIONS,
   COURT_GROUPS,
@@ -32,8 +34,18 @@ export default function ResearchFiltersModal({
     caseLawCourt,
   } = draft;
 
+  const sessions = Array.isArray(draft.sessions) ? draft.sessions : [];
+  const toggleSession = value =>
+    setDraft(d => {
+      const cur = Array.isArray(d.sessions) ? d.sessions : [];
+      const next = cur.includes(value) ? cur.filter(s => s !== value) : [...cur, value];
+      return { ...d, sessions: next };
+    });
+
   const showScotlandNINote =
     (jurisdiction === 'scotland' || jurisdiction === 'northern_ireland') && researchMode !== 'legislation_only';
+
+  const sessionsAreDefault = sessions.length === 1 && sessions[0] === LATEST_SESSION;
 
   const hasActiveFilters =
     jurisdiction ||
@@ -42,7 +54,8 @@ export default function ResearchFiltersModal({
     caseLawCourt ||
     legislationType ||
     currentOnly ||
-    recordType;
+    recordType ||
+    !sessionsAreDefault;
 
   const clearAllFilters = () =>
     setDraft(d => ({
@@ -54,6 +67,7 @@ export default function ResearchFiltersModal({
       legislationType: null,
       currentOnly: false,
       recordType: null,
+      sessions: [LATEST_SESSION],
     }));
 
   const secHead = label => (
@@ -160,6 +174,43 @@ export default function ResearchFiltersModal({
             {RECORD_TYPE_OPTIONS.map(opt =>
               optBtn(recordType === opt.value, () => set('recordType', opt.value), opt.label)
             )}
+
+            {/* § Session (multiselect) */}
+            {divider()}
+            {secHead('Session')}
+            {SESSION_OPTIONS.map(opt => {
+              const checked = sessions.includes(opt.value);
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => toggleSession(opt.value)}
+                  style={checked ? { background: 'var(--accent-soft-strong)' } : undefined}
+                  className={`flex w-full items-center gap-2 text-left px-[10px] py-[6px] rounded-md font-ui text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${checked ? 'text-accent-ink font-semibold' : 'text-ink-700 hover:bg-ink-50'}`}
+                >
+                  <span
+                    aria-hidden
+                    style={{
+                      width: 15,
+                      height: 15,
+                      flexShrink: 0,
+                      borderRadius: 4,
+                      border: `1.5px solid ${checked ? 'var(--accent)' : 'var(--ink-300)'}`,
+                      background: checked ? 'var(--accent)' : 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {checked && (
+                      <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    )}
+                  </span>
+                  {opt.label}
+                </button>
+              );
+            })}
 
             {/* § Date range */}
             {divider()}

@@ -170,6 +170,7 @@ export function useChat({
           legislationType: filters.legislationType,
           currentOnly: filters.currentOnly,
           recordType: filters.recordType,
+          sessions: filters.sessions,
           chatId: activeChatId,
         },
         deepResearchPlan
@@ -321,6 +322,7 @@ export function useChat({
             legislationType: filters.legislationType,
             currentOnly: filters.currentOnly,
             recordType: filters.recordType,
+            sessions: filters.sessions,
             chatId: activeChatId,
           },
           controller.signal

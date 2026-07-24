@@ -43,6 +43,7 @@ class ResearchPlanRequest(BaseModel):
     legislation_type: Optional[str] = None
     current_only: Optional[bool] = False
     record_type: Optional[str] = None
+    sessions: Optional[List[int]] = None
     chat_id: Optional[int] = None
 
 
@@ -77,6 +78,7 @@ async def draft_plan(body: ResearchPlanRequest, user: dict = Depends(get_current
         "_legislation_type": body.legislation_type or None,
         "_current_only": body.current_only or False,
         "_pt_record_type": body.record_type or None,
+        "_pt_sessions": body.sessions or None,
     })
 
     resolved_model = provider_config.get("model") or body.model
