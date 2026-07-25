@@ -552,6 +552,103 @@ Problem/Change/Files/Verify and PR slicing: `docs/LOGGING_IMPROVEMENTS_PLAN.md`.
   parked — build only if the deployment gains a central log aggregator. Depends on
   Item 5 (so `request_id` is a first-class JSON field).
 
+### D10. YouTube caption fetch for SP TV video deep links — INVESTIGATED, NO-GO 2026-07-25
+Question raised: some Scottish Parliament events are hosted on YouTube (`isYoutube`
+in the SP TV playback model) rather than served via HLS — could we fetch captions
+from YouTube for those, to produce video deep links where the HLS path can't?
+
+**Measured against the live parliament DB (`lexchat_parliament.sp_video_captions`):**
+- **1 of 1,177** cached SP TV events is YouTube-hosted (0.08%) — a single Finance
+  Committee meeting from **15 June 2016** (`youtube.com/embed/1fP9zjwzr8M`), and it
+  has `caption_ok = false` anyway, so it wouldn't benefit even if built.
+- The ~50% of events with **no** deep link are NOT YouTube — they are ordinary HLS
+  streams the Scottish Parliament published without a WebVTT caption track. Coverage
+  is age-driven: 2021 ~40%, 2024 ~35% (a dip), 2026 ~84%. Nothing fetchable recovers
+  captions that were never generated at source.
+
+**Decision: do not build a YouTube caption fetcher.** Payoff is one un-captioned 2016
+committee meeting; cost is whitelisting `youtube.com` + `*.googlevideo.com` on the
+internet-restricted target plus a fragile yt-dlp/timedtext dependency against the
+feature's fail-soft promise. (Note: YouTube captions would actually be *easier* to
+match than HLS — their timestamps are seconds-from-video-start, feeding straight into
+the existing `&t=` YouTube branch in `caption_match.py:173-177`, no wall-clock
+derivation. But feasibility isn't the blocker; value is.) The `&t=` YouTube branch is
+effectively dead code — leave as-is (harmless) or annotate.
+
+Revisit only if a future crawl shows YouTube-hosted events becoming a material share
+of recent sittings. The real coverage lever (un-captioned HLS) is source-side; the
+only on-our-side fix would be self-transcribing HLS audio (e.g. Whisper) — a large,
+separate project, not scoped here.
+
+### D11. Westminster (UK Parliament) video deep links — SPIKE RUN 2026-07-25: GO (cheap), still blocked on Westminster re-introduction
+
+**Spike outcome (2026-07-25, read-only HTTP probing — full findings in
+`docs/parliament/WESTMINSTER_VIDEO_SPIKE_PLAN.md` §6):** **GO (cheap).** All three
+questions confirmed against live endpoints with no auth, server-usable:
+- **Q1 (per-event timecodes):** `GET www.parliamentlive.tv/Event/Logs/{GUID}` returns
+  the agenda index — `<span class="time-code" data-time="…Z">` (UTC) + local render +
+  speaker per `<li>`. No auth/cookie (bare curl → 200). (The `data.parliamentlive.tv/api/event/{GUID}`
+  the plan flagged is a 401 dead-end and is not needed.)
+- **Q2 (Hansard↔video):** `hansard-api.parliament.uk` debate JSON carries a section-level
+  **`Timecode`** on the *same wall-clock timeline* as parliamentlive (Hansard local
+  `09:45:39` == parliamentlive `08:45:39Z`), but **no event GUID**. GUID resolved
+  deterministically via `GET www.parliamentlive.tv/Search?House=Commons&Start=DD/MM/YYYY&End=DD/MM/YYYY`
+  (one Chamber event per House per day). Reliable for chamber debates.
+- **Q3 (deep link):** `https://parliamentlive.tv/event/index/{GUID}?in=HH:MM:SS[&out=HH:MM:SS]`
+  (local wall-clock), confirmed via the site's own share-link generator `GetShareVideo`.
+- **The entire SP TV caption-derivation layer is eliminated** (no HLS/WebVTT/segment×6s/
+  rarest-phrase); coverage is effectively complete, not the ~47% caption ceiling.
+- **Build estimate (video layer only): ~2–3 days** — a `plive_client.py` (no caption
+  layer), a Hansard→`?in=` mapping helper, a fail-soft link-attach hook + small
+  GUID-keyed cache table, and fixture tests.
+- Whitelist (target): `www.parliamentlive.tv`, `hansard-api.parliament.uk` (required);
+  `data.parliamentlive.tv` optional.
+- **⚠️ GO authorises *costing only*, not building.** The gating decision is unchanged
+  and below: re-introducing Westminster as a supported jurisdiction (the ~Scotland-sized
+  scope), which is the real cost. The video piece is the last ~10% and is now de-risked.
+- **Draft build plan (video layer):** `docs/parliament/WESTMINSTER_VIDEO_IMPLEMENTATION_PLAN.md`
+  — 5 phases (`plive_client.py` + `plive_match.py`, lazy `plive_events` cache, attach
+  hook, flag/tests/docs). Assumes the Westminster Hansard retrieval layer (Phase W0) is
+  reintroduced first; not authorised to build.
+
+**(Original investigation notes retained below.)**
+
+Question raised: could we achieve the SP TV video-deeplink outcome (timestamped
+video link for a spoken contribution) for **UK Parliament (Westminster)** too?
+
+**Key finding (web-researched 2026-07-25):** Westminster exposes speaker→video
+**timecodes natively**, so the hardest part of the Scotland pipeline does not exist
+as a problem here. A live parliamentlive.tv event page
+(`/Event/Index/{GUID}`) renders a per-speaker agenda index with precise HH:MM:SS
+timecodes, each jumping to the exact video point, backed by a structured API host
+(`data.parliamentlive.tv`; Atom event feed confirmed). This eliminates SP TV's
+entire fragile caption layer (HLS/WebVTT parsing, segment-ordinal×6s timing,
+rarest-phrase matching, DST wall-clock). Video links would be a cheap lookup, and
+coverage would be **complete** (not the ~47% caption-track ceiling Scotland has).
+
+**But the real blocker is scope, not the video:** the parliament bot is currently
+**Scotland-only** — `search_hansard`/`get_hansard_debate` were deliberately removed,
+`get_member_info`/`search_bills` narrowed to Holyrood, `_slim_hansard_results`
+post-filters TWFY to `/sp/` only. Delivering *any* Westminster outcome first requires
+**re-introducing Westminster as a supported jurisdiction** (Hansard retrieval tools,
+search/crawl layer, filter plumbing, session/date mapping, prompt scope). The video
+links are the last ~10% on top of that, not a standalone feature. Westminster is
+*better* served by open data than Holyrood (native JSON Hansard API
+`hansard-api.parliament.uk` under OPL v3.0; mature `members-api.parliament.uk`; TWFY
+`getHansard` was originally a Westminster tool).
+
+**Decision needed (product, not code):** Westminster was removed on purpose — the
+reason for that removal must be understood before recommending re-adding it. The
+strong-but-cheap video links are an *argument in favour* of re-introduction, not a
+reason to do it in isolation.
+
+**Next action — a half-day technical spike** to ground the estimate (confirm the
+parliamentlive per-event agenda API shape, the Hansard-debate→event-GUID association,
+and the deep-link time-param format). **Self-contained spike plan:
+`docs/parliament/WESTMINSTER_VIDEO_SPIKE_PLAN.md`.** Spike is read-only/no-code
+(HTTP probing + findings write-up); build only decided after the spike + the
+Westminster-scope decision.
+
 ### D6. Cache admin UI: feature toggles + Cache stats tab (scoped 2026-07-17, BUILT 2026-07-17)
 Two feature flags in Developer tab → Feature flags (`prompt_caching_enabled`,
 `tool_memo_enabled`, both default ON = current behaviour), consumed via the request

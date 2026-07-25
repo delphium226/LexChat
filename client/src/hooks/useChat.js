@@ -171,6 +171,7 @@ export function useChat({
           currentOnly: filters.currentOnly,
           recordType: filters.recordType,
           sessions: filters.sessions,
+          house: filters.house,
           chatId: activeChatId,
         },
         deepResearchPlan
@@ -323,6 +324,7 @@ export function useChat({
             currentOnly: filters.currentOnly,
             recordType: filters.recordType,
             sessions: filters.sessions,
+            house: filters.house,
             chatId: activeChatId,
           },
           controller.signal

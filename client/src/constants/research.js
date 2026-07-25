@@ -26,6 +26,59 @@ export const SESSION_OPTIONS = [
 
 export const LATEST_SESSION = 7;
 
+// ── Westminster (UK Parliament) filter options ───────────────────────────────
+// The Westminster bot runs the same client from a separate deployment, selected
+// by the bot's research_mode (GET /api/bot-info). Its filter vocabulary is
+// disjoint from Holyrood's: a House dimension (Holyrood is unicameral), a
+// different record taxonomy (Hansard's own section types), and Parliaments
+// rather than fixed-term sessions.
+
+export const HOUSE_OPTIONS = [
+  { value: null, label: 'Both Houses' },
+  { value: 'commons', label: 'House of Commons' },
+  { value: 'lords', label: 'House of Lords' },
+];
+
+export const WM_RECORD_TYPE_OPTIONS = [
+  { value: null, label: 'All records' },
+  { value: 'chamber', label: 'Chamber debates' },
+  { value: 'westminster_hall', label: 'Westminster Hall' },
+  { value: 'public_bill_committee', label: 'Public Bill Committees' },
+  { value: 'written_statements', label: 'Written statements' },
+  { value: 'written_answers', label: 'Written answers' },
+];
+
+// `value` is the Parliament number sent to the backend, which maps it onto a
+// sitting-date window (see WM_PARLIAMENTS in westminster.py). Newest first.
+export const WM_SESSION_OPTIONS = [
+  { value: 6, label: '2024– Parliament' },
+  { value: 5, label: '2019–2024 Parliament' },
+  { value: 4, label: '2017–2019 Parliament' },
+  { value: 3, label: '2015–2017 Parliament' },
+  { value: 2, label: '2010–2015 Parliament' },
+  { value: 1, label: '2005–2010 Parliament' },
+];
+
+export const LATEST_WM_SESSION = 6;
+
+export const WESTMINSTER_MODE = 'westminster_records';
+
+// Mode-keyed selectors. The filter set is fixed per deployment (one bot = one
+// research mode), so these resolve once from botInfo rather than branching on
+// per-query user state.
+export const getRecordTypeOptions = mode =>
+  mode === WESTMINSTER_MODE ? WM_RECORD_TYPE_OPTIONS : RECORD_TYPE_OPTIONS;
+
+export const getSessionOptions = mode =>
+  mode === WESTMINSTER_MODE ? WM_SESSION_OPTIONS : SESSION_OPTIONS;
+
+export const getLatestSession = mode =>
+  mode === WESTMINSTER_MODE ? LATEST_WM_SESSION : LATEST_SESSION;
+
+// Holyrood calls its terms "sessions"; Westminster calls them "Parliaments".
+export const getSessionFilterLabel = mode =>
+  mode === WESTMINSTER_MODE ? 'Parliament' : 'Session';
+
 export const JURISDICTION_OPTIONS = [
   { value: null, label: 'All jurisdictions' },
   { value: 'england_and_wales', label: 'England & Wales' },

@@ -11,10 +11,12 @@ import logging
 import uuid
 from typing import Callable, Optional
 
+from .provider_factory import get_request_provider_config
 from .summarisation import call_chunk, summarise_for_query
 from .tools import (
     execute_worker_tool,
     execute_parliament_tool,
+    execute_westminster_tool,
     extract_legislation_ids_from_search,
     detect_appellate_decisions,
     _PARLIAMENT_TOOL_NAMES,
@@ -172,16 +174,19 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
             })
 
     elif name == "search_bills":
+        # Holyrood bills come back camelCase, Westminster bills snake_case — the
+        # tool name is shared across both bots, so accept either spelling.
         for bill in data.get("results", []):
             url = bill.get("url", "")
             if url and any(s.get("url") == url for s in accumulator):
                 continue
+            title = bill.get("shortTitle") or bill.get("short_title") or ""
             accumulator.append({
                 "kind": "Bill",
-                "title": bill.get("shortTitle", ""),
-                "sub": bill.get("currentStage", ""),
-                "meta": "",
-                "cite": bill.get("shortTitle", ""),
+                "title": title,
+                "sub": bill.get("currentStage") or bill.get("current_stage") or "",
+                "meta": bill.get("current_house") or "",
+                "cite": title,
                 "url": url,
             })
 
@@ -198,6 +203,57 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                 "cite": member.get("name", ""),
                 "url": url,
             })
+
+    elif name == "search_hansard":
+        for item in data.get("results", []):
+            url = item.get("url", "")
+            if url and any(s.get("url") == url for s in accumulator):
+                continue
+            title = item.get("title", "")
+            date = item.get("date", "")
+            section = item.get("section", "")
+            accumulator.append({
+                "kind": "Hansard",
+                "title": title or "Hansard debate",
+                "sub": section,
+                "meta": date,
+                "cite": f"HC Deb, {date}, {title}" if item.get("house") == "Commons" else f"HL Deb, {date}, {title}",
+                "url": url,
+            })
+
+    elif name == "get_hansard_debate":
+        url = data.get("url") or ""
+        title = data.get("title") or ""
+        date = data.get("date") or ""
+        contributions = data.get("contributions") or []
+        excerpt = contributions[0].get("text", "")[:300] if contributions else ""
+        # Item-level video entry point: the first contribution with a deep link
+        # marks where this debate starts on parliamentlive (mirrors the SP branches).
+        video = None
+        for c in contributions:
+            dl = c.get("video_deeplink")
+            if dl and dl.get("url"):
+                video = {"url": dl["url"], "clip_start": dl.get("clip_start"), "label": dl.get("label")}
+                break
+        existing = next((s for s in accumulator if s.get("url") == url), None)
+        if existing:
+            if not existing.get("excerpt") and excerpt:
+                existing["excerpt"] = excerpt
+            if video and not existing.get("video"):
+                existing["video"] = video
+        else:
+            src = {
+                "kind": "Hansard",
+                "title": title or "Hansard debate",
+                "sub": data.get("location") or "",
+                "meta": date,
+                "excerpt": excerpt,
+                "cite": f"HC Deb, {date}, {title}" if data.get("house") == "Commons" else f"HL Deb, {date}, {title}",
+                "url": url,
+            }
+            if video:
+                src["video"] = video
+            accumulator.append(src)
 
     elif name == "search_scottish_committee_transcripts":
         for item in data.get("results", []):
@@ -303,7 +359,7 @@ def _worker_tool_key_arg(args: dict) -> Optional[str]:
     items of one meeting are legitimate distinct retrievals, not redundant.
     slug is derivable and must NOT be part of the key.
     """
-    key_arg = args.get("legislation_id") or args.get("url") or args.get("gid")
+    key_arg = args.get("legislation_id") or args.get("url") or args.get("gid") or args.get("debate_ext_id")
     if not key_arg and args.get("meeting_id"):
         key_arg = f"{args['meeting_id']}:{args.get('iob_id', '')}"
     return key_arg
@@ -376,7 +432,10 @@ async def run_worker_tool(
 
     # Parliamentary search budget: after the allowed number of search/listing calls,
     # return a hard-stop so the model proceeds to retrieval instead of looping.
-    _PARLIAMENT_SEARCH_TOOLS = {"search_scottish_parliament", "search_scottish_committee_transcripts", "search_scottish_plenary"}
+    _PARLIAMENT_SEARCH_TOOLS = {
+        "search_scottish_parliament", "search_scottish_committee_transcripts", "search_scottish_plenary",
+        "search_hansard",  # Westminster discovery tool — same budget, same stop semantics
+    }
     if search_budget is not None and name in _PARLIAMENT_SEARCH_TOOLS:
         if search_budget["remaining"] <= 0:
             # The parliament bot's defining constraint: a budget-blocked search
@@ -384,9 +443,15 @@ async def run_worker_tool(
             # on its own counter (NOT worker_tool_calls / phase counts).
             if timing_collector:
                 timing_collector.record_search_budget_blocked()
-            stop_msg = json.dumps({
-                "notice": "Search limit reached — you have already performed the maximum number of parliamentary searches.",
-                "instruction": (
+            if name == "search_hansard":
+                instruction = (
+                    "STOP calling search_hansard. You MUST now either: (a) call get_hansard_debate "
+                    "with a debate_ext_id from your previous search results to retrieve the full "
+                    "verbatim contributions, or (b) if no results were found at all, synthesize your "
+                    "answer stating that no relevant records were found."
+                )
+            else:
+                instruction = (
                     "STOP calling search_scottish_plenary, search_scottish_parliament, or "
                     "search_scottish_committee_transcripts. "
                     "You MUST now either: (a) call get_scottish_plenary_debate or "
@@ -394,7 +459,10 @@ async def run_worker_tool(
                     "retrieve full text (search_scottish_parliament results are excerpt-only and need no "
                     "retrieval), or (b) if no results were found at all, synthesize your answer stating that "
                     "no relevant records were found."
-                ),
+                )
+            stop_msg = json.dumps({
+                "notice": "Search limit reached — you have already performed the maximum number of parliamentary searches.",
+                "instruction": instruction,
                 "results": [],
                 "total": 0,
             })
@@ -413,7 +481,12 @@ async def run_worker_tool(
     if parent_on_chunk:
         await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
 
-    if name in _PARLIAMENT_TOOL_NAMES:
+    # Dispatch by research mode first: get_member_info / search_bills exist in BOTH
+    # the Holyrood and Westminster tool sets with the same names but different
+    # backing APIs, so name alone cannot pick the executor.
+    if get_request_provider_config().get("_research_mode") == "westminster_records":
+        result = await execute_westminster_tool(name, args, on_chunk=parent_on_chunk, timing_collector=timing_collector)
+    elif name in _PARLIAMENT_TOOL_NAMES:
         result = await execute_parliament_tool(name, args, on_chunk=parent_on_chunk, timing_collector=timing_collector)
     else:
         result = await execute_worker_tool(name, args, on_chunk=parent_on_chunk, timing_collector=timing_collector)
@@ -563,6 +636,38 @@ async def run_worker_tool(
         except Exception:
             pass
 
+    hansard_phase2_note = ""
+    if name == "search_hansard":
+        try:
+            raw_data = json.loads(result)
+            items = raw_data.get("results", [])
+            note = raw_data.get("note", "")
+            if items:
+                item_lines = [
+                    f'  - debate_ext_id: "{r["debate_ext_id"]}"'
+                    f'  ({r.get("house", "")} {r.get("section", "")}, {r.get("date", "")} — {r.get("title", "")})'
+                    for r in items[:8]
+                    if r.get("debate_ext_id")
+                ]
+                if item_lines:
+                    hansard_phase2_note = (
+                        "\n\n[MANDATORY NEXT STEP — Call get_hansard_debate for the most relevant "
+                        "result(s) below to retrieve the full verbatim contributions before composing "
+                        "your answer. Pass debate_ext_id exactly as shown:\n"
+                        + "\n".join(item_lines)
+                        + "]"
+                    )
+            elif note:
+                hansard_phase2_note = f"\n\n[{note}]"
+            else:
+                hansard_phase2_note = (
+                    "\n\n[This search returned 0 results. You may retry search_hansard once with "
+                    "different or broader keywords. If you still have 0 results, state that no "
+                    "relevant Hansard records were found and compose your answer.]"
+                )
+        except Exception:
+            pass
+
     # For search_legislation: capture legislation_ids from the raw response before
     # any summarisation strips them, so we can inject a Phase 2 instruction into
     # the final result the model actually sees.
@@ -620,7 +725,6 @@ async def run_worker_tool(
         # Local prompt cache (D7): cross-user/cross-provider summary reuse,
         # exact (content_hash, canonicalised-query) match only. Flag-gated;
         # every cache operation is fail-soft (a DB error is just a miss).
-        from .provider_factory import get_request_provider_config
         _req_cfg = get_request_provider_config()
         _local_cache_on = _req_cfg.get("_local_prompt_cache_enabled", True)
         # Cache-key query (D8 Phase 5): standard mode keys on the raw user
@@ -718,6 +822,7 @@ async def run_worker_tool(
     result += sp_phase2_note
     result += sp_committee_phase2_note
     result += sp_plenary_phase2_note
+    result += hansard_phase2_note
     result += case_law_note
 
     if parent_on_chunk:

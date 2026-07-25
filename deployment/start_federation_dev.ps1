@@ -7,13 +7,43 @@ $ErrorActionPreference = 'Continue'
 # Bypass system proxy for all localhost HTTP calls in this session
 [System.Net.WebRequest]::DefaultWebProxy = New-Object System.Net.WebProxy
 
-# -------------------------------------------------------
-# Step 1: Ensure parliament_bot database exists
-# -------------------------------------------------------
-Write-Host '[3/4] Ensuring parliament_bot database exists...'
+# Bot registry — one entry per federated bot. The legislation bot is the base
+# deployment (no .env override); the parliament and Westminster bots each have
+# their own DB, port, config and .env.
+$bots = @(
+    [ordered]@{
+        Id       = 'legislation_bot'
+        Name     = 'Legislation Bot'
+        Port     = 8000
+        Db       = $null   # uses the default lexchat DB
+        Config   = Join-Path $RepoRoot 'bots\legislation\bot_config.json'
+        EnvFile  = $null
+        PeerDesc = 'Searches UK legislation, statutory instruments, and regulatory guidance'
+    },
+    [ordered]@{
+        Id       = 'parliament_bot'
+        Name     = 'Parliament Bot'
+        Port     = 8001
+        Db       = 'lexchat_parliament'
+        Config   = Join-Path $RepoRoot 'bots\parliament\bot_config.json'
+        EnvFile  = Join-Path $RepoRoot 'bots\parliament\.env'
+        PeerDesc = 'Searches Scottish Parliament (Holyrood) plenary and committee proceedings, MSPs, and Scottish bills'
+    },
+    [ordered]@{
+        Id       = 'westminster_bot'
+        Name     = 'Westminster Bot'
+        Port     = 8002
+        Db       = 'lexchat_westminster'
+        Config   = Join-Path $RepoRoot 'bots\westminster\bot_config.json'
+        EnvFile  = Join-Path $RepoRoot 'bots\westminster\.env'
+        PeerDesc = 'Searches UK Parliament (Westminster) Hansard debates, written statements, Members, and UK bills'
+    }
+)
 
-# Parliament bot DB name: must match DATABASE_URL in bots/parliament/.env
-$parDbName = 'lexchat_parliament'
+# -------------------------------------------------------
+# Step 1: Ensure each bot's database exists
+# -------------------------------------------------------
+Write-Host '[1/4] Ensuring per-bot databases exist...'
 
 $psqlPaths = @(
     'psql',
@@ -28,92 +58,88 @@ foreach ($p in $psqlPaths) {
     if (Test-Path $p -ErrorAction SilentlyContinue)   { $psql = $p; break }
 }
 
+$dbNames = $bots | Where-Object { $_.Db } | ForEach-Object { $_.Db }
+
 if (-not $psql) {
     Write-Host '   [WARN] psql not found in PATH or common install locations.'
-    Write-Host "          Parliament Bot will fail if $parDbName DB does not exist."
-    Write-Host "          Create it manually:  psql -U lexuser -c `"CREATE DATABASE $parDbName;`""
+    Write-Host "          Bots will fail if their DBs do not exist. Create manually:"
+    foreach ($d in $dbNames) {
+        Write-Host "          psql -U lexuser -c `"CREATE DATABASE $d;`""
+    }
 } else {
     $env:PGPASSWORD = 'lexpassword'
-    $exists = & $psql -U lexuser -h localhost -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$parDbName'" 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "   [WARN] Could not connect to PostgreSQL as lexuser (exit $LASTEXITCODE)."
-        Write-Host '          Check that PostgreSQL is accepting connections on localhost:5432.'
-    } elseif ($exists -match '1') {
-        Write-Host "   $parDbName database already exists."
-    } else {
-        Write-Host "   Creating $parDbName database..."
-        & $psql -U lexuser -h localhost -d postgres -c "CREATE DATABASE $parDbName;" 2>&1
+    foreach ($dbName in $dbNames) {
+        $exists = & $psql -U lexuser -h localhost -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$dbName'" 2>$null
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "   [WARN] Could not create $parDbName database automatically."
-            Write-Host "          Run manually:  psql -U lexuser -c `"CREATE DATABASE $parDbName;`""
+            Write-Host "   [WARN] Could not connect to PostgreSQL as lexuser (exit $LASTEXITCODE)."
+            Write-Host '          Check that PostgreSQL is accepting connections on localhost:5432.'
+            break
+        } elseif ($exists -match '1') {
+            Write-Host "   $dbName database already exists."
         } else {
-            Write-Host "   $parDbName database created."
+            Write-Host "   Creating $dbName database..."
+            & $psql -U lexuser -h localhost -d postgres -c "CREATE DATABASE $dbName;" 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "   [WARN] Could not create $dbName automatically."
+                Write-Host "          Run manually:  psql -U lexuser -c `"CREATE DATABASE $dbName;`""
+            } else {
+                Write-Host "   $dbName database created."
+            }
         }
     }
     $env:PGPASSWORD = ''
 }
 
 # -------------------------------------------------------
-# Step 2: Launch both bots in separate windows
+# Step 2: Launch every bot in its own window
 # -------------------------------------------------------
 Write-Host ''
-Write-Host '[4/4] Launching bots and wiring federation...'
+Write-Host '[2/4] Launching bots...'
 
-$serverDir      = Join-Path $RepoRoot 'server_py'
-$legConfigPath  = Join-Path $RepoRoot 'bots\legislation\bot_config.json'
-$parConfigPath  = Join-Path $RepoRoot 'bots\parliament\bot_config.json'
+$serverDir = Join-Path $RepoRoot 'server_py'
 
-# Kill any leftover processes still holding ports 8000/8001
-foreach ($port in 8000, 8001) {
-    $line = netstat -ano | Select-String ":$port\s" | Select-Object -First 1
+# Kill any leftover processes still holding the bot ports
+foreach ($bot in $bots) {
+    $line = netstat -ano | Select-String ":$($bot.Port)\s" | Select-Object -First 1
     if ($line) {
         $procId = ($line.ToString().Trim() -split '\s+')[-1]
         if ($procId -match '^\d+$') {
-            Write-Host "   Stopping process on port $port (PID $procId)..."
+            Write-Host "   Stopping process on port $($bot.Port) (PID $procId)..."
             Stop-Process -Id ([int]$procId) -Force -ErrorAction SilentlyContinue
             Start-Sleep 1
         }
     }
 }
 
-# Write a small temp .cmd for each bot — avoids all ArgumentList quote-escaping issues.
-# BOT_CONFIG_PATH must be absolute because uvicorn CWD is server_py/.
-
-$legScript = "@echo off`r`ncd /d `"$serverDir`"`r`nset BOT_ID=legislation_bot`r`nset BOT_CONFIG_PATH=$legConfigPath`r`npython -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --no-access-log --reload`r`n"
-$legFile = "$env:TEMP\run_legislation_bot.cmd"
-[System.IO.File]::WriteAllText($legFile, $legScript, [System.Text.Encoding]::ASCII)
-Start-Process cmd.exe -ArgumentList @('/k', $legFile) -WindowStyle Normal
-
-# Load extra env vars from bots/parliament/.env so TWFY_API_KEY, RESEARCH_MODE, etc. are set
-$parEnvExtra = ''
-$parEnvFile = Join-Path $RepoRoot 'bots\parliament\.env'
-if (Test-Path $parEnvFile) {
-    Get-Content $parEnvFile | Where-Object { $_ -match '^[A-Z_]+=.' } | ForEach-Object {
-        $k, $v = $_ -split '=', 2
-        $parEnvExtra += "set $($k.Trim())=$($v.Trim())`r`n"
+# Write a small temp .cmd per bot — avoids all ArgumentList quote-escaping issues.
+# The bot's .env is loaded FIRST, then BOT_ID and BOT_CONFIG_PATH are overridden
+# with absolute values so the relative path inside the .env cannot win
+# (uvicorn's CWD is server_py/, not the repo root).
+foreach ($bot in $bots) {
+    $envExtra = ''
+    if ($bot.EnvFile -and (Test-Path $bot.EnvFile)) {
+        Get-Content $bot.EnvFile | Where-Object { $_ -match '^[A-Z_]+=.' } | ForEach-Object {
+            $k, $v = $_ -split '=', 2
+            $envExtra += "set $($k.Trim())=$($v.Trim())`r`n"
+        }
     }
+    $script = "@echo off`r`ncd /d `"$serverDir`"`r`n$($envExtra)set BOT_ID=$($bot.Id)`r`nset BOT_CONFIG_PATH=$($bot.Config)`r`npython -m uvicorn src.main:app --host 0.0.0.0 --port $($bot.Port) --no-access-log --reload`r`n"
+    $file = "$env:TEMP\run_$($bot.Id).cmd"
+    [System.IO.File]::WriteAllText($file, $script, [System.Text.Encoding]::ASCII)
+    Start-Process cmd.exe -ArgumentList @('/k', $file) -WindowStyle Normal
+    Write-Host "   $($bot.Name) launching on port $($bot.Port)..."
 }
 
-# Load .env first, then override BOT_ID and BOT_CONFIG_PATH with absolute values so
-# the relative path in bots/parliament/.env does not win.
-$parScript = "@echo off`r`ncd /d `"$serverDir`"`r`n$($parEnvExtra)set BOT_ID=parliament_bot`r`nset BOT_CONFIG_PATH=$parConfigPath`r`npython -m uvicorn src.main:app --host 0.0.0.0 --port 8001 --no-access-log --reload`r`n"
-$parFile = "$env:TEMP\run_parliament_bot.cmd"
-[System.IO.File]::WriteAllText($parFile, $parScript, [System.Text.Encoding]::ASCII)
-Start-Process cmd.exe -ArgumentList @('/k', $parFile) -WindowStyle Normal
-
-Write-Host '   Both bots launching...'
-
 # -------------------------------------------------------
-# Step 3: Wait for both bots to respond
+# Step 3: Wait for every bot to respond
 # -------------------------------------------------------
 Write-Host ''
-Write-Host '   Waiting for bots to be ready...'
+Write-Host '[3/4] Waiting for bots to be ready...'
 
-function Wait-Bot([string]$Url, [string]$Name) {
-    $port = ([System.Uri]$Url).Port
+function Wait-Bot([int]$Port, [string]$Name) {
     Write-Host "   Waiting for $Name..." -NoNewline
     for ($i = 0; $i -lt 30; $i++) {
-        $up = Test-NetConnection -ComputerName localhost -Port $port `
+        $up = Test-NetConnection -ComputerName localhost -Port $Port `
             -InformationLevel Quiet -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
         if ($up) {
             Write-Host ' ready.'
@@ -126,20 +152,24 @@ function Wait-Bot([string]$Url, [string]$Name) {
     return $false
 }
 
-$ErrorActionPreference = 'Continue'
-$b1 = Wait-Bot 'http://localhost:8000' 'Legislation Bot'
-$b2 = Wait-Bot 'http://localhost:8001' 'Parliament Bot'
+$allUp = $true
+foreach ($bot in $bots) {
+    if (-not (Wait-Bot $bot.Port $bot.Name)) { $allUp = $false }
+}
 
-if (-not $b1 -or -not $b2) {
+if (-not $allUp) {
     Write-Host ''
-    Write-Host '[ERROR] One or both bots did not start in time. Check the bot windows for errors.'
+    Write-Host '[ERROR] One or more bots did not start in time. Check the bot windows for errors.'
     Write-Host '        Peer registration skipped — register manually via Admin Portal > Federation.'
     exit 1
 }
 
 # -------------------------------------------------------
-# Step 4: Register peers
+# Step 4: Register peers (every bot knows every other bot)
 # -------------------------------------------------------
+Write-Host ''
+Write-Host '[4/4] Wiring federation...'
+
 function Get-AdminToken([string]$BaseUrl) {
     $body = '{"username":"admin","password":"admin"}'
     $r = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/auth/login" `
@@ -184,24 +214,28 @@ function Register-Peer([string]$CallerUrl, [string]$Token,
     }
 }
 
-Write-Host '   Fetching admin tokens...'
-$t1 = Get-AdminToken 'http://localhost:8000'
-$t2 = Get-AdminToken 'http://localhost:8001'
+Write-Host '   Fetching admin tokens and minting non-expiring federation tokens...'
+foreach ($bot in $bots) {
+    $url = "http://localhost:$($bot.Port)"
+    $bot.Url = $url
+    $adminToken = Get-AdminToken $url
+    $bot.AdminToken = $adminToken
+    $bot.FedToken = Get-FederationToken $url $adminToken
+}
 
-# Peer api_keys must be non-expiring so federation never needs re-wiring.
-Write-Host '   Minting non-expiring federation tokens...'
-$f1 = Get-FederationToken 'http://localhost:8000' $t1
-$f2 = Get-FederationToken 'http://localhost:8001' $t2
-
-Register-Peer 'http://localhost:8000' $t1 `
-    'parliament_bot' 'Parliament Bot' `
-    'http://localhost:8001' $f2 `
-    'Searches UK Parliamentary records, Hansard debates, and committee proceedings'
-
-Register-Peer 'http://localhost:8001' $t2 `
-    'legislation_bot' 'Legislation Bot' `
-    'http://localhost:8000' $f1 `
-    'Searches UK legislation, statutory instruments, and regulatory guidance'
+# Full mesh: register every other bot as a peer on each bot.
+foreach ($caller in $bots) {
+    foreach ($peer in $bots) {
+        if ($caller.Id -eq $peer.Id) { continue }
+        Register-Peer $caller.Url $caller.AdminToken `
+            $peer.Id $peer.Name `
+            $peer.Url $peer.FedToken `
+            $peer.PeerDesc
+    }
+}
 
 Write-Host ''
-Write-Host '   Federation wired. Both bots are peered and ready.'
+Write-Host '   Federation wired. All bots are peered and ready:'
+foreach ($bot in $bots) {
+    Write-Host "     $($bot.Name.PadRight(18)) $($bot.Url)"
+}

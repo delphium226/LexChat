@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="#006E46">
+  <!-- Crowned portcullis — the UK Parliament emblem, stylised.
+       Deliberately distinct from the parliament (Holyrood) bot's classical
+       pediment so the two bots are told apart at favicon size. -->
+
+  <!-- Crown -->
+  <polygon points="26,16 32,6 40,13 48,6 54,16"/>
+  <rect x="26" y="16" width="28" height="5"/>
+
+  <!-- Portcullis frame -->
+  <rect x="16" y="24" width="48" height="5"/>
+
+  <!-- Vertical bars -->
+  <rect x="19" y="29" width="5" height="34"/>
+  <rect x="30" y="29" width="5" height="34"/>
+  <rect x="41" y="29" width="5" height="34"/>
+  <rect x="52" y="29" width="5" height="34"/>
+
+  <!-- Horizontal bars -->
+  <rect x="16" y="36" width="48" height="4"/>
+  <rect x="16" y="47" width="48" height="4"/>
+  <rect x="16" y="58" width="48" height="4"/>
+
+  <!-- Spikes along the bottom -->
+  <polygon points="19,63 24,63 21.5,71"/>
+  <polygon points="30,63 35,63 32.5,71"/>
+  <polygon points="41,63 46,63 43.5,71"/>
+  <polygon points="52,63 57,63 54.5,71"/>
+</svg>

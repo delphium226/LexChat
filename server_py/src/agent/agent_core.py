@@ -59,6 +59,9 @@ _REPORT_SECTIONS = {
     "parliamentary_records": [
         "Summary (BLUF)", "Key Speeches / Evidence", "Source & Date", "References",
     ],
+    "westminster_records": [
+        "Summary (BLUF)", "Key Contributions", "House & Date", "References",
+    ],
 }
 
 # A section header line: an ATX header (`## Foo`) or a bold label at the start of
@@ -182,8 +185,13 @@ async def run_worker_agent(
     worker_tools = get_worker_tools(research_mode)
     source_accumulator: list = []
     # Limit parliamentary searches so the model proceeds to Phase 2 instead of looping.
-    # Budget covers search_scottish_parliament and search_scottish_committee_transcripts.
-    search_budget = {"remaining": 3} if research_mode == "parliamentary_records" else None
+    # Covers the SP search tools on the Holyrood bot and search_hansard on the
+    # Westminster bot (see _PARLIAMENT_SEARCH_TOOLS in agent_shared).
+    search_budget = (
+        {"remaining": 3}
+        if research_mode in ("parliamentary_records", "westminster_records")
+        else None
+    )
 
     async def worker_tool_executor(name: str, args: dict) -> str:
         return await run_worker_tool(

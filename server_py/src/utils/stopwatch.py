@@ -4,13 +4,15 @@ _PHASE1_SEARCH_TOOLS = frozenset({
     "search_legislation", "search_case_law",
     "search_scottish_parliament", "search_scottish_committee_transcripts",
     "search_scottish_plenary", "search_bills",
+    "search_hansard",
 })
 _PHASE2_RETRIEVAL_TOOLS = frozenset({
     "search_legislation_sections", "get_legislation_text", "get_case_law_text",
     "get_scottish_committee_transcript", "get_scottish_plenary_debate",
+    "get_hansard_debate",
 })
-# get_member_info is intentionally unclassified — it is a metadata lookup (MSP
-# details), neither a discovery search nor primary-source retrieval.
+# get_member_info is intentionally unclassified — it is a metadata lookup (MSP /
+# MP details), neither a discovery search nor primary-source retrieval.
 
 # Primary-resource retrieval tools whose key_arg identifies a distinct resource,
 # used to count "distinct primary resources retrieved" (see _retrieved_lids /
@@ -18,10 +20,12 @@ _PHASE2_RETRIEVAL_TOOLS = frozenset({
 _LEGISLATION_RETRIEVAL_TOOLS = frozenset({
     "search_legislation_sections", "get_legislation_text",
 })
-# SP transcript retrieval tools. After WI-2's composite-key fix, their key_arg is
-# "meeting_id:iob_id", so the same distinct-resource set counts distinct transcripts.
+# Transcript retrieval tools. After WI-2's composite-key fix, the SP tools' key_arg
+# is "meeting_id:iob_id" and the Westminster tool's is its debate_ext_id, so the
+# same distinct-resource set counts distinct transcripts/debates in both bots.
 _TRANSCRIPT_RETRIEVAL_TOOLS = frozenset({
     "get_scottish_plenary_debate", "get_scottish_committee_transcript",
+    "get_hansard_debate",
 })
 
 

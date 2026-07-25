@@ -83,6 +83,12 @@ class Settings(BaseSettings):
     enable_video_deeplinks: bool = False
     sptv_base_url: str = "https://www.scottishparliament.tv"
 
+    # UK Parliament (parliamentlive.tv) video deep-links — the Westminster sibling of
+    # the above, kept separate so the two jurisdictions toggle independently.
+    # See docs/parliament/WESTMINSTER_VIDEO_IMPLEMENTATION_PLAN.md.
+    enable_westminster_video_deeplinks: bool = False
+    plive_base_url: str = "https://www.parliamentlive.tv"
+
     # Proxy
     https_proxy: Optional[str] = None
 
@@ -164,6 +170,27 @@ EFFICIENCY_PROFILES = {
             "halt": (0.001, 0.02),
             "fallback": (0.15, 0.35),              # excerpt-heavy answers cite less precisely
             "budget_blocked": (0.05, 0.15),        # share of requests hitting the budget wall
+        },
+    },
+    # Westminster: same search→retrieve shape as the Holyrood bot (one
+    # get_hansard_debate per distinct debate), so it starts from the Holyrood
+    # numbers. These are UNMEASURED starting points — re-tune once real
+    # Westminster traffic accumulates. The one expected difference is a lower
+    # fallback rate: Hansard retrieval is full-text, never excerpt-only.
+    "westminster_records": {
+        "max_delegations": 1,
+        "max_redundant_tool_calls": 0,
+        "fanout_abs": 5,
+        "fanout_ratio": 2.0,                       # retrievals per distinct debate ≈ 1
+        "fanout_denominator": "distinct_legislation_ids_retrieved",
+        "max_budget_blocked": 0,
+        "bands": {
+            "delegation": (1.05, 1.15),
+            "fanout": (1.3, 2.0),
+            "redundant": (0.05, 0.10),
+            "halt": (0.001, 0.02),
+            "fallback": (0.1, 0.25),
+            "budget_blocked": (0.05, 0.15),
         },
     },
 }

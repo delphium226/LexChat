@@ -1,0 +1,13 @@
+{
+  "bot_identity": {
+    "bot_id": "westminster_bot",
+    "name": "HansardChat",
+    "tagline": "UK Parliamentary Records & Debates",
+    "logo_path": "bots/westminster/assets/logo.svg",
+    "brand_color": "#006E46"
+  },
+  "agent": {
+    "research_mode": "westminster_records"
+  },
+  "peer_registry_seed": []
+}
