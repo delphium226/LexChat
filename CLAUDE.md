@@ -18,7 +18,9 @@ AILA (AI Legal Assistant) is an AI-powered legal research assistant for a **UK g
 - OpenRouter requires outbound internet to `openrouter.ai` — works on the target if that address is whitelisted
 
 ## Active Branch
-`main` — the active deployment branch. Merged and live: federation, Deep Research mode, and the full caching stack (D5 provider prompt caching + tool memo, D6 cache admin UI, D7 local prompt cache, D8 cache review fixes). See the Deep Research Mode and Caching Stack architectural notes below.
+`main` — the active deployment branch, and the branch work happens on directly. Commit straight to `main` rather than opening a feature branch unless asked otherwise; the target pulls from `origin/main`, so anything not pushed there is invisible to it.
+
+Merged and live: federation, Deep Research mode, the full caching stack (D5 provider prompt caching + tool memo, D6 cache admin UI, D7 local prompt cache, D8 cache review fixes), and Westminster as a separate federated bot (W0, merged 2026-07-28 in `cdbd15b`). See the Deep Research Mode and Caching Stack architectural notes below.
 
 ## Key Architectural Decisions
 
