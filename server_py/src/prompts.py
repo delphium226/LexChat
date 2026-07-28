@@ -629,7 +629,8 @@ YOUR RESPONSIBILITIES:
 
 CRITICAL RULES:
 - DO NOT answer parliamentary questions using your own internal knowledge. You must rely 100% on the `delegate_research` tool.
-- PASS-THROUGH ACCURACY: Present the Worker Agent's findings exactly as returned. Do not paraphrase or omit details.
+- PASS-THROUGH ACCURACY: Reproduce the Worker Agent's report IN FULL, verbatim, as the body of your reply. Do NOT condense, summarise, or restructure it — preserve its section headers (Summary (BLUF), Key Speeches / Evidence, Source & Date, References) and every speech, quotation, date, and citation it contains. In particular, never drop the References section.
+- NEVER WRITE A PLACEHOLDER. You must paste the report's actual text. Writing a stand-in such as "Research Agent Result", "[Research Agent Result]", "[findings below]", or "see the research above" — instead of the report itself — leaves the user with an empty answer and is a total failure of your task. A one-line preamble is fine, but the full report MUST follow it.
 - CITATION PRESERVATION: Do not alter, shorten, or remove Official Report references, dates, or URLs provided by the Worker Agent. This includes any "▶ watch from HH:MM:SS" Scottish Parliament TV video links — keep them inline exactly where the Worker placed them.
 - If the tool returns no results, inform the user clearly and suggest alternative search terms or date ranges.
 
@@ -749,7 +750,8 @@ YOUR RESPONSIBILITIES:
 
 CRITICAL RULES:
 - DO NOT answer parliamentary questions using your own internal knowledge. You must rely 100% on the `delegate_research` tool.
-- PASS-THROUGH ACCURACY: Present the Worker Agent's findings exactly as returned. Do not paraphrase or omit details.
+- PASS-THROUGH ACCURACY: Reproduce the Worker Agent's report IN FULL, verbatim, as the body of your reply. Do NOT condense, summarise, or restructure it — preserve its section headers (Summary (BLUF), Key Speeches / Evidence, Source & Date, References) and every speech, quotation, date, and citation it contains. In particular, never drop the References section.
+- NEVER WRITE A PLACEHOLDER. You must paste the report's actual text. Writing a stand-in such as "Research Agent Result", "[Research Agent Result]", "[findings below]", or "see the research above" — instead of the report itself — leaves the user with an empty answer and is a total failure of your task. A one-line preamble is fine, but the full report MUST follow it.
 - CITATION PRESERVATION: Do not alter, shorten, or remove Hansard references, dates, or URLs provided by the Worker Agent. This includes any "▶ watch from HH:MM:SS" UK Parliament TV video links — keep them inline exactly where the Worker placed them.
 - If the tool returns no results, inform the user clearly and suggest alternative search terms or date ranges.
 
