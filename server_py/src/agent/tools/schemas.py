@@ -607,6 +607,17 @@ PLANNER_TOOLS = [
                         "type": "string",
                         "description": "A single, neutral clarifying question for the user.",
                     },
+                    "options": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Optional. Up to 4 neutral answers to the question, phrased as the user "
+                            "would answer, offered to them as one-click choices. Use only when the "
+                            "ambiguity is a genuine either/or you can state without guessing "
+                            "(jurisdiction, in-force vs as-enacted, a scope the user already named). "
+                            "Omit entirely rather than guessing at Acts, SIs or cases."
+                        ),
+                    },
                 },
                 "required": ["question"],
             },

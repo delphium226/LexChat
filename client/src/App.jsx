@@ -40,6 +40,7 @@ import SystemChat from './pages/SystemChat';
 import WeeklyFeedbackBanner from './components/WeeklyFeedbackBanner';
 import DataSensitivityNotice from './components/DataSensitivityNotice';
 import DeepResearchPlan from './components/DeepResearchPlan';
+import SuggestedQuestions from './components/SuggestedQuestions';
 import { BookmarkIcon, ScalesIcon, GavelIcon, CalendarIcon, SlidersIcon, CopyIcon } from './components/ui/icons';
 import { GhostBtn } from './components/ui/buttons';
 import Modal from './components/ui/Modal';
@@ -735,8 +736,8 @@ function AppContent() {
                 {messages.map((msg, idx) => {
                   if (msg.role === 'tool') return null;
                   return (
+                    <React.Fragment key={msg.id ?? idx}>
                     <ChatMessage
-                      key={msg.id ?? idx}
                       message={msg}
                       onResend={() => {
                         const prevUser = messages
@@ -784,6 +785,19 @@ function AppContent() {
                         (msg.id === activeSourcesMsgId || (activeSourcesMsgId == null && msg.id === latestSourceMsgId))
                       }
                     />
+                    {/* Chips only under the newest answer — a long thread must
+                        not fill with stale suggestions from earlier turns. */}
+                    {msg.role === 'assistant' &&
+                      idx === messages.length - 1 &&
+                      !loading &&
+                      msg.suggestions?.length > 0 && (
+                        <SuggestedQuestions
+                          suggestions={msg.suggestions}
+                          onSelect={text => handleSend(text)}
+                          disabled={loading}
+                        />
+                      )}
+                    </React.Fragment>
                   );
                 })}
 

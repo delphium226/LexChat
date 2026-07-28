@@ -42,6 +42,11 @@ async def consult(body: ConsultRequest, user: dict = Depends(get_current_user)):
         # RESEARCH_MODE=parliamentary_records) — a consulted peer must answer
         # with its specialised toolset, not the legislation default.
         "_research_mode": settings.research_mode or "legislation_only",
+        # The consult channel is one-shot and stateless — there is no session and
+        # no way to deliver an answer back to a question. Tell the manager prompt
+        # to answer with a stated assumption instead of asking for clarification
+        # or ending with a follow-up/<suggestions> block.
+        "_consulted": True,
     })
 
     resolved_model = provider_config.get("model") or settings.bot_id

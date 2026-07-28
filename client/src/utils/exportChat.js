@@ -83,6 +83,22 @@ export function stripThinking(content) {
     .trim();
 }
 
+/**
+ * Remove the assistant's <suggestions> block, including an unterminated one
+ * mid-stream — the backend strips it off the final message, but tokens arrive
+ * raw so the tag would otherwise flash on screen while streaming.
+ */
+export function stripSuggestions(content) {
+  if (!content) return '';
+  return content
+    .replace(/<suggestions>[\s\S]*?<\/suggestions>/gi, '')
+    .replace(/<suggestions>[\s\S]*$/i, '')
+    .trim();
+}
+
+/** Everything that must be hidden from a rendered, copied, or exported answer. */
+export const sanitiseAssistantContent = (content) => stripSuggestions(stripThinking(content));
+
 function formatTime(isoDate) {
   if (!isoDate) return '';
   const d = new Date(isoDate);
@@ -242,7 +258,7 @@ export function buildConversationExport({ messages = [], title, botName = 'AILA'
       return;
     }
 
-    const content = stripThinking(msg.content);
+    const content = sanitiseAssistantContent(msg.content);
     const plan = renderPlan(msg.research_plan);
     const sources = renderSources(msg.sources);
     if (!content && !plan.html && !sources.html) return;

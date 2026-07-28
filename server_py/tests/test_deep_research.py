@@ -127,7 +127,31 @@ async def test_draft_research_plan_clarification_path():
         chat_loop, [{"role": "user", "content": "What does the Act say?"}],
         "test-model", None, 0,
     )
-    assert result == {"needs_clarification": True, "question": "Which Act do you mean?"}
+    assert result == {
+        "needs_clarification": True,
+        "question": "Which Act do you mean?",
+        "options": [],
+    }
+
+
+@pytest.mark.asyncio
+async def test_draft_research_plan_clarification_captures_options():
+    """`options` are normalised (trimmed, blanks dropped, capped at 4) for the chips."""
+    chat_loop = _make_chat_loop_calling(
+        "request_clarification",
+        {
+            "question": "Which jurisdiction?",
+            "options": ["  England and Wales ", "Scotland", "", "   ",
+                        "Northern Ireland", "All of the UK", "Extra one"],
+        },
+    )
+    result = await draft_research_plan(
+        chat_loop, [{"role": "user", "content": "What does the Act say?"}],
+        "test-model", None, 0,
+    )
+    assert result["options"] == [
+        "England and Wales", "Scotland", "Northern Ireland", "All of the UK",
+    ]
 
 
 @pytest.mark.asyncio

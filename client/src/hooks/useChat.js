@@ -219,6 +219,10 @@ export function useChat({
                   responseTimeMs: updated[i].responseTimeMs,
                   costUsd: updated[i].costUsd,
                   sources: updated[i].sources,
+                  // Live-only by design (no DB column), so the saved row cannot
+                  // carry it — without this the chips vanish a second after the
+                  // answer lands.
+                  suggestions: updated[i].suggestions,
                 };
                 break;
               }
@@ -331,7 +335,13 @@ export function useChat({
         );
         if (draft.needs_clarification) {
           const question = draft.question;
-          setMessages(prev => [...prev, { role: 'assistant', content: question }]);
+          // The planner's clarification options render through the same chip
+          // component as a manager follow-up. Not persisted — saveMessage below
+          // stores the question text only.
+          setMessages(prev => [
+            ...prev,
+            { role: 'assistant', content: question, suggestions: draft.options || [] },
+          ]);
           if (activeChatId) {
             await saveMessage(activeChatId, 'assistant', question).catch(err =>
               console.error('Failed to save clarification message:', err)

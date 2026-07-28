@@ -19,6 +19,7 @@ from ..prompts import (
     get_planner_system_prompt,
     get_worker_system_prompt,
 )
+from ..utils.suggestions import extract_suggestions
 from .agent_shared import describe_agent_error, run_worker_tool
 from .federation_client import (
     build_peer_descriptions,
@@ -382,6 +383,9 @@ async def draft_research_plan(
             if not question:
                 return "Error: `question` must be a non-empty string. Call request_clarification again."
             captured["question"] = question
+            captured["options"] = [
+                str(o).strip() for o in ((args or {}).get("options") or []) if str(o).strip()
+            ][:4]
             return "Clarification request recorded. Reply with the single word: Done."
         return f"Error: Unknown planner tool {name}"
 
@@ -417,7 +421,11 @@ async def draft_research_plan(
         return {"plan": captured["plan"]}
     if "question" in captured:
         logger.info("[Planner] Clarification requested")
-        return {"needs_clarification": True, "question": captured["question"]}
+        return {
+            "needs_clarification": True,
+            "question": captured["question"],
+            "options": captured.get("options") or [],
+        }
     logger.error("[Planner] Model failed to produce a plan or clarification")
     return {"error": "The planner did not produce a research plan. Please try rephrasing your question."}
 
@@ -583,6 +591,17 @@ async def process_user_request(
         timing_collector=timing_collector,
     )
 
+    # Strip the model's <suggestions> block off the answer and attach it to the
+    # result. This is the single manager return behind BOTH /api/chat and
+    # /api/consult, so a consulted peer's block never reaches the calling bot's
+    # context as a tool result. It must stay ABOVE the source block: sources are
+    # matched against the content, and a URL inside a suggestion line would
+    # otherwise falsely mark a source as cited.
+    clean, suggestions = extract_suggestions(final.get("content") or "")
+    final["content"] = clean
+    if suggestions:
+        final["suggestions"] = suggestions
+
     if accumulated_sources:
         final["sources"] = [
             {**{k: v for k, v in s.items() if k != "n"}, "n": i + 1}
@@ -726,6 +745,11 @@ async def run_deep_research(
         emit_tool_details=emit_tool_details,
         timing_collector=timing_collector,
     )
+
+    # Belt and braces: Deep Research reports are out of scope for suggestions
+    # (the synthesis prompt never asks for a block), but this guarantees a stray
+    # tag can never reach a report. Normally a no-op.
+    final["content"] = extract_suggestions(final.get("content") or "")[0]
 
     if accumulated_sources:
         final["sources"] = [

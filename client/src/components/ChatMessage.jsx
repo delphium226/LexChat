@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { marked } from 'marked';
 import { rateMessage, addMatterNote } from '../services/api';
 import { CopyIcon, RefreshIcon, BookmarkIcon } from './ui/icons';
-import { stripThinking } from '../utils/exportChat';
+import { sanitiseAssistantContent } from '../utils/exportChat';
 
 function formatTime(isoDate) {
   if (!isoDate) return '';
@@ -321,7 +321,7 @@ const ChatMessage = ({
     }
   };
 
-  const processedContent = useMemo(() => stripThinking(message.content), [message.content]);
+  const processedContent = useMemo(() => sanitiseAssistantContent(message.content), [message.content]);
 
   const handleCopy = async () => {
     try {
