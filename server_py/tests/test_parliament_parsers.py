@@ -7,6 +7,8 @@ structure, `meeting=ID&iob=ID` agenda links, and committee-vs-plenary slugs).
 """
 
 from src.agent.tools.parliament import (
+    _MAX_RETURNED_SPEECHES,
+    _cap_speeches,
     _parse_sp_listing_meetings,
     _parse_sp_meeting_page,
     _parse_sp_plenary_meetings,
@@ -131,3 +133,36 @@ def test_transcript_no_contributions_returns_empty_list():
     out = _parse_sp_plenary_transcript("<main><p>Nothing here</p></main>", "http://example/x")
     assert out["speeches"] == []
     assert out["total_speeches"] == 0
+
+
+# --- _cap_speeches ---
+#
+# The cap lives at the retrieval-tool boundary, NOT in the parser: the crawler
+# parses the same pages to build the FTS full_text and must see every speech.
+
+def test_cap_speeches_leaves_short_transcript_untouched():
+    parsed = {"speeches": [{"speaker": "A", "text": "x"}] * 3, "total_speeches": 3}
+    out = _cap_speeches(parsed)
+    assert len(out["speeches"]) == 3
+    assert "truncated" not in out and "note" not in out
+
+
+def test_cap_speeches_trims_and_flags_long_transcript():
+    n = _MAX_RETURNED_SPEECHES + 40
+    parsed = {
+        "speeches": [{"speaker": f"MSP {i}", "text": "x"} for i in range(n)],
+        "total_speeches": n,
+        "url": "http://example/x",
+    }
+    out = _cap_speeches(parsed)
+    assert len(out["speeches"]) == _MAX_RETURNED_SPEECHES
+    assert out["truncated"] is True
+    # The true count survives so the model can see what it is missing.
+    assert out["total_speeches"] == n
+    assert str(n) in out["note"]
+    # Kept from the start: caption matching anchors on the item's first speeches.
+    assert out["speeches"][0]["speaker"] == "MSP 0"
+
+
+def test_cap_speeches_handles_missing_speech_list():
+    assert _cap_speeches({"total_speeches": 0})["total_speeches"] == 0

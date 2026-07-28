@@ -194,11 +194,23 @@ def _slim_contribution_results(resp_json: dict, query: str, sections: tuple[str,
     }
 
 
+# Cap on the contributions handed back to the Worker. A whole day of departmental
+# oral questions flattens (via ChildDebates) into several hundred contributions of
+# up to 3000 chars each — large enough that a handful of Phase 2 retrievals stack
+# into a prefill that stalls the provider past the stream read timeout, yet each
+# one still slips under the context-scaled summarisation threshold. The Holyrood
+# analogue is _MAX_RETURNED_SPEECHES in parliament.py.
+_MAX_RETURNED_CONTRIBUTIONS = 150
+
+
 def _flatten_debate(data: dict) -> dict:
     """Turn a Hansard debate JSON document into a flat contribution list.
 
     A debate section may nest further child debates (a department's oral questions
     contain one child per question), so walk the tree and keep document order.
+
+    The returned list is capped at _MAX_RETURNED_CONTRIBUTIONS;
+    `total_contributions` reports the true count either way.
     """
     overview = data.get("Overview") or {}
     contributions: list[dict] = []
@@ -228,16 +240,29 @@ def _flatten_debate(data: dict) -> dict:
     title = _clean_text(overview.get("Title") or "")
     house = overview.get("House") or ""
     date = (overview.get("Date") or "")[:10]
-    return {
+    total = len(contributions)
+    flattened = {
         "debate_ext_id": ext_id,
         "title": title,
         "house": house,
         "location": overview.get("Location") or "",
         "date": date,
         "url": _debate_url(house, date, ext_id, title),
-        "contributions": contributions,
-        "total_contributions": len(contributions),
+        "contributions": contributions[:_MAX_RETURNED_CONTRIBUTIONS],
+        "total_contributions": total,
     }
+    if total > _MAX_RETURNED_CONTRIBUTIONS:
+        logger.info(
+            f"[Westminster] Capping debate result: {total} -> "
+            f"{_MAX_RETURNED_CONTRIBUTIONS} contributions ({ext_id})"
+        )
+        flattened["truncated"] = True
+        flattened["note"] = (
+            f"Showing the first {_MAX_RETURNED_CONTRIBUTIONS} of {total} contributions. "
+            "If the passage you need is not here, retrieve a more specific debate section "
+            "(debate_ext_id) rather than re-requesting this one."
+        )
+    return flattened
 
 
 def _apply_westminster_filters(name: str, args: dict) -> Optional[str]:
