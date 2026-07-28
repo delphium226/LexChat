@@ -28,10 +28,12 @@ import ResearchFiltersModal from './components/ResearchFiltersModal';
 import Composer from './components/Composer';
 import Sidebar from './components/Sidebar';
 import {
-  RECORD_TYPE_OPTIONS,
-  SESSION_OPTIONS,
+  HOUSE_OPTIONS,
   JURISDICTION_OPTIONS,
   COURT_GROUPS,
+  getRecordTypeOptions,
+  getSessionFilterLabel,
+  getSessionOptions,
 } from './constants/research';
 import { Routes, Route } from 'react-router-dom';
 import SystemChat from './pages/SystemChat';
@@ -195,6 +197,7 @@ function AppContent() {
     currentOnly,
     recordType,
     sessions,
+    house,
     setJurisdictionPersist,
     setDateFromPersist,
     setDateToPersist,
@@ -203,6 +206,8 @@ function AppContent() {
     setCurrentOnlyPersist,
     setRecordTypePersist,
     setSessionsPersist,
+    setHousePersist,
+    applySessionDefault,
     saveFiltersToChatStorage,
     restoreFiltersForChat,
   } = useFilters(currentChatId);
@@ -233,7 +238,7 @@ function AppContent() {
     logoutWithExpiry,
     chatMode,
     researchMode,
-    filters: { jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, currentOnly, recordType, sessions },
+    filters: { jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, currentOnly, recordType, sessions, house },
     saveFiltersToChatStorage,
     restoreFiltersForChat,
     currentChatId,
@@ -280,7 +285,23 @@ function AppContent() {
     return [];
   }, [messages, activeSourcesMsgId]);
 
-  const isParliament = botInfo.researchMode === 'parliamentary_records';
+  // Two parliamentary bots share this client, selected by the bot's research mode:
+  // Holyrood (unicameral, Sessions 1-7) and Westminster (two Houses, Parliaments).
+  // `isParliament` gates everything the two have in common (narrow filter layout,
+  // parliamentary chips); the specific flags gate the jurisdiction-specific labels.
+  const botMode = botInfo.researchMode;
+  const isHolyrood = botMode === 'parliamentary_records';
+  const isWestminster = botMode === 'westminster_records';
+  const isParliament = isHolyrood || isWestminster;
+
+  // The correct session/Parliament default depends on which bot this is, which is
+  // only known once /api/bot-info resolves — apply it then, and drop any persisted
+  // value belonging to the other bot's vocabulary.
+  useEffect(() => {
+    if (botMode) applySessionDefault(botMode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [botMode]);
+
   const jurisdictionLabel = jurisdiction
     ? JURISDICTION_OPTIONS.find(o => o.value === jurisdiction)?.label || 'All jurisdictions'
     : 'All jurisdictions';
@@ -530,7 +551,11 @@ function AppContent() {
             // 2. Region
             chips.push({
               icon: <GavelIcon />,
-              label: isParliament ? 'Scottish Parliament (Holyrood)' : jurisdictionLabel,
+              label: isWestminster
+                ? 'UK Parliament (Westminster)'
+                : isHolyrood
+                  ? 'Scottish Parliament (Holyrood)'
+                  : jurisdictionLabel,
             });
 
             // 3. Research type (implied context in conversational mode, so omitted there)
@@ -541,23 +566,33 @@ function AppContent() {
               });
             }
 
+            // 3b. House (Westminster only — Holyrood is unicameral)
+            if (isWestminster && house) {
+              chips.push({
+                icon: <GavelIcon />,
+                label: HOUSE_OPTIONS.find(o => o.value === house)?.label || house,
+              });
+            }
+
             // 4. Record type (Parliament)
             if (isParliament && recordType) {
               chips.push({
                 icon: <GavelIcon />,
-                label: RECORD_TYPE_OPTIONS.find(o => o.value === recordType)?.label || recordType,
+                label: getRecordTypeOptions(botMode).find(o => o.value === recordType)?.label || recordType,
               });
             }
 
-            // 4b. Session (Parliament) — multiselect
+            // 4b. Session / Parliament (Parliament bots) — multiselect
             if (isParliament && Array.isArray(sessions) && sessions.length) {
+              const opts = getSessionOptions(botMode);
               const sorted = [...sessions].sort((a, b) => a - b);
+              const noun = getSessionFilterLabel(botMode);
               const sessionLabel =
-                sorted.length === SESSION_OPTIONS.length
-                  ? 'All sessions'
+                sorted.length === opts.length
+                  ? `All ${noun.toLowerCase()}s`
                   : sorted.length === 1
-                    ? `Session ${sorted[0]}`
-                    : `Sessions ${sorted.join(', ')}`;
+                    ? opts.find(o => o.value === sorted[0])?.label || `${noun} ${sorted[0]}`
+                    : `${noun}s ${sorted.join(', ')}`;
               chips.push({ icon: <CalendarIcon />, label: sessionLabel });
             }
 
@@ -777,11 +812,14 @@ function AppContent() {
                 {showFilters && (
                   <ResearchFiltersModal
                     isParliament={isParliament}
+                    isWestminster={isWestminster}
+                    botMode={botMode}
                     thisYear={thisYear}
                     initial={{
                       researchMode,
                       recordType,
                       sessions,
+                      house,
                       jurisdiction,
                       legislationType,
                       currentOnly,
@@ -796,6 +834,7 @@ function AppContent() {
                       }
                       setRecordTypePersist(draft.recordType);
                       setSessionsPersist(draft.sessions);
+                      setHousePersist(draft.house ?? null);
                       setJurisdictionPersist(draft.jurisdiction);
                       setLegislationTypePersist(draft.legislationType);
                       setCurrentOnlyPersist(draft.currentOnly);
@@ -837,6 +876,7 @@ function AppContent() {
             collapsed={sourcesCollapsed}
             onCollapsedChange={setSourcesCollapsed}
             isParliament={isParliament}
+            isWestminster={isWestminster}
           />
         </div>
       </div>
@@ -975,6 +1015,7 @@ function AppContent() {
           botName={botInfo.name}
           botLogoEmoji={botInfo.logoEmoji}
           isParliament={isParliament}
+          isWestminster={isWestminster}
         />
       )}
     </div>

@@ -43,6 +43,7 @@ export const sendMessage = (
           current_only: filters.currentOnly || false,
           record_type: filters.recordType || null,
           sessions: filters.sessions || null,
+          house: filters.house || null,
         }),
         signal,
       });
@@ -131,6 +132,7 @@ export const getResearchPlan = async (
       current_only: filters.currentOnly || false,
       record_type: filters.recordType || null,
       sessions: filters.sessions || null,
+      house: filters.house || null,
     },
     { signal }
   );

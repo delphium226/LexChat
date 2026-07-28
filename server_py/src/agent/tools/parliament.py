@@ -218,6 +218,41 @@ def _parse_sp_plenary_transcript(html: str, url: str, agenda_title: str | None =
     }
 
 
+# Cap on the speeches a *retrieval tool* hands back to the Worker. An agenda item
+# can run to several hundred contributions of up to 3000 chars each, and if the
+# stored agenda title is missing the parser falls back to the whole meeting page —
+# a single result then approaches the (context-scaled) summarisation threshold
+# without tripping it, and four of them stack into a prefill large enough to stall
+# the provider past the stream read timeout.
+#
+# Deliberately NOT applied inside _parse_sp_plenary_transcript: the crawler parses
+# the same pages to build the FTS `full_text`, which must stay complete.
+_MAX_RETURNED_SPEECHES = 150
+
+
+def _cap_speeches(parsed: dict) -> dict:
+    """Trim a parsed transcript's speech list to _MAX_RETURNED_SPEECHES, in place.
+
+    `total_speeches` keeps the true count so the model can see what it is missing,
+    and a note tells it how to narrow the request.
+    """
+    speeches = parsed.get("speeches") or []
+    if len(speeches) <= _MAX_RETURNED_SPEECHES:
+        return parsed
+    logger.info(
+        f"[Parliament] Capping transcript result: {len(speeches)} -> "
+        f"{_MAX_RETURNED_SPEECHES} speeches ({parsed.get('url', '')})"
+    )
+    parsed["speeches"] = speeches[:_MAX_RETURNED_SPEECHES]
+    parsed["truncated"] = True
+    parsed["note"] = (
+        f"Showing the first {_MAX_RETURNED_SPEECHES} of {len(speeches)} contributions. "
+        "If the passage you need is not here, retrieve a more specific agenda item "
+        "(iob_id) rather than re-requesting this one."
+    )
+    return parsed
+
+
 _MIN_TRANSCRIPT_BYTES = 20_000  # reject undersized Cloudflare 524 error pages
 
 
@@ -825,7 +860,9 @@ async def execute_parliament_tool(
                 # Committee item pages use the same <p id="orscontributions_..."> markup as
                 # plenary; the plenary parser attributes speakers correctly where the older
                 # _parse_sp_transcript_page returns a single unnamed blob.
-                parsed = _parse_sp_plenary_transcript(resp.text, transcript_url, agenda_title)
+                parsed = _cap_speeches(
+                    _parse_sp_plenary_transcript(resp.text, transcript_url, agenda_title)
+                )
 
                 # Optional enrichment: attach SP TV video deep links to matched speeches.
                 # Additive and fail-soft — never blocks or errors the citation.
@@ -883,7 +920,9 @@ async def execute_parliament_tool(
                 if timing_collector:
                     timing_collector.record_lex_api_call(name, elapsed_ms)
                 await _emit(on_chunk, {"type": "api_call_end", "id": call_id, "url": transcript_url, "status": 200, "response": {"preview": f"{len(resp_text)} chars"}, "elapsed_ms": round(elapsed_ms)})
-                parsed = _parse_sp_plenary_transcript(resp_text, transcript_url, agenda_title)
+                parsed = _cap_speeches(
+                    _parse_sp_plenary_transcript(resp_text, transcript_url, agenda_title)
+                )
 
                 # Optional enrichment: attach SP TV video deep links to matched speeches.
                 # Additive and fail-soft — never blocks or errors the citation.

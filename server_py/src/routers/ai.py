@@ -83,9 +83,14 @@ class ChatRequest(BaseModel):
     court: Optional[str] = None
     legislation_type: Optional[str] = None
     current_only: Optional[bool] = False
-    # Parliamentary-mode filters (parliament bot only)
+    # Parliamentary-mode filters (parliament / Westminster bots only).
+    # record_type and sessions are shared fields whose vocabulary depends on the
+    # bot's research mode: Holyrood record types + Sessions 1-7, or Westminster
+    # record types + Parliament terms. `house` is Westminster-only (Holyrood is
+    # unicameral) and is ignored by every other mode.
     record_type: Optional[str] = None
     sessions: Optional[List[int]] = None
+    house: Optional[str] = None
     chat_id: Optional[int] = None
     # Deep Research execution: the user-approved plan (chat_mode="deep_research")
     deep_research_plan: Optional[DeepResearchPlan] = None
@@ -130,11 +135,13 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
         doc_context = await _load_doc_context(body.chat_id) if body.chat_id else ""
         matter_context = await _load_matter_context(body.chat_id) if body.chat_id else ""
 
+        _resolved_research_mode = settings.research_mode or body.research_mode or "legislation_only"
+
         set_request_provider_config({
             **provider_config,
             "_provider": active_provider,
             "_chat_mode": body.chat_mode or "research",
-            "_research_mode": settings.research_mode or body.research_mode or "legislation_only",
+            "_research_mode": _resolved_research_mode,
             "_jurisdiction": body.jurisdiction or None,
             "_year_from": body.year_from or None,
             "_year_to": body.year_to or None,
@@ -143,7 +150,12 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
             "_court": body.court or None,
             "_legislation_type": body.legislation_type or None,
             "_current_only": body.current_only or False,
-            "_pt_record_type": body.record_type or None,
+            # record_type is routed to the enforcement key matching this bot's
+            # mode — the two taxonomies are disjoint, so a Holyrood value must
+            # never reach the Westminster filter (or vice versa).
+            "_pt_record_type": body.record_type if _resolved_research_mode != "westminster_records" else None,
+            "_wm_record_type": body.record_type if _resolved_research_mode == "westminster_records" else None,
+            "_wm_house": body.house or None,
             "_pt_sessions": body.sessions or None,
             "_doc_context": doc_context,
             "_matter_context": matter_context,

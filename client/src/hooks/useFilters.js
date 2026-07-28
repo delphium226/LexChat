@@ -1,16 +1,18 @@
 import { useState } from 'react';
-import { LATEST_SESSION } from '../constants/research';
+import { LATEST_SESSION, getLatestSession, getSessionOptions } from '../constants/research';
 
-// Parse the persisted `filter_sessions` JSON array; fall back to the latest
-// session so the parliament session filter defaults to the current term.
+// Parse the persisted `filter_sessions` JSON array. Returns null when nothing is
+// persisted yet: the correct default depends on the bot's research mode (Holyrood
+// Session 7 vs the current Westminster Parliament), which is only known once
+// /api/bot-info resolves — App.jsx fills it in then via applySessionDefault.
 function readSessions() {
   const raw = localStorage.getItem('filter_sessions');
-  if (!raw) return [LATEST_SESSION];
+  if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [LATEST_SESSION];
+    return Array.isArray(parsed) ? parsed : null;
   } catch {
-    return [LATEST_SESSION];
+    return null;
   }
 }
 
@@ -28,11 +30,14 @@ export function useFilters(currentChatId) {
   const [caseLawCourt, setCaseLawCourt] = useState(() => localStorage.getItem('filter_caseLawCourt') || '');
   const [legislationType, setLegislationType] = useState(() => localStorage.getItem('filter_legislationType') || null);
   const [currentOnly, setCurrentOnly] = useState(() => localStorage.getItem('filter_currentOnly') !== 'false');
-  // Parliament-mode filters (only surfaced when the bot is in parliamentary_records mode)
+  // Parliamentary-mode filters (only surfaced on the parliament / Westminster bots).
+  // recordType and sessions carry whichever vocabulary the bot's research mode
+  // defines; `house` is Westminster-only (Holyrood is unicameral).
   const [recordType, setRecordType] = useState(() => localStorage.getItem('filter_recordType') || null);
-  // Session filter — multiselect array of Holyrood session numbers; defaults to
-  // the latest session. Empty array = no session restriction (all sessions).
+  // Session filter — multiselect array of Holyrood session / Westminster Parliament
+  // numbers. Empty array = no restriction; null = not yet defaulted (see readSessions).
   const [sessions, setSessions] = useState(readSessions);
+  const [house, setHouse] = useState(() => localStorage.getItem('filter_house') || null);
 
   const saveFiltersToChatStorage = (chatId, overrides = {}) => {
     if (!chatId) return;
@@ -45,6 +50,7 @@ export function useFilters(currentChatId) {
       currentOnly,
       recordType,
       sessions,
+      house,
       ...overrides,
     };
     localStorage.setItem(`filter_chat_${chatId}`, JSON.stringify(filters));
@@ -93,7 +99,27 @@ export function useFilters(currentChatId) {
     localStorage.setItem('filter_sessions', JSON.stringify(arr));
     if (currentChatId) saveFiltersToChatStorage(currentChatId, { sessions: arr });
   };
-  const clearAllFilters = () => {
+  const setHousePersist = v => {
+    setHouse(v);
+    if (v) localStorage.setItem('filter_house', v);
+    else localStorage.removeItem('filter_house');
+    if (currentChatId) saveFiltersToChatStorage(currentChatId, { house: v });
+  };
+
+  // Resolve the session default once the bot's research mode is known, and drop
+  // any persisted values that belong to the other bot's vocabulary (e.g. Holyrood
+  // "Session 7" lingering in a Westminster deployment's localStorage).
+  const applySessionDefault = researchMode => {
+    const valid = new Set(getSessionOptions(researchMode).map(o => o.value));
+    const latest = getLatestSession(researchMode);
+    if (sessions === null) {
+      setSessionsPersist([latest]);
+    } else if (sessions.some(s => !valid.has(s))) {
+      setSessionsPersist(sessions.filter(s => valid.has(s)));
+    }
+  };
+
+  const clearAllFilters = (researchMode = null) => {
     setJurisdictionPersist(null);
     setDateFromPersist('');
     setDateToPersist(thisYear);
@@ -101,9 +127,12 @@ export function useFilters(currentChatId) {
     setLegislationTypePersist(null);
     setCurrentOnlyPersist(false);
     setRecordTypePersist(null);
-    setSessionsPersist([LATEST_SESSION]);
+    setHousePersist(null);
+    setSessionsPersist([getLatestSession(researchMode)]);
   };
-  const sessionsAreDefault = sessions.length === 1 && sessions[0] === LATEST_SESSION;
+  const sessionsAreDefault =
+    sessions === null ||
+    (sessions.length === 1 && (sessions[0] === LATEST_SESSION || sessions[0] === getLatestSession('westminster_records')));
   const hasActiveFilters =
     jurisdiction ||
     dateFrom ||
@@ -112,6 +141,7 @@ export function useFilters(currentChatId) {
     legislationType ||
     currentOnly ||
     recordType ||
+    house ||
     !sessionsAreDefault;
 
   // Restore the per-chat filter snapshot when opening a chat; any filter not in
@@ -164,6 +194,11 @@ export function useFilters(currentChatId) {
         setSessions(f.sessions);
         localStorage.setItem('filter_sessions', JSON.stringify(f.sessions));
       }
+      if (f.house !== undefined) {
+        setHouse(f.house);
+        if (f.house) localStorage.setItem('filter_house', f.house);
+        else localStorage.removeItem('filter_house');
+      }
     }
     if (chatMatter) {
       if (chatMatter.jurisdiction && savedFilters.jurisdiction === undefined) {
@@ -187,6 +222,7 @@ export function useFilters(currentChatId) {
     currentOnly,
     recordType,
     sessions,
+    house,
     setJurisdiction,
     setDateFrom,
     setDateTo,
@@ -201,6 +237,8 @@ export function useFilters(currentChatId) {
     setCurrentOnlyPersist,
     setRecordTypePersist,
     setSessionsPersist,
+    setHousePersist,
+    applySessionDefault,
     saveFiltersToChatStorage,
     clearAllFilters,
     hasActiveFilters,

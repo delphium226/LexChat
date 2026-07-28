@@ -427,6 +427,118 @@ PARLIAMENT_TOOLS = [
     },
 ]
 
+WESTMINSTER_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_hansard",
+            "description": (
+                "Full-text search across UK Parliament Hansard — the Official Report of what was "
+                "said in the House of Commons, the House of Lords, Westminster Hall, and Public "
+                "Bill Committees. Relevance-ranked, date-filterable. Returns matching debates with "
+                "the speaker, date, an excerpt, and a debate_ext_id. "
+                "Follow up with get_hansard_debate to retrieve the full verbatim contributions."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Full-text search query (e.g. 'leasehold reform ground rents', 'e-bike safety').",
+                    },
+                    "house": {
+                        "type": "string",
+                        "description": "Optional: 'commons' or 'lords'. Omit to search both Houses.",
+                    },
+                    "record_type": {
+                        "type": "string",
+                        "description": (
+                            "Optional record type: 'chamber' (Commons/Lords Chamber debates, the default), "
+                            "'westminster_hall', 'public_bill_committee', 'written_statements', or "
+                            "'written_answers'. Omit to search spoken proceedings across all locations."
+                        ),
+                    },
+                    "date_from": {
+                        "type": "string",
+                        "description": "Optional start date filter (YYYY-MM-DD).",
+                    },
+                    "date_to": {
+                        "type": "string",
+                        "description": "Optional end date filter (YYYY-MM-DD).",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_hansard_debate",
+            "description": (
+                "Retrieve the full verbatim contributions of a specific Hansard debate section. "
+                "Pass debate_ext_id exactly as returned by search_hansard. Returns every attributed "
+                "contribution in order — this is how you quote a Minister's or Member's exact words "
+                "(for example a statement of statutory purpose for Pepper v Hart purposes)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "debate_ext_id": {
+                        "type": "string",
+                        "description": (
+                            "The debate section external ID from search_hansard "
+                            "(e.g. '8C0327E3-999B-44C4-BF2F-BECABD390B04')."
+                        ),
+                    },
+                },
+                "required": ["debate_ext_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_member_info",
+            "description": (
+                "Look up a UK Parliament member (MP or Member of the House of Lords). "
+                "Returns name, party, constituency, House, and whether they are a current member."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "The member's name (e.g. 'Matthew Pennycook', 'Baroness Taylor').",
+                    },
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_bills",
+            "description": (
+                "Search UK Parliament (Westminster) bills by topic, title, or keyword. "
+                "Returns bill title, current House, current stage, whether it has received Royal "
+                "Assent, and a link to the bill page on bills.parliament.uk."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search term (e.g. 'Renters Rights', 'leasehold').",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+]
+
 # -----------------------------------------------------------------------
 # Deep Research planner tools (Phase A — no research tools, plan only)
 # -----------------------------------------------------------------------
@@ -509,6 +621,7 @@ def get_planner_tools() -> list:
 
 
 _PARLIAMENT_TOOL_NAMES = {t["function"]["name"] for t in PARLIAMENT_TOOLS}
+_WESTMINSTER_TOOL_NAMES = {t["function"]["name"] for t in WESTMINSTER_TOOLS}
 
 
 def get_worker_tools(research_mode: str = "legislation_only") -> list:
@@ -519,5 +632,7 @@ def get_worker_tools(research_mode: str = "legislation_only") -> list:
         return WORKER_TOOLS + CASE_LAW_TOOLS
     elif research_mode == "parliamentary_records":
         return PARLIAMENT_TOOLS
+    elif research_mode == "westminster_records":
+        return WESTMINSTER_TOOLS
     return WORKER_TOOLS
 

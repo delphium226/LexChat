@@ -58,6 +58,8 @@ CACHEABLE_TOOLS = frozenset({
     "search_scottish_committee_transcripts",
     "get_scottish_plenary_debate", "get_scottish_committee_transcript",
     "search_bills", "get_member_info",
+    # UK Parliament (Hansard API — Open Parliament Licence v3.0, public record)
+    "search_hansard", "get_hansard_debate",
 })
 
 _STOPWORDS = frozenset(

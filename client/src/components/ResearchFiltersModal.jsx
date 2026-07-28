@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import Modal from './ui/Modal';
 import {
-  RECORD_TYPE_OPTIONS,
-  SESSION_OPTIONS,
-  LATEST_SESSION,
+  HOUSE_OPTIONS,
   JURISDICTION_OPTIONS,
   LEGISLATION_TYPE_OPTIONS,
   COURT_GROUPS,
+  getLatestSession,
+  getRecordTypeOptions,
+  getSessionFilterLabel,
+  getSessionOptions,
 } from '../constants/research';
 
 // Research-filters dialog. Draft-and-apply: all edits mutate a local draft and
@@ -15,6 +17,8 @@ import {
 // the draft. `initial` seeds the draft from the currently-applied values on open.
 export default function ResearchFiltersModal({
   isParliament,
+  isWestminster = false,
+  botMode = '',
   thisYear,
   initial,
   onApply,
@@ -26,6 +30,7 @@ export default function ResearchFiltersModal({
   const {
     researchMode,
     recordType,
+    house,
     jurisdiction,
     legislationType,
     currentOnly,
@@ -33,6 +38,12 @@ export default function ResearchFiltersModal({
     dateTo,
     caseLawCourt,
   } = draft;
+
+  // Filter vocabulary is fixed by the bot's research mode (Holyrood vs Westminster).
+  const recordTypeOptions = getRecordTypeOptions(botMode);
+  const sessionOptions = getSessionOptions(botMode);
+  const latestSession = getLatestSession(botMode);
+  const sessionLabel = getSessionFilterLabel(botMode);
 
   const sessions = Array.isArray(draft.sessions) ? draft.sessions : [];
   const toggleSession = value =>
@@ -45,7 +56,7 @@ export default function ResearchFiltersModal({
   const showScotlandNINote =
     (jurisdiction === 'scotland' || jurisdiction === 'northern_ireland') && researchMode !== 'legislation_only';
 
-  const sessionsAreDefault = sessions.length === 1 && sessions[0] === LATEST_SESSION;
+  const sessionsAreDefault = sessions.length === 1 && sessions[0] === latestSession;
 
   const hasActiveFilters =
     jurisdiction ||
@@ -55,6 +66,7 @@ export default function ResearchFiltersModal({
     legislationType ||
     currentOnly ||
     recordType ||
+    house ||
     !sessionsAreDefault;
 
   const clearAllFilters = () =>
@@ -67,7 +79,8 @@ export default function ResearchFiltersModal({
       legislationType: null,
       currentOnly: false,
       recordType: null,
-      sessions: [LATEST_SESSION],
+      house: null,
+      sessions: [latestSession],
     }));
 
   const secHead = label => (
@@ -169,16 +182,27 @@ export default function ResearchFiltersModal({
         {/* ── Parliament bot filters — narrow single column ── */}
         {isParliament && (
           <div style={{ padding: '8px 0 4px' }}>
+            {/* § House — Westminster only; Holyrood is unicameral */}
+            {isWestminster && (
+              <>
+                {secHead('House')}
+                {HOUSE_OPTIONS.map(opt =>
+                  optBtn(house === opt.value, () => set('house', opt.value), opt.label)
+                )}
+                {divider()}
+              </>
+            )}
+
             {/* § Record type */}
             {secHead('Record type')}
-            {RECORD_TYPE_OPTIONS.map(opt =>
+            {recordTypeOptions.map(opt =>
               optBtn(recordType === opt.value, () => set('recordType', opt.value), opt.label)
             )}
 
-            {/* § Session (multiselect) */}
+            {/* § Session / Parliament (multiselect) */}
             {divider()}
-            {secHead('Session')}
-            {SESSION_OPTIONS.map(opt => {
+            {secHead(sessionLabel)}
+            {sessionOptions.map(opt => {
               const checked = sessions.includes(opt.value);
               return (
                 <button

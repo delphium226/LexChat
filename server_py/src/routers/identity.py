@@ -19,8 +19,13 @@ class BotInfoOut(BaseModel):
     brand_color: Optional[str] = None
     logo_emoji: Optional[str] = None
 
-# identity.py lives at server_py/src/routers/ — three dirname calls reach the project root
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# identity.py lives at server_py/src/routers/identity.py — four dirname calls reach
+# the repo root (routers -> src -> server_py -> repo). Three stopped at server_py/,
+# so every relative bot_config logo_path 404'd; the parliament bot masked it by
+# also supplying a logo_emoji, which the frontend prefers for the favicon.
+_PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 
 
 @router.get("/api/bot-info", response_model=BotInfoOut, response_model_exclude_none=True)

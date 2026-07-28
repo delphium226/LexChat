@@ -88,7 +88,7 @@ function FilterPill({ label, active, onClick }) {
   );
 }
 
-export default function SourcesRail({ sources = [], activeCite, onCiteClick, collapsed = false, onCollapsedChange, isParliament = false }) {
+export default function SourcesRail({ sources = [], activeCite, onCiteClick, collapsed = false, onCollapsedChange, isParliament = false, isWestminster = false }) {
   const activeRef = useRef(null);
   const setCollapsed = v => onCollapsedChange?.(v);
 
@@ -348,9 +348,11 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick, col
             }}
           >
             <div style={{ fontSize: 30, marginBottom: 12, opacity: 0.3, lineHeight: 1 }}>⚖</div>
-            {isParliament
-              ? 'Sources will appear here as the research agent cites Scottish Parliament debates, committee transcripts, and bills.'
-              : 'Sources will appear here as the research agent cites legislation and case law.'}
+            {isWestminster
+              ? 'Sources will appear here as the research agent cites Hansard debates, written statements, and bills.'
+              : isParliament
+                ? 'Sources will appear here as the research agent cites Scottish Parliament debates, committee transcripts, and bills.'
+                : 'Sources will appear here as the research agent cites legislation and case law.'}
           </div>
         ) : visibleSources.length === 0 ? (
           <div

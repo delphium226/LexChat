@@ -116,6 +116,17 @@ def _apply_anthropic_cache_control(openai_messages: list, model: str) -> list:
     return marked
 
 
+# A stalled provider — no response headers, or no bytes mid-stream — surfaces as
+# httpx.TimeoutException once the read timeout below expires. Unretried, a single
+# transient stall propagates out through the worker, the manager and the request
+# queue, and kills the whole SSE request: the lawyer loses the answer and every
+# tool result already gathered for it. Retried only while nothing has been emitted
+# yet — once tokens have reached the user or tool-call deltas have accumulated,
+# replaying the request would duplicate them, so the error is re-raised.
+_MAX_STREAM_ATTEMPTS = 3
+_STREAM_RETRY_BASE_S = 2.0
+
+
 # -----------------------------------------------------------------------
 # Generic Chat Loop (ReAct pattern — OpenAI/OpenRouter format)
 # -----------------------------------------------------------------------
@@ -178,83 +189,115 @@ async def chat_loop(
     # No overall timeout (a long research answer can legitimately stream for
     # minutes) but a per-read timeout so a provider that hangs mid-stream — no
     # bytes for 180s — raises ReadTimeout instead of holding the request forever.
+    # httpx applies `read` to the wait for response headers too, so this doubles
+    # as a time-to-first-byte cap on the provider's prefill.
     stream_timeout = httpx.Timeout(None, connect=30.0, read=180.0)
-    try:
-        async with httpx.AsyncClient(timeout=stream_timeout, verify=False, proxy=_get_proxy()) as client:
-            async with client.stream(
-                "POST",
-                f"{_base_url()}/chat/completions",
-                json=payload,
-                headers=_get_headers(),
-            ) as response:
-                response.raise_for_status()
 
-                async for line in response.aiter_lines():
-                    if cancel_event and cancel_event.is_set():
-                        raise asyncio.CancelledError("Aborted")
+    for attempt in range(_MAX_STREAM_ATTEMPTS):
+        if cancel_event and cancel_event.is_set():
+            raise asyncio.CancelledError("Aborted")
 
-                    if not line.startswith("data: "):
-                        continue
+        # Reset per attempt: a retry replays the request from scratch, so the
+        # recorded timing describes the attempt that actually succeeded.
+        full_content = ""
+        tool_calls_map = {}
+        usage_stats = {}
+        t_send = time.perf_counter()
+        first_content_time = None
 
-                    raw = line[6:].strip()
-                    if raw == "[DONE]":
-                        break
-
-                    try:
-                        data = json.loads(raw)
-                    except json.JSONDecodeError:
-                        continue
-
-                    # Capture usage if present (OpenRouter sends it in the last chunk)
-                    if data.get("usage"):
-                        usage_stats = data["usage"]
-
-                    choices = data.get("choices", [])
-                    if not choices:
-                        continue
-
-                    delta = choices[0].get("delta", {})
-
-                    # Accumulate content tokens
-                    content = delta.get("content") or ""
-                    if content:
-                        if first_content_time is None:
-                            first_content_time = time.perf_counter()
-                        full_content += content
-                        if on_chunk:
-                            await call_chunk(on_chunk, {"type": "token", "content": content})
-
-                    # Accumulate tool call deltas
-                    for tc_delta in delta.get("tool_calls", []):
-                        idx = tc_delta.get("index", 0)
-                        if idx not in tool_calls_map:
-                            tool_calls_map[idx] = {
-                                "id": tc_delta.get("id", ""),
-                                "type": "function",
-                                "function": {"name": "", "arguments": ""},
-                            }
-                        entry = tool_calls_map[idx]
-                        if tc_delta.get("id"):
-                            entry["id"] = tc_delta["id"]
-                        func = tc_delta.get("function", {})
-                        if func.get("name"):
-                            entry["function"]["name"] += func["name"]
-                        if func.get("arguments"):
-                            entry["function"]["arguments"] += func["arguments"]
-
-    except httpx.ConnectError:
-        raise ConnectionError(
-            "OpenRouter is not reachable. "
-            "Check your internet connection and OPENROUTER_API_KEY."
-        )
-    except httpx.HTTPStatusError as e:
         try:
-            await e.response.aread()
-            body = e.response.text[:500]
-        except Exception:
-            body = "(body unreadable)"
-        logger.error(f"[OpenRouter] HTTP {e.response.status_code}: {body}")
-        raise
+            async with httpx.AsyncClient(timeout=stream_timeout, verify=False, proxy=_get_proxy()) as client:
+                async with client.stream(
+                    "POST",
+                    f"{_base_url()}/chat/completions",
+                    json=payload,
+                    headers=_get_headers(),
+                ) as response:
+                    response.raise_for_status()
+
+                    async for line in response.aiter_lines():
+                        if cancel_event and cancel_event.is_set():
+                            raise asyncio.CancelledError("Aborted")
+
+                        if not line.startswith("data: "):
+                            continue
+
+                        raw = line[6:].strip()
+                        if raw == "[DONE]":
+                            break
+
+                        try:
+                            data = json.loads(raw)
+                        except json.JSONDecodeError:
+                            continue
+
+                        # Capture usage if present (OpenRouter sends it in the last chunk)
+                        if data.get("usage"):
+                            usage_stats = data["usage"]
+
+                        choices = data.get("choices", [])
+                        if not choices:
+                            continue
+
+                        delta = choices[0].get("delta", {})
+
+                        # Accumulate content tokens
+                        content = delta.get("content") or ""
+                        if content:
+                            if first_content_time is None:
+                                first_content_time = time.perf_counter()
+                            full_content += content
+                            if on_chunk:
+                                await call_chunk(on_chunk, {"type": "token", "content": content})
+
+                        # Accumulate tool call deltas
+                        for tc_delta in delta.get("tool_calls", []):
+                            idx = tc_delta.get("index", 0)
+                            if idx not in tool_calls_map:
+                                tool_calls_map[idx] = {
+                                    "id": tc_delta.get("id", ""),
+                                    "type": "function",
+                                    "function": {"name": "", "arguments": ""},
+                                }
+                            entry = tool_calls_map[idx]
+                            if tc_delta.get("id"):
+                                entry["id"] = tc_delta["id"]
+                            func = tc_delta.get("function", {})
+                            if func.get("name"):
+                                entry["function"]["name"] += func["name"]
+                            if func.get("arguments"):
+                                entry["function"]["arguments"] += func["arguments"]
+            break
+
+        except httpx.TimeoutException as e:
+            # Anything already emitted is downstream: replaying would duplicate it.
+            emitted = bool(full_content or tool_calls_map)
+            if emitted or attempt == _MAX_STREAM_ATTEMPTS - 1:
+                logger.error(
+                    f"[OpenRouter] {type(e).__name__} after {attempt + 1} attempt(s) "
+                    f"(partial_output={emitted}) — giving up"
+                )
+                raise
+            delay = _STREAM_RETRY_BASE_S * (2 ** attempt)
+            logger.warning(
+                f"[OpenRouter] {type(e).__name__} before any output "
+                f"(attempt {attempt + 1}/{_MAX_STREAM_ATTEMPTS}, ~{total_chars} chars sent) "
+                f"— retrying in {delay:.1f}s"
+            )
+            await asyncio.sleep(delay)
+        except httpx.ConnectError:
+            raise ConnectionError(
+                "OpenRouter is not reachable. "
+                "Check your internet connection and OPENROUTER_API_KEY."
+            )
+        except httpx.HTTPStatusError as e:
+            try:
+                await e.response.aread()
+                body = e.response.text[:500]
+            except Exception:
+                body = "(body unreadable)"
+            logger.error(f"[OpenRouter] HTTP {e.response.status_code}: {body}")
+            raise
 
     # Record timing
     if timing_collector:

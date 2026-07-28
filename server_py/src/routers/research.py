@@ -44,6 +44,7 @@ class ResearchPlanRequest(BaseModel):
     current_only: Optional[bool] = False
     record_type: Optional[str] = None
     sessions: Optional[List[int]] = None
+    house: Optional[str] = None  # Westminster only (Holyrood is unicameral)
     chat_id: Optional[int] = None
 
 
@@ -64,11 +65,13 @@ async def draft_plan(body: ResearchPlanRequest, user: dict = Depends(get_current
         logger.error(f"[Research] Provider resolution failed: {e}", exc_info=True)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again.")
 
+    resolved_research_mode = settings.research_mode or body.research_mode or "legislation_only"
+
     set_request_provider_config({
         **provider_config,
         "_provider": active_provider,
         "_chat_mode": "deep_research",
-        "_research_mode": settings.research_mode or body.research_mode or "legislation_only",
+        "_research_mode": resolved_research_mode,
         "_jurisdiction": body.jurisdiction or None,
         "_year_from": body.year_from or None,
         "_year_to": body.year_to or None,
@@ -77,7 +80,9 @@ async def draft_plan(body: ResearchPlanRequest, user: dict = Depends(get_current
         "_court": body.court or None,
         "_legislation_type": body.legislation_type or None,
         "_current_only": body.current_only or False,
-        "_pt_record_type": body.record_type or None,
+        "_pt_record_type": body.record_type if resolved_research_mode != "westminster_records" else None,
+        "_wm_record_type": body.record_type if resolved_research_mode == "westminster_records" else None,
+        "_wm_house": body.house or None,
         "_pt_sessions": body.sessions or None,
     })
 

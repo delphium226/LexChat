@@ -422,23 +422,102 @@ def build_parliament_filter_constraint_block(cfg: dict) -> str:
     return "\n".join(lines)
 
 
+_WM_HOUSE_LABELS = {
+    "commons": "House of Commons",
+    "lords": "House of Lords",
+}
+
+_WM_RECORD_TYPE_LABELS = {
+    "chamber": "Chamber debates",
+    "westminster_hall": "Westminster Hall debates",
+    "public_bill_committee": "Public Bill Committees",
+    "written_statements": "Written ministerial statements",
+    "written_answers": "Written answers",
+}
+
+
+def build_westminster_filter_constraint_block(cfg: dict) -> str:
+    """Build a constraint block for the Westminster bot when its filters are active.
+
+    The Holyrood sibling is build_parliament_filter_constraint_block; this one adds
+    the House dimension (Holyrood is unicameral) and uses the Westminster record
+    taxonomy and Parliament-term session model.
+    """
+    house = cfg.get("_wm_house")
+    record_type = cfg.get("_wm_record_type")
+    date_from = cfg.get("_date_from")
+    date_to = cfg.get("_date_to")
+    sessions = cfg.get("_pt_sessions")
+
+    # Fold the selected Parliaments into the effective date window (mirrors
+    # _apply_westminster_filters) so the model's stated scope matches enforcement.
+    if sessions:
+        from .agent.tools.westminster import _wm_sessions_date_window
+        s_from, s_to = _wm_sessions_date_window(sessions)
+        if s_from:
+            date_from = max(date_from, s_from) if date_from else s_from
+        if s_to:
+            date_to = min(date_to, s_to) if date_to else s_to
+
+    if not any([house, record_type, date_from, date_to, sessions]):
+        return ""
+
+    lines = ["ACTIVE RESEARCH FILTERS (applied by the system — respect these when choosing tools and arguments):"]
+
+    if house:
+        label = _WM_HOUSE_LABELS.get(house, house)
+        lines.append(f"- House: {label} only. Pass house='{house}' to search_hansard and do not report proceedings from the other House.")
+
+    if record_type:
+        label = _WM_RECORD_TYPE_LABELS.get(record_type, record_type)
+        lines.append(f"- Record type: {label}. Pass record_type='{record_type}' to search_hansard; do not report other kinds of proceedings.")
+
+    if sessions:
+        from .agent.tools.westminster import WM_PARLIAMENTS
+        session_label = ", ".join(
+            f"{WM_PARLIAMENTS[s][0][:4]}–{(WM_PARLIAMENTS[s][1] or '')[:4] or 'present'} Parliament"
+            for s in sorted(sessions) if s in WM_PARLIAMENTS
+        )
+        if session_label:
+            lines.append(f"- Parliament(s): {session_label} (applied as the date window below). Only retrieve records within this window.")
+
+    if date_from and date_to:
+        lines.append(f"- Date range: {date_from} to {date_to}. Pass date_from/date_to to any tool that accepts them.")
+    elif date_from:
+        lines.append(f"- Date range: from {date_from} onwards. Pass date_from to any tool that accepts it.")
+    elif date_to:
+        lines.append(f"- Date range: up to {date_to}. Pass date_to to any tool that accepts it.")
+
+    return "\n".join(lines)
+
+
+def _filter_constraint_block_for_mode(research_mode: str, cfg: dict) -> str:
+    """Select the filter-constraint builder matching this bot's research mode."""
+    if research_mode == "parliamentary_records":
+        return build_parliament_filter_constraint_block(cfg)
+    if research_mode == "westminster_records":
+        return build_westminster_filter_constraint_block(cfg)
+    return build_filter_constraint_block(cfg)
+
+
 def get_worker_system_prompt(research_mode: str = "legislation_only", cfg: dict = None) -> str:
     from datetime import date
     date_line = f"Today's date is {date.today().strftime('%d %B %Y')}."
 
-    if cfg and cfg.get("_chat_mode") == "conversational" and research_mode != "parliamentary_records":
+    if (
+        cfg
+        and cfg.get("_chat_mode") == "conversational"
+        and research_mode not in ("parliamentary_records", "westminster_records")
+    ):
         return date_line + "\n\n" + WORKER_SYSTEM_PROMPT_CONVERSATIONAL
     base = {
         "case_law_only": WORKER_SYSTEM_PROMPT_CASE_LAW,
         "legislation_and_case_law": WORKER_SYSTEM_PROMPT_HYBRID,
         "parliamentary_records": PARLIAMENT_WORKER_SYSTEM_PROMPT,
+        "westminster_records": WESTMINSTER_WORKER_SYSTEM_PROMPT,
     }.get(research_mode, WORKER_SYSTEM_PROMPT)
     if cfg:
-        block = (
-            build_parliament_filter_constraint_block(cfg)
-            if research_mode == "parliamentary_records"
-            else build_filter_constraint_block(cfg)
-        )
+        block = _filter_constraint_block_for_mode(research_mode, cfg)
         if block:
             return date_line + "\n\n" + base + "\n\n" + block
     return date_line + "\n\n" + base
@@ -467,7 +546,7 @@ def get_manager_mode_note(research_mode: str, cfg: dict = None) -> str:
     else:
         note = ""
 
-    if cfg and research_mode != "parliamentary_records":
+    if cfg and research_mode not in ("parliamentary_records", "westminster_records"):
         block = build_filter_constraint_block(cfg)
         if block:
             note = (note + "\n\n" + block) if note else block
@@ -480,9 +559,13 @@ def get_manager_system_prompt(research_mode: str = "legislation_only", cfg: dict
     from datetime import date
     date_line = f"Today's date is {date.today().strftime('%d %B %Y')}."
 
-    if research_mode == "parliamentary_records":
-        base = PARLIAMENT_MANAGER_SYSTEM_PROMPT
-        block = build_parliament_filter_constraint_block(cfg) if cfg else ""
+    if research_mode in ("parliamentary_records", "westminster_records"):
+        base = (
+            PARLIAMENT_MANAGER_SYSTEM_PROMPT
+            if research_mode == "parliamentary_records"
+            else WESTMINSTER_MANAGER_SYSTEM_PROMPT
+        )
+        block = _filter_constraint_block_for_mode(research_mode, cfg) if cfg else ""
         if block:
             base = base + "\n\n" + block
         return date_line + "\n\n" + base
@@ -615,6 +698,108 @@ OUTPUT STRUCTURE (Use Markdown):
 Review your answer before responding: Does every claim have a corresponding source from the tool results? If yes, proceed."""
 
 
+WESTMINSTER_MANAGER_SYSTEM_PROMPT = """You are Hansard Chat, an AI UK Parliament (Westminster) research assistant for a UK government organisation.
+Your users are government analysts, policy advisers, and legal professionals researching parliamentary proceedings at Westminster.
+Your demeanour must be professional, concise, and precise.
+
+YOUR RESPONSIBILITIES:
+1. Triage: Determine if the user's input is a parliamentary research query or general conversation.
+2. Clarify: If a parliamentary query is ambiguous (e.g., "What did they say about it?" without naming a Member or topic), ask clarifying questions BEFORE delegating.
+3. Delegate: Once a clear parliamentary question is established, you MUST use the `delegate_research` tool.
+4. Deliver: Present the Worker Agent's findings to the user clearly and accurately.
+
+CRITICAL RULES:
+- DO NOT answer parliamentary questions using your own internal knowledge. You must rely 100% on the `delegate_research` tool.
+- PASS-THROUGH ACCURACY: Present the Worker Agent's findings exactly as returned. Do not paraphrase or omit details.
+- CITATION PRESERVATION: Do not alter, shorten, or remove Hansard references, dates, or URLs provided by the Worker Agent. This includes any "▶ watch from HH:MM:SS" UK Parliament TV video links — keep them inline exactly where the Worker placed them.
+- If the tool returns no results, inform the user clearly and suggest alternative search terms or date ranges.
+
+RESEARCH BRIEF CONSTRUCTION:
+When calling `delegate_research`, the `query` parameter must be a self-contained research brief — the Worker Agent has no access to the conversation history. Include:
+- The precise parliamentary question being asked.
+- Any specific Member names, bill titles, committee names, departments, or dates mentioned in the conversation.
+- Which House is in scope (Commons, Lords, or both), and whether the question concerns chamber proceedings, Westminster Hall, a Public Bill Committee, or written statements.
+- Relevant context from prior turns.
+Never forward the user's raw message verbatim if the conversation contains additional context.
+
+SCOPE:
+- You cover the UK Parliament at Westminster only — House of Commons and House of Lords chamber debates, Westminster Hall, Public Bill Committees, written statements, Members, and UK bills. You do NOT cover the Scottish Parliament (Holyrood), Senedd Cymru, or the Northern Ireland Assembly.
+- For questions about Scottish Parliament proceedings (Holyrood debates, MSPs, Scottish committee scrutiny), use `consult_peer` to query the Parliament Bot peer — do NOT deflect the user. If no such peer is registered, tell the user this assistant covers Westminster only.
+- For questions about the text or content of specific legislation (e.g. what does an Act or SI actually say, its provisions, definitions, or commencement dates), use `consult_peer` to query the Legislation Bot peer — do NOT deflect the user. If no legislation peer is registered, direct the user to the AILA assistant.
+- For general case law research (court judgments, precedents), direct those questions to the AILA assistant.
+
+TONE:
+- Be direct and professional. Avoid flowery language (e.g., avoid "I would be happy to help").
+
+FOLLOW-UP QUESTION:
+Always end your response with a single, concise question that invites the user to take the next logical step. Anticipate what they would naturally want to explore next — for example: a related debate, the progress of a relevant bill, what a specific Member said on the topic, or how a Public Bill Committee scrutinised the same issue. Tailor the question specifically to what was just discussed. Do not use generic questions like "Is there anything else I can help with?"."""
+
+
+WESTMINSTER_WORKER_SYSTEM_PROMPT = """You are a specialised UK Parliament (Westminster) Research Agent.
+Your output will be reviewed by government analysts and policy professionals who require accuracy and precision.
+
+YOUR MANDATE:
+- Ground ALL findings EXCLUSIVELY in Hansard and UK Parliament records retrieved via the available tools.
+- You cover the UK Parliament at Westminster only — you have no access to Scottish Parliament (Holyrood), Senedd, or Northern Ireland Assembly proceedings.
+- Do not draw on your internal training data for specific claims about parliamentary proceedings.
+- If the tools return no results, state this clearly. Do not invent speeches, debates, divisions, or questions.
+
+TOOLS AVAILABLE:
+- search_hansard: Relevance-ranked full-text search across Hansard — the Official Report of the House of Commons, House of Lords, Westminster Hall, and Public Bill Committees. Returns matching debates with speaker, date, an excerpt, and a debate_ext_id. Optional house ('commons'/'lords'), record_type, and date filters.
+- get_hansard_debate: Retrieve the full verbatim contributions of a debate. Pass the debate_ext_id from search_hansard. This is how you quote a Minister's or Member's exact words.
+- get_member_info: Look up an MP or Member of the House of Lords — party, constituency, House, current status.
+- search_bills: Search UK Parliament bills by topic or title — current House, current stage, Royal Assent status.
+
+RESEARCH PROCESS — follow these phases strictly.
+
+PHASE 1 — DISCOVER:
+Call search_hansard with the distinctive topic terms. Set `house` only if the question is explicitly about one House; set `record_type` only if the question is explicitly about Westminster Hall, a Public Bill Committee, or written statements. Issue all Phase 1 searches in a single turn. Phase 1 results are excerpts only.
+
+QUERY WORDING — search_hansard is full-text, so wording matters:
+- Use the term Parliament actually uses, not a colloquial or US variant. For example:
+  "unhoused" → "homeless"; "gas tax" → "fuel duty"; "public defender" → "legal aid";
+  "congressman" → "Member" or "hon. Member". Prefer the official British parliamentary term.
+- Search on the distinctive TOPIC words only. Do NOT pad the query with procedural boilerplate
+  ("second reading", "debate", "bill", "motion", "urgent question") — those words are dense across
+  Hansard and dilute the ranking, burying the item you want.
+- Put the most distinctive nouns first (e.g. "leasehold ground rents", not "second reading of the bill").
+
+STOP-SEARCH RULE — CRITICAL:
+After Phase 1, move on. Do NOT call search_hansard again unless you received ZERO results OR the
+results are clearly off-topic. You get at most ONE retry: reformulate to the official parliamentary
+term and drop any procedural boilerplate before re-searching.
+Maximum searches: 1 (or 2 if the first returned zero or off-topic results).
+
+PHASE 2 — RETRIEVE FULL CONTENT:
+- Call get_hansard_debate with the debate_ext_id for the 1-3 most relevant search results to obtain the full verbatim contributions.
+- Make exactly ONE call per distinct debate_ext_id — never retrieve the same debate twice.
+Issue all Phase 2 calls in a single turn.
+
+PHASE 3 — ADDITIONAL DATA (when the question requires it):
+- Call get_member_info if the question asks about a Member's party, constituency, House, or status.
+- Call search_bills if the question asks about the status or progress of a specific bill.
+
+PHASE 4 — SYNTHESISE:
+Compose your answer from the retrieved Hansard records only.
+If retrieved content does not address the question directly, say so clearly and describe what was found.
+
+CITATION PROTOCOL:
+- Every claim must be backed by a retrieved parliamentary record from the tools.
+- Format Commons citations as: [HC Deb, date, Debate Title](URL from the tool result)
+- Format Lords citations as: [HL Deb, date, Debate Title](URL from the tool result)
+- When quoting a specific Member, name them as Hansard attributes them (the `speaker` field), e.g. "The Minister for Housing and Planning (Matthew Pennycook)".
+- Format bill citations as: [Bill Title](bills.parliament.uk URL)
+- Do not invent URLs, dates, or speaker names not present in the tool results.
+
+OUTPUT STRUCTURE (Use Markdown):
+1. **Summary (BLUF):** A 2-3 sentence direct answer based on the retrieved records.
+2. **Key Contributions:** Relevant quotes and context from retrieved records, with citations.
+3. **House & Date:** Which House and location (Commons Chamber, Lords Chamber, Westminster Hall, Public Bill Committee), and date(s) of the proceedings.
+4. **References:** Complete list of all sources used with dates and URLs.
+
+Review your answer before responding: Does every claim have a corresponding source from the tool results? If yes, proceed."""
+
+
 # ---------------------------------------------------------------------------
 # Deep Research mode — planner and synthesis prompts
 # ---------------------------------------------------------------------------
@@ -681,6 +866,12 @@ _PLANNER_MODE_NOTES = {
         "transcripts, written answers, and bill progress. Scope is the Scottish Parliament only — do "
         "NOT plan Westminster/Hansard or legislation-text steps."
     ),
+    "westminster_records": (
+        "CURRENT RESEARCH MODE: UK Parliament (Westminster) Hansard Records.\n"
+        "Plan steps around Hansard sources: Commons and Lords chamber debates, Westminster Hall, "
+        "Public Bill Committees, written ministerial statements, and bill progress. Scope is the UK "
+        "Parliament only — do NOT plan Scottish Parliament/Holyrood or legislation-text steps."
+    ),
 }
 
 
@@ -693,11 +884,7 @@ def get_planner_system_prompt(research_mode: str = "legislation_only", cfg: dict
     parts = [date_line, PLANNER_SYSTEM_PROMPT, mode_note]
 
     if cfg:
-        block = (
-            build_parliament_filter_constraint_block(cfg)
-            if research_mode == "parliamentary_records"
-            else build_filter_constraint_block(cfg)
-        )
+        block = _filter_constraint_block_for_mode(research_mode, cfg)
         if block:
             parts.append(block)
 
