@@ -40,10 +40,11 @@ import SystemChat from './pages/SystemChat';
 import WeeklyFeedbackBanner from './components/WeeklyFeedbackBanner';
 import DataSensitivityNotice from './components/DataSensitivityNotice';
 import DeepResearchPlan from './components/DeepResearchPlan';
-import { BookmarkIcon, ScalesIcon, GavelIcon, CalendarIcon, SlidersIcon } from './components/ui/icons';
+import { BookmarkIcon, ScalesIcon, GavelIcon, CalendarIcon, SlidersIcon, CopyIcon } from './components/ui/icons';
 import { GhostBtn } from './components/ui/buttons';
 import Modal from './components/ui/Modal';
 import { getInitials } from './utils/format';
+import { copyConversation } from './utils/exportChat';
 import { useBotIdentity } from './hooks/useBotIdentity';
 import { useFilters } from './hooks/useFilters';
 import { usePreferences } from './hooks/usePreferences';
@@ -75,6 +76,8 @@ function AppContent() {
   const [activeSourcesMsgId, setActiveSourcesMsgId] = useState(null);
   const [sourcesCollapsed, setSourcesCollapsed] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  // 'idle' | 'copied' | 'failed' — transient feedback on the copy-thread button
+  const [copyState, setCopyState] = useState('idle');
 
   // ── Modal state ──────────────────────────────────────────────
   const modals = useModals();
@@ -363,6 +366,19 @@ function AppContent() {
     }
   };
 
+  // Copy the whole thread — every question, answer and source citation — to the
+  // clipboard as rich text, so it can be pasted into Word or Outlook intact.
+  const handleCopyConversation = async () => {
+    const ok = await copyConversation({
+      messages,
+      title: currentChatTitle,
+      botName: botInfo.name,
+      userName: user?.username,
+    });
+    setCopyState(ok ? 'copied' : 'failed');
+    setTimeout(() => setCopyState('idle'), 2500);
+  };
+
   const toggleSidebar = () => {
     const next = !sidebarCollapsed;
     setSidebarCollapsed(next);
@@ -505,6 +521,20 @@ function AppContent() {
             )}
           </div>
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            <GhostBtn
+              icon={<CopyIcon size={14} />}
+              onClick={handleCopyConversation}
+              disabled={messages.length === 0 || loading}
+              title={
+                messages.length === 0
+                  ? 'Nothing to copy yet'
+                  : loading
+                    ? 'Wait for the response to finish before copying'
+                    : 'Copy the whole thread — questions, answers and sources — ready to paste into Word or Outlook'
+              }
+            >
+              {copyState === 'copied' ? 'Copied' : copyState === 'failed' ? 'Copy failed' : 'Copy conversation'}
+            </GhostBtn>
             {features.matters_enabled && (
               <GhostBtn
                 icon={<BookmarkIcon />}
