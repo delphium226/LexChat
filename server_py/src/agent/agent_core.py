@@ -19,14 +19,14 @@ from ..prompts import (
     get_planner_system_prompt,
     get_worker_system_prompt,
 )
-from .agent_shared import run_worker_tool
+from .agent_shared import describe_agent_error, run_worker_tool
 from .federation_client import (
     build_peer_descriptions,
     consult_peer,
     load_peer_registry,
 )
 from .learning import format_learning_context, get_relevant_examples
-from .summarisation import call_chunk
+from .summarisation import WORKER_CONTEXT_BUDGET_CHARS, call_chunk
 from .tools import get_manager_tools, get_planner_tools, get_worker_tools
 
 logger = logging.getLogger("agent")
@@ -192,6 +192,12 @@ async def run_worker_agent(
         if research_mode in ("parliamentary_records", "westminster_records")
         else None
     )
+    # Bound on the SUM of tool output in this worker's context. The per-result
+    # summarisation threshold scales with the model's context window and so caps
+    # each result but not their total; without this, several individually-legal
+    # retrievals stack into a prefill that trips the stream read timeout.
+    # Fresh per run_worker_agent call, so each Deep Research step gets its own.
+    context_budget = {"used": 0, "limit": WORKER_CONTEXT_BUDGET_CHARS}
 
     async def worker_tool_executor(name: str, args: dict) -> str:
         return await run_worker_tool(
@@ -203,6 +209,7 @@ async def run_worker_agent(
             cancel_event=cancel_event,
             tool_memo=tool_memo,
             memo_count_redundant=memo_count_redundant,
+            context_budget=context_budget,
         )
 
     result = await chat_loop_fn(
@@ -500,13 +507,41 @@ async def process_user_request(
             if on_chunk:
                 await call_chunk(on_chunk, {"type": "tool_start", "tool": "Research Agent", "id": research_id})
 
-            result = await run_worker_agent_fn(
-                args["query"], model, cancel_event, num_ctx, on_chunk,
-                emit_tool_details=emit_tool_details,
-                timing_collector=timing_collector,
-                tool_memo=tool_memo,
-                memo_count_redundant=True,
-            )
+            try:
+                result = await run_worker_agent_fn(
+                    args["query"], model, cancel_event, num_ctx, on_chunk,
+                    emit_tool_details=emit_tool_details,
+                    timing_collector=timing_collector,
+                    tool_memo=tool_memo,
+                    memo_count_redundant=True,
+                )
+            except ConnectionError:
+                # Provider unreachable: the Manager's own next call would fail too,
+                # and ai.py renders this one with a specific message. Let it through.
+                raise
+            except Exception as e:
+                # Contain the failure. A worker that dies (provider timeout, transport
+                # error) used to take the entire SSE request with it — the lawyer got a
+                # dead stream and lost the conversation along with every retrieval
+                # already paid for. Handing the Manager an error string instead lets it
+                # close the loop honestly. asyncio.CancelledError is a BaseException, so
+                # a genuine user abort still propagates untouched.
+                logger.error(
+                    f"[Manager] Delegated research failed: {type(e).__name__}: {e}",
+                    exc_info=True,
+                )
+                if on_chunk:
+                    await call_chunk(on_chunk, {
+                        "type": "tool_end", "tool": "Research Agent",
+                        "id": research_id, "result": "Research failed",
+                    })
+                return (
+                    "[Research Agent Error] The research step did not complete: "
+                    f"{describe_agent_error(e)}. Do NOT call delegate_research again for "
+                    "this question — the same failure will recur. Tell the user plainly "
+                    "that the research could not be completed and suggest narrowing the "
+                    "question. Do NOT invent findings or answer from memory."
+                )
 
             if on_chunk:
                 await call_chunk(on_chunk, {"type": "tool_end", "tool": "Research Agent", "id": research_id, "result": "Research Complete"})

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from ..agent.agent_shared import describe_agent_error
 from ..agent.provider_factory import (
     get_active_provider,
     get_list_models,
@@ -298,11 +299,14 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
         except ConnectionError as e:
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
         except Exception as e:
-            logger.error(f"[AI] Chat error: {e}", exc_info=True)
-            error_msg = str(e)
-            if "ECONNREFUSED" in error_msg or "ConnectError" in error_msg:
+            # describe_agent_error, not str(e): httpx timeouts stringify to "",
+            # which reached the UI as an error banner with no text (and logged as
+            # "[AI] Chat error:" with nothing after the colon).
+            error_msg = describe_agent_error(e)
+            logger.error(f"[AI] Chat error: {type(e).__name__}: {error_msg}", exc_info=True)
+            if "ECONNREFUSED" in str(e) or "ConnectError" in str(e):
                 error_msg = "Agent Service (Ollama) is not reachable. Please ensure it is running."
-            yield f"data: {json.dumps({'type': 'error', 'error': error_msg})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'error': f'This request could not be completed: {error_msg}. Please try again, or narrow the question if it was a broad one.'})}\n\n"
         finally:
             cancel_event.set()
             disconnect_task.cancel()

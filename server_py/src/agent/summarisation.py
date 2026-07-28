@@ -16,6 +16,18 @@ SUMMARISE_CHUNK_CHARS = 150_000
 # raw chunk so the Worker still gets some content without blowing the context.
 SUMMARISE_CHUNK_FALLBACK_CHARS = 5_000
 
+# Total chars of tool output one Worker run may accumulate before EVERY further
+# result is summarised regardless of its own size (~62K tokens at ~4 chars/token).
+#
+# get_summarise_threshold() is a PER-RESULT cap that scales with the model's
+# context window — up to 200K chars each on a 1M-token model. Nothing bounded the
+# sum, so a handful of individually-under-threshold retrievals stacked into a
+# prefill large enough that the provider took >180s to return response headers,
+# tripping the stream read timeout and killing the request. This is the bound on
+# the sum. Deliberately generous: early retrievals still arrive verbatim, and only
+# the tail of a long research run is compressed.
+WORKER_CONTEXT_BUDGET_CHARS = 250_000
+
 
 async def call_chunk(on_chunk: Callable, data: dict) -> None:
     """Call on_chunk callback, handling both sync and async callables."""

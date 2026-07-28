@@ -25,6 +25,30 @@ from .tools import (
 logger = logging.getLogger("agent")
 
 
+def describe_agent_error(exc: BaseException) -> str:
+    """Human-readable one-liner for a provider/agent failure.
+
+    httpx's timeout exceptions are raised through httpcore's exception mapping
+    with an EMPTY message, so `str(exc)` is "" — which surfaced to the lawyer as
+    an error banner with no text at all, and logged as "[AI] Chat error:" with
+    nothing after the colon. Every caller that shows a failure to a user or the
+    model should render it through here rather than str().
+    """
+    import httpx
+
+    if isinstance(exc, httpx.TimeoutException):
+        return (
+            "the AI provider did not respond in time — this usually means the "
+            "request was too large or the provider is overloaded"
+        )
+    if isinstance(exc, httpx.HTTPStatusError):
+        return f"the AI provider returned HTTP {exc.response.status_code}"
+    if isinstance(exc, httpx.TransportError):
+        return f"could not reach the AI provider ({type(exc).__name__})"
+    text = str(exc).strip()
+    return text or f"an unexpected {type(exc).__name__}"
+
+
 def _extract_sources_from_tool(name: str, args: dict, raw_result_str: str, accumulator: list) -> None:
     """Parse a raw tool result JSON string and append structured source dicts to accumulator.
 
@@ -378,6 +402,7 @@ async def run_worker_tool(
     cancel_event=None,
     tool_memo: Optional[dict] = None,
     memo_count_redundant: bool = False,
+    context_budget: Optional[dict] = None,
 ) -> str:
     """Execute a single Worker tool call and return the (possibly summarised) result.
 
@@ -400,6 +425,10 @@ async def run_worker_tool(
             same Act" loop-health signal survives — the hit costs nothing but
             still reflects model behaviour. Deep Research leaves this False:
             cross-step reuse there is by design, not misbehaviour.
+        context_budget: Per-worker-run {"used": chars, "limit": chars}. Once the
+            accumulated tool output would exceed the limit, results are summarised
+            regardless of their own size — the per-result threshold alone does not
+            bound the sum. None disables the budget.
     """
     activity_id = uuid.uuid4().hex[:8]
 
@@ -428,6 +457,10 @@ async def run_worker_tool(
             if parent_on_chunk:
                 await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
                 await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done (cached)"})
+            # A memo hit costs no API call, but the result still lands in the
+            # context a second time — so it still spends context budget.
+            if context_budget is not None:
+                context_budget["used"] += len(hit["final"])
             return hit["final"]
 
     # Parliamentary search budget: after the allowed number of search/listing calls,
@@ -695,11 +728,27 @@ async def run_worker_tool(
             )
 
     from .provider_factory import get_summarise_threshold
-    if len(result) > get_summarise_threshold():
-        logger.info(
-            f"[Worker] Result from '{name}' is {len(result)} chars — summarising "
-            f"with model '{summarise_model}'"
-        )
+    # Two independent triggers: this result is large on its own, OR the run has
+    # accumulated enough context that even a modest addition is no longer free.
+    # The second is what stops several under-threshold retrievals stacking into a
+    # prefill the provider cannot start streaming inside the read timeout.
+    _over_budget = (
+        context_budget is not None
+        and context_budget["used"] + len(result) > context_budget["limit"]
+    )
+    if len(result) > get_summarise_threshold() or _over_budget:
+        if _over_budget and len(result) <= get_summarise_threshold():
+            logger.info(
+                f"[Worker] Context budget reached "
+                f"({context_budget['used']}/{context_budget['limit']} chars) — "
+                f"summarising {len(result)}-char result from '{name}' that would "
+                f"otherwise pass through raw"
+            )
+        else:
+            logger.info(
+                f"[Worker] Result from '{name}' is {len(result)} chars — summarising "
+                f"with model '{summarise_model}'"
+            )
 
         doc_name = name
         try:
@@ -830,5 +879,10 @@ async def run_worker_tool(
 
     if tool_memo is not None and memo_key is not None:
         tool_memo[memo_key] = {"raw": raw_result, "final": result}
+
+    # Charged after the nudges are appended: what is counted is exactly what the
+    # model receives, so the budget tracks the real context growth.
+    if context_budget is not None:
+        context_budget["used"] += len(result)
 
     return result
