@@ -725,9 +725,11 @@ function AppContent() {
                         ? 'Ask a legal question to begin.'
                         : chatMode === 'deep_research'
                           ? 'Describe your research question — a plan will be drafted for your review before any research runs.'
-                          : isParliament
-                            ? 'Ask about Scottish Parliament debates, committee scrutiny, or bill progress to begin.'
-                            : 'Ask about UK legislation or case law to begin.'}
+                          : isWestminster
+                            ? 'Ask about Hansard debates, committee scrutiny, or bill progress to begin.'
+                            : isParliament
+                              ? 'Ask about Scottish Parliament debates, committee scrutiny, or bill progress to begin.'
+                              : 'Ask about UK legislation or case law to begin.'}
                     </p>
                   </div>
                 )}
@@ -907,6 +909,8 @@ function AppContent() {
                   onSend={handleSend}
                   onStop={handleStop}
                   chatMode={chatMode}
+                  isParliament={isParliament}
+                  isWestminster={isWestminster}
                 />
               </div>
             </div>

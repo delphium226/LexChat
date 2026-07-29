@@ -19,6 +19,8 @@ export default function Composer({
   onSend,
   onStop,
   chatMode,
+  isParliament = false,
+  isWestminster = false,
 }) {
   return (
     <div
@@ -168,7 +170,11 @@ export default function Composer({
             ? 'Ask a legal question…'
             : chatMode === 'deep_research'
               ? 'Describe your research question — a plan will be drafted for review…'
-              : 'Ask about UK legislation or case law…'
+              : isWestminster
+                ? 'Ask about Hansard debates, committee scrutiny, or bill progress…'
+                : isParliament
+                  ? 'Ask about Scottish Parliament debates, committee scrutiny, or bill progress…'
+                  : 'Ask about UK legislation or case law…'
         }
         style={{
           width: '100%',
