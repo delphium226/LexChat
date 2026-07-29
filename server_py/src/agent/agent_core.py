@@ -19,7 +19,7 @@ from ..prompts import (
     get_planner_system_prompt,
     get_worker_system_prompt,
 )
-from ..utils.suggestions import extract_suggestions
+from ..utils.suggestions import diagnose_suggestions, extract_suggestions
 from .agent_shared import describe_agent_error, run_worker_tool
 from .federation_client import (
     build_peer_descriptions,
@@ -601,6 +601,15 @@ async def process_user_request(
     final["content"] = clean
     if suggestions:
         final["suggestions"] = suggestions
+
+    # Prompt-adherence floor: the block is enforced only by prompt wording, so
+    # log drift rather than letting it surface in front of a user first. Skipped
+    # for a consulted peer, which is explicitly told NOT to emit a block.
+    if not _cfg.get("_consulted"):
+        for issue in diagnose_suggestions(
+            clean, suggestions, has_sources=bool(accumulated_sources)
+        ):
+            logger.warning("[Suggestions] %s", issue)
 
     if accumulated_sources:
         final["sources"] = [

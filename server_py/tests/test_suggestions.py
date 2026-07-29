@@ -4,7 +4,11 @@ the prompt wiring that produces and suppresses the block."""
 import pytest
 
 from src.prompts import CONSULTED_PEER_BLOCK, get_manager_system_prompt
-from src.utils.suggestions import MAX_SUGGESTIONS, extract_suggestions
+from src.utils.suggestions import (
+    MAX_SUGGESTIONS,
+    diagnose_suggestions,
+    extract_suggestions,
+)
 
 
 def test_no_block_returns_content_unchanged():
@@ -152,3 +156,71 @@ def test_consulted_block_appended_on_every_return_path(mode, cfg):
     assert CONSULTED_PEER_BLOCK in consulted
     # It must be last, so it overrides the follow-up instruction above it.
     assert consulted.rstrip().endswith(CONSULTED_PEER_BLOCK)
+
+
+# --- diagnose_suggestions: the prompt-adherence floor ------------------------
+# These do not change a reply; they exist so a drifting model is greppable in
+# the logs instead of surfacing in front of a user first.
+
+_TRANSPORT_BODY = (
+    '"Tell me about transport" is a very broad topic. To help me find the most '
+    "relevant Scottish Parliament proceedings, could you please narrow down your "
+    "request?\n\nFor example, are you looking for:\n"
+    "- Recent plenary debates on transport policy?\n"
+    "- Evidence sessions from the Net Zero, Energy and Transport Committee?\n"
+    "- Statements from the Cabinet Secretary for Transport?"
+)
+
+
+def test_clarification_without_options_is_flagged():
+    issues = diagnose_suggestions(
+        "Which Act do you mean?", [], has_sources=False
+    )
+    assert len(issues) == 1
+    assert "nothing to click" in issues[0]
+
+
+def test_clarification_with_options_duplicated_in_body_is_flagged():
+    # The regression actually seen: options as prose bullets AND as chips.
+    issues = diagnose_suggestions(
+        _TRANSPORT_BODY, ["Plenary debates?", "Committee evidence?"],
+        has_sources=False,
+    )
+    assert len(issues) == 1
+    assert "duplicated" in issues[0]
+
+
+def test_clean_clarification_is_not_flagged():
+    issues = diagnose_suggestions(
+        "Could you narrow that down?",
+        ["Plenary debates?", "Committee evidence?"],
+        has_sources=False,
+    )
+    assert issues == []
+
+
+def test_researched_answer_without_a_block_is_flagged():
+    issues = diagnose_suggestions(
+        "Section 33 creates the offence.", [], has_sources=True
+    )
+    assert len(issues) == 1
+    assert "without a <suggestions> block" in issues[0]
+
+
+def test_healthy_researched_answer_is_not_flagged():
+    issues = diagnose_suggestions(
+        "Section 33 creates the offence.", ["What are the penalties?"],
+        has_sources=True,
+    )
+    assert issues == []
+
+
+def test_researched_answer_with_bullets_is_not_mistaken_for_a_clarification():
+    # A real report is full of bullets; it must not trip the duplication check.
+    body = "Findings:\n- s.1 imposes the duty\n- s.2 defines the employer\n- s.33 penalises breach"
+    assert diagnose_suggestions(body, ["Next?"], has_sources=True) == []
+
+
+def test_empty_content_is_never_flagged():
+    assert diagnose_suggestions("", [], has_sources=False) == []
+    assert diagnose_suggestions(None, [], has_sources=False) == []

@@ -17,6 +17,9 @@ _BLOCK_RE = re.compile(r"<suggestions>(.*?)</suggestions>", re.IGNORECASE | re.D
 _UNTERMINATED_RE = re.compile(r"<suggestions>.*$", re.IGNORECASE | re.DOTALL)
 # Leading markdown bullet or numbering: "- ", "* ", "1. ", "2) ".
 _BULLET_RE = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
+# The same, as a whole-line match anywhere in a body — used to spot a model that
+# wrote its clarification options as prose bullets as well as in the block.
+_BULLET_LINE_RE = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+\S", re.MULTILINE)
 
 MAX_SUGGESTIONS = 4
 MAX_SUGGESTION_CHARS = 160
@@ -76,3 +79,50 @@ def extract_suggestions(content: str) -> tuple[str, list[str]]:
         return cleaned, items
     except Exception:  # pragma: no cover — defensive; this must never break a reply
         return content, []
+
+
+def diagnose_suggestions(
+    content: str, suggestions: list[str], *, has_sources: bool
+) -> list[str]:
+    """Return prompt-adherence problems with a manager answer, for logging only.
+
+    The `<suggestions>` contract is enforced entirely by prompt wording, so every
+    regression otherwise surfaces in front of a user first. These checks put a
+    floor under that: they never alter the reply, they just make a drifting model
+    greppable in the logs.
+
+    `has_sources` distinguishes a researched answer from a clarifying question —
+    a manager that asked rather than delegated has no accumulated sources.
+    Never raises.
+    """
+    try:
+        text = (content or "").rstrip()
+        if not text:
+            return []
+
+        issues: list[str] = []
+        # A researched answer no longer ends in a question (follow-ups moved into
+        # the block), so "ends with ?" and "did not research" together are a good
+        # proxy for a clarifying question.
+        is_clarification = text.endswith("?") and not has_sources
+
+        if is_clarification:
+            if not suggestions:
+                issues.append(
+                    "clarifying question offered no options — no <suggestions> "
+                    "block, so the user has nothing to click"
+                )
+            else:
+                bullets = len(_BULLET_LINE_RE.findall(text))
+                if bullets >= 2:
+                    issues.append(
+                        f"clarification options look duplicated — {bullets} bullet "
+                        f"lines in the body alongside {len(suggestions)} chip(s); "
+                        "the body should carry the question only"
+                    )
+        elif not suggestions:
+            issues.append("answer ended without a <suggestions> block")
+
+        return issues
+    except Exception:  # pragma: no cover — diagnostics must never break a reply
+        return []
