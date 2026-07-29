@@ -122,6 +122,18 @@ export function useChat({
               'Worker: get_legislation_text': 'Reviewing statutory text…',
               'Worker: search_case_law': 'Searching case law database…',
               'Worker: get_case_law_text': 'Retrieving case law judgment…',
+              // Scottish Parliament (Holyrood) bot
+              'Worker: search_scottish_plenary': 'Searching chamber debates…',
+              'Worker: get_scottish_plenary_debate': 'Retrieving the Official Report…',
+              'Worker: search_scottish_committee_transcripts': 'Searching committee transcripts…',
+              'Worker: get_scottish_committee_transcript': 'Retrieving committee transcript…',
+              'Worker: search_scottish_parliament': 'Searching parliamentary records…',
+              // UK Parliament (Westminster) bot
+              'Worker: search_hansard': 'Searching Hansard…',
+              'Worker: get_hansard_debate': 'Retrieving the Hansard debate…',
+              // Both parliamentary bots
+              'Worker: search_bills': 'Checking bill progress…',
+              'Worker: get_member_info': 'Looking up the member…',
               'Extracting the relevant sections from a large document': 'Summarising document…',
             })[tool] || `${tool}…`;
 

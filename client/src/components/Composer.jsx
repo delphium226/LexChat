@@ -167,7 +167,11 @@ export default function Composer({
         rows={1}
         placeholder={
           chatMode === 'conversational'
-            ? 'Ask a legal question…'
+            ? isWestminster
+              ? 'Ask a question about UK Parliament records…'
+              : isParliament
+                ? 'Ask a question about Scottish Parliament records…'
+                : 'Ask a legal question…'
             : chatMode === 'deep_research'
               ? 'Describe your research question — a plan will be drafted for review…'
               : isWestminster

@@ -1,8 +1,10 @@
 import Modal from './ui/Modal';
 import { LexMark } from './LexMark';
 
-// Static "About" modal — bot branding + a short description of the architecture.
-export default function AboutModal({ botInfo, onClose }) {
+// "About" modal — bot branding + a short description of the architecture. The
+// blurb, source list and approach are per-bot: the same client serves the
+// legislation bot and the two parliamentary bots, which share no data sources.
+export default function AboutModal({ botInfo, onClose, isParliament = false, isWestminster = false }) {
   return (
     <Modal onClose={onClose} className="p-6 max-w-2xl w-full">
       <div className="flex items-center justify-center gap-2 mb-4">
@@ -38,21 +40,57 @@ export default function AboutModal({ botInfo, onClose }) {
       </div>
       <div className="space-y-4 text-ink-700 text-sm">
         <p>
-          <strong>{botInfo.name}</strong> is an intelligent legal research assistant for UK legislation and case law.
+          <strong>{botInfo.name}</strong>{' '}
+          {isWestminster
+            ? 'is an intelligent research assistant for UK Parliament records — Hansard debates, members, and bills.'
+            : isParliament
+              ? 'is an intelligent research assistant for Scottish Parliament records — plenary and committee debates, MSPs, and bills.'
+              : 'is an intelligent legal research assistant for UK legislation and case law.'}
         </p>
         <div>
           <h3 className="font-semibold text-ink-900 mb-1">Data Sources</h3>
           <ul className="list-disc list-inside">
-            <li>
-              <strong>The National Archives</strong> (legislation.gov.uk)
-            </li>
+            {isWestminster ? (
+              <>
+                <li>
+                  <strong>UK Parliament Hansard</strong> (hansard.parliament.uk)
+                </li>
+                <li>
+                  <strong>UK Parliament Members API</strong> (members-api.parliament.uk)
+                </li>
+                <li>
+                  <strong>UK Parliament Bills API</strong> (bills-api.parliament.uk)
+                </li>
+              </>
+            ) : isParliament ? (
+              <>
+                <li>
+                  <strong>Scottish Parliament Official Report</strong> (parliament.scot)
+                </li>
+                <li>
+                  <strong>TheyWorkForYou</strong> (theyworkforyou.com)
+                </li>
+                <li>
+                  <strong>Scottish Parliament Bills API</strong> (data.parliament.scot)
+                </li>
+              </>
+            ) : (
+              <li>
+                <strong>The National Archives</strong> (legislation.gov.uk)
+              </li>
+            )}
           </ul>
         </div>
         <div>
           <h3 className="font-semibold text-ink-900 mb-1">AI Approach</h3>
           <p>
-            Agentic RAG architecture — the system queries the LEX API and uses an LLM to provide accurate,
-            context-aware answers.
+            Agentic RAG architecture — the system queries{' '}
+            {isWestminster
+              ? 'the official UK Parliament APIs'
+              : isParliament
+                ? 'the Scottish Parliament Official Report and related APIs'
+                : 'the LEX API'}{' '}
+            and uses an LLM to provide accurate, context-aware answers.
           </p>
         </div>
       </div>

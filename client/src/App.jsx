@@ -722,7 +722,11 @@ function AppContent() {
                     </div>
                     <p style={{ fontSize: 14, margin: 0 }}>
                       {chatMode === 'conversational'
-                        ? 'Ask a legal question to begin.'
+                        ? isWestminster
+                          ? 'Ask a question about UK Parliament records to begin.'
+                          : isParliament
+                            ? 'Ask a question about Scottish Parliament records to begin.'
+                            : 'Ask a legal question to begin.'
                         : chatMode === 'deep_research'
                           ? 'Describe your research question — a plan will be drafted for your review before any research runs.'
                           : isWestminster
@@ -972,10 +976,22 @@ function AppContent() {
       )}
 
       {modals.dataSources && (
-        <DataSourcesModal botName={botInfo.name} onClose={() => modals.close('dataSources')} />
+        <DataSourcesModal
+          botName={botInfo.name}
+          onClose={() => modals.close('dataSources')}
+          isParliament={isParliament}
+          isWestminster={isWestminster}
+        />
       )}
 
-      {modals.about && <AboutModal botInfo={botInfo} onClose={() => modals.close('about')} />}
+      {modals.about && (
+        <AboutModal
+          botInfo={botInfo}
+          onClose={() => modals.close('about')}
+          isParliament={isParliament}
+          isWestminster={isWestminster}
+        />
+      )}
 
       {modals.admin && (
         <Modal onClose={() => modals.close('admin')} className="p-6 w-[95vw] h-[95vh] overflow-y-auto relative">
