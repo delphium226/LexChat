@@ -119,3 +119,17 @@ async def test_run_worker_tool_budget_blocked_counts_separately():
     # Blocked calls stay out of the worker/phase counts.
     assert tc.worker_tool_calls == 0
     assert tc.phase1_search_calls == 0
+
+
+# --------------------------------------------------------------------------- #
+# Report-structure reformat counter (prompt-adherence signal)
+# --------------------------------------------------------------------------- #
+
+def test_report_reformat_recorder_and_to_dict():
+    tc = TimingCollector("req")
+    assert tc.to_dict()["report_reformat_retries"] == 0
+    tc.record_report_reformat()
+    # One per worker run, so a Deep Research request can bank several.
+    tc.record_report_reformat()
+    assert tc.report_reformat_retries == 2
+    assert tc.to_dict()["report_reformat_retries"] == 2

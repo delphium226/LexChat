@@ -27,7 +27,7 @@ const STATUS_STYLE = {
 };
 
 export const EfficiencyTab = ({ effStats, effTimeframe, setEffTimeframe }) => {
-  const { kpi, indicators, daily, worst, researchMode } = effStats;
+  const { kpi, indicators, daily, worst, researchMode, byModel } = effStats;
   const timeframeLabel = effTimeframe === 'all' ? 'All Time' : `Last ${effTimeframe} Days`;
   const isParliamentary = researchMode === 'parliamentary_records';
   const fanoutCaption = isParliamentary ? 'retrievals / distinct transcript' : 'retrievals / kept source';
@@ -186,6 +186,62 @@ export const EfficiencyTab = ({ effStats, effTimeframe, setEffTimeframe }) => {
         )}
       </div>
 
+      {/* PROMPT ADHERENCE BY MODEL — is a high reformat rate systemic or one model? */}
+      <div className="bg-paper p-6 rounded-lg shadow">
+        <h2 className="text-sm font-bold mb-4 flex items-center">
+          Report Structure Adherence by Model ({timeframeLabel})
+          <InfoTip text="How often each model's Worker report failed the structure check (missing section headers or a References section) and needed one extra no-tools reformat call. This is the prompt-adherence measure: a rate that is high across every model points at the prompt or the output format; a rate concentrated in one model is a model-selection question. Only requests recorded since this metric shipped carry a model, so earlier rows are excluded." />
+        </h2>
+        {byModel && byModel.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-xs">
+              <thead>
+                <tr>
+                  {['Model', 'Research Queries', 'Reformat Retries', 'Reformat Rate'].map(h => (
+                    <th
+                      key={h}
+                      className="px-3 py-2 border-b-2 border-ink-200 text-left font-semibold text-ink-500 uppercase tracking-wider whitespace-nowrap"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {byModel.map(row => (
+                  <tr key={row.model} className="border-b border-ink-100">
+                    <td className="px-3 py-3 font-mono">{row.model}</td>
+                    <td className="px-3 py-3">{row.requestCount}</td>
+                    <td className="px-3 py-3">{row.reformats}</td>
+                    <td
+                      className={`px-3 py-3 font-bold ${
+                        row.reformatRate >= 0.15
+                          ? 'text-red-600 dark:text-red-400'
+                          : row.reformatRate >= 0.05
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : ''
+                      }`}
+                    >
+                      {(row.reformatRate * 100).toFixed(1)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-xs text-ink-400 mt-3">
+              Rate is the share of that model's research queries needing at least one repair. Compare
+              models on a like-for-like query mix before drawing a conclusion — a model used mainly for
+              hard queries will look worse than one used for simple ones.
+            </p>
+          </div>
+        ) : (
+          <p className="text-ink-400 text-sm">
+            No model-attributed queries recorded yet. Requests recorded before this metric shipped carry
+            no model and are excluded.
+          </p>
+        )}
+      </div>
+
       {/* WORST OFFENDERS TABLE */}
       <div className="bg-paper p-6 rounded-lg shadow">
         <h2 className="text-sm font-bold mb-4 flex items-center">
@@ -197,7 +253,7 @@ export const EfficiencyTab = ({ effStats, effTimeframe, setEffTimeframe }) => {
             <table className="min-w-full text-xs">
               <thead>
                 <tr>
-                  {['Request ID', 'Timestamp', 'Delegations', 'Worker Tools', 'Phase-2', 'Kept', 'Fan-out', 'Redundant', 'Truncations'].map(h => (
+                  {['Request ID', 'Timestamp', 'Model', 'Delegations', 'Worker Tools', 'Phase-2', 'Kept', 'Fan-out', 'Redundant', 'Reformats', 'Truncations'].map(h => (
                     <th
                       key={h}
                       className="px-3 py-2 border-b-2 border-ink-200 text-left font-semibold text-ink-500 uppercase tracking-wider whitespace-nowrap"
@@ -212,12 +268,14 @@ export const EfficiencyTab = ({ effStats, effTimeframe, setEffTimeframe }) => {
                   <tr key={row.requestId} className="border-b border-ink-100">
                     <td className="px-3 py-3 font-mono">{row.requestId}</td>
                     <td className="px-3 py-3 text-ink-500 whitespace-nowrap">{new Date(row.createdAt).toLocaleString()}</td>
+                    <td className="px-3 py-3 text-ink-500 whitespace-nowrap">{row.model || '—'}</td>
                     <td className={`px-3 py-3 font-bold ${row.delegations > 1 ? 'text-red-600 dark:text-red-400' : ''}`}>{row.delegations}</td>
                     <td className="px-3 py-3">{row.workerTools}</td>
                     <td className="px-3 py-3">{row.phase2}</td>
                     <td className="px-3 py-3">{row.kept}/{row.extracted}</td>
                     <td className={`px-3 py-3 font-bold ${row.fanout >= 3 ? 'text-red-600 dark:text-red-400' : row.fanout >= 2 ? 'text-amber-600 dark:text-amber-400' : ''}`}>{row.fanout}</td>
                     <td className={`px-3 py-3 font-bold ${row.redundant > 0 ? 'text-red-600 dark:text-red-400' : ''}`}>{row.redundant}</td>
+                    <td className={`px-3 py-3 font-bold ${row.reformats > 0 ? 'text-amber-600 dark:text-amber-400' : ''}`}>{row.reformats ?? 0}</td>
                     <td className="px-3 py-3">{row.truncations}</td>
                   </tr>
                 ))}

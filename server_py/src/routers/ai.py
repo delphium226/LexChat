@@ -331,13 +331,19 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
                 # Resolved active provider (D8) — replaces the cost>0 proxy for
                 # "OpenRouter-eligible" in the Cache tab going forward.
                 metrics["provider"] = active_provider
+                # Resolved model — lets the efficiency view attribute per-model
+                # behaviour (notably the report-structure reformat rate) without
+                # joining to messages, which a failed request never writes.
+                metrics["model"] = resolved_model
                 # One-line efficiency summary for grep-ability in the agent log.
                 logging.getLogger("agent").info(
-                    "[Efficiency] req=%s delegations=%s worker_tools=%s phase1=%s phase2=%s "
-                    "distinct_retrieved=%s redundant=%s summ=%s trunc=%s kept=%s/%s turns=%s cost=%.4f",
-                    metrics["request_id"], metrics["manager_delegations"], metrics["worker_tool_calls"],
+                    "[Efficiency] req=%s model=%s delegations=%s worker_tools=%s phase1=%s phase2=%s "
+                    "distinct_retrieved=%s redundant=%s reformat=%s summ=%s trunc=%s kept=%s/%s turns=%s cost=%.4f",
+                    metrics["request_id"], metrics["model"], metrics["manager_delegations"],
+                    metrics["worker_tool_calls"],
                     metrics["phase1_search_calls"], metrics["phase2_retrieval_calls"],
                     metrics["distinct_legislation_ids_retrieved"], metrics["redundant_tool_calls"],
+                    metrics["report_reformat_retries"],
                     metrics["summarisation_calls"], metrics["truncation_events"],
                     metrics["sources_kept"], metrics["sources_extracted"],
                     metrics["react_turns_max"], metrics["total_cost_usd"],

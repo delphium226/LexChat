@@ -144,6 +144,10 @@ class EfficiencyKpi(BaseModel):
     avgFanout: float
     summCompression: float
     avgBudgetBlocked: float
+    # Worker report-structure repairs: share of research queries needing at least
+    # one A4 reformat retry, and the total retries across the period.
+    reformatRate: float = 0.0
+    totalReformats: int = 0
 
 
 class EfficiencyIndicator(BaseModel):
@@ -175,6 +179,8 @@ class EfficiencyWorst(BaseModel):
     truncations: int
     fanout: float
     budgetBlocked: int
+    reformats: int = 0
+    model: Optional[str] = None
     createdAt: str
 
 
@@ -242,6 +248,15 @@ class CacheResponse(BaseModel):
     flags: Dict[str, bool]
 
 
+class EfficiencyByModel(BaseModel):
+    """Per-model prompt-adherence row: how often this model's worker reports
+    failed the structure check and needed the A4 reformat retry."""
+    model: str
+    requestCount: int
+    reformats: int
+    reformatRate: float
+
+
 class EfficiencyResponse(BaseModel):
     kpi: EfficiencyKpi
     indicators: List[EfficiencyIndicator]
@@ -252,6 +267,7 @@ class EfficiencyResponse(BaseModel):
     researchMode: str
     daily: List[EfficiencyDaily]
     worst: List[EfficiencyWorst]
+    byModel: List[EfficiencyByModel] = []
 
 
 def _band(value, warn_at, bad_at, higher_is_worse=True):
@@ -603,6 +619,14 @@ async def get_efficiency_stats(
     for parliamentary), the indicator bands, and — on the parliament bot — an
     extra search-budget-exhaustion indicator. With RESEARCH_MODE unset the output
     is numerically identical to the legislation baseline (bar additive keys).
+
+    Also reports the worker report-structure repair rate (A4 reformat retries) —
+    a prompt-adherence signal — both headline and broken down by model, since
+    "does the model follow the OUTPUT STRUCTURE rule" is a per-model property that
+    a mixed-model average hides. Both read the same research_filter as every other
+    number here, so Deep Research rows are excluded: their reformats are real but
+    their per-request shape is not the single-delegation baseline these bands
+    describe.
     """
     profile = get_efficiency_profile()
     # Fan-out denominator is interpolated into f-string SQL below, so it MUST be
@@ -651,6 +675,9 @@ async def get_efficiency_stats(
             COALESCE(AVG(search_budget_blocked), 0)                         AS avg_budget_blocked,
             COALESCE(SUM(CASE WHEN search_budget_blocked > 0
                      THEN 1 ELSE 0 END), 0)                                 AS budget_hit_count,
+            COALESCE(SUM(report_reformat_retries), 0)                       AS sum_reformats,
+            COALESCE(SUM(CASE WHEN report_reformat_retries > 0
+                     THEN 1 ELSE 0 END), 0)                                 AS reformat_hit_count,
             COALESCE(AVG(phase2_retrieval_calls::float
                      / GREATEST({fanout_denom_col}, 1)), 0)                 AS avg_fanout,
             COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP
@@ -675,6 +702,12 @@ async def get_efficiency_stats(
     compression = round(float(k["avg_compression"]), 2)
     avg_budget_blocked = round(float(k["avg_budget_blocked"]), 2)
     budget_hit_rate = round(int(k["budget_hit_count"]) / total, 3) if total else 0.0
+    # Share of research queries where at least one worker report failed the
+    # structure check and needed the A4 reformat retry. Rate (not average) because
+    # the question it answers is "how often does the model ignore OUTPUT STRUCTURE",
+    # and a Deep Research request can bank several retries in one row.
+    reformat_rate = round(int(k["reformat_hit_count"]) / total, 3) if total else 0.0
+    sum_reformats = int(k["sum_reformats"])
 
     # Fan-out indicator text depends on the profile's denominator.
     is_parliamentary = research_mode == "parliamentary_records"
@@ -724,6 +757,14 @@ async def get_efficiency_stats(
             "target": "low",
             "status": _band(fallback_rate, *bands["fallback"]),
         },
+        {
+            "key": "reformat_rate",
+            "label": "Report reformat rate",
+            "value": reformat_rate,
+            "unit": "% of queries needing a structure repair",
+            "target": "low",
+            "status": _band(reformat_rate, *bands.get("reformat", (0.05, 0.15))),
+        },
     ]
 
     # Parliament bot only: how often the model exhausts the search budget.
@@ -753,6 +794,30 @@ async def get_efficiency_stats(
         ORDER BY DATE(created_at) ASC
     """))
 
+    # Per-model prompt-adherence breakdown. The reformat rate is a per-model
+    # property (how reliably a model follows the OUTPUT STRUCTURE rule), so a
+    # headline average across a mixed-model period is not actionable on its own —
+    # this is the table that says whether a high rate is systemic or one model.
+    # Rows with model IS NULL are pre-column requests, excluded rather than
+    # bucketed as "unknown" so a large historical bucket cannot skew the read.
+    by_model_result = await db.execute(text(f"""
+        SELECT
+            model,
+            COUNT(*)                                                     AS request_count,
+            COALESCE(SUM(report_reformat_retries), 0)                    AS sum_reformats,
+            COALESCE(SUM(CASE WHEN report_reformat_retries > 0
+                     THEN 1 ELSE 0 END), 0)                              AS reformat_hit_count
+        FROM request_timings
+        {research_filter} AND model IS NOT NULL
+        GROUP BY model
+        -- Postgres will not resolve a SELECT alias inside an ORDER BY expression,
+        -- so the rate is spelled out again here rather than reusing the alias.
+        ORDER BY SUM(CASE WHEN report_reformat_retries > 0 THEN 1 ELSE 0 END)::float
+                 / GREATEST(COUNT(*), 1) DESC,
+                 COUNT(*) DESC
+        LIMIT 20
+    """))
+
     # Worst offenders — highest fan-out / redundancy, for drill-down. On the
     # parliament bot, a budget-exhausted request is the most interesting failure,
     # so it leads the ordering there.
@@ -771,6 +836,8 @@ async def get_efficiency_stats(
             sources_kept,
             truncation_events,
             search_budget_blocked,
+            report_reformat_retries,
+            model,
             ROUND((phase2_retrieval_calls::float
                   / GREATEST({fanout_denom_col}, 1))::numeric, 2)       AS fanout,
             created_at
@@ -795,6 +862,8 @@ async def get_efficiency_stats(
             "avgFanout": avg_fanout,
             "summCompression": compression,
             "avgBudgetBlocked": avg_budget_blocked,
+            "reformatRate": reformat_rate,
+            "totalReformats": sum_reformats,
         },
         "indicators": indicators,
         "thresholds": profile,
@@ -822,9 +891,22 @@ async def get_efficiency_stats(
                 "truncations": int(row["truncation_events"]),
                 "fanout": float(row["fanout"]),
                 "budgetBlocked": int(row["search_budget_blocked"]),
+                "reformats": int(row["report_reformat_retries"]),
+                "model": row["model"],
                 "createdAt": row["created_at"].isoformat(),
             }
             for row in worst_result.mappings()
+        ],
+        "byModel": [
+            {
+                "model": row["model"],
+                "requestCount": int(row["request_count"]),
+                "reformats": int(row["sum_reformats"]),
+                "reformatRate": round(
+                    int(row["reformat_hit_count"]) / max(int(row["request_count"]), 1), 3
+                ),
+            }
+            for row in by_model_result.mappings()
         ],
     }
 

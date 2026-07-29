@@ -143,6 +143,44 @@ def test_well_formed_report_no_reformat(_worker_config):
     assert result["content"] == _WELL_FORMED
 
 
+# --- reformat is counted, so the rate is measurable per model ------------------
+
+def test_reformat_is_recorded_on_the_timing_collector(_worker_config):
+    """The retry must increment report_reformat_retries — the counter backing the
+    Efficiency tab's prompt-adherence rate. A counter wired to nothing would read
+    as perfect adherence forever."""
+    from src.utils.stopwatch import TimingCollector
+
+    tc = TimingCollector("req")
+    flat = (
+        "XL Bully ownership without a certificate of exemption is a criminal offence "
+        "in Scotland from 31 July 2024 under the Dangerous Dogs Act 1991."
+    )
+    fixed = "1. **Summary Answer (BLUF):** Answer.\n2. **References:** None found."
+    chat_loop = _chat_loop_returning(flat, fixed)
+
+    asyncio.run(run_worker_agent(
+        chat_loop, lambda *a, **k: None, "q", "test-model", None, 0,
+        timing_collector=tc,
+    ))
+
+    assert tc.report_reformat_retries == 1
+
+
+def test_no_reformat_recorded_for_a_well_formed_report(_worker_config):
+    from src.utils.stopwatch import TimingCollector
+
+    tc = TimingCollector("req")
+    chat_loop = _chat_loop_returning(_WELL_FORMED)
+
+    asyncio.run(run_worker_agent(
+        chat_loop, lambda *a, **k: None, "q", "test-model", None, 0,
+        timing_collector=tc,
+    ))
+
+    assert tc.report_reformat_retries == 0
+
+
 def test_conversational_mode_skips_validation():
     set_request_provider_config({
         "_provider": "ollama",

@@ -147,19 +147,21 @@ async def test_efficiency_empty(client, admin_token):
     r = await client.get("/api/stats/efficiency", headers={"Authorization": f"Bearer {admin_token}"})
     assert r.status_code == 200
     body = r.json()
-    assert set(body) == {"kpi", "indicators", "thresholds", "researchMode", "daily", "worst"}
+    assert set(body) == {
+        "kpi", "indicators", "thresholds", "researchMode", "daily", "worst", "byModel",
+    }
     assert set(body["kpi"]) == {
         "totalRequests", "avgDelegations", "avgWorkerTools", "avgPhase1", "avgPhase2",
         "avgDistinctRetrieved", "avgSummCalls", "avgTruncations", "avgFanout", "summCompression",
-        "avgBudgetBlocked",
+        "avgBudgetBlocked", "reformatRate", "totalReformats",
     }
-    # indicators are static (5 bands on the legislation profile) even with no data;
+    # indicators are static (6 bands on the legislation profile) even with no data;
     # thresholds is the selected profile dict
-    assert len(body["indicators"]) == 5
+    assert len(body["indicators"]) == 6
     assert set(body["indicators"][0]) == {"key", "label", "value", "unit", "target", "status"}
     assert isinstance(body["thresholds"], dict)
     assert body["researchMode"] == "legislation"
-    assert body["daily"] == [] and body["worst"] == []
+    assert body["daily"] == [] and body["worst"] == [] and body["byModel"] == []
 
 
 async def test_efficiency_seeded(client, admin_token, db_session):
@@ -173,7 +175,8 @@ async def test_efficiency_seeded(client, admin_token, db_session):
     }
     assert set(body["worst"][0]) == {
         "requestId", "delegations", "workerTools", "phase2", "redundant",
-        "extracted", "kept", "truncations", "fanout", "budgetBlocked", "createdAt",
+        "extracted", "kept", "truncations", "fanout", "budgetBlocked",
+        "reformats", "model", "createdAt",
     }
 
 
@@ -200,6 +203,52 @@ async def test_efficiency_parliamentary_profile(client, admin_token, db_session,
     assert "budget_exhaustion" in keys
     assert body["kpi"]["avgFanout"] == 2.0
     assert body["worst"][0]["budgetBlocked"] == 1
+
+
+# --------------------------------------------------------------------------- #
+# /efficiency — report-structure reformat rate (prompt adherence)
+# --------------------------------------------------------------------------- #
+
+async def test_efficiency_reformat_rate_and_by_model(client, admin_token, db_session):
+    """The reformat metric is reported as a per-request RATE (not a sum), and
+    broken down per model so a high headline number can be attributed."""
+    # model-a: 2 requests, 1 needing a repair (2 retries banked on that one row).
+    await _seed_timing_row(
+        db_session, request_id="reqA1", model="model-a", report_reformat_retries=2,
+    )
+    await _seed_timing_row(
+        db_session, request_id="reqA2", model="model-a", report_reformat_retries=0,
+    )
+    # model-b: 1 request, clean.
+    await _seed_timing_row(
+        db_session, request_id="reqB1", model="model-b", report_reformat_retries=0,
+    )
+    r = await client.get("/api/stats/efficiency", headers={"Authorization": f"Bearer {admin_token}"})
+    assert r.status_code == 200
+    body = r.json()
+
+    # Headline: 1 of 3 requests needed a repair; 2 retries total.
+    assert body["kpi"]["reformatRate"] == round(1 / 3, 3)
+    assert body["kpi"]["totalReformats"] == 2
+    assert any(ind["key"] == "reformat_rate" for ind in body["indicators"])
+
+    by_model = {row["model"]: row for row in body["byModel"]}
+    assert set(by_model) == {"model-a", "model-b"}
+    # Rate counts REQUESTS needing a repair, so 2 retries on 1 of 2 rows = 0.5.
+    assert by_model["model-a"] == {
+        "model": "model-a", "requestCount": 2, "reformats": 2, "reformatRate": 0.5,
+    }
+    assert by_model["model-b"]["reformatRate"] == 0.0
+
+
+async def test_efficiency_by_model_excludes_null_model_rows(client, admin_token, db_session):
+    """Pre-column rows carry no model. They still count toward the headline rate
+    but must not appear as an 'unknown' bucket that skews the per-model read."""
+    await _seed_timing_row(db_session, request_id="reqOld", report_reformat_retries=1)
+    r = await client.get("/api/stats/efficiency", headers={"Authorization": f"Bearer {admin_token}"})
+    body = r.json()
+    assert body["kpi"]["reformatRate"] == 1.0
+    assert body["byModel"] == []
 
 
 # --------------------------------------------------------------------------- #

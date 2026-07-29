@@ -139,6 +139,13 @@ settings = Settings()
 # "fanout_denominator" names the SQL column used as the fan-out denominator in
 # stats.py; it is allowlist-validated there before interpolation.
 # "bands" values are (warn_at, bad_at) cut points for stats.py _band().
+#
+# The "reformat" band (worker report-structure repair rate) is UNMEASURED on
+# every profile — it was added to establish the base rate, so its cut-points are
+# a placeholder to be re-tuned once real traffic accumulates. Deliberately an
+# indicator only, with no matching breach rule: the reformat retry is fail-soft
+# and expected occasionally, so alerting on a single one would flood the activity
+# feed before we know what "normal" looks like.
 EFFICIENCY_PROFILES = {
     "legislation": {
         # per-request breach rules (evaluate_efficiency_breaches)
@@ -154,6 +161,7 @@ EFFICIENCY_PROFILES = {
             "redundant": (0.05, 0.10),
             "halt": (0.001, 0.02),
             "fallback": (0.1, 0.25),
+            "reformat": (0.05, 0.15),
         },
     },
     "parliamentary_records": {
@@ -170,6 +178,7 @@ EFFICIENCY_PROFILES = {
             "halt": (0.001, 0.02),
             "fallback": (0.15, 0.35),              # excerpt-heavy answers cite less precisely
             "budget_blocked": (0.05, 0.15),        # share of requests hitting the budget wall
+            "reformat": (0.05, 0.15),
         },
     },
     # Westminster: same search→retrieve shape as the Holyrood bot (one
@@ -191,6 +200,7 @@ EFFICIENCY_PROFILES = {
             "halt": (0.001, 0.02),
             "fallback": (0.1, 0.25),
             "budget_blocked": (0.05, 0.15),
+            "reformat": (0.05, 0.15),
         },
     },
 }

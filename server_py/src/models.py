@@ -132,6 +132,10 @@ class RequestTiming(Base):
     source_filter_fallback: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Parliamentary search-budget wall hits (model looped on discovery search).
     search_budget_blocked: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Worker report-structure repairs (A4): one extra no-tools reformat call was
+    # needed because the report failed the structure check. A prompt-adherence
+    # signal — read per-model via the `model` column below.
+    report_reformat_retries: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Deep Research tool-result memo hits (repeat tool call served without API/summarise).
     memo_hits: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Local prompt cache (D7): summaries served from local_prompt_cache, and the
@@ -149,6 +153,11 @@ class RequestTiming(Base):
     # Resolved active provider ("ollama"/"openrouter") — additive (D8), NULL on
     # pre-column rows (stats fall back to the total_cost_usd > 0 proxy).
     provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Resolved model used for the Manager/Worker calls of this request — additive,
+    # NULL on pre-column rows. Message.model records the same value on the saved
+    # assistant message, but a request that errors before saving one still writes
+    # a timing row, so the metric is kept self-contained rather than joined.
+    model: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (

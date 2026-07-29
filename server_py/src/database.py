@@ -229,6 +229,11 @@ async def init_db() -> None:
             # Resolved active provider per request (D8, additive, no backfill —
             # pre-column rows stay NULL and fall back to the cost>0 proxy in stats).
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS provider VARCHAR(32)",
+            # Worker report-structure repair rate + the model that earned it. Both
+            # additive with no backfill: pre-column rows read 0 / NULL, so per-model
+            # reformat trends are only meaningful from this release onward.
+            "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS report_reformat_retries INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS model VARCHAR(120)",
             # Committee SP TV slugs can exceed 128 chars (they embed the full debate
             # title), so widen slug from the original VARCHAR(128) to TEXT on existing
             # DBs. Guarded so it only runs while the column is still varchar.

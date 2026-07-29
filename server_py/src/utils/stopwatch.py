@@ -82,6 +82,12 @@ class TimingCollector:
         # Parliamentary search budget: count of search calls hard-stopped because
         # the per-request budget was already exhausted (the model looped on search).
         self.search_budget_blocked: int = 0
+        # Worker report-structure repairs (A4): count of worker runs whose report
+        # failed _report_needs_reformat and cost one extra no-tools reformat call.
+        # A prompt-adherence signal — how often the model ignores the OUTPUT
+        # STRUCTURE rule — and the LLM call the repair costs. Incremented once per
+        # worker run, so a Deep Research request can record more than one.
+        self.report_reformat_retries: int = 0
         # Deep Research tool-result memo: exact-repeat tool calls served from the
         # per-request memo (a saving, NOT a loop-health signal — deliberately kept
         # out of worker_tool_calls / phase counts / redundant_tool_calls).
@@ -191,6 +197,9 @@ class TimingCollector:
     def record_search_budget_blocked(self) -> None:
         self.search_budget_blocked += 1
 
+    def record_report_reformat(self) -> None:
+        self.report_reformat_retries += 1
+
     def record_memo_hit(self) -> None:
         self.memo_hits += 1
 
@@ -237,6 +246,7 @@ class TimingCollector:
             "sources_kept": self.sources_kept,
             "source_filter_fallback": self.source_filter_fallback,
             "search_budget_blocked": self.search_budget_blocked,
+            "report_reformat_retries": self.report_reformat_retries,
             "memo_hits": self.memo_hits,
             "local_cache_hits": self.local_cache_hits,
             "local_cache_chars_saved": self.local_cache_chars_saved,

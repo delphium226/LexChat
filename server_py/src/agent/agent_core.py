@@ -227,6 +227,8 @@ async def run_worker_agent(
         content = result.get("content", "") or ""
         if _report_needs_reformat(content, has_sources=bool(source_accumulator)):
             logger.info("[Worker] Report failed structure check — issuing one reformat retry")
+            if timing_collector:
+                timing_collector.record_report_reformat()
             result["content"] = await _reformat_worker_report(
                 chat_loop_fn, content, research_mode, model,
                 cancel_event, num_ctx, timing_collector=timing_collector,
