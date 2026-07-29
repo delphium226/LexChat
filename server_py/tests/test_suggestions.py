@@ -5,8 +5,7 @@ import pytest
 
 from src.prompts import (
     CONSULTED_PEER_BLOCK,
-    PLANNER_OPTIONS_DISABLED_BLOCK,
-    SUGGESTIONS_DISABLED_BLOCK,
+    NO_CHIPS_SUGGESTION_RULES,
     get_manager_system_prompt,
     get_planner_system_prompt,
 )
@@ -165,40 +164,60 @@ def test_consulted_block_appended_on_every_return_path(mode, cfg):
 
 
 # --- suggested_questions_enabled flag ---------------------------------------
+# The flag SUBSTITUTES the chips rules out of the prompt rather than appending an
+# override after them. These tests exist to keep it that way: an override-style
+# implementation would leave the <suggestions> instruction in the prompt and rely
+# on the model obeying a later contradiction.
 
 @pytest.mark.parametrize("mode,cfg", _MANAGER_PROMPT_CASES)
-def test_disabled_block_appended_on_every_return_path(mode, cfg):
-    """Same early-return hazard as the consulted block: the parliament/Westminster
-    branch returns before the end, so a single append would miss two bots."""
-    assert SUGGESTIONS_DISABLED_BLOCK not in get_manager_system_prompt(mode, cfg or None)
+def test_flag_off_removes_every_trace_of_the_chips_instruction(mode, cfg):
     off = get_manager_system_prompt(mode, {**cfg, "_suggested_questions_enabled": False})
-    assert SUGGESTIONS_DISABLED_BLOCK in off
-    # Last, so it overrides the FOLLOW-UP/CLARIFYING instructions above it.
-    assert off.rstrip().endswith(SUGGESTIONS_DISABLED_BLOCK)
+    assert "<suggestions>" not in off
+    assert "</suggestions>" not in off
+    # The chips-specific rationale must go too, not just the tag.
+    assert "clickable buttons" not in off
+
+
+@pytest.mark.parametrize("mode,cfg", _MANAGER_PROMPT_CASES)
+def test_flag_off_still_asks_for_a_follow_up_and_for_options(mode, cfg):
+    """Deleting the rules outright would lose the instruction to offer options at
+    all, leaving a clarifying question the user cannot answer."""
+    off = get_manager_system_prompt(mode, {**cfg, "_suggested_questions_enabled": False})
+    assert NO_CHIPS_SUGGESTION_RULES in off
+    assert "FOLLOW-UP QUESTIONS:" in off
+    assert "CLARIFYING QUESTIONS" in off
+    # The no-speculation guardrail survives the swap — chips made a hallucinated
+    # option one click away, but a written-out wrong option is still wrong.
+    assert "have not retrieved via a tool" in off
 
 
 @pytest.mark.parametrize("mode,cfg", _MANAGER_PROMPT_CASES)
 def test_flag_absent_or_true_leaves_prompt_unchanged(mode, cfg):
-    """Absent key must behave as ON, so an old saved features JSON is a no-op."""
+    """Absent key behaves as ON, so an old saved features JSON is a no-op."""
     baseline = get_manager_system_prompt(mode, cfg or None)
     assert get_manager_system_prompt(mode, {**cfg, "_suggested_questions_enabled": True}) == baseline
+    assert "<suggestions>" in baseline
 
 
 @pytest.mark.parametrize("mode,cfg", _MANAGER_PROMPT_CASES)
-def test_consulted_wins_over_disabled_flag(mode, cfg):
-    """A consulted peer is already forbidden a block outright; the two blocks give
-    conflicting clarification advice, so only one may be appended."""
+def test_consulted_block_still_appended_when_flag_is_off(mode, cfg):
+    """The two are independent: a consulted peer with chips off must get both the
+    swapped rules and the consulted override."""
     prompt = get_manager_system_prompt(
         mode, {**cfg, "_consulted": True, "_suggested_questions_enabled": False}
     )
     assert CONSULTED_PEER_BLOCK in prompt
-    assert SUGGESTIONS_DISABLED_BLOCK not in prompt
+    assert "<suggestions>" not in prompt.replace(CONSULTED_PEER_BLOCK, "")
 
 
-def test_planner_options_block_gated_by_the_same_flag():
-    assert PLANNER_OPTIONS_DISABLED_BLOCK not in get_planner_system_prompt("legislation_only", {})
-    off = get_planner_system_prompt("legislation_only", {"_suggested_questions_enabled": False})
-    assert PLANNER_OPTIONS_DISABLED_BLOCK in off
+@pytest.mark.parametrize("mode", ["legislation_only", "case_law_only", "parliamentary_records"])
+def test_planner_options_rule_swapped_not_overridden(mode):
+    on = get_planner_system_prompt(mode, {})
+    off = get_planner_system_prompt(mode, {"_suggested_questions_enabled": False})
+    assert "`options`" in on
+    assert "`options`" not in off
+    # The template slot must always be filled, on either path.
+    assert "{options_rule}" not in on and "{options_rule}" not in off
 
 
 # --- diagnose_suggestions: the prompt-adherence floor ------------------------
