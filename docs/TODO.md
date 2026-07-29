@@ -676,3 +676,24 @@ and suggested order: `docs/CACHE_ADMIN_UI_PLAN.md`. Work on
   flag OFF: same call re-executed, memo_hits=0; Cache tab endpoint returned the
   real hit row. Prompt-caching toggle unit-tested only (no OpenRouter key on dev
   machine — live payload check still outstanding, same as D5).
+
+### D9. Decide the report output format from the reformat-rate data (shipped 2026-07-29)
+Instrumentation is live: `request_timings.report_reformat_retries` + `model`, surfaced
+on the Efficiency tab as a `reformat_rate` indicator and a **Report Structure Adherence
+by Model** table. It exists to answer one question — *is it worth restructuring the
+worker report output (e.g. XML section wrappers) to improve prompt adherence?*
+
+Read it once real traffic accumulates, then decide:
+- **Low across all models** → the A4 reformat retry is already doing its job; change
+  nothing. This is the expected outcome.
+- **Concentrated in one model** → a model-selection question, not a format one.
+- **High across the board** → the strongest fix is still not XML in the prose (it costs
+  streaming, adds tag-leak surface on top of the existing `<suggestions>` strip, and
+  Gemini/OpenAI models are markdown-native). Prefer a `submit_report` tool with typed
+  fields — the `submit_research_plan` pattern — which is provider-enforced rather than
+  prompt-enforced, and only trades away streaming for the *worker* report, which is not
+  streamed to the user anyway.
+
+Also outstanding: the `reformat` bands `(0.05, 0.15)` on all three profiles are
+unmeasured placeholders (same category as **D2**), and there is deliberately no breach
+rule yet — add one only once the base rate is known.
