@@ -24,6 +24,7 @@ async def test_get_features_defaults(client, auth_headers):
         "local_prompt_cache_enabled": True,
         "research_mode_enabled": True,
         "deep_research_mode_enabled": True,
+        "suggested_questions_enabled": True,
     }
 
 
@@ -42,6 +43,7 @@ async def test_get_features_merges_old_saved_json(client, auth_headers, db_sessi
         "local_prompt_cache_enabled": True,
         "research_mode_enabled": True,
         "deep_research_mode_enabled": True,
+        "suggested_questions_enabled": True,
     }
 
 
@@ -55,6 +57,7 @@ async def test_save_features_round_trips_new_keys(client, admin_token):
         "local_prompt_cache_enabled": False,
         "research_mode_enabled": False,
         "deep_research_mode_enabled": False,
+        "suggested_questions_enabled": False,
     }
     response = await client.post(FEATURES_URL, json=body, headers=headers)
     assert response.status_code == 200
@@ -77,6 +80,7 @@ async def test_save_features_accepts_old_client_body(client, admin_token):
         "local_prompt_cache_enabled": True,
         "research_mode_enabled": True,
         "deep_research_mode_enabled": True,
+        "suggested_questions_enabled": True,
     }
 
 

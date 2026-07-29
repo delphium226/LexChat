@@ -23,6 +23,7 @@ from ..config import settings
 from ..database import async_session_maker
 from ..dependencies import get_current_user
 from ..utils.stopwatch import TimingCollector
+from .developer import _read_features
 
 logger = logging.getLogger("app")
 
@@ -61,6 +62,7 @@ async def draft_plan(body: ResearchPlanRequest, user: dict = Depends(get_current
         async with async_session_maker() as db:
             active_provider = await get_active_provider(db)
             provider_config = await get_provider_config(db, active_provider)
+            features = await _read_features(db)
     except Exception as e:
         logger.error(f"[Research] Provider resolution failed: {e}", exc_info=True)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again.")
@@ -84,6 +86,9 @@ async def draft_plan(body: ResearchPlanRequest, user: dict = Depends(get_current
         "_wm_record_type": body.record_type if resolved_research_mode == "westminster_records" else None,
         "_wm_house": body.house or None,
         "_pt_sessions": body.sessions or None,
+        # Governs the planner's clarification `options` — the same chips, and so
+        # the same flag, as the manager's follow-up suggestions.
+        "_suggested_questions_enabled": features.get("suggested_questions_enabled", True),
     })
 
     resolved_model = provider_config.get("model") or body.model

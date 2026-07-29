@@ -15,6 +15,7 @@ export function useMatters(user, currentChatId) {
     matters_enabled: true,
     research_mode_enabled: true,
     deep_research_mode_enabled: true,
+    suggested_questions_enabled: true,
   });
   const [matters, setMatters] = useState([]);
   const [closedMatters, setClosedMatters] = useState([]);

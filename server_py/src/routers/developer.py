@@ -248,6 +248,7 @@ _DEFAULT_FEATURES = {
     "local_prompt_cache_enabled": True,
     "research_mode_enabled": True,
     "deep_research_mode_enabled": True,
+    "suggested_questions_enabled": True,
 }
 
 
@@ -281,6 +282,7 @@ class FeaturesUpdate(BaseModel):
     local_prompt_cache_enabled: bool = True
     research_mode_enabled: bool = True
     deep_research_mode_enabled: bool = True
+    suggested_questions_enabled: bool = True
 
 
 @admin_router.post("/features")
@@ -296,6 +298,7 @@ async def save_features(
         "local_prompt_cache_enabled": body.local_prompt_cache_enabled,
         "research_mode_enabled": body.research_mode_enabled,
         "deep_research_mode_enabled": body.deep_research_mode_enabled,
+        "suggested_questions_enabled": body.suggested_questions_enabled,
     }
     result = await db.execute(select(AppSetting).where(AppSetting.key == _FEATURES_KEY))
     row = result.scalar_one_or_none()

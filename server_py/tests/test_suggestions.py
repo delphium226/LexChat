@@ -3,7 +3,13 @@ the prompt wiring that produces and suppresses the block."""
 
 import pytest
 
-from src.prompts import CONSULTED_PEER_BLOCK, get_manager_system_prompt
+from src.prompts import (
+    CONSULTED_PEER_BLOCK,
+    PLANNER_OPTIONS_DISABLED_BLOCK,
+    SUGGESTIONS_DISABLED_BLOCK,
+    get_manager_system_prompt,
+    get_planner_system_prompt,
+)
 from src.utils.suggestions import (
     MAX_SUGGESTIONS,
     diagnose_suggestions,
@@ -156,6 +162,43 @@ def test_consulted_block_appended_on_every_return_path(mode, cfg):
     assert CONSULTED_PEER_BLOCK in consulted
     # It must be last, so it overrides the follow-up instruction above it.
     assert consulted.rstrip().endswith(CONSULTED_PEER_BLOCK)
+
+
+# --- suggested_questions_enabled flag ---------------------------------------
+
+@pytest.mark.parametrize("mode,cfg", _MANAGER_PROMPT_CASES)
+def test_disabled_block_appended_on_every_return_path(mode, cfg):
+    """Same early-return hazard as the consulted block: the parliament/Westminster
+    branch returns before the end, so a single append would miss two bots."""
+    assert SUGGESTIONS_DISABLED_BLOCK not in get_manager_system_prompt(mode, cfg or None)
+    off = get_manager_system_prompt(mode, {**cfg, "_suggested_questions_enabled": False})
+    assert SUGGESTIONS_DISABLED_BLOCK in off
+    # Last, so it overrides the FOLLOW-UP/CLARIFYING instructions above it.
+    assert off.rstrip().endswith(SUGGESTIONS_DISABLED_BLOCK)
+
+
+@pytest.mark.parametrize("mode,cfg", _MANAGER_PROMPT_CASES)
+def test_flag_absent_or_true_leaves_prompt_unchanged(mode, cfg):
+    """Absent key must behave as ON, so an old saved features JSON is a no-op."""
+    baseline = get_manager_system_prompt(mode, cfg or None)
+    assert get_manager_system_prompt(mode, {**cfg, "_suggested_questions_enabled": True}) == baseline
+
+
+@pytest.mark.parametrize("mode,cfg", _MANAGER_PROMPT_CASES)
+def test_consulted_wins_over_disabled_flag(mode, cfg):
+    """A consulted peer is already forbidden a block outright; the two blocks give
+    conflicting clarification advice, so only one may be appended."""
+    prompt = get_manager_system_prompt(
+        mode, {**cfg, "_consulted": True, "_suggested_questions_enabled": False}
+    )
+    assert CONSULTED_PEER_BLOCK in prompt
+    assert SUGGESTIONS_DISABLED_BLOCK not in prompt
+
+
+def test_planner_options_block_gated_by_the_same_flag():
+    assert PLANNER_OPTIONS_DISABLED_BLOCK not in get_planner_system_prompt("legislation_only", {})
+    off = get_planner_system_prompt("legislation_only", {"_suggested_questions_enabled": False})
+    assert PLANNER_OPTIONS_DISABLED_BLOCK in off
 
 
 # --- diagnose_suggestions: the prompt-adherence floor ------------------------

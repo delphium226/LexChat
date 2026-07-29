@@ -135,6 +135,7 @@ const AdminPortal = ({ currentUser }) => {
     local_prompt_cache_enabled: true,
     research_mode_enabled: true,
     deep_research_mode_enabled: true,
+    suggested_questions_enabled: true,
   });
   const [isSavingFeatures, setIsSavingFeatures] = useState(false);
 
@@ -1240,6 +1241,11 @@ const AdminPortal = ({ currentUser }) => {
                   flag: 'deep_research_mode_enabled',
                   label: 'Deep Research mode',
                   desc: 'Offers the "Deep Research" chat mode (editable multi-step research plan) in the mode selector.',
+                },
+                {
+                  flag: 'suggested_questions_enabled',
+                  label: 'Suggested question buttons',
+                  desc: "Renders the assistant's follow-up questions and clarification options as one-click buttons. When off, the assistant writes them into the answer as ordinary text instead.",
                 },
                 {
                   flag: 'prompt_caching_enabled',

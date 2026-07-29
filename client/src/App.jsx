@@ -792,8 +792,11 @@ function AppContent() {
                       }
                     />
                     {/* Chips only under the newest answer — a long thread must
-                        not fill with stale suggestions from earlier turns. */}
-                    {msg.role === 'assistant' &&
+                        not fill with stale suggestions from earlier turns. The
+                        flag is belt-and-braces: with it off the backend already
+                        strips the block and drops the planner's options. */}
+                    {features.suggested_questions_enabled &&
+                      msg.role === 'assistant' &&
                       idx === messages.length - 1 &&
                       !loading &&
                       msg.suggestions?.length > 0 && (

@@ -424,7 +424,13 @@ async def draft_research_plan(
         return {
             "needs_clarification": True,
             "question": captured["question"],
-            "options": captured.get("options") or [],
+            # Dropped when chips are off — the prompt tells the planner to fold
+            # the alternatives into the question text instead.
+            "options": (
+                (captured.get("options") or [])
+                if cfg.get("_suggested_questions_enabled", True)
+                else []
+            ),
         }
     logger.error("[Planner] Model failed to produce a plan or clarification")
     return {"error": "The planner did not produce a research plan. Please try rephrasing your question."}
@@ -597,15 +603,20 @@ async def process_user_request(
     # context as a tool result. It must stay ABOVE the source block: sources are
     # matched against the content, and a URL inside a suggestion line would
     # otherwise falsely mark a source as cited.
+    # The STRIP is unconditional even when the flag is off: the prompt asks the
+    # model not to emit a block, but nothing enforces that, and an unstripped tag
+    # would render as raw markup in the answer.
+    suggestions_enabled = _cfg.get("_suggested_questions_enabled", True)
     clean, suggestions = extract_suggestions(final.get("content") or "")
     final["content"] = clean
-    if suggestions:
+    if suggestions and suggestions_enabled:
         final["suggestions"] = suggestions
 
     # Prompt-adherence floor: the block is enforced only by prompt wording, so
     # log drift rather than letting it surface in front of a user first. Skipped
-    # for a consulted peer, which is explicitly told NOT to emit a block.
-    if not _cfg.get("_consulted"):
+    # for a consulted peer, which is explicitly told NOT to emit a block — and
+    # when the flag is off, where a missing block is the intended behaviour.
+    if suggestions_enabled and not _cfg.get("_consulted"):
         for issue in diagnose_suggestions(
             clean, suggestions, has_sources=bool(accumulated_sources)
         ):

@@ -578,15 +578,36 @@ CONSULTED_PEER_BLOCK = """YOU ARE ANSWERING A PEER BOT, NOT A HUMAN.
 Nobody can reply to you — this is a single exchange. Never ask a clarifying question and never end with a follow-up question or a <suggestions> block. If the request is ambiguous, answer the most reasonable reading and state the assumption you made in one sentence, so the calling bot can pass that caveat on."""
 
 
+# Appended when the `suggested_questions_enabled` flag is off. The backend strips
+# the tag either way, so this is not what stops a block reaching the user — it is
+# what stops the CLARIFYING QUESTIONS rule stranding the user: that rule tells the
+# model to put its options ONLY in the block, which with chips disabled would leave
+# a clarifying question whose options are nowhere on screen.
+SUGGESTIONS_DISABLED_BLOCK = """SUGGESTED-QUESTION BUTTONS ARE TURNED OFF IN THIS DEPLOYMENT.
+This overrides the FOLLOW-UP QUESTIONS and CLARIFYING QUESTIONS instructions above.
+- Do NOT emit a <suggestions> block. Anything inside one is discarded and the user never sees it.
+- Still end your answer with a single tailored follow-up question, written as an ordinary sentence in the body.
+- When you ask a clarifying question, write out the options you are offering in the body as a short bulleted list. There are no clickable buttons in this session, so an option that is not written in the body is invisible to the user.
+- The no-speculation rule is unchanged: offer only scope choices grounded in the conversation or in tool results (jurisdiction, in-force vs as-enacted, a section the user already named). NEVER list an Act, SI or case you have not retrieved via a tool."""
+
+
 def get_manager_system_prompt(research_mode: str = "legislation_only", cfg: dict = None) -> str:
     """Return the full manager system prompt for the given research mode."""
     from datetime import date
     date_line = f"Today's date is {date.today().strftime('%d %B %Y')}."
 
-    # /api/consult sets this: the caller is another bot, so questions back to the
-    # "user" can never be answered. Appended to EVERY return path below — the
-    # parliament/Westminster branch returns early.
-    consulted_suffix = "\n\n" + CONSULTED_PEER_BLOCK if (cfg and cfg.get("_consulted")) else ""
+    # Appended to EVERY return path below — the parliament/Westminster branch
+    # returns early, so a single append at the end would silently miss two bots.
+    #
+    # /api/consult sets `_consulted`: the caller is another bot, so questions back
+    # to the "user" can never be answered. That block already forbids a
+    # <suggestions> block outright, so it subsumes the flag-off case.
+    if cfg and cfg.get("_consulted"):
+        prompt_suffix = "\n\n" + CONSULTED_PEER_BLOCK
+    elif cfg and not cfg.get("_suggested_questions_enabled", True):
+        prompt_suffix = "\n\n" + SUGGESTIONS_DISABLED_BLOCK
+    else:
+        prompt_suffix = ""
 
     if research_mode in ("parliamentary_records", "westminster_records"):
         base = (
@@ -597,7 +618,7 @@ def get_manager_system_prompt(research_mode: str = "legislation_only", cfg: dict
         block = _filter_constraint_block_for_mode(research_mode, cfg) if cfg else ""
         if block:
             base = base + "\n\n" + block
-        return date_line + "\n\n" + base + consulted_suffix
+        return date_line + "\n\n" + base + prompt_suffix
 
     if cfg and cfg.get("_chat_mode") == "conversational":
         mode_note = get_manager_mode_note(research_mode, cfg)
@@ -610,11 +631,11 @@ def get_manager_system_prompt(research_mode: str = "legislation_only", cfg: dict
                 "mode selector. Do NOT answer case law questions from your internal training data."
             )
         base = (mode_note + "\n\n" + MANAGER_SYSTEM_PROMPT_CONVERSATIONAL) if mode_note else MANAGER_SYSTEM_PROMPT_CONVERSATIONAL
-        return date_line + "\n\n" + base + consulted_suffix
+        return date_line + "\n\n" + base + prompt_suffix
 
     mode_note = get_manager_mode_note(research_mode, cfg)
     base = (mode_note + "\n\n" + MANAGER_SYSTEM_PROMPT) if mode_note else MANAGER_SYSTEM_PROMPT
-    return date_line + "\n\n" + base + consulted_suffix
+    return date_line + "\n\n" + base + prompt_suffix
 
 
 PARLIAMENT_MANAGER_SYSTEM_PROMPT = """You are Parli Chat, an AI Scottish Parliament (Holyrood) research assistant for a UK government organisation.
@@ -933,6 +954,14 @@ _PLANNER_MODE_NOTES = {
 }
 
 
+# The planner's `options` render through the same chip component as a manager
+# follow-up, so the same flag governs both. Without this the model would keep
+# passing options that are discarded, leaving a bare either/or question whose
+# alternatives the user never sees.
+PLANNER_OPTIONS_DISABLED_BLOCK = """CLICKABLE CLARIFICATION OPTIONS ARE TURNED OFF IN THIS DEPLOYMENT.
+This overrides the `options` guidance above: do NOT pass `options` to `request_clarification` — anything passed is discarded and the user never sees it. Put everything the user needs into the `question` itself, spelling out the alternatives in the question text (e.g. "Do you mean England and Wales, or Scotland?")."""
+
+
 def get_planner_system_prompt(research_mode: str = "legislation_only", cfg: dict = None) -> str:
     """Return the Deep Research planner system prompt for the given research mode."""
     from datetime import date
@@ -945,6 +974,8 @@ def get_planner_system_prompt(research_mode: str = "legislation_only", cfg: dict
         block = _filter_constraint_block_for_mode(research_mode, cfg)
         if block:
             parts.append(block)
+        if not cfg.get("_suggested_questions_enabled", True):
+            parts.append(PLANNER_OPTIONS_DISABLED_BLOCK)
 
     return "\n\n".join(parts)
 
