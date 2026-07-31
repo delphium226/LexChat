@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import sys
 import time
 import uuid
 import asyncio
@@ -32,6 +33,63 @@ setup_logging(bot_id=settings.bot_id)
 
 logger = logging.getLogger("app")
 http_logger = logging.getLogger("http")
+
+
+def _listen_url() -> str:
+    """Best-effort description of where uvicorn actually bound.
+
+    settings.host/port are .env startup defaults, but the launch scripts pass
+    --host/--port (and --ssl-certfile for HTTPS) on the uvicorn command line, so
+    the .env values can disagree with reality — the parliament bot carries
+    PORT=8001 while start_native.cmd binds 443 whenever the certs are present.
+    Read argv first (the app is always started via `python -m uvicorn`) and fall
+    back to settings when a flag is absent.
+    """
+    argv = sys.argv
+
+    def _flag(name: str) -> str | None:
+        for i, arg in enumerate(argv):
+            if arg == name and i + 1 < len(argv):
+                return argv[i + 1]
+            if arg.startswith(f"{name}="):
+                return arg.split("=", 1)[1]
+        return None
+
+    host = _flag("--host") or settings.host
+    port = _flag("--port") or str(settings.port)
+    ssl_on = any(a == "--ssl-certfile" or a.startswith("--ssl-certfile=") for a in argv)
+    return f"{'https' if ssl_on else 'http'}://{host}:{port}"
+
+
+def _install_quiet_connection_reset(loop: asyncio.AbstractEventLoop) -> None:
+    """Drop the benign Windows proactor teardown race; log everything else.
+
+    When a peer resets a socket, asyncio's
+    _ProactorBasePipeTransport._call_connection_lost still calls
+    sock.shutdown(SHUT_RDWR) on the dead socket and Winsock raises
+    ConnectionResetError (WinError 10054). It reaches the loop's exception
+    handler *after* the connection is already gone, so there is nothing to
+    recover — it is pure console noise, arriving in bursts on restarts, aborted
+    TLS handshakes and client disconnects. Matched on that exact callback so a
+    real ConnectionResetError raised anywhere else is still reported, and
+    delegated to the previous handler (default if none) for everything else.
+    Suppressed ones are still visible at LOG_LEVEL=DEBUG.
+    """
+    previous = loop.get_exception_handler()
+
+    def handler(loop: asyncio.AbstractEventLoop, context: dict) -> None:
+        exc = context.get("exception")
+        if isinstance(exc, ConnectionResetError) and "_call_connection_lost" in repr(
+            context.get("handle", "")
+        ):
+            logger.debug(f"[Main] Suppressed benign socket teardown reset: {exc}")
+            return
+        if previous is not None:
+            previous(loop, context)
+        else:
+            loop.default_exception_handler(context)
+
+    loop.set_exception_handler(handler)
 
 
 async def _load_bot_config() -> None:
@@ -91,6 +149,8 @@ async def lifespan(app: FastAPI):
             "Set a unique JWT_SECRET in server_py/.env (or .env.native) before "
             "exposing this server to users."
         )
+    # Installed on the serving loop (lifespan runs on it) before any traffic.
+    _install_quiet_connection_reset(asyncio.get_running_loop())
     await init_db()
     await _load_bot_config()
     health_task = asyncio.create_task(background_health_loop(300))
@@ -121,7 +181,7 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(background_plenary_crawl_loop(86400)),
         ]
 
-    logger.info(f"[Main] Server running on http://{settings.host}:{settings.port}")
+    logger.info(f"[Main] Server running on {_listen_url()}")
     yield
     # Shutdown
     health_task.cancel()
