@@ -697,3 +697,25 @@ Read it once real traffic accumulates, then decide:
 Also outstanding: the `reformat` bands `(0.05, 0.15)` on all three profiles are
 unmeasured placeholders (same category as **D2**), and there is deliberately no breach
 rule yet — add one only once the base rate is known.
+
+---
+
+### E1. Live-verify the eval audit trace end-to-end (open, 2026-07-31)
+`/api/system/chat` field parity + the `audit` SSE event shipped in `da3070d`
+(handover spec: `docs/api/AUDIT_TRACE.md`). Verified by 28 tests including an
+ASGI round-trip of the endpoint, but **the trace has never been produced by a
+real research run** — the endpoint tests mock the agent, so no live LEX call has
+gone through the `on_chunk` sniffer that populates `api_calls[]`.
+
+Run one real `case_law_only` and one Deep Research query against a live provider
+and check: `api_calls[].request`/`.response` are populated; `raw_result` differs
+from `final_result` when `summarised` is true; DR delegations carry `step`/`title`.
+
+Two follow-ups deferred until Tom's harness is actually consuming it:
+- **`extra="forbid"` on the request models.** Would have turned this whole bug
+  into a 422 at the first request instead of silent defaults. Held back because
+  it breaks any client sending a stale field (his payload still carries
+  `"stream": true`) — land it once he has migrated.
+- **`source` filtering in the stats queries.** Eval rows are tagged
+  `request_timings.source = "eval"` but the Efficiency/Cache tabs do not filter
+  on it, so a large sweep moves the headline numbers.
