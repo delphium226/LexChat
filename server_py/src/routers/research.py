@@ -7,10 +7,8 @@ through the existing POST /api/chat (SSE) with chat_mode="deep_research".
 import logging
 import time
 import uuid
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 
 from ..agent.provider_factory import (
     get_active_provider,
@@ -19,34 +17,15 @@ from ..agent.provider_factory import (
     get_request_queue,
     set_request_provider_config,
 )
-from ..config import settings
 from ..database import async_session_maker
 from ..dependencies import get_current_user
 from ..utils.stopwatch import TimingCollector
+from .agent_request import ResearchPlanRequest, build_request_config
 from .developer import _read_features
 
 logger = logging.getLogger("app")
 
 router = APIRouter(tags=["Research"])
-
-
-class ResearchPlanRequest(BaseModel):
-    messages: List[dict]
-    model: str
-    num_ctx: Optional[int] = None
-    research_mode: Optional[str] = "legislation_only"
-    jurisdiction: Optional[str] = None
-    year_from: Optional[int] = None
-    year_to: Optional[int] = None
-    date_from: Optional[str] = None
-    date_to: Optional[str] = None
-    court: Optional[str] = None
-    legislation_type: Optional[str] = None
-    current_only: Optional[bool] = False
-    record_type: Optional[str] = None
-    sessions: Optional[List[int]] = None
-    house: Optional[str] = None  # Westminster only (Holyrood is unicameral)
-    chat_id: Optional[int] = None
 
 
 @router.post("/api/research/plan")
@@ -67,29 +46,14 @@ async def draft_plan(body: ResearchPlanRequest, user: dict = Depends(get_current
         logger.error(f"[Research] Provider resolution failed: {e}", exc_info=True)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again.")
 
-    resolved_research_mode = settings.research_mode or body.research_mode or "legislation_only"
-
-    set_request_provider_config({
-        **provider_config,
-        "_provider": active_provider,
-        "_chat_mode": "deep_research",
-        "_research_mode": resolved_research_mode,
-        "_jurisdiction": body.jurisdiction or None,
-        "_year_from": body.year_from or None,
-        "_year_to": body.year_to or None,
-        "_date_from": body.date_from or None,
-        "_date_to": body.date_to or None,
-        "_court": body.court or None,
-        "_legislation_type": body.legislation_type or None,
-        "_current_only": body.current_only or False,
-        "_pt_record_type": body.record_type if resolved_research_mode != "westminster_records" else None,
-        "_wm_record_type": body.record_type if resolved_research_mode == "westminster_records" else None,
-        "_wm_house": body.house or None,
-        "_pt_sessions": body.sessions or None,
-        # Governs the planner's clarification `options` — the same chips, and so
-        # the same flag, as the manager's follow-up suggestions.
-        "_suggested_questions_enabled": features.get("suggested_questions_enabled", True),
-    })
+    # Planning is always deep_research, so chat_mode is fixed rather than read
+    # off the body. The cache/memo flags in the shared config are inert here
+    # (the planner runs no research tools) but cost nothing and keep the key
+    # set identical across the three endpoints.
+    set_request_provider_config(build_request_config(
+        body, provider_config, active_provider, features,
+        chat_mode="deep_research",
+    ))
 
     resolved_model = provider_config.get("model") or body.model
     # The planner is still an LLM call — take a slot on the same per-provider

@@ -11,6 +11,7 @@ import logging
 import uuid
 from typing import Callable, Optional
 
+from ..utils.audit_trace import get_audit_collector
 from .provider_factory import get_request_provider_config
 from .summarisation import call_chunk, summarise_for_query
 from .tools import (
@@ -403,6 +404,7 @@ async def run_worker_tool(
     tool_memo: Optional[dict] = None,
     memo_count_redundant: bool = False,
     context_budget: Optional[dict] = None,
+    audit_delegation: Optional[dict] = None,
 ) -> str:
     """Execute a single Worker tool call and return the (possibly summarised) result.
 
@@ -429,8 +431,19 @@ async def run_worker_tool(
             accumulated tool output would exceed the limit, results are summarised
             regardless of their own size — the per-result threshold alone does not
             bound the sum. None disables the budget.
+        audit_delegation: The audit trace's delegation record this tool call
+            belongs to (evaluation harnesses only; None on /api/chat). Passed
+            explicitly rather than read from a ContextVar so nesting stays
+            correct if worker runs are ever parallelised.
     """
     activity_id = uuid.uuid4().hex[:8]
+
+    # Audit trace: open a tool record and sniff the on_chunk callback so the
+    # external API calls the executor makes land inside THIS tool's record.
+    _audit = get_audit_collector()
+    _audit_tool = _audit.start_tool(audit_delegation, name, args) if _audit else None
+    if _audit_tool is not None:
+        parent_on_chunk = _audit.sniff_on_chunk(_audit_tool, parent_on_chunk)
 
     # Tool-result memo: exact-arg repeats within one request are served from
     # the per-request memo. In Deep Research, counted only as memo_hits — NOT
@@ -461,6 +474,11 @@ async def run_worker_tool(
             # context a second time — so it still spends context budget.
             if context_budget is not None:
                 context_budget["used"] += len(hit["final"])
+            if _audit:
+                _audit.end_tool(
+                    _audit_tool, raw_result=hit["raw"], final_result=hit["final"],
+                    memo_hit=True,
+                )
             return hit["final"]
 
     # Parliamentary search budget: after the allowed number of search/listing calls,
@@ -502,6 +520,11 @@ async def run_worker_tool(
             if parent_on_chunk:
                 await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
                 await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Search limit reached"})
+            if _audit:
+                _audit.end_tool(
+                    _audit_tool, raw_result=stop_msg, final_result=stop_msg,
+                    budget_blocked=True,
+                )
             return stop_msg
         search_budget["remaining"] -= 1
 
@@ -736,6 +759,10 @@ async def run_worker_tool(
         context_budget is not None
         and context_budget["used"] + len(result) > context_budget["limit"]
     )
+    # Audit flags — what happened to the raw result on its way to the model.
+    _audit_summarised = False
+    _audit_local_hit = False
+    _audit_truncated = False
     if len(result) > get_summarise_threshold() or _over_budget:
         if _over_budget and len(result) <= get_summarise_threshold():
             logger.info(
@@ -802,6 +829,8 @@ async def run_worker_tool(
             if timing_collector:
                 timing_collector.record_local_cache_hit(_cached["chars_in"] or len(result))
             result = _cached["summary"]
+            _audit_summarised = True
+            _audit_local_hit = True
         else:
             async def _emit_progress(msg: str) -> None:
                 if parent_on_chunk:
@@ -823,6 +852,8 @@ async def run_worker_tool(
                 _chunks = max(1, -(-_chars_in // SUMMARISE_CHUNK_CHARS))  # ceil division
                 timing_collector.record_summarisation(_chars_in, len(result), _chunks)
 
+            _audit_summarised = True
+
             # Enforce the size cap here, BEFORE the phase nudges are appended, so a
             # summary that still exceeds the threshold is trimmed without losing the
             # nudges (the chat loop's own truncation would chop them off the tail).
@@ -836,6 +867,7 @@ async def run_worker_tool(
                 if timing_collector:
                     timing_collector.record_truncation()
                 _truncated = True
+                _audit_truncated = True
                 result = (
                     result[:threshold]
                     + "\n\n[Content truncated — summary exceeded context limit]"
@@ -884,5 +916,15 @@ async def run_worker_tool(
     # model receives, so the budget tracks the real context growth.
     if context_budget is not None:
         context_budget["used"] += len(result)
+
+    if _audit:
+        _audit.end_tool(
+            _audit_tool,
+            raw_result=raw_result,
+            final_result=result,
+            summarised=_audit_summarised,
+            local_cache_hit=_audit_local_hit,
+            truncated=_audit_truncated,
+        )
 
     return result

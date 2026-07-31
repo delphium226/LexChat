@@ -152,9 +152,23 @@ SSE event types:
 ## 4. System Chat (`/api/system`) — Auth required
 
 ### POST `/api/system/chat`
-Machine-to-machine variant of `/api/chat`. Relays all internal SSE events including tool calls and API call start/end events. Same request shape as `/api/chat`. Additional event types:
+Machine-to-machine variant of `/api/chat` for evaluation harnesses. Accepts **exactly** the `/api/chat` body (the model subclasses it, so parity is structural) plus two audit-only fields:
+
+| Field | Default | Purpose |
+|---|---|---|
+| `audit` | `true` | Emit the structured `audit` event |
+| `audit_max_field_chars` | `0` | Truncate long strings in the trace; `0` = no truncation |
+
+Runs the same pipeline with `emit_tool_details=True`, so it additionally relays:
 - `tool_call` — model's tool call payload
-- `api_call_start` / `api_call_end` — LEX API request/response details
+- `api_call_start` / `api_call_end` — external API request/response details
+- `audit` — **structured trace of the whole run**, emitted once immediately before `result`
+
+Deep Research works here exactly as on `/api/chat`: draft a plan with `POST /api/research/plan`, then send it back as `deep_research_plan` with `chat_mode: "deep_research"`. Sending `chat_mode: "deep_research"` **without** a plan is a `400`, not a silent fall-through to standard research.
+
+Timing rows are persisted with `source = "eval"` so evaluation traffic stays separable from app traffic in the Efficiency and Cache tabs.
+
+See `docs/api/AUDIT_TRACE.md` for the full `audit` event schema and consumer guidance.
 
 ---
 

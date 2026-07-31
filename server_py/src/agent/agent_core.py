@@ -19,6 +19,7 @@ from ..prompts import (
     get_planner_system_prompt,
     get_worker_system_prompt,
 )
+from ..utils.audit_trace import get_audit_collector
 from ..utils.suggestions import diagnose_suggestions, extract_suggestions
 from .agent_shared import describe_agent_error, run_worker_tool
 from .federation_client import (
@@ -178,6 +179,12 @@ async def run_worker_agent(
     research_mode = cfg.get("_research_mode", "legislation_only")
     summarise_model = cfg.get("summarisation_model") or model
 
+    # Audit trace (evaluation harnesses only — None on /api/chat). One worker
+    # run is one delegation, which is the right granularity for BOTH callers:
+    # a Manager delegate_research call and a Deep Research plan step.
+    _audit = get_audit_collector()
+    _audit_delegation = _audit.start_delegation(query) if _audit else None
+
     messages = [
         {"role": "system", "content": get_worker_system_prompt(research_mode, cfg)},
         {"role": "user", "content": query},
@@ -211,14 +218,22 @@ async def run_worker_agent(
             tool_memo=tool_memo,
             memo_count_redundant=memo_count_redundant,
             context_budget=context_budget,
+            audit_delegation=_audit_delegation,
         )
 
-    result = await chat_loop_fn(
-        messages, model, cancel_event, num_ctx,
-        worker_tools, worker_tool_executor, None,  # on_chunk=None for worker to avoid mixing tokens
-        emit_tool_details=emit_tool_details,
-        timing_collector=timing_collector,
-    )
+    try:
+        result = await chat_loop_fn(
+            messages, model, cancel_event, num_ctx,
+            worker_tools, worker_tool_executor, None,  # on_chunk=None for worker to avoid mixing tokens
+            emit_tool_details=emit_tool_details,
+            timing_collector=timing_collector,
+        )
+    except BaseException as e:
+        # Close the audit delegation on the failure path too — a trace that
+        # simply ends mid-delegation is indistinguishable from a hang.
+        if _audit:
+            _audit.end_delegation(_audit_delegation, error=describe_agent_error(e) or type(e).__name__)
+        raise
 
     # A4: validate the report structure and, if malformed, issue ONE no-tools
     # reformat retry. Skipped in conversational chat mode (deliberately unstructured).
@@ -229,6 +244,8 @@ async def run_worker_agent(
             logger.info("[Worker] Report failed structure check — issuing one reformat retry")
             if timing_collector:
                 timing_collector.record_report_reformat()
+            if _audit:
+                _audit.mark_reformatted(_audit_delegation)
             result["content"] = await _reformat_worker_report(
                 chat_loop_fn, content, research_mode, model,
                 cancel_event, num_ctx, timing_collector=timing_collector,
@@ -250,6 +267,13 @@ async def run_worker_agent(
             {**{k: v for k, v in src.items() if not k.startswith("_")}, "n": i + 1}
             for i, src in enumerate(kept)
         ]
+
+    if _audit:
+        _audit.end_delegation(
+            _audit_delegation,
+            report=result.get("content", "") or "",
+            reformatted=bool(_audit_delegation and _audit_delegation.get("reformatted")),
+        )
 
     return result
 
@@ -586,6 +610,9 @@ async def process_user_request(
                 answer = await consult_peer(peer, question, depth=depth + 1)
                 if on_chunk:
                     await call_chunk(on_chunk, {"type": "tool_end", "tool": consult_label, "id": consult_id, "result": "Peer consult complete"})
+                _audit = get_audit_collector()
+                if _audit:
+                    _audit.record_peer_consult(peer_id, peer.name, question, answer)
                 return f"[Peer Bot: {peer.name}]\n{answer}"
             except Exception as e:
                 return f"Error consulting peer '{peer_id}': {e}"
@@ -719,6 +746,13 @@ async def run_deep_research(
 
         brief = _build_step_brief(step, approved_plan, user_query)
         logger.info(f"[DeepResearch] Step {i}/{len(steps)}: {title}")
+        # run_worker_agent opens the audit delegation, but only this loop knows
+        # the step number and the approved title — hand them over first.
+        _audit = get_audit_collector()
+        if _audit:
+            _audit.set_next_delegation_meta(
+                kind="deep_research_step", step=i, title=title,
+            )
         result = await run_worker_agent_fn(
             brief, model, cancel_event, num_ctx, on_chunk,
             emit_tool_details=emit_tool_details,

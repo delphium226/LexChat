@@ -234,6 +234,10 @@ async def init_db() -> None:
             # reformat trends are only meaningful from this release onward.
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS report_reformat_retries INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS model VARCHAR(120)",
+            # Traffic origin ("app" / "eval"). Pre-column rows stay NULL, which
+            # reads as app traffic — /api/system/chat wrote no timing rows at all
+            # before this release, so there is nothing to backfill.
+            "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS source VARCHAR(16)",
             # Committee SP TV slugs can exceed 128 chars (they embed the full debate
             # title), so widen slug from the original VARCHAR(128) to TEXT on existing
             # DBs. Guarded so it only runs while the column is still varchar.

@@ -158,6 +158,12 @@ class RequestTiming(Base):
     # assistant message, but a request that errors before saving one still writes
     # a timing row, so the metric is kept self-contained rather than joined.
     model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # Traffic origin: "app" (/api/chat) or "eval" (/api/system/chat). Evaluation
+    # harnesses drive real research runs at real cost, so their timings are worth
+    # keeping — but they are synthetic traffic and would otherwise silently skew
+    # the Efficiency bands. Recorded so the two can be separated; the dashboards
+    # do not filter on it yet.
+    source: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (

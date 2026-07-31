@@ -3,11 +3,11 @@ import json
 import logging
 import time
 import uuid
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from ..agent.agent_shared import describe_agent_error
 from ..agent.provider_factory import (
@@ -19,11 +19,12 @@ from ..agent.provider_factory import (
     get_run_deep_research_from_context,
     set_request_provider_config,
 )
-from ..config import MAX_TOTAL_DOC_CHARS, evaluate_efficiency_breaches, settings
+from ..config import MAX_TOTAL_DOC_CHARS, evaluate_efficiency_breaches
 from ..database import async_session_maker
 from ..dependencies import get_current_user
 from ..models import ActivityLog, Chat, Document, Matter, RequestTiming
 from ..utils.stopwatch import TimingCollector
+from .agent_request import ChatRequest, build_request_config, resolve_research_mode
 from .developer import _read_features
 
 logger = logging.getLogger("app")
@@ -54,47 +55,6 @@ async def get_models(user: dict = Depends(get_current_user)):
     if models and not marked:
         models[0]["active"] = True
     return models
-
-
-class ResearchPlanStep(BaseModel):
-    """One approved Deep Research plan step (user-editable, so validated here)."""
-    id: Optional[int] = None
-    title: str = Field(..., min_length=1, max_length=500)
-    detail: str = Field("", max_length=4000)
-
-
-class DeepResearchPlan(BaseModel):
-    """The approved plan sent back for execution. Each step is a full worker
-    run (real cost), so the step count is hard-capped server-side."""
-    scope_note: str = Field("", max_length=2000)
-    steps: List[ResearchPlanStep] = Field(..., min_length=1, max_length=8)
-
-
-class ChatRequest(BaseModel):
-    messages: List[dict]
-    model: str
-    num_ctx: Optional[int] = None
-    chat_mode: Optional[str] = "research"
-    research_mode: Optional[str] = "legislation_only"
-    jurisdiction: Optional[str] = None
-    year_from: Optional[int] = None
-    year_to: Optional[int] = None
-    date_from: Optional[str] = None
-    date_to: Optional[str] = None
-    court: Optional[str] = None
-    legislation_type: Optional[str] = None
-    current_only: Optional[bool] = False
-    # Parliamentary-mode filters (parliament / Westminster bots only).
-    # record_type and sessions are shared fields whose vocabulary depends on the
-    # bot's research mode: Holyrood record types + Sessions 1-7, or Westminster
-    # record types + Parliament terms. `house` is Westminster-only (Holyrood is
-    # unicameral) and is ignored by every other mode.
-    record_type: Optional[str] = None
-    sessions: Optional[List[int]] = None
-    house: Optional[str] = None
-    chat_id: Optional[int] = None
-    # Deep Research execution: the user-approved plan (chat_mode="deep_research")
-    deep_research_plan: Optional[DeepResearchPlan] = None
 
 
 @router.post("/api/chat")
@@ -136,49 +96,12 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
         doc_context = await _load_doc_context(body.chat_id) if body.chat_id else ""
         matter_context = await _load_matter_context(body.chat_id) if body.chat_id else ""
 
-        _resolved_research_mode = settings.research_mode or body.research_mode or "legislation_only"
-
-        set_request_provider_config({
-            **provider_config,
-            "_provider": active_provider,
-            "_chat_mode": body.chat_mode or "research",
-            "_research_mode": _resolved_research_mode,
-            "_jurisdiction": body.jurisdiction or None,
-            "_year_from": body.year_from or None,
-            "_year_to": body.year_to or None,
-            "_date_from": body.date_from or None,
-            "_date_to": body.date_to or None,
-            "_court": body.court or None,
-            "_legislation_type": body.legislation_type or None,
-            "_current_only": body.current_only or False,
-            # record_type is routed to the enforcement key matching this bot's
-            # mode — the two taxonomies are disjoint, so a Holyrood value must
-            # never reach the Westminster filter (or vice versa).
-            "_pt_record_type": body.record_type if _resolved_research_mode != "westminster_records" else None,
-            "_wm_record_type": body.record_type if _resolved_research_mode == "westminster_records" else None,
-            "_wm_house": body.house or None,
-            "_pt_sessions": body.sessions or None,
-            "_doc_context": doc_context,
-            "_matter_context": matter_context,
-            # Local-cache key source (D8 Phase 5): in standard mode the cache
-            # keys on the RAW user query, not the LLM-paraphrased delegation
-            # brief (which varies per model/run and makes cross-user hits
-            # luck). Deep Research must NOT set this — each step's approved
-            # plan text is the right key; steps with different intents must
-            # not collide.
-            "_cache_key_query": (
-                "" if body.chat_mode == "deep_research"
-                else next(
-                    (m.get("content", "") for m in reversed(body.messages)
-                     if m.get("role") == "user"),
-                    "",
-                )
-            ),
-            "_prompt_caching_enabled": features.get("prompt_caching_enabled", True),
-            "_tool_memo_enabled": features.get("tool_memo_enabled", True),
-            "_local_prompt_cache_enabled": features.get("local_prompt_cache_enabled", True),
-            "_suggested_questions_enabled": features.get("suggested_questions_enabled", True),
-        })
+        set_request_provider_config(build_request_config(
+            body, provider_config, active_provider, features,
+            chat_mode=body.chat_mode or "research",
+            doc_context=doc_context,
+            matter_context=matter_context,
+        ))
         # Always use the server-side configured model — the frontend may be stale
         # (e.g. user switched provider via Dev tab without refreshing the page).
         resolved_model = provider_config.get("model") or body.model
@@ -322,9 +245,7 @@ async def chat_endpoint(body: ChatRequest, request: Request, user: dict = Depend
                 # Effective per-request research mode (bot override wins, then the
                 # frontend value). Persisted for future per-mode filtering; not
                 # consumed by the efficiency queries (those key on the bot profile).
-                metrics["research_mode"] = (
-                    settings.research_mode or body.research_mode or "legislation_only"
-                )
+                metrics["research_mode"] = resolve_research_mode(body)
                 # Segments Deep Research (N delegations by design) from standard
                 # requests; evaluate_efficiency_breaches skips deep_research rows.
                 metrics["chat_mode"] = body.chat_mode or "research"
