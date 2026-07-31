@@ -3,13 +3,6 @@
 ## What This Project Is
 AILA (AI Legal Assistant) is an AI-powered legal research assistant for a **UK government organisation**. Users are qualified lawyers querying UK legislation and case law. The system uses a Manager-Worker agent architecture — the Manager handles conversation, the Worker performs deep research via the LEX API.
 
-## Tech Stack
-- **Frontend**: React 19 + Vite + Tailwind CSS (`client/`)
-- **Backend**: Python 3.11 + FastAPI + uvicorn (`server_py/`)
-- **Database**: PostgreSQL 15 (`lexuser`/`lexpassword`/`lexchat`)
-- **AI Engine**: Ollama (proxies to Ollama-hosted cloud models) **or** OpenRouter — switchable at runtime via Admin Portal
-- **Model**: Configured per-provider in Admin Portal → Developer tab; defaults to `mistral-large-3:675b-cloud` (Ollama)
-
 ## Deployment Target
 - **OS**: Windows Server 2022, **internet-restricted** (outbound access limited to whitelisted addresses only — not fully air-gapped)
 - **No Docker, no WSL** — everything runs natively
@@ -21,6 +14,14 @@ AILA (AI Legal Assistant) is an AI-powered legal research assistant for a **UK g
 `main` — the active deployment branch, and the branch work happens on directly. Commit straight to `main` rather than opening a feature branch unless asked otherwise; the target pulls from `origin/main`, so anything not pushed there is invisible to it.
 
 Merged and live: federation, Deep Research mode, the full caching stack (D5 provider prompt caching + tool memo, D6 cache admin UI, D7 local prompt cache, D8 cache review fixes), and Westminster as a separate federated bot (W0, merged 2026-07-28 in `cdbd15b`). See the Deep Research Mode and Caching Stack architectural notes below.
+
+## Where the rest of the context lives
+Loaded on demand, not every session:
+- **`repo-map` skill** — annotated index of which file does what, across backend and frontend.
+- **`external-apis` skill** — the seven external APIs, base URLs, auth, endpoints.
+- **`client/CLAUDE.md`** — frontend design-token rules; loads automatically when working under `client/`.
+- **`docs/frontend/design-system.md`** — full token and button/component class reference.
+- Env vars are declared in `server_py/src/config.py`; start/stop scripts are in `deployment/`.
 
 ## Key Architectural Decisions
 
@@ -145,19 +146,7 @@ Three cooperating cost-reduction layers, all additive and fail-soft, gated by fe
 
 ### External API Dependencies
 
-All external APIs called at query time. URLs must be reachable from the deployment target.
-
-| API | Base URL | Used by | Auth | Notes |
-|---|---|---|---|---|
-| LEX API | `https://lex.lab.i.ai.gov.uk` | Legislation bot | None (internal) | POST endpoints: `/legislation/search`, `/legislation/section/search`, `/legislation/text` |
-| National Archives case law | `https://caselaw.nationalarchives.gov.uk` | Legislation bot (case law mode) | None | `search_case_law`: `GET /atom.xml` with `query`, `court`, `date_from`, `date_to` params; returns Atom XML. `get_case_law_text`: `GET /{case-path}/data.xml` to fetch full judgment text (LegalDocML/AKN XML) |
-| TheyWorkForYou (TWFY) | `https://www.theyworkforyou.com/api` | Parliament bot | `TWFY_API_KEY` | Endpoints: `getHansard` (Scottish Parliament plenary/written answers — post-filtered to `/sp/` listurls) and `getMSPs` (`get_member_info`). Westminster endpoints are no longer used. |
-| Scottish Parliament Bills | `https://data.parliament.scot/api/bills` | Parliament bot | None | `search_bills`; full list fetched, filtered client-side (no server-side search param) |
-| SP Official Report | `https://www.parliament.scot/chamber-and-committees/official-report/search-what-was-said-in-parliament` | Parliament bot crawler + `get_scottish_plenary_debate`/`get_scottish_committee_transcript` | None | Crawled by `parliament_crawler.py` at startup and daily; three request types on the same base URL: (1) listing page with `showCommittee=true` (committee) or `showPlenary=true` (plenary), plus `dateSelect=custom&dtDateFrom=X&dtDateTo=Y`; (2) meeting detail pages at `/{slug}?meeting={id}`; (3) individual transcript pages at `/{slug}?meeting={id}&iob={iob_id}`. The two `get_scottish_*` retrieval tools also fetch (3) live at query time |
-| OpenRouter | `https://openrouter.ai/api/v1` | Both (optional) | `OPENROUTER_API_KEY` | Only when OpenRouter is set as active provider in Admin Portal |
-| SP TV (video deep links) | `https://www.scottishparliament.tv` + `https://scotparl-live.cdn.vustreams.com` | Parliament bot (when `ENABLE_VIDEO_DEEPLINKS=true`) | None | `GET /meeting/{slug}` (eventId), `GET /Player/PlaybackModel/{eventId}` (streams), HLS `.m3u8` + WebVTT caption segments. Both hosts must be whitelisted on the target or the feature auto-disables (fails soft to the plain Official Report citation) |
-
-To verify all endpoints are reachable from a deployment target, run `server_py/test_apis.ps1` (reads `TWFY_API_KEY` from `.env`; TWFY tests skip gracefully if the key is absent).
+Seven external APIs are called at query time (LEX, National Archives case law, TheyWorkForYou, SP Bills, SP Official Report, OpenRouter, SP TV). **Every base URL must be whitelisted on the internet-restricted target.** Full table — base URLs, auth, endpoints — is in the `external-apis` skill. Verify reachability with `server_py/test_apis.ps1`.
 
 ### Evaluation Endpoint & Audit Trace
 `/api/system/chat` is the machine-to-machine variant of `/api/chat`, used by the external [lexchat-eval](https://github.com/tomwilsonsco/lexchat-eval) harness. Its one functional difference is `emit_tool_details=True` — an eval harness has to see what was *retrieved*, not just what was answered, and `/api/chat` does not emit `tool_call` / `api_call_start` / `api_call_end`. **Handover spec: `docs/api/AUDIT_TRACE.md`.**
@@ -186,6 +175,7 @@ The Admin Portal → Efficiency tab and the per-request EFFICIENCY breach alerts
 - **Additive-only, no backfill.** New columns default to 0/NULL via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. Existing parliament-bot rows keep their old miscounted phase/redundant values; per-mode trends are only trustworthy from this change onward. `/api/stats/efficiency` gains additive keys only (`kpi.avgBudgetBlocked`, top-level `researchMode`, `worst[].budgetBlocked`) and returns the selected profile in `thresholds`.
 
 ### Other
+- **Activity Log is mostly synthesised, not stored** — only `LOGIN` rows are written explicitly to `activity_log` (in `auth.py`); `QUERY`, `FEEDBACK`, `SURVEY`, and `ERROR` events are derived at query time via UNION ALL over `messages`, `product_feedback`, and `service_health_logs`. Filtering is applied **in SQL inside each UNION branch**, not post-fetch, so `limit` reflects the filtered set.
 - Python deps are installed **globally** (no venv) on the target — the offline installer uses `pip install` directly
 - The frontend is **pre-built on the dev machine** and committed including `client/dist/` — the target has no Node.js
 - The backend serves the pre-built `client/dist` as static files
@@ -199,26 +189,6 @@ The Admin Portal → Efficiency tab and the per-request EFFICIENCY breach alerts
 - The start script emits harmless `find` errors (bash/cmd `find` mismatch) — PostgreSQL still starts correctly
 - PostgreSQL credentials are the same locally and on the target: `lexuser`/`lexpassword`/`lexchat`
 
-## Environment Variables (server_py/.env)
-| Variable | Purpose | Default |
-|---|---|---|
-| `OLLAMA_BASE_URL` | Ollama endpoint | `http://localhost:11434` |
-| `OLLAMA_API_KEY` | Bearer token for cloud-routed Ollama | *(blank)* |
-| `OPENROUTER_API_KEY` | OpenRouter API key | *(blank)* |
-| `OPENROUTER_BASE_URL` | OpenRouter endpoint | `https://openrouter.ai/api/v1` |
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://lexuser:lexpassword@localhost:5432/lexchat` |
-| `JWT_SECRET` | Auth token signing key | `dev_secret_key_change_me` |
-| `BOT_ID` | This bot's identifier (used by `/api/bot-info` fallback) | `legislation_bot` |
-| `BOT_CONFIG_PATH` | Path to `bot_config.json`; resolved relative to CWD (uvicorn runs from `server_py/`) | *(blank — identity not loaded)* |
-| `RESEARCH_MODE` | Override research mode for this bot instance; set to `parliamentary_records` for the parliament bot | *(blank — uses frontend value)* |
-| `TWFY_API_KEY` | TheyWorkForYou API key for the Scottish Parliament tools; free at theyworkforyou.com/api/key | *(blank)* |
-| `ENABLE_VIDEO_DEEPLINKS` | Parliament bot only: enable SP TV video timestamp deep links (caption crawl + link enrichment on plenary citations). Dark-launched — off by default | `false` |
-| `SPTV_BASE_URL` | Scottish Parliament TV base URL (meeting pages + playback model) | `https://www.scottishparliament.tv` |
-| `LOG_LEVEL` | Base level for the app/agent/http/crawler/sptv loggers (e.g. `DEBUG`, `INFO`, `WARNING`). Read directly by `utils/logger.py` at startup — no code change needed to raise verbosity on the target | `INFO` |
-| `CONSOLE_LOG_LEVEL` | Optional override for console output only; blank = same as `LOG_LEVEL` | *(blank)* |
-
-All `.env` values are startup defaults only. Provider-specific settings (base URL, API key, model, temperature, concurrency) can be overridden at runtime via Admin Portal → Developer tab and are persisted in the DB.
-
 ## Deployment Workflow
 The **only** way to deploy to the target server is via GitHub — the target does a `git pull` from `origin/main`. There is no direct file transfer or zip-based deployment.
 
@@ -230,127 +200,3 @@ The **only** way to deploy to the target server is via GitHub — the target doe
 
 Always commit and push together in the same step — uncommitted or unpushed changes are invisible to the target.
 
-## Start / Stop
-| Action | Script |
-|---|---|
-| Start | `deployment\start_native.cmd` |
-| Stop | `deployment\stop_native.cmd` |
-
-Start script launches PostgreSQL, then Ollama, then the FastAPI backend. Stop script kills uvicorn, Ollama, and the PostgreSQL Windows service.
-
-## Frontend Design System
-
-The full token/component reference lives at `docs/frontend/design-system.md`. **Read it before writing any new frontend UI.** Key rules:
-
-- Use design token classes — never raw Tailwind palette values (`text-blue-600`, `bg-zinc-800`, `text-gray-500`, etc.)
-- **`bg-brand` ≠ `bg-accent`** — `bg-brand` is for primary CTA button backgrounds; `bg-accent` is for focus rings, active indicators, and selected states only. Mixing these up is the most common mistake.
-- `bg-brand-navy` / `hover:bg-brand-navy-dark` are **old non-token classes** that no longer exist — replace with `bg-brand` / `hover:bg-brand-hover`.
-- Token-backed classes (`text-ink-*`, `bg-paper`, `bg-brand`, etc.) switch for dark mode automatically — no `dark:` variants needed for colour.
-- All button labels, inputs, and UI chrome use `font-ui`; legal content uses `font-serif`.
-
-### Button quick-reference
-
-| Variant | Key classes |
-|---|---|
-| Primary | `bg-brand hover:bg-brand-hover text-white font-ui text-sm font-medium rounded-md px-4 py-2 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed` |
-| Secondary | `bg-paper border border-ink-200 text-ink-900 font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-ink-50 focus-visible:ring-2 focus-visible:ring-accent` |
-| Danger | `bg-danger text-white font-ui text-sm font-medium rounded-md px-4 py-2 hover:opacity-90 focus-visible:ring-2 focus-visible:ring-danger` |
-| Icon | `size-[30px] flex items-center justify-center rounded-md text-ink-500 hover:bg-ink-100 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-accent` |
-| Filter pill (active) | `bg-accent text-white border-transparent rounded-full px-3 py-1 font-ui text-xs` |
-| Filter pill (inactive) | `border border-ink-200 text-ink-600 rounded-full px-3 py-1 font-ui text-xs hover:bg-ink-50` |
-
-## Key Files
-| File | Purpose |
-|---|---|
-| `client/src/App.jsx` | Main frontend app — chat UI, favicon swap, dynamic model fetch, dynamic bot branding, post-login notice gate; renders suggestion chips under the **last** assistant message only |
-| `client/src/components/SuggestedQuestions.jsx` | One-click chips for the assistant's follow-up / clarification questions; presentational, token-only classes (`accent`, not `brand`), click calls `handleSend(text)` |
-| `client/src/utils/exportChat.js` | Clipboard/export rendering; `stripThinking`, `stripSuggestions`, and `sanitiseAssistantContent` (the sanitiser used by display, copy, and export) |
-| `client/src/components/DataSensitivityNotice.jsx` | Post-login splash screen — data sensitivity warning shown on every login session |
-| `docs/frontend/design-system.md` | Design token reference — colours, typography, button/component patterns |
-| `client/src/pages/AdminPortal.jsx` | Admin portal including Developer tab (provider config + cache feature flags), Federation tab (peer registry CRUD), and Cache tab |
-| `client/src/pages/admin/CacheTab.jsx` | Admin Portal Cache tab — caching-stack KPIs, daily series, recent hits, flag state, "Clear local cache" purge; backed by `GET /api/stats/cache` |
-| `client/src/pages/Settings.jsx` | Account settings page — change password form |
-| `server_py/src/config.py` | `MODEL_LIST`, `OPENROUTER_MODEL_LIST`, system prompts, app settings; `bot_id`/`bot_config_path` |
-| `server_py/src/agent/tools/` | Tools package (split from the former single-file tools.py; `__init__.py` re-exports the full surface): `schemas.py` (tool schemas, `get_manager_tools`, `get_worker_tools`), `lex.py` (`_slim_search_results`, jurisdiction matching), `parliament.py` (`execute_parliament_tool`, `_slim_hansard_results`, `_search_committee_transcripts_db`, `_search_plenary_db`, `_or_tsquery` OR-fallback helper, `_fetch_sp_page_with_retry`, SP HTML parsers incl. `_parse_sp_plenary_transcript`/`_parse_sp_plenary_meetings`), `caselaw.py` (Atom/AKN parsing, `detect_appellate_decisions`/`_court_rank`/`_party_tokens`; `_TNA_NS`/`_TNA_AKN_NS` namespaces), `executor.py` (`execute_worker_tool`, `_request_with_retry` LEX backoff) |
-| `server_py/src/agent/agent_shared.py` | Shared worker tool execution pipeline; `run_worker_tool` (includes `search_budget` enforcement for parliamentary mode, phase 2 nudges for all search tools, per-request `tool_memo` short-circuit, and `local_prompt_cache` lookup/store gated by `CACHEABLE_TOOLS`) |
-| `server_py/src/agent/agent_core.py` | Provider-agnostic agent core: `run_worker_agent`, Deep Research `draft_research_plan` (Phase A planner) + `run_deep_research` (Phase B code-orchestrated execution + synthesis), `_normalise_plan`, `_build_step_brief`; report-structure validation (`_report_needs_reformat`, `_reformat_worker_report`, `_extract_section_headers`); the single manager return where the `<suggestions>` block is stripped and attached |
-| `server_py/src/utils/suggestions.py` | `extract_suggestions` — parses/strips the assistant's `<suggestions>` block (last-match, unterminated-tag tolerant, deduped, capped 4×160 chars); fail-soft, never raises |
-| `server_py/src/services/parliament_crawler.py` | Background crawler — **incremental** (see "Incremental crawl model"): committee `backfill_sessions()` (one-shot, adaptive start via `_backfill_window_start`) + `crawl_sp_new_meetings()` (daily trailing-window delta, `background_crawl_loop()`); plenary `backfill_plenary()` + `crawl_sp_new_plenary()` (`background_plenary_crawl_loop()`, self-staggered); shared `_fetch_window_meetings()` date-window helper; video: `backfill_captions()`/`backfill_committee_captions()` + `_capture_meeting_captions()` hook (staggered after plenary backfill; gated on `ENABLE_VIDEO_DEEPLINKS`); reuses HTML parsers from the tools package; only runs when `RESEARCH_MODE=parliamentary_records` |
-| `server_py/src/agent/ollama_client.py` | Ollama agent implementation (chat_loop, worker, summarisation, federation) |
-| `server_py/src/agent/openrouter_client.py` | OpenRouter agent implementation (OpenAI-compatible, federation) |
-| `server_py/src/agent/provider_factory.py` | Provider resolution, ContextVar config, queue/semaphore caches; `get_summarise_model()` |
-| `server_py/src/agent/federation_client.py` | `load_peer_registry`, `build_peer_descriptions`, `consult_peer`; `ConsultRequest`/`ConsultResponse` |
-| `server_py/src/routers/ai.py` | `/api/models` and `/api/chat` endpoints (also sets the cache/feature-flag ContextVar keys per request) |
-| `server_py/src/routers/agent_request.py` | Shared request models (`AgentRequestBase`/`ChatRequest`/`ResearchPlanRequest`) + `build_request_config` — the single definition used by `/api/chat`, `/api/system/chat` and `/api/research/plan` |
-| `server_py/src/routers/system.py` | `/api/system/chat` — machine-to-machine eval endpoint; same pipeline with `emit_tool_details=True` plus the `audit` event |
-| `server_py/src/utils/audit_trace.py` | `AuditCollector` — structured run trace (delegations → tools → api_calls, raw vs final results); ContextVar-gated, fail-soft |
-| `docs/api/AUDIT_TRACE.md` | Handover spec for the lexchat-eval harness: what changed, the `audit` event schema, and the migration off stream-parsing |
-| `server_py/src/routers/research.py` | `POST /api/research/plan` — Deep Research Phase A planner (plain JSON, not SSE) |
-| `server_py/src/services/local_prompt_cache.py` | Cross-user/cross-provider Worker-summary cache (D7/D8): `canonicalise_query`, `content_hash`, `lookup`, `store`, `CACHEABLE_TOOLS` allowlist; exact-match only, fail-soft |
-| `server_py/src/routers/developer.py` | Developer-only endpoints including provider config GET/POST, feature-flags GET/POST (incl. `research_mode_enabled`/`deep_research_mode_enabled`), `GET /developer/activity-log`, and `GET /api/developer/users-export` (admin-only CSV export) |
-| `server_py/src/utils/log_context.py` | Request-ID logging context: `request_id_var` ContextVar + `RequestIdFilter` that injects the current request id into every LogRecord for cross-log correlation (`-` placeholder outside a request) |
-| `server_py/src/routers/identity.py` | `GET /api/bot-info`, `GET /api/bot/logo` — no auth required |
-| `server_py/src/routers/federation.py` | `POST /api/consult` — receives peer consultation requests; sets `_consulted` so the manager prompt suppresses clarifying/follow-up questions |
-| `server_py/src/routers/peers.py` | Admin CRUD for peer registry — `api_key` never returned |
-| `server_py/src/models.py` | SQLAlchemy models — includes `AppSetting`, `Chat.provider`, `Message.model/provider`, `Message.research_plan` (Deep Research audit column), `RequestTiming` (incl. additive cache columns `memo_hits`, `local_cache_hits`, `local_cache_chars_saved`, `cached_prompt_tokens`, `cache_discount_usd`, `search_budget_blocked`, `report_reformat_retries`, `model`), `LocalPromptCache` (cross-user summary cache; unique `(content_hash, query_hash)`), `ActivityLog`, `PeerBot`, `SpCommitteeItem` (SP committee transcript DB with GIN FTS index on `full_text`), `SpPlenaryItem` (SP plenary transcript DB, same schema; GIN FTS on `full_text`; unique `uq_sp_plenary_meeting_iob`), `SpVideoCaption` (one row per SP TV event; cached caption `transcript` + `offset_index` for video deep links; unique `event_id`) |
-| `server_py/src/services/sptv_client.py` | SP TV client — `plenary_slug_for_date`, `resolve_event` (meeting page → eventId), `get_playback_model`, `fetch_caption_transcript` (HLS → WebVTT → `(transcript, offset_index)` using **segment-ordinal × 6s** timing). All fail-soft |
-| `server_py/src/services/caption_match.py` | Caption matcher — `match_speech`, `build_deeplink`, `annotate_speeches`; rarest-phrase match anchored to the agenda item, real Europe/London DST for `clip_start`. Unit-tested against `tests/fixtures/sptv_captions_20164.json.gz` |
-| `client/src/components/ActivityLogModal.jsx` | Admin activity log modal — unified feed of logins, queries, feedback, surveys, errors; auto-refreshes every 10 min |
-| `bots/legislation/bot_config.json` | Legislation bot identity + peer seed (default/template bot config) |
-| `bots/parliament/bot_config.json` | Parliament bot identity; `research_mode: "parliamentary_records"` under `agent` key |
-| `bots/parliament/.env` | Parliament bot env overrides — `RESEARCH_MODE`, `TWFY_API_KEY`, `DATABASE_URL` (`lexchat_parliament`), `PORT=8001` |
-| `docs/parliament/PARLIAMENTARY_DATA.md` | Parliamentary data model reference — Holyrood sessions, committee-transcript hierarchy (meeting→agenda item→speeches), `sp_committee_items` schema, and a per-data-type availability matrix (search/retrieval/date-filter/session coverage). Note: crawling older sessions requires `dateSelect=custom` |
-| `shared/scripts/new_bot.ps1` | Provision a new bot from the legislation template |
-| `shared/scripts/register_peer.ps1` | Register a peer bot via the admin API |
-| `docs/deployment/LOCAL_SETUP.md` | Multi-bot local dev workflow |
-| `docs/deployment/NATIVE_DEPLOYMENT.md` | Full deployment reference |
-
-## Admin Portal — Developer Tab
-Available to the `admin` user only. Contains:
-- **LLM Provider panel** — configure both providers (base URL, API key, model, temperature, max concurrent requests, max concurrent summarisations); separate Save Settings and Set as Active buttons
-- **Feature flags** — persisted per-bot in the `features` `AppSetting` JSON; consumed via the request provider-config ContextVar. All default ON (absent key = enabled), so direct callers/tests/parliament bot and old saved JSON stay unchanged:
-  - `prompt_caching_enabled` / `tool_memo_enabled` — gate the D5 provider prompt caching and tool memo respectively.
-  - `matters_enabled` — gate the Matters feature.
-  - `suggested_questions_enabled` — gates the one-click question chips (manager follow-ups **and** Deep Research planner clarification options). When off the model is told to write follow-ups and clarification options into the answer body instead; see the Suggested Questions note.
-  - `research_mode_enabled` / `deep_research_mode_enabled` — gate the **Research** and **Deep Research** chat modes. When off, the option is hidden from the sidebar mode selector; if a user's active mode is disabled the client falls back to **Conversational** (always available) and persists it. Backend keys are additive/defaulted so old client POST bodies stay valid.
-- **Activity Log** — unified feed of user logins, queries submitted, feedback ratings, survey responses, and service health errors; filterable by time range; auto-refreshes every 10 minutes; powered by `GET /developer/activity-log`
-- **Synthetic Data Generation** — seed 100 test users with 6 months of chat history
-- **User Export (CSV)** — admin-only "Export Users (CSV)" button opens a modal with a copy-pasteable CSV of all user accounts (name, email, role); quote/escaped fields. Backed by `GET /api/developer/users-export` on the `admin_router` (inherits the admin auth check); works for any bot process against its own DB.
-- **Danger Zone** — wipe all data except the admin account
-
-## Admin Portal — Cache Tab
-Available to the `admin` user only (`admin/CacheTab.jsx`, backed by `GET /api/stats/cache`). Surfaces the whole caching stack: KPI row, daily series, and recent-hits table over the `request_timings` cache columns (`memo_hits`, `cached_prompt_tokens`, `cache_discount_usd`, `local_cache_hits`, `local_cache_chars_saved`) plus current feature-flag state. Includes a **"Clear local cache"** purge button and small print explaining the Gemini-implicit-caching caveat (a hit shows saved tokens but `cache_discount_usd = 0`). See the Caching Stack architectural note.
-
-## Admin Portal — Federation Tab
-Available to the `admin` user only. Contains:
-- **Peer table** — lists all registered peers with name, peer_id, base URL, description, API key indicator, and enable/disable toggle
-- **Delete** — removes a peer from the registry immediately
-- **Add Peer form** — `peer_id`, `name`, `base_url`, `api_key` (password field, write-only), `description`, `enabled` checkbox
-- API key is **never displayed** after save — `has_api_key: true/false` indicator only
-
-## Activity Log
-- DB table: `activity_log` (columns: `id`, `event_type`, `username`, `description`, `created_at`); index on `created_at`
-- Model: `ActivityLog` in `server_py/src/models.py`
-- Currently only `LOGIN` events are written explicitly (in `auth.py` on successful login); `QUERY`, `FEEDBACK`, `SURVEY`, and `ERROR` events are synthesised at query time via UNION ALL from `messages`, `product_feedback`, and `service_health_logs`
-- Endpoint: `GET /developer/activity-log?days=7&limit=500` — admin only; `days=all` disables the date filter. Event-type and user filtering is applied **in SQL** (in each UNION ALL branch), not post-fetch in memory, so `limit` reflects the filtered set
-- Frontend: `ActivityLogModal.jsx` opened from the Developer tab
-
-## Post-Login Splash Screen
-- Shown on every login session, before the main app renders
-- Warns users not to enter information above OFFICIAL-SENSITIVE, personal data, privileged communications, ongoing proceedings, information under confidence, or commercially sensitive data
-- Explains that queries are processed by third-party LLM services outside the organisation's secure network
-- User must click "I understand — proceed to AILA" to dismiss; cannot be bypassed
-- State (`noticeAcknowledged`) resets to `false` on logout, ensuring the notice reappears on the next login
-- Component: `client/src/components/DataSensitivityNotice.jsx`
-
-## Favicon Behaviour
-- On mount (in `useBotIdentity.js`): the favicon is aligned with the logo the app shows everywhere else. If the bot config supplies `logo_emoji` (🏛️/⚖), that emoji is rendered to a 32×32 canvas and used; otherwise it falls back to the SVG logo file at `GET /api/bot/logo`, then to `/favicon.svg`
-- While AI is generating: swaps to animated canvas spinner driven by `requestAnimationFrame`
-- On load complete: reverts to `/favicon.svg` (or bot logo on next mount)
-- Mount logic lives in the `useBotIdentity` hook; the `loading`-driven spinner swap is a `useEffect` in `App.jsx`
-
-## Bot Identity & Branding
-- `GET /api/bot-info` (no auth) — returns `bot_id`, `name`, `tagline` from `bot_config.json` loaded at startup
-- `App.jsx` fetches bot info on mount: sets `document.title` and `botInfo` state; all "AILA" labels in the UI use `{botInfo.name}` (default `'AILA'` if the request fails)
-- `GET /api/bot/logo` — streams `bot_identity.logo_path`; 404 if not configured or file missing
-- `BOT_CONFIG_PATH` env var → path to `bot_config.json` relative to repo root; if unset, identity is not loaded and defaults apply
