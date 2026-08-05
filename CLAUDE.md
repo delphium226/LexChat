@@ -15,12 +15,15 @@ AILA (AI Legal Assistant) is an AI-powered legal research assistant for a **UK g
 
 Merged and live: federation, Deep Research mode, the full caching stack (D5 provider prompt caching + tool memo, D6 cache admin UI, D7 local prompt cache, D8 cache review fixes), and Westminster as a separate federated bot (W0, merged 2026-07-28 in `cdbd15b`). See the Deep Research Mode and Caching Stack architectural notes below.
 
+**Exception — `feature/drafting-bot` (drafting bot build, from 2026-08-05).** The legislative-drafting bot (`RESEARCH_MODE=drafting`) is built on a long-lived `feature/drafting-bot` branch and merged to `main` only when complete. This is scoped **to that project only** — everything else still commits straight to `main`. Do **not** push it to `main` or rebase `main` onto it mid-build: the target `git pull`s `origin/main`, and a half-built bot must not be pullable onto a production server. Its Session 0 (security prerequisites) is the one carve-out and landed on `main` directly, because those fixes are correct regardless of whether the drafting bot ever ships. Build spec and session ledger: `docs/drafting/BUILD_PLAN.md`.
+
 ## Where the rest of the context lives
 Loaded on demand, not every session:
 - **`repo-map` skill** — annotated index of which file does what, across backend and frontend.
 - **`external-apis` skill** — the seven external APIs, base URLs, auth, endpoints.
 - **`client/CLAUDE.md`** — frontend design-token rules; loads automatically when working under `client/`.
 - **`docs/frontend/design-system.md`** — full token and button/component class reference.
+- **`docs/drafting/BUILD_PLAN.md`** — the drafting-bot build spec and session ledger (plus `docs/drafting/SESSION_LOG.md` for what each session actually did).
 - Env vars are declared in `server_py/src/config.py`; start/stop scripts are in `deployment/`.
 
 ## Key Architectural Decisions
