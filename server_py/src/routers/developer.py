@@ -410,6 +410,19 @@ class ActivityLogEntry(BaseModel):
     created_at: Optional[str] = None
 
 
+# How much of a message body the QUERY / RESPONSE rows carry. Longer than the
+# other event descriptions because the point of those two rows is to read the
+# question and the answer against each other; the modal collapses anything long
+# behind a "Show more" toggle. Overruns get an ellipsis appended so a truncated
+# answer is visibly truncated rather than looking like a short one.
+_MESSAGE_EXCERPT_CHARS = 2000
+
+# Assistant content is stored raw, so it can still carry the model's
+# <think>/<thinking> reasoning block (the chat UI strips it at render time).
+# Stripped here too — otherwise the excerpt would be all reasoning and no answer.
+_THINKING_RE = r'<think(ing)?>.*?</think(ing)?>'
+
+
 @router.get("/activity-log", response_model=List[ActivityLogEntry])
 async def get_activity_log(
     days: str = "7",
@@ -420,6 +433,11 @@ async def get_activity_log(
     db: AsyncSession = Depends(get_db),
 ):
     """Return a unified activity feed for the admin activity log screen.
+
+    QUERY and RESPONSE are the two halves of an exchange — the user's message
+    and the assistant's reply to it. They are separate rows rather than one
+    paired row so the existing type filter can show or hide either half; being
+    seconds apart, an answer sorts immediately above the question it answers.
 
     Event-type and user filtering are applied in SQL (in the outer query,
     before the LIMIT) so a narrowed view does not lose older records to the
@@ -446,6 +464,8 @@ async def get_activity_log(
 
     outer_date_filter = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
+    params["thinking_re"] = _THINKING_RE
+
     query = text(f"""
         SELECT event_type, username, description, created_at FROM (
 
@@ -457,12 +477,32 @@ async def get_activity_log(
             SELECT
                 'QUERY' AS event_type,
                 u.username,
-                LEFT(m.content, 300) AS description,
+                CASE WHEN char_length(q.body) > {_MESSAGE_EXCERPT_CHARS}
+                    THEN LEFT(q.body, {_MESSAGE_EXCERPT_CHARS}) || '…'
+                    ELSE q.body END AS description,
                 m.created_at
             FROM messages m
             JOIN chats c ON m.chat_id = c.id
             JOIN users u ON c.user_id = u.id
+            CROSS JOIN LATERAL (SELECT btrim(m.content, E' \\t\\r\\n') AS body) q
             WHERE m.role = 'user'
+
+            UNION ALL
+
+            SELECT
+                'RESPONSE' AS event_type,
+                u.username,
+                CASE WHEN char_length(r.body) > {_MESSAGE_EXCERPT_CHARS}
+                    THEN LEFT(r.body, {_MESSAGE_EXCERPT_CHARS}) || '…'
+                    ELSE r.body END AS description,
+                m.created_at
+            FROM messages m
+            JOIN chats c ON m.chat_id = c.id
+            JOIN users u ON c.user_id = u.id
+            CROSS JOIN LATERAL (
+                SELECT btrim(regexp_replace(m.content, :thinking_re, '', 'gis'), E' \\t\\r\\n') AS body
+            ) r
+            WHERE m.role = 'assistant'
 
             UNION ALL
 

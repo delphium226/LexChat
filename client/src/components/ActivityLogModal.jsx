@@ -9,11 +9,12 @@ const DAYS_OPTIONS = [
   { label: 'All time', value: 'all' },
 ];
 
-const ALL_EVENT_TYPES = ['LOGIN', 'QUERY', 'SURVEY', 'FEEDBACK', 'ERROR', 'EFFICIENCY'];
+const ALL_EVENT_TYPES = ['LOGIN', 'QUERY', 'RESPONSE', 'SURVEY', 'FEEDBACK', 'ERROR', 'EFFICIENCY'];
 
 const BADGE_CLASSES = {
   LOGIN: 'bg-brand text-white',
   QUERY: 'bg-success-soft text-success',
+  RESPONSE: 'bg-cite-soft text-cite',
   SURVEY: 'bg-warn-soft text-warn',
   FEEDBACK: 'bg-accent-soft text-accent-ink',
   ERROR: 'bg-danger-soft text-danger',
@@ -23,12 +24,17 @@ const BADGE_CLASSES = {
 const BADGE_LABELS = {
   LOGIN: 'Login',
   QUERY: 'Query',
+  RESPONSE: 'Response',
   SURVEY: 'Survey',
   FEEDBACK: 'Feedback',
   ERROR: 'Error',
+  EFFICIENCY: 'Efficiency',
 };
 
-const LS_TYPE_KEY = 'activitylog_type_filter';
+// Bumped from `activitylog_type_filter` when RESPONSE was added: a saved
+// selection from before then cannot contain it, so returning admins would open
+// the log with answers hidden and no clue they exist.
+const LS_TYPE_KEY = 'activitylog_type_filter_v2';
 
 function loadSavedTypes() {
   try {
@@ -49,6 +55,34 @@ function EventBadge({ type }) {
     <span className={`inline-block font-ui text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${cls}`}>
       {label}
     </span>
+  );
+}
+
+// A full research answer runs to thousands of characters, so Details is clamped
+// to three lines and expands in place — otherwise a single RESPONSE row fills
+// the viewport and buries the rest of the feed.
+const CLAMP_CHARS = 220;
+
+function DetailsCell({ text }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (!text) return <span className="text-ink-400 italic">—</span>;
+
+  const clampable = text.length > CLAMP_CHARS;
+  return (
+    <div>
+      <div className={`whitespace-pre-wrap break-words ${clampable && !expanded ? 'line-clamp-3' : ''}`}>
+        {text}
+      </div>
+      {clampable && (
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className="font-ui text-xs text-accent-ink hover:underline underline-offset-2 mt-1 focus-visible:ring-2 focus-visible:ring-accent rounded"
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -195,7 +229,7 @@ export default function ActivityLogModal({ open, onClose }) {
             ))}
           </div>
           {/* Event type row — multi-select */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap gap-y-1">
             <span className="font-ui text-xs text-ink-500 w-10 shrink-0">Type:</span>
             {ALL_EVENT_TYPES.map(type => (
               <button
@@ -271,7 +305,10 @@ export default function ActivityLogModal({ open, onClose }) {
               </thead>
               <tbody>
                 {filteredEntries.map((entry, i) => (
-                  <tr key={i} className={`border-b border-ink-100 align-top ${i % 2 === 0 ? '' : 'bg-ink-25'}`}>
+                  <tr
+                    key={`${entry.event_type}-${entry.created_at}-${i}`}
+                    className={`border-b border-ink-100 align-top ${i % 2 === 0 ? '' : 'bg-ink-25'}`}
+                  >
                     <td className="font-mono text-xs text-ink-500 py-2 pr-4 whitespace-nowrap">
                       {fmtTimestamp(entry.created_at)}
                     </td>
@@ -279,8 +316,8 @@ export default function ActivityLogModal({ open, onClose }) {
                       <EventBadge type={entry.event_type} />
                     </td>
                     <td className="font-ui text-xs font-medium text-ink-800 py-2 pr-4 break-all">{entry.username}</td>
-                    <td className="font-ui text-xs text-ink-600 py-2 break-words max-w-md">
-                      {entry.description || <span className="text-ink-400 italic">—</span>}
+                    <td className="font-ui text-xs text-ink-600 py-2">
+                      <DetailsCell text={entry.description} />
                     </td>
                   </tr>
                 ))}
