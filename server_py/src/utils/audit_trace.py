@@ -38,6 +38,13 @@ import uuid
 from contextvars import ContextVar
 from typing import Any, Callable, Optional
 
+# The on_chunk callbacks the routers pass are sync (`events.put_nowait`), while
+# some internal emitters are async. call_chunk is the codebase-wide helper that
+# handles both; the sniffer must not re-decide that for itself. Safe to import
+# despite the agent -> utils direction elsewhere: summarisation has no
+# project-local imports and src/agent/__init__.py is empty, so there is no cycle.
+from ..agent.summarisation import call_chunk
+
 logger = logging.getLogger("app")
 
 _audit_ctx: ContextVar[Optional["AuditCollector"]] = ContextVar("audit_collector", default=None)
@@ -270,8 +277,13 @@ class AuditCollector:
                         entry["elapsed_ms"] = data.get("elapsed_ms")
             except Exception:
                 logger.debug("[Audit] api_call sniff failed", exc_info=True)
+            # Deliberately outside the try: a genuine failure in the real
+            # downstream callback is the caller's to see, exactly as at every
+            # other emission site. What must never fail here is the sniffer's
+            # own sync/async decision — hence call_chunk rather than a bare
+            # await, which crashed on the routers' sync put_nowait callbacks.
             if on_chunk:
-                return await on_chunk(data)
+                await call_chunk(on_chunk, data)
 
         return _sniffer
 

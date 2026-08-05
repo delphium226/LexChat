@@ -248,6 +248,99 @@ async def test_audit_captures_api_calls_inside_the_owning_tool(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_sniffer_passes_through_a_sync_on_chunk(monkeypatch):
+    """Regression: the routers' on_chunk is `events.put_nowait` — a SYNC
+    callable returning None. The sniffer used to `await on_chunk(data)`
+    unconditionally, so every worker tool call on /api/system/chat raised
+    `TypeError: object NoneType can't be used in 'await' expression` before any
+    LEX request was issued, and the endpoint returned a generic research
+    failure for every question.
+
+    The api_call test above missed it by leaving parent_on_chunk at its None
+    default: that exercises the sniffer's recording block but never its
+    pass-through. This test supplies the sync callback the routers actually
+    pass.
+    """
+    audit = AuditCollector("req123")
+    set_audit_collector(audit)
+
+    seen = []
+
+    def sync_on_chunk(data):  # precisely what system.py and ai.py hand over
+        seen.append(data)
+
+    async def fake_execute(name, args, on_chunk=None, timing_collector=None):
+        if on_chunk:
+            await on_chunk({
+                "type": "api_call_start", "id": "c1",
+                "url": "https://lex.example/search", "method": "POST",
+                "payload": {"query": "housing"},
+            })
+            await on_chunk({
+                "type": "api_call_end", "id": "c1",
+                "url": "https://lex.example/search", "status": 200,
+                "response": {"results": []}, "elapsed_ms": 12,
+            })
+        return json.dumps({"results": []})
+
+    monkeypatch.setattr("src.agent.agent_shared.execute_worker_tool", fake_execute)
+
+    result = await run_worker_agent(
+        _chat_loop_calling_tools([("search_legislation", {"query": "a"})]),
+        _noop_summarise, "brief", "test-model", None, 0,
+        parent_on_chunk=sync_on_chunk,
+    )
+
+    # The run completes instead of dying on the await ...
+    assert result["content"] == "THE REPORT"
+    # ... the trace is still captured ...
+    assert len(audit.delegations[0]["tools"][0]["api_calls"]) == 1
+    # ... and the sync callback genuinely received what passed through.
+    types = [d.get("type") for d in seen if isinstance(d, dict)]
+    assert "api_call_start" in types
+    assert "api_call_end" in types
+
+
+@pytest.mark.asyncio
+async def test_sniff_on_chunk_handles_sync_and_async_callbacks():
+    """The sniffer must not re-decide sync-vs-async for itself — call_chunk
+    owns that, as it does at every other emission site."""
+    audit = AuditCollector("req123")
+    tool_rec = audit.start_tool(audit.start_delegation("brief"), "search_legislation", {})
+
+    sync_seen, async_seen = [], []
+
+    def sync_cb(data):
+        sync_seen.append(data)
+
+    async def async_cb(data):
+        async_seen.append(data)
+
+    event = {
+        "type": "api_call_start", "id": "c1",
+        "url": "https://lex.example/search", "method": "POST", "payload": {},
+    }
+
+    await audit.sniff_on_chunk(tool_rec, sync_cb)(event)
+    await audit.sniff_on_chunk(tool_rec, async_cb)(event)
+
+    assert sync_seen == [event]
+    assert async_seen == [event]
+    assert len(tool_rec["api_calls"]) == 2
+
+
+def test_sniff_on_chunk_is_inert_without_a_tool_record():
+    """No tool record (i.e. /api/chat) — the callback is handed back
+    unwrapped, so the non-audit path keeps its exact original callable."""
+    audit = AuditCollector("req123")
+
+    def sync_cb(data):
+        pass
+
+    assert audit.sniff_on_chunk(None, sync_cb) is sync_cb
+
+
+@pytest.mark.asyncio
 async def test_audit_records_raw_and_final_separately(monkeypatch):
     """The point of raw_result: distinguishing a bad summary from a bad
     retrieval, which the SSE stream alone cannot express."""
