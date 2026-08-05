@@ -251,6 +251,7 @@ _DEFAULT_FEATURES = {
     "local_prompt_cache_enabled": True,
     "research_mode_enabled": True,
     "deep_research_mode_enabled": True,
+    "drafting_mode_enabled": True,
     "suggested_questions_enabled": True,
     # Feedback instruments — both default OFF and are switched on per
     # deployment. The weekly survey and the end-of-session pre-pilot form ask
@@ -290,6 +291,7 @@ class FeaturesUpdate(BaseModel):
     local_prompt_cache_enabled: bool = True
     research_mode_enabled: bool = True
     deep_research_mode_enabled: bool = True
+    drafting_mode_enabled: bool = True
     suggested_questions_enabled: bool = True
     weekly_survey_enabled: bool = False
     session_feedback_enabled: bool = False
@@ -308,6 +310,7 @@ async def save_features(
         "local_prompt_cache_enabled": body.local_prompt_cache_enabled,
         "research_mode_enabled": body.research_mode_enabled,
         "deep_research_mode_enabled": body.deep_research_mode_enabled,
+        "drafting_mode_enabled": body.drafting_mode_enabled,
         "suggested_questions_enabled": body.suggested_questions_enabled,
         "weekly_survey_enabled": body.weekly_survey_enabled,
         "session_feedback_enabled": body.session_feedback_enabled,

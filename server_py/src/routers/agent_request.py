@@ -112,6 +112,28 @@ def build_request_config(
     """
     research_mode = resolve_research_mode(body)
 
+    # The local prompt cache is cross-user by design: `local_prompt_cache`
+    # stores the key query in plaintext in a table every user's requests read
+    # from. In standard research mode the key query is deliberately the RAW
+    # user question (`_cache_key_query` below) — and on the drafting bot that
+    # question IS the draft clause, i.e. unpublished legislative text. So a
+    # precedent lookup during a draft review would write one user's draft into
+    # shared storage.
+    #
+    # This is forced off in code rather than left to the admin toggle: the flag
+    # defaults ON, lives in a per-bot DB row, and "remember to switch it off on
+    # that bot" is not a control. Doing it here covers all three agent
+    # endpoints at once — /api/chat, /api/system/chat and /api/research/plan
+    # all build their config through this function.
+    #
+    # Nothing is lost: every draft is unique, so the hit rate would be ~zero.
+    # Related invariant, enforced separately: `search_drafting_guidance` must
+    # stay out of CACHEABLE_TOOLS (services/local_prompt_cache.py).
+    local_cache_enabled = (
+        features.get("local_prompt_cache_enabled", True)
+        and research_mode != "drafting"
+    )
+
     return {
         **provider_config,
         "_provider": active_provider,
@@ -150,6 +172,7 @@ def build_request_config(
         ),
         "_prompt_caching_enabled": features.get("prompt_caching_enabled", True),
         "_tool_memo_enabled": features.get("tool_memo_enabled", True),
-        "_local_prompt_cache_enabled": features.get("local_prompt_cache_enabled", True),
+        "_local_prompt_cache_enabled": local_cache_enabled,
+        "_drafting_mode_enabled": features.get("drafting_mode_enabled", True),
         "_suggested_questions_enabled": features.get("suggested_questions_enabled", True),
     }

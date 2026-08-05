@@ -24,6 +24,7 @@ DEFAULTS = {
     "local_prompt_cache_enabled": True,
     "research_mode_enabled": True,
     "deep_research_mode_enabled": True,
+    "drafting_mode_enabled": True,
     "suggested_questions_enabled": True,
     "weekly_survey_enabled": False,
     "session_feedback_enabled": False,

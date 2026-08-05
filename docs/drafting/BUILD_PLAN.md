@@ -300,7 +300,7 @@ per-machine, and does not travel with the branch). Hence this file and `SESSION_
 
 Tick a row only when its tests are green AND the work is committed.
 
-- [ ] **S0 — Security prereqs** *(on `main`, before branching)*
+- [x] **S0 — Security prereqs** *(on `main`, before branching)*
       `secure=True` (auth.py:104) · `utils/redact.py` per LOGGING_IMPROVEMENTS_PLAN.md:118-153,
       applied at executor.py:123 + auth.py:174 · `drafting_mode_enabled` flag (5 sites) ·
       `local_prompt_cache_enabled` OFF for the drafting bot + reason recorded in CLAUDE.md
@@ -321,6 +321,52 @@ Tick a row only when its tests are green AND the work is committed.
 Sessions 2 and 3 are the ones most likely to overrun — if session 2 is running long, stop after
 the schema + DDL and leave ingest for its own session. Do not carry an un-green test suite
 across a session boundary.
+
+---
+
+## S0 as built
+
+Landed on `main`. Suite green, 326 → 350 tests (24 added, `tests/test_drafting_security.py`).
+Four things a later session should know:
+
+**1. `local_prompt_cache_enabled` is forced off in code for `research_mode == "drafting"`, not
+left as an operator setting.** The flag defaults ON and lives in a per-bot `AppSetting` row, so
+"turn it off on that bot" via the Admin Portal is an operator memory, not a control — and the
+failure mode is draft legislative text in a cross-user plaintext table. The override lives in
+`build_request_config` (`routers/agent_request.py`), the single seam `/api/chat`,
+`/api/system/chat` and `/api/research/plan` all pass through, and ANDs with the admin flag so
+no other mode changes.
+**Consequence: on a drafting bot the Cache tab will show "Local cache" as ON. That is correct
+— do not "fix" it.** The flag genuinely is on; the request-level override is what takes it off.
+
+**2. Redaction was applied at the two sites the ledger names. Two more are still open.**
+`utils/redact.py` is applied at `agent/tools/executor.py` (worker tool args) and
+`routers/auth.py` (password-reset email). Still logging free text at INFO:
+- `agent/agent_core.py:176` — `[Worker] Starting research on: {query}`, the Manager's
+  delegation brief. **In a review flow that brief can quote the draft.**
+- `routers/learning.py:145` — `[Learning] Test retrieval for query {body.query!r}`, admin-only.
+
+Neither is in the S0 row, so neither was touched. **Both must be closed before the bot is given
+real pre-publication drafts** — a one-line `redact_text(...)` each. Do not assume S0 finished
+the job. Also open, and flagged in `CLAUDE.md`: full text still appears at `LOG_LEVEL=DEBUG` by
+design, which is a decision the deploying org should confirm.
+
+`redact_args()` (a third helper, beyond the two `LOGGING_IMPROVEMENTS_PLAN.md` specs) is
+**allowlist-based and fails safe** — `SAFE_ARG_KEYS` logs in the clear, every other string value
+is redacted. A tool added later with a new free-text parameter loses log fidelity, not
+confidentiality. When S3 adds `search_drafting_guidance`, its structural args can be added to
+`SAFE_ARG_KEYS`; its `query` must not be.
+
+**3. `secure=True` means the cookie is not set over plain HTTP, including local dev on :8000.**
+This is fine because the frontend authenticates with the bearer token from the login response
+body and `get_current_user` falls back to the `Authorization` header — but if a future session
+sees cookie auth failing locally, this is why, and the fix is not to revert the flag.
+
+**4. The `drafting_mode_enabled` flag has no Admin Portal toggle row yet.** Backend only
+(`_DEFAULT_FEATURES`, `FeaturesUpdate`, the save dict, `build_request_config`). This is *not* a
+silent-reset trap: `AdminPortal.jsx` loads the server's full flag dict into state and posts it
+back, so the flag round-trips correctly through any other toggle. Adding the UI row belongs
+with S1/S6, when there is a mode to toggle.
 
 ---
 

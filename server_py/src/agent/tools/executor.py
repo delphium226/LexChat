@@ -11,6 +11,7 @@ from typing import Callable, Optional
 import httpx
 
 from ...config import settings
+from ...utils.redact import redact_args
 from ..provider_factory import get_request_provider_config
 from ._util import _emit
 from .caselaw import _fetch_judgment_text, _parse_case_law_atom
@@ -120,7 +121,13 @@ async def execute_worker_tool(
     timing_collector=None,
 ) -> str:
     """Execute a worker tool (LEX API call) and return JSON string result."""
-    logger.info(f"[Worker Tool Exec] {name} with args: {json.dumps(args)}")
+    # Free-text arguments (`query` and friends) are redacted at INFO — they are
+    # the user's own words, and on the drafting bot they can be a clause of
+    # unpublished legislative text. Structural args (Act IDs, dates, filters)
+    # stay in the clear, which is what makes the line useful. Full args remain
+    # available at DEBUG (LOG_LEVEL) for local debugging.
+    logger.info(f"[Worker Tool Exec] {name} with args: {json.dumps(redact_args(args))}")
+    logger.debug(f"[Worker Tool Exec] {name} full args: {json.dumps(args)}")
 
     call_id = str(uuid.uuid4())
 

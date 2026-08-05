@@ -12,6 +12,7 @@ from ..config import settings
 from ..database import get_db
 from ..dependencies import create_access_token, get_admin_user, get_current_db_user
 from ..models import ActivityLog, User
+from ..utils.redact import redact_email
 
 logger = logging.getLogger("app")
 
@@ -101,7 +102,13 @@ async def login(
         key="token",
         value=access_token,
         httponly=True,
-        secure=False,  # Set to True in production
+        # The deployment target serves HTTPS on 443 with organisational certs,
+        # so the auth cookie is HTTPS-only. Note this means the cookie is NOT
+        # set over plain HTTP — including local dev on :8000. Local dev is
+        # unaffected in practice because the frontend authenticates with the
+        # bearer token from the response body, and `get_current_user` checks
+        # the cookie first but falls back to the Authorization header.
+        secure=True,
         max_age=max_age,
         samesite="lax",
     )
@@ -171,7 +178,10 @@ async def reset_password_request(
 
     if user and user.email:
         # Email service will be wired in Phase 7
-        logger.info(f"[Auth] Password reset requested for user {user.username!r} — email: {user.email}")
+        logger.info(
+            f"[Auth] Password reset requested for user {user.username!r} "
+            f"— email: {redact_email(user.email)}"
+        )
 
     # Always return success to avoid user enumeration
     return {"message": "If user exists, a password reset email has been sent."}
