@@ -1,8 +1,13 @@
 import { IBtn } from './ui/buttons';
-import { PaperclipIcon, SendIcon, StopIcon } from './ui/icons';
+import { CheckCircleIcon, PaperclipIcon, SendIcon, StopIcon } from './ui/icons';
+
+// Shared by Send and Finished session so the two read as peers in the action
+// row; the colour is applied per-button.
+const ACTION_BTN =
+  'inline-flex items-center gap-1.5 px-3 py-2 font-ui text-sm font-semibold rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:cursor-not-allowed transition-colors disabled:bg-ink-200 disabled:text-ink-400';
 
 // The message composer card: attached-document chips, the textarea, and the
-// action row (attach / filters toggle / send-or-stop). Presentational — all
+// action row (attach / finished-session / send-or-stop). Presentational — all
 // chat state and handlers live in useChat / App and are passed in.
 export default function Composer({
   fileInputRef,
@@ -21,6 +26,10 @@ export default function Composer({
   chatMode,
   isParliament = false,
   isWestminster = false,
+  showFinishedSession = false,
+  onFinishedSession,
+  sessionFeedbackSent = false,
+  hasMessages = false,
 }) {
   return (
     <div
@@ -210,24 +219,43 @@ export default function Composer({
           </IBtn>
         </div>
 
-        {loading ? (
-          <button
-            onClick={onStop}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-danger text-white font-ui text-sm font-semibold rounded-md hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
-          >
-            <StopIcon /> Stop
-          </button>
-        ) : (
-          <button
-            onClick={() => {
-              if (input.trim()) onSend();
-            }}
-            disabled={!input.trim()}
-            className="inline-flex items-center gap-1.5 px-3 py-2 font-ui text-sm font-semibold rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:cursor-not-allowed transition-colors disabled:bg-ink-200 disabled:text-ink-400 bg-brand text-white hover:bg-brand-hover"
-          >
-            <SendIcon /> Send
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {showFinishedSession && (
+            <button
+              onClick={onFinishedSession}
+              disabled={!hasMessages || loading}
+              title={
+                !hasMessages
+                  ? 'Ask something first — the feedback form is about this session'
+                  : loading
+                    ? 'Wait for the response to finish'
+                    : 'Tell us how this session went'
+              }
+              className={`${ACTION_BTN} bg-brand text-white hover:bg-brand-hover`}
+            >
+              <CheckCircleIcon /> {sessionFeedbackSent ? 'Feedback sent' : 'Finished session'}
+            </button>
+          )}
+
+          {loading ? (
+            <button
+              onClick={onStop}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-danger text-white font-ui text-sm font-semibold rounded-md hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+            >
+              <StopIcon /> Stop
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                if (input.trim()) onSend();
+              }}
+              disabled={!input.trim()}
+              className={`${ACTION_BTN} bg-brand text-white hover:bg-brand-hover`}
+            >
+              <SendIcon /> Send
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

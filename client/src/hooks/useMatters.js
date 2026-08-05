@@ -10,12 +10,16 @@ import { getFeatures, getMatters } from '../services/api';
 // Destructured to the same names the JSX already used, so no call sites change.
 export function useMatters(user, currentChatId) {
   // Default new flags to true so mode options don't flash off before the flags
-  // load; the API response replaces this whole object on login.
+  // load; the API response replaces this whole object on login. The two
+  // feedback flags seed false for the mirror-image reason — an off-by-default
+  // prompt must not flash on in the window before the fetch lands.
   const [features, setFeatures] = useState({
     matters_enabled: true,
     research_mode_enabled: true,
     deep_research_mode_enabled: true,
     suggested_questions_enabled: true,
+    weekly_survey_enabled: false,
+    session_feedback_enabled: false,
   });
   const [matters, setMatters] = useState([]);
   const [closedMatters, setClosedMatters] = useState([]);

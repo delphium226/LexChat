@@ -90,6 +90,13 @@ export const SendIcon = ({ size = 16 }) => (
   </svg>
 );
 
+export const CheckCircleIcon = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" {...strokeProps}>
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+    <path d="M22 4 12 14.01l-3-3" />
+  </svg>
+);
+
 export const StopIcon = ({ size = 16 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
     <rect x="5" y="5" width="14" height="14" rx="2" />

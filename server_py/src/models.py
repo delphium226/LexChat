@@ -190,6 +190,66 @@ class ProductFeedback(Base):
     user: Mapped["User"] = relationship()
 
 
+class SessionFeedback(Base):
+    """End-of-session feedback for the pre-pilot.
+
+    Kept separate from ProductFeedback (the weekly survey): the two instruments
+    ask different questions, and the weekly productivity averages / compliance
+    grid must not start averaging over rows that never answered them.
+    """
+
+    __tablename__ = "session_feedback"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    # SET NULL, not CASCADE — deleting a thread must not destroy the feedback
+    # about it; the response is the audit record of how that research went.
+    chat_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("chats.id", ondelete="SET NULL"), nullable=True
+    )
+    message_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Q1, Q2, Q4 — time
+    manual_time_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    time_saved_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    verification_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Q3 — 'one_go' | 'not_one_go'
+    session_continuity: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # Q5 — 'yes' | 'partially' | 'no'
+    found_right_law: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    found_right_law_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Q6 — 'yes' | 'no' | 'unsure'
+    references_accurate: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    references_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Q7 — 'yes' | 'partially' | 'no'
+    stated_law_correctly: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    stated_law_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Q8 — 1..5
+    confidence: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Q9 — 1..5
+    ease_of_use: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ease_of_use_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Q10
+    other_comments: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # When the user pressed "Finished session" — the authoritative end of the
+    # session for the session-length metric. Distinct from created_at, which is
+    # when the completed form arrived and so includes however long they spent
+    # filling it in. NULL on rows written before this column existed.
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    user: Mapped["User"] = relationship()
+
+    __table_args__ = (
+        Index('idx_session_feedback_created_at', 'created_at'),
+    )
+
+
 class ServiceHealthStatus(Base):
     __tablename__ = "service_health_logs"
 

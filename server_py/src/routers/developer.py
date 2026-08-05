@@ -18,7 +18,7 @@ from ..agent.provider_factory import (
 from ..config import MODEL_LIST, settings
 from ..database import get_db
 from ..dependencies import get_admin_user, get_current_user
-from ..models import ActivityLog, AppSetting, Chat, Message, ProductFeedback, RequestTiming, ServiceHealthStatus, User
+from ..models import ActivityLog, AppSetting, Chat, Message, ProductFeedback, RequestTiming, ServiceHealthStatus, SessionFeedback, User
 from ..services.synthetic_data import generate_synthetic_data
 
 logger = logging.getLogger("app")
@@ -222,17 +222,20 @@ async def clear_performance_data(db: AsyncSession = Depends(get_db)):
 
 @admin_router.post("/clear-feedback")
 async def clear_feedback_data(db: AsyncSession = Depends(get_db)):
-    """Delete all product feedback surveys and clear message ratings/comments."""
+    """Delete all feedback (weekly surveys + session feedback) and clear message ratings/comments."""
     await db.execute(delete(ProductFeedback))
+    await db.execute(delete(SessionFeedback))
     await db.execute(
         text("UPDATE messages SET rating = NULL, feedback_comment = NULL WHERE rating IS NOT NULL OR feedback_comment IS NOT NULL")
     )
     await db.commit()
 
-    logger.warning("[Developer] Feedback data cleared: product_feedback deleted, message ratings nulled")
+    logger.warning(
+        "[Developer] Feedback data cleared: product_feedback and session_feedback deleted, message ratings nulled"
+    )
     return {
         "success": True,
-        "message": "User feedback cleared. All surveys and message ratings have been deleted.",
+        "message": "User feedback cleared. All surveys, session feedback and message ratings have been deleted.",
     }
 
 
@@ -249,6 +252,11 @@ _DEFAULT_FEATURES = {
     "research_mode_enabled": True,
     "deep_research_mode_enabled": True,
     "suggested_questions_enabled": True,
+    # Feedback instruments — both default OFF and are switched on per
+    # deployment. The weekly survey and the end-of-session pre-pilot form ask
+    # different things and are not meant to run at the same time.
+    "weekly_survey_enabled": False,
+    "session_feedback_enabled": False,
 }
 
 
@@ -283,6 +291,8 @@ class FeaturesUpdate(BaseModel):
     research_mode_enabled: bool = True
     deep_research_mode_enabled: bool = True
     suggested_questions_enabled: bool = True
+    weekly_survey_enabled: bool = False
+    session_feedback_enabled: bool = False
 
 
 @admin_router.post("/features")
@@ -299,6 +309,8 @@ async def save_features(
         "research_mode_enabled": body.research_mode_enabled,
         "deep_research_mode_enabled": body.deep_research_mode_enabled,
         "suggested_questions_enabled": body.suggested_questions_enabled,
+        "weekly_survey_enabled": body.weekly_survey_enabled,
+        "session_feedback_enabled": body.session_feedback_enabled,
     }
     result = await db.execute(select(AppSetting).where(AppSetting.key == _FEATURES_KEY))
     row = result.scalar_one_or_none()
@@ -468,6 +480,30 @@ async def get_activity_log(
                 pf.created_at
             FROM product_feedback pf
             JOIN users u ON pf.user_id = u.id
+
+            UNION ALL
+
+            SELECT
+                'SURVEY' AS event_type,
+                u.username,
+                CONCAT_WS(' · ',
+                    'End of session',
+                    CASE WHEN sf.found_right_law IS NOT NULL
+                        THEN CONCAT('Right legislation: ', sf.found_right_law) END,
+                    CASE WHEN sf.references_accurate IS NOT NULL
+                        THEN CONCAT('References: ', sf.references_accurate) END,
+                    CASE WHEN sf.stated_law_correctly IS NOT NULL
+                        THEN CONCAT('Stated correctly: ', sf.stated_law_correctly) END,
+                    CASE WHEN sf.confidence IS NOT NULL
+                        THEN CONCAT('Confidence: ', sf.confidence, '/5') END,
+                    CASE WHEN sf.ease_of_use IS NOT NULL
+                        THEN CONCAT('Ease: ', sf.ease_of_use, '/5') END,
+                    CASE WHEN sf.other_comments IS NOT NULL AND sf.other_comments <> ''
+                        THEN CONCAT('"', LEFT(sf.other_comments, 150), '"') END
+                ) AS description,
+                sf.created_at
+            FROM session_feedback sf
+            JOIN users u ON sf.user_id = u.id
 
             UNION ALL
 

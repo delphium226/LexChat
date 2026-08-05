@@ -117,6 +117,32 @@ async def init_db() -> None:
             "ALTER TABLE product_feedback ADD COLUMN IF NOT EXISTS confidence INTEGER",
             "ALTER TABLE product_feedback ADD COLUMN IF NOT EXISTS verification_hours FLOAT",
             "ALTER TABLE product_feedback ADD COLUMN IF NOT EXISTS usability INTEGER",
+            # Pre-pilot end-of-session feedback (separate instrument from the
+            # weekly product_feedback survey — see models.SessionFeedback).
+            """CREATE TABLE IF NOT EXISTS session_feedback (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                chat_id INTEGER REFERENCES chats(id) ON DELETE SET NULL,
+                message_count INTEGER,
+                manual_time_hours FLOAT,
+                time_saved_hours FLOAT,
+                verification_hours FLOAT,
+                session_continuity VARCHAR(20),
+                found_right_law VARCHAR(20),
+                found_right_law_notes TEXT,
+                references_accurate VARCHAR(20),
+                references_notes TEXT,
+                stated_law_correctly VARCHAR(20),
+                stated_law_notes TEXT,
+                confidence INTEGER,
+                ease_of_use INTEGER,
+                ease_of_use_reason TEXT,
+                other_comments TEXT,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_session_feedback_created_at ON session_feedback (created_at)",
+            # Session-length metric: when "Finished session" was pressed.
+            "ALTER TABLE session_feedback ADD COLUMN IF NOT EXISTS finished_at TIMESTAMP",
             """CREATE TABLE IF NOT EXISTS activity_log (
                 id SERIAL PRIMARY KEY,
                 event_type VARCHAR(20) NOT NULL,

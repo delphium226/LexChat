@@ -1,11 +1,20 @@
 import { useReducer } from 'react';
 
 // Visibility state for the top-level dialogs, moved from App.jsx. Consolidates
-// the seven boolean flags (previously seven useState pairs) into one reducer.
+// the boolean flags (previously one useState pair each) into one reducer.
 // API: modals.<name> (bool), modals.open(name), modals.close(name),
 // modals.closeAll(). Names: settingsMenu, admin, settings, history, about,
-// dataSources, weeklyBanner.
-const MODAL_NAMES = ['settingsMenu', 'admin', 'settings', 'history', 'about', 'dataSources', 'weeklyBanner'];
+// dataSources, weeklyBanner, sessionFeedback.
+const MODAL_NAMES = [
+  'settingsMenu',
+  'admin',
+  'settings',
+  'history',
+  'about',
+  'dataSources',
+  'weeklyBanner',
+  'sessionFeedback',
+];
 
 const initialState = MODAL_NAMES.reduce((acc, name) => ({ ...acc, [name]: false }), {});
 

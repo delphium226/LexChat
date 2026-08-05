@@ -18,6 +18,9 @@ import {
   getQueryPerformanceStats,
   getProductFeedback,
   getSurveyCompliance,
+  getSessionFeedback,
+  getSessionFeedbackCompliance,
+  getSessionDurations,
   getMessageRatings,
   getProviderConfig,
   saveProviderConfig,
@@ -58,6 +61,7 @@ import { PerformanceTab } from './admin/PerformanceTab';
 import { EfficiencyTab } from './admin/EfficiencyTab';
 import { CostTab } from './admin/CostTab';
 import { CacheTab } from './admin/CacheTab';
+import { SessionFeedbackTab } from './admin/SessionFeedbackTab';
 import { ParliamentCoverageTab } from './admin/ParliamentCoverageTab';
 import { ProviderConfigPanel } from './admin/ProviderConfigPanel';
 import { PERF_COLORS, COST_COLORS } from './admin/chartConfig';
@@ -120,6 +124,13 @@ const AdminPortal = ({ currentUser }) => {
   const [productFeedback, setProductFeedback] = useState([]);
   const [isProductFeedbackLoading, setIsProductFeedbackLoading] = useState(false);
   const [surveyCompliance, setSurveyCompliance] = useState(null);
+
+  // --- SESSION FEEDBACK STATE (own tab, own timeframe) ---
+  const [sessionFeedback, setSessionFeedback] = useState([]);
+  const [sessionCompliance, setSessionCompliance] = useState(null);
+  const [sessionDurations, setSessionDurations] = useState(null);
+  const [isSessionFeedbackLoading, setIsSessionFeedbackLoading] = useState(false);
+  const [sessionFeedbackTimeframe, setSessionFeedbackTimeframe] = useState('30');
   const [messageRatings, setMessageRatings] = useState([]);
   const [isMessageRatingsLoading, setIsMessageRatingsLoading] = useState(false);
   const [ratingsFilter, setRatingsFilter] = useState('all');
@@ -136,6 +147,8 @@ const AdminPortal = ({ currentUser }) => {
     research_mode_enabled: true,
     deep_research_mode_enabled: true,
     suggested_questions_enabled: true,
+    weekly_survey_enabled: false,
+    session_feedback_enabled: false,
   });
   const [isSavingFeatures, setIsSavingFeatures] = useState(false);
 
@@ -189,6 +202,8 @@ const AdminPortal = ({ currentUser }) => {
       fetchHealthStatus();
     } else if (activeTab === 'product-feedback') {
       fetchProductFeedback(productFeedbackTimeframe);
+    } else if (activeTab === 'session-feedback') {
+      fetchSessionFeedback(sessionFeedbackTimeframe);
     } else if (activeTab === 'developer') {
       getFeatures()
         .then(setFeatures)
@@ -203,7 +218,7 @@ const AdminPortal = ({ currentUser }) => {
         .catch(() => {})
         .finally(() => setIsPeersLoading(false));
     }
-  }, [activeTab, timeframe, learningTimeframe, perfTimeframe, effTimeframe, costTimeframe, cacheTimeframe, coverageSession, productFeedbackTimeframe]);
+  }, [activeTab, timeframe, learningTimeframe, perfTimeframe, effTimeframe, costTimeframe, cacheTimeframe, coverageSession, productFeedbackTimeframe, sessionFeedbackTimeframe]);
 
   // Poll the parliamentary-refresh status while a refresh is in flight so the
   // admin sees progress and the final result without reloading the tab.
@@ -233,6 +248,22 @@ const AdminPortal = ({ currentUser }) => {
     else console.error('Failed to fetch message ratings:', ratingsResult.reason);
     setIsProductFeedbackLoading(false);
     setIsMessageRatingsLoading(false);
+  };
+
+  const fetchSessionFeedback = async (days = '30') => {
+    setIsSessionFeedbackLoading(true);
+    const [responses, compliance, durations] = await Promise.allSettled([
+      getSessionFeedback(days),
+      getSessionFeedbackCompliance(days),
+      getSessionDurations(days),
+    ]);
+    if (responses.status === 'fulfilled') setSessionFeedback(responses.value);
+    else console.error('Failed to fetch session feedback:', responses.reason);
+    if (compliance.status === 'fulfilled') setSessionCompliance(compliance.value);
+    else console.error('Failed to fetch session feedback compliance:', compliance.reason);
+    if (durations.status === 'fulfilled') setSessionDurations(durations.value);
+    else console.error('Failed to fetch session durations:', durations.reason);
+    setIsSessionFeedbackLoading(false);
   };
 
   // ==========================================
@@ -490,6 +521,7 @@ const AdminPortal = ({ currentUser }) => {
             ...(currentUser?.username === 'admin' ? [{ id: 'federation', label: 'Federation' }] : []),
             { id: 'health', label: 'Service Health' },
             { id: 'product-feedback', label: 'User Feedback' },
+            { id: 'session-feedback', label: 'Session Feedback' },
           ].map(tab => (
             <button
               key={tab.id}
@@ -1248,6 +1280,16 @@ const AdminPortal = ({ currentUser }) => {
                   desc: "Renders the assistant's follow-up questions and clarification options as one-click buttons. When off, the assistant writes them into the answer as ordinary text instead.",
                 },
                 {
+                  flag: 'session_feedback_enabled',
+                  label: 'Session feedback form',
+                  desc: 'Shows a "Finished session" button in the chat header that opens the end-of-session feedback form (the pre-pilot questionnaire).',
+                },
+                {
+                  flag: 'weekly_survey_enabled',
+                  label: 'Weekly user survey',
+                  desc: 'Pops up the 6-question productivity survey once a week, and shows a "Take weekly survey" button until it has been completed.',
+                },
+                {
                   flag: 'prompt_caching_enabled',
                   label: 'Prompt caching (Anthropic via OpenRouter)',
                   desc: 'Marks cache breakpoints on Anthropic models so repeated agent-loop context is billed at the cached rate.',
@@ -1494,8 +1536,6 @@ const AdminPortal = ({ currentUser }) => {
         {/* USER FEEDBACK TAB */}
         {activeTab === 'product-feedback' &&
           (() => {
-            const timeframeLabel =
-              productFeedbackTimeframe === 'all' ? 'All Time' : `Last ${productFeedbackTimeframe} Days`;
             const withTime = productFeedback.filter(
               f => f.time_saved_hours != null && f.time_without_aila_hours != null
             );
@@ -2286,6 +2326,19 @@ const AdminPortal = ({ currentUser }) => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* SESSION FEEDBACK TAB */}
+        {activeTab === 'session-feedback' && (
+          <SessionFeedbackTab
+            sessionFeedback={sessionFeedback}
+            compliance={sessionCompliance}
+            durations={sessionDurations}
+            isLoading={isSessionFeedbackLoading}
+            timeframe={sessionFeedbackTimeframe}
+            setTimeframe={setSessionFeedbackTimeframe}
+            refetch={fetchSessionFeedback}
+          />
         )}
       </div>
 

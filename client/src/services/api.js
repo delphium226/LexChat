@@ -346,6 +346,11 @@ export const submitFeedback = async payload => {
   return response.data;
 };
 
+export const submitSessionFeedback = async payload => {
+  const response = await axios.post(`${API_URL}/feedback/session`, payload);
+  return response.data;
+};
+
 // --- HEALTH STATUS APIS ---
 export const getLatestHealthStatus = async () => {
   const response = await axios.get(`${API_URL}/health/status`);
@@ -369,6 +374,21 @@ export const getProductFeedback = async (days = '30') => {
 
 export const getSurveyCompliance = async () => {
   const response = await axios.get(`${API_URL}/feedback/compliance`);
+  return response.data;
+};
+
+export const getSessionFeedback = async (days = '30') => {
+  const response = await axios.get(`${API_URL}/feedback/session`, { params: { days } });
+  return response.data;
+};
+
+export const getSessionFeedbackCompliance = async (days = '30') => {
+  const response = await axios.get(`${API_URL}/feedback/session/compliance`, { params: { days } });
+  return response.data;
+};
+
+export const getSessionDurations = async (days = '30') => {
+  const response = await axios.get(`${API_URL}/feedback/session/durations`, { params: { days } });
   return response.data;
 };
 

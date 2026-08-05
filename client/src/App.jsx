@@ -38,6 +38,7 @@ import {
 import { Routes, Route } from 'react-router-dom';
 import SystemChat from './pages/SystemChat';
 import WeeklyFeedbackBanner from './components/WeeklyFeedbackBanner';
+import SessionFeedbackModal from './components/SessionFeedbackModal';
 import DataSensitivityNotice from './components/DataSensitivityNotice';
 import DeepResearchPlan from './components/DeepResearchPlan';
 import SuggestedQuestions from './components/SuggestedQuestions';
@@ -159,8 +160,11 @@ function AppContent() {
   // Weekly feedback — show banner once per week, button whenever survey not yet submitted this week.
   // Uses a ref (not state) for the checked flag so setting it doesn't trigger
   // a re-render that would cancel the timer via effect cleanup.
+  // The flag check must come before the ref is set, so that enabling the flag
+  // (or the flags simply arriving after this first runs) doesn't find the
+  // effect permanently short-circuited.
   useEffect(() => {
-    if (!user || weeklyBannerCheckedRef.current) return;
+    if (!user || !features.weekly_survey_enabled || weeklyBannerCheckedRef.current) return;
     weeklyBannerCheckedRef.current = true;
     const week = 7 * 24 * 60 * 60 * 1000;
     const submittedKey = `weeklyFeedbackSubmitted_${user.id}`;
@@ -177,7 +181,7 @@ function AppContent() {
     }, 2000);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, features.weekly_survey_enabled]);
 
   // ── Derived ──────────────────────────────────────────────────
 
@@ -189,6 +193,12 @@ function AppContent() {
     }[researchMode] || 'Legislation only';
 
   const todayLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  // Has this thread already had end-of-session feedback? Nothing on the chat
+  // row records it, so this is a render-time localStorage read — cheap, and
+  // always current because closing the modal after a submit re-renders anyway.
+  const sessionFeedbackSent =
+    !!currentChatId && localStorage.getItem(`sessionFeedbackSubmitted_${currentChatId}`) === '1';
 
   // ── Research filters (state + persistence in useFilters) ─────
   const {
@@ -549,7 +559,9 @@ function AppContent() {
                 Save to matter
               </GhostBtn>
             )}
-            {surveyDue && <GhostBtn onClick={() => modals.open('weeklyBanner')}>Take weekly survey</GhostBtn>}
+            {features.weekly_survey_enabled && surveyDue && (
+              <GhostBtn onClick={() => modals.open('weeklyBanner')}>Take weekly survey</GhostBtn>
+            )}
           </div>
         </div>
 
@@ -918,6 +930,10 @@ function AppContent() {
                   chatMode={chatMode}
                   isParliament={isParliament}
                   isWestminster={isWestminster}
+                  showFinishedSession={features.session_feedback_enabled}
+                  onFinishedSession={() => modals.open('sessionFeedback')}
+                  sessionFeedbackSent={sessionFeedbackSent}
+                  hasMessages={messages.length > 0}
                 />
               </div>
             </div>
@@ -1048,6 +1064,20 @@ function AppContent() {
           onSubmitted={() => {
             localStorage.setItem(`weeklyFeedbackSubmitted_${user.id}`, Date.now().toString());
             setSurveyDue(false);
+          }}
+        />
+      )}
+
+      {modals.sessionFeedback && (
+        <SessionFeedbackModal
+          chatId={currentChatId}
+          messageCount={messages.length}
+          botName={botInfo.name}
+          onClose={() => modals.close('sessionFeedback')}
+          // The label flips to "Feedback sent"; the button stays clickable, as
+          // a lawyer who carries on in the same thread may submit again.
+          onSubmitted={() => {
+            if (currentChatId) localStorage.setItem(`sessionFeedbackSubmitted_${currentChatId}`, '1');
           }}
         />
       )}
