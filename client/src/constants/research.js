@@ -62,18 +62,26 @@ export const WM_SESSION_OPTIONS = [
 export const LATEST_WM_SESSION = 6;
 
 export const WESTMINSTER_MODE = 'westminster_records';
+export const DRAFTING_MODE = 'drafting';
 
 // Mode-keyed selectors. The filter set is fixed per deployment (one bot = one
 // research mode), so these resolve once from botInfo rather than branching on
 // per-query user state.
+//
+// These were two-way (Westminster vs everything else), which meant a third mode
+// silently inherited the Holyrood session vocabulary. The drafting bot exposes no
+// research filters at all, so it gets an explicit empty answer rather than a
+// borrowed one — a Holyrood "Session 7" has no meaning there and must never be
+// persisted or sent. Callers that can receive `null` from getLatestSession are
+// getLatestSession's own consumers in useFilters.js; both guard for it.
 export const getRecordTypeOptions = mode =>
-  mode === WESTMINSTER_MODE ? WM_RECORD_TYPE_OPTIONS : RECORD_TYPE_OPTIONS;
+  mode === DRAFTING_MODE ? [] : mode === WESTMINSTER_MODE ? WM_RECORD_TYPE_OPTIONS : RECORD_TYPE_OPTIONS;
 
 export const getSessionOptions = mode =>
-  mode === WESTMINSTER_MODE ? WM_SESSION_OPTIONS : SESSION_OPTIONS;
+  mode === DRAFTING_MODE ? [] : mode === WESTMINSTER_MODE ? WM_SESSION_OPTIONS : SESSION_OPTIONS;
 
 export const getLatestSession = mode =>
-  mode === WESTMINSTER_MODE ? LATEST_WM_SESSION : LATEST_SESSION;
+  mode === DRAFTING_MODE ? null : mode === WESTMINSTER_MODE ? LATEST_WM_SESSION : LATEST_SESSION;
 
 // Holyrood calls its terms "sessions"; Westminster calls them "Parliaments".
 export const getSessionFilterLabel = mode =>

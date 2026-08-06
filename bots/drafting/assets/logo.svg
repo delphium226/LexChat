@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="#5B2C6F">
+  <!-- Quill over a ruled page — the drafting emblem, stylised.
+       Deliberately distinct from the legislation bot's scales and from both
+       parliamentary pediment/portcullis marks, so the four bots are told
+       apart at favicon size. -->
+
+  <!-- Page -->
+  <path d="M16 8 h34 l14 14 v50 H16 Z"/>
+  <polygon points="50,8 64,22 50,22" fill="#FFFFFF" opacity="0.45"/>
+
+  <!-- Ruled lines -->
+  <rect x="24" y="34" width="32" height="4" fill="#FFFFFF" opacity="0.85"/>
+  <rect x="24" y="44" width="32" height="4" fill="#FFFFFF" opacity="0.85"/>
+  <rect x="24" y="54" width="20" height="4" fill="#FFFFFF" opacity="0.85"/>
+
+  <!-- Quill nib, struck across the lower-right corner -->
+  <polygon points="70,30 74,34 46,62 40,64 42,58" />
+  <polygon points="70,30 74,34 46,62 40,64 42,58" fill="#FFFFFF" opacity="0.2"/>
+</svg>

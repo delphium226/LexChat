@@ -634,6 +634,13 @@ def get_planner_tools() -> list:
 _PARLIAMENT_TOOL_NAMES = {t["function"]["name"] for t in PARLIAMENT_TOOLS}
 _WESTMINSTER_TOOL_NAMES = {t["function"]["name"] for t in WESTMINSTER_TOOLS}
 
+# The drafting bot's precedent-finding half is the legislation tool set, so its
+# contents START as a copy of WORKER_TOOLS. It is a SEPARATE list, not an alias:
+# `search_drafting_guidance` (S3) is appended here, and a distinct object is what
+# lets the dispatch test tell "drafting resolved" apart from "fell through to the
+# legislation default" while the contents happen to be identical.
+DRAFTING_TOOLS = list(WORKER_TOOLS)
+
 
 def get_worker_tools(research_mode: str = "legislation_only") -> list:
     """Return the appropriate tool set for the given research mode."""
@@ -645,5 +652,7 @@ def get_worker_tools(research_mode: str = "legislation_only") -> list:
         return PARLIAMENT_TOOLS
     elif research_mode == "westminster_records":
         return WESTMINSTER_TOOLS
+    elif research_mode == "drafting":
+        return DRAFTING_TOOLS
     return WORKER_TOOLS
 

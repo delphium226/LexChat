@@ -64,6 +64,14 @@ _REPORT_SECTIONS = {
     "westminster_records": [
         "Summary (BLUF)", "Key Contributions", "House & Date", "References",
     ],
+    # PLACEHOLDER (S1) — mirrors the OUTPUT STRUCTURE block in the placeholder
+    # DRAFTING_WORKER_SYSTEM_PROMPT. The reviewer's own output schema (rule
+    # breached → location in draft → suggested fix) is S4/S5; these two must be
+    # changed together, since this list is what grades the report and what the
+    # reformat retry is told to aim at.
+    "drafting": [
+        "Summary (BLUF)", "Guidance", "Precedent", "References",
+    ],
 }
 
 # A section header line: an ATX header (`## Foo`) or a bold label at the start of

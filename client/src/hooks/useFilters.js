@@ -109,9 +109,13 @@ export function useFilters(currentChatId) {
   // Resolve the session default once the bot's research mode is known, and drop
   // any persisted values that belong to the other bot's vocabulary (e.g. Holyrood
   // "Session 7" lingering in a Westminster deployment's localStorage).
+  // A mode with no session vocabulary (drafting) yields latest === null; leave
+  // `sessions` alone rather than persisting [null], which would be sent on every
+  // request and shown as a filter the bot does not honour.
   const applySessionDefault = researchMode => {
-    const valid = new Set(getSessionOptions(researchMode).map(o => o.value));
     const latest = getLatestSession(researchMode);
+    if (latest === null) return;
+    const valid = new Set(getSessionOptions(researchMode).map(o => o.value));
     if (sessions === null) {
       setSessionsPersist([latest]);
     } else if (sessions.some(s => !valid.has(s))) {
@@ -128,7 +132,8 @@ export function useFilters(currentChatId) {
     setCurrentOnlyPersist(false);
     setRecordTypePersist(null);
     setHousePersist(null);
-    setSessionsPersist([getLatestSession(researchMode)]);
+    const latest = getLatestSession(researchMode);
+    setSessionsPersist(latest === null ? null : [latest]);
   };
   const sessionsAreDefault =
     sessions === null ||

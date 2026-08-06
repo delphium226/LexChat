@@ -8,8 +8,13 @@ $ErrorActionPreference = 'Continue'
 [System.Net.WebRequest]::DefaultWebProxy = New-Object System.Net.WebProxy
 
 # Bot registry — one entry per federated bot. The legislation bot is the base
-# deployment (no .env override); the parliament and Westminster bots each have
-# their own DB, port, config and .env.
+# deployment (no .env override); the parliament, Westminster and drafting bots
+# each have their own DB, port, config and .env.
+#
+# Step 4 wires a FULL MESH, so adding an entry here registers the new bot as a
+# peer of every existing bot and vice versa — that is how the drafting bot gets
+# `consult_peer` access to the legislation bot for "what does s.7 actually say"
+# without duplicating LEX tooling.
 $bots = @(
     [ordered]@{
         Id       = 'legislation_bot'
@@ -37,6 +42,15 @@ $bots = @(
         Config   = Join-Path $RepoRoot 'bots\westminster\bot_config.json'
         EnvFile  = Join-Path $RepoRoot 'bots\westminster\.env'
         PeerDesc = 'Searches UK Parliament (Westminster) Hansard debates, written statements, Members, and UK bills'
+    },
+    [ordered]@{
+        Id       = 'drafting_bot'
+        Name     = 'Drafting Bot'
+        Port     = 8003
+        Db       = 'lexchat_drafting'
+        Config   = Join-Path $RepoRoot 'bots\drafting\bot_config.json'
+        EnvFile  = Join-Path $RepoRoot 'bots\drafting\.env'
+        PeerDesc = 'Answers legislative drafting-guidance questions and finds comparable enacted drafting precedent'
     }
 )
 

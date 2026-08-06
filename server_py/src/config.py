@@ -203,6 +203,28 @@ EFFICIENCY_PROFILES = {
             "reformat": (0.05, 0.15),
         },
     },
+    # Drafting: guidance Q&A + precedent finding, so the shape is closest to the
+    # legislation bot (retrieve a handful of guidance rules / precedent sections
+    # per question, fan-out measured against sources_kept). These values are a
+    # COPY of the legislation profile and are UNMEASURED for this mode — the
+    # reviewer flow (S5) fans out per clause and may need its own carve-out, the
+    # way deep_research already has one. Re-tune once real drafting traffic
+    # accumulates.
+    "drafting": {
+        "max_delegations": 1,
+        "max_redundant_tool_calls": 0,
+        "fanout_abs": 5,
+        "fanout_ratio": 3.0,
+        "fanout_denominator": "sources_kept",
+        "bands": {
+            "delegation": (1.05, 1.15),
+            "fanout": (2.0, 3.0),
+            "redundant": (0.05, 0.10),
+            "halt": (0.001, 0.02),
+            "fallback": (0.1, 0.25),
+            "reformat": (0.05, 0.15),
+        },
+    },
 }
 
 

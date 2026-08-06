@@ -307,12 +307,19 @@ function AppContent() {
   const isHolyrood = botMode === 'parliamentary_records';
   const isWestminster = botMode === 'westminster_records';
   const isParliament = isHolyrood || isWestminster;
+  // The drafting bot has no research filters at all — no jurisdiction, no court,
+  // no session, no record type. It gates the whole filter bar and modal off
+  // rather than picking a filter vocabulary, so it is NOT part of isParliament.
+  const isDrafting = botMode === 'drafting';
 
   // The correct session/Parliament default depends on which bot this is, which is
   // only known once /api/bot-info resolves — apply it then, and drop any persisted
-  // value belonging to the other bot's vocabulary.
+  // value belonging to the other bot's vocabulary. Skipped for drafting: the
+  // session selectors are two-way (Westminster vs everything else), so calling
+  // this would hand a drafting deployment a Holyrood "Session 7" default for a
+  // filter it never shows.
   useEffect(() => {
-    if (botMode) applySessionDefault(botMode);
+    if (botMode && !isDrafting) applySessionDefault(botMode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [botMode]);
 
@@ -565,7 +572,11 @@ function AppContent() {
           </div>
         </div>
 
-        {/* Research context pills — part of the fixed header; stays in place as the chat scrolls */}
+        {/* Research context pills — part of the fixed header; stays in place as the chat scrolls.
+            Hidden entirely on the drafting bot: every pill below describes a research
+            filter that bot does not expose, and the bar's only control opens the
+            filter modal. */}
+        {!isDrafting && (
         <div
           style={{
             padding: '10px 24px',
@@ -705,6 +716,7 @@ function AppContent() {
             );
           })()}
         </div>
+        )}
 
         {/* Content area: chat column + sources rail */}
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
@@ -738,14 +750,18 @@ function AppContent() {
                           ? 'Ask a question about UK Parliament records to begin.'
                           : isParliament
                             ? 'Ask a question about Scottish Parliament records to begin.'
-                            : 'Ask a legal question to begin.'
+                            : isDrafting
+                              ? 'Ask a drafting question to begin.'
+                              : 'Ask a legal question to begin.'
                         : chatMode === 'deep_research'
                           ? 'Describe your research question — a plan will be drafted for your review before any research runs.'
                           : isWestminster
                             ? 'Ask about Hansard debates, committee scrutiny, or bill progress to begin.'
                             : isParliament
                               ? 'Ask about Scottish Parliament debates, committee scrutiny, or bill progress to begin.'
-                              : 'Ask about UK legislation or case law to begin.'}
+                              : isDrafting
+                                ? 'Ask about a drafting convention, or paste a clause to check, to begin.'
+                                : 'Ask about UK legislation or case law to begin.'}
                     </p>
                   </div>
                 )}
@@ -873,8 +889,11 @@ function AppContent() {
               }}
             >
               <div style={{ maxWidth: '95%', margin: '0 auto', position: 'relative' }}>
-                {/* Filters modal */}
-                {showFilters && (
+                {/* Filters modal — never opened on the drafting bot (its trigger,
+                    the research-context pill bar, is not rendered), but gated here
+                    too so a stale `showFilters` can never surface a filter set the
+                    bot does not honour. */}
+                {showFilters && !isDrafting && (
                   <ResearchFiltersModal
                     isParliament={isParliament}
                     isWestminster={isWestminster}

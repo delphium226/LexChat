@@ -144,6 +144,7 @@ _MANAGER_PROMPT_CASES = [
     ("legislation_only", {"_chat_mode": "conversational"}),     # conversational
     ("parliamentary_records", {}),                              # early return
     ("westminster_records", {}),                                # early return
+    ("drafting", {}),                                           # early return
 ]
 
 
@@ -208,6 +209,126 @@ def test_consulted_block_still_appended_when_flag_is_off(mode, cfg):
     )
     assert CONSULTED_PEER_BLOCK in prompt
     assert "<suggestions>" not in prompt.replace(CONSULTED_PEER_BLOCK, "")
+
+
+# ---------------------------------------------------------------------------
+# Mode dispatch completeness (S1 — drafting bot)
+# ---------------------------------------------------------------------------
+# Every mode dispatch in the codebase is a lookup-with-legislation-fallback or an
+# if/elif chain ending in the legislation branch. That makes adding a mode safe
+# for the existing bots — and makes a MISSED KEY FAIL SILENTLY, as the new bot
+# quietly runs with legislation prompts, legislation tools and legislation
+# efficiency thresholds. Nothing raises and nothing looks wrong in the logs.
+#
+# So each case below asserts BOTH halves: that "drafting" resolves to the
+# drafting object, AND that it is not the legislation fallback. Asserting only
+# the first half would pass on a missed key wherever the fallback happens to
+# satisfy the same assertion.
+
+def test_dispatch_efficiency_profile(monkeypatch):
+    """config.py — EFFICIENCY_PROFILES / get_efficiency_profile()."""
+    from src import config
+
+    monkeypatch.setattr(config.settings, "research_mode", "drafting")
+    profile = config.get_efficiency_profile()
+    assert profile is config.EFFICIENCY_PROFILES["drafting"]
+    assert profile is not config.EFFICIENCY_PROFILES["legislation"]
+
+
+def test_dispatch_worker_tools():
+    """tools/schemas.py — get_worker_tools()."""
+    from src.agent.tools.schemas import DRAFTING_TOOLS, WORKER_TOOLS, get_worker_tools
+
+    tools = get_worker_tools("drafting")
+    # Identity, not contents: DRAFTING_TOOLS starts as a copy of WORKER_TOOLS, so
+    # an equality check here would pass even if the branch were missing entirely.
+    assert tools is DRAFTING_TOOLS
+    assert tools is not WORKER_TOOLS
+
+
+def test_dispatch_worker_system_prompt():
+    """prompts.py — get_worker_system_prompt()."""
+    from src.prompts import (
+        DRAFTING_WORKER_SYSTEM_PROMPT,
+        WORKER_SYSTEM_PROMPT,
+        get_worker_system_prompt,
+    )
+
+    prompt = get_worker_system_prompt("drafting")
+    assert DRAFTING_WORKER_SYSTEM_PROMPT in prompt
+    assert WORKER_SYSTEM_PROMPT not in prompt
+
+
+def test_dispatch_worker_system_prompt_ignores_conversational_chat_mode():
+    """Like the parliament/Westminster bots, the drafting worker keeps its own
+    prompt in conversational mode — the generic conversational worker prompt is
+    legislation-shaped."""
+    from src.prompts import (
+        DRAFTING_WORKER_SYSTEM_PROMPT,
+        WORKER_SYSTEM_PROMPT_CONVERSATIONAL,
+        get_worker_system_prompt,
+    )
+
+    prompt = get_worker_system_prompt("drafting", {"_chat_mode": "conversational"})
+    assert DRAFTING_WORKER_SYSTEM_PROMPT in prompt
+    assert WORKER_SYSTEM_PROMPT_CONVERSATIONAL not in prompt
+
+
+def test_dispatch_manager_system_prompt():
+    """prompts.py — get_manager_system_prompt()'s early-return branch."""
+    from src.prompts import _DRAFTING_BODY, _MANAGER_BODY, get_manager_system_prompt
+
+    prompt = get_manager_system_prompt("drafting")
+    assert _DRAFTING_BODY in prompt
+    assert _MANAGER_BODY not in prompt
+
+
+def test_dispatch_filter_constraint_block():
+    """prompts.py — _filter_constraint_block_for_mode().
+
+    The drafting bot exposes no research filters, so its block is empty. The cfg
+    below produces a non-empty block on the legislation path, which is what makes
+    the empty result evidence of the branch rather than of an empty cfg.
+    """
+    from src.prompts import _filter_constraint_block_for_mode
+
+    cfg = {"_jurisdiction": "scotland", "_current_only": True}
+    assert _filter_constraint_block_for_mode("legislation_only", cfg) != ""
+    assert _filter_constraint_block_for_mode("drafting", cfg) == ""
+
+
+def test_dispatch_report_sections():
+    """agent_core.py — _REPORT_SECTIONS."""
+    from src.agent.agent_core import _REPORT_SECTIONS
+
+    assert "drafting" in _REPORT_SECTIONS
+    assert _REPORT_SECTIONS["drafting"] != _REPORT_SECTIONS["legislation_only"]
+    # The list is what _report_needs_reformat grades against and what the
+    # reformat retry is told to aim at, so it must match the worker prompt's
+    # OUTPUT STRUCTURE labels.
+    from src.prompts import DRAFTING_WORKER_SYSTEM_PROMPT
+
+    for section in _REPORT_SECTIONS["drafting"]:
+        assert section in DRAFTING_WORKER_SYSTEM_PROMPT
+
+
+def test_dispatch_planner_mode_note():
+    """prompts.py — _PLANNER_MODE_NOTES."""
+    from src.prompts import _PLANNER_MODE_NOTES, get_planner_system_prompt
+
+    prompt = get_planner_system_prompt("drafting")
+    assert _PLANNER_MODE_NOTES["drafting"] in prompt
+    assert _PLANNER_MODE_NOTES["legislation_only"] not in prompt
+
+
+def test_drafting_guidance_tool_is_not_yet_present():
+    """S1 is scaffolding: the guidance tool arrives in S3. Pinned so a later
+    session cannot mistake the placeholder tool set for a finished one — and as
+    the counterpart to test_drafting_security's CACHEABLE_TOOLS assertion."""
+    from src.agent.tools.schemas import get_worker_tools
+
+    names = {t["function"]["name"] for t in get_worker_tools("drafting")}
+    assert "search_drafting_guidance" not in names
 
 
 @pytest.mark.parametrize("mode", ["legislation_only", "case_law_only", "parliamentary_records"])

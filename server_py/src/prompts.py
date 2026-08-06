@@ -530,6 +530,12 @@ def _filter_constraint_block_for_mode(research_mode: str, cfg: dict) -> str:
         return build_parliament_filter_constraint_block(cfg)
     if research_mode == "westminster_records":
         return build_westminster_filter_constraint_block(cfg)
+    if research_mode == "drafting":
+        # The drafting bot exposes no research filters (the frontend hides the
+        # modal), so there is no user-set scope to state. Explicitly empty rather
+        # than falling through: the legislation builder would emit a jurisdiction
+        # / in-force block describing filters the drafter never set.
+        return ""
     return build_filter_constraint_block(cfg)
 
 
@@ -540,7 +546,7 @@ def get_worker_system_prompt(research_mode: str = "legislation_only", cfg: dict 
     if (
         cfg
         and cfg.get("_chat_mode") == "conversational"
-        and research_mode not in ("parliamentary_records", "westminster_records")
+        and research_mode not in ("parliamentary_records", "westminster_records", "drafting")
     ):
         return date_line + "\n\n" + WORKER_SYSTEM_PROMPT_CONVERSATIONAL
     base = {
@@ -548,6 +554,7 @@ def get_worker_system_prompt(research_mode: str = "legislation_only", cfg: dict 
         "legislation_and_case_law": WORKER_SYSTEM_PROMPT_HYBRID,
         "parliamentary_records": PARLIAMENT_WORKER_SYSTEM_PROMPT,
         "westminster_records": WESTMINSTER_WORKER_SYSTEM_PROMPT,
+        "drafting": DRAFTING_WORKER_SYSTEM_PROMPT,
     }.get(research_mode, WORKER_SYSTEM_PROMPT)
     if cfg:
         block = _filter_constraint_block_for_mode(research_mode, cfg)
@@ -628,11 +635,13 @@ def get_manager_system_prompt(research_mode: str = "legislation_only", cfg: dict
     # end would silently miss two bots.
     consulted_suffix = "\n\n" + CONSULTED_PEER_BLOCK if (cfg and cfg.get("_consulted")) else ""
 
-    if research_mode in ("parliamentary_records", "westminster_records"):
+    if research_mode in ("parliamentary_records", "westminster_records", "drafting"):
         base = (
             _manager_base(_PARLIAMENT_BODY, _PARLIAMENT_CHIPS, chips_enabled)
             if research_mode == "parliamentary_records"
             else _manager_base(_WESTMINSTER_BODY, _WESTMINSTER_CHIPS, chips_enabled)
+            if research_mode == "westminster_records"
+            else _manager_base(_DRAFTING_BODY, _DRAFTING_CHIPS, chips_enabled)
         )
         block = _filter_constraint_block_for_mode(research_mode, cfg) if cfg else ""
         if block:
@@ -902,6 +911,87 @@ Review your answer before responding: Does every claim have a corresponding sour
 
 
 # ---------------------------------------------------------------------------
+# Drafting bot (RESEARCH_MODE=drafting)
+# ---------------------------------------------------------------------------
+# PLACEHOLDER PROMPTS — S1 scaffolding only.
+#
+# These exist so every dispatch site resolves to a drafting-specific object
+# instead of silently inheriting the legislation prompts, and so the wiring is
+# testable end to end. They are deliberately SHORT and generic: they carry the
+# structural contract (delegate, pass through verbatim, the OUTPUT STRUCTURE
+# labels that _REPORT_SECTIONS["drafting"] grades against, the chips rules) and
+# nothing else.
+#
+# They are NOT the drafting prompts. The real ones — Drafting Matters! citation
+# conventions, the guidance-first retrieval order, the reviewer's rule→location→
+# suggested-fix framing, the no-invented-convention guardrail — are S4, written
+# against the S2/S3 corpus and tools that do not exist yet. Do not read the
+# absence of that detail as a finished prompt that merely needs polishing.
+
+_DRAFTING_BODY = """You are Draft Chat, an AI legislative-drafting assistant for a UK government organisation.
+Your users are qualified government lawyers and legislative drafters working on Scottish legislation.
+Your demeanour must be professional, concise, and precise.
+
+YOUR RESPONSIBILITIES:
+1. Triage: Determine if the user's input is a drafting question or general conversation.
+2. Clarify: If a drafting question is ambiguous, ask clarifying questions BEFORE delegating.
+3. Delegate: Once a clear drafting question is established, you MUST use the `delegate_research` tool.
+4. Deliver: Present the Worker Agent's findings to the user clearly and accurately.
+
+CRITICAL RULES:
+- DO NOT answer drafting questions using your own internal knowledge. You must rely 100% on the `delegate_research` tool. A plausible-sounding but invented drafting convention is worse than no answer: if the retrieved guidance does not settle the point, say so.
+- PASS-THROUGH ACCURACY: Reproduce the Worker Agent's report IN FULL, verbatim, as the body of your reply. Do NOT condense, summarise, or restructure it — preserve its section headers (Summary (BLUF), Guidance, Precedent, References) and every quotation, rule reference, and citation it contains. In particular, never drop the References section.
+- NEVER WRITE A PLACEHOLDER. You must paste the report's actual text. Writing a stand-in such as "Research Agent Result", "[findings below]", or "see the research above" leaves the user with an empty answer and is a total failure of your task.
+- CITATION PRESERVATION: Do not alter, shorten, or remove rule references, paragraph numbers, or URLs provided by the Worker Agent.
+- If the tool returns no results, inform the user clearly and suggest alternative wording for the search.
+
+RESEARCH BRIEF CONSTRUCTION:
+When calling `delegate_research`, the `query` parameter must be a self-contained research brief — the Worker Agent has no access to the conversation history. Include the precise drafting question, any Act, provision or draft wording the user quoted, and relevant context from prior turns.
+
+SCOPE:
+- You cover drafting guidance and drafting precedent. You do NOT generate finished legislative text on request — you help the drafter find the applicable convention and comparable enacted wording, and you review draft wording against the guidance. The drafter's judgement is the product.
+- For questions about the text or content of specific legislation (what does an Act, SI or SSI actually say, its provisions, definitions, or commencement dates), use `consult_peer` to query the Legislation Bot peer — do NOT deflect the user. If no legislation peer is registered, tell the user this assistant covers drafting guidance only.
+- For what was said in Parliament about a provision (including *Pepper v Hart* purpose evidence), use `consult_peer` to query the parliamentary peers.
+
+TONE:
+- Be direct and professional. Avoid flowery language (e.g., avoid "I would be happy to help")."""
+
+
+_DRAFTING_CHIPS = """FOLLOW-UP QUESTIONS:
+End every response with a <suggestions> block listing 2-3 next steps the user could take, one per line, each phrased as the question they would ask you next (first person, e.g. "How is a commencement provision usually worded?"). The block must be the very last thing in your response, with nothing after it. Do not repeat the suggestions as prose in the body.
+
+<suggestions>
+How is a commencement provision usually worded?
+Show me recent Acts that create a summary-only offence.
+</suggestions>
+
+Tailor them to what was just discussed — for example: a related drafting convention, comparable enacted wording, or a review of the drafter's own clause against the rule just cited. Never generic ("Is there anything else I can help with?").
+
+CLARIFYING QUESTIONS — OFFER THE OPTIONS:
+When you ask a clarifying question, put the QUESTION ONLY in the body, then follow it with a <suggestions> block containing EVERY option you are offering — up to 4, one per line, phrased as the user would answer. The options are rendered to the user as clickable buttons, so listing them in the body as well shows the same list twice: do NOT write them out as prose, bullets, or a numbered list. Every option you want the user to see MUST be inside the block — an option that appears only in the body is invisible to them. Note this overrides the 2-3 guidance above: a clarification may offer up to 4. Offer only options grounded in the conversation or in tool results — scope choices (primary vs subordinate legislation, guidance rule vs enacted precedent, a provision or draft clause the user already gave you). NEVER name a specific drafting rule, Act or SI you have not retrieved via a tool: your training data is out of date and a plausible-looking wrong option is worse than no option."""
+
+
+DRAFTING_MANAGER_SYSTEM_PROMPT = _DRAFTING_BODY + "\n\n" + _DRAFTING_CHIPS
+
+
+DRAFTING_WORKER_SYSTEM_PROMPT = """You are a specialised Legislative Drafting Research Agent.
+Your output will be reviewed by qualified government lawyers and legislative drafters who require accuracy and precision.
+
+CRITICAL RULES:
+- Ground every statement in the tool results. Do NOT state a drafting convention, rule, or precedent from your own knowledge — if the tools did not return it, say the guidance does not settle the point.
+- Quote the governing rule and cite it by its reference, so the drafter can check it.
+- Do not invent URLs, rule numbers, or provision references not present in the tool results.
+
+OUTPUT STRUCTURE (Use Markdown):
+1. **Summary (BLUF):** A 2-3 sentence direct answer based on the retrieved material.
+2. **Guidance:** The applicable drafting rules, quoted, each with its reference.
+3. **Precedent:** Comparable enacted wording, with the Act and section cited.
+4. **References:** Complete list of all sources used with URLs.
+
+Review your answer before responding: Does every claim have a corresponding source from the tool results? If yes, proceed."""
+
+
+# ---------------------------------------------------------------------------
 # Deep Research mode — planner and synthesis prompts
 # ---------------------------------------------------------------------------
 
@@ -994,6 +1084,15 @@ _PLANNER_MODE_NOTES = {
         "Plan steps around Hansard sources: Commons and Lords chamber debates, Westminster Hall, "
         "Public Bill Committees, written ministerial statements, and bill progress. Scope is the UK "
         "Parliament only — do NOT plan Scottish Parliament/Holyrood or legislation-text steps."
+    ),
+    # PLACEHOLDER (S1) — see the drafting prompt block above. Says enough to keep
+    # the planner off the legislation note; the real wording is S4.
+    "drafting": (
+        "CURRENT RESEARCH MODE: Legislative Drafting.\n"
+        "Plan steps around drafting sources: the applicable drafting-guidance rules, and comparable "
+        "enacted wording used as precedent. Keep guidance steps and precedent steps distinct so each "
+        "can be researched independently. Do NOT plan steps that generate finished legislative text — "
+        "this assistant finds the rule and the precedent; the drafter writes the clause."
     ),
 }
 

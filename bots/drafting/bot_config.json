@@ -1,0 +1,14 @@
+{
+  "bot_identity": {
+    "bot_id": "drafting_bot",
+    "name": "DraftChat",
+    "tagline": "Legislative Drafting Guidance & Review",
+    "logo_path": "bots/drafting/assets/logo.svg",
+    "logo_emoji": "🖋",
+    "brand_color": "#5B2C6F"
+  },
+  "agent": {
+    "research_mode": "drafting"
+  },
+  "peer_registry_seed": []
+}
