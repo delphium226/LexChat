@@ -304,7 +304,8 @@ per-machine, and does not travel with the branch). Hence this file and `SESSION_
 
 Tick a row only when its tests are green AND the work is committed.
 
-- [x] **S0 — Security prereqs** *(on `main`, before branching)*
+- [x] **S0 — Security prereqs** *(on `main`, before branching — ⚠️ **committed but NOT pushed**,
+      so the deployment target does not have these fixes; see the Session 2 log)*
       `secure=True` (auth.py:104) · `utils/redact.py` per LOGGING_IMPROVEMENTS_PLAN.md:118-153,
       applied at executor.py:123 + auth.py:174 · `drafting_mode_enabled` flag (5 sites) ·
       `local_prompt_cache_enabled` OFF for the drafting bot + reason recorded in CLAUDE.md

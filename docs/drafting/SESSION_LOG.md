@@ -268,7 +268,27 @@ rows** under `plainto_tsquery`, while an OR query returns 78 for the first and r
   migration: a second `source` with `sensitivity='official_sensitive'`, pinned by a test.
 
 **State of the branch:** `feature/drafting-bot` at `17ca4cc` (code) + this log commit, tests green
-(**383 passed**; 365 at the S1 baseline, 18 added). Nothing pushed; `main` still at `c220185`.
+(**383 passed**; 365 at the S1 baseline, 18 added).
+
+**Pushed — this changed at the end of S2 and breaks the pattern S0/S1 set.**
+`feature/drafting-bot` now has a remote (`origin/feature/drafting-bot`, pushed at `09802ad`).
+That is safe and does **not** weaken the deployment carve-out: the target pulls `origin/main`,
+which this does not touch. Pull/rebase against the remote branch from here on rather than
+assuming it is local-only. **`main` is still at `c220185` and must stay there.**
+
+**Local machine state:** the dev DB `lexchat_drafting` already holds the ingested corpus
+(285 rows). S3 can develop and test `search_drafting_guidance` against real data immediately —
+no need to re-run the ingest. On a different machine, run `POST /api/drafting/ingest` as admin
+(or the boot sequence: `init_db()` then `ingest_drafting_matters()`).
+
+**⚠️ `main` is 3 commits ahead of `origin/main`, and one of them is S0.** `6be5338`
+(`secure=True` cookie + log redaction) is committed locally but **never pushed**, so the
+deployment target does not have it — three sessions and counting. BUILD_PLAN deliberately
+carved S0 out to land on `main` because those fixes are correct regardless of whether the
+drafting bot ships, and the live deployment wants them; that intent is currently unrealised.
+Also unpushed: `2aa574d` and `c220185` (the plan and the S0 log). Pushing `main` is an
+outward-facing act — it makes the changes pullable to production — so it is the user's call,
+not a drive-by. Flagged to the user 2026-08-06; no decision yet.
 
 **Next action:** S3 — `search_drafting_guidance` (copy `_search_plenary_db` including the
 empty-table graceful note and the `_or_tsquery` fallback, which the numbers above show this corpus
