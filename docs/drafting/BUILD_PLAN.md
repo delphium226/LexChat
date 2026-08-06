@@ -213,9 +213,13 @@ Mirror the Westminster bot, which is the proven template for adding a mode end t
   byte-for-byte.
 - Ingest: one-shot admin-triggered script, **not** a crawler — guidance is near-static, so none
   of `parliament_crawler.py`'s high-water-mark / trailing-delta / Cloudflare-524 machinery is
-  needed. Reuse `_extract_text` from `routers/documents.py:34-66` (`pdfplumber` / `python-docx`)
-  as a plain function, and the `INSERT ... ON CONFLICT ... DO NOTHING` idiom.
-- **Chunk per numbered rule / paragraph**, not per chapter — see Risks.
+  needed. ~~Reuse `_extract_text` from `routers/documents.py:34-66`~~ — **superseded at S2: the
+  ingest reads the gov.scot HTML, not the PDF**, so `_extract_text` (pdfplumber/python-docx) is
+  not used. See the Session 2 log. Keeps the `INSERT ... ON CONFLICT ... DO NOTHING` idiom.
+- ~~**Chunk per numbered rule / paragraph**~~ — **superseded at S2: Drafting Matters! contains no
+  numbered rules in either HTML or PDF.** The unit is a *named topic* ("shall v must",
+  "Gender neutrality") with a `Rules:` / `To note:` body. Chunk per named topic, never per
+  chapter — the underlying point in Risks is unchanged.
 - `sensitivity` column exists from day one so the internal guidance drops in without a migration.
 - Tool `search_drafting_guidance`: copy `_search_plenary_db` (`parliament.py:393-498`) including
   the empty-table graceful note and the `_or_tsquery` zero-result fallback.
@@ -307,8 +311,9 @@ Tick a row only when its tests are green AND the work is committed.
 - [x] **S1 — Bot scaffolding**  bots/drafting/{bot_config.json,.env,assets} ·
       7 dispatch keys (config.py:149, schemas.py:638, prompts.py:546/631/527/967, agent_core.py:51) ·
       `isDrafting` in App.jsx:306 + hide filter modal
-- [ ] **S2 — Corpus schema + ingest**  `DraftingGuidance` model · DDL in database.py ·
-      GIN index · one-shot ingest of Drafting Matters!, chunked per numbered rule
+- [x] **S2 — Corpus schema + ingest**  `DraftingGuidance` model · DDL in database.py ·
+      GIN index · one-shot ingest of Drafting Matters!, chunked per named topic
+      (**not** per numbered rule — the source has no rule numbers; see Session 2)
 - [ ] **S3 — Retrieval tools**  `search_drafting_guidance` + `_or_tsquery` fallback ·
       wire LEX /amendment/search + explanatory-note endpoints ·
       stopwatch.py:3-28 + `_extract_sources_inner` registration

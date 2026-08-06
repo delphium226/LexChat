@@ -154,3 +154,123 @@ Nothing pushed. `feature/drafting-bot` does **not** exist yet.
 **Next action:** S2 — the `DraftingGuidance` model and the hand-written DDL + GIN index in
 `database.py`. If S2 runs long, stop after schema + DDL and leave the Drafting Matters! ingest for
 its own session, as the ledger advises.
+
+---
+
+## Session 2 — 2026-08-06 — S2 Corpus schema + ingest
+
+Completed in full, ingest included — the split-session fallback was not needed.
+
+**Done:**
+- `DraftingGuidance` (`models.py`) following `SpPlenaryItem`: `source`, `part`, `chapter`,
+  `rule_ref`, `heading`, `full_text`, `structured` (JSON), `url`, `version_date`, `sensitivity`,
+  `fetched_at`, `UniqueConstraint(source, rule_ref)`.
+- Hand-written DDL in `database.py` (no Alembic): `CREATE TABLE IF NOT EXISTS drafting_guidance`
+  in the migration block, plus four indexes — three btree and
+  `USING GIN (to_tsvector('english', coalesce(full_text,'')))`.
+- `services/drafting_ingest.py` — one-shot ingest, no crawler, no background task.
+- `routers/drafting.py` — `POST /api/drafting/ingest` and `GET /api/drafting/corpus`, both on an
+  admin-by-default sub-router copying the `developer.py` convention. Registered in `main.py`.
+- `tests/test_drafting_corpus.py` (18 tests). Suite 365 → **383 green**.
+- **Live ingest run against `lexchat_drafting`: 285 rows, mean 975 chars, median 691, min 27,
+  max 5992.** Re-run inserted 0 / skipped 285 — idempotent.
+
+**Surprises / deviations from BUILD_PLAN:**
+
+- **Source: the gov.scot HTML, not the PDF. The plan's `_extract_text` reuse does not happen.**
+  This was the open question and the answer is not close. The PDF is a designed 171-page
+  publication: under `pdfplumber` its **pull-quotes interleave mid-sentence into the body**
+  (p.11 extracts as "WE WILL CONTINUE Two years have passed since we published the first edition
+  of / TO DEVELOP / AND SHARE OUR / The reaction we received…"), every page carries a running
+  header, and — decisively — **all heading levels flatten to bare lines** indistinguishable from
+  prose, so per-topic chunking off the PDF would need font-size analysis. The HTML encodes a real
+  two-level hierarchy (`<p><strong>` = chapter/section, `<p><em>` = sub-topic). It also needs no
+  new dependency: stdlib `re` + a `_strip_html` helper, matching `parliament.py`. A DOM parser
+  would have meant regenerating the offline dependency bundle (see the note at the top of
+  `requirements.txt`). BUILD_PLAN Phase 2 amended.
+
+- **Drafting Matters! has no numbered rules — in either format.** The ledger row said "chunked per
+  numbered rule". There is nothing to number: the document's unit is a **named topic**
+  ("shall v must", "Gender neutrality", "numbers generally") with a `Rules:` / `To note:` body.
+  That unit is the chunk, and it happens to be the right size (median 691 chars). The
+  make-or-break instruction survives intact in substance — per topic, never per chapter — but a
+  future session looking for `rule_ref` values like "1.2.3" will not find them; `rule_ref` is a
+  slug path (`p6/language/particular-words-and-expressions/shall-v-must`). BUILD_PLAN amended.
+
+- **The List of Contents page (page 1) is load-bearing, and it is the only place the
+  chapter/section split is stated.** In the body, a chapter ("Language") and a section
+  ("Plain language") are both `<p><strong>…</strong></p>` — identical markup. Parsing the contents
+  page gives an authoritative split. It also **recovers headings whose `<strong>` markup is
+  missing in the body**: "Numbers and symbols" is a bare `<p>` in the HTML, and without recovery
+  its four child topics would have been misfiled under "Dates".
+
+- **Three body-markup traps, all pinned by tests.** (1) *Example provisions* are bolded exactly
+  like headings ("1 Short title", "50A Form of ballot papers") — detected by a leading numeral or
+  quote mark and kept as body. (2) Part 2 opens with a long bolded `Note:` paragraph — headings
+  are capped at 120 chars. (3) gov.scot sometimes leaves a `<strong>` open across several
+  `<br />`-separated contents entries; a multi-line span is treated as **sections, not chapters**,
+  deliberately biased that way because a chapter misread as a section still gets its own chunk,
+  whereas a section misread as a chapter loses its heading.
+
+- **The GIN index is correct but the planner does not use it at 285 rows, and that is fine.**
+  Plain `EXPLAIN` shows a Seq Scan (cost 73.29). With `enable_seqscan=off` it is a
+  `Bitmap Index Scan on idx_drafting_guidance_full_text` with an exactly-matching `Index Cond`,
+  so the expression matches byte-for-byte — the seq scan is a cost decision on a tiny table, not
+  a defect. **Do not "fix" this.** The test forces `enable_seqscan=off` for the same reason.
+  `DRAFTING_FTS_EXPR` in `models.py` is imported by both `database.py` and (at S3) the retrieval
+  tool, so the match is structural rather than remembered.
+
+- **`index=True` on a model column plus an explicit `CREATE INDEX` produces two indexes on the
+  same column** (`ix_drafting_guidance_part` *and* `idx_drafting_guidance_part`). Caught by
+  reading `pg_indexes` after the live run. Removed `index=True`; the DDL is the single
+  declaration site. **The older `sp_committee_items` / `sp_plenary_items` tables have this same
+  duplication today** (`committee_code`, `committee_name`, `meeting_date` — six redundant
+  indexes). Not touched here: out of scope, and dropping indexes on a populated parliament bot is
+  its own decision. Worth a cleanup line in `TODO.md`.
+
+- **`sensitivity` needed `server_default`, and no other model in the file uses one.** With a
+  Python-side `default` only, `Base.metadata.create_all` (what `conftest` builds) omits the
+  `DEFAULT` clause the hand-written DDL gives the real table — so a raw INSERT omitting the
+  column succeeds in production and raises `NotNullViolationError` under test. A real test caught
+  it. Fixed for this column because it is the one gating OFFICIAL-SENSITIVE material; **the same
+  latent ORM-vs-DDL divergence exists on every other table in `models.py`.**
+
+- **Measured, and rejected: adding `heading`/`chapter` to the indexed FTS expression.** Tried it
+  against the live corpus. It recovers one extra hit on one probe and nothing on the others,
+  because the real failure is `plainto_tsquery`'s AND-of-all-terms, not missing vocabulary.
+  Not worth changing a pinned index expression for. Kept `full_text`-only, matching
+  `_search_plenary_db`.
+
+**Retrieval quality as ingested — read this before S3:**
+The BUILD_PLAN spot-check passes: `'avoiding masculine pronouns'` → *Language > Gender
+neutrality* and `'how to word a commencement provision'` → *Form and key components of Bills >
+Commencement provisions*, both by concept, neither by exact heading. But conversationally-phrased
+probes hit the AND-cliff hard — `'obligation imposed on a person'`, `'splitting a long sentence
+into paragraphs'` and `'referring to a section elsewhere in the same Act'` all return **zero
+rows** under `plainto_tsquery`, while an OR query returns 78 for the first and ranks them badly
+(top hit *Criminal liability of the Crown > Drafting considerations*). So:
+- the `_or_tsquery` zero-result fallback in the S3 row is **necessary here, not inherited dogma**;
+- and the OR fallback's ranking is visibly poor on this corpus, which is early evidence for the
+  **pgvector re-measurement** the plan defers to S7. BUILD_PLAN already says that NO-GO was
+  measured against a transcript corpus and must be re-measured against this one. It looks likely
+  to go the other way. Do not let S7 inherit the transcript-corpus decision.
+
+**Still open, deliberately not done in S2:**
+- `search_drafting_guidance` is S3 and does not exist yet. The standing invariant is carried
+  forward untouched: **it must not be added to `CACHEABLE_TOOLS`**, and its `query` arg must not
+  go in `SAFE_ARG_KEYS`. `tests/test_drafting_security.py` still pins the former.
+- The two redaction sites S0 flagged (`agent/agent_core.py:176` delegation brief,
+  `routers/learning.py:145`) are **still open** — third session running. They are one-liners and
+  must be closed before the bot sees real pre-publication drafts.
+- No Admin Portal UI for the ingest; `POST /api/drafting/ingest` is called directly. Fine for a
+  one-shot, but if it ever needs a button it belongs with S6.
+- The internal OFFICIAL-SENSITIVE guidance is still unavailable. The schema takes it with no
+  migration: a second `source` with `sensitivity='official_sensitive'`, pinned by a test.
+
+**State of the branch:** `feature/drafting-bot` at `17ca4cc` (code) + this log commit, tests green
+(**383 passed**; 365 at the S1 baseline, 18 added). Nothing pushed; `main` still at `c220185`.
+
+**Next action:** S3 — `search_drafting_guidance` (copy `_search_plenary_db` including the
+empty-table graceful note and the `_or_tsquery` fallback, which the numbers above show this corpus
+needs), then the LEX `/amendment/search` + explanatory-note endpoints, then registration in
+`utils/stopwatch.py:3-28` and `agent_shared.py` `_extract_sources_inner`.

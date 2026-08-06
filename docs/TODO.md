@@ -27,6 +27,24 @@ Note: not yet deployed — the target still needs `git pull origin main` + resta
 `package_offline_native.ps1`. The current bundle predates the doc-upload feature and
 LACKS the pdfplumber/python-docx wheels — a fresh air-gapped install would fail.
 
+### T5. Duplicate indexes on the `sp_*` tables (found 2026-08-06 during drafting S2)
+`sp_committee_items` and `sp_plenary_items` declare `index=True` on `committee_code`,
+`committee_name` and `meeting_date` in `models.py` **and** carry explicit
+`CREATE INDEX idx_sp_*` statements in `database.py`. SQLAlchemy's `create_all` emits
+`ix_<table>_<col>` and the DDL emits `idx_…`, so each of those six columns is indexed
+twice — pure write and storage overhead. Confirmed on the drafting bot's brand-new
+table (fixed there by dropping `index=True`; the DDL is the single declaration site).
+Fix is `DROP INDEX IF EXISTS ix_sp_*` in `database.py`'s index block, matching the
+existing D8 cleanup lines — but it touches populated parliament-bot DBs, so it wants
+its own small session rather than a drive-by.
+
+Related and separate: **no model in `models.py` uses `server_default`**, so every
+Python-side `default=` leaves the ORM-created schema (what `conftest` builds for tests)
+without the `DEFAULT` clause the hand-written DDL gives the real table. A raw INSERT
+omitting such a column succeeds in production and fails under test. Closed for
+`drafting_guidance.sensitivity` only, because that column gates OFFICIAL-SENSITIVE
+material; the divergence is still live everywhere else.
+
 ### T4. Credential loose ends
 - Old `server/.env` credentials remain in git history (no history rewrite chosen) —
   rotate if still valid. (Ollama SSH key rotation done 2026-07-13; DB-creds rotation
