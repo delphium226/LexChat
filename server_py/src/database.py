@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from .config import settings
-from .models import AppSetting, Base, User
+from .models import DRAFTING_FTS_EXPR, AppSetting, Base, User
 
 logger = logging.getLogger("app")
 
@@ -235,6 +235,25 @@ async def init_db() -> None:
                 caption_ok BOOLEAN NOT NULL DEFAULT FALSE,
                 fetched_at TIMESTAMP
             )""",
+            # Drafting guidance corpus (S2, additive): one row per named drafting
+            # rule / topic. `sensitivity` is present from day one so the internal
+            # OFFICIAL-SENSITIVE PCO guidance drops in as a second `source` later
+            # with no migration.
+            """CREATE TABLE IF NOT EXISTS drafting_guidance (
+                id SERIAL PRIMARY KEY,
+                source VARCHAR(32) NOT NULL,
+                part VARCHAR(128),
+                chapter VARCHAR(256),
+                rule_ref VARCHAR(256) NOT NULL,
+                heading VARCHAR(512),
+                full_text TEXT,
+                structured JSONB,
+                url VARCHAR(512),
+                version_date DATE,
+                sensitivity VARCHAR(32) NOT NULL DEFAULT 'public',
+                fetched_at TIMESTAMP,
+                CONSTRAINT uq_drafting_guidance_source_ref UNIQUE (source, rule_ref)
+            )""",
             # Local prompt cache (D7, additive): cross-user summary cache + per-request hit metrics
             """CREATE TABLE IF NOT EXISTS local_prompt_cache (
                 id SERIAL PRIMARY KEY,
@@ -305,6 +324,14 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_sp_plenary_committee_name ON sp_plenary_items (committee_name)",
             "CREATE INDEX IF NOT EXISTS idx_sp_plenary_meeting_date ON sp_plenary_items (meeting_date)",
             "CREATE INDEX IF NOT EXISTS idx_sp_plenary_full_text ON sp_plenary_items USING GIN (to_tsvector('english', coalesce(full_text,'')))",
+            "CREATE INDEX IF NOT EXISTS idx_drafting_guidance_part ON drafting_guidance (part)",
+            "CREATE INDEX IF NOT EXISTS idx_drafting_guidance_chapter ON drafting_guidance (chapter)",
+            "CREATE INDEX IF NOT EXISTS idx_drafting_guidance_sensitivity ON drafting_guidance (sensitivity)",
+            # The expression here MUST stay byte-identical to the one the retrieval
+            # tool queries with, or Postgres silently seq-scans. Both sides import
+            # DRAFTING_FTS_EXPR so they cannot drift apart.
+            "CREATE INDEX IF NOT EXISTS idx_drafting_guidance_full_text "
+            f"ON drafting_guidance USING GIN ({DRAFTING_FTS_EXPR})",
             "CREATE INDEX IF NOT EXISTS idx_sp_video_captions_meeting_id ON sp_video_captions (meeting_id)",
             "CREATE INDEX IF NOT EXISTS idx_sp_video_captions_meeting_date ON sp_video_captions (meeting_date)",
             # One-shot cleanup (D8): this index duplicated the leading column of

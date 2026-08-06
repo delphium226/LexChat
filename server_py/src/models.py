@@ -412,6 +412,70 @@ class SpVideoCaption(Base):
     fetched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+#: The full-text expression for `drafting_guidance.full_text`.
+#:
+#: The GIN index in `database.py` and every query in the retrieval tool must use
+#: this **byte-for-byte** — Postgres matches an expression index by expression
+#: equality, so a whitespace difference silently falls back to a sequential scan
+#: with no error and no plan warning. Importing one constant makes that
+#: structural rather than something a future session has to remember.
+DRAFTING_FTS_EXPR = "to_tsvector('english', coalesce(full_text,''))"
+
+
+class DraftingGuidance(Base):
+    """One row per named drafting rule / topic, following `SpPlenaryItem`.
+
+    Chunked **per named topic, never per chapter** — a whole-chapter row ranks
+    poorly under `ts_rank` and returns a useless excerpt. This is the same defect
+    the old SP committee parser had (one blob per meeting), and it is called out
+    in `docs/drafting/BUILD_PLAN.md` as the make-or-break design decision here.
+
+    `sensitivity` exists from day one so the internal OFFICIAL-SENSITIVE PCO
+    guidance can be ingested later as a second `source` with no migration.
+    """
+    __tablename__ = "drafting_guidance"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # "drafting_matters" (public, gov.scot) | "internal" (OFFICIAL-SENSITIVE).
+    # No standalone index: uq_drafting_guidance_source_ref's leading column covers it.
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    # No `index=True` on part / chapter / sensitivity: the indexes are declared in
+    # `database.py` alongside the GIN one, which can only be raw DDL. Declaring
+    # them in both places creates a duplicate pair (SQLAlchemy's `ix_…` plus the
+    # DDL's `idx_…`) indexing the same column — which is what the older sp_*
+    # tables in this file actually do. One declaration site, not two.
+    part: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    chapter: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # Stable slug path ("p6/language/particular-words-and-expressions/shall-v-must").
+    # Half the ON CONFLICT key, so it must not drift between ingest runs.
+    rule_ref: Mapped[str] = mapped_column(String(256), nullable=False)
+    heading: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    full_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The heading path this chunk sits at. JSON rather than more columns because
+    # the internal guidance is not known to share this hierarchy.
+    structured: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    version_date: Mapped[Date | None] = mapped_column(Date, nullable=True)
+    # "public" | "official_sensitive". Indexed in database.py because every
+    # retrieval filters on it once the internal guidance lands.
+    #
+    # `server_default` as well as `default` — a deviation from the rest of this
+    # file, which uses Python-side defaults only. Those leave the ORM-created
+    # schema (what `conftest` builds for tests) without the DEFAULT clause that
+    # the hand-written DDL in `database.py` gives the real table, so a raw INSERT
+    # omitting the column succeeds in production and fails under test. On a column
+    # that gates OFFICIAL-SENSITIVE material, the two schemas must not diverge.
+    sensitivity: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="public",
+        server_default=text("'public'"),
+    )
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("source", "rule_ref", name="uq_drafting_guidance_source_ref"),
+    )
+
+
 class LocalPromptCache(Base):
     """Cross-user, cross-provider cache of Worker document summaries (D7).
 
