@@ -304,7 +304,7 @@ Tick a row only when its tests are green AND the work is committed.
       `secure=True` (auth.py:104) · `utils/redact.py` per LOGGING_IMPROVEMENTS_PLAN.md:118-153,
       applied at executor.py:123 + auth.py:174 · `drafting_mode_enabled` flag (5 sites) ·
       `local_prompt_cache_enabled` OFF for the drafting bot + reason recorded in CLAUDE.md
-- [ ] **S1 — Bot scaffolding**  bots/drafting/{bot_config.json,.env,assets} ·
+- [x] **S1 — Bot scaffolding**  bots/drafting/{bot_config.json,.env,assets} ·
       7 dispatch keys (config.py:149, schemas.py:638, prompts.py:546/631/527/967, agent_core.py:51) ·
       `isDrafting` in App.jsx:306 + hide filter modal
 - [ ] **S2 — Corpus schema + ingest**  `DraftingGuidance` model · DDL in database.py ·
@@ -350,6 +350,13 @@ Neither is in the S0 row, so neither was touched. **Both must be closed before t
 real pre-publication drafts** — a one-line `redact_text(...)` each. Do not assume S0 finished
 the job. Also open, and flagged in `CLAUDE.md`: full text still appears at `LOG_LEVEL=DEBUG` by
 design, which is a decision the deploying org should confirm.
+
+**S1 note — the placeholder prompts are placeholders.** `_DRAFTING_BODY` / `_DRAFTING_CHIPS` /
+`DRAFTING_WORKER_SYSTEM_PROMPT` / `_PLANNER_MODE_NOTES["drafting"]` exist so every dispatch
+resolves to a drafting-specific object instead of silently inheriting legislation behaviour, and
+so the wiring is testable. They carry the structural contract only. The real prompts are **S4**.
+`_REPORT_SECTIONS["drafting"]` and the worker prompt's OUTPUT STRUCTURE block must be changed
+**together** — a test asserts they agree.
 
 `redact_args()` (a third helper, beyond the two `LOGGING_IMPROVEMENTS_PLAN.md` specs) is
 **allowlist-based and fails safe** — `SAFE_ARG_KEYS` logs in the clear, every other string value
