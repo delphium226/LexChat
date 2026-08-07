@@ -44,10 +44,12 @@ class SessionFeedbackCreate(BaseModel):
     session_continuity: str | None = None
     found_right_law: str | None = None
     found_right_law_notes: str | None = None
+    right_jurisdiction: str | None = None
+    right_jurisdiction_notes: str | None = None
     references_accurate: str | None = None
     references_notes: str | None = None
-    stated_law_correctly: str | None = None
-    stated_law_notes: str | None = None
+    refers_incorrectly: str | None = None
+    refers_incorrectly_notes: str | None = None
     confidence: int | None = None
     ease_of_use: int | None = None
     ease_of_use_reason: str | None = None
@@ -72,10 +74,12 @@ class SessionFeedbackOut(BaseModel):
     session_continuity: str | None
     found_right_law: str | None
     found_right_law_notes: str | None
+    right_jurisdiction: str | None
+    right_jurisdiction_notes: str | None
     references_accurate: str | None
     references_notes: str | None
-    stated_law_correctly: str | None
-    stated_law_notes: str | None
+    refers_incorrectly: str | None
+    refers_incorrectly_notes: str | None
     confidence: int | None
     ease_of_use: int | None
     ease_of_use_reason: str | None
@@ -193,7 +197,6 @@ _MAX_FORM_FILL_SECONDS = 2 * 60 * 60
 
 _CONTINUITY_VALUES = {"one_go", "not_one_go"}
 _YES_PARTIALLY_NO = {"yes", "partially", "no"}
-_YES_NO_UNSURE = {"yes", "no", "unsure"}
 
 
 def _clean(value: str | None) -> str | None:
@@ -235,8 +238,9 @@ async def submit_session_feedback(
     for field, allowed in (
         ("session_continuity", _CONTINUITY_VALUES),
         ("found_right_law", _YES_PARTIALLY_NO),
-        ("references_accurate", _YES_NO_UNSURE),
-        ("stated_law_correctly", _YES_PARTIALLY_NO),
+        ("right_jurisdiction", _YES_PARTIALLY_NO),
+        ("references_accurate", _YES_PARTIALLY_NO),
+        ("refers_incorrectly", _YES_PARTIALLY_NO),
     ):
         value = getattr(body, field)
         if value is not None and value not in allowed:
@@ -270,10 +274,12 @@ async def submit_session_feedback(
         session_continuity=body.session_continuity,
         found_right_law=body.found_right_law,
         found_right_law_notes=_clean(body.found_right_law_notes),
+        right_jurisdiction=body.right_jurisdiction,
+        right_jurisdiction_notes=_clean(body.right_jurisdiction_notes),
         references_accurate=body.references_accurate,
         references_notes=_clean(body.references_notes),
-        stated_law_correctly=body.stated_law_correctly,
-        stated_law_notes=_clean(body.stated_law_notes),
+        refers_incorrectly=body.refers_incorrectly,
+        refers_incorrectly_notes=_clean(body.refers_incorrectly_notes),
         confidence=body.confidence,
         ease_of_use=body.ease_of_use,
         ease_of_use_reason=_clean(body.ease_of_use_reason),
@@ -316,10 +322,12 @@ async def get_all_session_feedback(
             session_continuity=fb.session_continuity,
             found_right_law=fb.found_right_law,
             found_right_law_notes=fb.found_right_law_notes,
+            right_jurisdiction=fb.right_jurisdiction,
+            right_jurisdiction_notes=fb.right_jurisdiction_notes,
             references_accurate=fb.references_accurate,
             references_notes=fb.references_notes,
-            stated_law_correctly=fb.stated_law_correctly,
-            stated_law_notes=fb.stated_law_notes,
+            refers_incorrectly=fb.refers_incorrectly,
+            refers_incorrectly_notes=fb.refers_incorrectly_notes,
             confidence=fb.confidence,
             ease_of_use=fb.ease_of_use,
             ease_of_use_reason=fb.ease_of_use_reason,

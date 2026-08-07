@@ -218,15 +218,23 @@ class SessionFeedback(Base):
     # Q3 — 'one_go' | 'not_one_go'
     session_continuity: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
-    # Q5 — 'yes' | 'partially' | 'no'
+    # Q5a/5b — 'yes' | 'partially' | 'no'
     found_right_law: Mapped[str | None] = mapped_column(String(20), nullable=True)
     found_right_law_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Q6 — 'yes' | 'no' | 'unsure'
+    # Q5c/5d — 'yes' | 'partially' | 'no'
+    right_jurisdiction: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    right_jurisdiction_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Q6a/6b — 'yes' | 'partially' | 'no'
+    # ('unsure' was the third option before the users revised the question; rows
+    # written then may still hold it, so readers must tolerate the value.)
     references_accurate: Mapped[str | None] = mapped_column(String(20), nullable=True)
     references_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Q7 — 'yes' | 'partially' | 'no'
-    stated_law_correctly: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    stated_law_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Q7a/7b — 'yes' | 'partially' | 'no'. NOTE THE POLARITY: the question asks
+    # whether the assistant got something WRONG, so 'no' is the good answer and
+    # 'yes' is the fault. Supersedes stated_law_correctly / stated_law_notes,
+    # which asked the inverse question — see database.py.
+    refers_incorrectly: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    refers_incorrectly_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Q8 — 1..5
     confidence: Mapped[int | None] = mapped_column(Integer, nullable=True)

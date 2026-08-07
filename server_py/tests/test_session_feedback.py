@@ -23,10 +23,12 @@ FULL_PAYLOAD = {
     "session_continuity": "one_go",
     "found_right_law": "partially",
     "found_right_law_notes": "  Missed the 2016 amendment.  ",
-    "references_accurate": "unsure",
+    "right_jurisdiction": "no",
+    "right_jurisdiction_notes": "Answered on England and Wales, not Scotland.",
+    "references_accurate": "partially",
     "references_notes": "Could not verify the case citation.",
-    "stated_law_correctly": "yes",
-    "stated_law_notes": "",
+    "refers_incorrectly": "yes",
+    "refers_incorrectly_notes": "",
     "confidence": 5,  # top of the scale — proves 5 is in range, not just 1-4
     "ease_of_use": 4,
     "ease_of_use_reason": "Clear, but the filters took a moment to find.",
@@ -52,11 +54,15 @@ async def test_submit_full_payload(client: AsyncClient, seed_user: User, user_to
     assert row.manual_time_hours == 4.0
     assert row.session_continuity == "one_go"
     assert row.found_right_law == "partially"
+    assert row.right_jurisdiction == "no"
+    # 7a's polarity is inverted — 'yes' means the assistant DID get something
+    # wrong. Stored verbatim; the reading of it lives in the admin tab.
+    assert row.refers_incorrectly == "yes"
     assert row.confidence == 5
     assert row.ease_of_use == 4
     # Free text is trimmed, and blank text is stored as NULL rather than ''
     assert row.found_right_law_notes == "Missed the 2016 amendment."
-    assert row.stated_law_notes is None
+    assert row.refers_incorrectly_notes is None
 
 
 @pytest.mark.asyncio
@@ -81,8 +87,11 @@ async def test_submit_empty_payload_is_allowed(client: AsyncClient, user_token: 
         {"message_count": -1},
         {"session_continuity": "sort of"},
         {"found_right_law": "maybe"},
-        {"references_accurate": "partially"},  # valid for 5a/7a, not for 6a
-        {"stated_law_correctly": "unsure"},  # valid for 6a, not for 7a
+        {"right_jurisdiction": "maybe"},
+        # All four accuracy questions are yes/partially/no since the users revised
+        # them; 'unsure' was 6a's old third option and is no longer accepted.
+        {"references_accurate": "unsure"},
+        {"refers_incorrectly": "unsure"},
     ],
 )
 @pytest.mark.asyncio

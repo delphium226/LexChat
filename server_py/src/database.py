@@ -143,6 +143,18 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_session_feedback_created_at ON session_feedback (created_at)",
             # Session-length metric: when "Finished session" was pressed.
             "ALTER TABLE session_feedback ADD COLUMN IF NOT EXISTS finished_at TIMESTAMP",
+            # Accuracy-column revisions agreed with the user group. Q5c/5d are new
+            # (jurisdiction). Q7a/7b are NEW COLUMNS rather than a rewording of
+            # stated_law_correctly / stated_law_notes because the question's polarity
+            # flipped: it used to ask whether the law was stated CORRECTLY (yes =
+            # good) and now asks whether anything was stated INCORRECTLY (yes =
+            # fault). Mixing the two in one column would silently invert the
+            # pre-pilot's headline accuracy figure, so the old pair is left in place
+            # holding its pre-revision answers and is no longer read or written.
+            "ALTER TABLE session_feedback ADD COLUMN IF NOT EXISTS right_jurisdiction VARCHAR(20)",
+            "ALTER TABLE session_feedback ADD COLUMN IF NOT EXISTS right_jurisdiction_notes TEXT",
+            "ALTER TABLE session_feedback ADD COLUMN IF NOT EXISTS refers_incorrectly VARCHAR(20)",
+            "ALTER TABLE session_feedback ADD COLUMN IF NOT EXISTS refers_incorrectly_notes TEXT",
             """CREATE TABLE IF NOT EXISTS activity_log (
                 id SERIAL PRIMARY KEY,
                 event_type VARCHAR(20) NOT NULL,

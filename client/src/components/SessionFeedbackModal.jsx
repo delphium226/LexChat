@@ -146,10 +146,12 @@ const SessionFeedbackModal = ({ chatId, messageCount, botName = 'AILA', onClose,
   const [verification, setVerification] = useState('');
   const [foundLaw, setFoundLaw] = useState(null);
   const [foundLawNotes, setFoundLawNotes] = useState('');
+  const [jurisdiction, setJurisdiction] = useState(null);
+  const [jurisdictionNotes, setJurisdictionNotes] = useState('');
   const [refsAccurate, setRefsAccurate] = useState(null);
   const [refsNotes, setRefsNotes] = useState('');
-  const [statedLaw, setStatedLaw] = useState(null);
-  const [statedLawNotes, setStatedLawNotes] = useState('');
+  const [refersIncorrectly, setRefersIncorrectly] = useState(null);
+  const [refersIncorrectlyNotes, setRefersIncorrectlyNotes] = useState('');
   const [confidence, setConfidence] = useState(null);
   const [ease, setEase] = useState(null);
   const [easeReason, setEaseReason] = useState('');
@@ -172,9 +174,18 @@ const SessionFeedbackModal = ({ chatId, messageCount, botName = 'AILA', onClose,
   const txt = v => v.trim() || null;
 
   const isEmpty =
-    [manualTime, timeSaved, verification, foundLawNotes, refsNotes, statedLawNotes, easeReason, comments].every(
-      v => v.trim() === ''
-    ) && [continuity, foundLaw, refsAccurate, statedLaw, confidence, ease].every(v => v === null);
+    [
+      manualTime,
+      timeSaved,
+      verification,
+      foundLawNotes,
+      jurisdictionNotes,
+      refsNotes,
+      refersIncorrectlyNotes,
+      easeReason,
+      comments,
+    ].every(v => v.trim() === '') &&
+    [continuity, foundLaw, jurisdiction, refsAccurate, refersIncorrectly, confidence, ease].every(v => v === null);
 
   const handleSubmit = async () => {
     setStatus('submitting');
@@ -188,10 +199,12 @@ const SessionFeedbackModal = ({ chatId, messageCount, botName = 'AILA', onClose,
         session_continuity: continuity,
         found_right_law: foundLaw,
         found_right_law_notes: txt(foundLawNotes),
+        right_jurisdiction: jurisdiction,
+        right_jurisdiction_notes: txt(jurisdictionNotes),
         references_accurate: refsAccurate,
         references_notes: txt(refsNotes),
-        stated_law_correctly: statedLaw,
-        stated_law_notes: txt(statedLawNotes),
+        refers_incorrectly: refersIncorrectly,
+        refers_incorrectly_notes: txt(refersIncorrectlyNotes),
         confidence,
         ease_of_use: ease,
         ease_of_use_reason: txt(easeReason),
@@ -271,7 +284,7 @@ const SessionFeedbackModal = ({ chatId, messageCount, botName = 'AILA', onClose,
             <div className="md:border-l md:border-ink-100 md:pl-8">
               <h4 className={SECTION}>Accuracy</h4>
 
-              <Field label={`5a. Did ${botName} find the right legislation?`}>
+              <Field label={`5a. Did ${botName} find the right law?`}>
                 <OptionRow options={YES_PARTIALLY_NO} value={foundLaw} onChange={setFoundLaw} disabled={busy} />
               </Field>
 
@@ -279,22 +292,26 @@ const SessionFeedbackModal = ({ chatId, messageCount, botName = 'AILA', onClose,
                 <TextArea
                   value={foundLawNotes}
                   onChange={setFoundLawNotes}
-                  placeholder="Which legislation was found or missed, and what went wrong…"
+                  placeholder="Which law was found or missed, and what went wrong…"
                   disabled={busy}
                 />
               </Field>
 
-              <Field label={`6a. Did ${botName} provide real and accurate references?`}>
-                <OptionRow
-                  options={[
-                    { value: 'yes', label: 'Yes' },
-                    { value: 'no', label: 'No' },
-                    { value: 'unsure', label: 'Unsure' },
-                  ]}
-                  value={refsAccurate}
-                  onChange={setRefsAccurate}
+              <Field label={`5c. Did ${botName} identify the right jurisdiction of the law?`}>
+                <OptionRow options={YES_PARTIALLY_NO} value={jurisdiction} onChange={setJurisdiction} disabled={busy} />
+              </Field>
+
+              <Field label={OBSERVATIONS('5d')}>
+                <TextArea
+                  value={jurisdictionNotes}
+                  onChange={setJurisdictionNotes}
+                  placeholder="Which jurisdiction was used, and which it should have been…"
                   disabled={busy}
                 />
+              </Field>
+
+              <Field label="6a. Is every reference to legislation or case law accurate in citation and description?">
+                <OptionRow options={YES_PARTIALLY_NO} value={refsAccurate} onChange={setRefsAccurate} disabled={busy} />
               </Field>
 
               <Field label={OBSERVATIONS('6b')}>
@@ -306,17 +323,20 @@ const SessionFeedbackModal = ({ chatId, messageCount, botName = 'AILA', onClose,
                 />
               </Field>
 
-              <Field
-                label={`7a. Did ${botName} state the legislation correctly without including unsupported information?`}
-              >
-                <OptionRow options={YES_PARTIALLY_NO} value={statedLaw} onChange={setStatedLaw} disabled={busy} />
+              <Field label={`7a. Did ${botName} refer to any source incorrectly or describe underlying law incorrectly?`}>
+                <OptionRow
+                  options={YES_PARTIALLY_NO}
+                  value={refersIncorrectly}
+                  onChange={setRefersIncorrectly}
+                  disabled={busy}
+                />
               </Field>
 
               <Field label={OBSERVATIONS('7b')}>
                 <TextArea
-                  value={statedLawNotes}
-                  onChange={setStatedLawNotes}
-                  placeholder="What was overstated, unsupported, or well evidenced…"
+                  value={refersIncorrectlyNotes}
+                  onChange={setRefersIncorrectlyNotes}
+                  placeholder="Which source or statement of law was wrong, and how…"
                   disabled={busy}
                 />
               </Field>

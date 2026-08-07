@@ -532,11 +532,13 @@ async def get_activity_log(
                 CONCAT_WS(' · ',
                     'End of session',
                     CASE WHEN sf.found_right_law IS NOT NULL
-                        THEN CONCAT('Right legislation: ', sf.found_right_law) END,
+                        THEN CONCAT('Right law: ', sf.found_right_law) END,
+                    CASE WHEN sf.right_jurisdiction IS NOT NULL
+                        THEN CONCAT('Jurisdiction: ', sf.right_jurisdiction) END,
                     CASE WHEN sf.references_accurate IS NOT NULL
                         THEN CONCAT('References: ', sf.references_accurate) END,
-                    CASE WHEN sf.stated_law_correctly IS NOT NULL
-                        THEN CONCAT('Stated correctly: ', sf.stated_law_correctly) END,
+                    CASE WHEN sf.refers_incorrectly IS NOT NULL
+                        THEN CONCAT('Referred incorrectly: ', sf.refers_incorrectly) END,
                     CASE WHEN sf.confidence IS NOT NULL
                         THEN CONCAT('Confidence: ', sf.confidence, '/5') END,
                     CASE WHEN sf.ease_of_use IS NOT NULL

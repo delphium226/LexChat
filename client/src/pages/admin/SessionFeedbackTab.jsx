@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import Spinner from '../../components/ui/Spinner';
 
 // Analytics for the end-of-session feedback form (the pre-pilot questionnaire).
@@ -21,11 +21,33 @@ const ANSWER_LABELS = {
 const ANSWER_COLORS = { yes: '#22c55e', partially: '#f59e0b', no: '#ef4444', unsure: '#94a3b8' };
 const SCALE_COLOR = '#6366f1';
 
+// `good` names the answer that counts as a positive result. It is 'yes' for
+// three of the four, but 7a asks whether the assistant got something WRONG, so
+// there 'no' is the good answer. Every read of these questions — the tiles, the
+// chart colours — goes through `good` rather than assuming yes-is-good, which
+// would report the pre-pilot's accuracy exactly backwards on 7a.
 const ACCURACY_QUESTIONS = [
-  { field: 'found_right_law', label: 'Found right legislation', answers: ['yes', 'partially', 'no'] },
-  { field: 'references_accurate', label: 'Accurate references', answers: ['yes', 'unsure', 'no'] },
-  { field: 'stated_law_correctly', label: 'Stated correctly', answers: ['yes', 'partially', 'no'] },
+  { field: 'found_right_law', label: 'Found right law', answers: ['yes', 'partially', 'no'], good: 'yes' },
+  { field: 'right_jurisdiction', label: 'Right jurisdiction', answers: ['yes', 'partially', 'no'], good: 'yes' },
+  {
+    field: 'references_accurate',
+    label: 'Accurate references',
+    // 'unsure' is a legacy value: it was 6a's third option before the users
+    // revised the question to yes/partially/no. It can no longer be submitted,
+    // but rows written before the change still hold it and must still stack.
+    answers: ['yes', 'partially', 'no', 'unsure'],
+    good: 'yes',
+  },
+  { field: 'refers_incorrectly', label: 'Referred incorrectly', answers: ['yes', 'partially', 'no'], good: 'no' },
 ];
+
+// Colour for one answer segment, resolved against its question's polarity: the
+// good answer is green and its opposite red, whichever literal word that is.
+const answerColor = (answer, good) => {
+  if (answer === 'partially') return ANSWER_COLORS.partially;
+  if (answer === 'unsure') return ANSWER_COLORS.unsure;
+  return answer === good ? ANSWER_COLORS.yes : ANSWER_COLORS.no;
+};
 
 const mean = (rows, field) => {
   const answered = rows.filter(r => r[field] != null);
@@ -34,9 +56,12 @@ const mean = (rows, field) => {
 
 const sum = (rows, field) => rows.reduce((s, r) => s + (r[field] ?? 0), 0);
 
-const yesShare = (rows, field) => {
+// Share of answers to `field` that were `value`, as a percentage of everyone who
+// answered the question at all (a legacy 'unsure' is not a 'yes', and counts in
+// the denominator).
+const answerShare = (rows, field, value) => {
   const answered = rows.filter(r => r[field] != null);
-  return answered.length > 0 ? (answered.filter(r => r[field] === 'yes').length / answered.length) * 100 : null;
+  return answered.length > 0 ? (answered.filter(r => r[field] === value).length / answered.length) * 100 : null;
 };
 
 const fmtDate = iso => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : null);
@@ -98,9 +123,11 @@ export const SessionFeedbackTab = ({
   // session, so a lawyer with 6 threads and 1 response is 17% covered.
   const coverage = totals && totals.threads > 0 ? (totals.responses / totals.threads) * 100 : null;
 
+  // `good` rides along on each row so the chart's per-category <Cell>s can colour
+  // by sentiment rather than by literal answer word.
   const accuracyData = ACCURACY_QUESTIONS.map(q => {
     const answered = rows.filter(r => r[q.field] != null);
-    const entry = { label: q.label, answered: answered.length };
+    const entry = { label: q.label, answered: answered.length, good: q.good };
     q.answers.forEach(a => {
       entry[a] = answered.filter(r => r[q.field] === a).length;
     });
@@ -325,19 +352,20 @@ export const SessionFeedbackTab = ({
             <div className="bg-paper p-6 rounded-lg shadow">
               <h3 className="text-sm font-bold mb-1">Accuracy</h3>
               <p className="text-xs text-ink-500 mb-4">
-                Questions 5a, 6a and 7a — the three the pre-pilot exists to answer.
+                Questions 5a, 5c, 6a and 7a — the four the pre-pilot exists to answer. Each tile shows the share who
+                gave the <em>good</em> answer, which for &ldquo;Referred incorrectly&rdquo; is <strong>no</strong>.
               </p>
               {rows.length === 0 ? (
                 <p className="text-ink-400 text-sm">No responses yet.</p>
               ) : (
                 <>
-                  <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                     {ACCURACY_QUESTIONS.map(q => {
-                      const share = yesShare(rows, q.field);
+                      const share = answerShare(rows, q.field, q.good);
                       return (
                         <Tile
                           key={q.field}
-                          label={`${q.label} — yes`}
+                          label={`${q.label} — ${ANSWER_LABELS[q.good].toLowerCase()}`}
                           value={share != null ? `${share.toFixed(0)}%` : '—'}
                           tone={share != null && share < 75 ? 'danger' : 'ink'}
                         />
@@ -359,10 +387,21 @@ export const SessionFeedbackTab = ({
                           stackId="a"
                           fill={ANSWER_COLORS[a]}
                           radius={i === allAnswerKeys.length - 1 ? [3, 3, 0, 0] : undefined}
-                        />
+                        >
+                          {/* Cells map to the x-categories, so one answer series can
+                              be green in three questions and red in the fourth. The
+                              Bar's own fill stays the legend swatch. */}
+                          {accuracyData.map(entry => (
+                            <Cell key={entry.label} fill={answerColor(a, entry.good)} />
+                          ))}
+                        </Bar>
                       ))}
                     </BarChart>
                   </ResponsiveContainer>
+                  <p className="text-xs text-ink-400 mt-2">
+                    Colour follows the result, not the word: for &ldquo;Referred incorrectly&rdquo;, <em>No</em> is the
+                    good answer and is shown green.
+                  </p>
                 </>
               )}
             </div>
@@ -485,9 +524,10 @@ export const SessionFeedbackTab = ({
                       <th className={`${thCls} w-28`}>Manual (hrs)</th>
                       <th className={`${thCls} w-28`}>Saved (hrs)</th>
                       <th className={`${thCls} w-28`}>Checking (hrs)</th>
-                      <th className={`${thCls} w-32`}>Right legislation</th>
+                      <th className={`${thCls} w-32`}>Right law</th>
+                      <th className={`${thCls} w-32`}>Jurisdiction</th>
                       <th className={`${thCls} w-28`}>References</th>
-                      <th className={`${thCls} w-32`}>Stated correctly</th>
+                      <th className={`${thCls} w-32`}>Referred incorrectly</th>
                       <th className={`${thCls} w-24`}>Confidence</th>
                       <th className={`${thCls} w-24`}>Ease</th>
                       <th className={thCls}>Observations</th>
@@ -497,8 +537,9 @@ export const SessionFeedbackTab = ({
                     {rows.map(item => {
                       const notes = [
                         ['5b', item.found_right_law_notes],
+                        ['5d', item.right_jurisdiction_notes],
                         ['6b', item.references_notes],
-                        ['7b', item.stated_law_notes],
+                        ['7b', item.refers_incorrectly_notes],
                         ['9b', item.ease_of_use_reason],
                         ['10', item.other_comments],
                       ].filter(([, text]) => text);
@@ -526,10 +567,13 @@ export const SessionFeedbackTab = ({
                             {ANSWER_LABELS[item.found_right_law] || '—'}
                           </td>
                           <td className="px-4 py-3 text-ink-700 text-center">
+                            {ANSWER_LABELS[item.right_jurisdiction] || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-ink-700 text-center">
                             {ANSWER_LABELS[item.references_accurate] || '—'}
                           </td>
                           <td className="px-4 py-3 text-ink-700 text-center">
-                            {ANSWER_LABELS[item.stated_law_correctly] || '—'}
+                            {ANSWER_LABELS[item.refers_incorrectly] || '—'}
                           </td>
                           <td className="px-4 py-3 text-ink-700 text-center">
                             {item.confidence != null ? `${item.confidence}/5` : '—'}
