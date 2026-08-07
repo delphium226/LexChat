@@ -266,11 +266,6 @@ export const testLearningRetrieval = async query => {
   return response.data;
 };
 
-export const generateSyntheticData = async () => {
-  const response = await axios.post(`${API_URL}/developer/seed`);
-  return response.data;
-};
-
 export const getUsageStats = async (days = 30) => {
   const response = await axios.get(`${API_URL}/stats/usage`, { params: { days } });
   return response.data;
@@ -316,28 +311,18 @@ export const triggerParliamentRefresh = async session => {
   return response.data;
 };
 
-export const resetDatabase = async () => {
-  const response = await axios.post(`${API_URL}/developer/reset`);
-  return response.data;
-};
-
 export const exportUsers = async () => {
   const response = await axios.get(`${API_URL}/developer/users-export`);
   return response.data;
 };
 
-export const clearUsageData = async () => {
-  const response = await axios.post(`${API_URL}/developer/clear-usage`);
+export const getDataCounts = async () => {
+  const response = await axios.get(`${API_URL}/developer/data-counts`);
   return response.data;
 };
 
-export const clearPerformanceData = async () => {
-  const response = await axios.post(`${API_URL}/developer/clear-performance`);
-  return response.data;
-};
-
-export const clearFeedbackData = async () => {
-  const response = await axios.post(`${API_URL}/developer/clear-feedback`);
+export const clearData = async (scopes, confirm) => {
+  const response = await axios.post(`${API_URL}/developer/clear-data`, { scopes, confirm });
   return response.data;
 };
 

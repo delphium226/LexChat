@@ -8,10 +8,7 @@ import {
   getPerformanceStats,
   getEfficiencyStats,
   getUsageStats,
-  clearUsageData,
   exportUsers,
-  clearPerformanceData,
-  clearFeedbackData,
   getLatestHealthStatus,
   getHealthHistory,
   triggerHealthCheck,
@@ -64,6 +61,7 @@ import { CacheTab } from './admin/CacheTab';
 import { SessionFeedbackTab } from './admin/SessionFeedbackTab';
 import { ParliamentCoverageTab } from './admin/ParliamentCoverageTab';
 import { ProviderConfigPanel } from './admin/ProviderConfigPanel';
+import { DangerZone } from './admin/DangerZone';
 import { PERF_COLORS, COST_COLORS } from './admin/chartConfig';
 import { WeeklySurveyComplianceChart } from './admin/surveyCharts';
 import { buildDailyRatingsData } from './admin/surveyData';
@@ -1455,82 +1453,7 @@ const AdminPortal = ({ currentUser }) => {
               </button>
             </div>
 
-            <div className="bg-paper p-6 rounded-lg shadow border border-red-200 dark:border-red-900">
-              <h2 className="text-lg font-bold mb-4 text-red-600 dark:text-red-400">Danger Zone</h2>
-              <p className="mb-2 text-sm text-ink-600">
-                These actions permanently delete data and <strong>cannot be undone.</strong>
-              </p>
-              <div className="flex flex-wrap gap-3 mb-6">
-                <button
-                  onClick={async () => {
-                    if (
-                      !window.confirm(
-                        'This will delete all chats and messages. User accounts will be kept.\n\nAre you sure?'
-                      )
-                    )
-                      return;
-                    setIsLoading(true);
-                    try {
-                      const res = await clearUsageData();
-                      setMessage(res.message);
-                      fetchStats();
-                    } catch (err) {
-                      setMessage('Error clearing usage data: ' + err.message);
-                    } finally {
-                      setIsLoading(false);
-                    }
-                  }}
-                  disabled={isLoading}
-                  className="bg-danger text-white px-5 py-2.5 rounded-md font-ui text-sm font-medium flex items-center gap-2 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isLoading && <Spinner size="sm" />}
-                  Clear All Usage Data
-                </button>
-                <button
-                  onClick={async () => {
-                    if (!window.confirm('This will delete all performance timing records.\n\nAre you sure?')) return;
-                    setIsLoading(true);
-                    try {
-                      const res = await clearPerformanceData();
-                      setMessage(res.message);
-                    } catch (err) {
-                      setMessage('Error clearing performance data: ' + err.message);
-                    } finally {
-                      setIsLoading(false);
-                    }
-                  }}
-                  disabled={isLoading}
-                  className="bg-danger text-white px-5 py-2.5 rounded-md font-ui text-sm font-medium flex items-center gap-2 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isLoading && <Spinner size="sm" />}
-                  Clear All Performance Data
-                </button>
-                <button
-                  onClick={async () => {
-                    if (
-                      !window.confirm(
-                        'This will delete all product feedback surveys and clear all message ratings and comments.\n\nAre you sure?'
-                      )
-                    )
-                      return;
-                    setIsLoading(true);
-                    try {
-                      const res = await clearFeedbackData();
-                      setMessage(res.message);
-                    } catch (err) {
-                      setMessage('Error clearing feedback data: ' + err.message);
-                    } finally {
-                      setIsLoading(false);
-                    }
-                  }}
-                  disabled={isLoading}
-                  className="bg-danger text-white px-5 py-2.5 rounded-md font-ui text-sm font-medium flex items-center gap-2 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isLoading && <Spinner size="sm" />}
-                  Clear User Feedback
-                </button>
-              </div>
-            </div>
+            <DangerZone onCleared={fetchStats} />
           </div>
         )}
         {/* USER FEEDBACK TAB */}

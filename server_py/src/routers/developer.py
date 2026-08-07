@@ -6,7 +6,7 @@ from typing import List, Optional
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..agent.provider_factory import (
@@ -18,8 +18,19 @@ from ..agent.provider_factory import (
 from ..config import MODEL_LIST, settings
 from ..database import get_db
 from ..dependencies import get_admin_user, get_current_user
-from ..models import ActivityLog, AppSetting, Chat, Message, ProductFeedback, RequestTiming, ServiceHealthStatus, SessionFeedback, User
-from ..services.synthetic_data import generate_synthetic_data
+from ..models import (
+    ActivityLog,
+    AppSetting,
+    Chat,
+    Document,
+    LocalPromptCache,
+    Message,
+    ProductFeedback,
+    RequestTiming,
+    ServiceHealthStatus,
+    SessionFeedback,
+    User,
+)
 
 logger = logging.getLogger("app")
 
@@ -150,41 +161,6 @@ async def get_openrouter_models(db: AsyncSession = Depends(get_db)):
     return {"models": models}
 
 
-@admin_router.post("/seed")
-async def seed_data(db: AsyncSession = Depends(get_db)):
-    """Generate 100 synthetic users with 6 months of chat history."""
-    return await generate_synthetic_data(db)
-
-
-@admin_router.post("/reset")
-async def reset_database(db: AsyncSession = Depends(get_db)):
-    """Delete all data except the admin user."""
-    await db.execute(delete(Message))
-    await db.execute(delete(Chat))
-    await db.execute(text("DELETE FROM users WHERE username != 'admin'"))
-    await db.commit()
-
-    logger.warning("[Developer] Database reset: all messages, chats, and non-admin users deleted")
-    return {
-        "success": True,
-        "message": "Database reset successfully. Only admin user remains.",
-    }
-
-
-@admin_router.post("/clear-usage")
-async def clear_usage_data(db: AsyncSession = Depends(get_db)):
-    """Delete all chats and messages, keeping all user accounts."""
-    await db.execute(delete(Message))
-    await db.execute(delete(Chat))
-    await db.commit()
-
-    logger.warning("[Developer] Usage data cleared: all chats and messages deleted")
-    return {
-        "success": True,
-        "message": "Usage data cleared. All chats and messages have been deleted.",
-    }
-
-
 @admin_router.get("/users-export")
 async def export_users(db: AsyncSession = Depends(get_db)):
     """Return all user accounts as a CSV string (name, email, role) for copy/paste."""
@@ -207,35 +183,140 @@ async def export_users(db: AsyncSession = Depends(get_db)):
     return {"csv": csv, "count": len(users)}
 
 
-@admin_router.post("/clear-performance")
-async def clear_performance_data(db: AsyncSession = Depends(get_db)):
-    """Delete all request timing records."""
-    await db.execute(delete(RequestTiming))
-    await db.commit()
+# -----------------------------------------------------------------------
+# Data clearing (Danger Zone)
+# -----------------------------------------------------------------------
 
-    logger.warning("[Developer] Performance data cleared: all request_timings deleted")
+# One scope per data domain the Admin Portal dashboards read from. The Danger
+# Zone renders a checkbox per scope; a "pilot reset" is simply all of them
+# ticked. Deliberately covered by NO scope, so they always survive: users,
+# app_settings (provider config + feature flags), peer_bots, matters /
+# matter_notes, and the crawled SP corpus (sp_committee_items,
+# sp_plenary_items, sp_video_captions).
+DATA_SCOPES: dict[str, str] = {
+    "chats": "Chats & messages",
+    "performance": "Performance timings",
+    "feedback": "Feedback & ratings",
+    "activity": "Activity log",
+    "health": "Service health history",
+    "cache": "Local prompt cache",
+}
+
+# Fixed execution order, applied regardless of the order scopes arrive in.
+# `feedback` MUST run before `chats`: session_feedback.chat_id is ON DELETE SET
+# NULL, so deleting chats first leaves orphan feedback rows behind and the
+# outcome would depend on which boxes were ticked in which order.
+_CLEAR_ORDER = ["feedback", "chats", "performance", "activity", "health", "cache"]
+
+_CONFIRM_PHRASE = "DELETE"
+
+
+class ClearDataRequest(BaseModel):
+    scopes: List[str]
+    confirm: str = ""
+
+
+async def _count(db: AsyncSession, model) -> int:
+    result = await db.execute(select(func.count()).select_from(model))
+    return int(result.scalar() or 0)
+
+
+@admin_router.get("/data-counts")
+async def get_data_counts(db: AsyncSession = Depends(get_db)):
+    """Row counts behind each Danger Zone scope, so the UI can show what a clear would destroy."""
+    rated_messages = int(
+        (
+            await db.execute(
+                select(func.count())
+                .select_from(Message)
+                .where((Message.rating.isnot(None)) | (Message.feedback_comment.isnot(None)))
+            )
+        ).scalar()
+        or 0
+    )
+    surveys = await _count(db, ProductFeedback)
+    sessions = await _count(db, SessionFeedback)
+
+    chats = await _count(db, Chat)
+    messages = await _count(db, Message)
+    documents = await _count(db, Document)
+
     return {
-        "success": True,
-        "message": "Performance data cleared. All timing records have been deleted.",
+        "scopes": DATA_SCOPES,
+        "counts": {
+            "chats": chats,
+            "performance": await _count(db, RequestTiming),
+            "feedback": surveys + sessions + rated_messages,
+            "activity": await _count(db, ActivityLog),
+            "health": await _count(db, ServiceHealthStatus),
+            "cache": await _count(db, LocalPromptCache),
+        },
+        # Secondary rows a scope takes with it — surfaced so the cascade is
+        # disclosed in the UI rather than discovered afterwards.
+        "details": {
+            "chats": {"chats": chats, "messages": messages, "documents": documents},
+            "feedback": {"surveys": surveys, "sessions": sessions, "rated_messages": rated_messages},
+        },
     }
 
 
-@admin_router.post("/clear-feedback")
-async def clear_feedback_data(db: AsyncSession = Depends(get_db)):
-    """Delete all feedback (weekly surveys + session feedback) and clear message ratings/comments."""
-    await db.execute(delete(ProductFeedback))
-    await db.execute(delete(SessionFeedback))
-    await db.execute(
-        text("UPDATE messages SET rating = NULL, feedback_comment = NULL WHERE rating IS NOT NULL OR feedback_comment IS NOT NULL")
-    )
+@admin_router.post("/clear-data")
+async def clear_data(body: ClearDataRequest, db: AsyncSession = Depends(get_db)):
+    """Delete the selected data domains. Users, settings and the crawled corpus are never touched."""
+    if body.confirm != _CONFIRM_PHRASE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Confirmation phrase must be exactly '{_CONFIRM_PHRASE}'.",
+        )
+
+    requested = set(body.scopes)
+    unknown = sorted(requested - set(DATA_SCOPES))
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown scope(s): {', '.join(unknown)}")
+    if not requested:
+        raise HTTPException(status_code=400, detail="Select at least one thing to delete.")
+
+    deleted: dict[str, int] = {}
+
+    for scope in _CLEAR_ORDER:
+        if scope not in requested:
+            continue
+
+        if scope == "feedback":
+            n = (await db.execute(delete(ProductFeedback))).rowcount or 0
+            n += (await db.execute(delete(SessionFeedback))).rowcount or 0
+            n += (
+                await db.execute(
+                    text(
+                        "UPDATE messages SET rating = NULL, feedback_comment = NULL "
+                        "WHERE rating IS NOT NULL OR feedback_comment IS NOT NULL"
+                    )
+                )
+            ).rowcount or 0
+        elif scope == "chats":
+            # messages.chat_id and documents.chat_id are ON DELETE CASCADE, but
+            # delete messages explicitly so the reported count is honest.
+            n = (await db.execute(delete(Message))).rowcount or 0
+            n += (await db.execute(delete(Chat))).rowcount or 0
+        elif scope == "performance":
+            n = (await db.execute(delete(RequestTiming))).rowcount or 0
+        elif scope == "activity":
+            n = (await db.execute(delete(ActivityLog))).rowcount or 0
+        elif scope == "health":
+            n = (await db.execute(delete(ServiceHealthStatus))).rowcount or 0
+        elif scope == "cache":
+            n = (await db.execute(delete(LocalPromptCache))).rowcount or 0
+
+        deleted[scope] = n
+
     await db.commit()
 
-    logger.warning(
-        "[Developer] Feedback data cleared: product_feedback and session_feedback deleted, message ratings nulled"
-    )
+    summary = ", ".join(f"{DATA_SCOPES[s]}: {n}" for s, n in deleted.items())
+    logger.warning(f"[Developer] Data cleared — {summary}")
     return {
         "success": True,
-        "message": "User feedback cleared. All surveys, session feedback and message ratings have been deleted.",
+        "deleted": deleted,
+        "message": f"Deleted {sum(deleted.values())} rows across {len(deleted)} data set(s).",
     }
 
 
