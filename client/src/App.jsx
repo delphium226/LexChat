@@ -934,6 +934,7 @@ function AppContent() {
                   onFinishedSession={() => modals.open('sessionFeedback')}
                   sessionFeedbackSent={sessionFeedbackSent}
                   hasMessages={messages.length > 0}
+                  botName={botInfo.name}
                 />
               </div>
             </div>

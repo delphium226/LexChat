@@ -30,6 +30,7 @@ export default function Composer({
   onFinishedSession,
   sessionFeedbackSent = false,
   hasMessages = false,
+  botName = 'AILA',
 }) {
   return (
     <div
@@ -209,7 +210,7 @@ export default function Composer({
         style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
+          gap: 8,
           marginTop: 6,
         }}
       >
@@ -218,6 +219,12 @@ export default function Composer({
             <PaperclipIcon />
           </IBtn>
         </div>
+
+        {/* AI-fallibility disclaimer — takes the space between the paperclip and the
+            action buttons, and centres itself within it. */}
+        <span className="font-ui text-xs italic text-ink-500 text-center" style={{ flex: 1, minWidth: 0 }}>
+          {botName} is AI and can make mistakes. Please check all output before use.
+        </span>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {showFinishedSession && (
