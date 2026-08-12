@@ -215,7 +215,16 @@ export function useChat({
               setAgentStatus('Typing…');
               setMessages(prev => upsertDraft(prev, run.draft));
             }
-          } else if (status.type === 'queue' || status.type === 'warning') {
+          } else if (status.type === 'queue') {
+            // The server sends {type:'queue', position:N} with NO message field,
+            // so reading status.message here left the status line on its
+            // "Thinking…" fallback and the wait looked like ordinary slowness.
+            // Position matters: the provider queue is shared across all users.
+            run.agentStatus = status.position
+              ? `Waiting for a free slot — position ${status.position} in the queue…`
+              : 'Waiting for a free slot…';
+            if (isVisible(run)) setAgentStatus(run.agentStatus);
+          } else if (status.type === 'warning') {
             run.agentStatus = status.message;
             if (isVisible(run)) setAgentStatus(status.message);
           }
