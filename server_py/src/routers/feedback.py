@@ -16,12 +16,14 @@ router = APIRouter(prefix="/api/feedback", tags=["Feedback"])
 
 # The operator's own login. Its threads are smoke tests, demos and support
 # reproductions, not legal research, so they are excluded from every pre-pilot
-# statistic — otherwise a demo thread that was never fed back on drags the
-# session-length medians and the coverage percentage around.
+# read — the responses, the session-length timings and the compliance roster
+# alike. Otherwise a demo thread that was never fed back on drags the medians
+# and the coverage percentage around, and the operator sits permanently at the
+# top of "who to chase" reading "Never".
 #
-# Deliberately NOT applied to /session/compliance: that endpoint backs the
-# "who to chase" roster, which is an operational list rather than a statistic,
-# and is left showing every account.
+# Applies to the whole /api/feedback/session/* family. Anything added here must
+# hold for all three, or the tab starts showing numbers that cannot be
+# reconciled against each other.
 EXCLUDED_USERNAMES = ("admin",)
 
 class FeedbackCreate(BaseModel):
@@ -505,6 +507,11 @@ async def get_session_feedback_compliance(
     all-time, not period-bounded — for chasing someone, "never" and "five weeks
     ago" are the useful answers, and a period-bounded MAX would render both as
     an indistinguishable blank.
+
+    `EXCLUDED_USERNAMES` is filtered out here too, so the roster matches the
+    statistics above it: there is nobody to chase about a smoke test, and an
+    operator account permanently reading "Never" is noise at the top of a list
+    sorted by how much feedback is missing.
     """
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin access required.")
@@ -561,7 +568,13 @@ async def get_session_feedback_compliance(
     )
     last_feedback_by_user = {r.user_id: r.last_at for r in last_feedback}
 
-    all_users = (await db.execute(select(User).order_by(User.username))).scalars().all()
+    all_users = (
+        await db.execute(
+            select(User)
+            .where(User.username.notin_(EXCLUDED_USERNAMES))
+            .order_by(User.username)
+        )
+    ).scalars().all()
 
     rows = []
     for u in all_users:

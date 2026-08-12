@@ -12,14 +12,12 @@ import Spinner from '../../components/ui/Spinner';
 // feedback form for. Threads with no form are excluded by the backend (both
 // /feedback/session and /feedback/session/durations), so the session-length
 // medians are no longer dominated by abandoned threads whose end had to be
-// inferred. The exception is the coverage pair below, which exists precisely
-// to count what is missing.
-
-// The operator's own login: smoke tests, demos and support reproductions, not
-// legal research. The backend drops it from the responses and the durations;
-// this set is what keeps it out of the two compliance-derived tiles, whose
-// endpoint still returns every account so the chase list stays complete.
-const EXCLUDED_USERNAMES = new Set(['admin']);
+// inferred. The exception is the coverage pair, which exists precisely to
+// count what is missing.
+//
+// The operator's own login is filtered out server-side across all three
+// endpoints (`EXCLUDED_USERNAMES` in routers/feedback.py) — this file does no
+// filtering of its own, so there is one place to change it.
 
 const ANSWER_LABELS = {
   yes: 'Yes',
@@ -131,24 +129,11 @@ export const SessionFeedbackTab = ({
   const totalSaved = sum(rows, 'time_saved_hours');
   const avgVerif = mean(rows, 'verification_hours');
 
+  const totals = compliance?.totals;
   // Coverage is responses per thread worked in: the form is asked for once per
   // session, so a lawyer with 6 threads and 1 response is 17% covered. This is
   // the one pair of numbers that still counts threads with no feedback — that
   // is what it measures, and excluding them would pin it at 100%.
-  //
-  // Recomputed from `compliance.users` rather than read off `compliance.totals`
-  // so the operator account can be dropped without changing the endpoint, which
-  // also backs the chase list below.
-  const complianceUsers = (compliance?.users || []).filter(u => !EXCLUDED_USERNAMES.has(u.username));
-  const activeUsers = complianceUsers.filter(u => u.threads > 0);
-  const totals = compliance
-    ? {
-        active_users: activeUsers.length,
-        responding_users: activeUsers.filter(u => u.responses > 0).length,
-        threads: complianceUsers.reduce((s, u) => s + u.threads, 0),
-        responses: complianceUsers.reduce((s, u) => s + u.responses, 0),
-      }
-    : null;
   const coverage = totals && totals.threads > 0 ? (totals.responses / totals.threads) * 100 : null;
 
   // `good` rides along on each row so the chart's per-category <Cell>s can colour

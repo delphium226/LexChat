@@ -139,9 +139,18 @@ async def test_compliance_requires_admin(client: AsyncClient, user_token: str):
 
 @pytest.mark.asyncio
 async def test_compliance_counts_threads_against_responses(
-    client: AsyncClient, seed_user: User, user_token: str, admin_token: str
+    client: AsyncClient, seed_user: User, user_token: str, admin_token: str, db_session
 ):
     """The chase list: two threads worked in, one response, so one thread is missing feedback."""
+    idle = User(
+        username="idlelawyer",
+        password_hash="x",
+        role="user",
+        email="idle@test.com",
+    )
+    db_session.add(idle)
+    await db_session.commit()
+
     user_headers = {"Authorization": f"Bearer {user_token}"}
     for title in ("Thread one", "Thread two"):
         chat = await client.post("/api/chats/", json={"model": "mistral", "title": title}, headers=user_headers)
@@ -163,12 +172,15 @@ async def test_compliance_counts_threads_against_responses(
     assert row["last_active"] is not None
     assert row["last_feedback"] is not None
 
-    # The admin account exists but has done nothing — it must appear with zeros
-    # rather than be dropped, so a wholly inactive user is still visible.
-    admin_row = next(u for u in body["users"] if u["username"] == "admin")
-    assert admin_row["threads"] == 0
-    assert admin_row["responses"] == 0
-    assert admin_row["last_feedback"] is None
+    # A user who has done nothing must appear with zeros rather than be dropped
+    # — never having logged in at all is exactly what the roster should surface.
+    idle_row = next(u for u in body["users"] if u["username"] == "idlelawyer")
+    assert idle_row["threads"] == 0
+    assert idle_row["responses"] == 0
+    assert idle_row["last_feedback"] is None
+
+    # ...but the operator account is filtered out entirely, not shown as idle.
+    assert "admin" not in {u["username"] for u in body["users"]}
 
     assert body["totals"]["active_users"] == 1
     assert body["totals"]["responding_users"] == 1
@@ -262,9 +274,9 @@ async def test_thread_without_feedback_is_not_measured(
 async def test_admin_own_sessions_are_excluded_from_stats(
     client: AsyncClient, user_token: str, admin_token: str
 ):
-    """The operator account's threads are smoke tests, not legal research: they
-    are dropped from both the responses and the durations. The chase list is
-    left alone, so /compliance still shows the account."""
+    """The operator account's threads are smoke tests, not legal research, so
+    they are dropped from all three reads the tab makes — including the chase
+    list, where there is nobody to chase about a smoke test."""
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
     user_headers = {"Authorization": f"Bearer {user_token}"}
     admin_chat = await _thread_with_messages(client, admin_headers, "Smoke test")
@@ -279,7 +291,10 @@ async def test_admin_own_sessions_are_excluded_from_stats(
     assert [s["chat_id"] for s in durations["sessions"]] == [user_chat]
 
     compliance = (await client.get(f"{URL}/compliance", headers=admin_headers)).json()
-    assert "admin" in {u["username"] for u in compliance["users"]}
+    assert "admin" not in {u["username"] for u in compliance["users"]}
+    # The admin thread must leave the coverage denominator too, not just the row.
+    assert compliance["totals"]["threads"] == 1
+    assert compliance["totals"]["active_users"] == 1
 
 
 @pytest.mark.asyncio
