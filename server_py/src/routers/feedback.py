@@ -24,6 +24,14 @@ router = APIRouter(prefix="/api/feedback", tags=["Feedback"])
 # Applies to the whole /api/feedback/session/* family. Anything added here must
 # hold for all three, or the tab starts showing numbers that cannot be
 # reconciled against each other.
+#
+# Matched on the username, and DELIBERATELY NOT on `role == "admin"`, decided
+# 2026-08-12: the operator account will not be renamed, and role-matching would
+# also exclude any genuine lawyer who is later given admin rights — silently
+# dropping real research from the pre-pilot's figures, which is the worse
+# failure. The trade-off is that renaming the account, or adding a second
+# operator login, quietly puts smoke-test threads back into the statistics.
+# Add the new name here if that ever happens.
 EXCLUDED_USERNAMES = ("admin",)
 
 class FeedbackCreate(BaseModel):
