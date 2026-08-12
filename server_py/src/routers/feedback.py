@@ -442,6 +442,14 @@ async def get_session_durations(
     number the tab shows now describes the same population — the sessions a
     lawyer actually reported on.
 
+    `days` filters on when the FORM arrived (see the `feedback_filter` note
+    below), which is the same clock GET /session uses, so the two endpoints
+    return the same set of responses. Two differences survive by construction
+    and are stated on the tab rather than hidden: a form submitted with no
+    `chat_id` has no thread to measure, and a thread with neither a timed press
+    nor an answer has no end signal. Both make this a subset of GET /session,
+    never the reverse.
+
     Elapsed wall-clock, deliberately not split on idle gaps, but capped at
     `_MAX_CREDITED_SECONDS`: a thread resumed the next day would otherwise
     report as one enormous session and drag the mean and the total with it.
@@ -454,12 +462,22 @@ async def get_session_durations(
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin access required.")
 
+    # The timeframe is resolved against the FORM's arrival, not the thread's
+    # first question, so this endpoint covers exactly the responses that
+    # GET /session lists. Filtering on `started_at` — as this did — put session
+    # length on a third clock, matching neither the accuracy charts (form time)
+    # nor the chase list (activity time): a thread begun five weeks ago and fed
+    # back yesterday appeared in both of those and in neither the medians nor
+    # the histogram. Because a form can only follow its thread and the window
+    # trails, that leak ran one way, and bit hardest at the short timeframes an
+    # operator reaches for to see how today went.
     params: dict = {"excluded": list(EXCLUDED_USERNAMES)}
     conditions = ["u.username NOT IN :excluded"]
+    feedback_filter = ""
     if days != "all":
         days_num = int(days) if days.isdigit() else 30
         params["cutoff"] = datetime.utcnow() - timedelta(days=days_num)
-        conditions.append("fq.started_at >= :cutoff")
+        feedback_filter = "AND created_at >= :cutoff"
     where_clause = "WHERE " + " AND ".join(conditions)
 
     result = await db.execute(
@@ -482,7 +500,9 @@ async def get_session_durations(
                 SELECT chat_id,
                        MAX(finished_at) AS finished_at,
                        (ARRAY_AGG(session_continuity ORDER BY created_at DESC))[1] AS session_continuity
-                FROM session_feedback WHERE chat_id IS NOT NULL GROUP BY chat_id
+                FROM session_feedback
+                WHERE chat_id IS NOT NULL {feedback_filter}
+                GROUP BY chat_id
             )
             SELECT c.id AS chat_id, c.title, u.username,
                    fq.started_at, fq.queries,

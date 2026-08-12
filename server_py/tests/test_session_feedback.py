@@ -510,6 +510,59 @@ async def test_short_session_is_untouched_by_the_cap(
 
 
 @pytest.mark.asyncio
+async def test_timeframe_follows_the_form_not_the_thread_start(
+    client: AsyncClient, user_token: str, admin_token: str, db_session
+):
+    """An old thread fed back on today is measured; the window tracks the form.
+
+    Filtering on the thread's first question put session length on a clock that
+    matched neither the accuracy charts nor the chase list, so a long-running
+    thread appeared in both of those and in neither the medians nor the
+    histogram.
+    """
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    chat_id = await _thread_with_messages(client, user_headers, "Long running")
+    await client.post(URL, json={"chat_id": chat_id, "finished_seconds_ago": 0}, headers=user_headers)
+
+    # Thread began well outside a 7-day window; the form arrived just now.
+    await db_session.execute(
+        text("UPDATE messages SET created_at = created_at - INTERVAL '20 days' WHERE chat_id = :c"),
+        {"c": chat_id},
+    )
+    await db_session.commit()
+
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    body = (await client.get(f"{URL}/durations?days=7", headers=headers)).json()
+    assert [s["chat_id"] for s in body["sessions"]] == [chat_id]
+
+    # ...and the two endpoints agree on the population, which is the point.
+    rows = (await client.get(f"{URL}?days=7", headers=headers)).json()
+    assert len(rows) == body["summary"]["sessions"]
+
+
+@pytest.mark.asyncio
+async def test_a_form_outside_the_window_is_not_measured(
+    client: AsyncClient, user_token: str, admin_token: str, db_session
+):
+    """The converse: an old form on an old thread stays out of a short window."""
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    chat_id = await _thread_with_messages(client, user_headers, "Ancient")
+    await client.post(URL, json={"chat_id": chat_id, "finished_seconds_ago": 0}, headers=user_headers)
+
+    for table in ("messages", "session_feedback"):
+        await db_session.execute(
+            text(f"UPDATE {table} SET created_at = created_at - INTERVAL '20 days' WHERE chat_id = :c"),
+            {"c": chat_id},
+        )
+    await db_session.commit()
+
+    body = (
+        await client.get(f"{URL}/durations?days=7", headers={"Authorization": f"Bearer {admin_token}"})
+    ).json()
+    assert body["summary"]["sessions"] == 0
+
+
+@pytest.mark.asyncio
 async def test_durations_summary_splits_by_continuity(client: AsyncClient, user_token: str, admin_token: str):
     user_headers = {"Authorization": f"Bearer {user_token}"}
     one_go = await _thread_with_messages(client, user_headers, "One go")

@@ -179,6 +179,11 @@ export const SessionFeedbackTab = ({
   // it gets checked without database access.
   const uncapped = durations?.uncapped;
   const capSeconds = durations?.cap_seconds;
+  // Both endpoints now filter on when the form arrived, so these two counts
+  // describe the same responses and any difference has exactly two causes —
+  // named on screen rather than left as an unexplained discrepancy between two
+  // tiles a few centimetres apart.
+  const unmeasured = dur ? Math.max(0, rows.length - dur.sessions) : 0;
   const durationHistogram = DURATION_BUCKETS.map((b, i) => {
     const min = i === 0 ? 0 : DURATION_BUCKETS[i - 1].max;
     return {
@@ -289,6 +294,14 @@ export const SessionFeedbackTab = ({
               or, where the press was not timed, to the last answer the assistant gave. Elapsed time, not split on
               breaks, so a thread picked up the next day counts as one long session. Only threads with a submitted
               feedback form are measured.
+              {unmeasured > 0 && (
+                <>
+                  {' '}
+                  {unmeasured} of the {rows.length} responses in this period {unmeasured === 1 ? 'is' : 'are'} not
+                  measured here: the form was submitted outside a thread, or the thread has neither a timed press nor
+                  an answer to measure to.
+                </>
+              )}
             </p>
             {!dur || dur.sessions === 0 ? (
               <p className="text-ink-400 text-sm">No sessions with feedback in this period.</p>
