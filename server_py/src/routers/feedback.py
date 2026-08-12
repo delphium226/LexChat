@@ -1,5 +1,6 @@
 import logging
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -121,6 +122,50 @@ class MessageRatingOut(BaseModel):
 
 class StatusResponse(BaseModel):
     status: str
+
+
+# The pre-pilot's fixed run, 11–19 August 2026 inclusive, selectable on the
+# Session Feedback tab as `?days=prepilot`. Every other timeframe is a trailing
+# window from "now"; this is the one with a closed upper bound, which is why
+# the endpoints below take an `until` as well as a `cutoff`.
+PREPILOT_TIMEFRAME = "prepilot"
+PREPILOT_START = date(2026, 8, 11)
+PREPILOT_END = date(2026, 8, 19)
+
+# Rows are stored as naive UTC (`datetime.utcnow()` throughout), but the dates
+# above are UK calendar days as the organisation means them. In August that is
+# BST, so a naive read would lose the first hour of the 11th and gain the last
+# hour of the 19th. Converted properly rather than assumed — `zoneinfo` handles
+# the DST offset without it being hardcoded anywhere.
+_UK_TZ = ZoneInfo("Europe/London")
+
+
+def _uk_day_bounds(start: date, end: date) -> tuple[datetime, datetime]:
+    """UK-local calendar days → the inclusive naive-UTC range that spans them."""
+    first = datetime.combine(start, time.min, tzinfo=_UK_TZ)
+    last = datetime.combine(end, time.max, tzinfo=_UK_TZ)
+    return (
+        first.astimezone(timezone.utc).replace(tzinfo=None),
+        last.astimezone(timezone.utc).replace(tzinfo=None),
+    )
+
+
+def _timeframe_bounds(days: str) -> tuple[datetime | None, datetime | None]:
+    """Resolve the tab's timeframe selector to (from, to) naive-UTC bounds.
+
+    One place, because the three /session endpoints have to agree on what a
+    timeframe means or the tab stops reconciling against itself — the failure
+    that produced the mismatched-clocks bug. `None` means unbounded on that
+    side: "all" is unbounded both ways, and the trailing windows have no upper
+    bound, which keeps them byte-for-byte what they were before the pre-pilot
+    option existed. An unrecognised value falls back to 30 days, as it did.
+    """
+    if days == "all":
+        return None, None
+    if days == PREPILOT_TIMEFRAME:
+        return _uk_day_bounds(PREPILOT_START, PREPILOT_END)
+    days_num = int(days) if days.isdigit() else 30
+    return datetime.utcnow() - timedelta(days=days_num), None
 
 
 def _week_bounds(weeks_ago: int) -> tuple[datetime, datetime]:
@@ -363,10 +408,11 @@ async def get_all_session_feedback(
         .outerjoin(Chat, SessionFeedback.chat_id == Chat.id)
         .where(User.username.notin_(EXCLUDED_USERNAMES))
     )
-    if days != "all":
-        days_num = int(days) if days.isdigit() else 30
-        cutoff = datetime.utcnow() - timedelta(days=days_num)
-        query = query.where(SessionFeedback.created_at >= cutoff)
+    period_from, period_to = _timeframe_bounds(days)
+    if period_from is not None:
+        query = query.where(SessionFeedback.created_at >= period_from)
+    if period_to is not None:
+        query = query.where(SessionFeedback.created_at <= period_to)
     result = await db.execute(query.order_by(desc(SessionFeedback.created_at)))
 
     # Newest first, so the first row seen for a thread is the one that stands.
@@ -485,11 +531,14 @@ async def get_session_durations(
     # operator reaches for to see how today went.
     params: dict = {"excluded": list(EXCLUDED_USERNAMES)}
     conditions = ["u.username NOT IN :excluded"]
+    period_from, period_to = _timeframe_bounds(days)
     feedback_filter = ""
-    if days != "all":
-        days_num = int(days) if days.isdigit() else 30
-        params["cutoff"] = datetime.utcnow() - timedelta(days=days_num)
-        feedback_filter = "AND created_at >= :cutoff"
+    if period_from is not None:
+        params["cutoff"] = period_from
+        feedback_filter += " AND created_at >= :cutoff"
+    if period_to is not None:
+        params["until"] = period_to
+        feedback_filter += " AND created_at <= :until"
     where_clause = "WHERE " + " AND ".join(conditions)
 
     result = await db.execute(
@@ -681,11 +730,15 @@ async def get_session_feedback_compliance(
     message_filter = ""
     feedback_filter = ""
     params: dict = {}
-    if days != "all":
-        days_num = int(days) if days.isdigit() else 30
-        params["cutoff"] = datetime.utcnow() - timedelta(days=days_num)
-        message_filter = "AND m.created_at >= :cutoff"
-        feedback_filter = "AND created_at >= :cutoff"
+    period_from, period_to = _timeframe_bounds(days)
+    if period_from is not None:
+        params["cutoff"] = period_from
+        message_filter += " AND m.created_at >= :cutoff"
+        feedback_filter += " AND created_at >= :cutoff"
+    if period_to is not None:
+        params["until"] = period_to
+        message_filter += " AND m.created_at <= :until"
+        feedback_filter += " AND created_at <= :until"
 
     activity = await db.execute(
         text(f"""

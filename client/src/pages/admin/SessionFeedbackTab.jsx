@@ -107,6 +107,15 @@ const Tile = ({ label, value, tone = 'ink', sub = null }) => (
 // underneath it.
 const MIN_N_FOR_SHARE = 5;
 
+// The pre-pilot's fixed run. Unlike every other option this is a closed date
+// range rather than a trailing window, and the dates themselves live in
+// `PREPILOT_START` / `PREPILOT_END` in routers/feedback.py — the backend
+// resolves them against UK local days, so nothing here needs to know about
+// BST. Change them there; these two strings are display only.
+const PREPILOT = 'prepilot';
+const PREPILOT_LABEL = 'Pre-pilot (11–19 Aug)';
+const PREPILOT_LABEL_LONG = 'the pre-pilot, 11–19 Aug 2026';
+
 // A percentage tile that refuses to overstate its own precision: under
 // MIN_N_FOR_SHARE it shows the raw count instead and never turns red.
 //
@@ -140,7 +149,8 @@ export const SessionFeedbackTab = ({
   setTimeframe,
   refetch,
 }) => {
-  const timeframeLabel = timeframe === 'all' ? 'All Time' : `Last ${timeframe} Days`;
+  const timeframeLabel =
+    timeframe === PREPILOT ? PREPILOT_LABEL_LONG : timeframe === 'all' ? 'All Time' : `Last ${timeframe} Days`;
   const rows = sessionFeedback || [];
 
   const avgConf = mean(rows, 'confidence');
@@ -240,6 +250,7 @@ export const SessionFeedbackTab = ({
             onChange={e => setTimeframe(e.target.value)}
             className="p-2 border rounded-md text-sm focus:ring-2 focus:ring-accent"
           >
+            <option value={PREPILOT}>{PREPILOT_LABEL}</option>
             <option value="1">Last 1 Day</option>
             <option value="3">Last 3 Days</option>
             <option value="7">Last 7 Days</option>

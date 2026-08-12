@@ -5,13 +5,14 @@ are present and out of range: both rating scales are 1-5 and the closed
 questions are enums, which would otherwise reach the DB as free-form values
 and quietly corrupt the admin aggregates.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select, text
 
 from src.models import SessionFeedback, User
+from src.routers.feedback import PREPILOT_END, PREPILOT_START, PREPILOT_TIMEFRAME, _timeframe_bounds
 
 URL = "/api/feedback/session"
 
@@ -311,6 +312,107 @@ async def test_compliance_accepts_all_timeframe(client: AsyncClient, admin_token
     response = await client.get(f"{URL}/compliance?days=all", headers={"Authorization": f"Bearer {admin_token}"})
     assert response.status_code == 200
     assert response.json()["days"] == "all"
+
+
+# --- Pre-pilot timeframe --------------------------------------------------
+#
+# Nothing here may depend on "today" falling inside the pre-pilot: the window is
+# a fixed range in August 2026 and these tests must still pass in 2027. Every
+# timestamp is therefore set explicitly rather than inherited from utcnow().
+
+# 11 Aug 2026 00:00 and 19 Aug 2026 23:59:59.999999 UK time, expressed in the
+# naive UTC the rows are stored in. August is BST, so both shift back an hour.
+PREPILOT_FIRST_UTC = datetime(2026, 8, 10, 23, 0, 0)
+PREPILOT_LAST_UTC = datetime(2026, 8, 19, 22, 59, 59, 999999)
+
+
+def test_timeframe_bounds_resolves_each_selector():
+    assert _timeframe_bounds("all") == (None, None)
+    assert _timeframe_bounds(PREPILOT_TIMEFRAME) == (PREPILOT_FIRST_UTC, PREPILOT_LAST_UTC)
+
+    # The trailing windows keep no upper bound, so they behave exactly as they
+    # did before the pre-pilot option was added.
+    start, end = _timeframe_bounds("30")
+    assert end is None
+    assert abs((datetime.utcnow() - timedelta(days=30)) - start) < timedelta(seconds=5)
+
+    # An unrecognised value still falls back to 30 days rather than erroring.
+    assert _timeframe_bounds("nonsense")[0] is not None
+    assert _timeframe_bounds("nonsense")[1] is None
+
+
+def test_prepilot_dates_are_the_agreed_run():
+    assert (PREPILOT_START.isoformat(), PREPILOT_END.isoformat()) == ("2026-08-11", "2026-08-19")
+
+
+@pytest.mark.asyncio
+async def test_prepilot_window_includes_both_end_days_in_uk_time(
+    client: AsyncClient, user_token: str, admin_token: str, db_session
+):
+    """Inclusive of the 11th and the 19th, as UK calendar days.
+
+    The boundary cases are an hour either side of midnight BST: stored naively
+    in UTC, the first moment of the 11th is 10 Aug 23:00 and the last moment of
+    the 19th is 19 Aug 22:59, so a UTC-naive reading would drop an hour of the
+    opening day and admit an hour of the 20th.
+    """
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    # confidence doubles as an identifier: 1/4 inside, 2/3 outside.
+    stamps = {
+        1: PREPILOT_FIRST_UTC,                                  # 11 Aug 00:00 BST
+        2: PREPILOT_FIRST_UTC - timedelta(minutes=1),           # 10 Aug 23:59 BST
+        3: PREPILOT_LAST_UTC + timedelta(minutes=1),            # 20 Aug 00:00 BST
+        4: PREPILOT_LAST_UTC - timedelta(minutes=1),            # 19 Aug 23:58 BST
+    }
+    for confidence, stamp in stamps.items():
+        await client.post(URL, json={"confidence": confidence}, headers=user_headers)
+        await db_session.execute(
+            text("UPDATE session_feedback SET created_at = :t WHERE confidence = :c"),
+            {"t": stamp, "c": confidence},
+        )
+    await db_session.commit()
+
+    rows = (
+        await client.get(
+            f"{URL}?days={PREPILOT_TIMEFRAME}", headers={"Authorization": f"Bearer {admin_token}"}
+        )
+    ).json()
+    assert sorted(r["confidence"] for r in rows) == [1, 4]
+
+
+@pytest.mark.asyncio
+async def test_prepilot_window_bounds_durations_and_compliance(
+    client: AsyncClient, seed_user: User, user_token: str, admin_token: str, db_session
+):
+    """All three endpoints honour the closed upper bound, not just the list."""
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    inside = await _thread_with_messages(client, user_headers, "During")
+    outside = await _thread_with_messages(client, user_headers, "After")
+    for chat_id in (inside, outside):
+        await client.post(URL, json={"chat_id": chat_id, "finished_seconds_ago": 0}, headers=user_headers)
+
+    # Anchor each thread whole — messages, form and press together — so the one
+    # outside differs only in when it happened.
+    for chat_id, anchor in ((inside, datetime(2026, 8, 15, 10, 0)), (outside, datetime(2026, 9, 15, 10, 0))):
+        await db_session.execute(
+            text("UPDATE messages SET created_at = :t WHERE chat_id = :c"), {"t": anchor, "c": chat_id}
+        )
+        await db_session.execute(
+            text("UPDATE session_feedback SET created_at = :t2, finished_at = :t2 WHERE chat_id = :c"),
+            {"t2": anchor + timedelta(minutes=30), "c": chat_id},
+        )
+    await db_session.commit()
+
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    durations = (await client.get(f"{URL}/durations?days={PREPILOT_TIMEFRAME}", headers=headers)).json()
+    assert [s["chat_id"] for s in durations["sessions"]] == [inside]
+    assert durations["summary"]["median_seconds"] == 30 * 60
+
+    compliance = (await client.get(f"{URL}/compliance?days={PREPILOT_TIMEFRAME}", headers=headers)).json()
+    row = next(u for u in compliance["users"] if u["user_id"] == seed_user.id)
+    assert row["threads"] == 1
+    assert row["responses"] == 1
+    assert row["threads_covered"] == 1
 
 
 # --- Session length -------------------------------------------------------
