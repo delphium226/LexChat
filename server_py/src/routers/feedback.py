@@ -210,6 +210,26 @@ _MAX_FORM_FILL_SECONDS = 2 * 60 * 60
 _CONTINUITY_VALUES = {"one_go", "not_one_go"}
 _YES_PARTIALLY_NO = {"yes", "partially", "no"}
 
+# Session length is elapsed wall-clock with no idle-gap splitting, so a thread
+# picked up after lunch — or the next morning — reads as one enormous session.
+# Past this point (4h) the extra time is breaks, not work, and it is credited
+# as 4h rather than at face value.
+#
+# CAPPED, NOT EXCLUDED, and the distinction is the whole design. Dropping the
+# long sessions would delete the genuine ones alongside the artefacts, turn
+# "Total time" into an undercount of unknown size, and pull those threads out
+# of the session-length population while leaving them in the accuracy and
+# confidence charts — the same irreconcilable-denominators problem the tab was
+# just cleaned up to avoid. A capped session keeps its row and its duration is
+# a floor on the truth, which is a failure mode you can state on screen.
+#
+# 4h is an ASSUMPTION, not a measurement: office-hours users, one thread per
+# research question, and Q3 exists at all because breaks were expected. The
+# endpoint therefore also returns an `uncapped` block so the tab can show what
+# the numbers would have been without it — retune or remove this constant from
+# what that line says once real traffic has accumulated.
+_MAX_CREDITED_SECONDS = 4 * 60 * 60
+
 
 def _clean(value: str | None) -> str | None:
     """Blank / whitespace-only free text is stored as NULL, not ''."""
@@ -388,10 +408,14 @@ async def get_session_durations(
     number the tab shows now describes the same population — the sessions a
     lawyer actually reported on.
 
-    Elapsed wall-clock, deliberately not split on idle gaps: a thread resumed
-    the next day reports as one long session. `session_continuity` (Q3 of the
-    feedback form) is returned per row so that distortion stays visible in the
-    numbers rather than being silently smoothed away.
+    Elapsed wall-clock, deliberately not split on idle gaps, but capped at
+    `_MAX_CREDITED_SECONDS`: a thread resumed the next day would otherwise
+    report as one enormous session and drag the mean and the total with it.
+    Each row carries both `duration_seconds` (capped, what the tab renders)
+    and `elapsed_seconds` (raw), and the summary is mirrored by an `uncapped`
+    block so the size of the correction stays legible rather than being
+    applied silently. `session_continuity` (Q3) is returned per row for the
+    same reason.
     """
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin access required.")
@@ -446,8 +470,8 @@ async def get_session_durations(
             ended_at, signal = row["last_response"], "last_response"
         else:
             continue
-        duration = (ended_at - row["started_at"]).total_seconds()
-        if duration < 0:
+        elapsed = (ended_at - row["started_at"]).total_seconds()
+        if elapsed < 0:
             # Only reachable via clock weirdness; a negative length is never
             # meaningful, so drop rather than pollute the medians.
             continue
@@ -458,7 +482,9 @@ async def get_session_durations(
             "started_at": row["started_at"].isoformat(),
             "ended_at": ended_at.isoformat(),
             "end_signal": signal,
-            "duration_seconds": duration,
+            "duration_seconds": min(elapsed, _MAX_CREDITED_SECONDS),
+            "elapsed_seconds": elapsed,
+            "capped": elapsed > _MAX_CREDITED_SECONDS,
             "queries": int(row["queries"]),
             "session_continuity": row["session_continuity"],
         })
@@ -471,9 +497,11 @@ async def get_session_durations(
     one_go = [s for s in sessions if s["session_continuity"] == "one_go"]
     not_one_go = [s for s in sessions if s["session_continuity"] == "not_one_go"]
     all_durations = durations(sessions)
+    elapsed_durations = [s["elapsed_seconds"] for s in sessions]
 
     return {
         "days": days,
+        "cap_seconds": _MAX_CREDITED_SECONDS,
         "summary": {
             "sessions": len(sessions),
             "closed_properly": len(closed),
@@ -487,6 +515,19 @@ async def get_session_durations(
             "not_one_go_sessions": len(not_one_go),
             "median_not_one_go": _median(durations(not_one_go)),
             "total_seconds": sum(all_durations),
+        },
+        # What the numbers above would have been with no cap. This is the tab
+        # answering the question we cannot run against the live DB: if the
+        # capped and uncapped medians agree and `capped_sessions` is ~0, the
+        # cap is doing nothing and can go. If the uncapped mean is a multiple
+        # of the uncapped median, the skew was real and the cap is earning its
+        # place. Rendered as one small line under the tiles, not as tiles.
+        "uncapped": {
+            "capped_sessions": sum(1 for s in sessions if s["capped"]),
+            "median_seconds": _median(elapsed_durations),
+            "mean_seconds": (sum(elapsed_durations) / len(elapsed_durations)) if elapsed_durations else None,
+            "total_seconds": sum(elapsed_durations),
+            "longest_seconds": max(elapsed_durations) if elapsed_durations else None,
         },
         "sessions": sessions,
     }

@@ -67,14 +67,6 @@ const mean = (rows, field) => {
 
 const sum = (rows, field) => rows.reduce((s, r) => s + (r[field] ?? 0), 0);
 
-// Share of answers to `field` that were `value`, as a percentage of everyone who
-// answered the question at all (a legacy 'unsure' is not a 'yes', and counts in
-// the denominator).
-const answerShare = (rows, field, value) => {
-  const answered = rows.filter(r => r[field] != null);
-  return answered.length > 0 ? (answered.filter(r => r[field] === value).length / answered.length) * 100 : null;
-};
-
 const fmtDate = iso => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : null);
 
 const fmtDuration = secs => {
@@ -86,9 +78,9 @@ const fmtDuration = secs => {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 };
 
-// Buckets for the session-length histogram. Open-ended at the top: the metric
-// is raw elapsed time with no idle-gap splitting, so a thread resumed the next
-// day lands in "4h+" rather than stretching the axis.
+// Buckets for the session-length histogram, over the CAPPED durations — so the
+// top bucket collects everything the backend credited at the cap rather than
+// stretching the axis out to a thread someone resumed the next morning.
 const DURATION_BUCKETS = [
   { label: '<5m', max: 300 },
   { label: '5–15m', max: 900 },
@@ -101,12 +93,40 @@ const DURATION_BUCKETS = [
 
 const daysSince = iso => (iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000) : null);
 
-const Tile = ({ label, value, tone = 'ink' }) => (
+const Tile = ({ label, value, tone = 'ink', sub = null }) => (
   <div className="bg-ink-50 rounded-lg p-4 text-center">
     <div className={`text-2xl font-bold ${tone === 'danger' ? 'text-danger' : 'text-ink-800'}`}>{value}</div>
     <div className="text-xs text-ink-500 mt-1">{label}</div>
+    {sub && <div className="text-[10px] text-ink-400 mt-0.5">{sub}</div>}
   </div>
 );
+
+// Below this many answers a percentage is noise. During a pre-pilot's opening
+// week that is the normal state, and "0%" in danger red off a single
+// "partially" is a false alarm — the tile is what gets read, not the chart
+// underneath it.
+const MIN_N_FOR_SHARE = 5;
+
+// A percentage tile that refuses to overstate its own precision: under
+// MIN_N_FOR_SHARE it shows the raw count instead and never turns red.
+//
+// Note the three distinct states. No answers at all is "—" (no data); two
+// answers is "1 of 2" (data, but don't read a trend into it); enough answers
+// is a percentage with its denominator. Collapsing the first two into "—"
+// would throw away the difference between "nobody has answered" and "nobody
+// has answered *yet*", which is the one an operator acts on.
+const ShareTile = ({ label, numerator, denominator, badBelow }) => {
+  const enough = denominator >= MIN_N_FOR_SHARE;
+  const pct = denominator > 0 ? (numerator / denominator) * 100 : null;
+  return (
+    <Tile
+      label={label}
+      value={pct == null ? '—' : enough ? `${pct.toFixed(0)}%` : `${numerator} of ${denominator}`}
+      sub={enough ? `n = ${denominator}` : null}
+      tone={enough && badBelow != null && pct < badBelow ? 'danger' : 'ink'}
+    />
+  );
+};
 
 const thCls =
   'px-4 py-2 border-b-2 border-ink-200 text-left font-semibold text-ink-500 uppercase tracking-wider whitespace-nowrap';
@@ -129,21 +149,24 @@ export const SessionFeedbackTab = ({
   const totalSaved = sum(rows, 'time_saved_hours');
   const avgVerif = mean(rows, 'verification_hours');
 
+  // Coverage ("Threads covered") is responses per thread worked in: the form is
+  // asked for once per session, so a lawyer with 6 threads and 1 response is
+  // 17% covered. It is the one pair of numbers on this tab that still counts
+  // threads with no feedback — that is precisely what it measures, and
+  // excluding them would pin it at 100%.
   const totals = compliance?.totals;
-  // Coverage is responses per thread worked in: the form is asked for once per
-  // session, so a lawyer with 6 threads and 1 response is 17% covered. This is
-  // the one pair of numbers that still counts threads with no feedback — that
-  // is what it measures, and excluding them would pin it at 100%.
-  const coverage = totals && totals.threads > 0 ? (totals.responses / totals.threads) * 100 : null;
 
   // `good` rides along on each row so the chart's per-category <Cell>s can colour
-  // by sentiment rather than by literal answer word.
+  // by sentiment rather than by literal answer word. `goodCount` / `answered`
+  // feed the tiles above the chart, so tile and chart cannot disagree — each
+  // question has its own denominator, since a form may skip any of them.
   const accuracyData = ACCURACY_QUESTIONS.map(q => {
     const answered = rows.filter(r => r[q.field] != null);
     const entry = { label: q.label, answered: answered.length, good: q.good };
     q.answers.forEach(a => {
       entry[a] = answered.filter(r => r[q.field] === a).length;
     });
+    entry.goodCount = entry[q.good];
     return entry;
   });
   const allAnswerKeys = [...new Set(ACCURACY_QUESTIONS.flatMap(q => q.answers))];
@@ -151,7 +174,11 @@ export const SessionFeedbackTab = ({
   // --- Session length ---
   const dur = durations?.summary;
   const durSessions = durations?.sessions || [];
-  const closedShare = dur && dur.sessions > 0 ? (dur.closed_properly / dur.sessions) * 100 : null;
+  // What the tiles would have said with no cap, rendered as one line beneath
+  // them. The cap is an assumption (see _MAX_CREDITED_SECONDS) and this is how
+  // it gets checked without database access.
+  const uncapped = durations?.uncapped;
+  const capSeconds = durations?.cap_seconds;
   const durationHistogram = DURATION_BUCKETS.map((b, i) => {
     const min = i === 0 ? 0 : DURATION_BUCKETS[i - 1].max;
     return {
@@ -164,7 +191,12 @@ export const SessionFeedbackTab = ({
       ).length,
     };
   });
-  const longestSessions = [...durSessions].sort((a, b) => b.duration_seconds - a.duration_seconds).slice(0, 8);
+  // Sorted and shown on RAW elapsed, unlike everything else on this card. The
+  // capped durations all tie at the cap, which would make the ordering
+  // arbitrary — and this table is the one place an operator goes looking for
+  // the multi-day threads the cap exists to contain, so hiding them here would
+  // defeat its purpose.
+  const longestSessions = [...durSessions].sort((a, b) => b.elapsed_seconds - a.elapsed_seconds).slice(0, 8);
 
   const scaleData = [1, 2, 3, 4, 5].map(n => ({
     score: `${n}`,
@@ -221,10 +253,11 @@ export const SessionFeedbackTab = ({
             <h3 className="text-sm font-bold mb-3">Overview</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
               <Tile label="Responses" value={rows.length} />
-              <Tile
+              <ShareTile
                 label="Threads covered"
-                value={coverage != null ? `${coverage.toFixed(0)}%` : '—'}
-                tone={coverage != null && coverage < 50 ? 'danger' : 'ink'}
+                numerator={totals?.responses ?? 0}
+                denominator={totals?.threads ?? 0}
+                badBelow={50}
               />
               <Tile
                 label="Users responding"
@@ -258,16 +291,39 @@ export const SessionFeedbackTab = ({
               <>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
                   <Tile label="Median session" value={fmtDuration(dur.median_seconds)} />
-                  <Tile label="Mean session" value={fmtDuration(dur.mean_seconds)} />
+                  <Tile label="Median, in one go" value={fmtDuration(dur.median_one_go)} />
                   <Tile label="Total time" value={fmtDuration(dur.total_seconds)} />
                   <Tile label="Sessions measured" value={dur.sessions} />
-                  <Tile
+                  <ShareTile
                     label="Ended by button"
-                    value={closedShare != null ? `${closedShare.toFixed(0)}%` : '—'}
-                    tone={closedShare != null && closedShare < 50 ? 'danger' : 'ink'}
+                    numerator={dur.closed_properly}
+                    denominator={dur.sessions}
+                    badBelow={50}
                   />
-                  <Tile label="Median, in one go" value={fmtDuration(dur.median_one_go)} />
+                  <Tile
+                    label={`Capped at ${fmtDuration(capSeconds)}`}
+                    value={uncapped?.capped_sessions ?? 0}
+                    sub={uncapped?.capped_sessions > 0 ? 'counted as a floor' : null}
+                  />
                 </div>
+
+                {/* The measurement we cannot run against the live database, put
+                    on screen instead. Read it after a few weeks: if nothing is
+                    being capped and the two medians agree, _MAX_CREDITED_SECONDS
+                    is doing no work and can go; if the uncapped mean is a
+                    multiple of the uncapped median, the skew was real. */}
+                {uncapped?.median_seconds != null && (
+                  <p className="text-xs text-ink-400 mb-5 -mt-2">
+                    Sessions longer than {fmtDuration(capSeconds)} are counted as {fmtDuration(capSeconds)}, on the
+                    assumption that the rest is breaks rather than work — so these are floors, not exact figures.
+                    Uncapped, the same sessions give a median of {fmtDuration(uncapped.median_seconds)}, a mean of{' '}
+                    {fmtDuration(uncapped.mean_seconds)}, a total of {fmtDuration(uncapped.total_seconds)}, and a
+                    longest of {fmtDuration(uncapped.longest_seconds)}.
+                    {uncapped.capped_sessions === 0
+                      ? ' Nothing hit the cap in this period.'
+                      : ` ${uncapped.capped_sessions} of ${dur.sessions} hit it.`}
+                  </p>
+                )}
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div>
@@ -317,7 +373,11 @@ export const SessionFeedbackTab = ({
 
                 {longestSessions.length > 0 && (
                   <div className="mt-5">
-                    <h4 className="text-xs font-bold text-ink-600 uppercase tracking-wider mb-2">Longest sessions</h4>
+                    <h4 className="text-xs font-bold text-ink-600 uppercase tracking-wider mb-2">
+                      Longest sessions <span className="font-normal normal-case tracking-normal text-ink-400">
+                        — raw elapsed, before capping
+                      </span>
+                    </h4>
                     <div className="overflow-x-auto">
                       <table className="min-w-full text-sm">
                         <thead>
@@ -334,7 +394,10 @@ export const SessionFeedbackTab = ({
                           {longestSessions.map(s => (
                             <tr key={s.chat_id} className="border-b border-ink-100">
                               <td className="px-4 py-2 font-medium text-ink-800 whitespace-nowrap">
-                                {fmtDuration(s.duration_seconds)}
+                                {fmtDuration(s.elapsed_seconds)}
+                                {s.capped && (
+                                  <span className="text-ink-400 font-normal"> · capped</span>
+                                )}
                               </td>
                               <td className="px-4 py-2 text-ink-700 whitespace-nowrap">{s.username}</td>
                               <td className="px-4 py-2 text-ink-700">{s.chat_title || `#${s.chat_id}`}</td>
@@ -374,17 +437,15 @@ export const SessionFeedbackTab = ({
               ) : (
                 <>
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-                    {ACCURACY_QUESTIONS.map(q => {
-                      const share = answerShare(rows, q.field, q.good);
-                      return (
-                        <Tile
-                          key={q.field}
-                          label={`${q.label} — ${ANSWER_LABELS[q.good].toLowerCase()}`}
-                          value={share != null ? `${share.toFixed(0)}%` : '—'}
-                          tone={share != null && share < 75 ? 'danger' : 'ink'}
-                        />
-                      );
-                    })}
+                    {ACCURACY_QUESTIONS.map((q, i) => (
+                      <ShareTile
+                        key={q.field}
+                        label={`${q.label} — ${ANSWER_LABELS[q.good].toLowerCase()}`}
+                        numerator={accuracyData[i].goodCount}
+                        denominator={accuracyData[i].answered}
+                        badBelow={75}
+                      />
+                    ))}
                   </div>
                   <ResponsiveContainer width="100%" height={190}>
                     <BarChart data={accuracyData} barCategoryGap="30%">

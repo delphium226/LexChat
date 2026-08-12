@@ -9,7 +9,7 @@ from datetime import datetime
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from src.models import SessionFeedback, User
 
@@ -354,6 +354,61 @@ async def test_thread_with_no_answer_is_not_measurable(client: AsyncClient, user
 
     body = (await client.get(f"{URL}/durations", headers={"Authorization": f"Bearer {admin_token}"})).json()
     assert all(s["chat_id"] != chat_id for s in body["sessions"])
+
+
+@pytest.mark.asyncio
+async def test_long_session_is_capped_not_dropped(
+    client: AsyncClient, user_token: str, admin_token: str, db_session
+):
+    """A thread picked up the next day is credited at the cap, and still counted.
+
+    Capping rather than excluding is the point: the row survives, so the
+    session-length population stays the same as the accuracy charts', and the
+    reported duration is a floor rather than a deletion.
+    """
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    chat_id = await _thread_with_messages(client, user_headers, "Resumed next day")
+    await client.post(URL, json={"chat_id": chat_id, "finished_seconds_ago": 0}, headers=user_headers)
+
+    # Backdate the thread's first question by 30h, leaving the end where it is.
+    await db_session.execute(
+        text("UPDATE messages SET created_at = created_at - INTERVAL '30 hours' WHERE chat_id = :c"),
+        {"c": chat_id},
+    )
+    await db_session.commit()
+
+    body = (await client.get(f"{URL}/durations", headers={"Authorization": f"Bearer {admin_token}"})).json()
+    cap = body["cap_seconds"]
+    session = next(s for s in body["sessions"] if s["chat_id"] == chat_id)
+    assert session["capped"] is True
+    assert session["duration_seconds"] == cap
+    assert session["elapsed_seconds"] > cap
+
+    # The cap must not leak into the headline totals...
+    assert body["summary"]["sessions"] == 1
+    assert body["summary"]["total_seconds"] == cap
+    # ...and the uncapped block must still report the truth, so the assumption
+    # behind the cap can be checked from the tab without database access.
+    assert body["uncapped"]["capped_sessions"] == 1
+    assert body["uncapped"]["longest_seconds"] > cap
+    assert body["uncapped"]["total_seconds"] > body["summary"]["total_seconds"]
+
+
+@pytest.mark.asyncio
+async def test_short_session_is_untouched_by_the_cap(
+    client: AsyncClient, user_token: str, admin_token: str
+):
+    """The common case must be byte-for-byte what it was before the cap."""
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    chat_id = await _thread_with_messages(client, user_headers, "Quick question")
+    await client.post(URL, json={"chat_id": chat_id, "finished_seconds_ago": 0}, headers=user_headers)
+
+    body = (await client.get(f"{URL}/durations", headers={"Authorization": f"Bearer {admin_token}"})).json()
+    session = next(s for s in body["sessions"] if s["chat_id"] == chat_id)
+    assert session["capped"] is False
+    assert session["duration_seconds"] == session["elapsed_seconds"]
+    assert body["uncapped"]["capped_sessions"] == 0
+    assert body["uncapped"]["median_seconds"] == body["summary"]["median_seconds"]
 
 
 @pytest.mark.asyncio
