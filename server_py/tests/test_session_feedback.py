@@ -189,6 +189,104 @@ async def test_compliance_counts_threads_against_responses(
 
 
 @pytest.mark.asyncio
+async def test_resubmission_is_a_correction_not_a_second_response(
+    client: AsyncClient, user_token: str, admin_token: str, db_session
+):
+    """Two forms on one thread: the latest is reported, the first is retained.
+
+    Nothing stops a lawyer pressing "Finished session" twice, and counting both
+    would give them double weight in the accuracy shares and the confidence
+    averages.
+    """
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    chat = await client.post("/api/chats/", json={"model": "mistral", "title": "T"}, headers=user_headers)
+    chat_id = chat.json()["id"]
+    await client.post(URL, json={"chat_id": chat_id, "confidence": 2}, headers=user_headers)
+    await client.post(URL, json={"chat_id": chat_id, "confidence": 5}, headers=user_headers)
+
+    rows = (await client.get(URL, headers={"Authorization": f"Bearer {admin_token}"})).json()
+    assert len(rows) == 1
+    assert rows[0]["confidence"] == 5
+
+    # Superseded, not deleted — the audit record survives in the table.
+    stored = (await db_session.execute(select(SessionFeedback))).scalars().all()
+    assert sorted(r.confidence for r in stored) == [2, 5]
+
+
+@pytest.mark.asyncio
+async def test_forms_without_a_thread_are_never_deduplicated(
+    client: AsyncClient, user_token: str, admin_token: str
+):
+    """There is no thread to supersede them against, so each one stands."""
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    await client.post(URL, json={"confidence": 3}, headers=user_headers)
+    await client.post(URL, json={"confidence": 4}, headers=user_headers)
+
+    rows = (await client.get(URL, headers={"Authorization": f"Bearer {admin_token}"})).json()
+    assert sorted(r["confidence"] for r in rows) == [3, 4]
+
+
+@pytest.mark.asyncio
+async def test_compliance_chases_on_threads_covered_not_form_count(
+    client: AsyncClient, seed_user: User, user_token: str, admin_token: str
+):
+    """Three forms on one of three threads leaves two threads to chase.
+
+    Counting forms reported this lawyer as fully up to date, and let the
+    coverage percentage exceed 100%.
+    """
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    chat_ids = []
+    for title in ("One", "Two", "Three"):
+        chat = await client.post("/api/chats/", json={"model": "mistral", "title": title}, headers=user_headers)
+        chat_ids.append(chat.json()["id"])
+        await client.post(
+            f"/api/chats/{chat_ids[-1]}/messages",
+            json={"role": "user", "content": "Question"},
+            headers=user_headers,
+        )
+    for _ in range(3):
+        await client.post(URL, json={"chat_id": chat_ids[0], "confidence": 4}, headers=user_headers)
+
+    body = (await client.get(f"{URL}/compliance", headers={"Authorization": f"Bearer {admin_token}"})).json()
+    row = next(u for u in body["users"] if u["user_id"] == seed_user.id)
+    assert row["threads"] == 3
+    assert row["responses"] == 3
+    assert row["threads_covered"] == 1
+
+    assert body["totals"]["threads"] == 3
+    assert body["totals"]["threads_covered"] == 1
+    assert body["totals"]["threads_covered"] <= body["totals"]["threads"]
+
+
+@pytest.mark.asyncio
+async def test_a_form_with_no_thread_covers_nothing(
+    client: AsyncClient, seed_user: User, user_token: str, admin_token: str
+):
+    """It is a response, but it closes no gap — the thread is still unreviewed.
+
+    The two counts are meant to disagree here: the lawyer has engaged with the
+    form (so they count as responding), but none of their threads is reviewed
+    (so the gap stays open and they stay on the chase list).
+    """
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    chat = await client.post("/api/chats/", json={"model": "mistral", "title": "T"}, headers=user_headers)
+    await client.post(
+        f"/api/chats/{chat.json()['id']}/messages",
+        json={"role": "user", "content": "Question"},
+        headers=user_headers,
+    )
+    await client.post(URL, json={"confidence": 4}, headers=user_headers)
+
+    body = (await client.get(f"{URL}/compliance", headers={"Authorization": f"Bearer {admin_token}"})).json()
+    row = next(u for u in body["users"] if u["user_id"] == seed_user.id)
+    assert row["responses"] == 1
+    assert row["threads_covered"] == 0
+    assert body["totals"]["responding_users"] == 1
+    assert body["totals"]["threads_covered"] == 0
+
+
+@pytest.mark.asyncio
 async def test_compliance_flags_a_user_who_never_responds(
     client: AsyncClient, seed_user: User, user_token: str, admin_token: str
 ):

@@ -206,11 +206,16 @@ export const SessionFeedbackTab = ({
 
   // Chase list: anyone who worked in at least one thread this period. Sorted
   // by threads left un-reviewed, so the biggest gaps sit at the top.
+  //
+  // The gap is threads minus threads COVERED, not minus forms submitted. Three
+  // corrections on one thread are three responses but one thread covered, so
+  // chasing on the form count reported a lawyer with three untouched threads
+  // as fully up to date.
   const chaseRows = (compliance?.users || [])
     .filter(u => u.threads > 0)
-    .map(u => ({ ...u, gap: Math.max(0, u.threads - u.responses) }))
+    .map(u => ({ ...u, gap: Math.max(0, u.threads - u.threads_covered) }))
     .sort((a, b) => b.gap - a.gap || b.threads - a.threads);
-  const neverResponded = chaseRows.filter(u => u.responses === 0).length;
+  const neverResponded = chaseRows.filter(u => u.threads_covered === 0).length;
 
   return (
     <div className="space-y-4">
@@ -255,7 +260,7 @@ export const SessionFeedbackTab = ({
               <Tile label="Responses" value={rows.length} />
               <ShareTile
                 label="Threads covered"
-                numerator={totals?.responses ?? 0}
+                numerator={totals?.threads_covered ?? 0}
                 denominator={totals?.threads ?? 0}
                 badBelow={50}
               />
@@ -507,7 +512,8 @@ export const SessionFeedbackTab = ({
             <h3 className="text-sm font-bold mb-1">Who to chase</h3>
             <p className="text-xs text-ink-500 mb-4">
               Everyone who used the system in this period, ordered by how many threads they finished without leaving
-              feedback.
+              feedback. Counted per thread, not per form: a resubmitted form corrects the first rather than covering
+              another thread.
               {neverResponded > 0 && (
                 <>
                   {' '}
@@ -527,7 +533,7 @@ export const SessionFeedbackTab = ({
                       <th className={thCls}>User</th>
                       <th className={`${thCls} w-24`}>Threads</th>
                       <th className={`${thCls} w-24`}>Queries</th>
-                      <th className={`${thCls} w-28`}>Responses</th>
+                      <th className={`${thCls} w-28`}>Fed back on</th>
                       <th className={`${thCls} w-32`}>Missing</th>
                       <th className={`${thCls} w-32`}>Last active</th>
                       <th className={`${thCls} w-40`}>Last feedback</th>
@@ -539,21 +545,28 @@ export const SessionFeedbackTab = ({
                       return (
                         <tr
                           key={u.user_id}
-                          className={`border-b border-ink-100 ${u.responses === 0 ? 'bg-danger/5' : ''}`}
+                          className={`border-b border-ink-100 ${u.threads_covered === 0 ? 'bg-danger/5' : ''}`}
                         >
                           <td className="px-4 py-3 font-medium text-ink-800 whitespace-nowrap">{u.username}</td>
                           <td className="px-4 py-3 text-ink-700 text-center">{u.threads}</td>
                           <td className="px-4 py-3 text-ink-500 text-center">{u.queries}</td>
                           <td className="px-4 py-3 text-center">
-                            <span className={u.responses === 0 ? 'text-danger font-semibold' : 'text-ink-700'}>
-                              {u.responses}
+                            <span className={u.threads_covered === 0 ? 'text-danger font-semibold' : 'text-ink-700'}>
+                              {u.threads_covered}
                             </span>
+                            {/* Forms submitted, where it differs from threads
+                                covered — resubmitted corrections, or a form
+                                left outside a thread. Shown so the two numbers
+                                never look like a contradiction. */}
+                            {u.responses !== u.threads_covered && (
+                              <div className="text-[10px] text-ink-400">{u.responses} forms</div>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-center">
                             {u.gap === 0 ? (
                               <span className="text-ink-400">—</span>
                             ) : (
-                              <span className={u.responses === 0 ? 'text-danger font-semibold' : 'text-ink-700'}>
+                              <span className={u.threads_covered === 0 ? 'text-danger font-semibold' : 'text-ink-700'}>
                                 {u.gap} {u.gap === 1 ? 'thread' : 'threads'}
                               </span>
                             )}
@@ -582,7 +595,12 @@ export const SessionFeedbackTab = ({
 
           {/* INDIVIDUAL RESPONSES */}
           <div className="bg-paper p-6 rounded-lg shadow">
-            <h3 className="text-sm font-bold mb-4">Individual responses</h3>
+            <h3 className="text-sm font-bold mb-1">Individual responses</h3>
+            <p className="text-xs text-ink-500 mb-4">
+              One per thread. Where a lawyer submitted the form more than once on the same thread the latest response
+              is shown and counted; the earlier ones are kept in the database but held back here, so a resubmission
+              does not carry double weight in the figures above.
+            </p>
             {rows.length === 0 ? (
               <p className="text-ink-400 text-sm">
                 No session feedback yet. Enable &ldquo;Session feedback form&rdquo; on the Developer tab to show the

@@ -329,6 +329,24 @@ async def get_all_session_feedback(
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """The responses behind every statistic on the admin tab.
+
+    Nothing stops a lawyer pressing "Finished session" twice on one thread, and
+    a second form is treated as a **correction**: the latest response per
+    (user, thread) is returned and the earlier ones are held back. Without this
+    a lawyer who resubmits is counted twice in the accuracy shares and the
+    confidence averages, silently carrying double weight in the pre-pilot's
+    headline numbers.
+
+    Superseded rows are filtered from the READ ONLY — never deleted, and the
+    POST is left free to insert. `session_feedback` is an audit record of how
+    each piece of research went (the same reasoning that makes `chat_id` SET
+    NULL rather than CASCADE), so the history stays queryable in the database
+    even though the tab reports one answer per thread.
+
+    Forms with no `chat_id` are exempt: there is no thread to supersede them
+    against, so each is a distinct response and all of them are returned.
+    """
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin access required.")
     query = (
@@ -342,6 +360,22 @@ async def get_all_session_feedback(
         cutoff = datetime.utcnow() - timedelta(days=days_num)
         query = query.where(SessionFeedback.created_at >= cutoff)
     result = await db.execute(query.order_by(desc(SessionFeedback.created_at)))
+
+    # Newest first, so the first row seen for a thread is the one that stands.
+    # Done in Python rather than as a window function because the rows are all
+    # materialised here anyway, and a DISTINCT ON would have to special-case
+    # the NULL chat_ids — Postgres treats NULLs as equal for that purpose, so
+    # it would collapse a user's untethered forms into one.
+    seen_threads: set[tuple[int, int]] = set()
+    latest = []
+    for fb, username, chat_title in result.all():
+        if fb.chat_id is not None:
+            key = (fb.user_id, fb.chat_id)
+            if key in seen_threads:
+                continue
+            seen_threads.add(key)
+        latest.append((fb, username, chat_title))
+
     return [
         SessionFeedbackOut(
             id=fb.id,
@@ -368,7 +402,7 @@ async def get_all_session_feedback(
             finished_at=fb.finished_at.isoformat() if fb.finished_at else None,
             created_at=fb.created_at.isoformat(),
         )
-        for fb, username, chat_title in result.all()
+        for fb, username, chat_title in latest
     ]
 
 
@@ -438,6 +472,12 @@ async def get_session_durations(
                 SELECT chat_id, MAX(created_at) AS last_response
                 FROM messages WHERE role = 'assistant' GROUP BY chat_id
             ),
+            -- One row per thread, so a resubmitted form is a correction here
+            -- too, matching GET /session. `session_continuity` takes the
+            -- latest answer; `finished_at` deliberately takes MAX rather than
+            -- the latest row's value, because a correction submitted without
+            -- pressing the button carries a NULL that would throw away a good
+            -- measurement and demote the session to an inferred one.
             fb AS (
                 SELECT chat_id,
                        MAX(finished_at) AS finished_at,
@@ -553,6 +593,21 @@ async def get_session_feedback_compliance(
     statistics above it: there is nobody to chase about a smoke test, and an
     operator account permanently reading "Never" is noise at the top of a list
     sorted by how much feedback is missing.
+
+    Two counts per user, and the distinction is the whole point of the chase
+    list. `responses` is forms submitted; `threads_covered` is how many of the
+    threads they worked in this period have a form against them. Only the
+    second can answer "what is missing" — three forms on one thread is three
+    responses but one thread covered, and a form with no `chat_id` (submitted
+    outside a thread, or against a thread the caller did not own) is a response
+    that covers nothing. Chasing on `responses`, as this did, reports a lawyer
+    with three untouched threads as fully up to date, and lets the coverage
+    percentage exceed 100.
+
+    `threads_covered` deliberately does not date-filter the feedback side: the
+    denominator is already bounded by thread activity in the period, and the
+    question being asked is "does this thread have feedback", which is a
+    property of the thread rather than of the window.
     """
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin access required.")
@@ -592,6 +647,30 @@ async def get_session_feedback_compliance(
     )
     responses_by_user = {r.user_id: int(r.responses) for r in responses}
 
+    # Threads worked in this period that have at least one form against them.
+    # Joining through the period's own threads is what bounds this by `threads`
+    # and keeps coverage at or below 100% — counting distinct chat_ids straight
+    # out of session_feedback would also pick up feedback left on threads that
+    # were started before the window.
+    covered = await db.execute(
+        text(f"""
+            WITH active AS (
+                SELECT c.user_id, m.chat_id
+                FROM messages m
+                JOIN chats c ON m.chat_id = c.id
+                WHERE m.role = 'user'
+                  {message_filter}
+                GROUP BY c.user_id, m.chat_id
+            )
+            SELECT a.user_id, COUNT(DISTINCT sf.chat_id) AS threads_covered
+            FROM active a
+            JOIN session_feedback sf ON sf.chat_id = a.chat_id
+            GROUP BY a.user_id
+        """),
+        params,
+    )
+    covered_by_user = {r.user_id: int(r.threads_covered) for r in covered}
+
     # All-time recency, used for the chase list.
     last_active = await db.execute(
         text("""
@@ -629,6 +708,7 @@ async def get_session_feedback_compliance(
             "queries": queries,
             "threads": threads,
             "responses": submitted,
+            "threads_covered": covered_by_user.get(u.id, 0),
             "last_active": la.isoformat() if la else None,
             "last_feedback": lf.isoformat() if lf else None,
         })
@@ -638,9 +718,16 @@ async def get_session_feedback_compliance(
         "days": days,
         "totals": {
             "active_users": len(active),
+            # Engagement, not coverage: has this lawyer submitted the form at
+            # all. Deliberately still keyed on `responses`, so someone whose
+            # only form was submitted outside a thread counts as having
+            # responded — they did. How much of their work is actually reviewed
+            # is what `threads_covered` is for, and the two are allowed to
+            # disagree.
             "responding_users": len([r for r in active if r["responses"] > 0]),
             "threads": sum(r["threads"] for r in rows),
             "responses": sum(r["responses"] for r in rows),
+            "threads_covered": sum(r["threads_covered"] for r in rows),
         },
         "users": rows,
     }

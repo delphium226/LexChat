@@ -236,7 +236,9 @@ export default function Composer({
                   ? 'Ask something first — the feedback form is about this session'
                   : streaming
                     ? 'Wait for the response to finish'
-                    : 'Tell us how this session went'
+                    : sessionFeedbackSent
+                      ? 'Send it again to update what you told us about this session'
+                      : 'Tell us how this session went'
               }
               className={`${ACTION_BTN} bg-brand text-white hover:bg-brand-hover`}
             >
