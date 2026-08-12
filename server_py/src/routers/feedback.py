@@ -450,6 +450,10 @@ async def get_session_durations(
     nor an answer has no end signal. Both make this a subset of GET /session,
     never the reverse.
 
+    Anything not measured is counted in the returned `quality` block — see the
+    `finished_at` note at the loop — so a session missing from the medians can
+    be accounted for from the tab rather than silently vanishing.
+
     Elapsed wall-clock, deliberately not split on idle gaps, but capped at
     `_MAX_CREDITED_SECONDS`: a thread resumed the next day would otherwise
     report as one enormous session and drag the mean and the total with it.
@@ -519,22 +523,43 @@ async def get_session_durations(
     )
 
     sessions = []
+    implausible_finish = 0
+    recovered = 0
+    no_end_signal = 0
     for row in result.mappings().all():
-        # The button wins when both signals exist — an explicit "I am done"
+        started = row["started_at"]
+        finished = row["finished_at"]
+
+        # `finished_at` is the one timestamp on this endpoint the server did not
+        # observe: the POST derives it as `utcnow() - finished_seconds_ago`,
+        # where the delta comes from the browser. A delta larger than the
+        # thread's own age therefore lands an end BEFORE the first question —
+        # a bad client value, not a short session. (Bounded: the delta is
+        # capped at _MAX_FORM_FILL_SECONDS, so it can be wrong by at most 2h.)
+        #
+        # Previously that dropped the whole session, even where `last_response`
+        # would have measured it perfectly well. Now the bad value is discarded
+        # and the inference is used instead, so one duff timer costs precision
+        # rather than the entire row. Counted either way — a rising count is a
+        # client-side bug worth seeing, and it is reported on the tab.
+        if finished is not None and finished < started:
+            implausible_finish += 1
+            finished = None
+            if row["last_response"] is not None:
+                recovered += 1
+
+        # The button wins when both signals survive — an explicit "I am done"
         # beats an inference. Threads with neither (a form submitted with no
         # timed press, on a thread the assistant never answered) have no
         # measurable length and are dropped.
-        if row["finished_at"] is not None:
-            ended_at, signal = row["finished_at"], "finished_button"
-        elif row["last_response"] is not None:
+        if finished is not None:
+            ended_at, signal = finished, "finished_button"
+        elif row["last_response"] is not None and row["last_response"] >= started:
             ended_at, signal = row["last_response"], "last_response"
         else:
+            no_end_signal += 1
             continue
-        elapsed = (ended_at - row["started_at"]).total_seconds()
-        if elapsed < 0:
-            # Only reachable via clock weirdness; a negative length is never
-            # meaningful, so drop rather than pollute the medians.
-            continue
+        elapsed = (ended_at - started).total_seconds()
         sessions.append({
             "chat_id": row["chat_id"],
             "chat_title": row["title"],
@@ -588,6 +613,19 @@ async def get_session_durations(
             "mean_seconds": (sum(elapsed_durations) / len(elapsed_durations)) if elapsed_durations else None,
             "total_seconds": sum(elapsed_durations),
             "longest_seconds": max(elapsed_durations) if elapsed_durations else None,
+        },
+        # Measurement quality, reported rather than swallowed. Everything this
+        # endpoint refuses to measure is counted here, so a number missing from
+        # the medians can always be accounted for on the tab instead of just
+        # being absent.
+        "quality": {
+            # Forms whose client-supplied end predated the thread's first
+            # question, and how many of those were still measurable from the
+            # last answer. A persistent count points at the browser timer.
+            "implausible_finish": implausible_finish,
+            "recovered_by_fallback": recovered,
+            # Threads with a form but nothing to measure to.
+            "no_end_signal": no_end_signal,
         },
         "sessions": sessions,
     }

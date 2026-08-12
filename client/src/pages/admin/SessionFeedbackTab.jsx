@@ -184,6 +184,7 @@ export const SessionFeedbackTab = ({
   // named on screen rather than left as an unexplained discrepancy between two
   // tiles a few centimetres apart.
   const unmeasured = dur ? Math.max(0, rows.length - dur.sessions) : 0;
+  const quality = durations?.quality;
   const durationHistogram = DURATION_BUCKETS.map((b, i) => {
     const min = i === 0 ? 0 : DURATION_BUCKETS[i - 1].max;
     return {
@@ -340,6 +341,24 @@ export const SessionFeedbackTab = ({
                     {uncapped.capped_sessions === 0
                       ? ' Nothing hit the cap in this period.'
                       : ` ${uncapped.capped_sessions} of ${dur.sessions} hit it.`}
+                  </p>
+                )}
+
+                {/* The "Finished session" timestamp is the one value here the
+                    server did not observe — it is derived from a delta the
+                    browser supplies. A rising count is a client bug, so it is
+                    reported rather than quietly worked around. */}
+                {quality?.implausible_finish > 0 && (
+                  <p className="text-xs text-ink-400 mb-5 -mt-2">
+                    {quality.implausible_finish}{' '}
+                    {quality.implausible_finish === 1 ? 'session reported a' : 'sessions reported an'} end time before
+                    its first question — a bad value from the browser rather than a short session.{' '}
+                    {quality.recovered_by_fallback > 0 &&
+                      `${quality.recovered_by_fallback} of those ${
+                        quality.recovered_by_fallback === 1 ? 'was' : 'were'
+                      } still measured to the last answer instead. `}
+                    {quality.implausible_finish > quality.recovered_by_fallback &&
+                      `${quality.implausible_finish - quality.recovered_by_fallback} had no answer to fall back on.`}
                   </p>
                 )}
 

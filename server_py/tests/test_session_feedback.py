@@ -563,6 +563,73 @@ async def test_a_form_outside_the_window_is_not_measured(
 
 
 @pytest.mark.asyncio
+async def test_impossible_finish_time_falls_back_instead_of_dropping(
+    client: AsyncClient, user_token: str, admin_token: str, db_session
+):
+    """`finished_at` is client-derived, so it can land before the thread began.
+
+    That is a bad browser value, not a short session. It used to drop the row
+    outright even where the last answer would have measured it; now the value
+    is discarded, the inference is used, and the event is counted.
+    """
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    chat_id = await _thread_with_messages(client, user_headers, "Duff timer")
+    await client.post(URL, json={"chat_id": chat_id, "finished_seconds_ago": 0}, headers=user_headers)
+
+    await db_session.execute(
+        text("UPDATE session_feedback SET finished_at = finished_at - INTERVAL '1 hour' WHERE chat_id = :c"),
+        {"c": chat_id},
+    )
+    await db_session.commit()
+
+    body = (await client.get(f"{URL}/durations", headers={"Authorization": f"Bearer {admin_token}"})).json()
+    session = next(s for s in body["sessions"] if s["chat_id"] == chat_id)
+    assert session["end_signal"] == "last_response"
+    assert session["duration_seconds"] >= 0
+    assert body["quality"]["implausible_finish"] == 1
+    assert body["quality"]["recovered_by_fallback"] == 1
+    assert body["quality"]["no_end_signal"] == 0
+
+
+@pytest.mark.asyncio
+async def test_impossible_finish_with_no_answer_is_counted_not_silent(
+    client: AsyncClient, user_token: str, admin_token: str, db_session
+):
+    """With nothing to fall back on it is still dropped — but no longer silently."""
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    chat_id = await _thread_with_messages(client, user_headers, "Unanswered", roles=("user",))
+    await client.post(URL, json={"chat_id": chat_id, "finished_seconds_ago": 0}, headers=user_headers)
+
+    await db_session.execute(
+        text("UPDATE session_feedback SET finished_at = finished_at - INTERVAL '1 hour' WHERE chat_id = :c"),
+        {"c": chat_id},
+    )
+    await db_session.commit()
+
+    body = (await client.get(f"{URL}/durations", headers={"Authorization": f"Bearer {admin_token}"})).json()
+    assert body["summary"]["sessions"] == 0
+    assert body["quality"]["implausible_finish"] == 1
+    assert body["quality"]["recovered_by_fallback"] == 0
+    assert body["quality"]["no_end_signal"] == 1
+
+
+@pytest.mark.asyncio
+async def test_quality_block_is_clean_for_ordinary_traffic(
+    client: AsyncClient, user_token: str, admin_token: str
+):
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    chat_id = await _thread_with_messages(client, user_headers, "Normal")
+    await client.post(URL, json={"chat_id": chat_id, "finished_seconds_ago": 0}, headers=user_headers)
+
+    body = (await client.get(f"{URL}/durations", headers={"Authorization": f"Bearer {admin_token}"})).json()
+    assert body["quality"] == {
+        "implausible_finish": 0,
+        "recovered_by_fallback": 0,
+        "no_end_signal": 0,
+    }
+
+
+@pytest.mark.asyncio
 async def test_durations_summary_splits_by_continuity(client: AsyncClient, user_token: str, admin_token: str):
     user_headers = {"Authorization": f"Bearer {user_token}"}
     one_go = await _thread_with_messages(client, user_headers, "One go")
