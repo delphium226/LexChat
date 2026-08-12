@@ -3,7 +3,7 @@ from datetime import date, datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, desc, text
+from sqlalchemy import bindparam, select, desc, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
@@ -13,6 +13,16 @@ from ..models import Chat, ProductFeedback, SessionFeedback, User
 logger = logging.getLogger("app")
 
 router = APIRouter(prefix="/api/feedback", tags=["Feedback"])
+
+# The operator's own login. Its threads are smoke tests, demos and support
+# reproductions, not legal research, so they are excluded from every pre-pilot
+# statistic — otherwise a demo thread that was never fed back on drags the
+# session-length medians and the coverage percentage around.
+#
+# Deliberately NOT applied to /session/compliance: that endpoint backs the
+# "who to chase" roster, which is an operational list rather than a statistic,
+# and is left showing every account.
+EXCLUDED_USERNAMES = ("admin",)
 
 class FeedbackCreate(BaseModel):
     message: str | None = None
@@ -303,6 +313,7 @@ async def get_all_session_feedback(
         select(SessionFeedback, User.username, Chat.title)
         .join(User, SessionFeedback.user_id == User.id)
         .outerjoin(Chat, SessionFeedback.chat_id == Chat.id)
+        .where(User.username.notin_(EXCLUDED_USERNAMES))
     )
     if days != "all":
         days_num = int(days) if days.isdigit() else 30
@@ -355,7 +366,7 @@ async def get_session_durations(
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Session length, one row per thread.
+    """Session length, one row per **thread that got a feedback form**.
 
     A session runs from the **first user message** in a thread to whichever end
     signal applies:
@@ -363,9 +374,17 @@ async def get_session_durations(
     * `finished_button` — the user pressed "Finished session". Authoritative:
       it is an explicit "I am done". Recorded as `finished_at`, the moment of
       the press, not when the completed form arrived.
-    * `last_response` — fallback for a thread the user simply navigated away
-      from. Systematically an **undercount**, since it stops at the moment the
+    * `last_response` — fallback for a form that arrived without a
+      `finished_seconds_ago` delta, so the press itself was never timed.
+      Systematically an **undercount**, since it stops at the moment the
       assistant finished writing and ignores the time spent reading it.
+
+    The `fb` join is INNER, so a thread with no feedback row is not measured at
+    all. That is a deliberate narrowing: an abandoned thread has no end signal
+    but the last answer, which is both the weakest measurement here and by far
+    the most common, and it used to dominate the medians on this tab. Every
+    number the tab shows now describes the same population — the sessions a
+    lawyer actually reported on.
 
     Elapsed wall-clock, deliberately not split on idle gaps: a thread resumed
     the next day reports as one long session. `session_continuity` (Q3 of the
@@ -375,12 +394,13 @@ async def get_session_durations(
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin access required.")
 
-    params: dict = {}
-    period_filter = ""
+    params: dict = {"excluded": list(EXCLUDED_USERNAMES)}
+    conditions = ["u.username NOT IN :excluded"]
     if days != "all":
         days_num = int(days) if days.isdigit() else 30
         params["cutoff"] = datetime.utcnow() - timedelta(days=days_num)
-        period_filter = "WHERE fq.started_at >= :cutoff"
+        conditions.append("fq.started_at >= :cutoff")
+    where_clause = "WHERE " + " AND ".join(conditions)
 
     result = await db.execute(
         text(f"""
@@ -404,19 +424,20 @@ async def get_session_durations(
             FROM fq
             JOIN chats c ON c.id = fq.chat_id
             JOIN users u ON u.id = c.user_id
+            JOIN fb ON fb.chat_id = fq.chat_id
             LEFT JOIN la ON la.chat_id = fq.chat_id
-            LEFT JOIN fb ON fb.chat_id = fq.chat_id
-            {period_filter}
+            {where_clause}
             ORDER BY fq.started_at DESC
-        """),
+        """).bindparams(bindparam("excluded", expanding=True)),
         params,
     )
 
     sessions = []
     for row in result.mappings().all():
         # The button wins when both signals exist — an explicit "I am done"
-        # beats an inference. Threads with neither (a question asked but never
-        # answered) have no measurable length and are dropped.
+        # beats an inference. Threads with neither (a form submitted with no
+        # timed press, on a thread the assistant never answered) have no
+        # measurable length and are dropped.
         if row["finished_at"] is not None:
             ended_at, signal = row["finished_at"], "finished_button"
         elif row["last_response"] is not None:

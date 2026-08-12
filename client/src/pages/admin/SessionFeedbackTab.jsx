@@ -7,6 +7,19 @@ import Spinner from '../../components/ui/Spinner';
 // Two jobs, in this order: how is the assistant doing on the three accuracy
 // questions, and — the operational one — who is using the system without
 // filling the form in, so they can be chased.
+//
+// Every statistic here describes one population: threads a lawyer submitted a
+// feedback form for. Threads with no form are excluded by the backend (both
+// /feedback/session and /feedback/session/durations), so the session-length
+// medians are no longer dominated by abandoned threads whose end had to be
+// inferred. The exception is the coverage pair below, which exists precisely
+// to count what is missing.
+
+// The operator's own login: smoke tests, demos and support reproductions, not
+// legal research. The backend drops it from the responses and the durations;
+// this set is what keeps it out of the two compliance-derived tiles, whose
+// endpoint still returns every account so the chase list stays complete.
+const EXCLUDED_USERNAMES = new Set(['admin']);
 
 const ANSWER_LABELS = {
   yes: 'Yes',
@@ -118,9 +131,24 @@ export const SessionFeedbackTab = ({
   const totalSaved = sum(rows, 'time_saved_hours');
   const avgVerif = mean(rows, 'verification_hours');
 
-  const totals = compliance?.totals;
   // Coverage is responses per thread worked in: the form is asked for once per
-  // session, so a lawyer with 6 threads and 1 response is 17% covered.
+  // session, so a lawyer with 6 threads and 1 response is 17% covered. This is
+  // the one pair of numbers that still counts threads with no feedback — that
+  // is what it measures, and excluding them would pin it at 100%.
+  //
+  // Recomputed from `compliance.users` rather than read off `compliance.totals`
+  // so the operator account can be dropped without changing the endpoint, which
+  // also backs the chase list below.
+  const complianceUsers = (compliance?.users || []).filter(u => !EXCLUDED_USERNAMES.has(u.username));
+  const activeUsers = complianceUsers.filter(u => u.threads > 0);
+  const totals = compliance
+    ? {
+        active_users: activeUsers.length,
+        responding_users: activeUsers.filter(u => u.responses > 0).length,
+        threads: complianceUsers.reduce((s, u) => s + u.threads, 0),
+        responses: complianceUsers.reduce((s, u) => s + u.responses, 0),
+      }
+    : null;
   const coverage = totals && totals.threads > 0 ? (totals.responses / totals.threads) * 100 : null;
 
   // `good` rides along on each row so the chart's per-category <Cell>s can colour
@@ -235,11 +263,12 @@ export const SessionFeedbackTab = ({
             <h3 className="text-sm font-bold mb-1">Session length</h3>
             <p className="text-xs text-ink-500 mb-4">
               From the first question in a thread to the moment the lawyer pressed &ldquo;Finished session&rdquo; —
-              or, where they never did, to the last answer the assistant gave. Elapsed time, not split on breaks, so a
-              thread picked up the next day counts as one long session.
+              or, where the press was not timed, to the last answer the assistant gave. Elapsed time, not split on
+              breaks, so a thread picked up the next day counts as one long session. Only threads with a submitted
+              feedback form are measured.
             </p>
             {!dur || dur.sessions === 0 ? (
-              <p className="text-ink-400 text-sm">No sessions in this period.</p>
+              <p className="text-ink-400 text-sm">No sessions with feedback in this period.</p>
             ) : (
               <>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
@@ -295,8 +324,8 @@ export const SessionFeedbackTab = ({
                     </div>
                     <p className="text-xs text-ink-400">
                       Inferred sessions undercount — they stop when the assistant finished writing and ignore however
-                      long the answer was then read for. The &ldquo;in one go&rdquo; split comes from question 3, so it
-                      only covers sessions that got feedback.
+                      long the answer was then read for. The &ldquo;in one go&rdquo; split comes from question 3, so a
+                      form that skipped it counts in neither half.
                     </p>
                   </div>
                 </div>

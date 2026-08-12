@@ -223,11 +223,14 @@ async def test_durations_requires_admin(client: AsyncClient, user_token: str):
 
 
 @pytest.mark.asyncio
-async def test_duration_uses_last_response_when_never_finished(
+async def test_duration_uses_last_response_when_the_press_was_not_timed(
     client: AsyncClient, user_token: str, admin_token: str
 ):
+    """A form with no `finished_seconds_ago` still counts, measured to the last
+    answer — the session was reported on, only its end was never timed."""
     user_headers = {"Authorization": f"Bearer {user_token}"}
-    chat_id = await _thread_with_messages(client, user_headers, "Abandoned")
+    chat_id = await _thread_with_messages(client, user_headers, "Untimed")
+    await client.post(URL, json={"chat_id": chat_id}, headers=user_headers)
 
     body = (await client.get(f"{URL}/durations", headers={"Authorization": f"Bearer {admin_token}"})).json()
     session = next(s for s in body["sessions"] if s["chat_id"] == chat_id)
@@ -235,6 +238,48 @@ async def test_duration_uses_last_response_when_never_finished(
     assert session["duration_seconds"] >= 0
     assert body["summary"]["inferred"] == 1
     assert body["summary"]["closed_properly"] == 0
+
+
+@pytest.mark.asyncio
+async def test_thread_without_feedback_is_not_measured(
+    client: AsyncClient, user_token: str, admin_token: str
+):
+    """An abandoned thread has an end signal (the last answer) but no form. It
+    is excluded so the medians describe only sessions a lawyer reported on."""
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    abandoned = await _thread_with_messages(client, user_headers, "Abandoned")
+    reported = await _thread_with_messages(client, user_headers, "Reported")
+    await client.post(URL, json={"chat_id": reported, "finished_seconds_ago": 0}, headers=user_headers)
+
+    body = (await client.get(f"{URL}/durations", headers={"Authorization": f"Bearer {admin_token}"})).json()
+    measured = [s["chat_id"] for s in body["sessions"]]
+    assert abandoned not in measured
+    assert measured == [reported]
+    assert body["summary"]["sessions"] == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_own_sessions_are_excluded_from_stats(
+    client: AsyncClient, user_token: str, admin_token: str
+):
+    """The operator account's threads are smoke tests, not legal research: they
+    are dropped from both the responses and the durations. The chase list is
+    left alone, so /compliance still shows the account."""
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    admin_chat = await _thread_with_messages(client, admin_headers, "Smoke test")
+    user_chat = await _thread_with_messages(client, user_headers, "Real research")
+    for headers, chat_id in ((admin_headers, admin_chat), (user_headers, user_chat)):
+        await client.post(URL, json={"chat_id": chat_id, "finished_seconds_ago": 0}, headers=headers)
+
+    rows = (await client.get(URL, headers=admin_headers)).json()
+    assert [r["chat_id"] for r in rows] == [user_chat]
+
+    durations = (await client.get(f"{URL}/durations", headers=admin_headers)).json()
+    assert [s["chat_id"] for s in durations["sessions"]] == [user_chat]
+
+    compliance = (await client.get(f"{URL}/compliance", headers=admin_headers)).json()
+    assert "admin" in {u["username"] for u in compliance["users"]}
 
 
 @pytest.mark.asyncio
@@ -283,9 +328,14 @@ async def test_finished_seconds_ago_rejects_implausible_values(client: AsyncClie
 
 @pytest.mark.asyncio
 async def test_thread_with_no_answer_is_not_measurable(client: AsyncClient, user_token: str, admin_token: str):
-    """A question asked but never answered, and never closed, has no end signal."""
+    """A question asked but never answered, and never closed, has no end signal.
+
+    The form is submitted (without a timed press) so this isolates the missing
+    end signal rather than passing for want of feedback.
+    """
     user_headers = {"Authorization": f"Bearer {user_token}"}
     chat_id = await _thread_with_messages(client, user_headers, "Unanswered", roles=("user",))
+    await client.post(URL, json={"chat_id": chat_id}, headers=user_headers)
 
     body = (await client.get(f"{URL}/durations", headers={"Authorization": f"Bearer {admin_token}"})).json()
     assert all(s["chat_id"] != chat_id for s in body["sessions"])
