@@ -719,3 +719,13 @@ Two follow-ups deferred until Tom's harness is actually consuming it:
 - **`source` filtering in the stats queries.** Eval rows are tagged
   `request_timings.source = "eval"` but the Efficiency/Cache tabs do not filter
   on it, so a large sweep moves the headline numbers.
+
+### D12. Server-side run durability (deferred 2026-08-12, at ship time of concurrent runs)
+Concurrent per-chat research runs shipped **in-tab only**: switching chats no longer
+interrupts a run, but a refresh or tab close still destroys it, because
+`_watch_disconnect` (`routers/ai.py`) cancels on disconnect and `/api/chat` never
+writes a `Message` row (the frontend persists the answer after the `result` event).
+Making runs survive needs a client-supplied `run_id`, a detached job registry, a
+replay-buffered re-attach endpoint, server-side persistence, and a schema change
+(`Message.content` is NOT NULL). **Full design: `docs/CONCURRENT_RUNS_DURABILITY.md`.**
+Signal to act on: lawyers losing long Deep Research runs to accidental refreshes.

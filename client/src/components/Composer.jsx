@@ -20,7 +20,7 @@ export default function Composer({
   onDismissUploadError,
   input,
   setInput,
-  loading,
+  streaming,
   onSend,
   onStop,
   chatMode,
@@ -170,10 +170,10 @@ export default function Composer({
         onKeyDown={e => {
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            if (!loading && input.trim()) onSend();
+            if (!streaming && input.trim()) onSend();
           }
         }}
-        disabled={loading}
+        disabled={streaming}
         rows={1}
         placeholder={
           chatMode === 'conversational'
@@ -230,11 +230,11 @@ export default function Composer({
           {showFinishedSession && (
             <button
               onClick={onFinishedSession}
-              disabled={!hasMessages || loading}
+              disabled={!hasMessages || streaming}
               title={
                 !hasMessages
                   ? 'Ask something first — the feedback form is about this session'
-                  : loading
+                  : streaming
                     ? 'Wait for the response to finish'
                     : 'Tell us how this session went'
               }
@@ -244,7 +244,7 @@ export default function Composer({
             </button>
           )}
 
-          {loading ? (
+          {streaming ? (
             <button
               onClick={onStop}
               className="inline-flex items-center gap-1.5 px-3 py-2 bg-danger text-white font-ui text-sm font-semibold rounded-md hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"

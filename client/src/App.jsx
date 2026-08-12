@@ -234,13 +234,19 @@ function AppContent() {
     setInput,
     selectedModel,
     activeProvider,
-    loading,
+    streaming,
+    historyLoading,
+    anyRunActive,
+    runSummaries,
+    runLimitNotice,
+    dismissRunLimitNotice,
     agentStatus,
     activities,
     chatScrollRef,
     textareaRef,
     handleSend,
     handleStop,
+    handleStopChat,
     handleNewChat,
     loadChat,
     resetChat,
@@ -272,8 +278,20 @@ function AppContent() {
     },
   });
 
-  // ── Bot identity (name/branding/favicon) — needs `loading` from useChat ──
-  const { botInfo } = useBotIdentity(loading);
+  // ── Bot identity (name/branding/favicon) — driven by `anyRunActive`, so the
+  // favicon keeps animating while a backgrounded chat is still researching ──
+  const { botInfo } = useBotIdentity(anyRunActive);
+
+  // Per-chat run state for the Sidebar indicators. Terminal states show only
+  // until the user opens that chat (`seen`).
+  const runStates = useMemo(() => {
+    const out = {};
+    for (const [id, s] of Object.entries(runSummaries)) {
+      if (s.status === 'planning' || s.status === 'streaming') out[id] = 'active';
+      else if (!s.seen) out[id] = s.status === 'error' ? 'error' : 'done';
+    }
+    return out;
+  }, [runSummaries]);
 
   // ID of the last assistant message that has sources (used for default highlight)
   const latestSourceMsgId = useMemo(() => {
@@ -442,6 +460,8 @@ function AppContent() {
         recentChats={recentChats}
         currentChatId={currentChatId}
         onLoadChat={loadChat}
+        runStates={runStates}
+        onStopRun={handleStopChat}
         onAddMatter={() => setShowCreateMatterModal(true)}
         onOpenNotes={setNotesModalMatter}
         onCloseMatter={async matter => {
@@ -535,13 +555,15 @@ function AppContent() {
             <GhostBtn
               icon={<CopyIcon size={14} />}
               onClick={handleCopyConversation}
-              disabled={messages.length === 0 || loading}
+              disabled={messages.length === 0 || streaming || historyLoading}
               title={
                 messages.length === 0
                   ? 'Nothing to copy yet'
-                  : loading
-                    ? 'Wait for the response to finish before copying'
-                    : 'Copy the whole thread — questions, answers and sources — ready to paste into Word or Outlook'
+                  : historyLoading
+                    ? 'Loading thread…'
+                    : streaming
+                      ? 'Wait for the response to finish before copying'
+                      : 'Copy the whole thread — questions, answers and sources — ready to paste into Word or Outlook'
               }
             >
               {copyState === 'copied' ? 'Copied' : copyState === 'failed' ? 'Copy failed' : 'Copy conversation'}
@@ -718,7 +740,7 @@ function AppContent() {
             >
               <div style={{ maxWidth: '95%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
                 {/* Empty state */}
-                {messages.length === 0 && !loading && (
+                {messages.length === 0 && !streaming && !historyLoading && (
                   <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--ink-400)' }}>
                     <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center' }}>
                       {botInfo.logoEmoji ? (
@@ -810,12 +832,12 @@ function AppContent() {
                     {features.suggested_questions_enabled &&
                       msg.role === 'assistant' &&
                       idx === messages.length - 1 &&
-                      !loading &&
+                      !streaming &&
                       msg.suggestions?.length > 0 && (
                         <SuggestedQuestions
                           suggestions={msg.suggestions}
                           onSelect={text => handleSend(text)}
-                          disabled={loading}
+                          disabled={streaming}
                         />
                       )}
                     </React.Fragment>
@@ -829,12 +851,12 @@ function AppContent() {
                     plan={pendingPlan}
                     onRun={handleRunPlan}
                     onCancel={handleCancelPlan}
-                    disabled={loading}
+                    disabled={streaming}
                   />
                 )}
 
                 {/* Loading indicator */}
-                {loading &&
+                {streaming &&
                   (() => {
                     let statusText = agentStatus || 'Thinking…';
                     if (activities.size > 0) {
@@ -912,6 +934,35 @@ function AppContent() {
                   />
                 )}
 
+                {/* Concurrency cap — the send was refused, so the composer
+                    still holds the user's text. */}
+                {runLimitNotice && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 8,
+                      marginBottom: 8,
+                      padding: '8px 10px',
+                      background: 'var(--paper)',
+                      border: '1px solid var(--ink-200)',
+                      borderRadius: 6,
+                      color: 'var(--danger)',
+                    }}
+                    className="font-ui text-xs"
+                    role="status"
+                  >
+                    <span style={{ flex: 1 }}>{runLimitNotice}</span>
+                    <button
+                      onClick={dismissRunLimitNotice}
+                      aria-label="Dismiss"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-500)' }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+
                 {/* Composer card */}
                 <Composer
                   fileInputRef={fileInputRef}
@@ -924,7 +975,7 @@ function AppContent() {
                   onDismissUploadError={() => setUploadError(null)}
                   input={input}
                   setInput={setInput}
-                  loading={loading}
+                  streaming={streaming}
                   onSend={handleSend}
                   onStop={handleStop}
                   chatMode={chatMode}

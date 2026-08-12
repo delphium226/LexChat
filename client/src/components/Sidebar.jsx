@@ -1,7 +1,51 @@
 import { LexMark, LexWordmark } from './LexMark';
 import { IBtn } from './ui/buttons';
-import { PlusIcon, SearchIcon, FolderIcon, SettingsIcon, SidebarIcon, BookmarkIcon, ChevRightIcon } from './ui/icons';
+import {
+  PlusIcon,
+  SearchIcon,
+  FolderIcon,
+  SettingsIcon,
+  SidebarIcon,
+  BookmarkIcon,
+  ChevRightIcon,
+  CheckIcon,
+} from './ui/icons';
 import { formatRelativeTime } from '../utils/format';
+
+// Per-chat research indicator. `active` reuses .lex-thinking-dot — the same dot
+// the transcript status line uses — so the sidebar and the transcript read as
+// one system. The terminal marks are shown only until the user opens the chat.
+const RUN_STATE_LABEL = {
+  active: 'Running…',
+  done: 'Answer ready',
+  error: 'Run failed',
+};
+
+function RunDot({ state }) {
+  if (!state) return null;
+  const label = RUN_STATE_LABEL[state];
+  if (state === 'active') return <span className="lex-thinking-dot" title={label} aria-label={label} />;
+  // A finished answer gets a green tick — the pulse resolving into a completion
+  // mark, rather than a second dot the eye has to distinguish from the first.
+  if (state === 'done') {
+    return (
+      <span
+        title={label}
+        aria-label={label}
+        style={{ display: 'inline-flex', flexShrink: 0, color: 'var(--success)' }}
+      >
+        <CheckIcon size={12} />
+      </span>
+    );
+  }
+  return (
+    <span
+      title={label}
+      aria-label={label}
+      style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: 'var(--danger)' }}
+    />
+  );
+}
 
 // Left navigation rail: brand row, new-thread / search actions, mode selector,
 // the Matters tree (open + closed), the Recent-threads list, and the user
@@ -27,6 +71,9 @@ export default function Sidebar({
   recentChats,
   currentChatId,
   onLoadChat,
+  // chatId -> 'active' | 'done' | 'error'; absent when there is nothing to show
+  runStates = {},
+  onStopRun,
   onAddMatter,
   onOpenNotes,
   onCloseMatter,
@@ -222,6 +269,17 @@ export default function Sidebar({
                   matters.map(matter => {
                     const isExpanded = expandedMatterIds.has(matter.id);
                     const matterChats = recentChats.filter(c => c.matter_id === matter.id);
+                    // Rolled up onto the header so a run inside a collapsed
+                    // matter is still visible.
+                    const matterRunState = isExpanded
+                      ? null
+                      : matterChats.some(c => runStates[c.id] === 'active')
+                        ? 'active'
+                        : matterChats.some(c => runStates[c.id] === 'error')
+                          ? 'error'
+                          : matterChats.some(c => runStates[c.id] === 'done')
+                            ? 'done'
+                            : null;
                     return (
                       <div key={matter.id}>
                         <div
@@ -262,6 +320,7 @@ export default function Sidebar({
                           >
                             {matter.title}
                           </span>
+                          <RunDot state={matterRunState} />
                           {matter.note_count > 0 && (
                             <span
                               style={{
@@ -326,6 +385,7 @@ export default function Sidebar({
                           ) : (
                             matterChats.map(chat => {
                               const active = chat.id === currentChatId;
+                              const runState = runStates[chat.id];
                               return (
                                 <div
                                   key={chat.id}
@@ -338,12 +398,24 @@ export default function Sidebar({
                                     color: active ? 'var(--ink-900)' : 'var(--ink-700)',
                                     cursor: 'pointer',
                                     fontSize: 13,
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 6,
                                   }}
                                 >
-                                  {chat.title}
+                                  <RunDot state={runState} />
+                                  <span
+                                    style={{
+                                      flex: 1,
+                                      minWidth: 0,
+                                      fontWeight: runState === 'done' || runState === 'error' ? 600 : 400,
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    {chat.title}
+                                  </span>
                                 </div>
                               );
                             })
@@ -475,9 +547,13 @@ export default function Sidebar({
             )}
             {recentChats
               .filter(c => !c.matter_id)
+              // A chat with a run to report is hoisted above the 12-row cut, or
+              // its indicator would be invisible on a busy list.
+              .sort((a, b) => (runStates[b.id] ? 1 : 0) - (runStates[a.id] ? 1 : 0))
               .slice(0, 12)
               .map(chat => {
                 const active = chat.id === currentChatId;
+                const runState = runStates[chat.id];
                 return (
                   <div
                     key={chat.id}
@@ -491,16 +567,43 @@ export default function Sidebar({
                       cursor: 'pointer',
                     }}
                   >
-                    <div
-                      style={{
-                        fontSize: 13,
-                        fontWeight: active ? 500 : 400,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {chat.title}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <RunDot state={runState} />
+                      <div
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          fontSize: 13,
+                          fontWeight: runState === 'done' || runState === 'error' ? 600 : active ? 500 : 400,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {chat.title}
+                      </div>
+                      {runState === 'active' && onStopRun && (
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            onStopRun(chat.id);
+                          }}
+                          title="Stop this research run"
+                          aria-label="Stop this research run"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            lineHeight: 1,
+                            cursor: 'pointer',
+                            color: 'var(--ink-500)',
+                            fontSize: 12,
+                            flexShrink: 0,
+                          }}
+                        >
+                          ■
+                        </button>
+                      )}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 1 }}>
                       {formatRelativeTime(chat.created_at)}

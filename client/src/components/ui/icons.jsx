@@ -97,6 +97,14 @@ export const CheckCircleIcon = ({ size = 16 }) => (
   </svg>
 );
 
+// Bare tick — reads cleanly at the small sizes where CheckCircleIcon's ring
+// closes up (e.g. the sidebar run indicator).
+export const CheckIcon = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" {...strokeProps} strokeWidth={2.6}>
+    <path d="M20 6 9 17l-5-5" />
+  </svg>
+);
+
 export const StopIcon = ({ size = 16 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
     <rect x="5" y="5" width="14" height="14" rx="2" />
