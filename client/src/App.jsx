@@ -623,13 +623,13 @@ function AppContent() {
                   : jurisdictionLabel,
             });
 
-            // 3. Research type (implied context in conversational mode, so omitted there)
-            if (chatMode !== 'conversational') {
-              chips.push({
-                icon: <ScalesIcon />,
-                label: isParliament ? 'Parliamentary records' : researchModeLabel,
-              });
-            }
+            // 3. Research type — shown in every chat mode. Conversational mode still
+            // delegates to the Worker, and research_mode still selects its tool set,
+            // so the legislation/case-law scope is in force and must stay visible.
+            chips.push({
+              icon: <ScalesIcon />,
+              label: isParliament ? 'Parliamentary records' : researchModeLabel,
+            });
 
             // 3b. House (Westminster only — Holyrood is unicameral)
             if (isWestminster && house) {
