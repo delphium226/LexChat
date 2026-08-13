@@ -1125,6 +1125,12 @@ function AppContent() {
           chatId={currentChatId}
           messageCount={messages.length}
           botName={botInfo.name}
+          // The same filter object the composer sends with each query, so the
+          // recorded snapshot is the state the research was actually run under
+          // rather than a second reading of localStorage.
+          filters={{ jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, currentOnly, recordType, sessions, house }}
+          researchMode={researchMode}
+          chatMode={chatMode}
           onClose={() => modals.close('sessionFeedback')}
           // The label flips to "Feedback sent"; the button stays clickable, as
           // a lawyer who carries on in the same thread may submit again.

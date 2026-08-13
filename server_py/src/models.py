@@ -244,6 +244,22 @@ class SessionFeedback(Base):
     # Q10
     other_comments: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # The research filter panel's state at the moment the form was submitted
+    # (jurisdiction, dates, court, legislation type, record type, sessions,
+    # house, plus the research/chat mode). NULL on rows written before this
+    # column existed, and on any form submitted with nothing set.
+    #
+    # Recorded because several of the questions cannot be read without it: a
+    # "no" on Q5c (did it identify the right jurisdiction) means one thing with
+    # the jurisdiction filter set to Scotland and quite another with it unset.
+    #
+    # A SNAPSHOT AT SUBMIT TIME, not a per-query history. Filters live only in
+    # the browser (client/src/hooks/useFilters.js) and are sent on each request
+    # without being persisted, so a lawyer who changed jurisdiction mid-thread
+    # is recorded at their final setting. Capturing the true per-message
+    # history would mean persisting filters on `messages`; see docs/TODO.md.
+    filters: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
     # When the user pressed "Finished session" — the authoritative end of the
     # session for the session-length metric. Distinct from created_at, which is
     # when the completed form arrived and so includes however long they spent

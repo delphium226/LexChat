@@ -75,6 +75,9 @@ class SessionFeedbackCreate(BaseModel):
     ease_of_use: int | None = None
     ease_of_use_reason: str | None = None
     other_comments: str | None = None
+    # The research filter panel's state at submit time. Allowlisted and coerced
+    # by `_clean_filters` before it is stored — see there.
+    filters: dict | None = None
     # Seconds between the user pressing "Finished session" and this form being
     # submitted. An elapsed delta, NOT a client wall-clock timestamp: a skewed
     # client clock would otherwise land in the DB as a wrong (or negative)
@@ -105,6 +108,7 @@ class SessionFeedbackOut(BaseModel):
     ease_of_use: int | None
     ease_of_use_reason: str | None
     other_comments: str | None
+    filters: dict | None
     finished_at: str | None
     created_at: str
 
@@ -292,6 +296,60 @@ def _clean(value: str | None) -> str | None:
     return stripped or None
 
 
+# The filter panel's fields, split by the type each one is allowed to be. The
+# vocabulary differs per bot (Holyrood record types vs Westminster's, sessions
+# vs Parliaments), so the values themselves are NOT validated against an enum —
+# one shared column serves every bot, and a list of legal values here would
+# have to be kept in step with three frontends. The shape is what is enforced.
+_FILTER_STR_KEYS = (
+    "research_mode",
+    "chat_mode",
+    "jurisdiction",
+    "date_from",
+    "date_to",
+    "court",
+    "legislation_type",
+    "record_type",
+    "house",
+)
+_FILTER_MAX_STR = 100
+_FILTER_MAX_SESSIONS = 20
+
+
+def _clean_filters(raw: dict | None) -> dict | None:
+    """Coerce the client's filter snapshot to the allowlisted shape, or None.
+
+    Allowlisted rather than stored as sent: this is client-supplied JSON going
+    into a column an admin reads and exports to CSV, so an unknown key, a wrong
+    type or an oversized string is dropped rather than persisted. Dropping is
+    deliberate over rejecting — a bad snapshot must never cost a lawyer the
+    feedback they just spent five minutes typing.
+
+    An empty result is stored as NULL, so "no filters were set" and "this row
+    predates the column" are the same thing in the data. That is the honest
+    reading: neither one tells you a filter was active.
+    """
+    if not isinstance(raw, dict):
+        return None
+    cleaned: dict = {}
+    for key in _FILTER_STR_KEYS:
+        value = raw.get(key)
+        if isinstance(value, str) and value.strip():
+            cleaned[key] = value.strip()[:_FILTER_MAX_STR]
+    # False is a real answer here ("current in force only" switched off), so
+    # this is a type check and not a truthiness one.
+    if isinstance(raw.get("current_only"), bool):
+        cleaned["current_only"] = raw["current_only"]
+    sessions = raw.get("sessions")
+    if isinstance(sessions, list):
+        # bool is a subclass of int in Python, so it has to be excluded
+        # explicitly or `[True]` would be stored as a session number.
+        numbers = [s for s in sessions if isinstance(s, int) and not isinstance(s, bool)]
+        if numbers:
+            cleaned["sessions"] = numbers[:_FILTER_MAX_SESSIONS]
+    return cleaned or None
+
+
 @router.post("/session", status_code=201, response_model=StatusResponse)
 async def submit_session_feedback(
     body: SessionFeedbackCreate,
@@ -369,6 +427,7 @@ async def submit_session_feedback(
         ease_of_use=body.ease_of_use,
         ease_of_use_reason=_clean(body.ease_of_use_reason),
         other_comments=_clean(body.other_comments),
+        filters=_clean_filters(body.filters),
     )
     db.add(entry)
     await db.commit()
@@ -453,6 +512,7 @@ async def get_all_session_feedback(
             ease_of_use=fb.ease_of_use,
             ease_of_use_reason=fb.ease_of_use_reason,
             other_comments=fb.other_comments,
+            filters=fb.filters,
             finished_at=fb.finished_at.isoformat() if fb.finished_at else None,
             created_at=fb.created_at.isoformat(),
         )

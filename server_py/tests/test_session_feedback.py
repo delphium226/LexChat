@@ -12,7 +12,13 @@ from httpx import AsyncClient
 from sqlalchemy import select, text
 
 from src.models import SessionFeedback, User
-from src.routers.feedback import PREPILOT_END, PREPILOT_START, PREPILOT_TIMEFRAME, _timeframe_bounds
+from src.routers.feedback import (
+    PREPILOT_END,
+    PREPILOT_START,
+    PREPILOT_TIMEFRAME,
+    _clean_filters,
+    _timeframe_bounds,
+)
 
 URL = "/api/feedback/session"
 
@@ -312,6 +318,92 @@ async def test_compliance_accepts_all_timeframe(client: AsyncClient, admin_token
     response = await client.get(f"{URL}/compliance?days=all", headers={"Authorization": f"Bearer {admin_token}"})
     assert response.status_code == 200
     assert response.json()["days"] == "all"
+
+
+# --- Filter snapshot ------------------------------------------------------
+#
+# The panel's state at submit time, so an answer like 5c (right jurisdiction)
+# can be read against what the jurisdiction filter was actually set to. Stored
+# through an allowlist, because it is client-supplied JSON landing in a column
+# an admin reads and exports.
+
+FILTERS = {
+    "research_mode": "legislation_only",
+    "chat_mode": "research",
+    "jurisdiction": "scotland",
+    "date_from": "1990",
+    "date_to": "2026",
+    "court": "",
+    "legislation_type": "ukpga",
+    "current_only": True,
+    "record_type": None,
+    "sessions": [6, 7],
+    "house": None,
+}
+
+
+@pytest.mark.asyncio
+async def test_filters_are_stored_and_returned(client: AsyncClient, user_token: str, admin_token: str, db_session):
+    headers = {"Authorization": f"Bearer {user_token}"}
+    response = await client.post(URL, json={**FULL_PAYLOAD, "filters": FILTERS}, headers=headers)
+    assert response.status_code == 201
+
+    row = (await db_session.execute(select(SessionFeedback))).scalars().one()
+    assert row.filters["jurisdiction"] == "scotland"
+    assert row.filters["sessions"] == [6, 7]
+    assert row.filters["current_only"] is True
+    # Nulls and blanks are absent, not stored as None/'' — "unset" is one state.
+    assert "record_type" not in row.filters
+    assert "court" not in row.filters
+
+    rows = (await client.get(URL, headers={"Authorization": f"Bearer {admin_token}"})).json()
+    assert rows[0]["filters"]["legislation_type"] == "ukpga"
+
+
+@pytest.mark.asyncio
+async def test_a_form_without_filters_still_submits(client: AsyncClient, user_token: str, db_session):
+    """The column is additive — omitting it must behave exactly as before."""
+    headers = {"Authorization": f"Bearer {user_token}"}
+    assert (await client.post(URL, json={"confidence": 3}, headers=headers)).status_code == 201
+    row = (await db_session.execute(select(SessionFeedback))).scalars().one()
+    assert row.filters is None
+
+
+@pytest.mark.asyncio
+async def test_junk_filters_do_not_cost_the_lawyer_their_feedback(
+    client: AsyncClient, user_token: str, db_session
+):
+    """A malformed snapshot is dropped, not rejected — the answers still land.
+
+    Rejecting would throw away five minutes of typing over a field nobody
+    filled in by hand.
+    """
+    headers = {"Authorization": f"Bearer {user_token}"}
+    response = await client.post(
+        URL, json={"confidence": 4, "filters": {"nonsense": "x", "sessions": "seven"}}, headers=headers
+    )
+    assert response.status_code == 201
+
+    row = (await db_session.execute(select(SessionFeedback))).scalars().one()
+    assert row.confidence == 4
+    assert row.filters is None
+
+
+def test_clean_filters_enforces_the_shape():
+    assert _clean_filters(None) is None
+    assert _clean_filters({}) is None
+    assert _clean_filters("scotland") is None
+    # Unknown keys are dropped rather than stored.
+    assert _clean_filters({"jurisdiction": "wales", "evil": "x"}) == {"jurisdiction": "wales"}
+    # False is a real answer ("current in force only" switched off), so it must
+    # survive a check that a truthiness test would swallow.
+    assert _clean_filters({"current_only": False}) == {"current_only": False}
+    assert _clean_filters({"current_only": "no"}) is None
+    # bool subclasses int in Python, so [True] must not become a session number.
+    assert _clean_filters({"sessions": [7, True, "6", None]}) == {"sessions": [7]}
+    assert _clean_filters({"sessions": []}) is None
+    # Oversized strings are truncated rather than rejected.
+    assert len(_clean_filters({"court": "x" * 500})["court"]) == 100
 
 
 # --- Pre-pilot timeframe --------------------------------------------------

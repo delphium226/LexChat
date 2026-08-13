@@ -139,7 +139,40 @@ const CONFIDENCE_ANCHORS = [
 ];
 const EASE_ANCHORS = ['Very difficult', 'Somewhat difficult', 'Neither easy nor difficult', 'Somewhat easy', 'Very easy'];
 
-const SessionFeedbackModal = ({ chatId, messageCount, botName = 'AILA', onClose, onSubmitted }) => {
+// The research filter panel's state at submit time, recorded alongside the
+// answers. Several questions cannot be read without it — a "no" on 5c (right
+// jurisdiction) means one thing with the jurisdiction filter set to Scotland
+// and quite another with it unset — and filters are browser-only state, so if
+// this form does not carry them nothing does.
+//
+// A snapshot, not a per-query history: a lawyer who changed jurisdiction
+// mid-thread is recorded at their final setting. The server allowlists the keys
+// (`_clean_filters` in routers/feedback.py), so an extra one added here is
+// dropped rather than stored until it is added there too.
+const filterSnapshot = (filters, researchMode, chatMode) => ({
+  research_mode: researchMode ?? null,
+  chat_mode: chatMode ?? null,
+  jurisdiction: filters?.jurisdiction ?? null,
+  date_from: filters?.dateFrom ?? null,
+  date_to: filters?.dateTo ?? null,
+  court: filters?.caseLawCourt ?? null,
+  legislation_type: filters?.legislationType ?? null,
+  current_only: typeof filters?.currentOnly === 'boolean' ? filters.currentOnly : null,
+  record_type: filters?.recordType ?? null,
+  sessions: Array.isArray(filters?.sessions) ? filters.sessions : null,
+  house: filters?.house ?? null,
+});
+
+const SessionFeedbackModal = ({
+  chatId,
+  messageCount,
+  botName = 'AILA',
+  filters = null,
+  researchMode = null,
+  chatMode = null,
+  onClose,
+  onSubmitted,
+}) => {
   const [manualTime, setManualTime] = useState('');
   const [timeSaved, setTimeSaved] = useState('');
   const [continuity, setContinuity] = useState(null);
@@ -209,6 +242,7 @@ const SessionFeedbackModal = ({ chatId, messageCount, botName = 'AILA', onClose,
         ease_of_use: ease,
         ease_of_use_reason: txt(easeReason),
         other_comments: txt(comments),
+        filters: filterSnapshot(filters, researchMode, chatMode),
         finished_seconds_ago: openedAtRef.current
           ? Math.max(0, Math.round((Date.now() - openedAtRef.current) / 1000))
           : 0,

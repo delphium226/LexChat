@@ -1,6 +1,7 @@
 import React from 'react';
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import Spinner from '../../components/ui/Spinner';
+import { toCsv, downloadCsv, csvDateStamp } from '../../utils/csv';
 
 // Analytics for the end-of-session feedback form (the pre-pilot questionnaire).
 //
@@ -140,6 +141,95 @@ const ShareTile = ({ label, numerator, denominator, badBelow }) => {
 const thCls =
   'px-4 py-2 border-b-2 border-ink-200 text-left font-semibold text-ink-500 uppercase tracking-wider whitespace-nowrap';
 
+// --- CSV export -----------------------------------------------------------
+//
+// Every field of every response, in question order — the on-screen table shows
+// a readable subset, and the point of the export is that nothing is left
+// behind. Three groups, in this order:
+//
+//   1. the form itself, exactly as `SessionFeedbackOut` returns it;
+//   2. the derived session length, joined from /session/durations on chat_id —
+//      it is the tab's headline metric and cannot be recomputed from the form;
+//   3. the filter panel's state at submit time, flattened one column per
+//      filter rather than a single JSON blob, so the sheet can be pivoted on
+//      jurisdiction or record type without unpacking anything first.
+//
+// Closed answers are exported RAW ('one_go', 'partially'), not as the display
+// labels. The raw values are what the database holds and what any later
+// analysis will group by; the labels are a rendering decision belonging to this
+// file, and freezing them into an exported dataset would make the two drift.
+//
+// Dates stay as the ISO strings the API returned, for the same reason: a
+// localised "13/08/2026, 14:32:07" is ambiguous across locales and sorts
+// alphabetically in a spreadsheet.
+
+const FILTER_COLUMNS = [
+  ['Research mode', 'research_mode'],
+  ['Chat mode', 'chat_mode'],
+  ['Jurisdiction', 'jurisdiction'],
+  ['Date from', 'date_from'],
+  ['Date to', 'date_to'],
+  ['Court', 'court'],
+  ['Legislation type', 'legislation_type'],
+  ['Current only', 'current_only'],
+  ['Record type', 'record_type'],
+  ['Sessions', 'sessions'],
+  ['House', 'house'],
+];
+
+const filterValue = (row, key) => {
+  const value = row.filters?.[key];
+  if (value === undefined || value === null) return '';
+  return Array.isArray(value) ? value.join(' ') : value;
+};
+
+const EXPORT_COLUMNS = [
+  { label: 'Response ID', value: r => r.id },
+  { label: 'User', value: r => r.username },
+  { label: 'Submitted at', value: r => r.created_at },
+  { label: 'Finished session at', value: r => r.finished_at },
+  { label: 'Chat ID', value: r => r.chat_id },
+  { label: 'Thread', value: r => r.chat_title },
+  { label: 'Messages in thread', value: r => r.message_count },
+  { label: 'Q1 manual time (hrs)', value: r => r.manual_time_hours },
+  { label: 'Q2 time saved (hrs)', value: r => r.time_saved_hours },
+  { label: 'Q3 session continuity', value: r => r.session_continuity },
+  { label: 'Q4 checking time (hrs)', value: r => r.verification_hours },
+  { label: 'Q5a found right law', value: r => r.found_right_law },
+  { label: 'Q5b observations', value: r => r.found_right_law_notes },
+  { label: 'Q5c right jurisdiction', value: r => r.right_jurisdiction },
+  { label: 'Q5d observations', value: r => r.right_jurisdiction_notes },
+  { label: 'Q6a references accurate', value: r => r.references_accurate },
+  { label: 'Q6b observations', value: r => r.references_notes },
+  { label: 'Q7a referred incorrectly', value: r => r.refers_incorrectly },
+  { label: 'Q7b observations', value: r => r.refers_incorrectly_notes },
+  { label: 'Q8 confidence (1-5)', value: r => r.confidence },
+  { label: 'Q9a ease of use (1-5)', value: r => r.ease_of_use },
+  { label: 'Q9b reason', value: r => r.ease_of_use_reason },
+  { label: 'Q10 other comments', value: r => r.other_comments },
+  // Session length. Blank where the thread was not measured — the form was
+  // submitted outside a thread, or the thread has neither a timed press nor an
+  // answer to measure to. Blank rather than 0, which would read as an instant
+  // session and pull any average computed over the column down.
+  { label: 'Session started at', value: r => r.session?.started_at },
+  { label: 'Session ended at', value: r => r.session?.ended_at },
+  { label: 'Session end signal', value: r => r.session?.end_signal },
+  { label: 'Session length (secs, capped)', value: r => r.session?.duration_seconds },
+  { label: 'Session length (secs, raw)', value: r => r.session?.elapsed_seconds },
+  { label: 'Session was capped', value: r => (r.session ? r.session.capped : '') },
+  { label: 'Queries in session', value: r => r.session?.queries },
+  ...FILTER_COLUMNS.map(([label, key]) => ({
+    label: `Filter: ${label}`,
+    value: r => filterValue(r, key),
+  })),
+];
+
+// `prepilot` / `all` / a day count → a filename fragment that says what the
+// file actually contains, so two exports taken at different scopes on the same
+// day do not overwrite each other in the downloads folder.
+const timeframeSlug = timeframe =>
+  timeframe === PREPILOT ? 'prepilot' : timeframe === 'all' ? 'all-time' : `last-${timeframe}-days`;
+
 export const SessionFeedbackTab = ({
   sessionFeedback,
   compliance,
@@ -233,6 +323,17 @@ export const SessionFeedbackTab = ({
     .sort((a, b) => b.gap - a.gap || b.threads - a.threads);
   const neverResponded = chaseRows.filter(u => u.threads_covered === 0).length;
 
+  // Export: the responses as listed, each with its measured session attached.
+  // Both endpoints are filtered on when the form arrived, so the two sides
+  // describe the same population and the join is on chat_id alone — a response
+  // with no chat_id, or a thread with no end signal, simply has no session and
+  // its length columns come out blank.
+  const sessionByChat = new Map(durSessions.map(s => [s.chat_id, s]));
+  const handleExport = () => {
+    const exportRows = rows.map(r => ({ ...r, session: r.chat_id ? sessionByChat.get(r.chat_id) : undefined }));
+    downloadCsv(`session-feedback-${timeframeSlug(timeframe)}-${csvDateStamp()}.csv`, toCsv(exportRows, EXPORT_COLUMNS));
+  };
+
   return (
     <div className="space-y-4">
       {/* TIMEFRAME FILTER HEADER */}
@@ -258,6 +359,18 @@ export const SessionFeedbackTab = ({
             <option value="90">Last 90 Days</option>
             <option value="all">All Time</option>
           </select>
+          <button
+            onClick={handleExport}
+            disabled={isLoading || rows.length === 0}
+            title={
+              rows.length === 0
+                ? 'No responses in this period'
+                : 'Download every field of every response shown, as CSV'
+            }
+            className="bg-paper border border-ink-200 text-ink-700 font-ui text-xs font-medium rounded-md px-3 py-1.5 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Export CSV
+          </button>
           <button onClick={() => refetch(timeframe)} className="text-xs text-accent hover:underline font-ui">
             Refresh
           </button>

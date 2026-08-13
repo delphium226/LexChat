@@ -155,6 +155,10 @@ async def init_db() -> None:
             "ALTER TABLE session_feedback ADD COLUMN IF NOT EXISTS right_jurisdiction_notes TEXT",
             "ALTER TABLE session_feedback ADD COLUMN IF NOT EXISTS refers_incorrectly VARCHAR(20)",
             "ALTER TABLE session_feedback ADD COLUMN IF NOT EXISTS refers_incorrectly_notes TEXT",
+            # The filter panel's state when the form was submitted — see the
+            # `filters` note on models.SessionFeedback for why the answers need
+            # it, and why it is a snapshot rather than a per-query history.
+            "ALTER TABLE session_feedback ADD COLUMN IF NOT EXISTS filters JSONB",
             """CREATE TABLE IF NOT EXISTS activity_log (
                 id SERIAL PRIMARY KEY,
                 event_type VARCHAR(20) NOT NULL,

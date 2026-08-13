@@ -729,3 +729,23 @@ Making runs survive needs a client-supplied `run_id`, a detached job registry, a
 replay-buffered re-attach endpoint, server-side persistence, and a schema change
 (`Message.content` is NOT NULL). **Full design: `docs/CONCURRENT_RUNS_DURABILITY.md`.**
 Signal to act on: lawyers losing long Deep Research runs to accidental refreshes.
+
+### D13. Per-message filter history, if the submit-time snapshot proves too coarse (deferred 2026-08-13)
+`session_feedback.filters` now records the research filter panel's state **at the
+moment the form was submitted** (added 2026-08-13, so the pre-pilot has it from the
+13th onward and rows before that are NULL). That is a snapshot, not a history: a
+lawyer who researched under `jurisdiction=scotland` and then switched to England &
+Wales before pressing "Finished session" is recorded at the second setting, and
+nothing marks that the filters changed mid-thread.
+
+Filters are browser-only state (`client/src/hooks/useFilters.js`) — sent on every
+`/api/chat` request via `build_request_config`, used for the run, then discarded — so
+there is no route to a truer record without persisting them. The honest fix is a
+`Message.filters` JSONB column populated from the resolved filter set echoed on the
+`result` SSE event (resolved, not the browser's copy, so the row records what was
+actually *enforced*); the CSV export would then carry `filters_used` and
+`filters_changed_mid_session` derived across the thread's messages.
+
+Signal to act on: Q5c/Q5d free text that contradicts the snapshot, or analysis that
+needs to attribute a wrong-jurisdiction answer to a specific query rather than to the
+session. Not worth a schema change mid-pre-pilot on current evidence.
