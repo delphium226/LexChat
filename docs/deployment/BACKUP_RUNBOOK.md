@@ -330,11 +330,32 @@ Options:
     -KeepDaily 30                      # retention
 ```
 
-**If you change `-BackupRoot`, change `BACKUP_ROOT` in `server_py/.env` to
-match.** The app reads that setting to find the dumps; if the two disagree the
-Developer tab's backup panel reads an empty directory and reports that nothing
-is being backed up, while the nightly task runs perfectly somewhere else. The
-default on both sides is `C:\LexChatBackups`.
+**Prefer the default `C:\LexChatBackups`.** The app (`config.py`) and the
+installer already agree on it, so with the default there is nothing to configure
+and nothing to keep in sync.
+
+**If you do change `-BackupRoot`,** the app has to be told too, or the Developer
+tab's backup panel reads an empty directory and reports that nothing is being
+backed up while the nightly task runs perfectly somewhere else. Set it in
+`server_py/.env.native`:
+
+```
+BACKUP_ROOT=D:\Backups\LexChat
+```
+
+**Not `server_py/.env`** — `start_native.cmd` does `copy /Y .env.native .env` on
+every start, so anything written directly to `.env` is silently overwritten the
+next time the app restarts.
+
+Be aware that `.env.native` is **tracked in git**, so a local edit to it can
+collide with a `git pull`. If that happens:
+
+```powershell
+copy server_py\.env.native server_py\.env.native.bak
+git checkout -- server_py\.env.native
+git pull
+copy /Y server_py\.env.native.bak server_py\.env.native
+```
 
 ---
 
