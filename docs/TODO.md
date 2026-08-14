@@ -754,18 +754,34 @@ session. Not worth a schema change mid-pre-pilot on current evidence.
 
 ## Database backup & restore (scoped 2026-08-14)
 
-### D14. Implement the backup regime — NOT STARTED
-**There is currently no backup of any database on the target**, and no documented
-restore procedure. Full plan: **`docs/BACKUP_RESTORE_PLAN.md`**.
+### D14. Implement the backup regime — PHASES 1–3 DONE (2026-08-14), 4–6 NOT STARTED
+Full plan and session ledger: **`docs/BACKUP_RESTORE_PLAN.md`**. Procedure:
+**`docs/deployment/BACKUP_RUNBOOK.md`**.
 
-Shape: nightly `pg_dump -Fc` per `lexchat%` database (~335 MB total, so logical dumps
-are ample), `--exclude-table-data=local_prompt_cache`, GFS retention, `pg_restore
---list` verify on every run, Windows Task Scheduler via a new
-`deployment/install_backup_task.ps1`. Phases 1–3 (backup + console restore script +
-one rehearsed restore) carry the real risk reduction; the Developer-tab UI is
-convenience on top.
+**Shipped:** `deployment/backup_databases.ps1` (databases enumerated from
+`pg_database`, not hardcoded, so a new federated bot is covered the night it is
+created; `-Fc`, `--exclude-table-data=local_prompt_cache`, `manifest.json` with the
+commit SHA, GFS 14/8/12 retention), `deployment/install_backup_task.ps1` (nightly at
+02:30 as SYSTEM, ACL-locked backup directory, event log source), and
+`deployment/restore_database.ps1` (verify → stop app → safety-dump → drop/recreate/
+restore → exact row-count comparison). Rehearsed on the dev machine: `lexchat` and
+the 157 MB `lexchat_parliament` both restored with every table matching, identical
+index/constraint counts, and identical FTS results.
 
-Two findings from scoping that the implementation must not miss:
+**Three things the plan got wrong, corrected in the code — see "What this plan got
+wrong" in the plan doc:**
+- **`pg_restore --list` does not catch truncation.** The TOC precedes the data, so a
+  dump truncated to half its length listed all 172 entries and exited 0. Verification
+  is now two-stage; `pg_restore -f NUL` (full read) is the stage that actually works,
+  at 1.7s for the 157 MB dump.
+- **`pg_dumpall --globals-only` needs superuser** (`pg_authid`) and `lexuser` is not
+  one. Falls back to `--no-role-passwords`; a fresh-cluster restore needs the lexuser
+  password set by hand.
+- **The restore cannot start with `stop_native.cmd`** — its last step stops
+  PostgreSQL, which the restore needs. The script stops only the app.
+
+**Still to do — Phases 4–6 (Developer-tab scoped restore).** Two findings from
+scoping that the implementation must not miss:
 - **The `feedback` clear scope is a mixed DELETE/UPDATE.** Rated messages are nulled
   in place (`developer.py:285`), not deleted, so an `INSERT ... ON CONFLICT DO
   NOTHING` restore silently restores no ratings while reporting success. That

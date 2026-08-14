@@ -43,6 +43,16 @@ Every script in this directory, what it does, and where it runs. Full walkthroug
 | `install_ollama_autostart.ps1` | Ensure Ollama starts at boot (service or scheduled task). |
 | `uninstall_autostart.ps1` | Remove the autostart task (revert to manual startup). |
 
+## Backup / restore (target)
+
+Procedure and troubleshooting: [BACKUP_RUNBOOK.md](BACKUP_RUNBOOK.md).
+
+| Script | Runs on | Purpose |
+|---|---|---|
+| `backup_databases.ps1` | Target / dev | Nightly `pg_dump -Fc` of every `lexchat%` database (enumerated, not hardcoded; `lexchat_test` excluded). Two-stage verify, `manifest.json` with the commit SHA, GFS retention. Safe against a live system. |
+| `install_backup_task.ps1` | Target | One-time, elevated: create and ACL-lock the backup directory, register the event log source, schedule the nightly run as SYSTEM. |
+| `restore_database.ps1` | Target / dev | Console restore of one database: verify → stop app (not PostgreSQL) → safety-dump current → drop/recreate/restore → row-count comparison. Also runs the monthly restore drill via `-TargetDatabase`/`-CompareWith`. |
+
 ## Network / security
 
 | Script | Purpose |

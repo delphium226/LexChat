@@ -335,14 +335,123 @@ the likely failures — but the regime is not disaster recovery.
 
 ---
 
+## What this plan got wrong (found while implementing Phases 1-3, 2026-08-14)
+
+Three corrections, all now reflected in the scripts and the runbook. The first
+one invalidated the central claim of Phase 2.
+
+### 1. `pg_restore --list` does NOT catch truncation
+
+Phase 2 above says `--list` "catches truncation and half-written files from a
+mid-dump reboot - the failure mode where the file looks fine by size and is
+worthless." **It does not.** In a custom-format archive the table of contents is
+written *ahead* of the data, and `--list` reads only the TOC. Measured on the
+dev machine: `lexchat.dump` truncated to exactly half its length listed **all
+172 TOC entries and exited 0**. The one failure mode the whole phase exists to
+prevent would have sailed through the check designed to catch it.
+
+Verification is therefore **two-stage**:
+
+| Stage | Command | Catches |
+|---|---|---|
+| 1 | `pg_restore --list` | missing or header-corrupt archive; gives the TOC count for the manifest |
+| 2 | `pg_restore -f NUL` | **truncation and data-block corruption** - converts the whole archive to SQL and discards it, forcing every block to be read and decompressed |
+
+Stage 2 costs **1.7s for the 157 MB parliament dump** (it emits 724 MB of SQL to
+`NUL`), so it runs on every database every night. `restore_database.ps1` runs the
+same two stages *before* it drops anything.
+
+### 2. `pg_dumpall --globals-only` requires superuser; `lexuser` is not one
+
+Phase 1 calls for `pg_dumpall --globals-only` without noting that it reads
+`pg_authid` for the password hashes, which needs superuser rights. `lexuser` is
+`NOSUPERUSER CREATEDB`, so the command fails outright:
+
+```
+pg_dumpall: error: query failed: ERROR:  permission denied for table pg_authid
+```
+
+The script now tries the full dump first and falls back to
+`--no-role-passwords`, recording which variant it got in
+`manifest.json` (`"globals": {"mode": "no-role-passwords"}`). Role *definitions*
+are captured; passwords are not. Consequence, documented in the runbook: a
+restore into a **fresh cluster** needs `ALTER ROLE lexuser WITH PASSWORD ...`
+by hand. Restores into the existing cluster are unaffected, since the role is
+already there.
+
+### 3. The restore procedure cannot start with `stop_native.cmd`
+
+Phase 3 step 1 says `stop_native.cmd`, step 3 then runs `dropdb`/`pg_restore`.
+But `stop_native.cmd` step 4 of 4 stops the `postgresql-x64-18` service - so the
+restore would have no server to connect to. `restore_database.ps1` instead stops
+the *app* only (the autostart task, nginx, the uvicorn process) and explicitly
+ensures the PostgreSQL service is running.
+
+### Also worth recording
+
+- **`pg_restore --list` output has no stable exit-code signal for an empty
+  archive**, so the script also fails a dump whose TOC entry count is zero.
+- **PowerShell 5.1 gotchas** that cost time and are pinned by comments in the
+  scripts: (a) a BOM-less `.ps1` is read as ANSI, so a UTF-8 em dash decodes to a
+  smart quote that silently terminates a string literal - **these three scripts
+  are deliberately ASCII-only**; (b) under `$ErrorActionPreference = "Stop"`, a
+  native command's redirected stderr becomes a *terminating* error, which killed
+  the run before the `--no-role-passwords` fallback could be tried (hence the
+  `Invoke-Native` helper).
+- **Backups live at `C:\LexChatBackups`, outside the repo**, so no git operation
+  can touch them.
+
+---
+
 ## Session ledger
 
 | Phase | Status | Notes |
 |---|---|---|
-| 1. `backup_databases.ps1` + manifest | NOT STARTED | |
-| 2. Verify / retention / scheduled task | NOT STARTED | |
-| 3. `restore_database.ps1` + runbook + rehearsal | NOT STARTED | Rehearsal is part of "done" |
+| 1. `backup_databases.ps1` + manifest | **DONE** 2026-08-14 | Enumerated targets, `-Fc`, `local_prompt_cache` rows excluded, manifest with commit SHA |
+| 2. Verify / retention / scheduled task | **DONE** 2026-08-14 | Two-stage verify (see corrections above), GFS 14/8/12, `install_backup_task.ps1` |
+| 3. `restore_database.ps1` + runbook + rehearsal | **DONE** 2026-08-14 | Rehearsed - see below. Runbook: `docs/deployment/BACKUP_RUNBOOK.md` |
 | 4. Scoped restore backend | NOT STARTED | Watch 4b (mixed DELETE/UPDATE) |
 | 5. Guard rails + endpoints | NOT STARTED | |
 | 6. Developer tab UI | NOT STARTED | Panel 1 is worth shipping alone |
-| Off-box copy | BLOCKED | Awaiting answer on available destinations |
+| Off-box copy | BLOCKED | Awaiting answer on available destinations (D15) |
+
+### Rehearsal record - 2026-08-14, dev machine, PostgreSQL 18.3
+
+Both restores went into `lexchat_restore_test` and were compared against the
+live database with exact per-table counts (`query_to_xml`, not `n_live_tup` -
+the estimate reads 0 until `ANALYZE` and would have made the comparison
+meaningless).
+
+| | `lexchat` | `lexchat_parliament` |
+|---|---|---|
+| Dump size | 128 KB | 157 MB |
+| Restore time | 0.3s | 32.8s |
+| pg_restore errors | 0 | 0 |
+| Tables matching live | 16 of 16 | 15 of 15 |
+| `local_prompt_cache` | 44 -> 0, as designed | 14 -> 0, as designed |
+
+The parliament corpus came back complete: 2,423 `sp_committee_items`, 3,763
+`sp_plenary_items`, 1,177 `sp_video_captions`. Row counts alone would not have
+proved the corpus is *usable*, so the restored database was also checked for
+schema objects and retrieval behaviour: **59 indexes, 3 GIN indexes and 144
+constraints in both**, and the same FTS query (`plainto_tsquery('english',
+'homeless')` over `sp_plenary_items.full_text`) returned **314 rows in both**.
+
+Failure paths were exercised deliberately, not just reasoned about:
+
+- **Bad credentials** - run aborts, exit 1, loud summary, no partial run
+  directory left behind.
+- **Verify failure** - forced with a stand-in `pg_restore.exe` that always
+  fails. All four dumps were renamed to `*.dump.corrupt`, a `FAILED` marker was
+  written, `manifest.json` recorded `"status": "FAILED"`, and the script exited
+  1. Nothing usable-looking was left in place.
+- **Retention** - run against 62 synthetic dated run directories (45 daily + 18
+  monthly, 3 marked FAILED). Kept 31: the 14 most recent *successful* runs, the
+  weekly and monthly representatives, and the 3 failed runs (within their 14-day
+  investigation window, and correctly **not** occupying a weekly or monthly
+  slot). Deleted 31, all older than the 12-month horizon.
+
+Not yet exercised on the dev machine, because it needs an elevated session on
+the real target: `install_backup_task.ps1` (the ACL tightening, event log source
+registration and task registration). The Application event log write is
+fail-soft by design and was observed degrading correctly when unprivileged.
