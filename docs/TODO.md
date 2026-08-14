@@ -749,3 +749,36 @@ actually *enforced*); the CSV export would then carry `filters_used` and
 Signal to act on: Q5c/Q5d free text that contradicts the snapshot, or analysis that
 needs to attribute a wrong-jurisdiction answer to a specific query rather than to the
 session. Not worth a schema change mid-pre-pilot on current evidence.
+
+---
+
+## Database backup & restore (scoped 2026-08-14)
+
+### D14. Implement the backup regime — NOT STARTED
+**There is currently no backup of any database on the target**, and no documented
+restore procedure. Full plan: **`docs/BACKUP_RESTORE_PLAN.md`**.
+
+Shape: nightly `pg_dump -Fc` per `lexchat%` database (~335 MB total, so logical dumps
+are ample), `--exclude-table-data=local_prompt_cache`, GFS retention, `pg_restore
+--list` verify on every run, Windows Task Scheduler via a new
+`deployment/install_backup_task.ps1`. Phases 1–3 (backup + console restore script +
+one rehearsed restore) carry the real risk reduction; the Developer-tab UI is
+convenience on top.
+
+Two findings from scoping that the implementation must not miss:
+- **The `feedback` clear scope is a mixed DELETE/UPDATE.** Rated messages are nulled
+  in place (`developer.py:285`), not deleted, so an `INSERT ... ON CONFLICT DO
+  NOTHING` restore silently restores no ratings while reporting success. That
+  component needs `UPDATE ... FROM staging`.
+- **`matter_notes.message_id` is a silent lossy edge.** It is `ON DELETE SET NULL`
+  and `matter_notes` sits in no clear scope, so a "chats" clear severs note→message
+  links inside a table the Danger Zone implies it does not touch. Recoverable from
+  staging by note id, but only if handled explicitly — and worth correcting the
+  Danger Zone copy regardless.
+
+### D15. Off-box backup destination — BLOCKED, needs an answer from the server owner
+Dumps on the same disk as the database protect against `DROP TABLE`, bad migrations
+and the Danger Zone, but not against loss of the VM. Getting them off the box needs a
+second volume, a reachable UNC share, or an existing org backup agent sweeping a
+directory — all outside this repo and unknown on the internet-restricted target.
+Until this is answered the regime is not disaster recovery. Blocks nothing in D14.
