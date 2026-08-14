@@ -30,14 +30,23 @@ Log "Python : $LEXCHAT_PYTHON"
 Log "Ollama : $(if ($LEXCHAT_OLLAMA) { $LEXCHAT_OLLAMA } else { '(service or skip)' })"
 
 # --- 1. PostgreSQL (should already auto-start as a Windows service) ---
+# The service name is DISCOVERED, not hardcoded. This used to read
+# "postgresql-x64-15" while the rest of deployment/ had moved to 18, and the
+# failure was silent in the worst way: Get-Service with -ErrorAction
+# SilentlyContinue returns $null for a name that does not exist, so the check
+# below fell through to the else branch and logged "PostgreSQL already running"
+# without ever having started it. A wildcard lookup cannot go stale on the next
+# major-version upgrade.
 try {
-    $pg = Get-Service -Name "postgresql-x64-15" -ErrorAction SilentlyContinue
-    if ($pg -and $pg.Status -ne "Running") {
-        Start-Service -Name "postgresql-x64-15"
+    $pg = Get-Service -Name "postgresql*" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $pg) {
+        Log "WARNING: No PostgreSQL service found (looked for 'postgresql*'). The backend will fail to connect."
+    } elseif ($pg.Status -ne "Running") {
+        Start-Service -Name $pg.Name
         Start-Sleep -Seconds 3
-        Log "PostgreSQL started."
+        Log "PostgreSQL started ($($pg.Name))."
     } else {
-        Log "PostgreSQL already running."
+        Log "PostgreSQL already running ($($pg.Name))."
     }
 } catch {
     Log "WARNING: Could not start PostgreSQL: $_"
