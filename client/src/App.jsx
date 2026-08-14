@@ -30,6 +30,7 @@ import Sidebar from './components/Sidebar';
 import {
   HOUSE_OPTIONS,
   JURISDICTION_OPTIONS,
+  LEGISLATION_TYPE_OPTIONS,
   COURT_GROUPS,
   getRecordTypeOptions,
   getSessionFilterLabel,
@@ -661,20 +662,36 @@ function AppContent() {
               chips.push({ icon: <CalendarIcon />, label: sessionLabel });
             }
 
-            // 5. Court (legislation, when case law is in scope)
+            // 5. Legislation type — same guard as the modal section, which is
+            // hidden in case-law-only mode (a legislation_type left over from an
+            // earlier scope is not in force over a case-law search).
+            if (!isParliament && legislationType && researchMode !== 'case_law_only') {
+              chips.push({
+                icon: <ScalesIcon />,
+                label: LEGISLATION_TYPE_OPTIONS.find(o => o.value === legislationType)?.label || legislationType,
+              });
+            }
+
+            // 6. Court (legislation, when case law is in scope)
             if (!isParliament && courtLabel && researchMode !== 'legislation_only') {
               chips.push({ icon: <GavelIcon />, label: courtLabel });
             }
 
-            // 6. Date range
+            // 7. Date range
             if (dateFrom || dateTo !== thisYear) {
               const dr = dateFrom && dateTo ? `${dateFrom}–${dateTo}` : dateFrom ? `From ${dateFrom}` : `To ${dateTo}`;
               chips.push({ icon: <CalendarIcon />, label: `Date: ${dr}` });
             }
 
-            // 7. In-force date (legislation)
+            // 8. Status (legislation) — this is the "Current legislation only"
+            // filter, which drops repealed/spent/not-yet-in-force results. It was
+            // previously pushed unconditionally, so the pill claimed the in-force
+            // position even after the lawyer turned the filter off.
             if (!isParliament) {
-              chips.push({ icon: <CalendarIcon />, label: `In force as at ${todayLabel}` });
+              chips.push({
+                icon: <CalendarIcon />,
+                label: currentOnly ? `In force as at ${todayLabel}` : 'All statuses, incl. repealed',
+              });
             }
 
             const filtersLabel = 'Filters';
@@ -928,6 +945,22 @@ function AppContent() {
                       setDateFromPersist(draft.dateFrom);
                       setDateToPersist(draft.dateTo);
                       setCourtPersist(draft.caseLawCourt);
+                      // Each persist setter above rewrites the whole per-chat
+                      // snapshot from *this* render's filter state plus its own
+                      // override, so the last one to run wins and the other eight
+                      // edits are lost — reopening the chat then restored the old
+                      // values over the new ones. Write the snapshot once, whole.
+                      saveFiltersToChatStorage(currentChatId, {
+                        jurisdiction: draft.jurisdiction,
+                        dateFrom: draft.dateFrom,
+                        dateTo: draft.dateTo,
+                        court: draft.caseLawCourt,
+                        legislationType: draft.legislationType,
+                        currentOnly: draft.currentOnly,
+                        recordType: draft.recordType,
+                        sessions: draft.sessions,
+                        house: draft.house ?? null,
+                      });
                       setShowFilters(false);
                     }}
                     onClose={() => setShowFilters(false)}
