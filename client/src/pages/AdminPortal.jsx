@@ -29,6 +29,7 @@ import {
   getParliamentRefresh,
   triggerParliamentRefresh,
   getFeatures,
+  getBackups,
   saveFeatures,
   getPeers,
   createPeer,
@@ -62,6 +63,8 @@ import { SessionFeedbackTab } from './admin/SessionFeedbackTab';
 import { ParliamentCoverageTab } from './admin/ParliamentCoverageTab';
 import { ProviderConfigPanel } from './admin/ProviderConfigPanel';
 import { DangerZone } from './admin/DangerZone';
+import { BackupStatus } from './admin/BackupStatus';
+import { ScopedRestore } from './admin/ScopedRestore';
 import { PERF_COLORS, COST_COLORS } from './admin/chartConfig';
 import { WeeklySurveyComplianceChart } from './admin/surveyCharts';
 import { buildDailyRatingsData } from './admin/surveyData';
@@ -150,6 +153,10 @@ const AdminPortal = ({ currentUser }) => {
   });
   const [isSavingFeatures, setIsSavingFeatures] = useState(false);
 
+  // --- BACKUP STATUS / SCOPED RESTORE STATE (D14) ---
+  const [backups, setBackups] = useState(null);
+  const [backupsError, setBackupsError] = useState('');
+
   // --- PARLIAMENTARY DATA REFRESH STATE (parliament bot only) ---
   const [parliamentRefresh, setParliamentRefresh] = useState(null);
   const [refreshSession, setRefreshSession] = useState('all');
@@ -209,6 +216,7 @@ const AdminPortal = ({ currentUser }) => {
       getParliamentRefresh()
         .then(setParliamentRefresh)
         .catch(() => {});
+      fetchBackups();
     } else if (activeTab === 'federation') {
       setIsPeersLoading(true);
       getPeers()
@@ -217,6 +225,21 @@ const AdminPortal = ({ currentUser }) => {
         .finally(() => setIsPeersLoading(false));
     }
   }, [activeTab, timeframe, learningTimeframe, perfTimeframe, effTimeframe, costTimeframe, cacheTimeframe, coverageSession, productFeedbackTimeframe, sessionFeedbackTimeframe]);
+
+  // Backup status + scoped restore share one payload, so it is fetched once here
+  // and passed to both panels. Read-only; the restore panel refreshes it after a
+  // run so the "Now" column reflects what just landed.
+  const fetchBackups = async () => {
+    setBackupsError('');
+    try {
+      setBackups(await getBackups());
+    } catch (err) {
+      setBackups(null);
+      setBackupsError(
+        'Could not read the backup directory: ' + (err.response?.data?.detail || err.message)
+      );
+    }
+  };
 
   // Poll the parliamentary-refresh status while a refresh is in flight so the
   // admin sees progress and the final result without reloading the tab.
@@ -1453,7 +1476,13 @@ const AdminPortal = ({ currentUser }) => {
               </button>
             </div>
 
+            <BackupStatus data={backups} error={backupsError} onRefresh={fetchBackups} />
+
             <DangerZone onCleared={fetchStats} />
+
+            {/* Deliberately AFTER the Danger Zone: it is the inverse of the
+                operation above it, and reads as its counterpart. */}
+            <ScopedRestore data={backups} onRestored={fetchStats} onRefresh={fetchBackups} />
           </div>
         )}
         {/* USER FEEDBACK TAB */}

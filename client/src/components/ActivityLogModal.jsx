@@ -9,7 +9,16 @@ const DAYS_OPTIONS = [
   { label: 'All time', value: 'all' },
 ];
 
-const ALL_EVENT_TYPES = ['LOGIN', 'QUERY', 'RESPONSE', 'SURVEY', 'FEEDBACK', 'ERROR', 'EFFICIENCY'];
+const ALL_EVENT_TYPES = [
+  'LOGIN',
+  'QUERY',
+  'RESPONSE',
+  'SURVEY',
+  'FEEDBACK',
+  'ERROR',
+  'EFFICIENCY',
+  'RESTORE',
+];
 
 const BADGE_CLASSES = {
   LOGIN: 'bg-brand text-white',
@@ -19,6 +28,7 @@ const BADGE_CLASSES = {
   FEEDBACK: 'bg-accent-soft text-accent-ink',
   ERROR: 'bg-danger-soft text-danger',
   EFFICIENCY: 'bg-warn-soft text-warn',
+  RESTORE: 'bg-danger-soft text-danger',
 };
 
 const BADGE_LABELS = {
@@ -29,12 +39,14 @@ const BADGE_LABELS = {
   FEEDBACK: 'Feedback',
   ERROR: 'Error',
   EFFICIENCY: 'Efficiency',
+  RESTORE: 'Restore',
 };
 
-// Bumped from `activitylog_type_filter` when RESPONSE was added: a saved
-// selection from before then cannot contain it, so returning admins would open
-// the log with answers hidden and no clue they exist.
-const LS_TYPE_KEY = 'activitylog_type_filter_v2';
+// Bumped whenever a type is ADDED, because a selection saved before the type
+// existed cannot contain it — so a returning admin would open the log with the
+// new events hidden and no clue they exist. v2 was RESPONSE; v3 is RESTORE,
+// where silently hiding an audit record of a data restore is the worst case.
+const LS_TYPE_KEY = 'activitylog_type_filter_v3';
 
 function loadSavedTypes() {
   try {

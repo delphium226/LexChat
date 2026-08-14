@@ -403,6 +403,92 @@ ensures the PostgreSQL service is running.
 
 ---
 
+## What Part B got wrong (found while implementing Phases 4-6, 2026-08-14)
+
+Four corrections. The first removes a scope from the restore UI entirely; the
+second is a bug the plan's own worked example would have produced.
+
+### 4. The `cache` scope can never be restored - Part B offers six, there are five
+
+Part B says the restore UI should mirror the Danger Zone with "the same six
+scopes". It can, but one of them is permanently empty: Phase 1 dumps with
+`--exclude-table-data=local_prompt_cache`, so **no dump contains a single cached
+summary**. Confirmed against the TOC - `local_prompt_cache` has a `TABLE` entry
+and no `TABLE DATA` entry.
+
+Restoring `cache` was therefore never going to do anything, and a bare `0` in the
+preflight would read as a bug. The component is marked unavailable with the
+reason stated, and the checkbox is disabled. **The exclusion list is read from
+`manifest.json` (`excluded_table_data`), not hardcoded**, so if the backup script's
+exclusions ever change the UI follows without an edit. Nothing is lost: the table
+is pure cache and refills on demand.
+
+### 5. `CAST(:p AS integer)` does not work - asyncpg types the parameter from the cast
+
+Values are copied staging -> live as **text** and cast back to the live column's
+type, which sidesteps driver type-mapping for json, timestamps, booleans and
+floats in one move. The obvious spelling fails:
+
+```
+invalid input for query argument $1: '10' ('str' object cannot be interpreted as an integer)
+```
+
+asyncpg infers each bind parameter's type from the expression around it, so
+`CAST($1 AS integer)` makes it *expect a Python int* and reject the text being
+sent deliberately. It has to be `CAST(CAST($1 AS text) AS integer)` - the inner
+cast pins the parameter as text and leaves the conversion to PostgreSQL. Pinned
+by `test_text_cast_is_nested`.
+
+### 6. 4b's UPDATE needs a tighter predicate than the plan's, or it lies on a re-run
+
+Part B's worked example is:
+
+```sql
+WHERE m.id = s.id AND (s.rating IS NOT NULL OR s.feedback_comment IS NOT NULL)
+```
+
+That restores correctly, but combined with the additive rule (never overwrite a
+value that survived) the natural candidate test - *live has a NULL in either
+column* - is wrong. A rating with no comment leaves `feedback_comment`
+legitimately NULL **forever**, so the row stays a candidate on every subsequent
+run and each one reports it as restored again having changed nothing. Measured:
+a second identical restore reported 3 rows applied with the database unchanged.
+
+The predicate has to be per column and directional: apply only where the dump
+has a value **and** live has none. Caught by re-running the restore in the
+harness, not by reasoning about it - which is the argument for stage 7 existing.
+
+### Also worth recording
+
+- **Staging only the tables the selected scopes need** (`pg_restore -t`) is not
+  just an optimisation. Staging the whole parliament dump takes **33s**; staging
+  the nine app tables out of it takes **0.13s**. It also means the crawled SP
+  corpus is never copied about. The tables arrive with **no indexes, primary keys
+  or foreign keys** (those are separate TOC entries whose tags do not match a
+  `-t` pattern), which is exactly right for a read-only source and means nothing
+  in staging depends on insert order.
+- **A dump may not contain a table at all.** `session_feedback` does not exist in
+  `lexchat_parliament` - that database predates it. Components resolve per table
+  against what actually landed and report "does not exist in this backup"
+  instead of failing the run.
+- **`postgres_fdw` / `dblink` are not available.** Both need `CREATE EXTENSION`,
+  which needs superuser, and `lexuser` is `NOSUPERUSER` - the same constraint
+  that broke `pg_dumpall` in Phase 1. The staging -> live copy is therefore done
+  in Python. Fine at this size (app tables only), but it does mean the restore
+  holds a table in memory; the irreplaceable tier is ~25 MB by design.
+- **The asyncio lock is not enough on its own.** It is per-process, so a
+  deployment running more than one uvicorn worker would have one lock per worker
+  and no mutual exclusion - two runs would drop each other's staging database
+  mid-copy. A cluster-wide `pg_try_advisory_lock` was added alongside it.
+- **The `chats` scope masks the 4b trap.** When `chats` and `feedback` are
+  restored together the message rows are re-INSERTed *carrying their rating
+  columns*, so ratings come back via the INSERT and a broken UPDATE component
+  goes unnoticed. Only a `feedback`-only restore exercises the real case. The
+  first version of the harness tested the combined case and would have passed
+  with the bug present.
+
+---
+
 ## Session ledger
 
 | Phase | Status | Notes |
@@ -410,10 +496,44 @@ ensures the PostgreSQL service is running.
 | 1. `backup_databases.ps1` + manifest | **DONE** 2026-08-14 | Enumerated targets, `-Fc`, `local_prompt_cache` rows excluded, manifest with commit SHA |
 | 2. Verify / retention / scheduled task | **DONE** 2026-08-14 | Two-stage verify (see corrections above), GFS 14/8/12, `install_backup_task.ps1` |
 | 3. `restore_database.ps1` + runbook + rehearsal | **DONE** 2026-08-14 | Rehearsed - see below. Runbook: `docs/deployment/BACKUP_RUNBOOK.md` |
-| 4. Scoped restore backend | NOT STARTED | Watch 4b (mixed DELETE/UPDATE) |
-| 5. Guard rails + endpoints | NOT STARTED | |
-| 6. Developer tab UI | NOT STARTED | Panel 1 is worth shipping alone |
+| 4. Scoped restore backend | **DONE** 2026-08-14 | `services/backup_restore.py`. Exercised end to end - see below |
+| 5. Guard rails + endpoints | **DONE** 2026-08-14 | 3 endpoints on `admin_router`, auto-backup, preflight, `RESTORE` phrase, `activity_log` |
+| 6. Developer tab UI | **DONE** 2026-08-14 | `BackupStatus.jsx` (read-only) + `ScopedRestore.jsx` (next to `DangerZone.jsx`) |
 | Off-box copy | BLOCKED | Awaiting answer on available destinations (D15) |
+
+**Still not run anywhere: `install_backup_task.ps1`.** It needs an elevated
+session on the target, so despite Phases 1-6 being complete **no backup is
+actually running on any machine yet**. Until that is run there is nothing for the
+restore UI to restore from, and the Developer tab will say so.
+
+### Scoped-restore verification record - 2026-08-14, dev machine
+
+`server_py/tests/manual/e2e_scoped_restore.py` (10 stages, **67 assertions, all
+passing**) against a scratch `lexchat_e2e`, driving the real code both ways: a
+real `backup_databases.ps1` run, then `developer.clear_data()` for the loss and
+`backup_restore.run_restore()` for the recovery. Plus
+`tests/test_backup_restore.py` (28 tests) in the unit suite, and an HTTP-level
+pass through the three endpoints with a real admin JWT.
+
+What the run actually proved, beyond row counts:
+
+| | Result |
+|---|---|
+| Pilot reset (all six scopes) cleared and restored | chats 5, messages 10, documents 3, surveys 2, session feedback 3, timings 3, activity 3, health 3 - all back |
+| **Message ratings after a `feedback`-only restore (4b)** | **4 of 4, values and comments exact** - including a comment-with-no-rating row |
+| matter_note message links repaired (4f) | 3 of 3, after the clear severed all 3 |
+| Sequences (4d) | all 8 restored tables advanced past `max(id)`; a real post-restore INSERT succeeded |
+| Re-run (4c) | second identical restore applied **0** rows and changed nothing |
+| Stale FK parents (4e) | user deleted -> its chat skipped and reported, its 2 messages skipped with it; matter deleted -> chat kept with `matter_id` nulled |
+| `cache` scope | reported unavailable with the reason, never silently 0 |
+| Type fidelity | `json` (`sources`, `research_plan`, `filters`), `float8`, `bool` and `timestamp` all exact after the text round trip |
+| Exclusivity | a second caller holding the advisory lock is refused; released, it succeeds |
+| Hygiene | staging database dropped, safety dump written, `RESTORE` row on the activity log |
+
+Two bugs were found by running it rather than by reading it - the asyncpg cast
+typing and the re-run over-reporting, both recorded above. A third finding is
+about the *test*: the all-six-scopes scenario masks the 4b trap entirely, so the
+`feedback`-only stage had to be added separately.
 
 ### Rehearsal record - 2026-08-14, dev machine, PostgreSQL 18.3
 

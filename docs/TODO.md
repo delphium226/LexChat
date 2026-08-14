@@ -754,7 +754,7 @@ session. Not worth a schema change mid-pre-pilot on current evidence.
 
 ## Database backup & restore (scoped 2026-08-14)
 
-### D14. Implement the backup regime — PHASES 1–3 DONE (2026-08-14), 4–6 NOT STARTED
+### D14. Implement the backup regime — ALL SIX PHASES DONE (2026-08-14)
 Full plan and session ledger: **`docs/BACKUP_RESTORE_PLAN.md`**. Procedure:
 **`docs/deployment/BACKUP_RUNBOOK.md`**.
 
@@ -780,17 +780,38 @@ wrong" in the plan doc:**
 - **The restore cannot start with `stop_native.cmd`** — its last step stops
   PostgreSQL, which the restore needs. The script stops only the app.
 
-**Still to do — Phases 4–6 (Developer-tab scoped restore).** Two findings from
-scoping that the implementation must not miss:
-- **The `feedback` clear scope is a mixed DELETE/UPDATE.** Rated messages are nulled
-  in place (`developer.py:285`), not deleted, so an `INSERT ... ON CONFLICT DO
-  NOTHING` restore silently restores no ratings while reporting success. That
-  component needs `UPDATE ... FROM staging`.
-- **`matter_notes.message_id` is a silent lossy edge.** It is `ON DELETE SET NULL`
-  and `matter_notes` sits in no clear scope, so a "chats" clear severs note→message
-  links inside a table the Danger Zone implies it does not touch. Recoverable from
-  staging by note id, but only if handled explicitly — and worth correcting the
-  Danger Zone copy regardless.
+**Phases 4–6 shipped (Developer-tab scoped restore).** `services/backup_restore.py`
+loads the chosen dump into a separate `lexchat_restore_staging` database the app
+never connects to, then copies staging→live scope by scope — live tables are never
+a `pg_restore` target. Three admin endpoints (`GET /api/developer/backups`,
+`POST /api/developer/restore/preflight`, `POST /api/developer/restore`), auto-backup
+before restore, `RESTORE` confirm phrase, `activity_log` audit row. UI:
+`BackupStatus.jsx` (read-only) + `ScopedRestore.jsx` beside `DangerZone.jsx`.
+Verified by `server_py/tests/manual/e2e_scoped_restore.py` (67 assertions) and
+`tests/test_backup_restore.py` (28 tests).
+
+**Four more things the plan got wrong, corrected in the code** — full detail in
+"What Part B got wrong" in the plan doc:
+- **The `cache` scope can never be restored.** Phase 1 dumps with
+  `--exclude-table-data=local_prompt_cache`, so no dump holds a single cached
+  summary. Part B offered six restorable scopes; there are five. The component is
+  marked unavailable with the reason, driven off `manifest.json`'s
+  `excluded_table_data` rather than a hardcoded name.
+- **`CAST(:p AS integer)` fails under asyncpg** — it types the bind parameter from
+  the surrounding cast and rejects the text being sent deliberately. Must be
+  `CAST(CAST(:p AS text) AS integer)`.
+- **4b's UPDATE needs a directional predicate.** "Live has a NULL in either column"
+  keeps a rating-without-comment row a candidate forever, so every re-run reports
+  it as restored having changed nothing. Apply only where the dump has a value and
+  live has none.
+- **The `chats` scope masks the 4b trap** — restored together, messages are
+  re-INSERTed carrying their rating columns, so a broken UPDATE goes unnoticed.
+  Only a `feedback`-only restore exercises the real case.
+
+**⚠ `install_backup_task.ps1` has still never been run.** It needs an elevated
+session on the target, so despite all six phases being complete **no backup is
+running on any machine yet**, and the restore UI has nothing to restore from.
+This is the one remaining action for D14.
 
 ### D15. Off-box backup destination — BLOCKED, needs an answer from the server owner
 Dumps on the same disk as the database protect against `DROP TABLE`, bad migrations

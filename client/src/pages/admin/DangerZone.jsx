@@ -171,9 +171,15 @@ export const DangerZone = ({ onCleared }) => {
             </div>
           )}
 
+          {/* "matters" needed the caveat: matter_notes.message_id is ON DELETE SET
+              NULL and matter_notes sits in no scope, so a chats clear silently
+              severs note-to-message links inside a table this copy otherwise
+              claims is untouched. Recoverable via the scoped restore below. */}
           <p className="font-ui text-xs text-ink-400">
             Always preserved: user accounts, provider settings and feature flags, federated peers,
-            matters, and the crawled Scottish Parliament corpus.
+            matters and their notes, and the crawled Scottish Parliament corpus. Deleting chats does
+            sever the link from a matter note to the message it was taken from — the note text
+            survives, and the link can be repaired from a backup.
           </p>
         </>
       )}

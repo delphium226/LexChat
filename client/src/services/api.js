@@ -326,6 +326,29 @@ export const clearData = async (scopes, confirm) => {
   return response.data;
 };
 
+// --- BACKUP / SCOPED RESTORE APIS (D14) ---
+export const getBackups = async () => {
+  const response = await axios.get(`${API_URL}/developer/backups`);
+  return response.data;
+};
+
+export const restorePreflight = async (runId, scopes) => {
+  const response = await axios.post(`${API_URL}/developer/restore/preflight`, {
+    run_id: runId,
+    scopes,
+  });
+  return response.data;
+};
+
+export const runRestore = async (runId, scopes, confirm) => {
+  const response = await axios.post(`${API_URL}/developer/restore`, {
+    run_id: runId,
+    scopes,
+    confirm,
+  });
+  return response.data;
+};
+
 export const submitFeedback = async payload => {
   const response = await axios.post(`${API_URL}/feedback`, payload);
   return response.data;

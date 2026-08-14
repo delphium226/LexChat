@@ -30,13 +30,45 @@ current contents first, so step 2 is reversible.
 
 ### "Somebody hit the Danger Zone / cleared data they should not have"
 
-**Do not restore the whole database yet.** A full restore also rolls back
-everything that happened since last night, including chats from other users. If
-what you lost is one of the six Danger Zone scopes (chats, feedback, timings,
-activity, health, cache), the scope-shaped restore is the right tool - but it is
-Phase 4 and **is not built yet**.
+**Do not restore the whole database.** A full restore also rolls back everything
+that happened since last night, including other people's chats. What you have
+lost is scope-shaped, and there is a scope-shaped tool for it.
 
-Until it is, the safe interim procedure is:
+**Admin Portal -> Developer -> Restore from backup.** No console needed.
+
+1. Pick the backup to restore from (defaults to the most recent verified one).
+2. Tick the same boxes that were ticked in the Danger Zone.
+3. Press **Check what would change**. This loads the dump into a staging
+   database and reports, line by line, exactly what it would put back - it is
+   the real restore with the writes withheld, not an estimate.
+4. Read it, type `RESTORE`, press the button.
+
+It is **additive**: it only fills in what is missing and never overwrites
+anything that survived, so it is safe to run twice and safe to run when you are
+not sure. It dumps the current contents to `C:\LexChatBackups\pre-restore\`
+first, so it can itself be undone, and it writes a row to the activity log.
+
+**Reading the preflight.** Three things surprise people:
+
+- **"Cached summaries" is always unavailable.** `local_prompt_cache` rows are
+  excluded from every dump by design, so there is nothing to restore. It is pure
+  cache and refills on its own. This is correct, not a fault.
+- **"Message ratings" says *updates rows that survived*.** Clearing feedback sets
+  `rating = NULL` in place; the messages themselves are still there. So ratings
+  are written back onto the existing rows rather than inserted.
+- **Rows can be reported as unrestorable.** If a user or matter was deleted by
+  hand, their chats have nothing to attach to. Those are skipped and counted;
+  optional links (a chat's matter) are simply cleared instead.
+
+**If you cleared `feedback` but restore `chats`,** the messages already exist, so
+nothing happens and the preflight will show every count as 0. Tick the scope that
+was actually cleared.
+
+**If the restore panel is not there,** no verified backup of this bot's database
+exists yet - see [Is the backup healthy?](#is-the-backup-healthy).
+
+<details>
+<summary>Doing it by hand instead (only if the Developer tab is unreachable)</summary>
 
 1. Restore last night's dump into a **scratch** database, not over the live one:
 
@@ -45,23 +77,19 @@ Until it is, the safe interim procedure is:
        -TargetDatabase lexchat_recovery -NoAppStop
    ```
 
-2. Copy back only what was lost, with the app still running. For example, to
-   recover session feedback:
+2. Copy back only what was lost:
 
-   ```sql
-   -- Run against the LIVE database, with lexchat_recovery restored alongside.
-   -- postgres_fdw or a dump/reload of the single table; the simplest route is:
-   --   pg_dump -Fc -t session_feedback -d lexchat_recovery -f sf.dump
-   --   pg_restore -d lexchat --data-only -t session_feedback sf.dump
+   ```
+   pg_dump -Fc -t session_feedback -d lexchat_recovery -f sf.dump
+   pg_restore -d lexchat --data-only -t session_feedback sf.dump
    ```
 
    **Parents before children.** `chats` must land before `session_feedback`
    (whose `chat_id` FK points at it), and `chats` -> `messages` -> `documents`
    in that order.
 
-   **Ratings are an UPDATE, not an INSERT.** Clearing the `feedback` scope sets
-   `messages.rating = NULL` in place - the rows still exist. A data-only insert
-   restores nothing for those. You need:
+   **Ratings are an UPDATE, not an INSERT.** A data-only insert restores nothing
+   for them, because the message rows still exist and every insert conflicts:
 
    ```sql
    UPDATE messages m SET rating = s.rating, feedback_comment = s.feedback_comment
@@ -73,10 +101,13 @@ Until it is, the safe interim procedure is:
    restored primary key hours later:
 
    ```sql
-   SELECT setval(pg_get_serial_sequence('chats','id'), COALESCE(MAX(id), 1)) FROM chats;
+   SELECT setval(pg_get_serial_sequence('chats','id'),
+                 COALESCE(MAX(id), 1), MAX(id) IS NOT NULL) FROM chats;
    ```
 
 4. Drop the scratch database when you are done.
+
+</details>
 
 ### "The database is corrupt / the app will not start / a migration went wrong"
 
@@ -231,6 +262,14 @@ and identical full-text search results.
 
 ## Is the backup healthy?
 
+**The quickest answer is Admin Portal -> Developer -> Backup status.** It reads
+the same `manifest.json` files as the commands below and shows the last run, its
+size and duration, the per-database verify result, and the commit SHA the dump's
+schema belongs to. It also says plainly when the backup directory does not exist
+or holds no runs.
+
+For anything the panel does not cover:
+
 ```powershell
 # Did last night's run succeed? LastTaskResult 0 = yes.
 Get-ScheduledTaskInfo -TaskName "LexChat Database Backup" |
@@ -290,6 +329,12 @@ Options:
     -At 01:00 `                        # time of day
     -KeepDaily 30                      # retention
 ```
+
+**If you change `-BackupRoot`, change `BACKUP_ROOT` in `server_py/.env` to
+match.** The app reads that setting to find the dumps; if the two disagree the
+Developer tab's backup panel reads an empty directory and reports that nothing
+is being backed up, while the nightly task runs perfectly somewhere else. The
+default on both sides is `C:\LexChatBackups`.
 
 ---
 

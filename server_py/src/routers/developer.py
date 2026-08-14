@@ -31,6 +31,7 @@ from ..models import (
     SessionFeedback,
     User,
 )
+from ..services import backup_restore
 
 logger = logging.getLogger("app")
 
@@ -318,6 +319,160 @@ async def clear_data(body: ClearDataRequest, db: AsyncSession = Depends(get_db))
         "deleted": deleted,
         "message": f"Deleted {sum(deleted.values())} rows across {len(deleted)} data set(s).",
     }
+
+
+# -----------------------------------------------------------------------
+# Backup status and scoped restore (D14 Phases 4-6)
+# -----------------------------------------------------------------------
+# The inverse of the Danger Zone above, and deliberately shaped like it: the
+# realistic loss on this system is somebody running a pilot reset and then
+# wanting last night's session feedback back, which is scope-shaped, not
+# database-shaped. Mechanism and the six correctness details live in
+# services/backup_restore.py; a WHOLE-database restore stays a console
+# operation (deployment/restore_database.ps1) for the reasons in
+# docs/BACKUP_RESTORE_PLAN.md Part A Phase 3.
+
+_RESTORE_CONFIRM_PHRASE = "RESTORE"
+
+# The restore order must be the exact reversal of the clear order: the clear runs
+# `feedback` before `chats` (session_feedback.chat_id is ON DELETE SET NULL, so
+# clearing chats first orphans it), and the restore has the mirror-image
+# constraint - parents first. Asserted here rather than in the service because
+# this is the one place both lists are visible, and a scope added to one and not
+# the other is otherwise a silent ordering bug.
+assert backup_restore.RESTORE_ORDER == list(reversed(_CLEAR_ORDER)), (
+    "backup_restore.RESTORE_ORDER must be the reversal of developer._CLEAR_ORDER"
+)
+assert set(backup_restore.SCOPE_COMPONENTS) == set(DATA_SCOPES), (
+    "every Danger Zone scope needs a restore counterpart, and vice versa"
+)
+
+
+class RestoreRequest(BaseModel):
+    run_id: str
+    scopes: List[str]
+    confirm: str = ""
+
+
+@admin_router.get("/backups")
+async def get_backups():
+    """List backup runs for this bot's database, with manifest provenance.
+
+    Read-only, and the panel that earns its place first: an operator can see
+    whether last night's backup ran, how big it was, whether it verified and
+    which commit its schema belongs to, without going to the console.
+    """
+    try:
+        listing = backup_restore.list_runs()
+    except backup_restore.RestoreError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return {
+        **listing,
+        "scopes": DATA_SCOPES,
+        "confirm_phrase": _RESTORE_CONFIRM_PHRASE,
+        # Surfaced so the UI can explain a scope that can never be restored
+        # rather than showing a bare zero. local_prompt_cache rows are excluded
+        # from every dump by design.
+        "components": {
+            scope: [
+                {"key": c.key, "table": c.table, "operation": c.operation, "label": c.label}
+                for c in backup_restore.SCOPE_COMPONENTS[scope]
+            ]
+            for scope in backup_restore.RESTORE_ORDER
+        },
+    }
+
+
+@admin_router.post("/restore/preflight")
+async def restore_preflight(body: RestoreRequest, db: AsyncSession = Depends(get_db)):
+    """Dry run: stage the dump and report exactly what a restore would change.
+
+    Walks the same code as the real restore with the same filters, so this is not
+    a separate estimate that can drift from the implementation - it is the
+    implementation, with the writes withheld. Same philosophy as the Danger
+    Zone's `details` block: disclose the cascade rather than let it be
+    discovered afterwards.
+    """
+    try:
+        return await backup_restore.run_restore(db, body.run_id, body.scopes, dry_run=True)
+    except backup_restore.RestoreError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception("[Developer] Restore preflight failed")
+        raise HTTPException(status_code=500, detail=f"Preflight failed: {exc}")
+
+
+@admin_router.post("/restore")
+async def restore_scopes(
+    body: RestoreRequest,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_admin_user),
+):
+    """Execute a scoped restore. Additive, undoable, and on the audit trail.
+
+    Guard rails, in order: confirm phrase, dump verified before anything is
+    touched, current contents dumped first so this is itself undoable, all live
+    writes in one transaction, identity sequences reset, and an activity_log row
+    recording who restored what from which dump.
+    """
+    if body.confirm != _RESTORE_CONFIRM_PHRASE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Confirmation phrase must be exactly '{_RESTORE_CONFIRM_PHRASE}'.",
+        )
+
+    username = user.get("username") or "unknown"
+    try:
+        result = await backup_restore.run_restore(db, body.run_id, body.scopes, dry_run=False)
+    except backup_restore.RestoreError as exc:
+        await _log_restore(username, f"FAILED restoring {', '.join(body.scopes)} "
+                                     f"from {body.run_id}: {exc}")
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception("[Developer] Scoped restore failed")
+        await _log_restore(username, f"FAILED restoring {', '.join(body.scopes)} "
+                                     f"from {body.run_id}: {exc}")
+        raise HTTPException(status_code=500, detail=f"Restore failed: {exc}")
+
+    applied = ", ".join(
+        f"{c['label']}: {c['applied']}"
+        for c in result["components"]
+        if c["applied"] or c["would_apply"]
+    ) or "nothing to restore"
+    await _log_restore(
+        username,
+        f"Restored {', '.join(result['scopes'])} from backup {result['run_id']} "
+        f"(commit {(result.get('commit_sha') or '?')[:8]}) - {applied}",
+    )
+    logger.warning(
+        f"[Developer] Scoped restore by {username} from {result['run_id']}: {applied}"
+    )
+    return {"success": True, **result}
+
+
+async def _log_restore(username: str, description: str) -> None:
+    """Write the RESTORE audit row on its own session.
+
+    Deliberately not the request's session: that one is either mid-rollback (on
+    failure) or has just committed the restore, and the audit record must land
+    either way. Fail-soft - losing the log entry must not turn a successful
+    restore into an error.
+    """
+    try:
+        from ..database import async_session_maker
+
+        async with async_session_maker() as session:
+            session.add(
+                ActivityLog(
+                    event_type="RESTORE",
+                    username=username,
+                    description=description[:4000],
+                )
+            )
+            await session.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"[Developer] Could not write the RESTORE activity_log row: {exc}")
 
 
 # -----------------------------------------------------------------------

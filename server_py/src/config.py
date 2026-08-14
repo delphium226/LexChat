@@ -56,6 +56,13 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://lexuser:lexpassword@localhost:5432/lexchat"
     db_max_connections: int = 20
 
+    # Backup / scoped restore (D14). `backup_root` must match the -BackupRoot the
+    # nightly deployment/backup_databases.ps1 run writes to; `pg_bin` is the
+    # PostgreSQL bin directory holding pg_restore.exe / pg_dump.exe and is
+    # auto-detected from C:\Program Files\PostgreSQL\* when left blank.
+    backup_root: str = "C:\\LexChatBackups"
+    pg_bin: str = ""
+
     # Auth
     jwt_secret: str = "dev_secret_key_change_me"
     jwt_algorithm: str = "HS256"
