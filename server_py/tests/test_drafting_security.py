@@ -201,7 +201,33 @@ async def test_executor_logs_redacted_args(caplog):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_login_cookie_is_secure_and_httponly(client, seed_user):
+async def test_login_cookie_is_secure_over_https(client, seed_user):
+    """Secure is set when the browser's connection is HTTPS.
+
+    X-Forwarded-Proto is what nginx sends; the test client itself always
+    speaks plain http:// to the ASGI app, exactly as uvicorn-behind-nginx does.
+    """
+    r = await client.post(
+        "/api/auth/login",
+        json={"username": "testuser", "password": "testpassword"},
+        headers={"X-Forwarded-Proto": "https"},
+    )
+    assert r.status_code == 200
+    cookie = r.headers.get("set-cookie", "")
+    assert "token=" in cookie
+    assert "Secure" in cookie
+    assert "HttpOnly" in cookie
+
+
+@pytest.mark.asyncio
+async def test_login_cookie_is_not_secure_over_plain_http(client, seed_user):
+    """Secure must NOT be set on a plain-HTTP deployment.
+
+    The browser discards a Secure cookie served over http:// without error and
+    the frontend has no bearer-token fallback, so a hardcoded Secure made login
+    a silent no-op — 200 with no session, then a 401 rendered as "your session
+    has expired". HttpOnly is unconditional.
+    """
     r = await client.post(
         "/api/auth/login",
         json={"username": "testuser", "password": "testpassword"},
@@ -209,5 +235,5 @@ async def test_login_cookie_is_secure_and_httponly(client, seed_user):
     assert r.status_code == 200
     cookie = r.headers.get("set-cookie", "")
     assert "token=" in cookie
-    assert "Secure" in cookie
+    assert "Secure" not in cookie
     assert "HttpOnly" in cookie

@@ -2,7 +2,7 @@ import logging
 from datetime import timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from passlib.hash import bcrypt
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -17,6 +17,19 @@ from ..utils.redact import redact_email
 logger = logging.getLogger("app")
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
+
+
+def _request_is_https(request: Request) -> bool:
+    """True when the *client* connection is HTTPS.
+
+    Behind nginx uvicorn is spoken to over plain HTTP on 127.0.0.1, so the
+    scheme on the ASGI request describes the proxy hop, not the browser's.
+    X-Forwarded-Proto carries the real one (set in deployment/nginx/lexchat.conf).
+    """
+    forwarded = request.headers.get("X-Forwarded-Proto")
+    if forwarded:
+        return forwarded.split(",")[0].strip().lower() == "https"
+    return request.url.scheme == "https"
 
 
 # --- Pydantic schemas ---
@@ -70,6 +83,7 @@ class MessageResponse(BaseModel):
 
 @router.post("/login", response_model=LoginResponse)
 async def login(
+    request: Request,
     response: Response,
     creds: LoginRequest,
     db: AsyncSession = Depends(get_db),
@@ -102,13 +116,16 @@ async def login(
         key="token",
         value=access_token,
         httponly=True,
-        # The deployment target serves HTTPS on 443 with organisational certs,
-        # so the auth cookie is HTTPS-only. Note this means the cookie is NOT
-        # set over plain HTTP — including local dev on :8000. Local dev is
-        # unaffected in practice because the frontend authenticates with the
-        # bearer token from the response body, and `get_current_user` checks
-        # the cookie first but falls back to the Authorization header.
-        secure=True,
+        # Secure on HTTPS, not on plain HTTP. This MUST track the actual
+        # scheme: the browser silently discards a Secure cookie served over
+        # http://, and the frontend has no bearer-token fallback (it never
+        # sends an Authorization header — get_current_user's header branch is
+        # for machine callers only). A hardcoded secure=True therefore made
+        # login a no-op on every plain-HTTP deployment: the POST returned 200,
+        # no cookie was stored, and the next request 401'd into "your session
+        # has expired". Only visible to a browser with an empty cookie jar,
+        # so pre-existing sessions masked it.
+        secure=_request_is_https(request),
         max_age=max_age,
         samesite="lax",
     )
