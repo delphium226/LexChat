@@ -4,12 +4,12 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import bindparam, select, desc, text
+from sqlalchemy import String, bindparam, cast, select, desc, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..dependencies import get_current_user
-from ..models import Chat, ProductFeedback, SessionFeedback, User
+from ..models import Chat, Message, ProductFeedback, SessionFeedback, User
 
 logger = logging.getLogger("app")
 
@@ -109,8 +109,29 @@ class SessionFeedbackOut(BaseModel):
     ease_of_use_reason: str | None
     other_comments: str | None
     filters: dict | None
+    # Which mode the thread was worked in — see `_session_mode`. Derived, not
+    # stored: NULL where neither signal is available.
+    session_mode: str | None
     finished_at: str | None
     created_at: str
+
+
+class TranscriptMessageOut(BaseModel):
+    """One turn of a thread, for the Developer tab's transcript export."""
+
+    role: str
+    content: str
+    model: str | None
+    provider: str | None
+    cost_usd: float | None
+    rating: int | None
+    feedback_comment: str | None
+    created_at: str
+
+
+class SessionTranscriptOut(BaseModel):
+    chat_id: int
+    messages: list[TranscriptMessageOut]
 
 
 class MessageRatingOut(BaseModel):
@@ -435,13 +456,38 @@ async def submit_session_feedback(
     return {"status": "ok"}
 
 
-@router.get("/session", response_model=list[SessionFeedbackOut])
-async def get_all_session_feedback(
-    days: str = "30",
-    user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """The responses behind every statistic on the admin tab.
+# The chat modes a thread can be worked in. The filter snapshot's `chat_mode` is
+# stored as free text (one column serves every bot — see `_clean_filters`), so it
+# is validated here rather than trusted, and an unrecognised value reads as "not
+# known" rather than being exported as-is.
+_CHAT_MODES = ("conversational", "research", "deep_research")
+
+
+def _session_mode(filters: dict | None, ran_deep_research: bool) -> str | None:
+    """Which mode a thread was worked in: 'conversational' / 'research' /
+    'deep_research', or None where neither signal is available.
+
+    Two sources, and the OBSERVED one wins. A stored research plan on any
+    message in the thread is proof Deep Research actually ran; the filter
+    snapshot is only the state of the mode toggle at the moment the form was
+    submitted, so a lawyer who ran a deep-research query and then switched back
+    to conversational to ask a follow-up would otherwise be recorded as
+    conversational. A thread that mixed the two is reported as deep_research —
+    the expensive mode is the one worth segmenting on.
+
+    Conversational and standard research are indistinguishable in the message
+    table, so those two can only come from the snapshot. That is why the
+    snapshot stays exported alongside this (as "Filter: Chat mode"): where the
+    two disagree, the difference is itself the finding.
+    """
+    if ran_deep_research:
+        return "deep_research"
+    mode = (filters or {}).get("chat_mode")
+    return mode if mode in _CHAT_MODES else None
+
+
+async def _latest_responses(db: AsyncSession, days: str) -> list[tuple[SessionFeedback, str, str | None]]:
+    """The responses behind every statistic on the admin tab, one per thread.
 
     Nothing stops a lawyer pressing "Finished session" twice on one thread, and
     a second form is treated as a **correction**: the latest response per
@@ -458,9 +504,12 @@ async def get_all_session_feedback(
 
     Forms with no `chat_id` are exempt: there is no thread to supersede them
     against, so each is a distinct response and all of them are returned.
+
+    Shared by /session and /session/transcripts so the transcript export covers
+    exactly the responses the feedback export does — two selections of "which
+    sessions count" would drift, and the pair are meant to be joined on
+    chat_id by whoever opens them.
     """
-    if user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required.")
     query = (
         select(SessionFeedback, User.username, Chat.title)
         .join(User, SessionFeedback.user_id == User.id)
@@ -488,6 +537,45 @@ async def get_all_session_feedback(
                 continue
             seen_threads.add(key)
         latest.append((fb, username, chat_title))
+    return latest
+
+
+@router.get("/session", response_model=list[SessionFeedbackOut])
+async def get_all_session_feedback(
+    days: str = "30",
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """The responses behind every statistic on the admin tab — see
+    `_latest_responses` for which of them are returned."""
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    latest = await _latest_responses(db, days)
+
+    # Threads in which Deep Research actually ran, in one query over the rows
+    # being returned rather than one per response. `research_plan` is written
+    # only on a Deep Research assistant message, so its presence is the
+    # observed signal `_session_mode` prefers over the filter snapshot.
+    #
+    # IS NOT NULL is not sufficient on its own. SQLAlchemy's JSON type persists
+    # a Python None as the JSON literal `null`, not as SQL NULL, so every
+    # ordinary message has a non-NULL research_plan holding `null` — the
+    # unguarded test marks every thread deep_research. The column is `json`
+    # rather than `jsonb`, which has no equality operator in Postgres, so the
+    # comparison goes through a text cast.
+    chat_ids = {fb.chat_id for fb, _, _ in latest if fb.chat_id is not None}
+    deep_research_chats: set[int] = set()
+    if chat_ids:
+        found = await db.execute(
+            select(Message.chat_id)
+            .where(
+                Message.chat_id.in_(chat_ids),
+                Message.research_plan.isnot(None),
+                cast(Message.research_plan, String) != "null",
+            )
+            .distinct()
+        )
+        deep_research_chats = set(found.scalars().all())
 
     return [
         SessionFeedbackOut(
@@ -513,11 +601,76 @@ async def get_all_session_feedback(
             ease_of_use_reason=fb.ease_of_use_reason,
             other_comments=fb.other_comments,
             filters=fb.filters,
+            session_mode=_session_mode(fb.filters, fb.chat_id in deep_research_chats),
             finished_at=fb.finished_at.isoformat() if fb.finished_at else None,
             created_at=fb.created_at.isoformat(),
         )
         for fb, username, chat_title in latest
     ]
+
+
+@router.get("/session/transcripts", response_model=list[SessionTranscriptOut])
+async def get_session_transcripts(
+    days: str = "30",
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Full transcripts of the threads the session feedback describes.
+
+    Powers the Developer tab's transcript export, which is the feedback export
+    with every query and answer of the thread attached — so what a lawyer said
+    about a session can be read against what actually happened in it.
+
+    Scoped to the threads `_latest_responses` returns for the same `days`, NOT
+    to every thread in the period. The two exports are meant to be joined on
+    chat_id, and a transcript with no feedback row to attach to would produce
+    orphan rows in the file.
+
+    Returned whole and unabridged, deliberately: this is the one export whose
+    entire purpose is the message text, and a truncated answer is exactly the
+    evidence a reader of "the assistant referred to the wrong Act" needs. It is
+    admin-only and can be a large response on a wide timeframe.
+    """
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    latest = await _latest_responses(db, days)
+    chat_ids = {fb.chat_id for fb, _, _ in latest if fb.chat_id is not None}
+    if not chat_ids:
+        return []
+
+    result = await db.execute(
+        select(Message)
+        .where(Message.chat_id.in_(chat_ids))
+        # id breaks the tie: messages saved in the same transaction can share a
+        # created_at to the microsecond, and a transcript whose turns come back
+        # in a different order each export is not a transcript.
+        .order_by(Message.chat_id, Message.created_at, Message.id)
+    )
+
+    by_chat: dict[int, list[TranscriptMessageOut]] = {chat_id: [] for chat_id in chat_ids}
+    for message in result.scalars().all():
+        by_chat[message.chat_id].append(
+            TranscriptMessageOut(
+                role=message.role,
+                content=message.content,
+                model=message.model,
+                provider=message.provider,
+                cost_usd=message.cost_usd,
+                rating=message.rating,
+                feedback_comment=message.feedback_comment,
+                created_at=message.created_at.isoformat(),
+            )
+        )
+
+    # Threads with no messages are still returned, as an empty list — a thread
+    # whose messages have since been cleared, or one opened and never used. The
+    # export must show that response with blank message columns rather than
+    # dropping it: the answers are the record, and losing them silently to a
+    # missing transcript would be the worse of the two outcomes. (A thread
+    # deleted outright never reaches here — `chat_id` is SET NULL on delete, so
+    # its response has no chat_id and is handled the same way.)
+    return [SessionTranscriptOut(chat_id=chat_id, messages=by_chat[chat_id]) for chat_id in sorted(chat_ids)]
 
 
 def _median(values: list[float]) -> float | None:

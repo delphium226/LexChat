@@ -17,6 +17,7 @@ from src.routers.feedback import (
     PREPILOT_START,
     PREPILOT_TIMEFRAME,
     _clean_filters,
+    _session_mode,
     _timeframe_bounds,
 )
 
@@ -845,6 +846,190 @@ async def test_durations_summary_splits_by_continuity(client: AsyncClient, user_
     assert summary["not_one_go_sessions"] == 1
     assert summary["median_one_go"] is not None
     assert summary["median_not_one_go"] is not None
+
+
+# --- Session mode (the CSV export's conversational / deep research column) ---
+
+
+def test_session_mode_prefers_what_the_thread_actually_did():
+    """The snapshot is the toggle at submit time; a stored plan is proof."""
+    assert _session_mode(None, False) is None
+    assert _session_mode({"chat_mode": "conversational"}, False) == "conversational"
+    assert _session_mode({"chat_mode": "research"}, False) == "research"
+    # Observed beats reported: a deep-research thread whose author switched back
+    # to conversational before submitting is still a deep-research session.
+    assert _session_mode({"chat_mode": "conversational"}, True) == "deep_research"
+    assert _session_mode(None, True) == "deep_research"
+    # The snapshot column is free text, so an unrecognised mode reads as "not
+    # known" rather than being exported as-is.
+    assert _session_mode({"chat_mode": "turbo"}, False) is None
+    assert _session_mode({"jurisdiction": "scotland"}, False) is None
+
+
+@pytest.mark.asyncio
+async def test_session_mode_reads_deep_research_off_the_stored_plan(
+    client: AsyncClient, user_token: str, admin_token: str
+):
+    """A thread with a stored research plan exports as deep_research; a plain
+    one falls back to the snapshot. Both in one read, so the per-row join is
+    exercised rather than a single-row shortcut."""
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+
+    deep = (await client.post("/api/chats/", json={"model": "mistral", "title": "Deep"}, headers=user_headers)).json()
+    await client.post(
+        f"/api/chats/{deep['id']}/messages",
+        json={
+            "role": "assistant",
+            "content": "Report",
+            "research_plan": {"scope_note": "n", "steps": [{"id": 1, "title": "t", "detail": "d"}]},
+        },
+        headers=user_headers,
+    )
+    plain = (await client.post("/api/chats/", json={"model": "mistral", "title": "Plain"}, headers=user_headers)).json()
+    await client.post(
+        f"/api/chats/{plain['id']}/messages", json={"role": "assistant", "content": "Answer"}, headers=user_headers
+    )
+
+    for chat_id in (deep["id"], plain["id"]):
+        await client.post(
+            URL,
+            json={"chat_id": chat_id, "confidence": 4, "filters": {"chat_mode": "conversational"}},
+            headers=user_headers,
+        )
+
+    rows = (await client.get(URL, headers={"Authorization": f"Bearer {admin_token}"})).json()
+    by_chat = {r["chat_id"]: r for r in rows}
+    assert by_chat[deep["id"]]["session_mode"] == "deep_research"
+    assert by_chat[plain["id"]]["session_mode"] == "conversational"
+    # The snapshot is still exported unchanged alongside the derived value.
+    assert by_chat[deep["id"]]["filters"]["chat_mode"] == "conversational"
+
+
+@pytest.mark.asyncio
+async def test_session_mode_is_null_for_a_form_with_no_thread(client: AsyncClient, user_token: str, admin_token: str):
+    """No thread and no snapshot is two absent signals, not a mode."""
+    await client.post(URL, json={"confidence": 3}, headers={"Authorization": f"Bearer {user_token}"})
+    rows = (await client.get(URL, headers={"Authorization": f"Bearer {admin_token}"})).json()
+    assert rows[0]["session_mode"] is None
+
+
+# --- Transcripts (the Developer tab's export) -----------------------------
+
+
+@pytest.mark.asyncio
+async def test_transcripts_require_admin(client: AsyncClient, user_token: str):
+    response = await client.get(f"{URL}/transcripts", headers={"Authorization": f"Bearer {user_token}"})
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_transcripts_return_the_thread_in_order(client: AsyncClient, user_token: str, admin_token: str):
+    """Every turn, in the order it was said — the export is a transcript."""
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    chat = (await client.post("/api/chats/", json={"model": "mistral", "title": "CPO"}, headers=user_headers)).json()
+    for role, content in (("user", "First question"), ("assistant", "First answer"), ("user", "Follow-up")):
+        await client.post(
+            f"/api/chats/{chat['id']}/messages", json={"role": role, "content": content}, headers=user_headers
+        )
+    await client.post(URL, json={"chat_id": chat["id"], "confidence": 4}, headers=user_headers)
+
+    body = (await client.get(f"{URL}/transcripts", headers={"Authorization": f"Bearer {admin_token}"})).json()
+    assert len(body) == 1
+    assert body[0]["chat_id"] == chat["id"]
+    assert [(m["role"], m["content"]) for m in body[0]["messages"]] == [
+        ("user", "First question"),
+        ("assistant", "First answer"),
+        ("user", "Follow-up"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_transcripts_cover_the_same_sessions_as_the_feedback_export(
+    client: AsyncClient, user_token: str, admin_token: str
+):
+    """The two files are joined on chat_id, so their populations must match.
+
+    A thread nobody fed back on has no row to attach to and must not appear;
+    the operator's own threads are excluded from both.
+    """
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+    reported = await _thread_with_messages(client, user_headers, "Reported")
+    abandoned = await _thread_with_messages(client, user_headers, "Abandoned")
+    smoke_test = await _thread_with_messages(client, admin_headers, "Smoke test")
+    await client.post(URL, json={"chat_id": reported}, headers=user_headers)
+    await client.post(URL, json={"chat_id": smoke_test}, headers=admin_headers)
+
+    rows = (await client.get(URL, headers=admin_headers)).json()
+    transcripts = (await client.get(f"{URL}/transcripts", headers=admin_headers)).json()
+    assert {t["chat_id"] for t in transcripts} == {r["chat_id"] for r in rows if r["chat_id"]}
+    assert [t["chat_id"] for t in transcripts] == [reported]
+    assert abandoned not in {t["chat_id"] for t in transcripts}
+    assert smoke_test not in {t["chat_id"] for t in transcripts}
+
+
+@pytest.mark.asyncio
+async def test_transcripts_follow_the_timeframe(client: AsyncClient, user_token: str, admin_token: str, db_session):
+    """Scoped by when the form arrived, exactly as /session is."""
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    old_chat = await _thread_with_messages(client, user_headers, "Old")
+    recent = await _thread_with_messages(client, user_headers, "Recent")
+    await client.post(URL, json={"chat_id": old_chat}, headers=user_headers)
+    await client.post(URL, json={"chat_id": recent}, headers=user_headers)
+    await db_session.execute(
+        text("UPDATE session_feedback SET created_at = :when WHERE chat_id = :chat_id"),
+        {"when": datetime.utcnow() - timedelta(days=45), "chat_id": old_chat},
+    )
+    await db_session.commit()
+
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+    within = (await client.get(f"{URL}/transcripts?days=30", headers=admin_headers)).json()
+    assert [t["chat_id"] for t in within] == [recent]
+    everything = (await client.get(f"{URL}/transcripts?days=all", headers=admin_headers)).json()
+    assert {t["chat_id"] for t in everything} == {old_chat, recent}
+
+
+@pytest.mark.asyncio
+async def test_transcript_of_an_empty_thread_is_returned_not_dropped(
+    client: AsyncClient, user_token: str, admin_token: str
+):
+    """A response must never be lost for want of a transcript — the answers are
+    the record, and the export shows the session with blank message columns."""
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    chat = (await client.post("/api/chats/", json={"model": "mistral", "title": "Empty"}, headers=user_headers)).json()
+    await client.post(URL, json={"chat_id": chat["id"], "confidence": 2}, headers=user_headers)
+
+    body = (await client.get(f"{URL}/transcripts", headers={"Authorization": f"Bearer {admin_token}"})).json()
+    assert [t["chat_id"] for t in body] == [chat["id"]]
+    assert body[0]["messages"] == []
+
+
+@pytest.mark.asyncio
+async def test_transcripts_carry_the_per_message_rating(client: AsyncClient, user_token: str, admin_token: str):
+    """The thumbs rating is a different instrument from the session form, and
+    is exported beside it: a well-rated session can hold a bad answer."""
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    chat = (await client.post("/api/chats/", json={"model": "mistral", "title": "Rated"}, headers=user_headers)).json()
+    message = (
+        await client.post(
+            f"/api/chats/{chat['id']}/messages",
+            json={"role": "assistant", "content": "Answer", "model": "gemini", "provider": "openrouter"},
+            headers=user_headers,
+        )
+    ).json()
+    await client.put(
+        f"/api/chats/messages/{message['id']}/rating",
+        json={"rating": 2, "comment": "Wrong Act."},
+        headers=user_headers,
+    )
+    await client.post(URL, json={"chat_id": chat["id"], "confidence": 5}, headers=user_headers)
+
+    body = (await client.get(f"{URL}/transcripts", headers={"Authorization": f"Bearer {admin_token}"})).json()
+    exported = body[0]["messages"][0]
+    assert exported["rating"] == 2
+    assert exported["feedback_comment"] == "Wrong Act."
+    assert exported["model"] == "gemini"
+    assert exported["provider"] == "openrouter"
 
 
 @pytest.mark.asyncio

@@ -65,6 +65,7 @@ import { ProviderConfigPanel } from './admin/ProviderConfigPanel';
 import { DangerZone } from './admin/DangerZone';
 import { BackupStatus } from './admin/BackupStatus';
 import { ScopedRestore } from './admin/ScopedRestore';
+import { TranscriptExport } from './admin/TranscriptExport';
 import { PERF_COLORS, COST_COLORS } from './admin/chartConfig';
 import { WeeklySurveyComplianceChart } from './admin/surveyCharts';
 import { buildDailyRatingsData } from './admin/surveyData';
@@ -1475,6 +1476,10 @@ const AdminPortal = ({ currentUser }) => {
                 Export Users (CSV)
               </button>
             </div>
+
+            {/* Beside the user export, the other thing an operator leaves this
+                tab with as a file. */}
+            <TranscriptExport />
 
             <BackupStatus data={backups} error={backupsError} onRefresh={fetchBackups} />
 

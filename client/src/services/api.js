@@ -400,6 +400,14 @@ export const getSessionDurations = async (days = '30') => {
   return response.data;
 };
 
+// Full transcripts of the threads the session feedback covers. Large on a wide
+// timeframe — fetched on demand by the Developer tab's export button, never as
+// part of a tab's normal load.
+export const getSessionTranscripts = async (days = '30') => {
+  const response = await axios.get(`${API_URL}/feedback/session/transcripts`, { params: { days } });
+  return response.data;
+};
+
 export const getMessageRatings = async (days = '30') => {
   const response = await axios.get(`${API_URL}/feedback/message-ratings`, { params: { days } });
   return response.data;
