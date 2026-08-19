@@ -78,6 +78,11 @@ graphify-out/
 # Secrets / keys (never commit; rotate if ever tracked)
 ollama_auth/
 
+# Playwright MCP browser-session output. Its accessibility snapshots dump the
+# DOM value of every field including password inputs, so a snapshot taken on
+# Admin Portal -> Developer contains the live provider API key in plain text.
+.playwright-mcp/
+
 # Offline Deployment Binaries
 binaries/raw/
 binaries/offline_dependencies.zip
