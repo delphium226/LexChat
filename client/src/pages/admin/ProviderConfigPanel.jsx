@@ -55,7 +55,7 @@ const ModelCombobox = ({ value, onChange, models, loading, error }) => {
         onFocus={() => setOpen(true)}
         placeholder={loading ? 'Loading models…' : open ? 'Search models…' : value || 'Select a model'}
         disabled={loading}
-        className="w-full text-sm border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+        className="w-full font-ui text-sm bg-paper text-ink-900 placeholder:text-ink-400 border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50"
       />
       {loading && (
         <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
@@ -67,7 +67,7 @@ const ModelCombobox = ({ value, onChange, models, loading, error }) => {
           tabIndex={-1}
           className="absolute z-20 mt-1 w-full max-h-64 overflow-auto bg-paper border border-ink-200 rounded-md shadow-lg text-sm"
         >
-          {error && <li className="px-3 py-2 text-red-500 dark:text-red-400">{error}</li>}
+          {error && <li className="px-3 py-2 font-ui text-sm text-danger">{error}</li>}
           {!error && filtered.length === 0 && <li className="px-3 py-2 text-ink-400">No models match</li>}
           {!error &&
             filtered.map(m => (
@@ -288,7 +288,7 @@ export const ProviderConfigPanel = () => {
                 type="text"
                 value={draft.base_url || ''}
                 onChange={e => updateDraft(selectedId, 'base_url', e.target.value)}
-                className="w-full text-sm border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full font-ui text-sm bg-paper text-ink-900 placeholder:text-ink-400 border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </Field>
 
@@ -300,7 +300,7 @@ export const ProviderConfigPanel = () => {
                   value={draft.api_key || ''}
                   onChange={e => updateDraft(selectedId, 'api_key', e.target.value)}
                   placeholder={hasApiKey ? '••••••••' : 'Not set'}
-                  className="flex-1 text-sm border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 font-ui text-sm bg-paper text-ink-900 placeholder:text-ink-400 border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent"
                 />
                 <button
                   type="button"
@@ -326,7 +326,7 @@ export const ProviderConfigPanel = () => {
                 <select
                   value={draft.model || ''}
                   onChange={e => updateDraft(selectedId, 'model', e.target.value)}
-                  className="w-full text-sm border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full font-ui text-sm bg-paper text-ink-900 placeholder:text-ink-400 border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent"
                 >
                   {selectedProvider.model_list.map(m => (
                     <option key={m.name} value={m.name}>
@@ -354,7 +354,7 @@ export const ProviderConfigPanel = () => {
                 <select
                   value={draft.summarisation_model || ''}
                   onChange={e => updateDraft(selectedId, 'summarisation_model', e.target.value)}
-                  className="w-full text-sm border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full font-ui text-sm bg-paper text-ink-900 placeholder:text-ink-400 border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent"
                 >
                   <option value="">— Same as Active Model —</option>
                   {selectedProvider.model_list.map(m => (
@@ -375,7 +375,7 @@ export const ProviderConfigPanel = () => {
                 step="0.05"
                 value={draft.temperature ?? 0.1}
                 onChange={e => updateDraft(selectedId, 'temperature', parseFloat(e.target.value))}
-                className="w-full text-sm border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full font-ui text-sm bg-paper text-ink-900 placeholder:text-ink-400 border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </Field>
 
@@ -388,7 +388,7 @@ export const ProviderConfigPanel = () => {
                 step="1"
                 value={draft.max_concurrent_requests ?? 3}
                 onChange={e => updateDraft(selectedId, 'max_concurrent_requests', parseInt(e.target.value))}
-                className="w-full text-sm border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full font-ui text-sm bg-paper text-ink-900 placeholder:text-ink-400 border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </Field>
 
@@ -401,7 +401,7 @@ export const ProviderConfigPanel = () => {
                 step="1"
                 value={draft.max_summarise_concurrency ?? 1}
                 onChange={e => updateDraft(selectedId, 'max_summarise_concurrency', parseInt(e.target.value))}
-                className="w-full text-sm border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full font-ui text-sm bg-paper text-ink-900 placeholder:text-ink-400 border border-ink-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </Field>
           </div>
