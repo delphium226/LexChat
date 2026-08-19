@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import Spinner from '../../components/ui/Spinner';
+import { Card, SectionHeader } from '../../components/ui/Card';
 import { restorePreflight, runRestore } from '../../services/api';
 import { fmtBytes, fmtWhen } from './BackupStatus';
 
@@ -99,13 +100,13 @@ export const ScopedRestore = ({ data, onRestored, onRefresh }) => {
 
   if (restorable.length === 0) {
     return (
-      <div className="bg-paper p-6 rounded-lg shadow border border-ink-100">
-        <h2 className="text-lg font-bold mb-1 text-ink-900">Restore from backup</h2>
+      <Card>
+        <SectionHeader title="Restore from backup" />
         <p className="font-ui text-sm text-ink-600">
           No verified backup of <code className="font-mono text-xs">{data.database}</code> is
           available to restore from. Runs marked as failed are never offered.
         </p>
-      </div>
+      </Card>
     );
   }
 
@@ -168,14 +169,18 @@ export const ScopedRestore = ({ data, onRestored, onRefresh }) => {
   );
 
   return (
-    <div className="bg-paper p-6 rounded-lg shadow border border-ink-200">
-      <h2 className="text-lg font-bold mb-1 text-ink-900">Restore from backup</h2>
-      <p className="font-ui text-sm text-ink-600 mb-4">
-        Puts back data one of the Danger Zone scopes removed. <strong>Additive</strong> — it only
-        fills in what is missing and never overwrites anything that survived, so it is safe to run
-        twice. The current contents are dumped first, so the restore itself can be undone from the
-        console.
-      </p>
+    <Card>
+      <SectionHeader
+        title="Restore from backup"
+        description={
+          <>
+            Puts back data one of the Danger Zone scopes removed. <strong>Additive</strong> — it
+            only fills in what is missing and never overwrites anything that survived, so it is safe
+            to run twice. The current contents are dumped first, so the restore itself can be undone
+            from the console.
+          </>
+        }
+      />
 
       {/* --- Step 1: which dump --- */}
       <label
@@ -357,7 +362,7 @@ export const ScopedRestore = ({ data, onRestored, onRefresh }) => {
         user accounts, provider settings and feature flags, federated peers, matters, and the
         crawled Scottish Parliament corpus.
       </p>
-    </div>
+    </Card>
   );
 };
 

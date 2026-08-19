@@ -12,6 +12,9 @@ import {
 } from 'recharts';
 import { fmtUsd } from './chartConfig';
 import { purgeLocalCache } from '../../services/api';
+import { Card, SectionHeader } from '../../components/ui/Card';
+import { FeatureToggleList } from './FeatureToggleList';
+import { flagsInGroup } from './featureFlagDefs';
 
 const CACHE_COLORS = {
   memo: '#6366f1', // indigo
@@ -33,19 +36,23 @@ const fmtChars = v => {
   return `${v} chars`;
 };
 
-const FlagBadge = ({ label, on }) => (
-  <span
-    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-ui text-xs font-medium ${
-      on ? 'bg-accent-soft text-accent-ink' : 'bg-ink-100 text-ink-500'
-    }`}
-  >
-    <span className={`inline-block h-1.5 w-1.5 rounded-full ${on ? 'bg-accent' : 'bg-ink-400'}`} />
-    {label}: {on ? 'ON' : 'OFF'}
-  </span>
-);
-
-export const CacheTab = ({ cacheStats, cacheTimeframe, setCacheTimeframe, refetchCacheStats }) => {
-  const { kpi, daily, recentHits, flags } = cacheStats;
+export const CacheTab = ({
+  cacheStats,
+  cacheTimeframe,
+  setCacheTimeframe,
+  refetchCacheStats,
+  features,
+  setFeatures,
+  isSavingFeatures,
+  setIsSavingFeatures,
+  setMessage,
+}) => {
+  const { kpi, daily, recentHits } = cacheStats;
+  // Read flag state from `features`, not from cacheStats.flags: the latter is a
+  // snapshot taken when the stats were fetched, so it would go stale the moment
+  // a toggle below is flipped.
+  const cachingFlags = flagsInGroup('caching');
+  const anyCachingOff = cachingFlags.some(f => !features[f.flag]);
   const localCache = cacheStats.localCache || { entries: 0, distinctDocuments: 0, totalHitsServed: 0, oldestEntry: null };
   const localCacheTop = cacheStats.localCacheTop || [];
   const timeframeLabel = cacheTimeframe === 'all' ? 'All Time' : `Last ${cacheTimeframe} Days`;
@@ -58,14 +65,9 @@ export const CacheTab = ({ cacheStats, cacheTimeframe, setCacheTimeframe, refetc
 
   return (
     <div className="space-y-6">
-      {/* HEADER WITH FLAG STATE + FILTER */}
+      {/* HEADER + FILTER */}
       <div className="flex justify-between items-center bg-paper p-4 rounded-lg shadow">
-        <div className="flex items-center gap-3 flex-wrap">
-          <h2 className="text-lg font-bold">Cache Savings</h2>
-          <FlagBadge label="Prompt caching" on={flags.prompt_caching_enabled} />
-          <FlagBadge label="Tool-call cache" on={flags.tool_memo_enabled} />
-          <FlagBadge label="Local cache" on={flags.local_prompt_cache_enabled} />
-        </div>
+        <h2 className="text-lg font-bold">Cache Savings</h2>
         <div className="flex items-center space-x-2">
           <label className="text-sm text-ink-500 font-medium">Timeframe:</label>
           <select
@@ -82,14 +84,32 @@ export const CacheTab = ({ cacheStats, cacheTimeframe, setCacheTimeframe, refetc
         </div>
       </div>
 
+      {/* CACHING CONTROLS — the switches for the mechanisms this tab measures.
+          They used to live on the Developer tab, which meant reading a number
+          here and changing the thing that produced it somewhere else. */}
+      <Card>
+        <SectionHeader
+          title="Caching controls"
+          description="Switch each caching mechanism on or off for all users. Changes take effect immediately; the figures below are historical and will not change retrospectively."
+        />
+        <FeatureToggleList
+          flags={cachingFlags}
+          features={features}
+          setFeatures={setFeatures}
+          isSaving={isSavingFeatures}
+          setIsSaving={setIsSavingFeatures}
+          onError={setMessage}
+        />
+      </Card>
+
       {!hasData && (
         <div className="bg-paper p-8 rounded-lg shadow text-center text-ink-400 text-sm">
           No cache activity for this period. Cached tool calls come from multi-step Deep Research runs;
           cached prompt tokens are only reported for Anthropic models on OpenRouter; local-cache hits
           appear when the same oversized document is researched with the same question twice.
-          {(!flags.prompt_caching_enabled || !flags.tool_memo_enabled || !flags.local_prompt_cache_enabled) && (
-            <span className="block mt-2 text-amber-600 dark:text-amber-400">
-              Note: one or both caching mechanisms are currently switched off (Developer tab → Feature Flags).
+          {anyCachingOff && (
+            <span className="block mt-2 text-warn">
+              Note: one or more caching mechanisms are currently switched off — see the controls above.
             </span>
           )}
         </div>

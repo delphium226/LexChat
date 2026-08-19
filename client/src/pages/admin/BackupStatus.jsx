@@ -1,5 +1,6 @@
 import React from 'react';
 import Spinner from '../../components/ui/Spinner';
+import { Card, SectionHeader } from '../../components/ui/Card';
 
 /**
  * Read-only backup status (D14 Phase 6, panel 1).
@@ -58,21 +59,21 @@ const Badge = ({ tone, children }) => {
 export const BackupStatus = ({ data, error, onRefresh }) => {
   if (error) {
     return (
-      <div className="bg-paper p-6 rounded-lg shadow border border-ink-100">
-        <h2 className="text-lg font-bold mb-1 text-ink-900">Backup status</h2>
+      <Card>
+        <SectionHeader title="Backup status" />
         <p className="font-ui text-sm text-danger">{error}</p>
-      </div>
+      </Card>
     );
   }
 
   if (!data) {
     return (
-      <div className="bg-paper p-6 rounded-lg shadow border border-ink-100">
-        <h2 className="text-lg font-bold mb-3 text-ink-900">Backup status</h2>
+      <Card>
+        <SectionHeader title="Backup status" />
         <div className="flex items-center gap-2 font-ui text-sm text-ink-500">
           <Spinner size="sm" /> Reading the backup directory…
         </div>
-      </div>
+      </Card>
     );
   }
 
@@ -83,21 +84,25 @@ export const BackupStatus = ({ data, error, onRefresh }) => {
   const stale = hours !== null && hours > 26;
 
   return (
-    <div className="bg-paper p-6 rounded-lg shadow border border-ink-100">
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
-        <h2 className="text-lg font-bold text-ink-900">Backup status</h2>
-        <button
-          onClick={onRefresh}
-          className="bg-paper border border-ink-200 text-ink-900 font-ui text-sm font-medium rounded-md px-3 py-1.5 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          Refresh
-        </button>
-      </div>
-      <p className="font-ui text-sm text-ink-600 mb-4">
-        Nightly <code className="font-mono text-xs">pg_dump</code> runs written to{' '}
-        <code className="font-mono text-xs">{data.backup_root}</code>. Read-only — a full-database
-        restore is a console operation, see the backup runbook.
-      </p>
+    <Card>
+      <SectionHeader
+        title="Backup status"
+        description={
+          <>
+            Nightly <code className="font-mono text-xs">pg_dump</code> runs written to{' '}
+            <code className="font-mono text-xs">{data.backup_root}</code>. Read-only — a
+            full-database restore is a console operation, see the backup runbook.
+          </>
+        }
+        right={
+          <button
+            onClick={onRefresh}
+            className="bg-paper border border-ink-200 text-ink-900 font-ui text-sm font-medium rounded-md px-3 py-1.5 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            Refresh
+          </button>
+        }
+      />
 
       {!data.root_exists && (
         <div className="bg-danger-soft rounded-md px-4 py-3 mb-4">
@@ -237,7 +242,7 @@ export const BackupStatus = ({ data, error, onRefresh }) => {
           </p>
         </>
       )}
-    </div>
+    </Card>
   );
 };
 

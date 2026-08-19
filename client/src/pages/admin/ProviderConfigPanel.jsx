@@ -2,6 +2,7 @@ import React from 'react';
 import { getProviderConfig, saveProviderConfig, setActiveProvider, getOpenRouterModels } from '../../services/api';
 import Spinner from '../../components/ui/Spinner';
 import InfoTip from '../../components/ui/InfoTip';
+import { Card, SectionHeader } from '../../components/ui/Card';
 
 const PROVIDER_DISPLAY = {
   ollama: 'Ollama (Local)',
@@ -200,10 +201,10 @@ export const ProviderConfigPanel = () => {
 
   if (!data) {
     return (
-      <div className="bg-paper p-6 rounded-lg shadow flex items-center gap-3">
+      <Card className="flex items-center gap-3">
         <Spinner size="sm" />
-        <span className="text-sm text-ink-500">Loading provider config…</span>
-      </div>
+        <span className="font-ui text-sm text-ink-500">Loading provider config…</span>
+      </Card>
     );
   }
 
@@ -214,15 +215,18 @@ export const ProviderConfigPanel = () => {
   const hasApiKey = !!draft.api_key;
 
   return (
-    <div className="bg-paper p-6 rounded-lg shadow space-y-6">
+    <Card className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold">LLM Provider</h2>
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300">
-          <span className="w-2 h-2 rounded-full bg-green-500 inline-block"></span>
-          Active: {activeInfo?.name ?? data.active_provider}
-        </span>
-      </div>
+      <SectionHeader
+        title="LLM Provider"
+        className=""
+        right={
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-ui text-xs font-semibold bg-success-soft text-success">
+            <span className="w-2 h-2 rounded-full bg-success inline-block"></span>
+            Active: {activeInfo?.name ?? data.active_provider}
+          </span>
+        }
+      />
 
       {/* Provider picker */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -241,7 +245,7 @@ export const ProviderConfigPanel = () => {
                 <span className="font-semibold text-sm">{provider.name}</span>
                 <div className="flex items-center gap-1.5">
                   {isAct && (
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 font-medium">
+                    <span className="font-ui text-xs px-1.5 py-0.5 rounded bg-success-soft text-success font-medium">
                       Active
                     </span>
                   )}
@@ -435,7 +439,7 @@ export const ProviderConfigPanel = () => {
 
             {statusMsg && (
               <span
-                className={`text-sm font-medium ${statusMsg.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}
+                className={`font-ui text-sm font-medium ${statusMsg.type === 'success' ? 'text-success' : 'text-danger'}`}
               >
                 {statusMsg.text}
               </span>
@@ -443,7 +447,7 @@ export const ProviderConfigPanel = () => {
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 };
 

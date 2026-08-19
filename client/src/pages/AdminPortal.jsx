@@ -27,10 +27,8 @@ import {
   getCacheStats,
   getParliamentCoverage,
   getParliamentRefresh,
-  triggerParliamentRefresh,
   getFeatures,
   getBackups,
-  saveFeatures,
   getPeers,
   createPeer,
   updatePeer,
@@ -61,11 +59,7 @@ import { CostTab } from './admin/CostTab';
 import { CacheTab } from './admin/CacheTab';
 import { SessionFeedbackTab } from './admin/SessionFeedbackTab';
 import { ParliamentCoverageTab } from './admin/ParliamentCoverageTab';
-import { ProviderConfigPanel } from './admin/ProviderConfigPanel';
-import { DangerZone } from './admin/DangerZone';
-import { BackupStatus } from './admin/BackupStatus';
-import { ScopedRestore } from './admin/ScopedRestore';
-import { TranscriptExport } from './admin/TranscriptExport';
+import { DeveloperTab } from './admin/DeveloperTab';
 import { PERF_COLORS, COST_COLORS } from './admin/chartConfig';
 import { WeeklySurveyComplianceChart } from './admin/surveyCharts';
 import { buildDailyRatingsData } from './admin/surveyData';
@@ -141,6 +135,11 @@ const AdminPortal = ({ currentUser }) => {
   const [productFeedbackTimeframe, setProductFeedbackTimeframe] = useState('30');
 
   // --- FEATURE FLAGS STATE ---
+  // These are placeholders only — a toggle POSTs the WHOLE object, so saving
+  // against them would reset every flag the operator did not touch. The
+  // mount-once getFeatures() below replaces them with real server state before
+  // any tab can render a toggle. `drafting_mode_enabled` is here because the
+  // server defines it, not because it is offered in the UI.
   const [features, setFeatures] = useState({
     matters_enabled: true,
     prompt_caching_enabled: true,
@@ -148,6 +147,7 @@ const AdminPortal = ({ currentUser }) => {
     local_prompt_cache_enabled: true,
     research_mode_enabled: true,
     deep_research_mode_enabled: true,
+    drafting_mode_enabled: true,
     suggested_questions_enabled: true,
     weekly_survey_enabled: false,
     session_feedback_enabled: false,
@@ -160,8 +160,6 @@ const AdminPortal = ({ currentUser }) => {
 
   // --- PARLIAMENTARY DATA REFRESH STATE (parliament bot only) ---
   const [parliamentRefresh, setParliamentRefresh] = useState(null);
-  const [refreshSession, setRefreshSession] = useState('all');
-  const [isTriggeringRefresh, setIsTriggeringRefresh] = useState(false);
 
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [showUserExport, setShowUserExport] = useState(false);
@@ -211,9 +209,6 @@ const AdminPortal = ({ currentUser }) => {
     } else if (activeTab === 'session-feedback') {
       fetchSessionFeedback(sessionFeedbackTimeframe);
     } else if (activeTab === 'developer') {
-      getFeatures()
-        .then(setFeatures)
-        .catch(() => {});
       getParliamentRefresh()
         .then(setParliamentRefresh)
         .catch(() => {});
@@ -226,6 +221,18 @@ const AdminPortal = ({ currentUser }) => {
         .finally(() => setIsPeersLoading(false));
     }
   }, [activeTab, timeframe, learningTimeframe, perfTimeframe, effTimeframe, costTimeframe, cacheTimeframe, coverageSession, productFeedbackTimeframe, sessionFeedbackTimeframe]);
+
+  // Feature flags are fetched ONCE ON MOUNT, deliberately not per-tab. Toggles
+  // now render on two tabs (Developer → Configuration and Cache), and a toggle
+  // POSTs the whole flag object — so a tab-scoped fetch would let an operator
+  // who opened the other tab first save against the placeholder defaults and
+  // silently reset every flag they did not touch. Do not move this back into the
+  // activeTab chain.
+  useEffect(() => {
+    getFeatures()
+      .then(setFeatures)
+      .catch(() => {});
+  }, []);
 
   // Backup status + scoped restore share one payload, so it is fetched once here
   // and passed to both panels. Read-only; the restore panel refreshes it after a
@@ -242,8 +249,28 @@ const AdminPortal = ({ currentUser }) => {
     }
   };
 
+  // The export modal lives here rather than in the Developer tab because it is
+  // rendered at the page root alongside the other modals.
+  const handleOpenUserExport = async () => {
+    setShowUserExport(true);
+    setUserExportLoading(true);
+    setUserExportError('');
+    setUserExportCopied(false);
+    try {
+      const res = await exportUsers();
+      setUserExportCsv(res.csv || '');
+      setUserExportCount(res.count || 0);
+    } catch (err) {
+      setUserExportError('Error exporting users: ' + err.message);
+    } finally {
+      setUserExportLoading(false);
+    }
+  };
+
   // Poll the parliamentary-refresh status while a refresh is in flight so the
   // admin sees progress and the final result without reloading the tab.
+  // Keyed on the TOP-LEVEL tab, not the Developer sub-tab: a refresh takes
+  // minutes and the operator will move between sub-tabs while it runs.
   useEffect(() => {
     if (activeTab !== 'developer' || !parliamentRefresh?.status?.running) return;
     const id = setInterval(() => {
@@ -1000,6 +1027,11 @@ const AdminPortal = ({ currentUser }) => {
             cacheTimeframe={cacheTimeframe}
             setCacheTimeframe={setCacheTimeframe}
             refetchCacheStats={() => fetchCacheStats(cacheTimeframe)}
+            features={features}
+            setFeatures={setFeatures}
+            isSavingFeatures={isSavingFeatures}
+            setIsSavingFeatures={setIsSavingFeatures}
+            setMessage={setMessage}
           />
         )}
         {activeTab === 'cache' && !isCacheLoading && !cacheStats && (
@@ -1270,225 +1302,21 @@ const AdminPortal = ({ currentUser }) => {
 
         {/* DEVELOPER TAB */}
         {activeTab === 'developer' && (
-          <div className="space-y-6">
-            {/* LLM Provider Configuration */}
-            <ProviderConfigPanel />
-
-            {/* Feature Flags */}
-            <div className="bg-paper p-6 rounded-lg shadow">
-              <h2 className="text-lg font-bold mb-1">Feature Flags</h2>
-              <p className="text-sm text-ink-500 mb-5">
-                Toggle features on or off for all users. Changes take effect immediately.
-              </p>
-              {[
-                {
-                  flag: 'matters_enabled',
-                  label: 'Matters',
-                  desc: 'Lets users organise threads into named matters with notes.',
-                },
-                {
-                  flag: 'research_mode_enabled',
-                  label: 'Research mode',
-                  desc: 'Offers the "Research" chat mode (deep single-query research via the Worker) in the mode selector.',
-                },
-                {
-                  flag: 'deep_research_mode_enabled',
-                  label: 'Deep Research mode',
-                  desc: 'Offers the "Deep Research" chat mode (editable multi-step research plan) in the mode selector.',
-                },
-                {
-                  flag: 'suggested_questions_enabled',
-                  label: 'Suggested question buttons',
-                  desc: "Renders the assistant's follow-up questions and clarification options as one-click buttons. When off, the assistant writes them into the answer as ordinary text instead.",
-                },
-                {
-                  flag: 'session_feedback_enabled',
-                  label: 'Session feedback form',
-                  desc: 'Shows a "Finished session" button in the chat header that opens the end-of-session feedback form (the pre-pilot questionnaire).',
-                },
-                {
-                  flag: 'weekly_survey_enabled',
-                  label: 'Weekly user survey',
-                  desc: 'Pops up the 6-question productivity survey once a week, and shows a "Take weekly survey" button until it has been completed.',
-                },
-                {
-                  flag: 'prompt_caching_enabled',
-                  label: 'Prompt caching (Anthropic via OpenRouter)',
-                  desc: 'Marks cache breakpoints on Anthropic models so repeated agent-loop context is billed at the cached rate.',
-                },
-                {
-                  flag: 'tool_memo_enabled',
-                  label: 'Tool-call caching (Deep Research)',
-                  desc: 'Serves exact repeat tool calls across Deep Research steps from memory instead of re-fetching and re-summarising.',
-                },
-                {
-                  flag: 'local_prompt_cache_enabled',
-                  label: 'Local prompt caching',
-                  desc: 'Reuses document summaries across users and providers when the same text is researched with the same question — exact match only.',
-                },
-              ].map(({ flag, label, desc }) => (
-                <div key={flag} className="flex items-center justify-between py-3 border-b border-ink-100">
-                  <div>
-                    <p className="text-sm font-medium">{label}</p>
-                    <p className="text-xs text-ink-500">{desc}</p>
-                  </div>
-                  <button
-                    role="switch"
-                    aria-checked={features[flag]}
-                    disabled={isSavingFeatures}
-                    onClick={async () => {
-                      const next = { ...features, [flag]: !features[flag] };
-                      setIsSavingFeatures(true);
-                      try {
-                        const saved = await saveFeatures(next);
-                        setFeatures(saved.features);
-                      } catch {
-                        setMessage('Failed to save feature flags.');
-                      } finally {
-                        setIsSavingFeatures(false);
-                      }
-                    }}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${features[flag] ? 'bg-accent' : 'bg-ink-300'} ${isSavingFeatures ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-paper shadow transition-transform ${features[flag] ? 'translate-x-6' : 'translate-x-1'}`}
-                    />
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* Parliamentary Data Refresh — parliament bot only */}
-            {parliamentRefresh?.supported && (
-              <div className="bg-paper p-6 rounded-lg shadow">
-                <h2 className="text-lg font-bold mb-1">Parliamentary Data Refresh</h2>
-                <p className="text-sm text-ink-500 mb-5">
-                  Re-crawl the Scottish Parliament Official Report for a Holyrood session. Reprocesses every meeting in
-                  the session's date range, ingesting new sittings, late-published transcripts, and newly-added agenda
-                  items. Runs in the background — completed transcripts are skipped, so a re-run is cheap.
-                </p>
-
-                <div className="flex flex-wrap items-end gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-ink-500 mb-1">Session</label>
-                    <select
-                      value={refreshSession}
-                      onChange={e => setRefreshSession(e.target.value)}
-                      disabled={parliamentRefresh?.status?.running}
-                      className="p-2 border rounded-md text-sm focus:ring-2 focus:ring-accent disabled:opacity-50"
-                    >
-                      {(parliamentRefresh.sessions || []).map(s => (
-                        <option key={s.id} value={s.id}>
-                          {s.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <button
-                    disabled={isTriggeringRefresh || parliamentRefresh?.status?.running}
-                    onClick={async () => {
-                      setIsTriggeringRefresh(true);
-                      try {
-                        await triggerParliamentRefresh(refreshSession);
-                        const status = await getParliamentRefresh();
-                        setParliamentRefresh(status);
-                      } catch (err) {
-                        setMessage(err?.response?.data?.detail || 'Failed to start data refresh.');
-                      } finally {
-                        setIsTriggeringRefresh(false);
-                      }
-                    }}
-                    className="bg-brand hover:bg-brand-hover text-white font-ui text-sm font-medium rounded-md px-4 py-2 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {parliamentRefresh?.status?.running ? 'Refresh running…' : 'Refresh now'}
-                  </button>
-                </div>
-
-                {parliamentRefresh?.status && (parliamentRefresh.status.running || parliamentRefresh.status.finished_at) && (
-                  <div className="mt-4 text-sm">
-                    {parliamentRefresh.status.running ? (
-                      <div className="flex items-center gap-2 text-ink-600">
-                        <Spinner />
-                        <span>
-                          Refreshing session {parliamentRefresh.status.session}… this can take several minutes. You can
-                          leave this tab.
-                        </span>
-                      </div>
-                    ) : parliamentRefresh.status.error ? (
-                      <p className="text-red-600 dark:text-red-400">
-                        Last refresh (session {parliamentRefresh.status.session}) failed: {parliamentRefresh.status.error}
-                      </p>
-                    ) : parliamentRefresh.status.result ? (
-                      <p className="text-ink-600">
-                        Last refresh (session {parliamentRefresh.status.session}) stored{' '}
-                        <span className="font-medium">{parliamentRefresh.status.result.committee}</span> committee and{' '}
-                        <span className="font-medium">{parliamentRefresh.status.result.plenary}</span> plenary items
-                        {parliamentRefresh.status.result.captions > 0 && (
-                          <> · {parliamentRefresh.status.result.captions} video-caption meetings cached</>
-                        )}
-                        .
-                      </p>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Activity Log */}
-            <div className="bg-paper p-6 rounded-lg shadow">
-              <h2 className="font-ui text-base font-semibold text-ink-900 mb-1">Activity Log</h2>
-              <p className="font-ui text-sm text-ink-500 mb-4">
-                Live feed of user logins, queries submitted, feedback, surveys, and service errors. Auto-refreshes every
-                10 minutes while open.
-              </p>
-              <button
-                onClick={() => setShowActivityLog(true)}
-                className="bg-brand hover:bg-brand-hover text-white font-ui text-sm font-medium rounded-md px-4 py-2 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
-              >
-                View Activity Log
-              </button>
-            </div>
-
-            {/* User Export */}
-            <div className="bg-paper p-6 rounded-lg shadow">
-              <h2 className="font-ui text-base font-semibold text-ink-900 mb-1">Export Users</h2>
-              <p className="font-ui text-sm text-ink-500 mb-4">
-                Generate a CSV list of all user accounts (name, email, role) to copy and paste.
-              </p>
-              <button
-                onClick={async () => {
-                  setShowUserExport(true);
-                  setUserExportLoading(true);
-                  setUserExportError('');
-                  setUserExportCopied(false);
-                  try {
-                    const res = await exportUsers();
-                    setUserExportCsv(res.csv || '');
-                    setUserExportCount(res.count || 0);
-                  } catch (err) {
-                    setUserExportError('Error exporting users: ' + err.message);
-                  } finally {
-                    setUserExportLoading(false);
-                  }
-                }}
-                className="bg-brand hover:bg-brand-hover text-white font-ui text-sm font-medium rounded-md px-4 py-2 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
-              >
-                Export Users (CSV)
-              </button>
-            </div>
-
-            {/* Beside the user export, the other thing an operator leaves this
-                tab with as a file. */}
-            <TranscriptExport />
-
-            <BackupStatus data={backups} error={backupsError} onRefresh={fetchBackups} />
-
-            <DangerZone onCleared={fetchStats} />
-
-            {/* Deliberately AFTER the Danger Zone: it is the inverse of the
-                operation above it, and reads as its counterpart. */}
-            <ScopedRestore data={backups} onRestored={fetchStats} onRefresh={fetchBackups} />
-          </div>
+          <DeveloperTab
+            features={features}
+            setFeatures={setFeatures}
+            isSavingFeatures={isSavingFeatures}
+            setIsSavingFeatures={setIsSavingFeatures}
+            parliamentRefresh={parliamentRefresh}
+            setParliamentRefresh={setParliamentRefresh}
+            backups={backups}
+            backupsError={backupsError}
+            fetchBackups={fetchBackups}
+            fetchStats={fetchStats}
+            onOpenActivityLog={() => setShowActivityLog(true)}
+            onOpenUserExport={handleOpenUserExport}
+            setMessage={setMessage}
+          />
         )}
         {/* USER FEEDBACK TAB */}
         {activeTab === 'product-feedback' &&

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { getSessionFeedback, getSessionDurations, getSessionTranscripts } from '../../services/api';
+import { Card, SectionHeader } from '../../components/ui/Card';
 import { toCsv, downloadCsv, csvDateStamp } from '../../utils/csv';
 import {
   SESSION_EXPORT_COLUMNS,
@@ -82,14 +83,20 @@ export const TranscriptExport = () => {
   };
 
   return (
-    <div className="bg-paper p-6 rounded-lg shadow">
-      <h2 className="text-lg font-bold mb-1">Session Feedback + Transcripts Export</h2>
-      <p className="text-sm text-ink-500 mb-5">
-        The Session Feedback tab&rsquo;s export with the whole thread attached — every query and every answer of each
-        reported session, one row per message, with that session&rsquo;s feedback answers repeated across its rows.
-        Join it to the plain export on <span className="font-ui text-xs">Session ID</span>. Contains the full text of
-        users&rsquo; queries and the assistant&rsquo;s answers, so treat the file as you would the chat history itself.
-      </p>
+    <Card>
+      <SectionHeader
+        title="Session Feedback + Transcripts Export"
+        description={
+          <>
+            The Session Feedback tab&rsquo;s export with the whole thread attached — every query and
+            every answer of each reported session, one row per message, with that session&rsquo;s
+            feedback answers repeated across its rows. Join it to the plain export on{' '}
+            <span className="font-ui text-xs">Session ID</span>. Contains the full text of
+            users&rsquo; queries and the assistant&rsquo;s answers, so treat the file as you would
+            the chat history itself.
+          </>
+        }
+      />
 
       <div className="flex flex-wrap items-end gap-3">
         <div>
@@ -122,7 +129,7 @@ export const TranscriptExport = () => {
         messages have since been cleared still appear, as a single row with the message columns blank — a response is
         never dropped for want of a transcript.
       </p>
-    </div>
+    </Card>
   );
 };
 

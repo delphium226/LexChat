@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Spinner from '../../components/ui/Spinner';
+import { Card, SectionHeader } from '../../components/ui/Card';
 import { getDataCounts, clearData } from '../../services/api';
 
 const CONFIRM_PHRASE = 'DELETE';
@@ -69,12 +70,18 @@ export const DangerZone = ({ onCleared }) => {
   };
 
   return (
-    <div className="bg-paper p-6 rounded-lg shadow border border-danger">
-      <h2 className="text-lg font-bold mb-1 text-danger">Danger Zone</h2>
-      <p className="mb-4 text-sm text-ink-600">
-        Select what to delete, then type <code className="font-ui font-bold">{CONFIRM_PHRASE}</code> to
-        confirm. These actions permanently delete data and <strong>cannot be undone.</strong>
-      </p>
+    <Card tone="danger">
+      <SectionHeader
+        title="Danger Zone"
+        tone="danger"
+        description={
+          <>
+            Select what to delete, then type{' '}
+            <code className="font-ui font-bold">{CONFIRM_PHRASE}</code> to confirm. These actions
+            permanently delete data and <strong>cannot be undone.</strong>
+          </>
+        }
+      />
 
       {!data ? (
         <div className="flex items-center gap-2 text-sm text-ink-500">
@@ -183,7 +190,7 @@ export const DangerZone = ({ onCleared }) => {
           </p>
         </>
       )}
-    </div>
+    </Card>
   );
 };
 
