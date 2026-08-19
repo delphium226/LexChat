@@ -819,3 +819,95 @@ and the Danger Zone, but not against loss of the VM. Getting them off the box ne
 second volume, a reachable UNC share, or an existing org backup agent sweeping a
 directory — all outside this repo and unknown on the internet-restricted target.
 Until this is answered the regime is not disaster recovery. Blocks nothing in D14.
+
+---
+
+## Legislation search accuracy (investigated 2026-08-17 — PARKED until after the pilot)
+
+### D16. Legislation retrieval accuracy — findings parked pre-pilot
+**Status: PARKED by user decision, 2026-08-17.** We are in a pre-pilot period and the
+baseline retrieval performance must not move before the pilot runs — otherwise pilot
+feedback cannot be attributed to the bot's behaviour rather than to a mid-flight change.
+Nothing below is to be implemented until the pilot is complete. Recorded now so the
+analysis is not repeated.
+
+Investigation covered how LEX searches are actually issued (`agent/tools/executor.py`,
+`agent/tools/lex.py`), how the query is determined (Manager brief → worker phase prompts
+→ code-side filter enforcement → Phase-2 nudge), and how many term variations are tried
+(no `search_budget` in legislation modes — only `max_turns=20`; prompt-level "minimum
+searches needed", hybrid mode caps at 1 retry per track, conversational at one search).
+
+**Three defects — add information only, but still deferred to keep the baseline frozen:**
+1. **Impossible year window, silently.** `executor.py:149-156` intersects the user's year
+   filter with the model's year args via `max(froms)`/`min(tos)`. User filter 2000–2010 +
+   a model pin at 2019 (which the prompt tells it to set) yields `year_from=2019,
+   year_to=2010` → an empty window, zero results, no error, no explanation. Fix: detect
+   `final_year_from > final_year_to` and drop the model's pin (the user filter is the hard
+   constraint) or return an explanatory note.
+2. **The API's result count is discarded.** `_slim_search_results` preserves the response
+   `total`, then `executor.py:227` overwrites it with `len(results)` post-filter. The model
+   cannot tell "5 matches exist" from "500 matched, you see 5, 8 were dropped by your
+   jurisdiction filter" — which is the signal it needs to decide whether to reformulate.
+   Return `returned` / `total_matched` / `removed_by_filters` separately.
+3. **`search_legislation` is the only search tool with no zero-result nudge.** Case law
+   has one (`agent_shared.py:565`), Hansard has one (`:720`), but the legislation branch
+   at `:731` only fires `if id_pairs:`. Given the prompt's aggressive year pinning, a
+   too-tight year window is the most likely cause — which is exactly the diagnosis a
+   nudge could hand the model.
+
+**Three cheap enhancements (need measurement — see the A3 caveat below):**
+4. **Restore a truncated `description`.** Stripped when payloads were 20 results ×
+   10–16K; results are now capped at 5, so 5 × ~200 chars is negligible. Act *selection*
+   currently runs on `title`+`year`+`status`+`extent` alone — description is what
+   distinguishes the principal Act from a similarly-titled amending instrument.
+5. **Always over-fetch then filter.** `limit` is 20 only when post-filters are active,
+   else 5 (`executor.py:164`) — so on an unfiltered query an Act ranking 6th is invisible
+   and unrecoverable. Fetch 20 always, filter, keep 5 (`include_text: False`, so cheap).
+6. **Verify the returned title against the named Act.** When the brief names an exact
+   short title, the residual risk is not finding nothing but confidently retrieving from
+   the *wrong* instrument. A normalised containment check + nudge catches the C/D-grade
+   failure class deterministically. Code enforcement over prompt obedience, as with the
+   existing nudges.
+7. **Use the ranked sections array — after verifying it exists.** The
+   `_slim_search_results` docstring claims the raw search response carries "a ranked
+   sections array that the model never uses". If real, that is the API stating which
+   sections matched, and Phase 2 currently discards it and re-guesses section topics in
+   free text. Cheapest precision win available — but confirm the live shape first: an
+   unverified assumption about a response field is exactly what made A2 dead on live data.
+
+**The structural change (biggest lever, most measurement needed):** the prompt mandates
+exactly ONE `search_legislation_sections` call per `legislation_id` with all aspects
+combined into one query (`prompts.py:86`). That was a cost fix and it worked, but a
+4-aspect query against a relevance-ranked endpoint with `limit: 10` asks one ranking to
+serve four information needs — the same dilution the parliament prompt explicitly warns
+against ("distinctive nouns first; no procedural boilerplate that dilutes `ts_rank`").
+The economics that justified it have since changed: the tool memo, the local prompt cache
+and `WORKER_CONTEXT_BUDGET_CHARS` now absorb the cost it was defending against. Candidate:
+allow 2–3 *aspect-specific* section calls per Act, enforced by a per-Act budget in code
+(the `search_budget` pattern, unused in legislation modes), and/or raise the section
+`limit` above 10. Trades measured efficiency for hypothesised accuracy — do not ship
+without the harness.
+
+**Measurement prerequisite — A3 is not enough on its own.** The golden set is
+`docs/evals/GOLDEN_QUESTIONS_LEGISLATION.md`: **31 questions (L01–L31)**, not the ~60 the
+size suggests. Provenance checked 2026-08-17: authored by Claude in `fb88b41` (2026-07-15)
+*while diagnosing* the completeness regression, self-declared 26 High / 5 Medium
+confidence, several `[VERIFY]` markers, and **never verified by a lawyer** despite the
+header requiring it. Consequences for using it as an accuracy baseline:
+- At 31 items, one question flipping grade moves the headline %A/B by ~3 points, so small
+  differences between prompt variants are not separable.
+- `trap` (correct answer is "no such source exists") has only **2** entries — that is the
+  category testing hallucination resistance, i.e. the Grade D class reported separately
+  because it matters most to government lawyers. Two data points cannot support a
+  published %D.
+- **L31 is a regression test, not a probe.** It is the XL Bully question that drove
+  `fb88b41` and the only entry with an `Automatic fail conditions` block, listing the four
+  failures that commit (and later A2) were built to fix. Grading well on it is partly
+  tautological.
+So the set is a usable **regression harness** today (it would have caught the A2 dead
+nudge) but not an **accuracy baseline** — a disagreement between bot and answer key cannot
+be attributed to either side. Before quoting accuracy numbers: get a lawyer through the
+`[VERIFY]` and Medium-confidence entries, and expand `trap` and `caselaw` (3 entries).
+
+**Order when this is unparked (post-pilot):** defects 1–3 (self-contained, information-only)
+→ A3 harness **plus** answer-key verification → 4–7 as an A/B → the Phase 2 experiment.
