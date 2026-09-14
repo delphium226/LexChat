@@ -439,7 +439,6 @@ async def replay_session(
                                 status="error",
                                 error=f"planner: {drafted['_http_error']}")
                 turns.append(tr)
-                messages.append({"role": "assistant", "content": ""})
                 continue
             if drafted.get("needs_clarification"):
                 # The lawyer answered this live; the runner cannot. Record it,
@@ -466,7 +465,6 @@ async def replay_session(
                                 status="error",
                                 error=f"planner returned no plan: {str(drafted)[:300]}")
                 turns.append(tr)
-                messages.append({"role": "assistant", "content": ""})
                 continue
 
         tr = await client.chat(messages, s, mode, plan)
@@ -481,7 +479,15 @@ async def replay_session(
             "answer_chars": t.recorded_answer_chars,
         }
         turns.append(tr)
-        messages.append({"role": "assistant", "content": tr.answer})
+        # Only a real answer joins the history. A turn that produced nothing
+        # saved no assistant message in the pre-pilot either — that is why the
+        # export carries 15 user turns with the next user turn following
+        # directly (bucket B13), and reproducing that shape matters because it
+        # is the input the next turn actually ran against. Appending an empty
+        # assistant message would also hand the provider a content-less turn
+        # on every subsequent request in the session.
+        if tr.answer:
+            messages.append({"role": "assistant", "content": tr.answer})
 
         print(
             f"    turn {i}/{len(s.turns)} [{mode}]: {tr.status}"

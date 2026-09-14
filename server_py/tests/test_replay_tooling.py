@@ -117,12 +117,14 @@ def test_filter_loss_counts_both_sides_of_the_filters():
     fl = sig.filter_losses[0]
     assert fl.api_total == 97 and fl.api_returned == 20
     assert fl.tool_returned == 0 and fl.tool_total == 0
-    assert fl.discarded == 20
     assert fl.wiped_out is True
+    assert fl.filters_bit is True
+    # Only the shortfall below the cap is attributable to filtering.
+    assert fl.rows_lost_min == rr.RESULT_CAP
     # B5's second half: the API's real match count did not reach the model.
     assert fl.total_misreported is True
     assert sig.searches_wiped_out == 1
-    assert sig.results_discarded == 20
+    assert sig.rows_lost_min == rr.RESULT_CAP
 
 
 def test_filter_loss_clean_search_is_not_flagged():
@@ -133,8 +135,44 @@ def test_filter_loss_clean_search_is_not_flagged():
     )])
     sig = rr.analyse_run(doc)
     assert sig.searches_wiped_out == 0
-    assert sig.results_discarded == 0
+    assert sig.searches_filters_bit == 0
+    assert sig.rows_lost_min == 0
     assert sig.filter_losses[0].total_misreported is False
+
+
+def test_a_cap_bound_search_is_not_evidence_either_way():
+    """20 in, exactly 5 out is what the `[:5]` cap does with no filtering at
+    all. Counting it as filter loss is the mistake that overstates B2."""
+    doc = _run(tools=[_tool(
+        "search_legislation",
+        final_result=json.dumps({"results": [{"id": i} for i in range(5)], "total": 5}),
+        api_response={"results": [{"id": i} for i in range(20)], "total": 189},
+    )])
+    sig = rr.analyse_run(doc)
+    assert sig.searches_filters_bit == 0
+    assert sig.rows_lost_min == 0
+    # ...but the overwritten total is still P1.3, and is independent of filters.
+    assert sig.searches_total_misreported == 1
+
+
+def test_the_phase_2_nudge_does_not_break_the_count():
+    """`run_worker_tool` appends the nudge after the JSON. A plain json.loads
+    raises there, which would silently mark every PRODUCTIVE search
+    unmeasurable and leave the metric describing only empty ones."""
+    payload = json.dumps({"results": [{"id": i} for i in range(3)], "total": 3})
+    nudge = (
+        '\n\n[NEXT STEP: Call search_legislation_sections for:\n'
+        '  - legislation_id: "asp/2014/18"]'
+    )
+    doc = _run(tools=[_tool(
+        "search_legislation",
+        final_result=payload + nudge,
+        api_response={"results": [{"id": i} for i in range(20)], "total": 97},
+    )])
+    sig = rr.analyse_run(doc)
+    assert sig.filter_losses[0].tool_returned == 3, "nudge must not defeat the parse"
+    assert sig.searches_filters_bit == 1
+    assert sig.rows_lost_min == 2
 
 
 def test_filter_loss_partial_filtering_is_not_wiped_out():
@@ -146,7 +184,8 @@ def test_filter_loss_partial_filtering_is_not_wiped_out():
     )])
     sig = rr.analyse_run(doc)
     assert sig.filter_losses[0].wiped_out is False
-    assert sig.results_discarded == 18
+    assert sig.filter_losses[0].filters_bit is True
+    assert sig.rows_lost_min == 3  # 5 (cap) - 2 seen
     assert sig.searches_total_misreported == 1
 
 
@@ -158,7 +197,8 @@ def test_filter_loss_zero_from_the_api_is_not_attributed_to_filters():
     )])
     sig = rr.analyse_run(doc)
     assert sig.searches_wiped_out == 0, "no results in means nothing was discarded"
-    assert sig.results_discarded == 0
+    assert sig.searches_filters_bit == 0
+    assert sig.rows_lost_min == 0
 
 
 # --- P1.4: provision links must point at the provision -----------------------

@@ -96,12 +96,31 @@ _LABEL_TO_PATH = {
 
 
 def _json_or_none(s: Any) -> Any:
+    """Parse the JSON object a tool result *starts* with.
+
+    `json.loads` is not enough: `run_worker_tool` appends the Phase-2 nudge
+    ("[NEXT STEP: Call search_legislation_sections ... legislation_id: ...]")
+    after the JSON, so a plain parse raises "Extra data" on exactly the calls
+    that returned results — the successful ones. Silently reading those as
+    unparseable would count every productive search as un-measurable and leave
+    the filter-loss figure describing only the searches that came back empty.
+    `raw_decode` stops at the end of the first object and ignores the tail.
+    """
     if not isinstance(s, str):
         return s if isinstance(s, (dict, list)) else None
     try:
-        return json.loads(s)
+        obj, _ = json.JSONDecoder().raw_decode(s.lstrip())
+        return obj
     except Exception:
         return None
+
+
+# `executor.py` truncates every legislation search to this many results AFTER
+# the post-filters run, then overwrites `total` with the truncated length. The
+# cap is deliberate slimming; the overwrite is P1.3's defect. Any "results lost"
+# figure that ignores the cap attributes ordinary truncation to the filters and
+# overstates B2 several-fold — so every measure below is defined against it.
+RESULT_CAP = 5
 
 
 @dataclass
@@ -115,19 +134,54 @@ class FilterLoss:
     tool_total: int | None
 
     @property
-    def discarded(self) -> int:
-        if self.api_returned is None or self.tool_returned is None:
-            return 0
-        return max(0, self.api_returned - self.tool_returned)
+    def measurable(self) -> bool:
+        return self.api_returned is not None and self.tool_returned is not None
 
     @property
     def wiped_out(self) -> bool:
-        """The API found results and the model was shown none."""
+        """The API found results and the model was shown none.
+
+        Unambiguous: the cap cannot produce an empty list from a non-empty one,
+        so zero out of non-zero is the filters removing everything.
+        """
         return bool(self.api_returned) and self.tool_returned == 0
 
     @property
+    def filters_bit(self) -> bool:
+        """The filters demonstrably removed results.
+
+        True when the API returned at least `RESULT_CAP` rows but the model saw
+        fewer — with no filtering the cap alone would have delivered exactly
+        `RESULT_CAP`. A call that returns exactly `RESULT_CAP` is cap-bound and
+        says nothing either way, which is why it is not counted.
+        """
+        return (
+            self.measurable
+            and self.api_returned >= RESULT_CAP
+            and self.tool_returned < RESULT_CAP
+        )
+
+    @property
+    def rows_lost_min(self) -> int:
+        """Lower bound on rows the filters removed, net of the cap.
+
+        The API is asked for 20 and the model may see at most `RESULT_CAP`, so
+        only the shortfall below the cap is attributable to filtering. This
+        understates the true loss (rows beyond the cap that the filters also
+        removed are invisible) and is reported as a floor, never a total.
+        """
+        if not self.measurable:
+            return 0
+        return max(0, min(self.api_returned, RESULT_CAP) - self.tool_returned)
+
+    @property
     def total_misreported(self) -> bool:
-        """The API's real match count did not survive to the model."""
+        """The API's real match count did not survive to the model.
+
+        P1.3: `slimmed["total"] = len(results)` after truncation, so the model
+        is told "5 matched" when the API said 189 — it cannot distinguish a
+        genuinely narrow result set from a wide one it was shown the top of.
+        """
         return (
             self.api_total is not None
             and self.tool_total is not None
@@ -167,8 +221,9 @@ class RunSignals:
     filter_losses: list = field(default_factory=list)
     searches: int = 0
     searches_wiped_out: int = 0
+    searches_filters_bit: int = 0
     searches_total_misreported: int = 0
-    results_discarded: int = 0
+    rows_lost_min: int = 0
 
     bare_negatives: int = 0  # B5: a not-found with no explanation
     explained_negatives: int = 0
@@ -197,7 +252,8 @@ class RunSignals:
             "halt_ans": self.halt_language_in_answer,
             "searches": self.searches,
             "wiped": self.searches_wiped_out,
-            "discarded": self.results_discarded,
+            "bit": self.searches_filters_bit,
+            "lost>=": self.rows_lost_min,
             "bare_neg": self.bare_negatives,
             "inforce": self.in_force_claims,
             "bad_links": len(self.bad_links),
@@ -331,9 +387,11 @@ def analyse_run(doc: dict) -> RunSignals:
                     tool_total=out.get("total") if isinstance(out, dict) else None,
                 )
                 sig.filter_losses.append(fl)
-                sig.results_discarded += fl.discarded
+                sig.rows_lost_min += fl.rows_lost_min
                 if fl.wiped_out:
                     sig.searches_wiped_out += 1
+                if fl.filters_bit:
+                    sig.searches_filters_bit += 1
                 if fl.total_misreported:
                     sig.searches_total_misreported += 1
 
@@ -362,9 +420,9 @@ def cmd_summary(args) -> int:
 
     hdr = [
         "session", "rep", "verdict", "bucket", "cost", "mins", "turns", "empty",
-        "billed_empty", "halt_src", "halt_ans", "searches", "wiped", "discarded",
-        "bare_neg", "inforce", "bad_links", "links", "src_unused", "src_kept",
-        "src_fallbk",
+        "billed_empty", "halt_src", "halt_ans", "searches", "wiped",
+        "bit", "lost>=", "bare_neg", "inforce", "bad_links", "links",
+        "src_unused", "src_kept", "src_fallbk",
     ]
     widths = {h: max(len(h), 6) for h in hdr}
     rows = [s.as_row() for s in sigs]
@@ -383,10 +441,15 @@ def cmd_summary(args) -> int:
     print(f"  runs with halt text shown   {sum(1 for s in sigs if s.halt_language_in_answer)}   <- B1 / P2.1")
     tot_s = sum(s.searches for s in sigs)
     tot_w = sum(s.searches_wiped_out for s in sigs)
-    print(f"  search_legislation calls    {tot_s}")
-    print(f"    returning 0 to the model  {tot_w}"
+    tot_b = sum(s.searches_filters_bit for s in sigs)
+    print(f"  search_legislation calls    {tot_s}   (each capped to "
+          f"{RESULT_CAP} results AFTER filtering, by design)")
+    print(f"    filters removed EVERYTHING {tot_w}"
           f"{f'  ({100*tot_w/tot_s:.0f}%)' if tot_s else ''}   <- B2 / P1.1")
-    print(f"    results discarded         {sum(s.results_discarded for s in sigs)}")
+    print(f"    filters demonstrably bit  {tot_b}"
+          f"{f'  ({100*tot_b/tot_s:.0f}%)' if tot_s else ''}")
+    print(f"    rows lost to filters      >={sum(s.rows_lost_min for s in sigs)}"
+          f"  (floor: loss beyond the cap is unobservable)")
     print(f"    real total not passed on  {sum(s.searches_total_misreported for s in sigs)}   <- B5 / P1.3")
     tl = sum(s.total_links for s in sigs)
     bl = sum(len(s.bad_links) for s in sigs)
@@ -424,7 +487,8 @@ def cmd_session(args) -> int:
         if s.filter_losses:
             print("\nsearch_legislation, both sides of the filters:")
             for fl in s.filter_losses:
-                flag = "  <-- ALL DISCARDED" if fl.wiped_out else ""
+                flag = ("  <-- FILTERS REMOVED ALL" if fl.wiped_out
+                        else "  <-- filters bit" if fl.filters_bit else "")
                 print(f"  api total={fl.api_total} returned={fl.api_returned}"
                       f"  ->  model saw results={fl.tool_returned} total={fl.tool_total}"
                       f"{flag}   q={fl.query!r}")
@@ -464,8 +528,8 @@ def cmd_baseline(args) -> int:
         if any(r.searches_wiped_out for r in runs):
             w = sum(r.searches_wiped_out for r in runs)
             t = sum(r.searches for r in runs)
-            d_ = sum(r.results_discarded for r in runs)
-            notes.append(f"{w}/{t} searches wiped by filters ({d_} results discarded)")
+            d_ = sum(r.rows_lost_min for r in runs)
+            notes.append(f"{w}/{t} searches emptied by filters (>={d_} rows lost)")
         if any(r.turns_billed_but_empty for r in runs):
             notes.append(f"billed-but-empty turns: {sum(r.turns_billed_but_empty for r in runs)}")
         if any(r.turns_empty_answer for r in runs):

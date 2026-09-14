@@ -94,3 +94,111 @@ the dev machine is **wrong** — there is one, in the local DB (`app_settings` �
 `emit_tool_details=True`. Do **not** start Wave 1 before P0.3 has recorded a baseline; three
 weeks of commits landed between the pre-pilot and this branch, and some failures will not
 reproduce.
+
+## Session 2 — 2026-09-14 — P0.1, P0.2, P0.3 (Wave 0)
+
+**Done:**
+- **The P0.1 gate passed: `google/gemini-3.1-pro-preview` is still served.** In the OpenRouter
+  catalogue and answering a live tool-calling probe as its own id. No substitution needed, so the
+  baseline sits on the model all 176 pre-pilot assistant messages ran on. `replay.py check` re-runs
+  the probe.
+- **P0.1** — built `server_py/tools/replay.py` (+ `replay_set.py`, `replay_report.py`) and
+  `tests/test_replay_tooling.py`. Acceptance passed: 6404 replayed to a 6,653-char answer
+  (pre-pilot 6,757) over 4 delegations with 8 `search_legislation` calls, on the pinned model.
+- **P0.2** — froze the 41-session replay set. Acceptance passed, plus three independent
+  cross-checks against the frozen analysis that all matched exactly: 10 of 23 Deep Research
+  sessions mentioning the step cap, 15 unanswered turns across 11 sessions, and zero session-mode
+  reconciliation conflicts.
+- **P0.3** — ran the baseline and wrote `BASELINE.md`. **29 of 41 reproduce, 9 do not, 3
+  inconclusive.** $37.62 and 6.0 h for the n=1 pass over 155 turns on `bc8e7a4`. Targeted n=3 on
+  the 12 unsettled sessions launched after it.
+- Amended `FIX_PLAN.md` (P0.1–P0.4, P1.1, P1.3, P1.4, P2.1, P2.6, P4.2, the whole *Replay
+  configuration* table) and the `_matches_jurisdiction` paragraph in the root `CLAUDE.md`.
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **The model pins in the DATABASE, not the request body.** `system.py:129` resolves
+  `provider_config.get("model") or body.model`, so the `app_settings` row always wins and
+  `body.model` never fires. Sending the model in the body and assuming it took would have measured
+  `moonshotai/kimi-k3` for the entire baseline, silently. Every run file now asserts
+  `audit["model"]` against the pin.
+
+- **Chat mode is a property of the TURN, not the session, and the export does not say which.**
+  Deep Research is one-shot (`useChat.js::onDeepResearchComplete` reverts to conversational), so a
+  `deep_research` session ran one DR turn among several conversational ones — and **not the
+  first**: 6409 turn 6 of 11, 6406 turns 2 **and** 3 of 12, 6341 turn 7 of 8. Only **20 of 155**
+  turns are Deep Research. Replaying whole sessions in one mode would have measured a system nobody
+  used, at several times the cost. The stored signal (`messages.research_plan`) is not in the export
+  and the pre-pilot DB is not on this machine, so it is reconstructed from the `**Key findings`
+  block only `DEEP_RESEARCH_SYNTHESIS_PROMPT` asks for — 23/23 known-DR sessions, 0/24 known-non-DR,
+  0/15 blank-mode. **New row P0.4** replaces the inference with the stored flag, because reading it
+  off the answer is structurally blind to a DR turn that produced no answer, which is B13 itself.
+
+- **B2 does not fail closed, it fails *selectively*, and that is why nobody reported it.**
+  `_matches_jurisdiction` opens `if not extent: return True`. Of the **1,009 rows that survived** a
+  jurisdiction filter across the baseline, **every one had `extent: []`**; not one carrying a real
+  extent value survived. A Scotland filter drops `['Scotland']` and keeps the unknowns — 6354
+  returned the *Building Materials and Housing Act 1945* under `jurisdiction=scotland`. So the
+  filter hands back a plausible non-empty result set that is simply wrong, rather than an obviously
+  empty one. **P1.1 has two jobs, not one:** map the vocabulary *and* decide what `extent: []`
+  means. This corrects the headline in both `FIX_PLAN` and `CLAUDE.md`.
+
+- **The halt is not confined to Deep Research.** `chat_loop` returns it as the worker's assistant
+  content, so it escapes through a plain Manager delegation too — confirmed in 6340 (standard
+  `research` mode) and, most starkly, **6383 turn 1, a conversational turn whose entire answer to
+  the lawyer was the raw string `[Research halted: exceeded 20 tool-call steps]`.** A fix at the
+  `run_deep_research` site alone leaves that path open. P2.1 amended.
+
+- **A halt answer can look like honest failure and not be one.** 6340 told the lawyer the agent
+  "exceeded its operational limits (timed out)" — it hit a step cap — and invented a cause: *"a
+  broad enabling power has generated a very large volume of statutory instruments over several
+  decades"*, for an Act that is a **404 in LEX**. Invariant 1 requires the disclosure to be *true*,
+  not merely non-legal.
+
+- **New row P2.6** — the A4 reformat retry fires on halted workers, spending an LLM call to turn
+  "no findings" into a well-formed empty report (*"Jurisdiction & Status: Not applicable"*), and
+  scoring it as a prompt-adherence failure in the Efficiency tab.
+
+- **Three of the nine non-reproductions are not improvements**, and reading the count alone would
+  get this wrong: 6357 swapped a halt for a filter failure, 6381 now discloses honestly but
+  retrieves *worse* (the cause is B2), and 6340 swapped fabrication for a truncated non-answer.
+
+- **6406, P2.1's named acceptance case, no longer halts** — 0 of 4 steps against 4 of 4, $0.72
+  against $2.36. But 6382 and 6384 (the row's other two) still halt and still leak the text, so the
+  row keeps two of its three cases. The margin is thin: median tool calls per delegation is 5, but
+  9% of delegations reach 18+ against a cap of 20, and the max was 41.
+
+- **B13 reproduced and eliminated its own first suspect.** 4 billed-but-empty turns (6370 ×2,
+  6407 ×2), all `status: ok`, `audit.error: null`, after real research — 6370 turn 2 made 5 tool
+  calls and produced a 976-char Worker report citing SSI 2017/114. **None emitted a single `token`
+  event**, so there was never a body for the `<suggestions>` strip to consume. P4.2's acceptance
+  also cannot name a turn: the plan cites 6370 #8, the replay blanked at turns 2 and 3.
+
+- **Two measurement traps in my own instrument, both caught by a number disagreeing with what the
+  code said should happen.** (1) `json.loads` on `final_result` raises "Extra data" because the
+  Phase-2 nudge is appended after the JSON — which silently marked every *productive* search
+  unmeasurable and left the metric describing only the empty ones. (2) `executor.py` caps searches
+  to `results[:5]` **after** filtering, so a naive "rows discarded" figure counts ordinary
+  truncation as filter loss; it overstated B2 several-fold in this file's first draft. Both are now
+  pinned by tests (`RESULT_CAP`, `test_the_phase_2_nudge_does_not_break_the_count`).
+
+- **Cost: FIX_PLAN's ~$50 was ~2.3× light.** Replay costs about 2.3× the pre-pilot's recorded
+  spend, because that figure covers only the saved assistant message and not the Deep Research
+  planner call (which saves no message). A blanket n=3/n=1 pass prices at ~$140.
+
+**Decisions taken this session (user):**
+- **Repetitions: n=1 over all 41, then reps 2–3 only where the first pass was ambiguous or
+  disagreed with the classification.** Replaces the blanket n=3-on-FAIL policy.
+- **Summarisation model left at `google/gemini-3-flash-preview` and recorded, not pinned** — the
+  pre-pilot's value is unrecoverable, and inventing one would be a silent confound either way.
+
+**State of the branch:** `fix/prepilot-defects`, Wave 0 complete bar the in-flight n=3 reps.
+**No product code has been changed** — everything so far is measurement. Tests: 455 existing + 30
+new, all passing.
+
+**Housekeeping owed:** the dev box is still **pinned** to `google/gemini-3.1-pro-preview` with
+`local_prompt_cache_enabled = false`. Run `python -m tools.replay restore` (from `server_py/`) once
+the n=3 reps finish, or unrelated work will silently run on the replay configuration.
+
+**Next action:** when the n=3 reps land, add their column to `BASELINE.md`, restore the dev box,
+then start **P1.1** — and answer the `extent: []` question, not just the vocabulary one.
