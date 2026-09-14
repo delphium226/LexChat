@@ -202,3 +202,74 @@ the n=3 reps finish, or unrelated work will silently run on the replay configura
 
 **Next action:** when the n=3 reps land, add their column to `BASELINE.md`, restore the dev box,
 then start **P1.1** — and answer the `extent: []` question, not just the vocabulary one.
+
+## Session 3 — 2026-09-14 — P0.3 completed, Wave 1 (P1.1–P1.4)
+
+**Done:**
+- **Finished the baseline.** Targeted n=3 on the 12 unsettled sessions: 24 runs, $23.66.
+  **Total baseline spend $61.28.** `BASELINE.md` now carries the final verdicts.
+- **Wave 1 complete: P1.1, P1.2, P1.3, P1.4 all fixed and accepted.** 528 tests passing
+  (71 new across three files). Frontend rebuilt, `client/dist/` force-added.
+- Restored the dev box (`moonshotai/kimi-k3`, local prompt cache back ON).
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **The repetitions overturned three verdicts, and that is the headline result of P0.3.** The
+  n=1 pass said 29 reproduce / 9 do not / 3 inconclusive. n=3 on the twelve unsettled sessions
+  moved it to **34 / 7 / 0**, by flipping three `does not reproduce` calls:
+  **6357** (no halt at n=1; halts in 2 of 3 reps), **6389** (1 of 3), **6396** (n=1 said it
+  answered the question; rep1 halted **four** workers and rep3 halted two — rep2 was the clean
+  draw a single pass would have banked). Invariant 4 is not a formality: a third of the negative
+  verdicts in this corpus were wrong on one sample. Any later row claiming a fix works must clear
+  the same bar.
+- **"Which failure" is stochastic even where "fails" is not.** 6340 produced a different defect on
+  each of three runs: a truncated non-answer, a bare negative, then a halted worker. A row whose
+  acceptance test asserts on one symptom can pass while the session is still broken.
+- **P1.2 was much more than a dead toggle, and this is the most consequential finding of the
+  session.** `current_only` did not merely fail to filter — it made an affirmative claim in two
+  places. The UI pill read *"In force as at <today>"*, and `build_filter_constraint_block`
+  injected *"Status: In-force legislation only. Do not cite or rely on repealed or
+  not-yet-in-force legislation"* into the system prompt. **42 of 62 pre-pilot sessions ran with
+  that on, so this is the proximate cause of bucket B4** — in 6341 the model said every provision
+  cited was in force because the system had told it the results were current. Removing it should
+  make P2.5 substantially easier; re-measure the in-force claim rate at P1.5 before writing P2.5,
+  because part of that bucket may already be gone.
+- **P1.4's cause was our own prompt, not the model.** `WORKER_SYSTEM_PROMPT` said *"IF you are
+  citing a specific section, you MUST manually append `/section/{number}` to the Base URI"* —
+  while the LEX section endpoint was already returning the exact provision URL in `uri`, buried in
+  a raw passthrough alongside `created_at` and five null `provenance_*` fields. The model was
+  obeying an instruction to guess. Worth generalising: **before treating a defect as model
+  behaviour, check whether a prompt instructs it.** Two of Wave 1's four rows were this.
+- **`['']` had to be treated as unknown-and-include, and the data forced it.** Matching territory
+  names alone (the obvious fix) would have dropped **40% of Scottish material**, because 2,009
+  Scottish SIs carry `['']`. The obvious fix was a new trap. The id-prefix tie-break
+  (`nisr/`, `wsi/`) is what makes admitting unknowns safe — it removes the last 1,017 wrong
+  admissions at zero cost in false negatives.
+- **A third measurement trap in my own instrument**, after the two in Session 2: `results[:5]` in
+  `executor.py` truncates *after* filtering, so a naive "rows discarded" count attributes ordinary
+  truncation to the filters. It overstated B2 several-fold in BASELINE.md's first draft. Now named
+  `_MAX_SEARCH_RESULTS` in the product and `RESULT_CAP` in the harness, with tests on both sides.
+  The pattern across all three: **a number that disagrees with what the code says should happen is
+  usually the instrument, not the finding.**
+
+**Decisions taken this session (user):**
+- **Jurisdiction filter means "applies in", not "made for"** — Scottish-extent + UK-wide +
+  unknown-extent, minus other-jurisdiction id prefixes. Scored over 17,560 real result rows it
+  drops 0% of Scottish material and admits 0 clearly non-Scottish rows, against the old code's
+  97.5% dropped. Pinned by `test_uk_wide_instruments_are_in_scope_for_a_devolved_filter`.
+- **`current_only` removed outright**, not relabelled.
+
+**Judgement call worth revisiting if you disagree:** `current_only` survives on the request model
+as accepted-and-ignored, and `audit["filters"]["current_only"]` survives reporting `null`, rather
+than being removed with an `AUDIT_SCHEMA_VERSION` bump. Rationale: Invariant 5 (additive,
+fail-soft) and one external consumer (lexchat-eval) that would otherwise break on validation. The
+clean removal is a one-line change plus a schema bump if preferred.
+
+**State of the branch:** `fix/prepilot-defects` @ `811c64d`. Waves 0 and 1 complete, tests green,
+**nothing pushed to `main`.** The dev box is restored — no housekeeping owed.
+
+**Next action:** **P1.5 — re-baseline on the Wave 1 HEAD.** It needs a server restart to pick up
+the Wave 1 code (the baseline sweeps deliberately ran against the pre-Wave-1 process). Re-run the
+n=1 pass over all 41 and add the column; expect B2's 351 emptied searches and B14's 88 bad links
+to go to zero, and watch the in-force claim count, which P1.2 may have already cut. Then Wave 2,
+starting from P2.1 — whose acceptance test needs rewriting anyway, since 6406 no longer halts.

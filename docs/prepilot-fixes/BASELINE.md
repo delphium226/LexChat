@@ -13,8 +13,8 @@ branch.
 | **Summarisation model** | `google/gemini-3-flash-preview` — **not pinned**, see *Known confounds* |
 | **Feature flags** | `local_prompt_cache` **OFF**; `tool_memo`, `prompt_caching`, `suggested_questions` ON |
 | **Sessions** | 41 (25 FAIL, 16 DEFECT), 155 user turns, 20 of them Deep Research |
-| **Repetitions** | n=1 over all 41, then n=3 on the 12 sessions the first pass did not settle |
-| **Spend** | **$37.62** for the n=1 pass (6.0 h wall clock, serial). See *Cost*. |
+| **Repetitions** | n=1 over all 41, then n=3 on the 12 sessions the first pass did not settle — **complete** |
+| **Spend** | **$61.28** total: $37.62 for the n=1 pass (6.0 h) + $23.66 for 24 targeted reps |
 | **Harness** | `server_py/tools/replay.py` → `/api/system/chat`, `audit` trace captured per turn |
 | **Raw output** | `evidence/replay/baseline/` (gitignored — lawyers' verbatim casework questions) |
 
@@ -28,7 +28,25 @@ python -m tools.replay_report --dir ../docs/prepilot-fixes/evidence/replay/basel
 
 ## Headline
 
-**29 of 41 sessions still reproduce their original failure. 9 do not. 3 are inconclusive.**
+**34 of 41 sessions still reproduce their original failure. 7 do not. None are left inconclusive.**
+
+### The repetitions changed the answer, and that is the most important result here
+
+The first pass said 29 reproduce / 9 do not / 3 inconclusive. Running n=3 on the twelve
+unsettled sessions **overturned three of the nine "does not reproduce" verdicts**:
+
+| Session | n=1 said | n=3 found |
+|---|---|---|
+| **6357** | no halt | halt in **2 of 3** reps (2 workers halted in rep2, 3 in rep3) |
+| **6389** | no halt | halt in **1 of 3** reps |
+| **6396** | answered the question | halted workers in **2 of 3** reps (4 in one) |
+
+A single clean draw is not evidence that a defect is gone — Invariant 4 says so, and this is
+the measurement that proves it on this corpus. **No `does not reproduce` verdict in this file
+rests on fewer than three runs**, and any future row that claims a fix worked must clear the
+same bar. Three of the twelve also showed a *different* failure on each rep (6340: a truncated
+non-answer, then a bare negative, then a halt), so "which failure" is stochastic even where
+"fails" is not.
 
 The three defects Wave 1 targets are all confirmed present and measurable, and two of them are
 **worse than the transcripts suggested**, because the transcripts could only show what the lawyer
@@ -42,7 +60,7 @@ saw. The trace shows what the tool did.
 | **B1** research halt | P2.1 | **10 of 41** runs had a halted worker; **7** showed halt text to the lawyer | **Confirmed** |
 | **B4** in-force claims | P2.5 | **27** unsupported in-force assertions across 41 runs | **Confirmed** |
 | **B8** sources rail | P4.3 | **1,222 of 1,387** kept sources (88%) never cited; **62 turns** cited none of theirs | **Confirmed, now a rate** |
-| **B13** lost/blank turns | P4.2 | **4 turns** billed >$0 and returned an empty body | **Confirmed** |
+| **B13** lost/blank turns | P4.2 | **5 turns** billed >$0 and returned an empty body (a fifth appeared in 6406 rep3) | **Confirmed** |
 
 ---
 
@@ -184,18 +202,18 @@ three times because a single draw does not settle them (Invariant 4).
 | 6348 | DEFECT | B10 | R | s.36(2) surfaced only when asked for by name |
 | 6350 | DEFECT | B7 | **R — worse** | Pre-pilot recovered once the filter was reset; this time *"I have reset the filter"* still produced nothing |
 | 6354 | FAIL | B3 | R | SSI 2022/356 still missed; 2 of 3 searches emptied by the jurisdiction filter |
-| 6357 | DEFECT | B1 | **N** *(n=3)* | No halt. Replaced by a filter failure — 53 of 93 searches emptied, `legislation_type=primary` blocking every SSI, so it never reached s.85 at all |
+| 6357 | DEFECT | B1 | **R** *(n=3, 2/3)* | **n=1 said no halt and was wrong.** rep2 halted 2 workers and showed the text, rep3 halted 3 and showed it twice. Compounded by a filter failure that worsens across reps — 53, 65 then 79 searches emptied, `legislation_type=primary` blocking every SSI, so it never reached s.85 |
 | 6359 | FAIL | B8 | **R — worse** | Now cites *Clark v Harney Westwood and Riegels* [2021] IRLR 528 with a specific report citation. Clark is **absent from the corpus** — apparent fabrication, where the pre-pilot merely cited irrelevant cases |
 | 6360 | DEFECT | B9 | R | E&W answer first, Scottish rules only on follow-up |
 | 6363 | DEFECT | B12 | R | Recency bias intact — cites 2026 authorities, misses the foundational ones. No blank message this time |
 | 6365 | DEFECT | B10 | **N** *(n=3)* | Found the Public Finance and Accountability (Scotland) Act 2000 in the first answer |
-| 6367 | FAIL | B5 | **?** *(n=3)* | Answers from the right body of law; whether the statutory deadlines are stated needs a legal read |
+| 6367 | FAIL | B5 | **R** *(n=3)* | rep3 states outright that *"the legislation does not prescribe fixed calendar dates for these duties"* — the original defect verbatim in substance. All three reps answer from the Water Industry (Scotland) Act 2002 rather than the Public Finance and Accountability (Scotland) Act 2000, where the deadlines are |
 | 6369 | DEFECT | B10 | R | Purpose test still surfaced only after repeated prompting |
 | 6370 | DEFECT | B11 | R **+ B13** | Two blank billed turns; *"You are entirely correct"* capitulation openers intact |
-| 6372 | DEFECT | B8 | **?** *(n=3)* | Cites Rule 35.8 to the Court of Session Rules 1994; provenance needs checking |
+| 6372 | DEFECT | B8 | **N** *(n=3)* | Clean on every mechanical signal in all three reps, and all three open by asking which jurisdiction is meant rather than guessing. **Caveat: the misattribution itself is not machine-checkable** — confirming it needs a lawyer to check Rule 35.8 against the instrument cited |
 | 6373 | FAIL | B12 | R | Questioned the lawyer's citation twice — *"Could you verify the citation?"*, *"Could you check if the year or the SI number might be different?"* — rather than stating an index limit |
 | 6374 | FAIL | B3 | R | Orders in Council under s.126(8) still not retrieved; halt text shown |
-| 6375 | FAIL | B11 | **?** *(n=3)* | 11 of 15 provision links wrong. Whether English common interest privilege is again analysed as Scots law needs a legal read |
+| 6375 | FAIL | B11 | **R** *(n=3)* | Bad provision links in every rep and getting worse — 11/15, 10/19, **15/16**. The B11 doctrine question (English common interest privilege analysed as Scots law) still needs a lawyer's read, but the session fails on B14 regardless |
 | 6378 | FAIL | B8 | R | A UK question answered England-only; SSI 2008/216 still absent from the answer |
 | 6380 | DEFECT | B10 | R | Legitimate expectations reached only after a clarifying exchange |
 | 6381 | FAIL | B5 | **N** *(n=3)* | **Improved** — now says plainly *"I am unable to locate the Victims and Witnesses (Scotland) Act 2014"* three times instead of answering silently from adjacent statutes. But the non-retrieval is now caused by the filter: 30 of 80 searches emptied |
@@ -204,8 +222,8 @@ three times because a single draw does not settle them (Invariant 4).
 | 6384 | FAIL | B1 | R | *"I am currently unable to retrieve the Courts Reform (Scotland) Act 2014"* — verbatim reproduction. It is in LEX |
 | 6385 | FAIL | B12 | R | English authorities only, no Scots-corpus disclosure |
 | 6387 | DEFECT | B13 | **N** *(n=3)* | No timeout; all three turns answered |
-| 6389 | DEFECT | B1 | **N** *(n=3)* | No halt text in the report |
-| 6396 | FAIL | B10 | **N** *(n=3)* | Answered the question — 14 days, Article 16 — where the pre-pilot could not find the provisions. 32 of 172 searches still emptied by filters |
+| 6389 | DEFECT | B1 | **R** *(n=3, 1/3)* | **n=1 said no halt and was wrong** — rep3 halted a worker. Marginal but real; also 13–14 bad provision links per rep |
+| 6396 | FAIL | B10 | **R** *(n=3, 2/3)* | **n=1 said it answered and was wrong.** rep1 halted **four** workers, rep3 halted two; filters emptied 32/172, 6/23 and 16/73 searches across the three. rep2 answered cleanly, which is what a single draw would have recorded |
 | 6406 | FAIL | B1 | **N** *(n=3)* | **0 of 4 steps halted** on both Deep Research turns, against 4 of 4 in the pre-pilot. $0.72 and 14,090 chars against $2.36 and a report with no findings |
 | 6407 | DEFECT | B1 | R **+ B13** | Two blank billed turns; halt text shown. The most expensive run in the sweep at $5.99 / 50 min |
 | 6408 | FAIL | B1 | R | 52 of 92 searches emptied by filters; turn 3 explains the step cap to the lawyer |
@@ -213,23 +231,35 @@ three times because a single draw does not settle them (Invariant 4).
 | 6410 | FAIL | B3 | R | Same false negative, verbatim. The Care Reform (Scotland) Act 2025 (Commencement No.1) Regulations 2025 exist |
 | 6411 | FAIL | B4 | R | Unsupported in-force assertion |
 
-### Why the nine does-not-reproduce
+### Why the seven does-not-reproduce
 
-Six are genuine improvements attributable to work that landed between the pre-pilot and this
-branch — most plausibly the worker context budget and the Phase-2 fan-out tuning, both of which
-reduce tool-call counts and therefore halts (6406, 6389, 6396, 6365, 6387, 6334). **No attribution
-is claimed**: separating those commits from model variance would need its own experiment, and
-these are single draws until the n=3 reps land.
+Four are genuine improvements, each confirmed over three runs rather than one:
 
-Three are **not** improvements and must not be read as such:
+- **6406** — 0 of 4 Deep Research steps halted in **all three** reps, against 4 of 4 in the
+  pre-pilot. The clearest recovery in the corpus.
+- **6365** — every rep names the Public Finance and Accountability (Scotland) Act 2000 in its
+  opening summary, the Act the pre-pilot reached only when pointed at it.
+- **6387** — no timeout in any rep; all three turns answered each time.
+- **6334** — no bad provision links in any rep. Note this is *before* P1.4, so it is model
+  variance rather than a fix.
 
-- **6357** swapped a halt for a filter failure. The lawyer is no better off.
-- **6381** discloses the failure honestly now, which is exactly what Invariant 1 protects — but the
-  underlying retrieval got worse, not better, and the cause is B2.
-- **6340** stopped fabricating and started returning a truncated non-answer, which is a different
-  defect in the same session.
+Three are **not** improvements, and reading the headline count alone would get this wrong:
 
----
+- **6340** stopped fabricating the SI list, but produced a different failure on each of the three
+  runs — a truncated non-answer, a bare negative, then a halted worker. "Does not reproduce" here
+  means "does not reproduce *this* defect", not "works".
+- **6381** now discloses plainly that it cannot find the Victims and Witnesses (Scotland) Act 2014
+  — in all three reps, which is exactly the honest failure Invariant 1 protects. But the
+  underlying retrieval got **worse**, not better: the filter emptied 30 of 80, 26 of 49 and 31 of
+  66 searches across the reps. The lawyer is told the truth about a failure that B2 caused.
+- **6372** is clean on every signal this harness can compute, but the defect it was classified for
+  — provisions attributed to the wrong instrument — is not machine-checkable. It is recorded as
+  does-not-reproduce on mechanical grounds only.
+
+**No attribution is claimed for the four genuine recoveries.** The worker context budget and the
+Phase-2 fan-out tuning both landed between the pre-pilot and this branch and both reduce tool-call
+counts, but separating them from model variance would need its own experiment — and 6396 is a
+caution against assuming a recovery is real, since one of its three reps looked like one.
 
 ## Known confounds
 
@@ -247,9 +277,9 @@ Three are **not** improvements and must not be read as such:
 5. **Which turn ran Deep Research is inferred**, not read from stored state — see P0.4. The
    inference reconciles exactly with the exported thread-level mode on all 62 sessions, but it is
    read off the answer and so is structurally blind to a Deep Research turn that produced none.
-6. **n=1 for most sessions.** Only the 12 unsettled sessions were repeated. A verdict of
-   *reproduces* on a single draw is safe (the defect was observed); a verdict of *does not
-   reproduce* on a single draw is not, which is why every `N` above is in the n=3 set.
+6. **n=1 for the 29 sessions the first pass settled.** A verdict of *reproduces* on a single draw
+   is safe — the defect was observed. A verdict of *does not reproduce* is not, which is why every
+   `N` above was re-run three times, and why three of them flipped.
 
 ---
 
@@ -258,9 +288,14 @@ Three are **not** improvements and must not be read as such:
 | | |
 |---|---|
 | n=1 over 41 sessions, 155 turns | **$37.62** |
-| targeted n=3 on 12 sessions (24 further runs) | see `SESSION_LOG.md` |
-| wall clock, serial | 6.0 h |
+| targeted n=3 on 12 sessions (24 further runs) | **$23.66** |
+| **total** | **$61.28** |
+| wall clock, serial | ~9 h |
 | most expensive run | 6407 — $5.99, 50 min |
+
+Against FIX_PLAN's original ~$50 for a blanket n=3/n=1 pass, the targeted policy landed at $61.28
+and bought something the blanket policy would not have: three corrected verdicts, because the
+repetitions went to the sessions where the answer was actually in doubt.
 
 Replay costs about **2.3× the pre-pilot's recorded spend** for the same work. The recorded figure
 covers only the saved assistant message; a replay also pays for the Deep Research planner call,
