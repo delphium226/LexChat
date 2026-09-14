@@ -20,10 +20,18 @@ from .lex import (
     _TYPE_CODES,
     _matches_jurisdiction,
     _slim_search_results,
+    _slim_section_results,
     extract_legislation_ids_from_search,
 )
 
 logger = logging.getLogger("agent")
+
+# How many legislation search results reach the model. Deliberate slimming, not
+# a filter: the API is asked for 20 and the top few carry the signal, while the
+# rest cost context. Named because the number matters to anyone measuring filter
+# loss — a search returning exactly this many is cap-bound and says nothing
+# about whether the filters removed anything (see `tools/replay_report.py`).
+_MAX_SEARCH_RESULTS = 5
 
 # -----------------------------------------------------------------------
 # Retry / backoff for the (rate-limited) LEX API
@@ -141,7 +149,6 @@ async def execute_worker_tool(
                 user_year_to = cfg.get("_year_to")
                 jurisdiction = cfg.get("_jurisdiction")
                 legislation_type = cfg.get("_legislation_type")
-                current_only = cfg.get("_current_only", False)
 
                 # Merge user filter with model-supplied year args (take intersection)
                 model_year_from = args.get("year_from")
@@ -155,7 +162,7 @@ async def execute_worker_tool(
                 else:
                     final_year_to = user_year_to or model_year_to
 
-                needs_post_filter = bool(jurisdiction or legislation_type or current_only)
+                needs_post_filter = bool(jurisdiction or legislation_type)
                 payload = {
                     "query": args["query"],
                     "year_from": final_year_from,
@@ -198,6 +205,10 @@ async def execute_worker_tool(
                 resp.raise_for_status()
                 slimmed = _slim_search_results(resp_json)
                 results = slimmed["results"]
+                # How many rows the API actually handed us, before any
+                # post-filter. `total` is the API's match count across the whole
+                # corpus and is usually much larger than this page.
+                api_returned = len(results)
 
                 # Post-filter: legislation type (by legislation_id prefix)
                 if legislation_type:
@@ -207,24 +218,48 @@ async def execute_worker_tool(
                         if r.get("legislation_id", "").split("/")[0] in type_codes
                     ]
 
-                # Post-filter: current legislation only (exclude known non-in-force)
-                if current_only:
-                    _INACTIVE = {"repealed", "revoked", "spent", "expired", "not in force"}
-                    results = [
-                        r for r in results
-                        if r.get("status", "").lower() not in _INACTIVE
-                    ]
-
-                # Post-filter: jurisdiction (by extent field)
+                # Post-filter: jurisdiction (by extent field, with the
+                # legislation id as a tie-break when extent is unknown — see
+                # `_matches_jurisdiction`, which is why the id is passed).
                 if jurisdiction:
                     results = [
                         r for r in results
-                        if _matches_jurisdiction(r.get("extent", []), jurisdiction)
+                        if _matches_jurisdiction(
+                            r.get("extent", []),
+                            jurisdiction,
+                            r.get("legislation_id", ""),
+                        )
                     ]
 
-                results = results[:5]
+                # P1.3 (bucket B5): report the three counts separately.
+                #
+                # This used to be `slimmed["total"] = len(results)`, which threw
+                # away the API's real match count and left the model unable to
+                # tell "5 instruments match your question" from "138 match and
+                # your filters removed all but 5". Measured over the P0.3
+                # baseline, 1,010 of 1,531 searches misreported `total` —
+                # including 438 with no filter set at all, because the [:5] cap
+                # alone was enough to destroy it.
+                #
+                # `total` is kept, still meaning the API's match count, so any
+                # consumer reading it gets a truer number than before rather
+                # than a differently-wrong one. The new keys are additive.
+                matched = slimmed.get("total")
+                after_filters = len(results)
+                results = results[:_MAX_SEARCH_RESULTS]
+
                 slimmed["results"] = results
-                slimmed["total"] = len(results)
+                slimmed["returned"] = len(results)
+                slimmed["total_matched"] = matched
+                slimmed["removed_by_filters"] = max(0, api_returned - after_filters)
+                slimmed["total"] = matched
+                if slimmed["removed_by_filters"]:
+                    slimmed["filters_applied"] = {
+                        k: v for k, v in (
+                            ("jurisdiction", jurisdiction),
+                            ("legislation_type", legislation_type),
+                        ) if v
+                    }
                 return json.dumps(slimmed)
 
             elif name == "search_legislation_sections":
@@ -265,7 +300,10 @@ async def execute_worker_tool(
                 })
 
                 resp.raise_for_status()
-                return json.dumps(resp_json)
+                # P1.4: slim to the fields the model needs, keeping the API's
+                # own provision-level URL so citations link to the provision
+                # rather than to the Act's contents page.
+                return json.dumps(_slim_section_results(resp_json))
 
             elif name == "get_legislation_text":
                 url = f"{LEX_API_URL}/legislation/text"

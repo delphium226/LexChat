@@ -114,12 +114,19 @@ OUTPUT STRUCTURE (Use Markdown):
 CITATION PROTOCOL:
 - STRICT REQUIREMENT: Every legal assertion must be backed by a source from the tool.
 - Legislation:
-  - The tools provide the "Act Base URI" (legislation.gov.uk).
-  - IF you are citing a specific section (e.g. s.149), you MUST manually append `/section/{number}` to the Base URI.
-  - Example: `[Equality Act 2010 - s.149](http://www.legislation.gov.uk/.../section/149)`
+  - `search_legislation_sections` returns a `url` for EVERY provision it finds.
+    That URL already points at the provision itself. Use it VERBATIM.
+  - Do NOT build a provision URL yourself by appending `/section/{number}` to an
+    Act's base URI — the `url` field is authoritative and covers sections,
+    schedules, regulations and articles alike.
+  - Example: `[Courts Reform (Scotland) Act 2014 - s.110](http://www.legislation.gov.uk/asp/2014/18/section/110)`
+  - Cite an Act's base `url` (from `search_legislation`) ONLY when referring to
+    the Act as a whole. If you name a provision, the link must be that
+    provision's `url`.
 - VALIDATION:
   - Do not invent URLs for domains other than `legislation.gov.uk`.
-  - If no URI is provided, use bold text citations.
+  - If no URL is provided for a provision, cite it in bold text rather than
+    guessing a URL.
 
 Review your answer before responding: Does every claim have a corresponding source from the API? If yes, proceed."""
 
@@ -216,7 +223,10 @@ PHASE 6 — SYNTHESISE:
 Compose an integrated answer covering both the statutory framework and the case law applying it.
 
 CITATION PROTOCOL:
-- Legislation: [Act Name - s.X](legislation.gov.uk URL/section/X)
+- Legislation: use the `url` returned for that provision by
+  `search_legislation_sections`, verbatim — it already points at the provision.
+  Do not append `/section/{number}` to an Act's base URI yourself.
+  e.g. `[Courts Reform (Scotland) Act 2014 - s.110](http://www.legislation.gov.uk/asp/2014/18/section/110)`
 - Case law: [Case Name NCN](caselaw.nationalarchives.gov.uk URL)
 
 OUTPUT STRUCTURE (Use Markdown):
@@ -361,9 +371,11 @@ def build_filter_constraint_block(cfg: dict) -> str:
     date_to = cfg.get("_date_to")
     court = cfg.get("_court")
     legislation_type = cfg.get("_legislation_type")
-    current_only = cfg.get("_current_only", False)
-
-    if not any([jurisdiction, year_from, year_to, date_from, date_to, court, legislation_type, current_only]):
+    # `current_only` is deliberately absent. See P1.2: the filter it belonged to
+    # excluded nothing, and this block used to tell the model "In-force
+    # legislation only", which is the proximate cause of bucket B4 — the model
+    # asserted currency because the system told it the results were current.
+    if not any([jurisdiction, year_from, year_to, date_from, date_to, court, legislation_type]):
         return ""
 
     lines = ["ACTIVE RESEARCH FILTERS (applied by the system — do not override or ignore):"]
@@ -371,9 +383,6 @@ def build_filter_constraint_block(cfg: dict) -> str:
     if legislation_type:
         label = _LEGISLATION_TYPE_LABELS.get(legislation_type, legislation_type)
         lines.append(f"- Legislation type: {label}.")
-
-    if current_only:
-        lines.append("- Status: In-force legislation only. Do not cite or rely on repealed or not-yet-in-force legislation.")
 
     if jurisdiction:
         label = _JURISDICTION_LABELS.get(jurisdiction, jurisdiction)

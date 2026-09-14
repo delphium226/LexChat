@@ -58,6 +58,18 @@ class AgentRequestBase(BaseModel):
     date_to: Optional[str] = None
     court: Optional[str] = None
     legislation_type: Optional[str] = None
+    # DEPRECATED and IGNORED since P1.2 (bucket B4). The filter behind this
+    # excluded nothing: it tested `status` for {repealed, revoked, spent,
+    # expired, not in force}, but the LEX API's `status` vocabulary is `final`
+    # and `revised` only — the field means which text version is held, not
+    # in-force status. 42 of 62 pre-pilot sessions ran with it on, and the
+    # system prompt told the model "In-force legislation only" on the strength
+    # of it, which is why answers asserted currency no tool could establish.
+    #
+    # Kept on the model, rather than removed, so an existing client or the eval
+    # harness does not start failing validation — it is accepted and discarded.
+    # Nothing reads it. Do not reintroduce a consumer without a real in-force
+    # signal to back it (see P2.5, and P5.3 for the corpus question).
     current_only: Optional[bool] = False
     # Parliamentary-mode filters (parliament / Westminster bots only).
     # record_type and sessions are shared fields whose vocabulary depends on the
@@ -146,7 +158,10 @@ def build_request_config(
         "_date_to": body.date_to or None,
         "_court": body.court or None,
         "_legislation_type": body.legislation_type or None,
-        "_current_only": body.current_only or False,
+        # `_current_only` is deliberately NOT set — see `current_only` above.
+        # Every reader of it has been removed (the no-op post-filter in
+        # executor.py and the "In-force legislation only" line in the prompt's
+        # filter-constraint block). Leaving the key would invite a new reader.
         # record_type is routed to the enforcement key matching this bot's
         # mode — the two taxonomies are disjoint, so a Holyrood value must
         # never reach the Westminster filter (or vice versa).

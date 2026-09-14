@@ -193,7 +193,6 @@ function AppContent() {
       legislation_and_case_law: 'Legislation & case law',
     }[researchMode] || 'Legislation only';
 
-  const todayLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   // Has this thread already had end-of-session feedback? Nothing on the chat
   // row records it, so this is a render-time localStorage read — cheap, and
@@ -209,7 +208,6 @@ function AppContent() {
     dateTo,
     caseLawCourt,
     legislationType,
-    currentOnly,
     recordType,
     sessions,
     house,
@@ -218,7 +216,6 @@ function AppContent() {
     setDateToPersist,
     setCourtPersist,
     setLegislationTypePersist,
-    setCurrentOnlyPersist,
     setRecordTypePersist,
     setSessionsPersist,
     setHousePersist,
@@ -259,7 +256,7 @@ function AppContent() {
     logoutWithExpiry,
     chatMode,
     researchMode,
-    filters: { jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, currentOnly, recordType, sessions, house },
+    filters: { jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, recordType, sessions, house },
     saveFiltersToChatStorage,
     restoreFiltersForChat,
     currentChatId,
@@ -683,16 +680,14 @@ function AppContent() {
               chips.push({ icon: <CalendarIcon />, label: `Date: ${dr}` });
             }
 
-            // 8. Status (legislation) — this is the "Current legislation only"
-            // filter, which drops repealed/spent/not-yet-in-force results. It was
-            // previously pushed unconditionally, so the pill claimed the in-force
-            // position even after the lawyer turned the filter off.
-            if (!isParliament) {
-              chips.push({
-                icon: <CalendarIcon />,
-                label: currentOnly ? `In force as at ${todayLabel}` : 'All statuses, incl. repealed',
-              });
-            }
+            // 8. Status — REMOVED (P1.2, bucket B4). This pill read "In force
+            // as at <today>", which was a claim nothing could support: the
+            // filter behind it tested the LEX `status` field for
+            // repealed/revoked/spent, and that field's vocabulary is `final`
+            // and `revised` only — it records which text version is held, not
+            // in-force status. The filter excluded nothing, so the pill told 42
+            // of 62 pre-pilot sessions their results were current when no such
+            // check had run. Do not reinstate without a real in-force source.
 
             const filtersLabel = 'Filters';
             return (
@@ -926,8 +921,7 @@ function AppContent() {
                       house,
                       jurisdiction,
                       legislationType,
-                      currentOnly,
-                      dateFrom,
+                                        dateFrom,
                       dateTo,
                       caseLawCourt,
                     }}
@@ -941,7 +935,6 @@ function AppContent() {
                       setHousePersist(draft.house ?? null);
                       setJurisdictionPersist(draft.jurisdiction);
                       setLegislationTypePersist(draft.legislationType);
-                      setCurrentOnlyPersist(draft.currentOnly);
                       setDateFromPersist(draft.dateFrom);
                       setDateToPersist(draft.dateTo);
                       setCourtPersist(draft.caseLawCourt);
@@ -956,7 +949,6 @@ function AppContent() {
                         dateTo: draft.dateTo,
                         court: draft.caseLawCourt,
                         legislationType: draft.legislationType,
-                        currentOnly: draft.currentOnly,
                         recordType: draft.recordType,
                         sessions: draft.sessions,
                         house: draft.house ?? null,
@@ -1161,7 +1153,7 @@ function AppContent() {
           // The same filter object the composer sends with each query, so the
           // recorded snapshot is the state the research was actually run under
           // rather than a second reading of localStorage.
-          filters={{ jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, currentOnly, recordType, sessions, house }}
+          filters={{ jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, recordType, sessions, house }}
           researchMode={researchMode}
           chatMode={chatMode}
           onClose={() => modals.close('sessionFeedback')}

@@ -33,7 +33,6 @@ export default function ResearchFiltersModal({
     house,
     jurisdiction,
     legislationType,
-    currentOnly,
     dateFrom,
     dateTo,
     caseLawCourt,
@@ -64,7 +63,6 @@ export default function ResearchFiltersModal({
     dateTo !== thisYear ||
     caseLawCourt ||
     legislationType ||
-    currentOnly ||
     recordType ||
     house ||
     !sessionsAreDefault;
@@ -77,7 +75,6 @@ export default function ResearchFiltersModal({
       dateTo: thisYear,
       caseLawCourt: '',
       legislationType: null,
-      currentOnly: false,
       recordType: null,
       house: null,
       sessions: [latestSession],
@@ -295,59 +292,6 @@ export default function ResearchFiltersModal({
                 {LEGISLATION_TYPE_OPTIONS.map(opt =>
                   optBtn(legislationType === opt.value, () => set('legislationType', opt.value), opt.label)
                 )}
-              </div>
-            )}
-
-            {/* § Status */}
-            {researchMode !== 'case_law_only' && (
-              <div>
-                {secHead('Status')}
-                <div
-                  style={{
-                    padding: '4px 8px 8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => set('currentOnly', !currentOnly)}
-                >
-                  <div
-                    style={{
-                      width: 30,
-                      height: 17,
-                      borderRadius: 9,
-                      background: currentOnly ? 'var(--accent)' : 'var(--ink-200)',
-                      position: 'relative',
-                      flexShrink: 0,
-                      transition: 'background 120ms',
-                    }}
-                  >
-                    <span
-                      style={{
-                        position: 'absolute',
-                        top: 2,
-                        left: currentOnly ? 15 : 2,
-                        width: 13,
-                        height: 13,
-                        borderRadius: '50%',
-                        background: 'white',
-                        transition: 'left 120ms',
-                        display: 'block',
-                      }}
-                    />
-                  </div>
-                  <span
-                    style={{
-                      fontSize: 13,
-                      color: 'var(--ink-700)',
-                      fontFamily: 'var(--font-ui)',
-                      userSelect: 'none',
-                    }}
-                  >
-                    Current legislation only
-                  </span>
-                </div>
               </div>
             )}
 

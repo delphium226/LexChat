@@ -41,30 +41,196 @@ def _slim_search_results(resp_json: dict) -> dict:
     }
 
 
-def _matches_jurisdiction(extent: list, jurisdiction: str) -> bool:
-    """Return True if the legislation extent covers the requested jurisdiction.
+# The complete `extent` vocabulary the LEX API emits, measured over 17,560 result
+# rows in the P0.3 baseline (docs/prepilot-fixes/BASELINE.md). Pinned as a fixture
+# so that an API vocabulary change breaks `tests/test_jurisdiction_filter.py`
+# rather than silently breaking the product, which is exactly how the original
+# defect survived a 62-session pre-pilot.
+#
+#     ['']                                  6668
+#     ['United Kingdom']                    3289
+#     ['Scotland']                          2765
+#     []                                    2662
+#     ['England', 'Wales']                   918
+#     ['Northern Ireland']                   761
+#     ['England', 'Wales', 'Scotland']       484
+#     ['England']                             10
+#     ['England', 'Wales', 'Northern Ireland'] 2
+#     ['Wales']                                1
+_TERRITORY_ALIASES = {
+    "england": "E",
+    "wales": "W",
+    "scotland": "S",
+    "northern ireland": "NI",
+    "united kingdom": "UK",
+    "great britain": "GB",
+}
 
-    Extent values are strings like "E+W+S+NI". Split on "+" to get individual
-    territory tokens: E (England), W (Wales), S (Scotland), NI (Northern Ireland).
-    An empty extent list is treated as unknown — included by default.
+# Which territory tokens satisfy each filter value. UK (and GB, where it appears)
+# count for their constituent nations: a UK-wide Act applies in Scotland, so a
+# lawyer filtering for Scotland must see it. This is the "applies in" reading of
+# the control, decided 2026-09-14 — see the note below.
+_JURISDICTION_ACCEPTS = {
+    "england_and_wales": {"E", "W", "UK", "GB"},
+    "scotland": {"S", "UK", "GB"},
+    "northern_ireland": {"NI", "UK"},
+    "wales": {"W", "UK", "GB"},
+    "uk_wide": {"UK"},
+}
+
+# Legislation-id prefixes that belong to one devolved jurisdiction whatever the
+# `extent` field says. Used ONLY to reject a row whose extent is unknown — an
+# explicit extent always wins. This is what lets unknown-extent rows be admitted
+# (necessary: 2,009 Scottish SIs carry `['']`) without admitting Northern Irish
+# and Welsh instruments alongside them.
+_ID_PREFIX_JURISDICTION = {
+    "asp": "scotland", "ssi": "scotland",
+    "nia": "northern_ireland", "nisr": "northern_ireland",
+    "nisro": "northern_ireland", "nisi": "northern_ireland",
+    "apni": "northern_ireland",
+    "asc": "wales", "anaw": "wales", "wsi": "wales", "mwa": "wales",
+}
+
+
+def _extent_tokens(extent: list) -> set[str]:
+    """Normalise an `extent` list to territory tokens.
+
+    Handles the API's real vocabulary (full territory names, one per list entry)
+    and the "E+W+S+NI" form the original implementation expected, so a future
+    API change back to codes does not reintroduce the defect.
     """
-    if not extent:
-        return True
     tokens: set[str] = set()
-    for e in extent:
-        for t in e.split("+"):
-            tokens.add(t.strip())
-    if jurisdiction == "england_and_wales":
-        return "E" in tokens
-    if jurisdiction == "scotland":
-        return "S" in tokens
-    if jurisdiction == "northern_ireland":
-        return "NI" in tokens
-    if jurisdiction == "wales":
-        return "W" in tokens
+    for e in extent or []:
+        for part in str(e).split("+"):
+            part = part.strip()
+            if not part:
+                continue
+            tokens.add(_TERRITORY_ALIASES.get(part.lower(), part.upper()))
+    return tokens
+
+
+def _matches_jurisdiction(
+    extent: list, jurisdiction: str, legislation_id: str = ""
+) -> bool:
+    """Return True if this result should survive the `jurisdiction` filter.
+
+    **This function used to discard almost everything.** It split `extent` on
+    "+" and tested single-letter tokens `E`/`W`/`S`/`NI`; the API returns full
+    territory names (`['Scotland']`, `['United Kingdom']`, `['']`), so every
+    row carrying a real extent failed. It did not fail *closed*, though — the
+    old `if not extent: return True` meant rows with a MISSING extent passed,
+    so the filter returned a plausible non-empty result set composed entirely of
+    unknown-territory items. Measured over the P0.3 baseline: of 1,009 rows that
+    survived a jurisdiction filter, every single one had `extent: []`, and a
+    `jurisdiction=scotland` search returned the Building Materials and Housing
+    Act 1945. That is why 13 pre-pilot sessions ran with it and none reported a
+    broken filter, and why the fix is not just "map the vocabulary".
+
+    Three rules, in order:
+
+    1. **A stated extent decides it.** Matched against `_JURISDICTION_ACCEPTS`,
+       in which UK-wide counts for each constituent nation — a UK Act applies in
+       Scotland, and the assimilated EU regulations a lawyer needs (`eur/…`,
+       23% of the `['United Kingdom']` rows) are only reachable this way. This
+       is the "law that **applies in** Scotland" reading of the control rather
+       than "law **made for** Scotland", decided 2026-09-14: CambeulW's 6406
+       needed assimilated EU instruments under a Scotland filter, and under
+       Invariant 1 a filter that hides a relevant Act is worse than one that
+       shows an irrelevant one, because the lawyer can see the second and not
+       the first.
+
+    2. **An unknown extent is included unless the id says otherwise.** `['']`
+       and `[]` are 53% of all rows and are not junk: 2,009 Scottish SIs carry
+       `['']`, so excluding unknowns would drop 40% of Scottish material and
+       swap one trap for another. But an `nisr/`/`wsi/` instrument is not
+       Scottish whatever its extent says, so the id prefix rejects those.
+
+    3. **`uk_wide` means UK-wide**, and nothing else — unknown extents are NOT
+       admitted there, because "UK-wide only" is an explicit narrowing and a row
+       that does not say it is UK-wide does not satisfy it.
+
+    Scored against the 17,560 baseline rows, this drops **0%** of unambiguously
+    Scottish rows and admits **0** rows that are clearly not Scottish. The old
+    implementation dropped 97.5% of the Scottish ones.
+    """
+    accepts = _JURISDICTION_ACCEPTS.get(jurisdiction)
+    if accepts is None:
+        return True  # unknown filter value: never silently narrow
+
+    tokens = _extent_tokens(extent)
+    if tokens:
+        return bool(tokens & accepts)
+
+    # Extent unknown from here on.
     if jurisdiction == "uk_wide":
-        return tokens >= {"E", "W", "S", "NI"}
-    return True
+        return False
+
+    prefix = (legislation_id or "").split("/")[0].strip().lower()
+    owner = _ID_PREFIX_JURISDICTION.get(prefix)
+    if owner is None:
+        return True          # UK-level or unrecognised: could apply anywhere
+    if owner == jurisdiction:
+        return True
+    # England & Wales and Wales overlap: a Welsh instrument is in scope for an
+    # England & Wales search, but an English one is not exclusively Welsh.
+    return owner == "wales" and jurisdiction == "england_and_wales"
+
+
+def _short_legislation_id(value: str) -> str:
+    """`http://www.legislation.gov.uk/id/asp/2014/18` -> `asp/2014/18`.
+
+    The two LEX endpoints disagree: `legislation/search` returns the short form
+    and `legislation/section/search` returns a full URI under the same key. The
+    model has to pass this value back as `legislation_id`, so it is normalised
+    to the short form both places.
+    """
+    if not value:
+        return ""
+    path = urlparse(value).path.lstrip("/") if "://" in value else value.lstrip("/")
+    if path.startswith("id/"):
+        path = path[3:]
+    return path
+
+
+def _slim_section_results(resp_json) -> dict:
+    """Strip the search_legislation_sections response, keeping the provision URL.
+
+    **P1.4 (bucket B14): this is where provision links come from.** The raw API
+    item already carries the canonical, provision-level legislation.gov.uk URL
+    in `uri` (`…/asp/2014/18/section/110`) — but the whole response used to be
+    passed through untouched, buried in `created_at`, five null `provenance_*`
+    fields, and three different spellings of the identifier. The model composed
+    its own link instead, and across the pre-pilot 88 of 376 provision-labelled
+    links (23.4%) pointed at the Act's contents page or the wrong provision.
+
+    So the fix is not to teach the model to build URLs: it is to hand it the one
+    the API already built, under an unambiguous key, and drop the noise it was
+    guessing from. `provision_type` and `number` travel alongside so a citation
+    can be checked against the link without re-parsing it.
+
+    The response is a **bare JSON list** at the top level, not an object — hence
+    the isinstance dance. Anything unexpected is passed through untouched rather
+    than dropped: a slimmer must never be the reason a retrieval goes missing.
+    """
+    items = resp_json if isinstance(resp_json, list) else resp_json.get("results")
+    if not isinstance(items, list):
+        return resp_json
+
+    slimmed = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        slimmed.append({
+            "legislation_id": _short_legislation_id(item.get("legislation_id", "")),
+            "provision_type": item.get("provision_type", ""),
+            "number": item.get("number"),
+            "title": item.get("title", ""),
+            # The citation URL. Named `url` to match search_legislation, and it
+            # is the API's own value — never reconstructed here either.
+            "url": item.get("uri") or item.get("id", ""),
+            "text": item.get("text", ""),
+        })
+    return {"results": slimmed, "returned": len(slimmed)}
 
 
 def extract_legislation_ids_from_search(resp_json: dict) -> list[tuple[str, str]]:
@@ -77,8 +243,22 @@ def extract_legislation_ids_from_search(resp_json: dict) -> list[tuple[str, str]
 
 LEX_API_URL = settings.lex_api_url.rstrip("/")
 
+# Legislation-id prefixes for each `legislation_type` filter value.
+#
+# P1.3 (bucket B5): `eur` was missing from every set, so a `legislation_type`
+# filter of any value silently discarded **every assimilated EU instrument** —
+# they are present and retrievable (`eur/2009/1069` returns 10 sections) and
+# were exactly what CambeulW needed in session 6406. Assimilated regulations and
+# decisions are directly-applicable law made outside Parliament, so they sit
+# with secondary rather than primary: a lawyer filtering for "primary" means
+# Acts, and a lawyer filtering for "secondary" means everything below an Act.
+# `eudn`/`eudr` (decisions and directives) are included on the same reasoning.
+#
+# Northern Irish and Scottish secondary prefixes seen live but previously
+# absent are added here too (`nisro`, `nisi`) — the same class of omission.
 _TYPE_CODES: dict[str, set[str]] = {
-    "primary":   {"ukpga", "ukppa", "ukla", "asp", "nia"},
-    "secondary": {"uksi", "ssi", "wsi", "nisr"},
-    "draft":     {"ukdsi"},
+    "primary":   {"ukpga", "ukppa", "ukla", "asp", "nia", "apni", "anaw", "asc", "mwa"},
+    "secondary": {"uksi", "ssi", "wsi", "nisr", "nisro", "nisi",
+                  "eur", "eudn", "eudr"},
+    "draft":     {"ukdsi", "sdsi"},
 }

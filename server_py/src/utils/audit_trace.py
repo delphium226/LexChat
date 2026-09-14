@@ -338,7 +338,10 @@ class AuditCollector:
                     "date_to": config.get("_date_to"),
                     "court": config.get("_court"),
                     "legislation_type": config.get("_legislation_type"),
-                    "current_only": config.get("_current_only"),
+                    # Always null since P1.2 removed the filter: the key is
+                    # kept so the trace shape does not change under an external
+                    # consumer, but the value would be a claim we cannot make.
+                    "current_only": None,
                     "record_type": config.get("_pt_record_type") or config.get("_wm_record_type"),
                     "house": config.get("_wm_house"),
                     "sessions": config.get("_pt_sessions"),

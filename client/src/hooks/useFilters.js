@@ -29,7 +29,6 @@ export function useFilters(currentChatId) {
   const [dateTo, setDateTo] = useState(() => localStorage.getItem('filter_dateTo') || String(new Date().getFullYear()));
   const [caseLawCourt, setCaseLawCourt] = useState(() => localStorage.getItem('filter_caseLawCourt') || '');
   const [legislationType, setLegislationType] = useState(() => localStorage.getItem('filter_legislationType') || null);
-  const [currentOnly, setCurrentOnly] = useState(() => localStorage.getItem('filter_currentOnly') !== 'false');
   // Parliamentary-mode filters (only surfaced on the parliament / Westminster bots).
   // recordType and sessions carry whichever vocabulary the bot's research mode
   // defines; `house` is Westminster-only (Holyrood is unicameral).
@@ -47,7 +46,6 @@ export function useFilters(currentChatId) {
       jurisdiction,
       court: caseLawCourt,
       legislationType,
-      currentOnly,
       recordType,
       sessions,
       house,
@@ -81,11 +79,6 @@ export function useFilters(currentChatId) {
     if (v) localStorage.setItem('filter_legislationType', v);
     else localStorage.removeItem('filter_legislationType');
     if (currentChatId) saveFiltersToChatStorage(currentChatId, { legislationType: v });
-  };
-  const setCurrentOnlyPersist = v => {
-    setCurrentOnly(v);
-    localStorage.setItem('filter_currentOnly', String(v));
-    if (currentChatId) saveFiltersToChatStorage(currentChatId, { currentOnly: v });
   };
   const setRecordTypePersist = v => {
     setRecordType(v);
@@ -125,7 +118,6 @@ export function useFilters(currentChatId) {
     setDateToPersist(thisYear);
     setCourtPersist('');
     setLegislationTypePersist(null);
-    setCurrentOnlyPersist(false);
     setRecordTypePersist(null);
     setHousePersist(null);
     setSessionsPersist([getLatestSession(researchMode)]);
@@ -139,7 +131,6 @@ export function useFilters(currentChatId) {
     dateTo !== thisYear ||
     caseLawCourt ||
     legislationType ||
-    currentOnly ||
     recordType ||
     house ||
     !sessionsAreDefault;
@@ -181,10 +172,6 @@ export function useFilters(currentChatId) {
         if (f.legislationType) localStorage.setItem('filter_legislationType', f.legislationType);
         else localStorage.removeItem('filter_legislationType');
       }
-      if (f.currentOnly !== undefined) {
-        setCurrentOnly(f.currentOnly);
-        localStorage.setItem('filter_currentOnly', String(f.currentOnly));
-      }
       if (f.recordType !== undefined) {
         setRecordType(f.recordType);
         if (f.recordType) localStorage.setItem('filter_recordType', f.recordType);
@@ -219,7 +206,6 @@ export function useFilters(currentChatId) {
     dateTo,
     caseLawCourt,
     legislationType,
-    currentOnly,
     recordType,
     sessions,
     house,
@@ -228,13 +214,11 @@ export function useFilters(currentChatId) {
     setDateTo,
     setCaseLawCourt,
     setLegislationType,
-    setCurrentOnly,
     setJurisdictionPersist,
     setDateFromPersist,
     setDateToPersist,
     setCourtPersist,
     setLegislationTypePersist,
-    setCurrentOnlyPersist,
     setRecordTypePersist,
     setSessionsPersist,
     setHousePersist,
