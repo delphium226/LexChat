@@ -74,6 +74,19 @@ session learns that reality diverged from the plan.
   regression fixture.** Until answered it is regenerated locally from the Developer-tab export.
   This blocks nothing — P0.2 writes it to a gitignored path.
 
+**Decisions taken before kickoff (user, 2026-09-14):**
+- **Replay model pinned to `google/gemini-3.1-pro-preview`.** All 176 pre-pilot assistant
+  messages ran on it; the dev box is currently on `moonshotai/kimi-k3`, which would have
+  measured a different system. **Confirm it is still served before the first replay** — it is a
+  preview model. If withdrawn, stop and re-decide rather than substituting.
+- **n=3 on the 25 FAIL sessions, n=1 on the 16 DEFECTs** (~$50 per baseline pass against ~$82).
+  Ambiguous DEFECT replays get promoted to n=3.
+- Still open, blocking nothing: whether the verbatim replay set may be committed as a fixture.
+
+**Also corrected this session:** the standing memory note saying there is no OpenRouter key on
+the dev machine is **wrong** — there is one, in the local DB (`app_settings` →
+`provider.openrouter`, `active_provider = openrouter`), not in `.env`. Memory updated.
+
 **State of the branch:** `fix/prepilot-defects` at the plan commit, branched from `main` at
 `eaaa4ec`. No code changed yet. Test suite untouched.
 
