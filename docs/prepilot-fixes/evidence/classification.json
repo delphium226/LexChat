@@ -1,0 +1,813 @@
+{
+ "6406": {
+  "verdict": "FAIL",
+  "primary": "B1",
+  "secondary": [
+   "B6",
+   "B3"
+  ],
+  "diag": "All four DR steps halted on the 20-step cap; a 2.36 USD report with zero findings. Then reversed its legal conclusion twice under user pushback.",
+  "user": "CambeulW",
+  "q5a": "no",
+  "q8": "1",
+  "mode": "deep_research",
+  "rmode": "legislation_only",
+  "thread": "I'm researching the export of fish oil which is a by-product from ensiled fish t\u2026"
+ },
+ "6408": {
+  "verdict": "FAIL",
+  "primary": "B1",
+  "secondary": [
+   "B2",
+   "B3"
+  ],
+  "diag": "DR halted on every step; the report narrates the halt as a legal gap. Jurisdiction=scotland guaranteed zero search results anyway.",
+  "user": "PatrickS",
+  "q5a": "no",
+  "q8": "1",
+  "mode": "deep_research",
+  "rmode": "legislation_only",
+  "thread": "can you find every bit of legislation that amends REGULATION (EU) No 1306/2013 o\u2026"
+ },
+ "6382": {
+  "verdict": "FAIL",
+  "primary": "B1",
+  "secondary": [
+   "B2",
+   "B3"
+  ],
+  "diag": "The entire report is the halt message. 33 SSIs exist under s.95; zero returned.",
+  "user": "EmmaM",
+  "q5a": "no",
+  "q8": "",
+  "mode": "deep_research",
+  "rmode": "legislation_only",
+  "thread": "I am looking for scottish statutory instruments, made under the powers in sectio\u2026"
+ },
+ "6384": {
+  "verdict": "FAIL",
+  "primary": "B1",
+  "secondary": [
+   "B2",
+   "B5"
+  ],
+  "diag": "Courts Reform (Scotland) Act 2014 reported as not in the database, twice. It is. Two steps halted.",
+  "user": "EmmaM",
+  "q5a": "partially",
+  "q8": "2",
+  "mode": "deep_research",
+  "rmode": "legislation_only",
+  "thread": "Identify any statutory definitions of Interdict "
+ },
+ "6409": {
+  "verdict": "FAIL",
+  "primary": "B3",
+  "secondary": [
+   "B5",
+   "B1",
+   "B12"
+  ],
+  "diag": "Act not found twice, then found on the identical third ask. Commencement SSIs invisible; SSI 2025/119 content stated from model memory, not retrieval.",
+  "user": "CambeulW",
+  "q5a": "no",
+  "q8": "1",
+  "mode": "deep_research",
+  "rmode": "legislation_only",
+  "thread": "Is the Social Security (Amendment) (Scotland) Act 2025 in force?"
+ },
+ "6410": {
+  "verdict": "FAIL",
+  "primary": "B3",
+  "secondary": [
+   "B5"
+  ],
+  "diag": "'No commencement regulations have been made' - the Care Reform (Scotland) Act 2025 (Commencement No.1) Regulations 2025 exist.",
+  "user": "DominiqueT",
+  "q5a": "partially",
+  "q8": "2",
+  "mode": "conversational",
+  "rmode": "legislation_only",
+  "thread": "is the care reform (Scotland) Act 2025 in force? "
+ },
+ "6411": {
+  "verdict": "FAIL",
+  "primary": "B4",
+  "secondary": [
+   "B3"
+  ],
+  "diag": "Determined in-force status by reference to case law, because no commencement mechanism exists in the toolset.",
+  "user": "StephenD",
+  "q5a": "yes",
+  "q8": "3",
+  "mode": "conversational",
+  "rmode": "legislation_and_case_law",
+  "thread": "Is the Scotland Act 1998 in force?"
+ },
+ "6340": {
+  "verdict": "FAIL",
+  "primary": "B3",
+  "secondary": [
+   "B12"
+  ],
+  "diag": "Asserted three real SIs were made under s.117 Education (Scotland) Act 1962. None were. The Act is absent from LEX entirely - the three SIs are simply the top keyword hits.",
+  "user": "EmmaM",
+  "q5a": "no",
+  "q8": "1",
+  "mode": "",
+  "rmode": "",
+  "thread": "Provide a list of all secondary legislation made under the enabling powers in se\u2026"
+ },
+ "6383": {
+  "verdict": "FAIL",
+  "primary": "B3",
+  "secondary": [
+   "B2"
+  ],
+  "diag": "Found 1 of 30+ SSIs made under s.95; its own report flags the discrepancy between general search and direct lookup.",
+  "user": "EmmaM",
+  "q5a": "partially",
+  "q8": "1",
+  "mode": "deep_research",
+  "rmode": "legislation_only",
+  "thread": "I am looking for scottish statutory instruments, made under the powers in sectio\u2026"
+ },
+ "6354": {
+  "verdict": "FAIL",
+  "primary": "B3",
+  "secondary": [
+   "B10"
+  ],
+  "diag": "Retrieved the Housing (Scotland) Act 1987 but missed SSI 2022/356 suspending the s.33 referral rules - rank 1 on a title search in LEX.",
+  "user": "StephenD",
+  "q5a": "partially",
+  "q8": "4",
+  "mode": "conversational",
+  "rmode": "legislation_and_case_law",
+  "thread": "With regards to Scotland, what mechanisms could the Scottish Government consider\u2026"
+ },
+ "6374": {
+  "verdict": "FAIL",
+  "primary": "B3",
+  "secondary": [
+   "B1"
+  ],
+  "diag": "Could not find the Orders in Council under s.126(8); the step that would have found them was halted. Honest about it - the user gave 5/5 for that honesty.",
+  "user": "CambeulW",
+  "q5a": "partially",
+  "q8": "5",
+  "mode": "deep_research",
+  "rmode": "legislation_only",
+  "thread": "I would like a list of everything which makes up \"The Scottish Administration\" a\u2026"
+ },
+ "6345": {
+  "verdict": "FAIL",
+  "primary": "B3",
+  "secondary": [
+   "B6",
+   "B13"
+  ],
+  "diag": "Cited the wrong Act (Transport (Scotland) Act 2005 s.40), capitulated when told, then partially corrected. Two user turns dropped; ~15 min perceived wait.",
+  "user": "MoniqueM",
+  "q5a": "partially",
+  "q8": "1",
+  "mode": "",
+  "rmode": "",
+  "thread": "What provision enables Scottish Ministers to establish a national bus fare cap s\u2026"
+ },
+ "6396": {
+  "verdict": "FAIL",
+  "primary": "B10",
+  "secondary": [
+   "B2"
+  ],
+  "diag": "Found the right enactment, could not find the provisions inside it, and told the user it could not answer.",
+  "user": "EmmaM",
+  "q5a": "partially",
+  "q8": "3",
+  "mode": "conversational",
+  "rmode": "legislation_only",
+  "thread": "How soon after birth must a bovine animal be officially identified in Scotland?"
+ },
+ "6367": {
+  "verdict": "FAIL",
+  "primary": "B5",
+  "secondary": [
+   "B8"
+  ],
+  "diag": "Stated the statutory deadlines do not exist; they are in the Public Finance and Accountability (Scotland) Act 2000. Cited an irrelevant Act instead.",
+  "user": "PatrickS",
+  "q5a": "partially",
+  "q8": "2",
+  "mode": "deep_research",
+  "rmode": "legislation_only",
+  "thread": "I am looking to create a timeline for the statutory requirements placed on the W\u2026"
+ },
+ "6381": {
+  "verdict": "FAIL",
+  "primary": "B5",
+  "secondary": [
+   "B2"
+  ],
+  "diag": "Answered from adjacent statutes without disclosing that the Act asked about was unavailable - the user spotted it only from the sources rail.",
+  "user": "AlistairC",
+  "q5a": "partially",
+  "q8": "3",
+  "mode": "conversational",
+  "rmode": "legislation_only",
+  "thread": "Can you identify duties or functions conferred on procurator fiscals, prosecutor\u2026"
+ },
+ "6378": {
+  "verdict": "FAIL",
+  "primary": "B8",
+  "secondary": [
+   "B9",
+   "B4"
+  ],
+  "diag": "The correct instrument (SSI 2008/216) was in the sources rail and absent from the answer; a revoked 1999 SSI was cited instead. A UK question was answered England-only.",
+  "user": "DominiqueT",
+  "q5a": "no",
+  "q8": "2",
+  "mode": "conversational",
+  "rmode": "legislation_only",
+  "thread": "are there rules on the level of vitamins contained in margarine sold in the UK?"
+ },
+ "6338": {
+  "verdict": "FAIL",
+  "primary": "B11",
+  "secondary": [],
+  "diag": "Applied the Interpretation and Legislative Reform (Scotland) Act 2010 to a 2009 Act. ILRA s.1(1)(a) applies only to Acts assented on or after commencement. Also wrong on s.35A/35ZA concurrency.",
+  "user": "HeatherE",
+  "q5a": "no",
+  "q8": "1",
+  "mode": "",
+  "rmode": "",
+  "thread": "How are months defined under the Climate Change (Scotland) Act 2009?"
+ },
+ "6375": {
+  "verdict": "FAIL",
+  "primary": "B11",
+  "secondary": [
+   "B12"
+  ],
+  "diag": "Analysed common interest privilege as if it were Scots law; it is English. The Scots case-law disclaimer it gives in other sessions did not appear here.",
+  "user": "PatrickS",
+  "q5a": "no",
+  "q8": "2",
+  "mode": "deep_research",
+  "rmode": "legislation_and_case_law",
+  "thread": "Explain the concepts of legal professional privilege, common interest privileges\u2026"
+ },
+ "6346": {
+  "verdict": "FAIL",
+  "primary": "B7",
+  "secondary": [],
+  "diag": "Told the user four times she was still in Legislation Only after she changed it. 1/5 confidence, 1/5 ease - the worst session in the corpus.",
+  "user": "MoniqueM",
+  "q5a": "no",
+  "q8": "1",
+  "mode": "",
+  "rmode": "",
+  "thread": "Provide a succinct case summary of the English case: Rex v Evans (Graham) [2025]\u2026"
+ },
+ "6343": {
+  "verdict": "FAIL",
+  "primary": "B7",
+  "secondary": [],
+  "diag": "Same dead-end, then invented a UI location ('typically located at the top or side of the chat window').",
+  "user": "MoniqueM",
+  "q5a": "no",
+  "q8": "1",
+  "mode": "",
+  "rmode": "",
+  "thread": "R (SC) [2022] AC 223 - what point came out in this case regarding interpretation\u2026"
+ },
+ "6335": {
+  "verdict": "FAIL",
+  "primary": "B8",
+  "secondary": [
+   "B13"
+  ],
+  "diag": "Five sources, several irrelevant; the case law did not contain the definition asked for. Three user turns dropped.",
+  "user": "HeatherE",
+  "q5a": "partially",
+  "q8": "1",
+  "mode": "",
+  "rmode": "",
+  "thread": "Does the insolvency act define 'legal proceedings'?"
+ },
+ "6359": {
+  "verdict": "FAIL",
+  "primary": "B8",
+  "secondary": [
+   "B12",
+   "B2"
+  ],
+  "diag": "Cited cases the user checked and found irrelevant; the key EAT authority (Clark) is absent from the corpus.",
+  "user": "AlistairC",
+  "q5a": "partially",
+  "q8": "2",
+  "mode": "conversational",
+  "rmode": "legislation_and_case_law",
+  "thread": "Can you please tell me the correct approach in law to correctly identifying who \u2026"
+ },
+ "6373": {
+  "verdict": "FAIL",
+  "primary": "B12",
+  "secondary": [
+   "B5"
+  ],
+  "diag": "SSI 2026/170 is genuinely absent from LEX - but the reply questioned the lawyer's citation rather than stating an index limit.",
+  "user": "FrankieH",
+  "q5a": "no",
+  "q8": "1",
+  "mode": "conversational",
+  "rmode": "legislation_only",
+  "thread": "What rights are individuals in polygamous marriages granted, in respect to adult\u2026"
+ },
+ "6385": {
+  "verdict": "FAIL",
+  "primary": "B12",
+  "secondary": [
+   "B10"
+  ],
+  "diag": "Scottish courts not indexed (a real gap); also missed R v Donna Foster, which the same TNA query returns.",
+  "user": "EmmaM",
+  "q5a": "no",
+  "q8": "4",
+  "mode": "conversational",
+  "rmode": "case_law_only",
+  "thread": "Identify case law regarding dangerous dogs. Please also flag an XL bully type ha\u2026"
+ },
+ "6341": {
+  "verdict": "FAIL",
+  "primary": "B4",
+  "secondary": [
+   "B1",
+   "B14"
+  ],
+  "diag": "Stated that all provisions cited were in force; ss.38-39 Shops Act are repealed. Invented an explanation for the missing text. Two citations pointed at superseded wording.",
+  "user": "EmmaM",
+  "q5a": "partially",
+  "q8": "3",
+  "mode": "deep_research",
+  "rmode": "",
+  "thread": "I am interested in the definition of \"shop\" - can you find any statutory definit\u2026"
+ },
+ "6407": {
+  "verdict": "DEFECT",
+  "primary": "B1",
+  "secondary": [
+   "B2",
+   "B7"
+  ],
+  "diag": "Conversational could not retrieve the 2016 Act; DR could. The secondary-legislation step halted. 'I cannot change the mode for you' after the user clicked AILA's own suggestion.",
+  "user": "AlistairC",
+  "q5a": "yes",
+  "q8": "5",
+  "mode": "deep_research",
+  "rmode": "legislation_and_case_law",
+  "thread": "What is the legal mechanism by which members are appointed to the body known as \u2026"
+ },
+ "6363": {
+  "verdict": "DEFECT",
+  "primary": "B12",
+  "secondary": [
+   "B13"
+  ],
+  "diag": "Recency bias in the case-law corpus; missed the foundational occupiers' liability authorities. One blank assistant message.",
+  "user": "CambeulW",
+  "q5a": "partially",
+  "q8": "3",
+  "mode": "deep_research",
+  "rmode": "legislation_and_case_law",
+  "thread": "I am looking for definitions, both statutory and in case law, of the term \"occup\u2026"
+ },
+ "6370": {
+  "verdict": "DEFECT",
+  "primary": "B11",
+  "secondary": [
+   "B13"
+  ],
+  "diag": "Took and defended a firm interpretive position on an ambiguous drafting point across three turns, then conceded. One blank message, billed 0.0217 USD.",
+  "user": "CambeulW",
+  "q5a": "yes",
+  "q8": "3",
+  "mode": "conversational",
+  "rmode": "legislation_and_case_law",
+  "thread": "what is the scope of The Agriculture, Land Drainage and Irrigation Projects (Env\u2026"
+ },
+ "6365": {
+  "verdict": "DEFECT",
+  "primary": "B10",
+  "secondary": [
+   "B5"
+  ],
+  "diag": "Cited whole sections, never subsections; missed the Public Finance and Accountability (Scotland) Act 2000 until pointed at it.",
+  "user": "PatrickS",
+  "q5a": "partially",
+  "q8": "4",
+  "mode": "deep_research",
+  "rmode": "legislation_only",
+  "thread": "I am looking at the process for the reporting and publishing of Scottish Water's\u2026"
+ },
+ "6347": {
+  "verdict": "DEFECT",
+  "primary": "B7",
+  "secondary": [
+   "B10"
+  ],
+  "diag": "Mode deflection on turn 1; the summary then missed the judgment's ratio on duties at the material time.",
+  "user": "MoniqueM",
+  "q5a": "partially",
+  "q8": "2",
+  "mode": "deep_research",
+  "rmode": "",
+  "thread": "please summarise Rex v Evans (Graham) [2025] EWCA."
+ },
+ "6350": {
+  "verdict": "DEFECT",
+  "primary": "B7",
+  "secondary": [],
+  "diag": "Mode deflection, but recovered cleanly once the filter was reset.",
+  "user": "EmmaM",
+  "q5a": "partially",
+  "q8": "4",
+  "mode": "",
+  "rmode": "",
+  "thread": "What legislation makes provision about police powers in relation to non-violent \u2026"
+ },
+ "6348": {
+  "verdict": "DEFECT",
+  "primary": "B10",
+  "secondary": [],
+  "diag": "Identified s.36 FOISA but elaborated only s.36(1), not s.36(2).",
+  "user": "AnnaON",
+  "q5a": "yes",
+  "q8": "4",
+  "mode": "",
+  "rmode": "",
+  "thread": "What is the statutory provision which covers legal advice privilege exemption fo\u2026"
+ },
+ "6360": {
+  "verdict": "DEFECT",
+  "primary": "B9",
+  "secondary": [],
+  "diag": "Answered with the E&W 2007 Rules first; found the Scottish 2007 Rules only on follow-up.",
+  "user": "AnnaON",
+  "q5a": "yes",
+  "q8": "5",
+  "mode": "conversational",
+  "rmode": "legislation_only",
+  "thread": "Who is eligible to claim expenses in a statutory public inquiry?"
+ },
+ "6369": {
+  "verdict": "DEFECT",
+  "primary": "B10",
+  "secondary": [],
+  "diag": "Right part of the Act, but the purpose test - the point that decides the question - surfaced only after repeated prompting.",
+  "user": "DominiqueT",
+  "q5a": "yes",
+  "q8": "3",
+  "mode": "conversational",
+  "rmode": "legislation_only",
+  "thread": "is radiation a devolved matter?"
+ },
+ "6372": {
+  "verdict": "DEFECT",
+  "primary": "B8",
+  "secondary": [
+   "B10"
+  ],
+  "diag": "Quoted provisions as belonging to one instrument when they belong to another (the other was in the sources rail).",
+  "user": "FrankieH",
+  "q5a": "yes",
+  "q8": "3",
+  "mode": "conversational",
+  "rmode": "legislation_only",
+  "thread": "What is the law on inadvertent disclosure of legally privileged information?"
+ },
+ "6333": {
+  "verdict": "DEFECT",
+  "primary": "B10",
+  "secondary": [],
+  "diag": "Found s.91(1) and corrected the user's section reference, but needed prompting for the rest; the follow-up on the strategy was wrong.",
+  "user": "HeatherE",
+  "q5a": "partially",
+  "q8": "2",
+  "mode": "",
+  "rmode": "",
+  "thread": "what would the Public Engagement Strategy need to contain to be complaint with s\u2026"
+ },
+ "6334": {
+  "verdict": "DEFECT",
+  "primary": "B14",
+  "secondary": [],
+  "diag": "Correct answer; links go to the Act contents page rather than the provision discussed.",
+  "user": "HeatherE",
+  "q5a": "yes",
+  "q8": "4",
+  "mode": "",
+  "rmode": "",
+  "thread": "Does Section 35(1)(b) of the Climate Change (Scotland) Act 2009 refer to the dat\u2026"
+ },
+ "6387": {
+  "verdict": "DEFECT",
+  "primary": "B13",
+  "secondary": [],
+  "diag": "Correct on both local Acts; the session timed out on a follow-up.",
+  "user": "EmmaM",
+  "q5a": "yes",
+  "q8": "5",
+  "mode": "conversational",
+  "rmode": "legislation_only",
+  "thread": "What legislation originally set out the maximun height of the roof of Waverley s\u2026"
+ },
+ "6389": {
+  "verdict": "DEFECT",
+  "primary": "B1",
+  "secondary": [],
+  "diag": "Correct answer and reasoning, but the report carries halt text.",
+  "user": "CorsinoSM",
+  "q5a": "yes",
+  "q8": "4",
+  "mode": "deep_research",
+  "rmode": "legislation_only",
+  "thread": "Can a tobacco-free herbal smoking product containing CBD be lawfully sold in the\u2026"
+ },
+ "6357": {
+  "verdict": "DEFECT",
+  "primary": "B1",
+  "secondary": [],
+  "diag": "Found s.85 and was honest about the rest; one step halted.",
+  "user": "JayaPS",
+  "q5a": "yes",
+  "q8": "4",
+  "mode": "deep_research",
+  "rmode": "legislation_only",
+  "thread": "Under social security law in Scotland, how does the First-tier Tribunal for Scot\u2026"
+ },
+ "6380": {
+  "verdict": "DEFECT",
+  "primary": "B10",
+  "secondary": [],
+  "diag": "Good first answer on data protection; needed prompting to reach legitimate expectations. Some cited cases were off-context.",
+  "user": "AlistairC",
+  "q5a": "partially",
+  "q8": "4",
+  "mode": "conversational",
+  "rmode": "legislation_and_case_law",
+  "thread": "Is it lawful to publish a consultation response without the respondent's consent\u2026"
+ },
+ "6336": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Correct statutes and conclusions; gave all-UK answers where only Scotland was wanted, but the user did not specify.",
+  "user": "StephenD",
+  "q5a": "yes",
+  "q8": "5",
+  "mode": "deep_research",
+  "rmode": "",
+  "thread": "Can teachers run to be Councillors?"
+ },
+ "6339": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Correct Act, section and schedule; the scoping miss was the user's own.",
+  "user": "StephenD",
+  "q5a": "partially",
+  "q8": "5",
+  "mode": "deep_research",
+  "rmode": "",
+  "thread": "I am interested to understand a debt issue. If a widow collecting their deceased\u2026"
+ },
+ "6371": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Correctly reported that LEX holds only citation/commencement provisions for the 1945 Act and pointed at Hansard. An honest limit, correctly stated.",
+  "user": "FrankieH",
+  "q5a": "partially",
+  "q8": "3",
+  "mode": "conversational",
+  "rmode": "legislation_only",
+  "thread": "What is the background on the purpose behind section 73 of the Education (Scotla\u2026"
+ },
+ "6376": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Correct throughout, including the s.25 / s.36(2)(i) expenses distinction. Q7a appears mis-keyed in the form.",
+  "user": "AnnaON",
+  "q5a": "yes",
+  "q8": "5",
+  "mode": "conversational",
+  "rmode": "legislation_only",
+  "thread": "Tell me about the legislation which covers fatal accident inquiries in scotland"
+ },
+ "6361": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Stated the case-law limit up front and gave the provision text correctly. Q7a appears mis-keyed.",
+  "user": "AnnaON",
+  "q5a": "yes",
+  "q8": "5",
+  "mode": "conversational",
+  "rmode": "legislation_only",
+  "thread": "Can you tell me about any case law where s40(4) of the Inquiries Act 2005 has be\u2026"
+ },
+ "6413": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Followed the dependency from FOISA into SSI 2004/467 and got both figures right - the trap the user designed it to fall into.",
+  "user": "CorsinoSM",
+  "q5a": "yes",
+  "q8": "",
+  "mode": "deep_research",
+  "rmode": "legislation_only",
+  "thread": "can scottish public authorities refuse a freedom of information request because \u2026"
+ },
+ "6405": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Kept the 2014 Act and 2015 Regulations thresholds apart; exact figures correct.",
+  "user": "CorsinoSM",
+  "q5a": "yes",
+  "q8": "4",
+  "mode": "deep_research",
+  "rmode": "legislation_only",
+  "thread": "at what contract value do the duties under the Procurement Reform Scotland act 2\u2026"
+ },
+ "6404": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Correct Act, correct 20-working-day rule, correct s.10 pause.",
+  "user": "CorsinoSM",
+  "q5a": "yes",
+  "q8": "5",
+  "mode": "deep_research",
+  "rmode": "legislation_only",
+  "thread": "how long does scottish public authorities have to respond to a freedom of inform\u2026"
+ },
+ "6401": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Applied current law to a hypothetical correctly; identified social care as devolved.",
+  "user": "CorsinoSM",
+  "q5a": "yes",
+  "q8": "5",
+  "mode": "deep_research",
+  "rmode": "legislation_only",
+  "thread": "Assuming responsibility for social care does transfer to local authorities, the \u2026"
+ },
+ "6390": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Correct legislation and pinpointed provisions.",
+  "user": "EmmaM",
+  "q5a": "yes",
+  "q8": "5",
+  "mode": "conversational",
+  "rmode": "legislation_only",
+  "thread": "What are the requirements of writing in scotland in relation to sole trustees an\u2026"
+ },
+ "6379": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Identified the four Gunning principles from later restatements despite Gunning itself being outside the corpus.",
+  "user": "AlistairC",
+  "q5a": "yes",
+  "q8": "5",
+  "mode": "conversational",
+  "rmode": "legislation_and_case_law",
+  "thread": "What are the legal principles behind a Government running a lawful consultation \u2026"
+ },
+ "6377": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Correct law and framework for data sharing, plus relevant case law.",
+  "user": "JayaPS",
+  "q5a": "yes",
+  "q8": "5",
+  "mode": "conversational",
+  "rmode": "legislation_and_case_law",
+  "thread": "Is there a power allowing Social Security Scotland to share data relating to fra\u2026"
+ },
+ "6368": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Correct route to the marine licence provisions.",
+  "user": "DominiqueT",
+  "q5a": "yes",
+  "q8": "4",
+  "mode": "conversational",
+  "rmode": "legislation_only",
+  "thread": "If I'm looking to apply for a marine licence in Scotland, where would i find the\u2026"
+ },
+ "6362": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Correctly identified ASPA 1986.",
+  "user": "AnnaON",
+  "q5a": "yes",
+  "q8": "5",
+  "mode": "conversational",
+  "rmode": "legislation_only",
+  "thread": "What is the primary legislation which regulates the use of animals in scientific\u2026"
+ },
+ "6358": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Correct on alcohol sale and minimum unit pricing in Scotland.",
+  "user": "DominiqueT",
+  "q5a": "yes",
+  "q8": "4",
+  "mode": "conversational",
+  "rmode": "legislation_only",
+  "thread": "How is the online sale of alcohol and minimum unit pricing regulated in Scotland\u2026"
+ },
+ "6351": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Correct on s.77 of the 1978 Act and the express-remedy point.",
+  "user": "JohnP",
+  "q5a": "yes",
+  "q8": "5",
+  "mode": "",
+  "rmode": "",
+  "thread": "Can you use an order ad factum praestandum to enforce a health board to follow a\u2026"
+ },
+ "6344": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Correct primary legislation and provision for the concessionary scheme.",
+  "user": "MoniqueM",
+  "q5a": "yes",
+  "q8": "5",
+  "mode": "",
+  "rmode": "",
+  "thread": "What legislation and specific provision did UK Ministers use to establish the \u00a33\u2026"
+ },
+ "6342": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Correct provisions for traffic authority powers.",
+  "user": "MoniqueM",
+  "q5a": "yes",
+  "q8": "5",
+  "mode": "",
+  "rmode": "",
+  "thread": "State the legislation and specific provisions which enables a traffic authority \u2026"
+ },
+ "6337": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Correct that no consent/connivance clause exists and that such clauses are statute-specific.",
+  "user": "HeatherE",
+  "q5a": "yes",
+  "q8": "4",
+  "mode": "",
+  "rmode": "",
+  "thread": "Do offences in the Forestry and Land Management (Scotland) Act 2018 carry indivi\u2026"
+ },
+ "6332": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Correct section and subsection.",
+  "user": "StephenD",
+  "q5a": "yes",
+  "q8": "5",
+  "mode": "",
+  "rmode": "",
+  "thread": "I am considering benefits run by the Scottish Government. If one of these was to\u2026"
+ },
+ "6329": {
+  "verdict": "PASS",
+  "primary": "",
+  "secondary": [],
+  "diag": "Correct sections plus the absence of enabling SSIs for the second Act.",
+  "user": "StephenD",
+  "q5a": "yes",
+  "q8": "5",
+  "mode": "deep_research",
+  "rmode": "",
+  "thread": "where would i find out about the power to advance wellbeing?"
+ }
+}

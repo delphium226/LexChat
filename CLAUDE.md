@@ -17,6 +17,10 @@ Merged and live: federation, Deep Research mode, the full caching stack (D5 prov
 
 **Exception — `feature/drafting-bot` (drafting bot build, from 2026-08-05).** The legislative-drafting bot (`RESEARCH_MODE=drafting`) is built on a long-lived `feature/drafting-bot` branch and merged to `main` only when complete. This is scoped **to that project only** — everything else still commits straight to `main`. Do **not** push it to `main` or rebase `main` onto it mid-build: the target `git pull`s `origin/main`, and a half-built bot must not be pullable onto a production server. Its Session 0 (security prerequisites) is the one carve-out and landed on `main` directly, because those fixes are correct regardless of whether the drafting bot ever ships. Build spec and session ledger: `docs/drafting/BUILD_PLAN.md`.
 
+**Exception — `fix/prepilot-defects` (pre-pilot defect fixes, from 2026-09-14).** The fixes for the 14 failure buckets found by re-analysing all 62 pre-pilot sessions are built on `fix/prepilot-defects` and merged to `main` **wave by wave as each wave is accepted**, not held to the end. Same rule as the drafting bot while work is in flight: do not push half-finished waves to `main`, because the target pulls `origin/main`. Everything unrelated still commits straight to `main`. **Read `docs/prepilot-fixes/FIX_PLAN.md` first, then `SESSION_LOG.md` next to it, before touching anything in `agent/tools/`, `prompts.py`, or the Deep Research path** — several of those files have a fix queued against them and the plan records why the obvious change is the wrong one.
+
+One finding from that work is load-bearing enough to state here: **`_matches_jurisdiction` (`agent/tools/lex.py`) discards 100% of legislation search results whenever a jurisdiction filter is set.** It splits `extent` on `+` looking for `E`/`W`/`S`/`NI`; the LEX API returns `['Scotland']`, `['']`, `['England','Wales','Scotland']`, `['United Kingdom']`. Until P1.1 lands, any measurement taken with a jurisdiction filter active is measuring an empty result set, not retrieval quality.
+
 ## Where the rest of the context lives
 Loaded on demand, not every session:
 - **`repo-map` skill** — annotated index of which file does what, across backend and frontend.
@@ -24,6 +28,7 @@ Loaded on demand, not every session:
 - **`client/CLAUDE.md`** — frontend design-token rules; loads automatically when working under `client/`.
 - **`docs/frontend/design-system.md`** — full token and button/component class reference.
 - **`docs/drafting/BUILD_PLAN.md`** — the drafting-bot build spec and session ledger (plus `docs/drafting/SESSION_LOG.md` for what each session actually did).
+- **`docs/prepilot-fixes/FIX_PLAN.md`** — the pre-pilot defect fix plan, invariants and tickable ledger (plus `SESSION_LOG.md` and `evidence/classification.json`, the frozen per-session classification, next to it).
 - Env vars are declared in `server_py/src/config.py`; start/stop scripts are in `deployment/`.
 
 ## Key Architectural Decisions

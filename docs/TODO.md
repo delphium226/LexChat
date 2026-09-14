@@ -824,6 +824,27 @@ Until this is answered the regime is not disaster recovery. Blocks nothing in D1
 
 ## Pre-pilot session-transcript analysis (2026-08-19)
 
+> **SUPERSEDED 2026-09-14 — the freeze is lifted and the fixes are in build.** All 62 pre-pilot
+> sessions (not the 41-session cut below) have been re-classified from the transcripts, with the
+> disputed law verified at source: **25 FAIL, 16 DEFECT, 21 PASS**, sorted into 14 failure
+> buckets. Work is tracked in **`docs/prepilot-fixes/FIX_PLAN.md`** on branch
+> `fix/prepilot-defects`; the per-session classification is frozen at
+> `docs/prepilot-fixes/evidence/classification.json`; the full analysis is at
+> <https://claude.ai/code/artifact/43d8e63d-1c9d-4460-907c-2d35c1fa3786>.
+>
+> **Three corrections to what follows.** (1) Three buckets turned out to be **code defects, not
+> model behaviour** — chief among them `_matches_jurisdiction`, which discards 100% of
+> legislation results whenever a jurisdiction filter is set (15 of 62 sessions), and
+> `current_only`, which excludes nothing because it reads a field that means text-revision
+> state, not in-force status (42 of 62 sessions). Neither is visible in a transcript. (2) P1's
+> confident false negatives are a **symptom**; the cause is that no tool exposes *made under* /
+> *commences* / *amends*, so relationship questions are answered from search adjacency (bucket
+> B3, the largest). (3) A bucket P1–P10 missed entirely: the model **capitulates under
+> challenge** and reverses its legal conclusion on pushback (bucket B6, session 6406).
+>
+> The P1–P10 analysis below is kept as written — it is the record of what was known during the
+> freeze, and the bucket list reconciles against it rather than replacing it.
+
 Source: `session-transcripts-prepilot-2026-08-19.csv` (Developer tab export) — **41 sessions,
 12 lawyers, 251 messages, 119 assistant turns, $20.22 total spend**, 2026-08-11 → 08-19.
 
@@ -1053,7 +1074,15 @@ Fixes to the measurement instrument, ordered by what they cost the analysis:
 
 ---
 
-## Retrieval & report-prompt accuracy (PARKED until after the pilot)
+## Retrieval & report-prompt accuracy (UNPARKED 2026-09-14 — now in build)
+
+> **The freeze is lifted.** D16 and D17 below are unparked and folded into
+> `docs/prepilot-fixes/FIX_PLAN.md`: D16 defect 1 (impossible year window) and defect 3
+> (missing zero-result nudge) sit in row **P2.2**; D16 defect 2 (discarded result count) is
+> **P1.3**; D16 item 7 (the unverified ranked-sections array) is **P3.1**, which still requires
+> confirming the live response shape first. D17 remains as recorded below and is not yet
+> allocated a row — the mode-blind synthesis prompt is real but no pre-pilot session evidences
+> it, so it is scheduled after Wave 3 rather than inside it.
 
 Both items below are parked for the same reason and are to be **unparked and reviewed as a
 single body of work**, not picked off individually. Further external feedback is expected

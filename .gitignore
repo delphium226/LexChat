@@ -96,3 +96,8 @@ deployment/autostart_config.ps1
 
 # Loose deployment artifacts
 frontend_update.zip
+
+# Pre-pilot replay fixtures — contain lawyers' verbatim research questions.
+# Regenerate from the Developer-tab transcript export; see docs/prepilot-fixes/FIX_PLAN.md.
+docs/prepilot-fixes/evidence/replay_set.json
+docs/prepilot-fixes/evidence/replay/
