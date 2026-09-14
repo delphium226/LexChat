@@ -822,9 +822,250 @@ Until this is answered the regime is not disaster recovery. Blocks nothing in D1
 
 ---
 
-## Legislation search accuracy (investigated 2026-08-17 — PARKED until after the pilot)
+## Pre-pilot session-transcript analysis (2026-08-19)
+
+Source: `session-transcripts-prepilot-2026-08-19.csv` (Developer tab export) — **41 sessions,
+12 lawyers, 251 messages, 119 assistant turns, $20.22 total spend**, 2026-08-11 → 08-19.
+
+Headline: **ease of use 4.17/5, confidence 3.37/5**; ease exceeded confidence in 22 of 41
+sessions. Confidence tracks accuracy almost exactly (mean 4.40 where the right law was found,
+2.93 partially, **1.29** where it was not), so these scores are a usable accuracy proxy rather
+than a polish score. **51% of sessions did not cleanly find the right law; 37% contained at
+least one incorrect reference.** Claimed time saved 18.1h against 55.7h of estimated manual
+effort (32%) — but **14 of 40 sessions reported zero saving**, and 14.9h went on checking.
+
+Entries are ranked by impact. Each is tagged **[FROZEN]** — moves retrieval or report
+behaviour, so it belongs with the D16/D17 cluster below and must not ship pre-pilot — or
+**[SAFE]**, a defect whose fix does not move what the pilot is measuring.
+
+### P1. Confident false negatives: the same instrument is retrieved, then reported "not in the database" [FROZEN]
+**Evidence.** Session 6357 (JayaPS): message 3 answers Reg 7 of the Disability Assistance for
+Working Age People (Scotland) Regulations 2022 (SSI 2022/54) correctly and in detail; message 5
+— same thread, two turns later — returns a Deep Research report whose BLUF states *"the
+requested Scottish Statutory Instrument (SSI 2022/54) was not found in the available
+database"*. Same session: the Social Security (Scotland) Act 2018 is *"unable to locate"* at
+message 7 (conversational) and fully retrieved at s.85 at message 11 (research mode). Session
+6373 (FrankieH) is the same shape against SSI 2026/170 and scored **1/5**.
+
+**Why it ranks first.** A wrong answer is checkable; *"this is not in the database"* is not —
+the lawyer stops looking. Worse, the behaviour is being **rewarded**: CambeulW gave 5/5
+confidence explicitly because AILA said it could not find something (*"I am confident in the
+answer because it correctly identified it was unable to answer the question"*). We are
+collecting positive signal for negatives we cannot substantiate.
+
+**Mirror image, same root.** Session 6340 (EmmaM, 1/5): AILA asserted three SIs were made under
+the enabling powers in s.117 Education (Scotland) Act 1962. All three are real and correctly
+cited; **none was made under s.117**. A fabricated *relationship* between real documents —
+invisible to link-checking, which is the only verification the sources rail supports.
+
+**Relation to D16.** This is the field evidence D16 was waiting for; do not treat it as a
+separate workstream. D16 defects 1–3 are all plausible contributors, and defect 2 (the API's
+result count discarded at `executor.py:227`) would specifically let the model distinguish
+"nothing matched" from "matches existed and your filter removed them" — the sentence it is
+currently getting wrong. **Add to the D16 fix list:** never render a bare negative; a
+zero-result answer must state what was searched and under which filters, so an absent
+instrument is distinguishable from a too-tight window.
+
+### P2. The research-mode dead-end: the model refuses on the strength of its own earlier refusal [SAFE, with a caveat]
+**Evidence.** ~13 of 41 sessions (32%) contain a scope deflection. Four users changed the
+setting, said so, and were told they had not:
+- **6346 (MoniqueM)** — *"I have changed the mode, please proceed"* → *"the system still
+  restricts my searches to 'Legislation Only'"*. Never recovered; **the only 1/1 session in the
+  dataset** (Q8=1, Q9a=1). She then opened session 6347, asked the identical question, and got
+  a full report first try.
+- **6357 (JayaPS)** — *"the system indicates I am still in Chat mode"*; recovered only after a
+  second round-trip. **6363 (CambeulW)** and **6350 (EmmaM)** are the same shape.
+
+**Diagnosis — code-checked 2026-08-19, not a hypothesis.** The backend is not stale.
+`researchMode` is browser state sent on every request (`client/src/hooks/useChat.js:234`,
+`:391`), and `get_manager_system_prompt` rebuilds the mode note **per turn** from that
+request's cfg — `prompts.py:643-650` for the conversational `legislation_only` fallback,
+`get_manager_mode_note` (`prompts.py:559-580`) for the rest. So when the user switched to
+Legislation & Case Law, the system prompt on the very next turn said *"CURRENT RESEARCH MODE:
+Legislation & Case Law"* and the model answered *"restricted to Legislation Only"* anyway.
+**The model anchors on its own prior refusal, still sitting in the conversation history, over
+the current system prompt.** The 6346→6347 recovery (fresh session, no prior refusal in
+history) is the confirming case.
+
+**Candidate fixes, cheapest first:**
+1. Code-side, not prompt-side: when the resolved research mode differs from the mode in effect
+   on the previous assistant turn, inject a marker into the history (`[RESEARCH MODE CHANGED:
+   now Legislation & Case Law — your earlier statements about scope no longer apply]`). Same
+   philosophy as the Phase-2 nudges and the search budget — enforcement in code beats prompt
+   obedience. Needs the previous turn's mode, which the frontend has and currently discards;
+   see **D13**.
+2. Frontend: render the change in the thread itself (a mode-change chip), so user and model
+   see the same fact.
+3. Independent prompt-fidelity bug: `prompts.py:648-649` tells the model to suggest switching
+   to **"Legislation & Case Law" mode via the mode selector** — the research filter. In the
+   transcripts it repeatedly says *"switch to **Research mode**"*, which is the *chat mode*
+   control and does not lift the case-law block at all. Users followed that advice and it did
+   not work (6343, 6357). Whatever else changes, the deflection must name the right control.
+
+**Caveat on [SAFE].** (2) and (3) are defensible inside the freeze with no retrieval effect.
+(1) touches the manager's message history, so it wants A3 or at least a manual regression
+before shipping — user's call whether that clears the freeze.
+
+### P3. Deep Research leaks its own step budget into the report as a legal finding [FROZEN]
+**Evidence.** **6 of 15 long Deep Research reports (40%)** carry text like *"the research
+process for this specific step was halted due to a system limitation exceeding the maximum
+tool-call steps"* — inside the BLUF, formatted as a **Material Gap** beside genuine legal
+findings. Sessions 6339, 6341, 6357, 6374.
+
+**Mechanism.** `chat_loop` returns `"[Research halted: exceeded {max_turns} tool-call steps]"`
+as the worker's **assistant content** (`agent/openrouter_client.py:158`,
+`agent/ollama_client.py:85`, `max_turns=20`). `run_deep_research` treats that string as the
+step's findings and hands it to synthesis, which faithfully reports it as a gap. Every layer
+behaves correctly and the composite is bad.
+
+**Two separable problems.** *Presentation* — an internal budget exhaustion is narrated to a
+government lawyer as if it were a fact about the law; synthesis should receive the halt as
+metadata and the UI should mark the step incomplete, rather than the halt string entering
+report prose. *The budget itself* — in 6374 the halted step was precisely the one that would
+have found the Orders in Council under s.126(8) the user came for; `max_turns=20` is shared
+with single-delegation research, and a DR plan step running an enumeration sweep is a
+different shape.
+
+**Already measurable, no new instrumentation needed:** `request_timings.max_turns_halted`
+exists (`utils/stopwatch.py:177`, `models.py:119`) and `routers/stats.py:673` already
+aggregates `halt_count`. Read it before changing the cap.
+
+### P4. Enumeration questions fail systematically [FROZEN]
+Every "all / every / comprehensive list" question in the file underperformed: all secondary
+legislation under s.117 (6340, 1/5); everything constituting the Scottish Administration
+(6374); all statutory definitions of "shop" in Scots law (6341); all Orders in Council under
+s.126(8) (6374). The Phase 1 search → Phase 2 section-retrieval pipeline is tuned for targeted
+lookup — `limit: 5` when unfiltered (D16 item 5) and one combined section call per Act (D16's
+structural change) — and both precision optimisations work directly against exhaustiveness.
+
+A scoping decision, not only a tuning one: either (a) accept it, have the planner detect
+enumeration intent, and say plainly that the tool cannot guarantee completeness, or (b) build
+a distinct enumeration path. (a) is cheap, honest, and consistent with the no-speculation
+guardrail pilot users are already praising.
+
+### P5. A retrieved source that never reaches the answer [FROZEN]
+Session 6378 (DominiqueT, 2/5). Asked about the **UK**, got an England-only answer; pushed to
+Scotland, got the wrong instrument (the Spreadable Fats (Marketing Standards) (Scotland)
+Regulations 1999). The correct one — The Spreadable Fats, Milk and Milk Products (Scotland)
+Regulations 2008 — **was in the sources rail and absent from the answer**. Her words: *"This
+legislation was cited in sources but not in the answer."*
+
+Distinct from P1 and much cheaper: retrieval worked, synthesis dropped it. Worth checking
+whether the `_source_is_used` / accumulated-sources path can be inverted into a diagnostic — a
+source retrieved, kept, and *not* referenced in the body is a detectable condition and, on this
+evidence, a meaningful one. One observation is not a rate; look for it in the next export
+before building anything.
+
+### P6. Scottish case law absence is now producing substantive legal errors, not just gaps [FROZEN]
+The National Archives corpus does not index the Court of Session or the Sheriff Courts. In
+session 6375 (PatrickS, 2/5) that stopped being a coverage gap and became a wrong answer: AILA
+analysed common interest privilege as applying to legal advice shared between the UK and
+Scottish Governments, and described EWCA authority as *"highly persuasive in Scottish courts"*
+— without noting that the doctrine is English and, per the user, not part of Scots law. Also
+flagged by AlistairC (*Clark v Harney Westwood* absent from the corpus), CambeulW (recency
+bias — *"it did not provide the most fundamental cases in this area"*), and EmmaM.
+
+**The actionable half is disclosure consistency.** AILA discloses the gap well in some sessions
+(6341: *"the available case law database does not index the Scottish Court of Session or
+Sheriff Courts"*; 6337) and not at all in 6375, where it mattered most. Inconsistent disclosure
+is worse than none — users calibrate to the warning and are then not warned. A deterministic
+footer on any Scots-law case-law answer is a code fix, not a prompt one. The corpus gap itself
+is a product/procurement question; record it as the top substantive content gap of the
+pre-pilot.
+
+### P7. Blank assistant responses [SAFE]
+Two empty assistant messages, both to CambeulW, both reported unprompted (*"it thought for 9
+seconds and provided a blank box"*):
+- **6370 #8 — cost $0.0217.** Tokens billed, nothing rendered.
+- **6363 #6 — cost $0.** Looks like a hard failure.
+
+Both followed long adversarial turns; 6363's came immediately after the user changed the
+research filter, so it may be a second face of P2. The billed-but-empty case is the
+interesting one — content was generated and lost downstream. Candidates to eliminate in order:
+a `<suggestions>` strip consuming the whole body (`utils/suggestions.py` takes the **last**
+block and also strips an *unterminated* trailing tag — precisely the shape a partial stream
+presents), a tool-call-only final message, and the `chat_loop` stream-retry guard re-raising
+after partial emission. n=2, so reproduce before fixing; both are in the export with full
+context.
+
+### P8. Latency, and the gap between real and perceived latency [SAFE]
+Median turn **45s**, p90 **323s**, max **1,599s (26 min)**; 20% of turns exceed 2 minutes.
+Deep Research median 122s against conversational 51s. Three users complained.
+
+The instructive number is MoniqueM's: she reported *"very slow, taking around 15 minutes"* for
+a turn the timestamps put at **5.5 minutes** — perceived latency running ~3× actual. In the
+same session she resubmitted the identical question three times; HeatherE did the same in 6335.
+**10 consecutive user→user pairs across 8 sessions**: some are the legitimate Deep Research
+plan-approval re-send (which also inflates `Queries in session` and makes transcripts hard to
+read), the rest are impatience with no visible progress.
+
+The cheap fix is progress feedback, not speed. The `tool_call` / `api_call_start` events
+already exist behind `emit_tool_details=True` on the eval endpoint
+(`docs/api/AUDIT_TRACE.md`) and are deliberately not emitted on `/api/chat`; a coarse step
+counter ("step 3 of 5: retrieving sections") costs nothing in retrieval terms.
+
+### P9. Firm legal interpretation offered without hedging [FROZEN]
+Session 6370 (CambeulW — 3/5 confidence, 5/5 ease). On an ambiguous drafting point (whether
+reg 3(2)(a) turns on "development" or "EIA development") AILA took a definite interpretive
+position, defended it across three turns, then conceded: *"your interpretation … is a highly
+persuasive reading."* His feedback: *"I didn't like that it took such a position, which was
+more of an analytical position, without deferring to getting legal advice or the fact that it
+is open to interpretation… having it present in a more neutral fashion for aspects which
+require a legal analysis might be helpful."*
+
+A prompt change to report output, so it sits with **D17**. The distinction to encode is
+between *"s.25 provides that the sheriff may not…"* (what the text says) and *"on one reading,
+X"* (an interpretation the statute does not settle): the first is retrieval, the second is
+advice, and only the second needs the hedge. Note the counter-pressure — the same users
+reward decisiveness when it is grounded, so this is not a blanket "add caveats" change.
+
+### P10. What this export could not tell me [SAFE]
+Fixes to the measurement instrument, ordered by what they cost the analysis:
+- **Filters are a per-session snapshot, so the sessions most needing diagnosis are the ones the
+  data cannot explain.** Session 6363 records `legislation_and_case_law` while the transcript
+  shows the model claiming Legislation Only, and nothing in the row says when the user changed
+  it. **This is the "signal to act on" D13 was waiting for** — P2 is exactly "analysis that
+  needs to attribute a wrong answer to a specific query rather than to the session". D13's
+  `Message.filters`, populated from the resolved set echoed on the `result` event, would have
+  settled P2 without reading any code.
+- **15 of 41 sessions carry no mode or filter columns** (rows predating the 2026-08-13
+  capture), so every mode comparison here runs on n=26.
+- **5 assistant messages have no model/provider** — the planner clarification turns. Real,
+  billed LLM calls, unattributed in any cost-by-model breakdown.
+- **One message rating in 251 rows.** Thumbs are effectively unused and the exit survey is
+  carrying the entire feedback load. Either drive the thumbs or stop counting on them.
+- **3 sessions hit the 14,400s cap** (raw 91,445 / 57,665 / 53,245s). Lawyers leave tabs open,
+  so session length is not a usable engagement metric without an idle timeout.
+
+### What is working — protect it in any of the above
+- **Ease of use is not the problem** (4.17/5; 34 of 41 rated 4–5). Do not spend pilot budget
+  on UI.
+- **Honest failure is actively valued.** Three users praised it in free text, two of them at
+  5/5 confidence; CambeulW: *"it is very good it did not lie or make something up instead."*
+  Every fix to P1 must make the negatives *true* — not make the bot more willing to guess.
+- **The demonstrated sweet spot is narrow, single-Act, section-level questions** — FAI Act
+  2016, ASPA 1986, Inquiries Act 2005, Marine (Scotland) Act 2010, RTRA 1984 — all 4–5
+  confidence, several clean on every accuracy axis.
+- **Deep Research is not where the wins are.** Against conversational mode it costs **5.3×**
+  per message ($0.395 vs $0.074), takes **2.4×** the latency (median 122s vs 51s), and scores
+  **the same** (mean confidence 3.64 vs 3.60, n=11/15). Worth re-reading once D16/D17 land,
+  since P3 and P4 both hit DR hardest and may be suppressing it.
+
+---
+
+## Retrieval & report-prompt accuracy (PARKED until after the pilot)
+
+Both items below are parked for the same reason and are to be **unparked and reviewed as a
+single body of work**, not picked off individually. Further external feedback is expected
+(colleague review of the Deep Research ReAct loop, 2026-08-19 onward); add it here as it
+arrives rather than acting on it piecemeal.
+
+**Pre-pilot transcript findings feed this cluster (2026-08-19)** — see the section above:
+**P1** (confident false negatives) and **P4** (enumeration) are D16 evidence; **P3**, **P5**,
+**P6** and **P9** are D17 evidence. Unpark all of them together.
 
 ### D16. Legislation retrieval accuracy — findings parked pre-pilot
+*(investigated 2026-08-17)*
 **Status: PARKED by user decision, 2026-08-17.** We are in a pre-pilot period and the
 baseline retrieval performance must not move before the pilot runs — otherwise pilot
 feedback cannot be attributed to the bot's behaviour rather than to a mid-flight change.
@@ -911,3 +1152,49 @@ be attributed to either side. Before quoting accuracy numbers: get a lawyer thro
 
 **Order when this is unparked (post-pilot):** defects 1–3 (self-contained, information-only)
 → A3 harness **plus** answer-key verification → 4–7 as an A/B → the Phase 2 experiment.
+
+---
+
+### D17. Deep Research synthesis prompt is mode-blind — parked with D16
+**Status: PARKED by user decision, 2026-08-19**, to be taken up with D16 as one piece of
+work once the further feedback lands. Raised by an external colleague reviewing the Deep
+Research ReAct loop; verified against the code the same day (their line numbers were off —
+corrected below).
+
+`DEEP_RESEARCH_SYNTHESIS_PROMPT` (`prompts.py:1025`, applied at `agent_core.py:790`) is a
+single module-level constant with **no research-mode awareness at all**, unlike the planner
+(`_PLANNER_MODE_NOTES`, `prompts.py:967`) and unlike worker-report grading
+(`_REPORT_SECTIONS`, `agent_core.py:51`). Two consequences:
+
+1. **The worked example of a research gap assumes case law was searched** (`prompts.py:1048`):
+   > Material gaps belong HERE … if a step found nothing on an aspect of the question, say so
+   > in the summary (e.g. "No reported case law was found on X").
+
+   In Legislation Only mode the planner is separately told *"Do NOT include case-law steps —
+   case law is out of scope in this mode"*, and the synthesis call also receives the plan's
+   `scope_note` in its user message (`agent_core.py:786`). The model reconciles the two and
+   emits a sentence that argues with itself — reported example: *"**No reported case law was
+   found** on the interpretation of Section G2 (case law was excluded from the research scope
+   by the approved plan)."* The bolded half is what a reader takes away, and it asserts a
+   search that never ran. Colleague reports 7 of 36 legislation-only runs, model-dependent —
+   **their harness data, not reproducible from this repo**; get the runs before/after any fix.
+
+2. **The OUTPUT STRUCTURE block hardcodes the `legislation_only` section list for every mode**
+   — `prompts.py:1051` mandates *"Jurisdiction & Status: Territorial extent and in-force
+   status"*. On the parliament bot a Deep Research report is therefore told to produce a
+   territorial-extent/in-force section for a Holyrood debate. This is worse than (1) — a
+   mandatory heading rather than an illustration — and it is silent because synthesis output
+   is never run through `_report_needs_reformat` (only worker reports are, `agent_core.py:250`).
+   `_REPORT_SECTIONS` already holds the correct per-mode shape (`Jurisdiction & Currency` for
+   case law, `Key Speeches / Evidence` + `Source & Date` for Holyrood, `Key Contributions` +
+   `House & Date` for Westminster).
+
+**Candidate fix (do the per-mode version, not the swap-the-example patch).** Turn the constant
+into `get_deep_research_synthesis_prompt(research_mode)` filling two slots: the gap example
+(new small dict mirroring `_PLANNER_MODE_NOTES`) and the section list (reuse `_REPORT_SECTIONS`,
+which needs moving to or importing into `prompts.py`). **No signature change needed** —
+`run_deep_research` already has `_get_cfg()` in scope (`agent_core.py:731`), so
+`_get_cfg().get("_research_mode", "legislation_only")` gets the mode for free.
+
+**Why parked rather than shipped:** it is a prompt change to report output, so it moves what
+the pilot lawyers read even though it does not touch retrieval. Same freeze rationale as D16.
