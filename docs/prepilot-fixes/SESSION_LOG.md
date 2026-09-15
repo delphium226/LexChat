@@ -795,7 +795,11 @@ and P5.3 done**; P0.4 and P5.2 at `[~]`; **P2.7, P3.5 and P3.6 opened this sessi
 - **Send Wave 5.** `WAVE5_QUESTIONS.md` — P5.1 and P5.3 are answered but carry short
   residual lists; **P5.2 is the live one** and step 1 (ask the LEX team whether their
   case-law corpus is reachable and covers the Court of Session) is free and gates the rest.
-- **P0.4's re-export** needs target access.
+- **P0.4's re-export is NOT available before the final push** (established 2026-09-15). The pre-pilot
+  data lives only on the target, the new column lives only on this branch, no backup exists to
+  restore locally, and the branch does not reach the target until the plan concludes. It is a
+  **post-push** activity; confound 5 persists for the remaining pre-merge sweeps and must not be
+  treated as a blocker for P2.2 or any Wave 2 acceptance.
 
 **Next action:** ~~P2.2~~ — **see the P5.1 answer above first; it changes what Wave 2 and Wave 3 contain.** Then **P2.2** (B5, no bare negatives) — its `Depends on: P1.3, P2.1` is now
 satisfied, and this session amended it to cover the negative drawn from an **incomplete**
