@@ -273,11 +273,25 @@ one field — **P2.1 is the natural moment**, since making the halt structured m
 trace shape anyway. `docs/api/AUDIT_TRACE.md` was stale on this (it still documented `current_only`
 as a live filter) and has been corrected.
 
-**State of the branch:** `fix/prepilot-defects` @ `811c64d`. Waves 0 and 1 complete, tests green,
-**nothing pushed to `main`.** The dev box is restored — no housekeeping owed.
+**State of the branch:** `fix/prepilot-defects` @ `302585e`. Waves 0 and 1 complete, **529 tests
+passing, working tree clean, 8 commits unpushed — nothing on `main`.**
 
-**Next action:** **P1.5 — re-baseline on the Wave 1 HEAD.** It needs a server restart to pick up
-the Wave 1 code (the baseline sweeps deliberately ran against the pre-Wave-1 process). Re-run the
-n=1 pass over all 41 and add the column; expect B2's 351 emptied searches and B14's 88 bad links
-to go to zero, and watch the in-force claim count, which P1.2 may have already cut. Then Wave 2,
-starting from P2.1 — whose acceptance test needs rewriting anyway, since 6406 no longer halts.
+**Machine state a new session inherits (all deliberate, nothing owed):**
+- Dev box **restored**: `moonshotai/kimi-k3`, `google/gemini-3-flash-preview`, local prompt cache
+  **ON**. P1.5 must re-pin before measuring — `tools/.replay_pin_state.json` is gone, as it should
+  be after a successful `restore`.
+- **No uvicorn is running**, deliberately. The Wave 0 process was killed rather than left up:
+  Python loads modules at import, so a server surviving from this session would have served
+  **pre-Wave-1 code**, and a replay against it would have recorded old behaviour as the Wave 1
+  result. Start a fresh one.
+- `evidence/replay/baseline/` holds all 65 Wave 0 run files (gitignored). Do **not** write the
+  re-baseline into that directory — `replay.py run` skips existing files and would silently do
+  nothing. Use `evidence/replay/wave1/`.
+
+**Next action:** **P1.5 — re-baseline on the Wave 1 HEAD.** The full runbook is in the P1.5 ledger
+row, including the three traps above. ~$38, ~6 h. Then Wave 2 from P2.1 — **whose acceptance test
+needs rewriting before it is used**, because 6406 stopped halting (0/4 steps in all three reps) and
+asserting "no halt text" on a session that no longer halts would pass without the fix. 6382 and
+6384 still halt and still leak the text, so they are the cases to keep; 6383 turn 1 is the
+strongest, having shown the raw `[Research halted: exceeded 20 tool-call steps]` string as its
+entire answer.
