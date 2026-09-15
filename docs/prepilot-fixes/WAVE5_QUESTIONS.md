@@ -1,6 +1,6 @@
 # Wave 5 — the external questions, drafted and ready to send
 
-**Status 2026-09-15: P5.1 and P5.3 LARGELY ANSWERED HERE** by reading the API's own OpenAPI spec, `/api/stats` and `/healthcheck`, and by sampling coverage directly. **P5.2 is reframed by a finding in P5.3** — LEX holds case-law collections its API does not expose. What remains is a short, specific list for the LEX team, marked under each row. NOT YET SENT. These need a human to send them;
+**Status 2026-09-15: P5.1 and P5.3 LARGELY ANSWERED HERE** by reading the API's own OpenAPI spec, `/api/stats` and `/healthcheck`, and by sampling coverage directly. **P5.2's facts are established too** — the National Archives gap is verified as total, and LEX holds case-law collections its API does not expose, so ask before buying. What remains is a short, specific list for the LEX team under each row, plus one product decision. NOT YET SENT. These need a human to send them;
 nothing in the codebase can. They have been idle across five sessions, and the plan says to
 open them early precisely because they block nothing and have unknown lead time.
 
@@ -123,29 +123,76 @@ which no section text states. This is now **P3.6**.
 >    contract** we can detect on, or an implementation detail? We would rather branch on a
 >    field than a magic string.
 
-## P5.2 — internal/product: the Scottish case-law corpus
+## P5.2 — the Scottish case-law corpus **FACTS ESTABLISHED 2026-09-15; the decision is yours**
 
-> The National Archives *Find Case Law* corpus does not contain the **Court of Session** or
-> the **Sheriff Courts**. For a Scottish Government legal audience this is the top substantive
-> content gap of the pre-pilot, and in at least one session it stopped being a coverage gap
-> and produced a **wrong answer** (6375) rather than a "not found".
->
-> Raised independently by three lawyers during the pre-pilot: AlistairC (*Clark* absent,
-> 6359), CambeulW (recency bias in what is returned, 6363) and EmmaM.
->
-> **A lead found 2026-09-15 that may change this question entirely.** LEX's own `/healthcheck` reports
-> case-law collections in its vector store — `caselaw` **69,970** points, `caselaw_section`
-> **4,723,735**, `caselaw_summary` **61,107** — while `/openapi.json` exposes **no case-law endpoint**.
-> So a case-law corpus exists inside the system we already call, and we reach case law through the
-> National Archives instead. **Before treating this as procurement, ask whether that corpus is
-> reachable and whether it includes the Court of Session and the Sheriff Courts.** If it does, this
-> stops being a purchase and becomes an API request.
->
-> The engineering half — disclosing the gap in the answer rather than answering around it —
-> is P2.4 and is not blocked on this. The question here is a product/procurement decision:
-> **is there a licensable source of Court of Session and Sheriff Court decisions we can
-> index, and is anyone willing to buy it?** A decision either way should be recorded; "no"
-> is an answer that makes P2.4 permanent rather than interim.
+This row's acceptance is *a recorded decision*, which is not mine to make. What follows is
+the decision brief: the gap is now measured rather than asserted, and it has changed shape.
+
+### The gap is total, and it is verified
+
+| probe | result |
+|---|---|
+| `atom.xml?court=csoh` (Outer House) | **HTTP 400** — *"csoh is not one of the available choices"* |
+| `atom.xml?court=csih` (Inner House) | **HTTP 400**, same |
+| `atom.xml?query=Court of Session` | 200, 50 results — **not one of them a Scottish judgment**: 20 EWHC, 11 UKFTT, 5 EWFC, 4 UKSC, 3 UKUT, 3 EWCA, 2 EWCOP, 1 EAT |
+
+The Court of Session is not a court in the National Archives' taxonomy. It is not a thin
+corpus; it is not there.
+
+### The failure mode is a wrong answer, not an empty one
+
+That middle row is the whole problem. A Scots-law case-law question does not come back
+empty — it comes back with **fifty English judgments that happen to mention Scotland**, and
+the model answers from them. That is 6375 exactly: English common-interest privilege
+analysed as Scots law. An empty result is a disclosure; a full one of the wrong
+jurisdiction is a trap, and it is why **P2.4 matters more than a coverage gap normally
+would.**
+
+### Every court AILA can filter on is non-Scottish
+
+The Court filter offered to a **Scottish Government** lawyer has 14 options — UK Supreme
+Court, Privy Council, Court of Appeal (Civil and Criminal), Administrative, Chancery,
+Family, Commercial, Patents, TCC, Upper Tribunal, Immigration & Asylum, Lands Chamber,
+Employment Appeal — and **not one Scottish court**. That is not a defect to fix in the
+filter (the codes are correct and the tool schema already warns against inventing others);
+it is the product gap stated plainly, and it is visible to every user on every research
+query.
+
+### The lead that may change this from procurement to an API request
+
+LEX's own `/healthcheck` reports a case-law corpus in its vector store:
+
+```
+caselaw            69,970 points
+caselaw_summary    61,107 points
+caselaw_section  4,723,735 points
+```
+
+and `/openapi.json` exposes **no case-law endpoint**. The conventional names that would
+mirror the documented ones — `/caselaw/search`, `/caselaw/lookup`, `/caselaw/text`,
+`/caselaw/section/search` — all return **404**. So the corpus exists inside a system we
+already call and is not reachable through its published contract.
+
+**Ask before buying anything.** If that corpus includes the Court of Session and the
+Sheriff Courts, this is an API request to a team we already work with. If it is a mirror of
+the National Archives, it changes nothing and the procurement question stands.
+
+### The decision, stated so it can be taken
+
+> 1. **To the LEX team:** is the case-law corpus behind `/healthcheck` reachable, and does
+>    it include the **Court of Session** and the **Sheriff Courts**? (Ask this first — it is
+>    free and it determines whether the rest of the question exists.)
+> 2. **If not — to the product owner:** is there a licensable source of Court of Session and
+>    Sheriff Court decisions we can index, and is anyone willing to buy it? Raised
+>    independently by three lawyers in the pre-pilot: AlistairC (*Clark* absent, 6359),
+>    CambeulW (recency bias, 6363) and EmmaM.
+> 3. **Either way**, record the answer. A "no" is a decision too — it makes **P2.4**
+>    permanent rather than interim, and P2.4 should be built on that footing.
+
+The engineering half is **P2.4** and is **not blocked** by any of this: whatever the corpus
+turns out to hold, an answer drawing on English authority for a Scots-law question must say
+so, in code, every time. Today AILA discloses it in 6341, 6385 and 6407 — and not in 6375,
+where it mattered most.
 
 ## P5.3 — coverage rules and refresh cadence **LARGELY ANSWERED HERE, 2026-09-15**
 

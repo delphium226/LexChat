@@ -430,7 +430,7 @@ three of nine negative verdicts, so any row claiming a fix still needs n=3.
 
 ---
 
-## Session 5 — 2026-09-15 — P1.6, P2.1, P2.6, P0.4 (code half), P5.1 + P5.3, and four instrument corrections
+## Session 5 — 2026-09-15 — P1.6, P2.1, P2.6, P0.4 (code half), all of Wave 5, and four instrument corrections
 
 **Done:**
 - **P1.6 complete.** `src/utils/citation_links.py`, wired at four seams. **(a) the cause** —
@@ -463,8 +463,10 @@ three of nine negative verdicts, so any row claiming a fix still needs n=3.
   permanently a disclosure.** Full answer below; new rows **P3.5** and **P3.6**; P2.3
   narrowed to enabling power alone. **P5.3 answered the same way** — the index refreshes
   daily and is current, but 2026 secondary legislation is only ~5% held, which is what
-  B5's negative must say. **P5.2 is reframed**: LEX holds case-law collections its API does
-  not expose. Only P5.2 still needs a human.
+  B5's negative must say. **P5.2's facts established** — the National Archives gap is
+  verified as TOTAL (the Court of Session is not in its taxonomy) and, worse, a Scots-law
+  query returns 50 English judgments rather than nothing. Its decision is the
+  organisation's, so the row stays `[~]`.
 - **634 tests** (564 → 634). Dev box restored, no uvicorn left running.
 
 **Surprises / deviations from FIX_PLAN:**
@@ -672,6 +674,40 @@ vector store — **`caselaw` 69,970 points, `caselaw_section` 4,723,735, `casela
 inside a system we already call, and we reach case law through the National Archives
 instead. **That may turn B12 from a procurement question into an API request**, which is a
 materially different piece of work. Recorded in P5.2; still needs a human to ask.
+
+### P5.2 — facts established, decision still the organisation's (recorded)
+
+The row rested on an asserted gap. It is now measured, and it is worse than "thin".
+
+- `atom.xml?court=csoh` and `?court=csih` → **HTTP 400, "csoh is not one of the available
+  choices"**. The Court of Session is not a court in the National Archives' taxonomy.
+- `atom.xml?query=Court of Session` → **200 with 50 results, not one of them Scottish**:
+  20 EWHC, 11 UKFTT, 5 EWFC, 4 UKSC, 3 UKUT, 3 EWCA, 2 EWCOP, 1 EAT.
+
+**That second line is the finding.** A Scots-law case-law question does not come back
+empty; it comes back with fifty English judgments that mention Scotland, and the model
+answers from them. That is 6375 exactly — English common-interest privilege analysed as
+Scots law. **An empty result is a disclosure; a full one of the wrong jurisdiction is a
+trap**, which is why P2.4 matters more than an ordinary coverage gap and why its footer can
+now say something precise and verifiable instead of "may be incomplete".
+
+**Every court AILA can filter on is non-Scottish** — 14 options in both the tool schema and
+the UI filter, none Scottish. The codes are correct and the schema already warns against
+inventing others, so this is not a defect to fix; it is the product gap, visible to every
+user on every research query.
+
+**And the lead from P5.3 holds up.** `/healthcheck` reports `caselaw` **69,970**,
+`caselaw_section` **4,723,735**, `caselaw_summary` **61,107** points; `/openapi.json`
+exposes **no case-law endpoint**; and the four conventional mirror names (`/caselaw/search`,
+`/caselaw/lookup`, `/caselaw/text`, `/caselaw/section/search`) all **404**. The corpus exists
+inside a system we already call and is unreachable through its published contract. **So the
+first move is a free question to the LEX team, not a procurement exercise** — if it covers
+the Court of Session this is an API request; if it mirrors TNA, nothing changes.
+
+**Left open deliberately.** The row's acceptance is *a recorded decision*, and that is the
+organisation's to take, so P5.2 is `[~]` not `[x]`. `WAVE5_QUESTIONS.md` now states it as
+three steps in order: ask LEX; if no, put the procurement question to the product owner;
+either way record it, because a "no" makes **P2.4 permanent rather than interim**.
 
 **Next action:** ~~P2.2~~ — **see the P5.1 answer above first; it changes what Wave 2 and Wave 3 contain.** Then **P2.2** (B5, no bare negatives) — its `Depends on: P1.3, P2.1` is now
 satisfied, and this session amended it to cover the negative drawn from an **incomplete**
