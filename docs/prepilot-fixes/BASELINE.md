@@ -478,9 +478,11 @@ case", where Wave 0 returned the raw marker as the entire 46-character answer �
 did **not** halt in this sweep: it ran conversational, answered in 27s, and the
 halt moved to turn 4's Deep Research plan. That is Invariant 4 working as
 intended, and it is why the grading is per halted TURN over the whole directory
-rather than per named session. The same session's rep 2 halted **nowhere at all**
-— four turns, deepest loop 12 rounds of 20 — which is a legitimate
-non-contributing run rather than a pass or a fail.
+rather than per named session. **6383 halted in only 1 of its 3 reps** (rep 2's
+deepest loop was 12 rounds of 20, rep 3's 16) — the other two are legitimate
+non-contributing runs, neither a pass nor a fail. Whether a session halts is
+itself a coin toss, which is a second reason the cap is better described as a
+tail than as a ceiling the work now sits against.
 
 The three 6340 replays are the clearest read, because 6340 is the session that
 produced the invented cause. All three now open with the code-emitted notice, and
