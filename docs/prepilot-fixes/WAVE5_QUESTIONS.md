@@ -1,6 +1,6 @@
 # Wave 5 — the external questions, drafted and ready to send
 
-**Status: drafted 2026-09-15 (Session 5), NOT YET SENT.** These need a human to send them;
+**Status: P5.1 mostly ANSWERED HERE 2026-09-15 by reading the API's own OpenAPI spec — see below. P5.2 and P5.3 drafted, NOT YET SENT.** These need a human to send them;
 nothing in the codebase can. They have been idle across five sessions, and the plan says to
 open them early precisely because they block nothing and have unknown lead time.
 
@@ -24,35 +24,104 @@ Why it matters that these go out now, rather than when the code work reaches the
 
 ---
 
-## P5.1 — to the LEX team: are instrument relationships retrievable?
+## P5.1 — are instrument relationships retrievable? **MOSTLY ANSWERED HERE, 2026-09-15**
 
-> We are building a legal research assistant over the LEX API for Scottish Government lawyers,
-> and the single largest class of error we found in our pre-pilot is the model asserting a
-> relationship between two instruments that it never actually retrieved — for example that
-> an SSI was made under a particular enabling power, or that a commencement order brought a
-> section into force.
+**Four of the five questions are answered, and we answered them ourselves.** The API
+publishes an OpenAPI spec at `/openapi.json` documenting **13 endpoints. We call 3.**
+Nobody had looked. Re-run the evidence with `python -m tools.lex_probe`.
+
+| | endpoint | we call it |
+|---|---|---|
+| | `POST /legislation/search` | **yes** |
+| | `POST /legislation/section/search` | **yes** |
+| | `POST /legislation/text` | **yes** |
+| **1** | `POST /amendment/search` | no |
+| **2** | `POST /amendment/section/search` | no |
+| 3 | `POST /legislation/lookup` | no |
+| 4 | `POST /legislation/section/lookup` | no |
+| 5 | `GET /legislation/proxy/{legislation_id}` | no |
+| 6 | `POST /explanatory_note/legislation/lookup` | no |
+| 7 | `POST /explanatory_note/section/lookup` | no |
+| 8 | `POST /explanatory_note/section/search` | no |
+| 9 | `GET /api/stats`, `GET /healthcheck` | no |
+
+### What is answered
+
+**Q2 — amendment relations: YES, fully.** `/amendment/search` takes a `legislation_id`
+and a **`search_amended` flag that is the direction of the relation** — `True` returns
+amendments made *to* it, `False` amendments it *makes*. `/amendment/section/search` does
+the same at provision level from a `provision_id`. Each row is provision-to-provision
+with a resolvable URL on **both** sides:
+
+```jsonc
+{ "changed_legislation": "asp/2018/9",   "changed_provision": "sch. 5 para. 7",
+  "changed_provision_url":   "…/asp/2018/9/schedule/5",
+  "affecting_legislation": "ssi/2020/295", "affecting_provision": "reg. 2(c)",
+  "affecting_provision_url": "…/ssi/2020/295/regulation/2/c",
+  "type_of_effect": "coming into force" }
+```
+
+**Q3 — commencement: YES**, as `type_of_effect`. Over 1,358 rows sampled from five
+instruments: **246 "coming into force"** and **43 "Commencement Order"**.
+
+**Q4 — repeal / revocation: YES**, same field: 62 "repealed", 30 "words repealed",
+6 "revoked", 3 "words revoked", 3 "repealed in part".
+
+**Q5 — the route:** `/openapi.json`. There was never a hidden route; there was a
+published spec we had not read.
+
+**Q1 — enabling power ("made under s.X"): NO structured route found**, and this is the
+one to actually ask about. Not in `/legislation/lookup`'s fields, and explanatory notes
+are an **Act-level** resource here — `/explanatory_note/legislation/lookup` returns notes
+for `asp/2018/9` and **404 for `ssi/2020/295`** — so they cannot say what an SI was made
+under. Commencement rows relate a commencement SSI to the Act it commences, which is a
+species of the relation but not the general case: a substantive SSI made under s.95 need
+not appear in the amendment data at all.
+
+### The finding that costs us nothing to fix
+
+`description` on a search or lookup result **states the relationship in prose, with the
+date** — and `_slim_search_results` strips it deliberately, so the model never sees it:
+
+> *"These Regulations bring sections 31 and 36 and schedules 5 and 10 of the Social
+> Security (Scotland) Act 2018 into force on 8 October 2020."*
+
+**5 of 10 sampled results** carried commencement, amendment or enabling-power language
+there. The comment in `lex.py` calls the field "verbose and redundant once Phase 2
+retrieves actual section text" — true for the *text*, false for the *relationships*,
+which no section text states. This is now **P3.6**.
+
+### Corrections to what this file first said
+
+- ~~"`/legislation/text` returns a record for `ssi/2025/119` with an **empty `text`
+  field**… a stub record is indistinguishable from absence at the tool boundary."~~
+  **Wrong, twice over.** (a) The response is `{legislation, full_text}` — the `text` key
+  is on the nested object and is empty for *everything*, including Acts held in full, so
+  reading it as the text says the whole corpus is a stub. (b) A genuine stub is
+  **explicitly signalled**: `full_text` is the literal sentence *"No text content
+  available for this legislation."* (47 chars), and `/legislation/section/lookup` returns
+  **404** where a held instrument returns 200. Absent is different again —
+  `/legislation/lookup` for `ukpga/1962/47` is a flat 404. Three states, all
+  distinguishable.
+
+### What is left to ask the LEX team — much narrower
+
+> We have read `/openapi.json` and probed `/amendment/search`, so this is a short list.
 >
-> We currently call three endpoints: `/legislation/search`, `/legislation/section/search` and
-> `/legislation/text`. None of them appears to return relationships.
->
-> 1. Does the API expose **enabling-power** relations (this instrument was made under
->    s.X of that Act), in any endpoint or any field we may have missed?
-> 2. Does it expose **amendment** relations (this provision amends / is amended by), and if
->    so, is the direction recoverable?
-> 3. Does it expose **commencement** relations (this order commences s.X of that Act on a
->    date)?
-> 4. Does it expose **revocation / repeal** relations?
-> 5. If any of these exist but are not in the endpoints above, what is the route to them?
->
-> If the answer is "not available", that is genuinely useful to know — we will tell our users
-> the system cannot verify those relationships rather than letting the model guess at them.
->
-> **A related observation, from the same investigation.** `/legislation/text` returns a record
-> for `ssi/2025/119` whose `text` field is **empty**, while `/legislation/section/search`
-> returns nothing at all for the same identifier. At the API boundary a stub record like that
-> is indistinguishable from an instrument that genuinely has no text — so we cannot tell
-> "we hold this but have no text yet" apart from "this does not exist". Is there a field, a
-> status value, or a convention that distinguishes them?
+> 1. **Enabling power.** Is there any route to "this instrument was made under section X
+>    of that Act", or the reverse, "list the instruments made under this power"? It is the
+>    one relation we cannot find, and it is the single largest class of error in our
+>    pre-pilot — the model infers it from search-result adjacency and is confidently wrong.
+> 2. **The commencement date.** `/amendment/search` gives us *which* SSI commenced *which*
+>    provision, with no date on the row. We can retrieve the SSI and read the date from its
+>    text, but is the date available directly?
+> 3. **`type_of_effect: null` on 19%** of the rows we sampled (261 of 1,358). Is that
+>    "effect not classified", "data not yet loaded", or something we should filter out?
+> 4. **Completeness and paging.** Is `/amendment/search` authoritative and complete for an
+>    instrument, and is `size` the only control — is there paging beyond it?
+> 5. **Is the `"No text content available for this legislation."` sentinel a stable
+>    contract** we can detect on, or an implementation detail? We would rather branch on a
+>    field than a magic string.
 
 ## P5.2 — internal/product: the Scottish case-law corpus
 

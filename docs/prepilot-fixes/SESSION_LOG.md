@@ -430,7 +430,7 @@ three of nine negative verdicts, so any row claiming a fix still needs n=3.
 
 ---
 
-## Session 5 — 2026-09-15 — P1.6, P2.1, P2.6, P0.4 (code half), and the ninth instrument correction
+## Session 5 — 2026-09-15 — P1.6, P2.1, P2.6, P0.4 (code half), P5.1, and two instrument corrections
 
 **Done:**
 - **P1.6 complete.** `src/utils/citation_links.py`, wired at four seams. **(a) the cause** —
@@ -457,10 +457,11 @@ three of nine negative verdicts, so any row claiming a fix still needs n=3.
   export + CSV column, `client/dist/` rebuilt. The re-export stays blocked on target access.
 - **New row P2.7** — the legislation bot has no discovery budget; only the parliamentary
   modes get one. Opened off P2.1's cap evidence.
-- **Wave 5 drafted at last** (`WAVE5_QUESTIONS.md`): all three questions written out in
-  full with the evidence attached, idle across five sessions only because they need a
-  human to send them. P5.1's answer decides whether B3 is buildable or permanently a
-  disclosure, so it is the one worth sending first.
+- **Wave 5 opened, and P5.1 ANSWERED without sending it.** All three questions drafted
+  (`WAVE5_QUESTIONS.md`) — then P5.1 turned out to be answerable from here: the API
+  publishes an OpenAPI spec and we call 3 of its 13 endpoints. **B3 is buildable, not
+  permanently a disclosure.** Full answer below; new rows **P3.5** and **P3.6**; P2.3
+  narrowed to enabling power alone. P5.2 and P5.3 still need a human.
 - **634 tests** (564 → 634). Dev box restored, no uvicorn left running.
 
 **Surprises / deviations from FIX_PLAN:**
@@ -573,7 +574,59 @@ still runs the pre-pilot code.
   step read "was … it" where HEAD reads "were … they". None changes a graded condition.
 - **Wave 5 is drafted and unsent** (`WAVE5_QUESTIONS.md`). It needs a human. P5.1 first.
 
-**Next action:** **P2.2** (B5, no bare negatives) — its `Depends on: P1.3, P2.1` is now
+### P5.1 — ANSWERED, and mostly without the LEX team (recorded answer, this row's acceptance)
+
+The row was written as a question to ask. Four fifths of it was answerable from here,
+because **the LEX API publishes an OpenAPI spec at `/openapi.json`** and nobody had looked.
+It documents **13 endpoints. We call 3.** Reproduce with `python -m tools.lex_probe`.
+
+| question | answer |
+|---|---|
+| **Q2 amendment relations** | **YES** — `/amendment/search`, `/amendment/section/search`. Provision-to-provision, resolvable URL on both sides, and a **`search_amended` flag that carries the direction** |
+| **Q3 commencement** | **YES** — `type_of_effect`: 246 "coming into force", 43 "Commencement Order" over 1,358 sampled rows |
+| **Q4 repeal / revocation** | **YES** — 62 "repealed", 30 "words repealed", 6 "revoked", 3 "words revoked", 3 "repealed in part" |
+| **Q5 the route** | `/openapi.json`. There was never a hidden route — there was a published spec we had not read |
+| **Q1 enabling power** | **NO route found.** Not in `/legislation/lookup`'s fields; explanatory notes are **Act-level** (404 for `ssi/2020/295`), so they cannot say what an SI was made under |
+
+**So B3 — the largest bucket — is BUILDABLE, not permanently a disclosure**, for four of
+its five relations. That inverts the row's stated stakes ("this determines whether the
+largest bucket is buildable or permanently a disclosure"). P2.3 narrows to enabling power
+alone; the rest becomes **P3.5**, a retrieval row.
+
+**And `description` is thrown away by our own slimmer.** It states relationships in prose
+**with the date** — *"These Regulations bring sections 31 and 36 and schedules 5 and 10 of
+the Social Security (Scotland) Act 2018 into force on 8 October 2020."* — and 5 of 10
+sampled results carried commencement, amendment or enabling-power language there. The
+comment in `lex.py` calls it "verbose and redundant once Phase 2 retrieves actual section
+text": true of the text, **false of the relationships**, which no section text states. It
+is also the only observed route to an enabling power. → **P3.6**, with the warning that the
+original reason for stripping it was real (~10–16K per result, and removing it is what kept
+Phase 1 under the summarisation threshold), so it must come back capped, not reverted.
+
+**Two of my own claims in this row were wrong, and both were read-the-wrong-field errors —
+the same class as the eight instrument traps before them.**
+
+- ~~"`/legislation/text` returns a record for `ssi/2025/119` with an empty `text` field"~~ —
+  the response is `{legislation, full_text}`. The `text` key sits on the nested object and
+  is **empty for everything**, including `asp/2018/9`, which returns **130,476 characters**
+  of `full_text`. Reading it as the text says the entire corpus is a stub.
+- ~~"a stub record is indistinguishable from absence at the tool boundary"~~ — it is
+  **explicitly signalled**: `full_text` is the literal sentence *"No text content available
+  for this legislation."* and `/legislation/section/lookup` returns **404** where a held
+  instrument returns 200. Absent is different again (`/legislation/lookup` → flat 404 for
+  `ukpga/1962/47`). **Three states, all distinguishable.** What remains worth asking is
+  whether that sentinel is a stable contract — branching on a magic string is fragile.
+
+**Five narrower questions remain for the LEX team** (`WAVE5_QUESTIONS.md`), led by enabling
+power and by the fact that **a commencement row carries no date** — the relation is
+retrievable, the date is not, which lands directly on P2.5.
+
+**The wider lesson, and it is the ninth and tenth instrument error of this work in a
+different guise:** two sessions of planning treated "does the API expose relationships?" as
+an external question with unknown lead time. It was a `GET /openapi.json` away. **Before
+opening an external row, check whether the system can be asked directly.**
+
+**Next action:** ~~P2.2~~ — **see the P5.1 answer above first; it changes what Wave 2 and Wave 3 contain.** Then **P2.2** (B5, no bare negatives) — its `Depends on: P1.3, P2.1` is now
 satisfied, and this session amended it to cover the negative drawn from an **incomplete**
 search as well as from a filtered one. Note P2.3 depends on P2.2 and on P5.1's answer, so
 sending the Wave 5 questions before starting P2.2 is worth the five minutes. **P2.7** is
