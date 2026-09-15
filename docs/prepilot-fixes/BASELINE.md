@@ -57,7 +57,7 @@ saw. The trace shows what the tool did.
 | **B2** jurisdiction filter | P1.1 | **351 of 974** searches under a jurisdiction filter returned **nothing** to the model (36%); **478** (49%) demonstrably lost rows; **0 of 557** searches lost anything with the filter off | **Confirmed, cause isolated** |
 | **B5** count destroyed | P1.3 | **1,010 of 1,531** searches reported a `total` that was not the API's | **Confirmed, and independent of the filters** |
 | **B14** provision links | P1.4 | ~~88 of 376 (23.4%)~~ **20 of 376** provision-labelled links (5.3%) miss their provision — see *Correction* below | **Confirmed, but six-fold smaller than first published** |
-| **B1** research halt | P2.1 | **10 of 41** runs had a halted worker; **7** showed halt text to the lawyer | **Confirmed** |
+| **B1** research halt | P2.1 | **10 of 41** runs had a halted worker; ~~7~~ **9** showed halt text (the detector was blind to a third of the wordings — see *Halt detector* below); **2 halted silently**, telling the lawyer nothing | **Confirmed, and worse than counted** |
 | **B4** in-force claims | P2.5 | **27** unsupported in-force assertions across 41 runs | **Confirmed** |
 | **B8** sources rail | P4.3 | 1,222 of 1,387 kept sources (88%) never cited; 62 turns cited none of theirs — but **more than half of that is a shadow of B1/B3**, see *B8 split* below. On turns that actually produced a report: **489 of 622 (79%), 9 turns** | **Confirmed, but two conditions were being counted as one** |
 | **B13** lost/blank turns | P4.2 | **5 turns** billed >$0 and returned an empty body (a fifth appeared in 6406 rep3) | **Confirmed** |
@@ -155,6 +155,40 @@ honest failure and is not one.
 The median worker is nowhere near the cap; the tail runs well past it. Raising the cap would
 change behaviour for ~9% of delegations and nothing else — useful input to P2.1's deferred
 question, which should still be decided from `request_timings.max_turns_halted`, not from here.
+
+---
+
+## Halt detector — it was blind to a third of the disclosures, and to a worse failure
+
+`HALT_PARAPHRASE` required near-exact wording ("operational limit", "research was halted").
+The model does not paraphrase to a script. Across the whole baseline, **17 turns had a halted
+worker and the detector flagged 9**; widened and re-validated, it flags **14**. What it had
+been missing:
+
+- *"exceeded its **processing** limits (timed out)"* — 6335 t7
+- *"**timed out** while searching"* — 6341 t5, 6345 t4
+- *"exceeded the maximum **permitted steps**"* — 6340 rep3
+- *"Research Step 2 (…) **was halted** by the system"* — 6389 rep3, where an intervening
+  clause defeated `research (?:process )?was halted`
+
+On the rep-1 pass the corrected count is **9 runs showing halt text, not 7**.
+
+### The failure nobody named: the silent halt
+
+**2 turns in the rep-1 pass (3 across all 65 runs) halted a worker, returned a normal-looking
+report, and never mentioned it.** 6396 rep1 halted **four** workers and the answer says nothing.
+The lawyer is handed an incomplete answer with no signal that it is incomplete — which under
+Invariant 1 is worse than the halt text leaking, because a visible halt at least tells them to
+distrust it. Counted separately as `halts_undisclosed`; a turn with an *empty* body is B13 and
+is deliberately not double-booked here.
+
+**This changes what P2.1 may be accepted on.** "No halt text in the answer" is satisfied by a
+silent halt, so the trivially-passing implementation of that row is to suppress the message —
+the worse outcome. The row has been rewritten accordingly.
+
+Note also that **6383 turn 1's halt never appears in any delegation report** — the raw string
+was the whole answer, via the conversational path — so an acceptance check that inspects only
+`delegations[].report` is blind to the corpus's starkest case.
 
 ---
 

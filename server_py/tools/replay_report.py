@@ -45,9 +45,31 @@ from typing import Any, Iterable
 # tool-call steps; `run_deep_research` then treats it as the step's findings.
 HALT_LITERAL = re.compile(r"\[Research halted", re.I)
 # What the synthesis turns that into by the time the lawyer sees it.
+#
+# **Widened 2026-09-15 (P1.5) after measuring it: the original caught 9 of the 14
+# real disclosures.** It required near-exact wording — "operational limit",
+# "research was halted" — and the model does not paraphrase to a fixed script.
+# It missed "exceeded its *processing* limits", "timed out while searching",
+# "exceeded the maximum *permitted steps*", and "Research Step 2 ... was halted"
+# (an intervening clause defeated `research (?:process )?was halted`).
+#
+# That is the dangerous direction for P2.1, whose acceptance asserts the ABSENCE
+# of halt language: a blind detector passes the row while the halt still reaches
+# the lawyer. Validated over the whole baseline — 14/14 disclosures matched, and
+# the only hit on a non-halt turn is 6383 turn 1, which is not a false positive
+# but the corpus's worst case (the raw string as the entire answer, reaching the
+# lawyer without any delegation report carrying it).
 HALT_PARAPHRASE = re.compile(
-    r"tool[- ]call step|exceeded (?:the )?(?:maximum )?(?:technical )?limit"
-    r"|operational limit|research (?:process )?was halted|halted across",
+    r"\[research halted"
+    r"|tool[- ]call step"
+    r"|exceed(?:ed|ing|s)? (?:the |its |their )?"
+    r"(?:maximum |technical |processing |operational |permitted |internal |system )*"
+    r"(?:number of )?(?:research )?(?:step|limit)"
+    r"|(?:operational|processing|technical|system|internal) limits?"
+    r"|(?:research|search|step|process|analysis)[^.]{0,70}\bwas halted\b"
+    r"|\bhalted (?:by the system|due to|prior to|after|across|before)"
+    r"|(?:research|agent|search|step|process)[^.]{0,50}\btimed out\b"
+    r"|\btimed out\b[^.]{0,50}(?:search|research|attempt)",
     re.I,
 )
 
@@ -240,6 +262,11 @@ class RunSignals:
 
     halt_in_worker_report: int = 0  # B1, at source
     halt_language_in_answer: int = 0  # B1, as the lawyer sees it
+    # B1, the case nobody named: a worker halted, the answer is non-empty, and it
+    # says nothing about it. Invariant 1 requires a disclosure to be TRUE; no
+    # disclosure at all is the worse failure, because the lawyer has no signal
+    # that the answer is incomplete. 3 turns in the Wave 0 baseline.
+    halts_undisclosed: int = 0
 
     filter_losses: list = field(default_factory=list)
     searches: int = 0
@@ -387,10 +414,12 @@ def analyse_run(doc: dict) -> RunSignals:
         if sources and cited == 0:
             sig.turns_source_fallback += 1
 
+        turn_halted = False
         for dg in audit.get("delegations", []):
             sig.delegations += 1
             if HALT_LITERAL.search(dg.get("report") or ""):
                 sig.halt_in_worker_report += 1
+                turn_halted = True
             for tl in dg.get("tools", []):
                 sig.tool_calls[tl["name"]] += 1
                 if tl["name"] != "search_legislation":
@@ -421,6 +450,13 @@ def analyse_run(doc: dict) -> RunSignals:
                     sig.searches_filters_bit += 1
                 if fl.total_misreported:
                     sig.searches_total_misreported += 1
+
+        # A halt the lawyer was never told about. Scored per TURN and after every
+        # delegation has been seen, and only where there is an answer it could
+        # have been disclosed in — an empty body is B13, a different defect with
+        # a different fix, and counting it here would double-book it.
+        if turn_halted and answer.strip() and not HALT_PARAPHRASE.search(answer):
+            sig.halts_undisclosed += 1
 
     return sig
 
@@ -466,6 +502,7 @@ def cmd_summary(args) -> int:
     print(f"    of those, billed >$0      {sum(s.turns_billed_but_empty for s in sigs)}   <- P4.2 acceptance")
     print(f"  runs with a halted worker   {sum(1 for s in sigs if s.halt_in_worker_report)}")
     print(f"  runs with halt text shown   {sum(1 for s in sigs if s.halt_language_in_answer)}   <- B1 / P2.1")
+    print(f"  turns halted with NO mention  {sum(s.halts_undisclosed for s in sigs)}   <- B1 / P2.1 (silent halt)")
     tot_s = sum(s.searches for s in sigs)
     tot_w = sum(s.searches_wiped_out for s in sigs)
     tot_b = sum(s.searches_filters_bit for s in sigs)
@@ -594,6 +631,7 @@ _COMPARE_METRICS: list[tuple[str, str, str]] = [
     ("n_bad_links", "  wrong granularity", "B14/P1.4"),
     ("halt_runs", "runs with a halted worker", "B1/P2.1"),
     ("halt_answer_runs", "runs with halt text shown", "B1/P2.1"),
+    ("halts_undisclosed", "  turns halted with NO mention", "B1/P2.1"),
     ("in_force_claims", "unsupported in-force claims", "B4/P2.5"),
     ("bare_negatives", "bare negatives", "B5/P2.2"),
     ("explained_negatives", "  (explained negatives)", ""),
@@ -628,6 +666,7 @@ def _agg(sigs: list[RunSignals]) -> dict:
         "sources_kept", "sources_unused", "turns_source_fallback",
         "turns_empty_answer", "turns_billed_but_empty",
         "turns_needing_clarification", "turns_errored", "delegations",
+        "halts_undisclosed",
     ):
         out[f] = sum(getattr(s, f) for s in sigs)
     return out

@@ -303,3 +303,79 @@ def test_totals_ignore_sessions_missing_from_one_side(tmp_path, capsys):
     # 5 -> 5 over the one common session, NOT 10 -> 5.
     before_n, after_n, change = _metric(out, "  filters removed EVERYTHING")
     assert (before_n, after_n, change) == (5, 5, "=")
+
+
+# --- the halt detector (widened 2026-09-15, P1.5) -----------------------------
+#
+# The original HALT_PARAPHRASE caught 9 of the 14 real disclosures in the Wave 0
+# baseline. That is the dangerous direction for P2.1, whose acceptance asserts
+# the ABSENCE of halt language: a blind detector marks the row green while the
+# halt still reaches the lawyer. These are the verbatim strings it missed.
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("text", [
+    "The research agent was unable to complete the search for this query as it "
+    "exceeded its processing limits (timed out).",
+    'The research agent timed out while searching for further definitions of "shop".',
+    "The research agent timed out while attempting to find the correct provision.",
+    "The research agent was unable to complete this request as the search exceeded "
+    "the maximum permitted steps.",
+    "Research Step 2 (examining the controlled drug status) was halted by the system "
+    "prior to completion.",
+    "A broader search for statutory definitions was halted due to system limitations.",
+    "the agent exceeded its operational limits (timed out)",
+    "[Research halted: exceeded 20 tool-call steps]",
+    "the research process was halted prior to completion",
+])
+def test_real_halt_disclosures_are_detected(text):
+    assert rr.HALT_PARAPHRASE.search(text), f"missed a real halt disclosure: {text!r}"
+
+
+@pytest.mark.parametrize("text", [
+    # Ordinary legal prose that must not read as a halt.
+    "The time limit for appeal under section 20 is 21 days from the decision.",
+    "The Act imposes a statutory limit on the number of directors.",
+    "Section 5 sets out the maximum penalty of level 3 on the standard scale.",
+    "The limit of liability is prescribed by regulation 4.",
+    "The council halted the development under a stop notice.",
+    "The search returned no results for the Victims and Witnesses (Scotland) Act 2014.",
+])
+def test_ordinary_legal_prose_is_not_read_as_a_halt(text):
+    assert not rr.HALT_PARAPHRASE.search(text), f"false positive on: {text!r}"
+
+
+def test_a_halt_the_answer_never_mentions_is_counted_separately():
+    """The case the plan does not name: the worker halted, the answer is a normal
+    report, and the lawyer is given no signal that it is incomplete. Invariant 1
+    requires a disclosure to be TRUE; no disclosure at all is worse."""
+    doc = _run(
+        answer="The Act applies throughout Scotland and section 3 sets out the duty. " * 6,
+        report="[Research halted: exceeded 20 tool-call steps]",
+    )
+    sig = rr.analyse_run(doc)
+    assert sig.halt_in_worker_report == 1
+    assert sig.halt_language_in_answer == 0
+    assert sig.halts_undisclosed == 1
+
+
+def test_a_disclosed_halt_is_not_counted_as_undisclosed():
+    doc = _run(
+        answer="The research process was halted prior to completion, so no findings "
+               "are available for that step.",
+        report="[Research halted: exceeded 20 tool-call steps]",
+    )
+    sig = rr.analyse_run(doc)
+    assert sig.halt_language_in_answer == 1
+    assert sig.halts_undisclosed == 0
+
+
+def test_an_empty_answer_after_a_halt_is_b13_not_an_undisclosed_halt():
+    """An empty body has no room for a disclosure. It is B13/P4.2, a different
+    defect with a different fix, and double-booking it here would inflate both."""
+    doc = _run(answer="", report="[Research halted: exceeded 20 tool-call steps]", cost=0.4)
+    sig = rr.analyse_run(doc)
+    assert sig.halts_undisclosed == 0
+    assert sig.turns_billed_but_empty == 1
