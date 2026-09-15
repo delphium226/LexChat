@@ -347,3 +347,61 @@ def test_an_unhalted_delegation_reports_halted_as_none():
     rec = audit.start_delegation("brief")
     audit.end_delegation(rec, report="a fine report")
     assert rec["halted"] is None
+
+
+# ---------------------------------------------------------------------------
+# P2.6 — the A4 reformat retry must not fire on a halt
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_a_halted_worker_costs_no_reformat_call(_cfg):
+    """A halt has nothing to reformat. In 6340 the retry spent an LLM call
+    turning the marker into *"Jurisdiction & Status: Not applicable (no research
+    generated). References: None found."* — a perfectly-structured empty report,
+    which is what let the halt read downstream as finished research. Pure cost,
+    and it laundered the failure."""
+    from src.utils.stopwatch import TimingCollector
+
+    calls = []
+
+    async def chat_loop(messages, model, cancel_event, num_ctx, tools, tool_executor,
+                        on_chunk=None, emit_tool_details=False, timing_collector=None):
+        calls.append(tools)
+        return {"role": "assistant", "content": RAW, "halted": dict(HALT)}
+
+    timing = TimingCollector("req1")
+    result = await run_worker_agent(
+        chat_loop, lambda *a, **k: None, "q", "test-model", None, 0,
+        timing_collector=timing,
+    )
+
+    assert len(calls) == 1, "the reformat retry fired on a halt"
+    assert timing.report_reformat_retries == 0
+    assert "Not applicable" not in result["content"]
+
+
+@pytest.mark.asyncio
+async def test_an_unhalted_malformed_report_still_gets_its_retry(_cfg):
+    """The guard must be narrow: A4 is doing real work on real reports, and
+    disabling it for everything would trade one defect for another."""
+    from src.utils.stopwatch import TimingCollector
+
+    seq = [
+        "A flat prose blob with no headers at all, long enough to be graded.",
+        "1. **Summary Answer (BLUF):** Answer.\n2. **References:** None found.",
+    ]
+    calls = []
+
+    async def chat_loop(messages, model, cancel_event, num_ctx, tools, tool_executor,
+                        on_chunk=None, emit_tool_details=False, timing_collector=None):
+        calls.append(tools)
+        return {"role": "assistant", "content": seq[len(calls) - 1]}
+
+    timing = TimingCollector("req1")
+    result = await run_worker_agent(
+        chat_loop, lambda *a, **k: None, "q", "test-model", None, 0,
+        timing_collector=timing,
+    )
+    assert len(calls) == 2
+    assert timing.report_reformat_retries == 1
+    assert result["content"] == seq[1]

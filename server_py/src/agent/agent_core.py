@@ -255,7 +255,19 @@ async def run_worker_agent(
     # A4: validate the report structure and, if malformed, issue ONE no-tools
     # reformat retry. Skipped in conversational chat mode (deliberately unstructured).
     # Runs before source filtering so the filter sees the reformatted content.
-    if cfg.get("_chat_mode") != "conversational":
+    #
+    # P2.6 (B1): and skipped for a HALTED worker. A halt has no findings to
+    # reformat, so the retry is pure cost — and worse, it is what laundered the
+    # failure: in 6340 it spent an LLM call turning the halt marker into a
+    # perfectly-structured empty report ("Jurisdiction & Status: Not applicable
+    # (no research generated). References: None found."), which is what let the
+    # halt read downstream as a finished piece of research. It also polluted the
+    # measurement — `report_reformat_retries` and the Efficiency tab's
+    # `reformat_rate` scored these as prompt-adherence failures when the model
+    # never had a report to format.
+    if result.get("halted"):
+        logger.info("[Worker] Halted — skipping the A4 reformat retry (nothing to format)")
+    elif cfg.get("_chat_mode") != "conversational":
         content = result.get("content", "") or ""
         if _report_needs_reformat(content, has_sources=bool(source_accumulator)):
             logger.info("[Worker] Report failed structure check — issuing one reformat retry")

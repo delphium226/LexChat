@@ -421,6 +421,81 @@ strings that were mis-flagged.
 
 ---
 
+## The step cap — measured on the completed sweep, and the earlier reading was the wrong counter
+
+**Decision (P2.1, 2026-09-15): `max_turns` stays at 20.** Recorded here because the
+row asked for it to be decided on the finished Wave 1 sweep rather than on the
+mid-sweep figures, and because the mid-sweep figures pointed the other way.
+
+### The earlier reading counted tool calls against a cap on rounds
+
+P2.1's row recorded *"p90 tool calls per delegation 15 → 20 — the 90th-percentile
+delegation now sits AT the cap"* and *"at-or-over-cap 6.3% → 11.2%"*, concluding that
+**fixing retrieval nearly doubled the share of delegations hitting the ceiling.**
+
+`max_turns` caps **ReAct rounds** — recursions of `chat_loop`, one LLM call each. A
+single round issues as many tool calls as the model asks for, executed in parallel by
+`asyncio.gather`, and the Worker prompt explicitly instructs batching ("exactly one
+call per `legislation_id`"). So tool calls per delegation and rounds are different
+quantities, and comparing the first against the number 20 overstates cap proximity —
+most on the largest delegations, where batching does the most work:
+
+| | tool calls in the biggest delegation | `react_turns_max` | halted? |
+|---|---|---|---|
+| 6341 turn 6 | 45 | **13** | no |
+| 6341 turn 5 | 31 | **17** | no |
+| 6374 turn 2 | 24 | **19** | no |
+| 6408 turn 2 | 20 | **10** | no |
+
+Of the 15 Wave 1 turns whose biggest delegation made ≥20 tool calls, 4 never came
+near the cap. `request_timings.react_turns_max` is the counter the cap actually acts
+on, it is on every run file, and P2.1's row said to read
+`request_timings.max_turns_halted` before changing the cap. Both were available.
+
+### On the completed sweep, cap pressure FELL
+
+41 sessions, 153 measurable turns, rep-1 like-for-like:
+
+| | Wave 0 | Wave 1 | |
+|---|---|---|---|
+| `react_turns_max` median | 3 | 3 | = |
+| p75 | 7 | 6 | |
+| **p90** | 17 | **13** | **−24%** |
+| p95 | 20 | 20 | = |
+| **turns at the cap** | 12 (7.8%) | **11 (7.2%)** | −0.6pp |
+| turns at 15–19 (near, not at) | 5 (3.3%) | 4 (2.6%) | |
+| tool calls per delegation, p90 | 18 | 17 | |
+| delegations ≥20 tool calls | 22 (7.9%) | 19 (9.6%) | denominator fell 29% |
+
+The distribution is sharply bimodal: over 90% of turns finish inside 14 rounds, and a
+7–8% tail runs to the ceiling. Wave 1 moved the body of the distribution *down* — the
+model stopped re-searching against emptied results — and left the tail where it was.
+
+### The turns that hit the cap are looping, not starved
+
+This is the evidence that settles it. Across the 11 halted turns of the Wave 1 sweep:
+
+| session · turn | tool calls | redundant | Phase 1 | Phase 2 | sources |
+|---|---|---|---|---|---|
+| 6335 · 7 | 26 | **22** | 2 | 24 | 2 |
+| 6338 · 2 | 27 | **19** | 4 | 23 | 4 |
+| 6382 · 1 | 53 | **24** | 13 | 40 | 24 |
+| 6409 · 6 | 23 | 0 | **22** | **1** | 3 |
+| 6409 · 7 | 25 | 0 | **25** | **0** | 18 |
+
+**26% of tool calls on halted turns are redundant, against a 15% base rate** over all
+turns. Two failure shapes, both visible: *repeat retrieval* (6335 spending 22 of 26
+calls re-fetching) and *discovery flail* (6409 turn 7 running 25 searches and
+retrieving nothing at all). Neither is a run that was nearly finished. Raising 20 → 30
+would add cost and latency to the 7% and buy more of the same, while **masking** the
+failure P2.1 exists to make honest.
+
+What it does justify is a different fix, opened as **P2.7**: `run_worker_agent` gives
+`search_budget` only to the parliamentary modes, so nothing stops a legislation Worker
+searching indefinitely. The parliamentary budget exists for exactly 6409's shape.
+
+---
+
 ## Correction — the provenance signal was blind to summarisation (found 2026-09-15, during P1.6)
 
 **This file first published "provision URLs never returned by a tool: 327 of 327 (100%) →

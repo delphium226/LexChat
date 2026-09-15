@@ -75,6 +75,16 @@ HALT_PARAPHRASE = re.compile(
     re.I,
 )
 
+# P2.1 condition (3): the halt disclosed with the WRONG reason. "Timed out"
+# is the specific falsehood 6340 produced, and it is not a harmless synonym —
+# a timeout implies the same question might succeed on a retry, where a step
+# cap says it will not. Negations are excluded so P2.1's own notice ("it is
+# **not** a timeout") does not match itself.
+HALT_AS_TIMEOUT = re.compile(
+    r"(?<!not a )(?<!not\*\* a )(?:timed out|timeout|time[- ]?out)",
+    re.I,
+)
+
 NOT_FOUND = re.compile(
     r"\b(no (?:relevant )?(?:results?|legislation|provisions?|records?|cases?|"
     r"regulations?|instruments?)\b|not (?:be )?(?:found|located|retrieved)"
@@ -269,6 +279,12 @@ class RunSignals:
     # disclosure at all is the worse failure, because the lawyer has no signal
     # that the answer is incomplete. 3 turns in the Wave 0 baseline.
     halts_undisclosed: int = 0
+    # P2.1's conditions (2) and (3), separated from "was it disclosed at all".
+    # A halt can be disclosed and still be disclosed WRONGLY: 6340 told the
+    # lawyer the agent "exceeded its operational limits (timed out)" — it hit a
+    # step cap, and a timeout implies retrying might work.
+    halt_raw_marker_in_answer: int = 0
+    halt_called_a_timeout: int = 0
 
     filter_losses: list = field(default_factory=list)
     searches: int = 0
@@ -475,6 +491,10 @@ def analyse_run(doc: dict) -> RunSignals:
 
         if HALT_PARAPHRASE.search(answer):
             sig.halt_language_in_answer += 1
+        if HALT_LITERAL.search(answer):
+            sig.halt_raw_marker_in_answer += 1
+        if HALT_AS_TIMEOUT.search(answer):
+            sig.halt_called_a_timeout += 1
 
         if NOT_FOUND.search(answer):
             if NEGATIVE_EXPLAINED.search(answer):
@@ -894,6 +914,63 @@ def cmd_compare(args) -> int:
     return 0
 
 
+def cmd_halts(args) -> int:
+    """P2.1's acceptance, run over a replay directory.
+
+    Four of the five conditions are mechanical and are checked here per TURN;
+    the fifth — "no invented cause" — is a reading of the prose and is left to a
+    person, with the answer printed so they can do it. Printing per turn rather
+    than per run matters: a session's failure lives in one turn of four, and a
+    run-level total hides which.
+    """
+    docs = load_runs(Path(args.dir))
+    if not docs:
+        print(f"No run files in {args.dir}")
+        return 1
+    print(f"P2.1 acceptance over {args.dir}")
+    print()
+    print(f"{'session':>8} {'rep':>3} {'turn':>4} {'halted':>6} "
+          f"{'discl':>5} {'raw':>4} {'timeout':>7} {'meta':>4}  verdict")
+    print("-" * 78)
+    bad = 0
+    halted_turns = 0
+    for doc in sorted(docs, key=lambda d: (d["session_id"], d.get("rep", 1))):
+        for t in doc.get("turns", []):
+            audit = t.get("audit") or {}
+            dgs = audit.get("delegations", [])
+            meta = any(dg.get("halted") for dg in dgs)
+            halted = bool((t.get("timing") or {}).get("max_turns_halted")) or meta or any(
+                HALT_LITERAL.search(dg.get("report") or "") for dg in dgs)
+            if not halted:
+                continue
+            halted_turns += 1
+            answer = t.get("answer") or ""
+            disclosed = bool(HALT_PARAPHRASE.search(answer))
+            raw = bool(HALT_LITERAL.search(answer))
+            timeout = bool(HALT_AS_TIMEOUT.search(answer))
+            # (5) is satisfied by the audit field OR, on a Manager-loop halt
+            # where there is no delegation at all, by the request-level counter.
+            meta_ok = meta or not dgs
+            ok = disclosed and not raw and not timeout and meta_ok
+            bad += 0 if ok else 1
+            print(f"{doc['session_id']:>8} {doc.get('rep',1):>3} {t['turn']:>4} "
+                  f"{'yes':>6} {('yes' if disclosed else 'NO'):>5} "
+                  f"{('YES' if raw else '-'):>4} {('YES' if timeout else '-'):>7} "
+                  f"{('yes' if meta_ok else 'NO'):>4}  {'PASS' if ok else 'FAIL'}")
+    print()
+    print(f"{halted_turns} halted turn(s); {bad} failing.")
+    if args.answers:
+        for doc in sorted(docs, key=lambda d: (d["session_id"], d.get("rep", 1))):
+            for t in doc.get("turns", []):
+                if not bool((t.get("timing") or {}).get("max_turns_halted")):
+                    continue
+                print()
+                print(f"=== {doc['session_id']} rep{doc.get('rep',1)} "
+                      f"turn {t['turn']} ===")
+                print((t.get("answer") or "")[: args.chars])
+    return 0 if bad == 0 else 1
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="replay_report")
     p.add_argument("--dir", default=str(
@@ -911,12 +988,17 @@ def main(argv: Iterable[str] | None = None) -> int:
     c.add_argument("--after", required=True)
     c.add_argument("--all-reps", action="store_true",
                    help="do not restrict to rep 1 (denominators will differ)")
+
+    h = sub.add_parser("halts", help="P2.1 acceptance: every halted turn, graded")
+    h.add_argument("--answers", action="store_true", help="print the answers too")
+    h.add_argument("--chars", type=int, default=1200)
     args = p.parse_args(list(argv) if argv is not None else None)
     return {
         "summary": cmd_summary,
         "session": cmd_session,
         "baseline": cmd_baseline,
         "compare": cmd_compare,
+        "halts": cmd_halts,
     }[args.cmd](args)
 
 

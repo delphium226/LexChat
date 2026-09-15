@@ -572,3 +572,30 @@ def test_p2_1s_code_emitted_disclosure_counts_as_disclosure():
     ))
     assert sig.halts_undisclosed == 0
     assert sig.halt_language_in_answer == 1
+
+
+@pytest.mark.parametrize("answer,expected", [
+    ("The research agent timed out before finishing.", 1),
+    ("the agent exceeded its operational limits (timed out)", 1),   # 6340, verbatim
+    ("A timeout occurred during the search.", 1),
+    # P2.1's own notice denies a timeout — it must not match itself, or the
+    # acceptance check would fail on the very text that fixes the defect.
+    ("it is **not** a timeout, and it is **not** a finding that the material "
+     "does not exist", 0),
+    ("It is NOT a timeout, NOT an API failure, and NOT evidence that", 0),
+    ("A perfectly ordinary answer about compulsory purchase.", 0),
+])
+def test_a_halt_disclosed_as_a_timeout_is_disclosed_wrongly(answer, expected):
+    """P2.1 condition (3). "Timed out" is not a harmless synonym for a step cap:
+    a timeout implies the same question might succeed on a retry, where a cap
+    says it will not."""
+    sig = rr.analyse_run(_run(answer=answer))
+    assert sig.halt_called_a_timeout == expected
+
+
+def test_the_raw_marker_reaching_the_answer_is_counted_separately():
+    """Disclosed-at-all and disclosed-readably are different questions: 6383
+    turn 1 'disclosed' the halt by printing the marker as the whole answer."""
+    sig = rr.analyse_run(_run(answer="[Research halted: exceeded 20 tool-call steps]"))
+    assert sig.halt_raw_marker_in_answer == 1
+    assert sig.halt_language_in_answer == 1   # it does count as a mention
