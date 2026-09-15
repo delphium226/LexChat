@@ -325,6 +325,12 @@ class ReplayClient:
             "year_to": s.year_to,
             "date_from": s.date_from,
             "date_to": s.date_to,
+            # `court` (P4.4) and `current_only` (P1.2) are RETIRED filters, kept
+            # here deliberately. This dict records what the original pre-pilot
+            # session ran under, which is a historical fact and not a claim
+            # about today's system; and both are accepted-and-ignored by the
+            # request model, so sending them is a no-op. Dropping them would
+            # quietly rewrite the record of how those sessions were configured.
             "court": s.court,
             "legislation_type": s.legislation_type,
             "current_only": s.current_only,

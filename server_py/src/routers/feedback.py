@@ -335,7 +335,12 @@ _FILTER_STR_KEYS = (
     "jurisdiction",
     "date_from",
     "date_to",
-    "court",
+    # `court` was REMOVED from this allowlist by P4.4 (bucket B12) along with
+    # the filter itself. Nothing sends it any more, and accepting it from a
+    # stale client would write a snapshot claiming a control was set that no
+    # longer exists — a false statement in a record an admin reads and exports.
+    # EXISTING ROWS ARE UNTOUCHED: this is the write path, and the export keeps
+    # its "Court" column so pre-pilot snapshots still render what was really set.
     "legislation_type",
     "record_type",
     "house",

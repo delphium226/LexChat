@@ -31,7 +31,6 @@ import {
   HOUSE_OPTIONS,
   JURISDICTION_OPTIONS,
   LEGISLATION_TYPE_OPTIONS,
-  COURT_GROUPS,
   getRecordTypeOptions,
   getSessionFilterLabel,
   getSessionOptions,
@@ -206,7 +205,6 @@ function AppContent() {
     jurisdiction,
     dateFrom,
     dateTo,
-    caseLawCourt,
     legislationType,
     recordType,
     sessions,
@@ -214,7 +212,6 @@ function AppContent() {
     setJurisdictionPersist,
     setDateFromPersist,
     setDateToPersist,
-    setCourtPersist,
     setLegislationTypePersist,
     setRecordTypePersist,
     setSessionsPersist,
@@ -256,7 +253,7 @@ function AppContent() {
     logoutWithExpiry,
     chatMode,
     researchMode,
-    filters: { jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, recordType, sessions, house },
+    filters: { jurisdiction, dateFrom, dateTo, legislationType, recordType, sessions, house },
     saveFiltersToChatStorage,
     restoreFiltersForChat,
     currentChatId,
@@ -335,10 +332,6 @@ function AppContent() {
   const jurisdictionLabel = jurisdiction
     ? JURISDICTION_OPTIONS.find(o => o.value === jurisdiction)?.label || 'All jurisdictions'
     : 'All jurisdictions';
-
-  const courtLabel = caseLawCourt
-    ? COURT_GROUPS.flatMap(g => g.courts).find(c => c.value === caseLawCourt)?.label || caseLawCourt
-    : '';
 
   const userInitials = getInitials(user?.username);
 
@@ -669,11 +662,6 @@ function AppContent() {
               });
             }
 
-            // 6. Court (legislation, when case law is in scope)
-            if (!isParliament && courtLabel && researchMode !== 'legislation_only') {
-              chips.push({ icon: <GavelIcon />, label: courtLabel });
-            }
-
             // 7. Date range
             if (dateFrom || dateTo !== thisYear) {
               const dr = dateFrom && dateTo ? `${dateFrom}–${dateTo}` : dateFrom ? `From ${dateFrom}` : `To ${dateTo}`;
@@ -923,7 +911,6 @@ function AppContent() {
                       legislationType,
                                         dateFrom,
                       dateTo,
-                      caseLawCourt,
                     }}
                     onApply={draft => {
                       if (!isParliament && draft.researchMode !== researchMode) {
@@ -937,7 +924,6 @@ function AppContent() {
                       setLegislationTypePersist(draft.legislationType);
                       setDateFromPersist(draft.dateFrom);
                       setDateToPersist(draft.dateTo);
-                      setCourtPersist(draft.caseLawCourt);
                       // Each persist setter above rewrites the whole per-chat
                       // snapshot from *this* render's filter state plus its own
                       // override, so the last one to run wins and the other eight
@@ -947,7 +933,6 @@ function AppContent() {
                         jurisdiction: draft.jurisdiction,
                         dateFrom: draft.dateFrom,
                         dateTo: draft.dateTo,
-                        court: draft.caseLawCourt,
                         legislationType: draft.legislationType,
                         recordType: draft.recordType,
                         sessions: draft.sessions,
@@ -1153,7 +1138,7 @@ function AppContent() {
           // The same filter object the composer sends with each query, so the
           // recorded snapshot is the state the research was actually run under
           // rather than a second reading of localStorage.
-          filters={{ jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, recordType, sessions, house }}
+          filters={{ jurisdiction, dateFrom, dateTo, legislationType, recordType, sessions, house }}
           researchMode={researchMode}
           chatMode={chatMode}
           onClose={() => modals.close('sessionFeedback')}

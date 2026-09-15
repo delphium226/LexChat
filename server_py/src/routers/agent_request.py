@@ -56,8 +56,25 @@ class AgentRequestBase(BaseModel):
     year_to: Optional[int] = None
     date_from: Optional[str] = None
     date_to: Optional[str] = None
-    court: Optional[str] = None
     legislation_type: Optional[str] = None
+    # `court` was REMOVED here by P4.4 (bucket B12). Three reasons, and the
+    # third is the one that made it a defect rather than dead weight:
+    #   1. NOBODY USED IT. Zero of the 41 replayed pre-pilot sessions set a
+    #      court, against `current_only` at 29 and `jurisdiction` at 13.
+    #   2. For a Scottish Government audience it was a trap. All 14 options are
+    #      English, Welsh or UK-wide, because the National Archives corpus has
+    #      no Scottish courts in it at all (`court=csoh` is rejected 400,
+    #      "not one of the available choices" — see P5.2). Selecting any of them
+    #      guaranteed a non-Scottish result set.
+    #   3. It OVERRODE the model. `executor.py` applied `_court` after the
+    #      model's own `court` argument and clobbered it, so a court chosen
+    #      three turns earlier silently beat the model's per-query judgement —
+    #      the same stale-filter failure as B2 and B4. Note the date filters
+    #      intersect (max/min); court did not.
+    #
+    # The model KEEPS its own `court` parameter on `search_case_law`, so the
+    # capability is unchanged — only the user-facing control is gone.
+    #
     # `current_only` was REMOVED here by P1.2 (bucket B4). The filter behind it
     # excluded nothing: it tested `status` for {repealed, revoked, spent,
     # expired, not in force}, but the LEX API's `status` vocabulary is `final`
@@ -161,8 +178,10 @@ def build_request_config(
         "_year_to": body.year_to or None,
         "_date_from": body.date_from or None,
         "_date_to": body.date_to or None,
-        "_court": body.court or None,
         "_legislation_type": body.legislation_type or None,
+        # `_court` is deliberately NOT set — see `court` above. Its only reader
+        # was the override in executor.py's search_case_law branch, now removed.
+        # Leaving the key would invite a new one.
         # `_current_only` is deliberately NOT set — see `current_only` above.
         # Every reader of it has been removed (the no-op post-filter in
         # executor.py and the "In-force legislation only" line in the prompt's

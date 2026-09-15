@@ -57,6 +57,10 @@ const FILTER_COLUMNS = [
   ['Jurisdiction', 'jurisdiction'],
   ['Date from', 'date_from'],
   ['Date to', 'date_to'],
+  // 'Court' and 'Current only' are RETIRED filters (P4.4 and P1.2). The columns
+  // stay because pre-pilot snapshots recorded real values in them and an export
+  // that silently dropped those would misrepresent what those sessions ran
+  // under. Nothing writes either any more, so they are blank on new rows.
   ['Court', 'court'],
   ['Legislation type', 'legislation_type'],
   ['Current only', 'current_only'],

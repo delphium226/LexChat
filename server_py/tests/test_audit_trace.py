@@ -485,7 +485,7 @@ def test_audit_event_shape():
     event = audit.to_event(
         config={
             "_chat_mode": "research", "_research_mode": "case_law_only",
-            "_provider": "openrouter", "model": "m", "_court": "UKSC",
+            "_provider": "openrouter", "model": "m", "_jurisdiction": "scotland",
         },
         timings={"total_ms": 1234},
     )
@@ -499,7 +499,11 @@ def test_audit_event_shape():
     assert event["request_id"] == "req123"
     assert event["chat_mode"] == "research"
     assert event["research_mode"] == "case_law_only"
-    assert event["filters"]["court"] == "UKSC"
+    assert event["filters"]["jurisdiction"] == "scotland"
+    # Retired filters keep their key as a permanent null so the trace shape does
+    # not move under an external consumer: `court` (P4.4), `current_only` (P1.2).
+    assert event["filters"]["court"] is None
+    assert event["filters"]["current_only"] is None
     assert event["answer"] == "the answer"
     assert event["sources"] == [{"n": 1, "url": "u"}]
     assert event["timings"]["total_ms"] == 1234
@@ -552,7 +556,7 @@ async def test_system_chat_emits_audit_event_on_the_wire(client, auth_headers, m
             "model": "mistral",
             "chat_mode": "research",
             "research_mode": "case_law_only",
-            "court": "UKSC",
+            "jurisdiction": "scotland",
         },
         headers=auth_headers,
     )
@@ -570,7 +574,12 @@ async def test_system_chat_emits_audit_event_on_the_wire(client, auth_headers, m
     # The fields the old endpoint silently dropped.
     assert ev["research_mode"] == "case_law_only"
     assert ev["chat_mode"] == "research"
-    assert ev["filters"]["court"] == "UKSC"
+    assert ev["filters"]["jurisdiction"] == "scotland"
+    # `court` is no longer sent and no longer has a reader (P4.4), but its key
+    # stays in the trace as a permanent null so the shape is stable for the
+    # external harness. Compatibility with a client that still sends it is
+    # pinned in tests/test_court_filter_removed.py.
+    assert ev["filters"]["court"] is None
 
     assert ev["answer"] == "the answer"
     assert len(ev["delegations"]) == 1

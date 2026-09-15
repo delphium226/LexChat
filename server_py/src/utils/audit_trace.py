@@ -347,11 +347,16 @@ class AuditCollector:
                     "year_to": config.get("_year_to"),
                     "date_from": config.get("_date_from"),
                     "date_to": config.get("_date_to"),
-                    "court": config.get("_court"),
                     "legislation_type": config.get("_legislation_type"),
-                    # Always null since P1.2 removed the filter: the key is
-                    # kept so the trace shape does not change under an external
-                    # consumer, but the value would be a claim we cannot make.
+                    # Both always null, and kept only so the trace shape does
+                    # not change under an external consumer:
+                    #   `court`        — P4.4 removed the filter (B12). The
+                    #                    model still chooses a court per query;
+                    #                    that choice is in the tool's `args`,
+                    #                    which is where a harness should read it.
+                    #   `current_only` — P1.2 removed the filter (B4); the value
+                    #                    would be a claim we cannot make.
+                    "court": None,
                     "current_only": None,
                     "record_type": config.get("_pt_record_type") or config.get("_wm_record_type"),
                     "house": config.get("_wm_house"),

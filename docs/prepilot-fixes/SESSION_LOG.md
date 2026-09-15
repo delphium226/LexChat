@@ -430,7 +430,7 @@ three of nine negative verdicts, so any row claiming a fix still needs n=3.
 
 ---
 
-## Session 5 — 2026-09-15 — P1.6, P2.1, P2.6, P0.4 (code half), all of Wave 5, and four instrument corrections
+## Session 5 — 2026-09-15 — P1.6, P2.1, P2.6, P4.4, P0.4 (code half), all of Wave 5, and four instrument corrections
 
 **Done:**
 - **P1.6 complete.** `src/utils/citation_links.py`, wired at four seams. **(a) the cause** —
@@ -708,6 +708,41 @@ the Court of Session this is an API request; if it mirrors TNA, nothing changes.
 organisation's to take, so P5.2 is `[~]` not `[x]`. `WAVE5_QUESTIONS.md` now states it as
 three steps in order: ask LEX; if no, put the procurement question to the product owner;
 either way record it, because a "no" makes **P2.4 permanent rather than interim**.
+
+### P4.4 — the case-law court filter removed (user decision, acted on this session)
+
+Raised by the user off the back of P5.2, and the evidence supported it three ways.
+
+- **Nobody used it.** Zero of the 41 replayed sessions set a court, against
+  `current_only` at 29 and `jurisdiction` at 13. Only 11 of 62 sessions touched case law.
+- **It was a trap for this audience.** All 14 options English, Welsh or UK-wide, against a
+  corpus with no Scottish courts in it. Choosing one guaranteed the wrong jurisdiction.
+- **It overrode the model**, and this is the part that made it a defect rather than dead
+  weight. `executor.py` applied `_court` *after* the model's own `court` argument and
+  clobbered it — a court chosen three turns earlier beating live per-query judgement, which
+  is the B2/B4 stale-filter failure again. The date filters beside it *intersect*
+  (`max`/`min`); court did not.
+
+**The capability stayed; only the control went.** `search_case_law` keeps its `court`
+parameter, which is the whole reason the filter was redundant — the model already narrows
+by court when a question calls for it. Two tests pin that specifically, because deleting
+the tool parameter too is the obvious wrong reading of this change.
+
+Retired on **P1.2's precedent exactly**: field removed outright, pydantic ignores rather
+than rejects (verified live — a stale client still gets a 200), `audit["filters"]["court"]`
+kept as a permanent null, `AUDIT_SCHEMA_VERSION` **not** bumped.
+
+**What was deliberately kept**, and why it matters: the session-feedback **export column**
+and the stored historical `filters` rows, because pre-pilot snapshots recorded real values
+and an export that dropped them would misrepresent what those sessions ran under; `court`
+in the replay harness for the same reason; and **the jurisdiction panel's Scotland/NI
+note** — *"Case law database covers E&W and UK-wide courts only"* — which is the true
+statement the court list was quietly contradicting. Removed from the **write** allowlist,
+though: storing a value for a control that no longer exists would put a false claim in a
+record an admin reads.
+
+**And what it does not fix.** Removing a misleading control does not put the Court of
+Session in the corpus. P2.4 is still required and P5.2's question still stands.
 
 **Next action:** ~~P2.2~~ — **see the P5.1 answer above first; it changes what Wave 2 and Wave 3 contain.** Then **P2.2** (B5, no bare negatives) — its `Depends on: P1.3, P2.1` is now
 satisfied, and this session amended it to cover the negative drawn from an **incomplete**

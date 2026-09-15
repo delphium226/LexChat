@@ -351,10 +351,13 @@ async def execute_worker_tool(
                 if args.get("date_to"):
                     params["date_to"] = args["date_to"]
 
-                # Apply user's hard filter constraints (override model args)
+                # Apply user's hard filter constraints (override model args).
+                # `_court` is gone (P4.4): the UI filter used to clobber the
+                # model's own `court` argument here, so a court selected turns
+                # earlier beat the model's per-query judgement. The date
+                # filters below deliberately INTERSECT rather than override,
+                # which is what court should always have done.
                 cl_cfg = get_request_provider_config()
-                if cl_cfg.get("_court"):
-                    params["court"] = cl_cfg["_court"]
                 if cl_cfg.get("_date_from"):
                     model_df = args.get("date_from") or ""
                     params["date_from"] = max(model_df, cl_cfg["_date_from"]) if model_df else cl_cfg["_date_from"]

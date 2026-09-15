@@ -343,23 +343,11 @@ _JURISDICTION_EXTENT_NOTES = {
     ),
 }
 
-_COURT_LABELS = {
-    "uksc": "UK Supreme Court (uksc)",
-    "ukpc": "Privy Council (ukpc)",
-    "ewca/civ": "Court of Appeal Civil Division (ewca/civ)",
-    "ewca/crim": "Court of Appeal Criminal Division (ewca/crim)",
-    "ewhc/admin": "Administrative Court (ewhc/admin)",
-    "ewhc/qb": "King's Bench Division (ewhc/qb)",
-    "ewhc/ch": "Chancery Division (ewhc/ch)",
-    "ewhc/fam": "Family Division (ewhc/fam)",
-    "ewhc/comm": "Commercial Court (ewhc/comm)",
-    "ewhc/pat": "Patents Court (ewhc/pat)",
-    "ewhc/tcc": "Technology & Construction Court (ewhc/tcc)",
-    "ukut": "Upper Tribunal (ukut)",
-    "ukut/iac": "Immigration & Asylum Chamber (ukut/iac)",
-    "ukut/lc": "Lands Chamber (ukut/lc)",
-    "eat": "Employment Appeal Tribunal (eat)",
-}
+# `_COURT_LABELS` was REMOVED by P4.4 along with the court filter (B12).
+# The court codes themselves are NOT gone — they live in `search_case_law`'s
+# tool schema (`agent/tools/schemas.py`), which is where the model reads them
+# and where they belong. This dict existed only to label the retired filter in
+# the constraint block below.
 
 
 def build_filter_constraint_block(cfg: dict) -> str:
@@ -369,13 +357,15 @@ def build_filter_constraint_block(cfg: dict) -> str:
     year_to = cfg.get("_year_to")
     date_from = cfg.get("_date_from")
     date_to = cfg.get("_date_to")
-    court = cfg.get("_court")
     legislation_type = cfg.get("_legislation_type")
     # `current_only` is deliberately absent. See P1.2: the filter it belonged to
     # excluded nothing, and this block used to tell the model "In-force
     # legislation only", which is the proximate cause of bucket B4 — the model
     # asserted currency because the system told it the results were current.
-    if not any([jurisdiction, year_from, year_to, date_from, date_to, court, legislation_type]):
+    # `court` is deliberately absent. See P4.4: the filter it belonged to was
+    # never used, offered only non-Scottish courts to a Scottish audience, and
+    # overrode the model's own per-query court choice.
+    if not any([jurisdiction, year_from, year_to, date_from, date_to, legislation_type]):
         return ""
 
     lines = ["ACTIVE RESEARCH FILTERS (applied by the system — do not override or ignore):"]
@@ -402,10 +392,6 @@ def build_filter_constraint_block(cfg: dict) -> str:
         lines.append(f"- Case law date range: from {date_from} onwards.")
     elif date_to:
         lines.append(f"- Case law date range: up to {date_to}.")
-
-    if court:
-        label = _COURT_LABELS.get(court, court)
-        lines.append(f"- Case law court: {label} only.")
 
     return "\n".join(lines)
 

@@ -334,12 +334,12 @@ FILTERS = {
     "jurisdiction": "scotland",
     "date_from": "1990",
     "date_to": "2026",
-    "court": "",
     "legislation_type": "ukpga",
     "current_only": True,
     "record_type": None,
     "sessions": [6, 7],
-    "house": None,
+    # blank vs null, both of which must be dropped rather than stored
+    "house": "",
 }
 
 
@@ -355,6 +355,9 @@ async def test_filters_are_stored_and_returned(client: AsyncClient, user_token: 
     assert row.filters["current_only"] is True
     # Nulls and blanks are absent, not stored as None/'' — "unset" is one state.
     assert "record_type" not in row.filters
+    assert "house" not in row.filters
+    # `court` is not stored at all since P4.4 retired the filter — even when a
+    # stale client sends a real value, not just a blank one.
     assert "court" not in row.filters
 
     rows = (await client.get(URL, headers={"Authorization": f"Bearer {admin_token}"})).json()
@@ -403,8 +406,12 @@ def test_clean_filters_enforces_the_shape():
     # bool subclasses int in Python, so [True] must not become a session number.
     assert _clean_filters({"sessions": [7, True, "6", None]}) == {"sessions": [7]}
     assert _clean_filters({"sessions": []}) is None
-    # Oversized strings are truncated rather than rejected.
-    assert len(_clean_filters({"court": "x" * 500})["court"]) == 100
+    # Oversized strings are truncated rather than rejected. Asserted on a LIVE
+    # key: `court` used to be the exemplar here and is no longer allowlisted
+    # (P4.4), which would have made this assertion vacuous.
+    assert len(_clean_filters({"jurisdiction": "x" * 500})["jurisdiction"]) == 100
+    # And the retired key is dropped outright rather than truncated.
+    assert _clean_filters({"court": "uksc"}) is None
 
 
 # --- Pre-pilot timeframe --------------------------------------------------
