@@ -472,6 +472,14 @@ no-speculation rule.
 Every condition except "no invented cause" is mechanical and is graded by the
 same command; the fifth is a reading of the prose, printed by `--answers`.
 
+**Which turns halted is stochastic, and the write-up says what actually halted
+rather than what was expected to.** 6383 turn 1 — the row's named "strongest
+case", where Wave 0 returned the raw marker as the entire 46-character answer —
+did **not** halt in this sweep: it ran conversational, answered in 27s, and the
+halt moved to turn 4's Deep Research plan. That is Invariant 4 working as
+intended, and it is why the grading is per halted TURN over the whole directory
+rather than per named session.
+
 The three 6340 replays are the clearest read, because 6340 is the session that
 produced the invented cause. All three now open with the code-emitted notice, and
 **none of the three invents a cause** — the enabling-power sentence is gone
