@@ -484,6 +484,18 @@ non-contributing runs, neither a pass nor a fail. Whether a session halts is
 itself a coin toss, which is a second reason the cap is better described as a
 tail than as a ceiling the work now sits against.
 
+**A large per-session drop that is NOT evidence of a fix, recorded so it is not
+later read as one.** 6384 turn 1 went from **14 Phase-1 searches and 2
+retrievals** in Wave 1 to **1-2 searches and 2-3 retrievals** here; 6383 turn 1
+from 10 searches / 11 retrievals / 7 redundant (and a halt at 20 rounds) to
+1-2 / 2-5 / 0-3 (2-6 rounds). Tempting to attribute to P1.6, and it should not
+be: P1.6's citation-URL block only fires *after* a summarised section retrieval,
+and 6384 turn 1 made two retrievals in Wave 1 — the block could have fired twice
+at most, which cannot explain a 14 → 2 collapse in *searching*. The before-side
+is n=1, and Wave 0 → Wave 1 already showed swings of this size from variance
+alone (6396: 172 searches → 1). **Most likely variance.** The next full sweep
+can settle it; a per-session claim on n=1 cannot.
+
 The three 6340 replays are the clearest read, because 6340 is the session that
 produced the invented cause. All three now open with the code-emitted notice, and
 **none of the three invents a cause** — the enabling-power sentence is gone
