@@ -406,8 +406,17 @@ is gone, as it should be after a successful `restore`.
   import, so a server surviving this session would serve pre-Wave-2 code.
 - `evidence/replay/baseline/` (65 files) and `evidence/replay/wave1/` (41 files), both gitignored.
   A Wave 2 sweep needs a **new** directory; `replay.py run` silently skips existing files.
-- **Compare with `replay_report compare --before <baseline> --after <dir>`**, which defaults to
-  rep 1 on both sides. Do not compare directories whole.
+- **Compare with `replay_report compare --before <baseline dir> --after <dir>`**, pointing at the
+  **real** directories: it restricts both sides to rep 1 itself. Do not hand-build a filtered copy
+  and do not compare directories whole — the baseline holds 65 files to a sweep's 41, which
+  inflates every Wave 0 figure by roughly half.
+- **The 20 purged pre-pilot server logs are preserved outside the repo** at
+  `C:/Temp/aila-prepilot/ServerLogs-backup/` (24 files). They were removed from branch history
+  because 8 of them carried 211 unredacted Worker delegation briefs naming live casework.
+  **Do not re-commit them**; `.gitignore` now blocks both `*.log.*` and `server_py/ServerLogs/`.
+- **Run files record `git_head: 6a5eeea`, which no longer resolves.** That commit was rewritten
+  by the log purge mid-sweep and is now `4c8878c` — same tree minus the logs. Product code was
+  verified unchanged across the sweep, so the measurement stands; the SHA is simply stale.
 
 **Decision after the sweep (user, 2026-09-15):** **no wave-by-wave merging.** The branch is completed in full and pushed to `main` once, at the end. This reverses the original policy in *Merging back* and in the root `CLAUDE.md`, both now amended, along with the standing memory note. The accepted consequence: the target keeps running the pre-pilot code — including B2 — until that push. A later session must not push a finished wave early on its own judgement.
 

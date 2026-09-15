@@ -40,8 +40,12 @@ python -m tools.replay_report --dir ../docs/prepilot-fixes/evidence/replay/basel
 Reproduce with:
 
 ```
-python -m tools.replay_report compare --before <baseline rep-1 only> --after ../docs/prepilot-fixes/evidence/replay/wave1
+cd server_py && python -m tools.replay_report compare \
+    --before ../docs/prepilot-fixes/evidence/replay/baseline \
+    --after  ../docs/prepilot-fixes/evidence/replay/wave1
 ```
+
+Point it at the **real** directories — `compare` restricts both sides to rep 1 itself, so there is no need to build a filtered copy of the baseline (and doing so by hand is how the denominator trap below gets re-introduced).
 
 **The rep-1 restriction is load-bearing.** The baseline directory holds 65 run files (the n=1 pass
 plus 24 targeted repetitions); a Wave 1 sweep holds 41. Comparing the directories whole inflates
