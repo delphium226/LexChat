@@ -782,6 +782,19 @@ and P5.3 done**; P0.4 and P5.2 at `[~]`; **P2.7, P3.5 and P3.6 opened this sessi
 - **`tools/lex_probe.py` is new** — re-runs P5.1's and P5.3's evidence
   (`--surface`, `--coverage`). Use it before trusting any claim in those rows.
 
+**User knowledge recorded 2026-09-15, and it redirects P5.2.** The user recalls that **LEX
+used to expose case law via the API and has since disabled access**, and that **Scottish
+courts were not represented in that data anyway**. Recollection, not verified — but
+consistent with the probe, which found populated `caselaw` collections behind
+`/healthcheck` and no endpoint, and which cannot distinguish "disabled" from "never
+exposed". **Consequence: do not plan around re-enabling the LEX route.** The LEX question
+shrinks to a one-line confirmation and P5.2's real subject becomes **finding an alternative
+case-law API**. Candidates, none assessed: **BAILII** (`ScotCS`/`ScotHC`/`ScotSC` — the
+obvious technical fit, **but its terms restrict automated access, so read them before
+designing anything**), the **Scottish Courts and Tribunals Service** (`scotcourts.gov.uk`,
+check for a feed), and the commercial providers (a licence cost). Whatever is chosen must
+clear the internet-restricted target's whitelist.
+
 **Two standing hazards for whoever picks this up:**
 1. **Ten instrument errors across five sessions**, four of them today, and one caught only
    because a second instrument disagreed. **A number that disagrees with what the code says

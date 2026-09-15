@@ -183,19 +183,32 @@ mirror the documented ones — `/caselaw/search`, `/caselaw/lookup`, `/caselaw/t
 `/caselaw/section/search` — all return **404**. So the corpus exists inside a system we
 already call and is not reachable through its published contract.
 
-**Ask before buying anything.** If that corpus includes the Court of Session and the
-Sheriff Courts, this is an API request to a team we already work with. If it is a mirror of
-the National Archives, it changes nothing and the procurement question stands.
+**But this route is probably closed, and the row's real subject is now finding an
+alternative.** The user recalls (2026-09-15) that **LEX used to expose case law and has
+since disabled access**, and that **Scottish courts were not represented in that data
+anyway**. Recorded as recollection, not verified — though it is consistent with what the
+probe found, which cannot tell "disabled" from "never exposed".
+
+So the LEX question shrinks to a one-line confirmation, and even a "yes" would probably not
+deliver the Court of Session. **The substantive work is sourcing Scottish case law
+elsewhere.**
 
 ### The decision, stated so it can be taken
 
-> 1. **To the LEX team:** is the case-law corpus behind `/healthcheck` reachable, and does
->    it include the **Court of Session** and the **Sheriff Courts**? (Ask this first — it is
->    free and it determines whether the rest of the question exists.)
-> 2. **If not — to the product owner:** is there a licensable source of Court of Session and
->    Sheriff Court decisions we can index, and is anyone willing to buy it? Raised
->    independently by three lawyers in the pre-pilot: AlistairC (*Clark* absent, 6359),
->    CambeulW (recency bias, 6363) and EmmaM.
+> 1. **To the LEX team — now a confirmation, not an open question:** we understand case-law
+>    access was available and has been withdrawn, and that Scottish courts were not in that
+>    data. Is that right, is it coming back, and did it ever include the Court of Session?
+>    One line either way; it closes the question rather than opening it.
+> 2. **The real one — which alternative source?** Three candidates, **none assessed**:
+>    **BAILII**, which carries `ScotCS` (Court of Session), `ScotHC` (High Court of
+>    Justiciary) and `ScotSC` (Sheriff Court) and is the obvious technical fit — **read its
+>    terms of use before designing anything, as they restrict automated access**; the
+>    **Scottish Courts and Tribunals Service** (`scotcourts.gov.uk`), which publishes
+>    opinions directly and should be checked for a feed or API; and the commercial providers
+>    (Westlaw, LexisNexis), which are a licence cost and a procurement decision. Whatever is
+>    chosen must clear the **internet-restricted target's whitelist**. Raised independently
+>    by three lawyers in the pre-pilot: AlistairC (*Clark* absent, 6359), CambeulW (recency
+>    bias, 6363) and EmmaM.
 > 3. **To the National Archives, separately: what is the corpus's date coverage?**
 >    Judgments exist back to **1965**, but the Atom feed caps at 50 results for every window
 >    and the search page exposes no total, so we could not measure density before ~2000 from
