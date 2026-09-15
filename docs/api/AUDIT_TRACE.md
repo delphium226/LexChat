@@ -50,7 +50,11 @@ All three endpoints that drive the agent pipeline — `/api/chat`, `/api/system/
 
 ### Filters
 
-`jurisdiction`, `year_from`, `year_to`, `date_from`, `date_to`, `court`, `legislation_type`, `current_only`, and — in parliamentary modes — `record_type`, `sessions`, `house`.
+`jurisdiction`, `year_from`, `year_to`, `date_from`, `date_to`, `court`, `legislation_type`, and — in parliamentary modes — `record_type`, `sessions`, `house`.
+
+**`current_only` was removed in September 2026 and is no longer a filter.** The control it belonged to excluded nothing: it tested the LEX `status` field for `repealed`/`revoked`/`spent`, but that field's vocabulary is `final` and `revised` only — it records which text version is held, not in-force status. There is no in-force signal anywhere in the tool surface, so the filter could not be repaired by extending the word list, and the UI and system prompt were both asserting currency on the strength of a check that never ran.
+
+The request field is **accepted and ignored** rather than rejected: this model does not set `extra="forbid"`, so a client still sending `current_only` receives the same response it did before and the value goes nowhere. `filters.current_only` is still present in the audit event, **always `null`**, so the trace shape is unchanged and `schema_version` remains `1`. Treat a `null` there as "this filter no longer exists", not as "the filter was off".
 
 ### Audit controls
 
@@ -113,7 +117,7 @@ One event per request, emitted immediately **before** `result`, so a consumer th
   "filters": {
     "jurisdiction": null, "year_from": null, "year_to": null,
     "date_from": null, "date_to": null, "court": "UKSC",
-    "legislation_type": null, "current_only": false,
+    "legislation_type": null, "current_only": null,   // removed Sept 2026; always null
     "record_type": null, "house": null, "sessions": null
   },
 

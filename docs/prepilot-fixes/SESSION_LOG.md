@@ -259,11 +259,19 @@ then start **P1.1** — and answer the `extent: []` question, not just the vocab
   97.5% dropped. Pinned by `test_uk_wide_instruments_are_in_scope_for_a_devolved_filter`.
 - **`current_only` removed outright**, not relabelled.
 
-**Judgement call worth revisiting if you disagree:** `current_only` survives on the request model
-as accepted-and-ignored, and `audit["filters"]["current_only"]` survives reporting `null`, rather
-than being removed with an `AUDIT_SCHEMA_VERSION` bump. Rationale: Invariant 5 (additive,
-fail-soft) and one external consumer (lexchat-eval) that would otherwise break on validation. The
-clean removal is a one-line change plus a schema bump if preferred.
+**Judgement call, now RESOLVED (user chose option C, 2026-09-15).** ~~The justification I first
+gave for keeping the request field — that removing it would break clients "on validation" — was
+**wrong**: `AgentRequestBase` does not set `extra="forbid"`, so pydantic ignores unknown keys.
+Removing the field breaks nothing.~~ What was actually at stake was only the external contract:
+`audit["filters"]["current_only"]` is read by lexchat-eval, and `AUDIT_TRACE.md` tells consumers
+to assert on `schema_version`, so dropping the key means bumping to v2 and telling that repo.
+
+Settled as: **request field removed; audit key kept, always `null`; schema stays v1.** A `null`
+there reads as "this filter no longer exists" and is strictly safer than a `KeyError` for a
+consumer indexing it directly. A schema bump is worth spending on a batch of changes rather than
+one field — **P2.1 is the natural moment**, since making the halt structured metadata changes the
+trace shape anyway. `docs/api/AUDIT_TRACE.md` was stale on this (it still documented `current_only`
+as a live filter) and has been corrected.
 
 **State of the branch:** `fix/prepilot-defects` @ `811c64d`. Waves 0 and 1 complete, tests green,
 **nothing pushed to `main`.** The dev box is restored — no housekeeping owed.

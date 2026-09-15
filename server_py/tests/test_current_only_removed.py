@@ -36,12 +36,25 @@ def _config(**body_kwargs):
     )
 
 
-def test_current_only_is_accepted_but_reaches_nothing():
-    """Accepted for compatibility; it must not appear on the request config,
-    because the config is what every reader downstream consults."""
-    assert ChatRequest(
+def test_current_only_is_gone_from_the_request_model():
+    """Removed outright, not deprecated in place.
+
+    Safe for existing clients because `AgentRequestBase` does not set
+    `extra="forbid"`: pydantic ignores an unknown key rather than rejecting the
+    request, so a client still sending `current_only` gets the same 200 it got
+    before and the value goes nowhere.
+    """
+    body = ChatRequest(
         messages=[{"role": "user", "content": "q"}], model="m", current_only=True
-    ).current_only is True
+    )
+    assert not hasattr(body, "current_only"), "the field must not exist"
+    assert "current_only" not in body.model_dump()
+
+
+def test_sending_current_only_is_ignored_not_rejected():
+    """The compatibility guarantee, asserted rather than assumed. If anyone adds
+    `extra="forbid"` to this model later, this test says what it will break."""
+    assert ChatRequest.model_config.get("extra") in (None, "ignore")
     assert "_current_only" not in _config(current_only=True)
 
 

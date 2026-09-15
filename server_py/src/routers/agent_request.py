@@ -58,19 +58,24 @@ class AgentRequestBase(BaseModel):
     date_to: Optional[str] = None
     court: Optional[str] = None
     legislation_type: Optional[str] = None
-    # DEPRECATED and IGNORED since P1.2 (bucket B4). The filter behind this
+    # `current_only` was REMOVED here by P1.2 (bucket B4). The filter behind it
     # excluded nothing: it tested `status` for {repealed, revoked, spent,
     # expired, not in force}, but the LEX API's `status` vocabulary is `final`
-    # and `revised` only — the field means which text version is held, not
-    # in-force status. 42 of 62 pre-pilot sessions ran with it on, and the
-    # system prompt told the model "In-force legislation only" on the strength
-    # of it, which is why answers asserted currency no tool could establish.
+    # and `revised` only — the field records which text version is held, not
+    # in-force status. Worse than inert: 42 of 62 pre-pilot sessions ran with it
+    # on while the UI claimed "In force as at <today>" and the system prompt
+    # told the model "In-force legislation only", which is why answers asserted
+    # a currency no tool could establish.
     #
-    # Kept on the model, rather than removed, so an existing client or the eval
-    # harness does not start failing validation — it is accepted and discarded.
-    # Nothing reads it. Do not reintroduce a consumer without a real in-force
-    # signal to back it (see P2.5, and P5.3 for the corpus question).
-    current_only: Optional[bool] = False
+    # Removing the field is safe for existing clients: this model does not set
+    # `extra="forbid"`, so pydantic ignores an unknown key rather than
+    # rejecting the request. A client still sending it gets the same 200 it got
+    # before, and the value goes nowhere.
+    #
+    # `audit["filters"]["current_only"]` is deliberately still emitted, always
+    # null, so the trace shape is unchanged for the external eval harness and
+    # AUDIT_SCHEMA_VERSION stays at 1. Do not reintroduce a consumer of this
+    # without a real in-force signal (see P2.5, and P5.3 for the corpus question).
     # Parliamentary-mode filters (parliament / Westminster bots only).
     # record_type and sessions are shared fields whose vocabulary depends on the
     # bot's research mode: Holyrood record types + Sessions 1-7, or Westminster
