@@ -521,3 +521,54 @@ def test_bare_year_filters_are_read_as_years_not_dates():
     s = next(s for s in rs.load_sessions() if s.session_id == "6404")
     assert s.year_to == 2026
     assert s.date_to is None
+
+
+# --- P2.1: a halt is read from three places, because each has a hole ----------
+
+
+def _halt_run(answer, report="", halted=None, timing_halt=False):
+    d = _run(answer=answer, report=report, cost=0.1)
+    dg = d["turns"][0]["audit"]["delegations"][0]
+    dg["report"] = report
+    if halted is not None:
+        dg["halted"] = halted
+    d["turns"][0]["timing"]["max_turns_halted"] = 1 if timing_halt else 0
+    return d
+
+
+def test_halt_seen_via_the_v2_audit_field():
+    """Schema v2 removes the marker from the report, so a detector reading only
+    the report text would stop seeing halts the moment P2.1 shipped."""
+    sig = rr.analyse_run(_halt_run(
+        "A perfectly normal-looking answer.",
+        report="[Research Incomplete — step limit reached] ...",
+        halted={"reason": "step_cap", "limit": 20},
+    ))
+    assert sig.halt_in_worker_report == 1
+    assert sig.halts_undisclosed == 1  # the answer never says so
+
+
+def test_halt_seen_via_the_legacy_marker_in_the_report():
+    """v1 run files — the whole Wave 0 and Wave 1 corpus — carry only this."""
+    sig = rr.analyse_run(_halt_run(
+        "A normal answer.", report="[Research halted: exceeded 20 tool-call steps]"))
+    assert sig.halt_in_worker_report == 1
+
+
+def test_a_manager_loop_halt_is_seen_via_the_products_own_counter():
+    """6383 turn 1: no delegation report carries it, because the MANAGER's loop
+    halted. `timing.max_turns_halted` is the only signal that survives."""
+    sig = rr.analyse_run(_halt_run("A normal answer.", timing_halt=True))
+    assert sig.halts_undisclosed == 1
+
+
+def test_p2_1s_code_emitted_disclosure_counts_as_disclosure():
+    """The fix must be visible to the metric that grades it — the P1.6 lesson,
+    applied before the sweep rather than after."""
+    sig = rr.analyse_run(_halt_run(
+        "> **⚠ This answer is incomplete.** One research step reached a fixed "
+        "internal limit of 20 tool-call rounds.\n\nThe findings follow.",
+        timing_halt=True,
+    ))
+    assert sig.halts_undisclosed == 0
+    assert sig.halt_language_in_answer == 1

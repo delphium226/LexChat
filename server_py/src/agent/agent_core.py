@@ -21,6 +21,7 @@ from ..prompts import (
 )
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import enforce_provision_links
+from ..utils.research_halt import apply_halt_disclosure, halt_worker_report
 from ..utils.suggestions import diagnose_suggestions, extract_suggestions
 from .agent_shared import describe_agent_error, run_worker_tool
 from .federation_client import (
@@ -267,6 +268,22 @@ async def run_worker_agent(
                 cancel_event, num_ctx, timing_collector=timing_collector,
             )
 
+    # P2.1 (B1): a halted worker produced NO findings, so whatever is sitting in
+    # `content` is bookkeeping, not research. Replace it with a statement of what
+    # actually happened, addressed to the agent that will read it. Done AFTER the
+    # reformat retry so this text is the last word — the retry currently still
+    # fires on a halt and dresses it up as a finished report, which is P2.6's
+    # (separate) cost problem, not a correctness one once this overwrite lands.
+    if result.get("halted"):
+        logger.warning(
+            "[Worker] Halted at the step cap (%s rounds) — %d source(s) retrieved, "
+            "no findings produced",
+            result["halted"].get("limit"), len(source_accumulator),
+        )
+        result["content"] = halt_worker_report(
+            result["halted"], sources_retrieved=len(source_accumulator)
+        )
+
     # P1.6 (B14): a provision URL no tool returned still resolves, so it reads
     # to a lawyer as a verified citation. Enforced here, AFTER the reformat retry
     # (which rewrites the report and could reintroduce one) and BEFORE source
@@ -303,6 +320,7 @@ async def run_worker_agent(
             _audit_delegation,
             report=result.get("content", "") or "",
             reformatted=bool(_audit_delegation and _audit_delegation.get("reformatted")),
+            halted=result.get("halted"),
         )
 
     return result
@@ -574,6 +592,11 @@ async def process_user_request(
     # times and the answer it composes draws on all of them.
     retrieved_urls: set = set()
 
+    # P2.1 (B1): every worker that stopped at the step cap. Collected in code
+    # rather than read back off the answer, because the failure being fixed is
+    # precisely that the answer does not mention it.
+    halts: list = []
+
     async def manager_tool_executor(name: str, args: dict) -> str:
         if name == "delegate_research":
             if timing_collector:
@@ -628,6 +651,8 @@ async def process_user_request(
             for src in result.get("sources", []):
                 if not _is_duplicate_source(src, accumulated_sources):
                     accumulated_sources.append(src)
+            if result.get("halted"):
+                halts.append({**result["halted"], "scope": "delegation"})
             return f"[Research Agent Result]\n{result['content']}"
 
         if name == "consult_peer":
@@ -683,6 +708,27 @@ async def process_user_request(
             f"[Manager] Provision links not returned by any tool: "
             f"{_demoted} demoted to the Act, {_unlinked} unlinked"
         )
+
+    # P2.1 (B1). The Manager's OWN loop can hit the cap, in which case the raw
+    # marker is the entire answer and no delegation report carries it (6383
+    # turn 1) — so the Manager's result is checked here as well as the workers'.
+    if final.get("halted"):
+        halts.append({**final["halted"], "scope": "manager"})
+    # Emitted by code, unconditionally when a halt occurred: the model may
+    # disclose it well, badly ("timed out"), or not at all — 5 turns in the
+    # Wave 1 sweep halt silently — and under Invariant 1 a silent halt is the
+    # worst of the three. The strip runs even with no halts, so a marker that
+    # arrives by some other route still never renders.
+    clean, _disclosed = apply_halt_disclosure(clean, halts)
+    if halts:
+        logger.warning(
+            "[Manager] %d halted worker(s) — answer marked incomplete", len(halts)
+        )
+        final["research_incomplete"] = {
+            "reason": "step_cap",
+            "halts": halts,
+            "disclosed": _disclosed,
+        }
     final["content"] = clean
     if suggestions and suggestions_enabled:
         final["suggestions"] = suggestions
@@ -780,6 +826,10 @@ async def run_deep_research(
     # in step 2 is legitimately cited by the synthesis, which sees all the steps
     # at once; a per-step set would flag that as manufactured.
     retrieved_urls: set = set()
+    # P2.1 (B1): plan steps that stopped at the step cap, with the step number
+    # and approved title — only this loop knows them, and "step 4 is incomplete"
+    # is far more use to a lawyer than "some research was incomplete".
+    halts: list = []
 
     for i, step in enumerate(steps, 1):
         if cancel_event and cancel_event.is_set():
@@ -813,6 +863,9 @@ async def run_deep_research(
 
         if on_chunk:
             await call_chunk(on_chunk, {"type": "tool_end", "tool": label, "id": step_id, "result": "Step complete"})
+
+        if result.get("halted"):
+            halts.append({**result["halted"], "scope": "step", "step": i, "title": title})
 
         step_findings.append({
             "title": title,
@@ -869,7 +922,24 @@ async def run_deep_research(
             f"[DeepResearch] Provision links not returned by any tool: "
             f"{_demoted} demoted to the Act, {_unlinked} unlinked"
         )
-        final["content"] = _content
+
+    # P2.1 (B1). Synthesis is handed the step findings and composes freely, so a
+    # halted step can vanish into a report that reads as complete — 6406 halted
+    # ALL FOUR steps and produced a $2.36 report. The disclosure is code-emitted
+    # and names the steps.
+    _content, _disclosed = apply_halt_disclosure(_content, halts)
+    if halts:
+        logger.warning(
+            "[DeepResearch] %d of %d plan step(s) halted at the step cap — "
+            "report marked incomplete", len(halts), len(steps),
+        )
+        final["research_incomplete"] = {
+            "reason": "step_cap",
+            "halts": halts,
+            "steps_total": len(steps),
+            "disclosed": _disclosed,
+        }
+    final["content"] = _content
 
     if accumulated_sources:
         final["sources"] = [

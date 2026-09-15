@@ -54,7 +54,7 @@ All three endpoints that drive the agent pipeline — `/api/chat`, `/api/system/
 
 **`current_only` was removed in September 2026 and is no longer a filter.** The control it belonged to excluded nothing: it tested the LEX `status` field for `repealed`/`revoked`/`spent`, but that field's vocabulary is `final` and `revised` only — it records which text version is held, not in-force status. There is no in-force signal anywhere in the tool surface, so the filter could not be repaired by extending the word list, and the UI and system prompt were both asserting currency on the strength of a check that never ran.
 
-The request field is **accepted and ignored** rather than rejected: this model does not set `extra="forbid"`, so a client still sending `current_only` receives the same response it did before and the value goes nowhere. `filters.current_only` is still present in the audit event, **always `null`**, so the trace shape is unchanged and `schema_version` remains `1`. Treat a `null` there as "this filter no longer exists", not as "the filter was off".
+The request field is **accepted and ignored** rather than rejected: this model does not set `extra="forbid"`, so a client still sending `current_only` receives the same response it did before and the value goes nowhere. `filters.current_only` is still present in the audit event, **always `null`**, so the trace shape was unchanged and `schema_version` remained `1` at the time (it is `2` as of the v2 note below). Treat a `null` there as "this filter no longer exists", not as "the filter was off".
 
 ### Audit controls
 
@@ -106,7 +106,7 @@ One event per request, emitted immediately **before** `result`, so a consumer th
 ```jsonc
 {
   "type": "audit",
-  "schema_version": 1,
+  "schema_version": 2,
   "request_id": "a1b2c3d4",
 
   "chat_mode": "research",
@@ -134,6 +134,7 @@ One event per request, emitted immediately **before** `result`, so a consumer th
       "brief": "<query the Manager sent the Worker>",
       "report": "<the Worker's research report>",
       "reformatted": false,           // structure-repair retry fired
+      "halted": null,                 // v2; {reason, limit, steps} at the step cap
       "error": null,
       "started_at": 0.512,            // seconds from request start
       "duration_s": 41.8,
@@ -183,7 +184,8 @@ One event per request, emitted immediately **before** `result`, so a consumer th
 - **`summarised`** is true for both a summarisation call and a local prompt-cache hit; **`local_cache_hit`** distinguishes the two. **`memo_hit`** indicates an exact repeat within the same request served from the per-request tool memo, incurring neither an API call nor summarisation.
 - **`budget_blocked`** applies to parliamentary modes only, and indicates that the model exhausted its three-call discovery budget and the search was hard-stopped.
 - **`error`** is populated at whichever level failed. A failed run still emits the audit event, carrying whatever was captured before the failure; a failed run remains a valid evaluation data point.
-- **`schema_version`** is incremented on any breaking change to this shape and should be asserted on by consumers.
+- **`halted`** *(v2)* is `null` unless the Worker's ReAct loop stopped at the step cap, in which case it is `{"reason": "step_cap", "limit": 20, "steps": 20}`. Before v2 the only signal was the literal string `[Research halted: exceeded N tool-call steps]` appearing in `report` — which was never reliable and is no longer present. Two reasons it was not reliable: the Manager's **own** loop can halt, producing no delegation at all (so no `report` to match on), and a halted worker's `report` is now replaced with a structured incompleteness statement. A halt is a first-class outcome and should be read from this field; `request_timings.max_turns_halted` remains the request-level flag.
+- **`schema_version`** is incremented on any change to this shape and should be asserted on by consumers. **v2** (Sept 2026) adds `delegations[].halted`; it is additive, so a v1 consumer sees one unknown key and is otherwise unaffected.
 
 ### Implementation
 

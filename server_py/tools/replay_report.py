@@ -61,6 +61,8 @@ HALT_LITERAL = re.compile(r"\[Research halted", re.I)
 # lawyer without any delegation report carrying it).
 HALT_PARAPHRASE = re.compile(
     r"\[research halted"
+    r"|this answer is incomplete"          # P2.1's code-emitted disclosure
+    r"|tool-call rounds?"
     r"|tool[- ]call step"
     r"|exceed(?:ed|ing|s)? (?:the |its |their )?"
     r"(?:maximum |technical |processing |operational |permitted |internal |system )*"
@@ -524,10 +526,19 @@ def analyse_run(doc: dict) -> RunSignals:
         if sources and cited == 0:
             sig.turns_source_fallback += 1
 
-        turn_halted = False
+        # A halt is read from THREE places, because each one alone has a hole:
+        #   * `delegations[].halted` — audit schema v2 (P2.1), the authoritative
+        #     field, absent from every run file recorded before it existed;
+        #   * the literal marker in a delegation report — what v1 runs have, and
+        #     what P2.1 now removes from the report, so it cannot be relied on
+        #     going forward either;
+        #   * `timing.max_turns_halted` — the product's own counter, and the only
+        #     one that catches a halt in the MANAGER's loop, which produces no
+        #     delegation report at all (6383 turn 1).
+        turn_halted = bool((t.get("timing") or {}).get("max_turns_halted"))
         for dg in audit.get("delegations", []):
             sig.delegations += 1
-            if HALT_LITERAL.search(dg.get("report") or ""):
+            if dg.get("halted") or HALT_LITERAL.search(dg.get("report") or ""):
                 sig.halt_in_worker_report += 1
                 turn_halted = True
             for tl in dg.get("tools", []):

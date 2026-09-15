@@ -51,7 +51,10 @@ _audit_ctx: ContextVar[Optional["AuditCollector"]] = ContextVar("audit_collector
 
 # Trace schema version. Bump on any breaking change to the `audit` event shape
 # so consumers can assert against a known contract.
-AUDIT_SCHEMA_VERSION = 1
+# v2 (2026-09-15, FIX_PLAN P2.1): `delegations[].halted` — {reason, limit,
+# steps} when a worker stopped at the ReAct step cap, else None. Additive:
+# a v1 consumer sees an unknown key and is otherwise unaffected.
+AUDIT_SCHEMA_VERSION = 2
 
 
 def set_audit_collector(collector: Optional["AuditCollector"]) -> None:
@@ -112,6 +115,12 @@ class AuditCollector:
                 "brief": _clip(brief, self.max_field_chars),
                 "report": "",
                 "reformatted": False,
+                # P2.1 (B1), schema v2: {"reason","limit","steps"} when this
+                # worker stopped at the step cap, else None. An eval harness
+                # previously had to string-match "[Research halted" in `report`
+                # to know — and the Manager's own loop can halt without any
+                # delegation report carrying it, so that was never reliable.
+                "halted": None,
                 "error": None,
                 "tools": [],
                 "started_at": round(time.time() - self._started, 3),
@@ -131,6 +140,7 @@ class AuditCollector:
         report: str = "",
         error: Optional[str] = None,
         reformatted: bool = False,
+        halted: Optional[dict] = None,
     ) -> None:
         if rec is None:
             return
@@ -138,6 +148,7 @@ class AuditCollector:
             rec["report"] = _clip(report or "", self.max_field_chars)
             rec["error"] = error
             rec["reformatted"] = reformatted
+            rec["halted"] = halted
             rec["duration_s"] = round(
                 time.time() - self._started - rec["started_at"], 3
             )

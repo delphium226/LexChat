@@ -7,6 +7,7 @@ from typing import AsyncGenerator, Callable, Optional
 import httpx
 
 from ..config import MODEL_LIST, settings
+from ..utils.research_halt import halt_marker_text
 from . import agent_core
 from .summarisation import call_chunk, summarise_prompt
 
@@ -82,7 +83,16 @@ async def chat_loop(
         logger.warning(f"[ChatLoop] Max turns ({max_turns}) reached — halting tool calls")
         if timing_collector:
             timing_collector.record_max_turns_halt()
-        return {"role": "assistant", "content": f"[Research halted: exceeded {max_turns} tool-call steps]"}
+        # P2.1 (B1): the halt travels as STRUCTURE, not only as prose. The
+        # content marker is kept so nothing that reads content breaks, but it
+        # is `halted` that callers act on — a string in an assistant message
+        # is indistinguishable from findings, which is how a step cap came to
+        # be rendered to a lawyer as a legal conclusion about the statute book.
+        return {
+            "role": "assistant",
+            "content": halt_marker_text(max_turns),
+            "halted": {"reason": "step_cap", "limit": max_turns, "steps": _turn},
+        }
 
     # Determine context size from model config
     configured = next((m for m in MODEL_LIST if m["name"] == model), None)

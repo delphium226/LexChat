@@ -29,7 +29,11 @@ from src.routers.agent_request import (
     resolve_research_mode,
 )
 from src.routers.system import SystemChatRequest
-from src.utils.audit_trace import AuditCollector, set_audit_collector
+from src.utils.audit_trace import (
+    AUDIT_SCHEMA_VERSION,
+    AuditCollector,
+    set_audit_collector,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -486,7 +490,12 @@ def test_audit_event_shape():
         timings={"total_ms": 1234},
     )
     assert event["type"] == "audit"
-    assert event["schema_version"] == 1
+    # Pinned to the constant, not to a literal: a bump must be a deliberate
+    # edit to `AUDIT_SCHEMA_VERSION` with a spec change alongside it, and
+    # asserting the literal here just makes the bump noisy without checking
+    # that the event carries the version the module declares.
+    assert event["schema_version"] == AUDIT_SCHEMA_VERSION
+    assert AUDIT_SCHEMA_VERSION == 2  # v2: delegations[].halted (P2.1)
     assert event["request_id"] == "req123"
     assert event["chat_mode"] == "research"
     assert event["research_mode"] == "case_law_only"
