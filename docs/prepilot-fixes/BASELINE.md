@@ -444,6 +444,29 @@ missing findings — *"a broad enabling power has generated a very large volume 
 statutory instruments over several decades"* — about an Act that **404s in LEX**.
 A step cap had become a finding about the state of the statute book.
 
+**The starkest case is 6409 turn 7, and it is worse than 6340.** The worker ran
+**25 Phase-1 searches and 0 retrievals**, hit the cap, and the lawyer was told:
+
+> *"The research agent could not locate 'The Social Security (Amendment)
+> (Scotland) Act 2025 (Commencement No. 1 and Saving and Transitional
+> Provisions) Regulations 2025' in the legislation database."*
+
+That is the whole answer. A step cap rendered as a **negative retrieval
+finding**, with no hint the research was cut off — an *untrue* honest failure,
+which is the one thing Invariant 1 cannot survive. A lawyer who has learned to
+trust this tool's negatives takes it at face value. It is why the code-emitted
+notice denies the reading explicitly ("it is **not** a finding that the material
+does not exist") rather than merely describing the cap.
+
+**And 6340 is not the only invented cause.** 6335 turn 7 produced the same two-part
+failure: *"The initial search **timed out**"* — it hit the cap — followed by
+*"It is possible the database is having difficulty parsing the Schedule B1
+structure."* Two of the five disclosures in the corpus invented a technical
+cause for the missing findings, which is why the worker's replacement report
+carries an explicit **"Do NOT state or speculate about why material was not
+found — you do not know"** rather than relying on the manager prompt's general
+no-speculation rule.
+
 ### After
 
 Every condition except "no invented cause" is mechanical and is graded by the
