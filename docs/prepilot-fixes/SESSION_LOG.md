@@ -744,6 +744,41 @@ record an admin reads.
 **And what it does not fix.** Removing a misleading control does not put the Court of
 Session in the corpus. P2.4 is still required and P5.2's question still stands.
 
+### Case-law coverage, mapped — and one claim made and retracted
+
+Asked what the case-law corpus actually covers, so it was measured rather than inferred.
+
+**42 court codes**, scraped from the National Archives' own search facet: 17 England &
+Wales (High Court ×11 divisions, Court of Appeal ×2, Crown, County, Family, Court of
+Protection) and the rest UK-wide tribunals (UKSC, Privy Council, Upper Tribunal ×4,
+First-tier ×10, EAT, SIAC, IPT, legacy tax/information tribunals). **Not one Scottish or
+Northern Irish court.**
+
+**But "no Scottish case law" is false, and P2.4 must not say it.** `court=uksc` returns
+*Daly v His Majesty's Advocate (Scotland)*, *ABC v Principal Reporter and another
+(Scotland)* and *X v Lord Advocate* — **Scottish appeals that reached the UK Supreme Court
+are indexed.** What is missing is the **Court of Session (Inner and Outer House), Sheriff
+Appeal Court, Sheriff Courts and High Court of Justiciary**, which is where the
+overwhelming majority of Scots law is made. The blunt wording would make a lawyer distrust
+a sound UKSC result; the precise wording also tells them where the one real Scottish route
+is. P2.4 and P5.2 both amended to say it that way.
+
+**A claim made and retracted in the same session — the fourth instrument error today, and
+the first caught before it was written down.** I told the user "coverage effectively starts
+around 2001; 1–5 judgments a year through the 1980s". That came from sorting the Atom feed
+ascending and reading the oldest entries, which establishes that **a tail exists** and says
+nothing about **density**. On checking, 1990–1994 filled a 50-result page — not a handful.
+The feed caps at 50 for *every* window and neither the feed nor the search page exposes a
+total, so **there is no census instrument available from outside** and the temporal floor is
+**unmeasured**. Judgments do exist back to **1965**; that is all that is established.
+
+**Consequences.** No row was created for it — a row asserting a floor I cannot measure
+would be exactly the failure this log keeps recording. Instead it is now **question 3 to the
+National Archives** in `WAVE5_QUESTIONS.md`: is the corpus comprehensive from a particular
+year, with a selected set before it? CambeulW's recency-bias complaint (6363) may well be
+sound, and **if it is, it affects English research too, not only Scots** — which nothing in
+the plan currently covers.
+
 **Next action:** ~~P2.2~~ — **see the P5.1 answer above first; it changes what Wave 2 and Wave 3 contain.** Then **P2.2** (B5, no bare negatives) — its `Depends on: P1.3, P2.1` is now
 satisfied, and this session amended it to cover the negative drawn from an **incomplete**
 search as well as from a filtered one. Note P2.3 depends on P2.2 and on P5.1's answer, so

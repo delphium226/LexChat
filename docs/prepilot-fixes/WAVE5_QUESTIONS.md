@@ -136,8 +136,18 @@ the decision brief: the gap is now measured rather than asserted, and it has cha
 | `atom.xml?court=csih` (Inner House) | **HTTP 400**, same |
 | `atom.xml?query=Court of Session` | 200, 50 results — **not one of them a Scottish judgment**: 20 EWHC, 11 UKFTT, 5 EWFC, 4 UKSC, 3 UKUT, 3 EWCA, 2 EWCOP, 1 EAT |
 
-The Court of Session is not a court in the National Archives' taxonomy. It is not a thin
-corpus; it is not there.
+The Court of Session is not a court in the National Archives' taxonomy. The full facet
+lists **42 court codes — 17 England & Wales, the rest UK-wide tribunals — and not one
+Scottish or Northern Irish.**
+
+**But the blunt version of this is false, and saying it would be its own error.** Scottish
+appeals that reached the **UK Supreme Court are indexed**: `court=uksc` returns *Daly v His
+Majesty's Advocate (Scotland)*, *ABC v Principal Reporter and another (Scotland)* and *X v
+Lord Advocate*. What is missing is everything below that — **Court of Session (Inner and
+Outer House), Sheriff Appeal Court, Sheriff Courts and the High Court of Justiciary** —
+which is where the overwhelming majority of Scots law is made. Told "Scottish courts are
+not indexed", a lawyer would distrust a sound UKSC result; told the precise version, they
+also learn where the one real Scottish route is.
 
 ### The failure mode is a wrong answer, not an empty one
 
@@ -186,7 +196,13 @@ the National Archives, it changes nothing and the procurement question stands.
 >    Sheriff Court decisions we can index, and is anyone willing to buy it? Raised
 >    independently by three lawyers in the pre-pilot: AlistairC (*Clark* absent, 6359),
 >    CambeulW (recency bias, 6363) and EmmaM.
-> 3. **Either way**, record the answer. A "no" is a decision too — it makes **P2.4**
+> 3. **To the National Archives, separately: what is the corpus's date coverage?**
+>    Judgments exist back to **1965**, but the Atom feed caps at 50 results for every window
+>    and the search page exposes no total, so we could not measure density before ~2000 from
+>    outside. CambeulW raised recency bias in the pre-pilot (6363) and it may well be sound —
+>    it is currently **unmeasured**, and if real it affects English research too, not only
+>    Scots. Is the corpus comprehensive from a particular year, with a selected set before it?
+> 4. **Either way**, record the answer. A "no" is a decision too — it makes **P2.4**
 >    permanent rather than interim, and P2.4 should be built on that footing.
 
 The engineering half is **P2.4** and is **not blocked** by any of this: whatever the corpus
