@@ -421,6 +421,77 @@ strings that were mis-flagged.
 
 ---
 
+## B1 — what a halted turn actually said, before and after (P2.1)
+
+The before-column is the Wave 1 sweep, graded per **turn** rather than per run
+(`python -m tools.replay_report --dir <dir> halts`). A session's failure lives in
+one turn of four, and a run-level total hides which.
+
+**11 turns halted. 2 of them were disclosed acceptably.**
+
+| | Wave 1 | |
+|---|---|---|
+| turns whose worker hit the step cap | 11 | |
+| **said nothing at all** | **6** | the silent halt — the failure the rewritten acceptance exists for. One of the 6 produced no answer at all, which is B13; `halts_undisclosed` excludes it and so reports 5 |
+| mentioned it | 5 | |
+|   … of which called it a **timeout** | 2 | false: a timeout implies a retry might work; a cap says it will not |
+|   … of which printed the **raw marker** as the answer | 1 | 6383 turn 1, 46 characters |
+| carried the halt as **structured metadata** | 0 | no field existed |
+
+The two wrong disclosures are not cosmetic. 6340 told the lawyer the agent had
+*"exceeded its operational limits (timed out)"* and then supplied a cause for the
+missing findings — *"a broad enabling power has generated a very large volume of
+statutory instruments over several decades"* — about an Act that **404s in LEX**.
+A step cap had become a finding about the state of the statute book.
+
+### After
+
+Every condition except "no invented cause" is mechanical and is graded by the
+same command; the fifth is a reading of the prose, printed by `--answers`.
+
+The three 6340 replays are the clearest read, because 6340 is the session that
+produced the invented cause. All three now open with the code-emitted notice, and
+**none of the three invents a cause** — the enabling-power sentence is gone
+entirely, replaced by the model correctly reporting that it was stopped before it
+could compile the list.
+
+> **⚠ This answer is incomplete.** One research step reached a fixed internal
+> limit of 20 tool-call rounds and was stopped before it finished. This is a
+> limit on how much work one research step may do — it is **not** a timeout, and
+> it is **not** a finding that the material does not exist. Treat the coverage
+> below as partial, and consider asking again with a narrower question.
+
+Two things about that text are deliberate and were argued over:
+
+- **It is prepended, not appended.** A warning read after the findings have been
+  relied on is not a warning.
+- **It claims only the step cap.** Not "the material does not exist", not "this
+  timed out", not a reason for the absence. Invariant 1 requires the disclosure
+  to be *true*, and the only thing known at that seam is that a limit was hit.
+
+**The sources rail is untouched by this row and still disagrees.** 6340's halted
+turn shows **16 sources** behind an answer with no findings — real retrievals,
+kept by the excerpt branch of `_source_is_used`, not a fallback list. The lawyer
+is now told the answer is partial, which is an improvement on the Wave 0 reading
+(*"6341 turn 5 shows 40 sources behind a 333-char 'timed out' message"*), but the
+rail still implies those sources were used. That is **B8 / P4.3**, and P2.1
+narrows it rather than closing it.
+
+**Two measurement notes, recorded rather than hidden.** (1) A cosmetic
+plural-agreement fix to the notice landed *after* the sweep started, so runs
+naming more than one halted step read "…and **was** stopped before **it**
+finished" where HEAD now reads "were … they" (6382 rep 1 shows it). It changes
+no graded condition — `HALT_PARAPHRASE` matches the opening clause — but the
+measured tree and HEAD differ by that string. (2) The `wave2_p21/` run files
+record `git_head: 7a1c79b`, which is P1.6's commit. P2.1 was complete and loaded
+by the server when the sweep started but was committed as `4d3f4c1` a few minutes
+later; **P2.6 was written after the server started and is therefore NOT in these
+runs** — visible in the files as `report_reformat_retries: 1` on halted turns,
+which P2.6 takes to 0. P2.6 cannot change the answer text, because P2.1 overwrites
+the report after the reformat runs.
+
+---
+
 ## The step cap — measured on the completed sweep, and the earlier reading was the wrong counter
 
 **Decision (P2.1, 2026-09-15): `max_turns` stays at 20.** Recorded here because the

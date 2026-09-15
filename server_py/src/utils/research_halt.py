@@ -27,11 +27,12 @@ Two things follow, and the second is the one the rewritten acceptance turns on:
 * the reason stated must be the real one (a cap on tool-call rounds — not a
   timeout, not an API failure, and not evidence the material does not exist);
 * **the disclosure is emitted by code, not requested in a prompt.** The original
-  acceptance ("produce no halt text") was satisfiable by saying nothing, and
-  5 turns in the Wave 1 sweep already halt *silently*: a worker stops, a
-  normal-looking report comes back, and the lawyer gets no signal it is
-  incomplete. That is worse than the raw string leaking, because the raw string
-  at least tells them something is wrong.
+  acceptance ("produce no halt text") was satisfiable by saying nothing — and
+  over the Wave 1 sweep's 11 halted turns, **6 said nothing at all and only 2
+  were disclosed acceptably**: a worker stops, a normal-looking report comes
+  back, and the lawyer gets no signal it is incomplete. That is worse than the
+  raw string leaking, because the raw string at least tells them something is
+  wrong.
 
 So `apply_halt_disclosure` always speaks when a halt happened. There is no
 detector deciding whether the model already disclosed it well enough — on this
@@ -115,8 +116,14 @@ def halt_worker_report(halt: dict, sources_retrieved: int = 0) -> str:
     )
 
 
-def _describe(halts: list) -> str:
-    """Name what stopped, as specifically as the caller knew."""
+def _describe(halts: list) -> tuple:
+    """Name what stopped, as specifically as the caller knew. (subject, plural).
+
+    `plural` is returned rather than inferred from the subject string because
+    the sentence needs "was"/"were" and this text is read by lawyers — a
+    number-agnostic phrasing that avoids the agreement reads worse than getting
+    the agreement right.
+    """
     steps = [h for h in halts if h.get("step")]
     if steps:
         labels = []
@@ -124,13 +131,16 @@ def _describe(halts: list) -> str:
             title = (h.get("title") or "").strip()
             labels.append(f"step {h['step']}" + (f" ({title})" if title else ""))
         if len(labels) == 1:
-            return f"Research {labels[0]} reached"
-        return "Research " + ", ".join(labels[:-1]) + f" and {labels[-1]} reached"
+            return f"Research {labels[0]} reached", False
+        return (
+            "Research " + ", ".join(labels[:-1]) + f" and {labels[-1]} reached",
+            True,
+        )
     if any(h.get("scope") == "manager" for h in halts):
-        return "This request reached"
+        return "This request reached", False
     if len(halts) == 1:
-        return "One research step reached"
-    return f"{len(halts)} research steps reached"
+        return "One research step reached", False
+    return f"{len(halts)} research steps reached", True
 
 
 def halt_notice(halts: list) -> str:
@@ -144,13 +154,15 @@ def halt_notice(halts: list) -> str:
     if not halts:
         return ""
     limit = next((h.get("limit") for h in halts if h.get("limit")), 20)
+    subject, plural = _describe(halts)
     return (
         "> **⚠ This answer is incomplete.** "
-        f"{_describe(halts)} a fixed internal limit of {limit} tool-call rounds and "
-        "was stopped before it finished. This is a limit on how much work one research "
-        "step may do — it is **not** a timeout, and it is **not** a finding that the "
-        "material does not exist. Treat the coverage below as partial, and consider "
-        "asking again with a narrower question."
+        f"{subject} a fixed internal limit of {limit} tool-call rounds and "
+        f"{'were' if plural else 'was'} stopped before "
+        f"{'they' if plural else 'it'} finished. This is a limit on how much work one "
+        "research step may do — it is **not** a timeout, and it is **not** a finding "
+        "that the material does not exist. Treat the coverage below as partial, and "
+        "consider asking again with a narrower question."
     )
 
 

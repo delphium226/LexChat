@@ -350,3 +350,18 @@ async def test_a_summarised_retrieval_still_hands_the_urls_to_the_model(_worker_
     assert S21 in out and S22 in out                  # and so did the URLs
     # And provenance is recorded from the RAW result, not from what the model saw.
     assert normalise_leg_url(S21) in retrieved
+
+
+def test_a_parliamentary_answer_is_untouched():
+    """The same code runs on the Holyrood and Westminster bots, where every
+    citation is an Official Report URL with its own identifier discipline —
+    and `/section/` appears in parliament.scot paths too."""
+    answer = (
+        "[Meeting of the Parliament, 2 June 2026](https://www.parliament.scot/"
+        "chamber-and-committees/official-report/x/meeting-june-02-2026?iob=12345) "
+        "(▶ watch from 15:02:46), and see "
+        "[the committee](https://www.parliament.scot/y/section/3)."
+    )
+    out, demoted, unlinked = enforce_provision_links(answer, set())
+    assert out == answer
+    assert (demoted, unlinked) == (0, 0)

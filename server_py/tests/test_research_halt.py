@@ -405,3 +405,17 @@ async def test_an_unhalted_malformed_report_still_gets_its_retry(_cfg):
     assert len(calls) == 2
     assert timing.report_reformat_retries == 1
     assert result["content"] == seq[1]
+
+
+def test_the_notice_agrees_in_number():
+    """Lawyer-facing text. A number-agnostic phrasing that dodges the agreement
+    reads worse than getting the agreement right, so the plurality is carried
+    explicitly rather than inferred from the subject string."""
+    one = halt_notice([{**HALT, "step": 2, "title": "A"}])
+    assert "was stopped before it finished" in one
+    many = halt_notice([
+        {**HALT, "step": 2, "title": "A"}, {**HALT, "step": 4, "title": "B"},
+    ])
+    assert "were stopped before they finished" in many
+    assert halt_notice([HALT, HALT]).startswith(
+        "> **⚠ This answer is incomplete.** 2 research steps reached")

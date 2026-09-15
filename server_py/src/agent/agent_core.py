@@ -727,9 +727,11 @@ async def process_user_request(
     if final.get("halted"):
         halts.append({**final["halted"], "scope": "manager"})
     # Emitted by code, unconditionally when a halt occurred: the model may
-    # disclose it well, badly ("timed out"), or not at all — 5 turns in the
-    # Wave 1 sweep halt silently — and under Invariant 1 a silent halt is the
-    # worst of the three. The strip runs even with no halts, so a marker that
+    # disclose it well, badly ("timed out"), or not at all. Over the Wave 1
+    # sweep's 11 halted turns, 6 said nothing and only 2 disclosed it
+    # acceptably — and under Invariant 1 the silent halt is the worst of the
+    # three outcomes, because the lawyer gets a normal-looking report with no
+    # signal it is partial. The strip runs even with no halts, so a marker that
     # arrives by some other route still never renders.
     clean, _disclosed = apply_halt_disclosure(clean, halts)
     if halts:
