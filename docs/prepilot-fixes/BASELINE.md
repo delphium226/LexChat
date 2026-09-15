@@ -59,7 +59,7 @@ saw. The trace shows what the tool did.
 | **B14** provision links | P1.4 | ~~88 of 376 (23.4%)~~ **20 of 376** provision-labelled links (5.3%) miss their provision — see *Correction* below | **Confirmed, but six-fold smaller than first published** |
 | **B1** research halt | P2.1 | **10 of 41** runs had a halted worker; **7** showed halt text to the lawyer | **Confirmed** |
 | **B4** in-force claims | P2.5 | **27** unsupported in-force assertions across 41 runs | **Confirmed** |
-| **B8** sources rail | P4.3 | **1,222 of 1,387** kept sources (88%) never cited; **62 turns** cited none of theirs | **Confirmed, now a rate** |
+| **B8** sources rail | P4.3 | 1,222 of 1,387 kept sources (88%) never cited; 62 turns cited none of theirs — but **more than half of that is a shadow of B1/B3**, see *B8 split* below. On turns that actually produced a report: **489 of 622 (79%), 9 turns** | **Confirmed, but two conditions were being counted as one** |
 | **B13** lost/blank turns | P4.2 | **5 turns** billed >$0 and returned an empty body (a fifth appeared in 6406 rep3) | **Confirmed** |
 
 ---
@@ -155,6 +155,35 @@ honest failure and is not one.
 The median worker is nowhere near the cap; the tail runs well past it. Raising the cap would
 change behaviour for ~9% of delegations and nothing else — useful input to P2.1's deferred
 question, which should still be decided from `request_timings.max_turns_halted`, not from here.
+
+---
+
+## B8 split — most of the uncited sources belong to turns that never answered
+
+The 88% is true but it answers a different question from the one P4.3 asks. Splitting the
+136 source-carrying turns by whether they produced a report at all (>=1,200 chars):
+
+| | turns | sources kept | uncited | turns citing none |
+|---|---|---|---|---|
+| produced a report | 57 | 622 | **489 (79%)** | **9** |
+| no report — halt, disclosure, truncation | 79 | 765 | 733 (96%) | 53 |
+| combined (as first published) | 136 | 1,387 | 1,222 (88%) | 62 |
+
+**765 of the 1,387 kept sources hang off turns that never produced a report**, and 53 of
+the 62 turns citing none of theirs are failures of other buckets. They are not the model
+consulting a source and declining to cite it; they are B1 halts and B3 false negatives with
+the rail left showing whatever the Worker had accumulated. The rail is at its most
+misleading precisely when the answer failed — **6341 turn 5 shows 40 sources behind a
+333-character message saying the agent timed out.**
+
+Two consequences:
+
+- **B8 is real but smaller than published.** A completed report leaves 79% of its retrieved
+  sources uncited, which is still worth P4.3. The headline was not wrong, it was two
+  conditions added together.
+- **P4.3 cannot be measured before P2.1.** Fixing the halt removes a large share of the 88%
+  without touching the sources rail, so a P4.3 number taken now will move for reasons that
+  have nothing to do with P4.3. This dependency is not in the plan and has been added.
 
 ---
 
