@@ -554,31 +554,6 @@ three of nine negative verdicts, so any row claiming a fix still needs n=3.
   disclosed it well enough. On this work the detectors have been wrong more often than the
   product, and a false negative there is a lawyer relying on a partial answer.
 
-**State of the branch:** `fix/prepilot-defects`. Waves 0 and 1 complete plus P1.5, P1.6,
-P2.1 and P2.6; P0.4 half done; P2.7 opened. 634 tests green, tree clean. **Nothing
-pushed** — the whole-plan-then-one-push policy (Session 4, user) stands, and the target
-still runs the pre-pilot code.
-
-**Machine state a new session inherits:**
-- **No uvicorn running** — stopped deliberately. Start a fresh one before any live work:
-  Python loads modules at import, so a surviving server serves stale code.
-- **Dev box restored** — `moonshotai/kimi-k3`, local prompt cache ON,
-  `tools/.replay_pin_state.json` gone, as it should be after a successful `restore`.
-  **Re-pin before any measurement.**
-- Three gitignored replay directories now: `baseline/` (65 files), `wave1/` (41) and
-  **`wave2_p21/` (12 — four sessions × three reps, P2.1's acceptance, NOT a full sweep)**.
-  A Wave 2 sweep needs a **new** directory; `replay.py run` silently skips existing files.
-- **Do not compare `wave2_p21/` against `wave1/` with `compare`** — it is 4 sessions
-  against 41 and every total would be nonsense. Use `replay_report --dir <dir> halts` for
-  it, which grades per halted turn and is what its acceptance is stated in.
-- **Provenance notes on `wave2_p21/`, recorded rather than hidden:** the files say
-  `git_head: 7a1c79b` (P1.6's commit) because P2.1 was loaded by the server but committed
-  minutes later as `4d3f4c1`; **P2.6 is NOT in those runs** (written after the server
-  started — visible as `report_reformat_retries: 1` on halted turns); and a cosmetic
-  plural-agreement fix to the notice landed mid-sweep, so runs naming more than one halted
-  step read "was … it" where HEAD reads "were … they". None changes a graded condition.
-- **Wave 5 is drafted and unsent** (`WAVE5_QUESTIONS.md`). It needs a human. P5.1 first.
-
 ### P5.1 — ANSWERED, and mostly without the LEX team (recorded answer, this row's acceptance)
 
 The row was written as a question to ask. Four fifths of it was answerable from here,
@@ -778,6 +753,49 @@ National Archives** in `WAVE5_QUESTIONS.md`: is the corpus comprehensive from a 
 year, with a selected set before it? CambeulW's recency-bias complaint (6363) may well be
 sound, and **if it is, it affects English research too, not only Scots** — which nothing in
 the plan currently covers.
+
+**State of the branch:** `fix/prepilot-defects`, 17 commits this session (`eb5e921` →
+`763566e`). **643 tests green, tree clean, NOTHING PUSHED** — the whole-plan-then-one-push
+policy (Session 4, user) stands, so the target still runs the pre-pilot code including the
+jurisdiction-filter defect. Ledger: Waves 0 and 1 complete; **P1.6, P2.1, P2.6, P4.4, P5.1
+and P5.3 done**; P0.4 and P5.2 at `[~]`; **P2.7, P3.5 and P3.6 opened this session**.
+
+**Machine state a new session inherits:**
+- **No uvicorn running** — stopped deliberately. Start a fresh one before any live work:
+  Python loads modules at import, so a surviving server serves stale code. (This session
+  proved the point: P2.6 was written after the acceptance server started and is therefore
+  absent from `wave2_p21/`.)
+- **Dev box restored** — `moonshotai/kimi-k3`, local prompt cache ON,
+  `tools/.replay_pin_state.json` gone, as it should be after a successful `restore`.
+  **Re-pin before any measurement.**
+- **Three gitignored replay directories:** `baseline/` (65 files), `wave1/` (41) and
+  **`wave2_p21/` (12 — four sessions × three reps, P2.1's acceptance only, NOT a sweep)**.
+  A Wave 2 sweep needs a **new** directory; `replay.py run` silently skips existing files.
+- **Do NOT feed `wave2_p21/` to `replay_report compare`** — 4 sessions against 41 makes
+  every total nonsense. Read it with `replay_report --dir <dir> halts`, which grades per
+  halted turn and is the form P2.1's acceptance is stated in.
+- **Provenance on `wave2_p21/`, recorded rather than hidden:** files say `git_head:
+  7a1c79b` (P1.6's commit) because P2.1 was loaded by the server but committed minutes
+  later as `4d3f4c1`; **P2.6 is NOT in those runs** (visible as `report_reformat_retries: 1`
+  on halted turns); and a cosmetic plural fix landed mid-sweep, so multi-step notices read
+  "was … it" where HEAD reads "were … they". None changes a graded condition.
+- **`tools/lex_probe.py` is new** — re-runs P5.1's and P5.3's evidence
+  (`--surface`, `--coverage`). Use it before trusting any claim in those rows.
+
+**Two standing hazards for whoever picks this up:**
+1. **Ten instrument errors across five sessions**, four of them today, and one caught only
+   because a second instrument disagreed. **A number that disagrees with what the code says
+   should happen is the instrument until proven otherwise**, and a sparse sample of
+   absences proves nothing about a corpus. Cross-check every census against a second route.
+2. **Two claims were published and later retracted this session** — B14's "100% manufactured"
+   and case law's "coverage starts ~2001". Both were confidently stated from one instrument.
+   Before writing a number into `BASELINE.md` or a row, ask what would falsify it.
+
+**What still needs a human, and nothing in the repo can do it:**
+- **Send Wave 5.** `WAVE5_QUESTIONS.md` — P5.1 and P5.3 are answered but carry short
+  residual lists; **P5.2 is the live one** and step 1 (ask the LEX team whether their
+  case-law corpus is reachable and covers the Court of Session) is free and gates the rest.
+- **P0.4's re-export** needs target access.
 
 **Next action:** ~~P2.2~~ — **see the P5.1 answer above first; it changes what Wave 2 and Wave 3 contain.** Then **P2.2** (B5, no bare negatives) — its `Depends on: P1.3, P2.1` is now
 satisfied, and this session amended it to cover the negative drawn from an **incomplete**
