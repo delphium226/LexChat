@@ -371,6 +371,7 @@ async def run_worker_agent(
     timing_collector=None,
     tool_memo: Optional[dict] = None,
     memo_count_redundant: bool = False,
+    retrieved_urls: Optional[set] = None,
 ) -> dict:
     return await agent_core.run_worker_agent(
         chat_loop, _summarise_chunk,
@@ -380,6 +381,7 @@ async def run_worker_agent(
         timing_collector=timing_collector,
         tool_memo=tool_memo,
         memo_count_redundant=memo_count_redundant,
+        retrieved_urls=retrieved_urls,
     )
 
 

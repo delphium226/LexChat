@@ -20,6 +20,7 @@ from ..prompts import (
     get_worker_system_prompt,
 )
 from ..utils.audit_trace import get_audit_collector
+from ..utils.citation_links import enforce_provision_links
 from ..utils.suggestions import diagnose_suggestions, extract_suggestions
 from .agent_shared import describe_agent_error, run_worker_tool
 from .federation_client import (
@@ -171,8 +172,17 @@ async def run_worker_agent(
     timing_collector=None,
     tool_memo: Optional[dict] = None,
     memo_count_redundant: bool = False,
+    retrieved_urls: Optional[set] = None,
 ) -> dict:
-    """Run the Worker agent with a fresh context for legal research."""
+    """Run the Worker agent with a fresh context for legal research.
+
+    `retrieved_urls` is the per-REQUEST set of legislation.gov.uk URLs any tool
+    has returned (P1.6/B14). It is passed in rather than created here because a
+    Manager delegating twice, or a Deep Research plan of six steps, is still one
+    answer: a provision retrieved in step 2 is legitimately cited in step 5. A
+    caller that passes nothing gets a run-local set, so a standalone worker is
+    still enforced against its own retrievals.
+    """
     logger.info(f"[Worker] Starting research on: {query}")
 
     cfg = _get_cfg()
@@ -207,6 +217,11 @@ async def run_worker_agent(
     # Fresh per run_worker_agent call, so each Deep Research step gets its own.
     context_budget = {"used": 0, "limit": WORKER_CONTEXT_BUDGET_CHARS}
 
+    # See the docstring: request-scoped when the caller threads one, run-local
+    # otherwise, never None — the enforcement below must not silently no-op.
+    if retrieved_urls is None:
+        retrieved_urls = set()
+
     async def worker_tool_executor(name: str, args: dict) -> str:
         return await run_worker_tool(
             name, args, query, summarise_chunk_fn, summarise_model,
@@ -219,6 +234,7 @@ async def run_worker_agent(
             memo_count_redundant=memo_count_redundant,
             context_budget=context_budget,
             audit_delegation=_audit_delegation,
+            retrieved_urls=retrieved_urls,
         )
 
     try:
@@ -250,6 +266,20 @@ async def run_worker_agent(
                 chat_loop_fn, content, research_mode, model,
                 cancel_event, num_ctx, timing_collector=timing_collector,
             )
+
+    # P1.6 (B14): a provision URL no tool returned still resolves, so it reads
+    # to a lawyer as a verified citation. Enforced here, AFTER the reformat retry
+    # (which rewrites the report and could reintroduce one) and BEFORE source
+    # filtering, so `_source_is_used` matches against the text the user will see.
+    _content = result.get("content", "") or ""
+    if _content:
+        _content, _demoted, _unlinked = enforce_provision_links(_content, retrieved_urls)
+        if _demoted or _unlinked:
+            logger.info(
+                f"[Worker] Provision links not returned by any tool: "
+                f"{_demoted} demoted to the Act, {_unlinked} unlinked"
+            )
+            result["content"] = _content
 
     if source_accumulator:
         content = result.get("content", "") or ""
@@ -539,6 +569,11 @@ async def process_user_request(
         {} if _cfg.get("_tool_memo_enabled", True) else None
     )
 
+    # P1.6 (B14): every legislation.gov.uk URL any tool returned this request.
+    # Request-scoped, not delegation-scoped — the Manager may delegate several
+    # times and the answer it composes draws on all of them.
+    retrieved_urls: set = set()
+
     async def manager_tool_executor(name: str, args: dict) -> str:
         if name == "delegate_research":
             if timing_collector:
@@ -554,6 +589,7 @@ async def process_user_request(
                     timing_collector=timing_collector,
                     tool_memo=tool_memo,
                     memo_count_redundant=True,
+                    retrieved_urls=retrieved_urls,
                 )
             except ConnectionError:
                 # Provider unreachable: the Manager's own next call would fail too,
@@ -637,6 +673,16 @@ async def process_user_request(
     # would render as raw markup in the answer.
     suggestions_enabled = _cfg.get("_suggested_questions_enabled", True)
     clean, suggestions = extract_suggestions(final.get("content") or "")
+    # P1.6 (B14) belt and braces. The Worker's report was already enforced, but
+    # the Manager is instructed to pass it through verbatim and is not compelled
+    # to — and in conversational mode it answers in its own words. Idempotent, so
+    # a report that came through untouched is not marked twice.
+    clean, _demoted, _unlinked = enforce_provision_links(clean, retrieved_urls)
+    if _demoted or _unlinked:
+        logger.info(
+            f"[Manager] Provision links not returned by any tool: "
+            f"{_demoted} demoted to the Act, {_unlinked} unlinked"
+        )
     final["content"] = clean
     if suggestions and suggestions_enabled:
         final["suggestions"] = suggestions
@@ -730,6 +776,10 @@ async def run_deep_research(
     tool_memo: Optional[dict] = (
         {} if _get_cfg().get("_tool_memo_enabled", True) else None
     )
+    # P1.6 (B14): shared across every step, deliberately. A provision retrieved
+    # in step 2 is legitimately cited by the synthesis, which sees all the steps
+    # at once; a per-step set would flag that as manufactured.
+    retrieved_urls: set = set()
 
     for i, step in enumerate(steps, 1):
         if cancel_event and cancel_event.is_set():
@@ -758,6 +808,7 @@ async def run_deep_research(
             emit_tool_details=emit_tool_details,
             timing_collector=timing_collector,
             tool_memo=tool_memo,
+            retrieved_urls=retrieved_urls,
         )
 
         if on_chunk:
@@ -806,6 +857,19 @@ async def run_deep_research(
     # (the synthesis prompt never asks for a block), but this guarantees a stray
     # tag can never reach a report. Normally a no-op.
     final["content"] = extract_suggestions(final.get("content") or "")[0]
+
+    # P1.6 (B14). The synthesis call composes its own prose from the step
+    # reports, so a provision link the steps never carried can appear here for
+    # the first time — this seam is not redundant with the per-worker one.
+    _content, _demoted, _unlinked = enforce_provision_links(
+        final.get("content") or "", retrieved_urls
+    )
+    if _demoted or _unlinked:
+        logger.info(
+            f"[DeepResearch] Provision links not returned by any tool: "
+            f"{_demoted} demoted to the Act, {_unlinked} unlinked"
+        )
+        final["content"] = _content
 
     if accumulated_sources:
         final["sources"] = [

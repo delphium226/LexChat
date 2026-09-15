@@ -7,9 +7,18 @@ without the defect being fixed. In particular:
 
 * `test_filter_loss_*` pins the arithmetic behind P1.1 and P1.3 — the
   before/after number for the jurisdiction filter discarding every result.
-* `test_bad_link_*` **is** P1.4's stated acceptance check ("every link whose
-  label names a section/regulation/article/schedule contains the matching path
-  segment"), written against synthetic answers so it is available before the fix.
+* `test_bad_link_*` pins P1.4's *granularity* check ("every link whose label
+  names a section/regulation/article/schedule contains the matching path
+  segment"). ~~It **is** P1.4's stated acceptance check.~~ **It is not, and
+  believing that cost three sessions.** It was written against synthetic labels
+  no real corpus produces, so it stayed green while the detector read an SI's
+  title year ("...Regulations 2013") as a provision number and over-counted B14
+  six-fold. A green unit test is not protection if its fixtures are not the
+  shape the product emits — every fixture below is now a real payload shape.
+* `test_a_url_*` / `test_provenance_*` pin the question `bad_links` cannot ask:
+  where did this provision URL come from? Three outcomes, not two — shown to the
+  model, reconstructed after summarisation ate it, or manufactured. Collapsing
+  the last two hid the real defect behind the benign one (P1.6).
 * `test_source_cited_*` pins the mirror of `agent_core._source_is_used`, which
   is subtle: `audit["sources"]` is the already-filtered list, so the diagnostic
   deliberately drops the `excerpt` branch.
@@ -244,6 +253,109 @@ def test_bad_link_ignores_paragraph_labels():
               "/schedule/1) of the Schedule.")
     sig = rr.analyse_run(_run(answer=answer))
     assert sig.bad_links == []
+
+
+# --- P1.6: where did this provision URL come from? ---------------------------
+#
+# Added 2026-09-15, after the ninth instrument trap. `_urls_returned_by_tools`
+# read only `final_result`, which is the SUMMARISED text when summarisation
+# fired — and 70% of section searches are summarised, the summary keeping the
+# section numbers and dropping every URL. Every provision URL the retrieval
+# genuinely returned but the summariser ate was therefore scored "manufactured".
+# Wave 1's published "26 manufactured (19%)" was in fact 0 manufactured and 26
+# reconstructed. There was no test here at all, which is why it survived.
+
+
+def _prov_run(answer, raw=None, final=None, summarised=False):
+    t = _tool("search_legislation_sections", final_result=final or "")
+    t["raw_result"] = raw or ""
+    t["summarised"] = summarised
+    return _run(answer=answer, tools=[t])
+
+
+_S21 = "http://www.legislation.gov.uk/id/asp/2000/1/section/21"
+_SECTION_JSON = json.dumps({"results": [
+    {"legislation_id": "asp/2000/1", "provision_type": "section",
+     "number": 21, "url": _S21, "text": "..."},
+]})
+_ANSWER = f"Accounts are governed by [PFA Act 2000 - s.21]({_S21})."
+
+
+def test_a_url_the_model_was_shown_is_neither_manufactured_nor_reconstructed():
+    sig = rr.analyse_run(_prov_run(_ANSWER, raw=_SECTION_JSON, final=_SECTION_JSON))
+    assert sig.provision_links == 1
+    assert sig.provision_links_manufactured == 0
+    assert sig.provision_links_reconstructed == 0
+
+
+def test_a_url_summarisation_ate_is_reconstructed_not_manufactured():
+    """The trap, pinned. The retrieval returned section 21's URL; the summary
+    the model actually saw is prose with no URL in it, so the model rebuilt the
+    link. The provision WAS retrieved — calling that manufactured hides the
+    sessions where nothing was."""
+    summary = "Section 21 requires accounts to be sent to the Auditor General."
+    sig = rr.analyse_run(
+        _prov_run(_ANSWER, raw=_SECTION_JSON, final=summary, summarised=True)
+    )
+    assert sig.provision_links_manufactured == 0
+    assert sig.provision_links_reconstructed == 1
+
+
+def test_a_url_no_tool_returned_anywhere_is_manufactured():
+    """The real defect: 6365 appending `/section/21` to an Act it only held at
+    Act level. A manufactured URL resolves to a real page, so it reads to a
+    lawyer as a verified citation."""
+    act_only = json.dumps({"results": [
+        {"legislation_id": "asp/2000/1", "url": "http://www.legislation.gov.uk/asp/2000/1"},
+    ]})
+    sig = rr.analyse_run(_prov_run(_ANSWER, raw=act_only, final=act_only))
+    assert sig.provision_links_manufactured == 1
+    assert sig.provision_links_reconstructed == 0
+
+
+def test_p1_6_citation_url_block_counts_as_shown():
+    """P1.6 appends the URLs after summarisation, so `final_result` is prose +
+    a bracketed block — not JSON. A detector that parsed `final_result` instead
+    of scanning it would report the fix as having changed nothing."""
+    final = (
+        "Section 21 requires accounts.\n\n[CITATION URLS - ...]\n"
+        f"- section 21: {_S21}"
+    )
+    sig = rr.analyse_run(
+        _prov_run(_ANSWER, raw=_SECTION_JSON, final=final, summarised=True)
+    )
+    assert sig.provision_links_manufactured == 0
+    assert sig.provision_links_reconstructed == 0
+
+
+@pytest.mark.parametrize("cited", [
+    "https://www.legislation.gov.uk/asp/2000/1/section/21",   # scheme upgraded, /id/ dropped
+    "http://legislation.gov.uk/id/asp/2000/1/section/21",     # www dropped
+    "http://www.legislation.gov.uk/id/asp/2000/1/section/21/",  # trailing slash
+])
+def test_provenance_survives_the_model_respelling_the_url(cited):
+    """LEX returns `http://` and the `/id/` form; models emit `https://` without
+    it. Comparing raw strings would call a correctly-copied link manufactured —
+    the instrument failing, not the product. Mirrors
+    `src/utils/citation_links.normalise_leg_url`, which the enforcement uses."""
+    sig = rr.analyse_run(
+        _prov_run(f"See [s.21]({cited}).", raw=_SECTION_JSON, final=_SECTION_JSON)
+    )
+    assert sig.provision_links == 1
+    assert sig.provision_links_manufactured == 0
+    assert sig.provision_links_reconstructed == 0
+
+
+def test_provenance_is_a_run_level_question_not_a_turn_level_one():
+    """A URL retrieved in turn 1 is legitimately cited in turn 4."""
+    t1 = _run(answer="Found it.", tools=[_tool(
+        "search_legislation_sections", final_result=_SECTION_JSON)])["turns"][0]
+    t2 = _run(answer=_ANSWER, tools=[])["turns"][0]
+    t2["turn"] = 2
+    doc = _run(answer="")
+    doc["turns"] = [t1, t2]
+    sig = rr.analyse_run(doc)
+    assert sig.provision_links_manufactured == 0
 
 
 # --- B1 / P2.1: the halt, at source and as shown -----------------------------

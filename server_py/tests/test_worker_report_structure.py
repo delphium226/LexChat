@@ -135,8 +135,12 @@ def test_malformed_report_triggers_one_reformat(_worker_config):
 def test_well_formed_report_no_reformat(_worker_config):
     chat_loop = _chat_loop_returning(_WELL_FORMED)
 
+    # The stub makes no tool calls, so nothing is retrieved and P1.6's provision
+    # enforcement would correctly unlink the s.1 citation. Hand it the URL the
+    # report cites: this test is about the reformat retry, not about links.
     result = asyncio.run(run_worker_agent(
         chat_loop, lambda *a, **k: None, "q", "test-model", None, 0,
+        retrieved_urls={"http://www.legislation.gov.uk/ukpga/1991/65/section/1"},
     ))
 
     assert len(chat_loop.calls) == 1  # no retry

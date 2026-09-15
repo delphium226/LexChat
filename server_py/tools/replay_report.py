@@ -281,14 +281,33 @@ class RunSignals:
     scots_gap_disclosures: int = 0  # B12
     bad_links: list = field(default_factory=list)  # B14
     total_links: int = 0
-    # B14's real question, and the one `bad_links` cannot answer: was this
-    # provision URL ever RETURNED by a tool, or did the model build it by
-    # appending `/section/{n}` to an Act's base URI? A manufactured URL usually
-    # resolves to a real page, so it reads as a verified citation and is not —
-    # which makes it more dangerous than a link that merely misses its
-    # provision. Baseline 257/260 (99%); Wave 1 26/134 (19%).
+    # B14's real question, and the one `bad_links` cannot answer: where did this
+    # provision URL come from? A manufactured URL resolves to a real page, so it
+    # reads as a verified citation and is not — more dangerous than a link that
+    # merely misses its provision.
+    #
+    # THREE outcomes, not two. ~~Two: in `final_result` or manufactured.~~
+    # **Corrected 2026-09-15 during P1.6 — the ninth instrument trap, and it was
+    # reading a third of the answer.** `final_result` is the summarised text when
+    # summarisation fired, and 70% of section searches are summarised, so a URL
+    # the retrieval genuinely returned survives only in `raw_result`. Scoring
+    # against `final_result` alone called every one of those manufactured:
+    #
+    #   * `shown`         — the URL was in the text the model was handed. Copied.
+    #   * `reconstructed` — the tool returned it but the summariser dropped it, so
+    #     the model rebuilt it. Substantiated (the provision WAS retrieved) but
+    #     built by guessing, which is the mechanism P1.4 removed the instruction
+    #     for. This is what P1.6's citation-URL block closes.
+    #   * `manufactured`  — no tool returned it anywhere. The provision was never
+    #     retrieved and the citation is unsupported. The real defect.
+    #
+    # Measured over the whole corpus (all reps), Wave 0 -> Wave 1:
+    # shown 7 -> 110, reconstructed 447 -> 26, **manufactured 75 -> 0**.
+    # The previously published "327/327 (100%) -> 26/136 (19%)" conflated the
+    # last two and so understated what P1.4 achieved.
     provision_links: int = 0
     provision_links_manufactured: int = 0
+    provision_links_reconstructed: int = 0
     sources_kept: int = 0
     sources_unused: int = 0  # B8: kept but not textually cited
     turns_source_fallback: int = 0  # B8: rail showed an unvouched-for list
@@ -348,28 +367,74 @@ def _source_cited(src: dict, text: str) -> bool:
 _PROVISION_URL = re.compile(r"/(?:section|regulation|article|schedule|rule)/")
 
 
-def _urls_returned_by_tools(doc: dict) -> set:
-    """Every `url`/`uri` any tool handed back, normalised.
+_LEG_URL_IN_TEXT = re.compile(r'https?://[^\s"<>)\]]*legislation\.gov\.uk[^\s"<>)\],]*', re.I)
 
-    legislation.gov.uk serves the same resource at `/id/asp/2000/1/section/21`
-    and `/asp/2000/1/section/21`; the LEX endpoints use both spellings, so the
-    `/id/` segment is dropped before comparing or every link would look
-    manufactured.
+
+def _walk_urls(obj, out: set) -> None:
+    """Collect every legislation.gov.uk URL anywhere in a parsed tool result.
+
+    Key-agnostic and recursive on purpose: the two LEX endpoints spell the
+    identifier `url`, `uri` and `id`, and reading only `results[].url` missed
+    `get_legislation_text`'s top-level one entirely.
     """
-    out = set()
+    if isinstance(obj, dict):
+        for v in obj.values():
+            if isinstance(v, str) and "legislation.gov.uk" in v.lower():
+                out.add(_norm_leg_url(v))
+            else:
+                _walk_urls(v, out)
+    elif isinstance(obj, list):
+        for v in obj:
+            _walk_urls(v, out)
+
+
+def _norm_leg_url(url: str) -> str:
+    """Reduce a legislation.gov.uk URL to a comparable key.
+
+    Mirrors `src/utils/citation_links.normalise_leg_url` — the measurement and
+    the enforcement must agree on what "the same URL" means, or one of them is
+    lying. Four spellings are live at once: `http`/`https`, with and without
+    `www.`, with and without the `/id/` segment (the two LEX endpoints differ),
+    and with or without a trailing slash.
+    """
+    s = str(url or "").strip().rstrip(".,;:)]}'\"")
+    s = re.sub(r"^https?://", "", s, flags=re.I)
+    s = re.sub(r"^www\.", "", s, flags=re.I)
+    s = s.split("#", 1)[0].split("?", 1)[0]
+    return s.replace("/id/", "/", 1).rstrip("/").lower()
+
+
+def _urls_returned_by_tools(doc: dict) -> tuple:
+    """(shown_to_model, returned_by_any_tool) — two sets, and the pair matters.
+
+    `final_result` is what the model was actually handed; `raw_result` is what
+    the tool returned before summarisation. They are the same string only when
+    the result passed through unsummarised, and **70% of section searches are
+    summarised** — the summary keeps the section numbers and drops every URL.
+
+    Reading only `final_result` (what this function did until P1.6) scores a URL
+    the retrieval genuinely returned as manufactured, because the model had to
+    rebuild it from the Act's base URI. That is a real and fixable weakness, but
+    it is not the same failure as citing a provision nothing ever retrieved, and
+    collapsing them hid the second behind the first.
+    """
+    shown: set = set()
+    returned: set = set()
     for t in doc.get("turns", []):
         for dg in (t.get("audit") or {}).get("delegations", []):
             for tl in dg.get("tools", []):
-                parsed = _json_or_none(tl.get("final_result"))
-                if not isinstance(parsed, dict):
-                    continue
-                for r in parsed.get("results") or []:
-                    if not isinstance(r, dict):
-                        continue
-                    u = r.get("url") or r.get("uri")
-                    if u:
-                        out.add(str(u).replace("/id/", "/"))
-    return out
+                # `shown` is scanned as TEXT, not parsed as JSON. A summarised
+                # result is prose, and P1.6 appends the citation-URL block after
+                # it — neither is JSON, so a parse-first reading would report the
+                # fix as having changed nothing. The question here is literally
+                # "was this string in front of the model".
+                for u in _LEG_URL_IN_TEXT.findall(tl.get("final_result") or ""):
+                    shown.add(_norm_leg_url(u))
+                # `returned` stays structural: a URL sitting inside a quoted
+                # section's *body text* is not a retrieval of that provision.
+                _walk_urls(_json_or_none(tl.get("raw_result")), returned)
+    returned |= shown
+    return shown, returned
 
 
 def analyse_run(doc: dict) -> RunSignals:
@@ -387,7 +452,7 @@ def analyse_run(doc: dict) -> RunSignals:
     )
     # Gathered once per run: a URL retrieved in turn 1 is legitimately cited in
     # turn 4, so provenance is a run-level question, not a per-turn one.
-    tool_urls = _urls_returned_by_tools(doc)
+    shown_urls, tool_urls = _urls_returned_by_tools(doc)
 
     for t in doc.get("turns", []):
         sig.turns += 1
@@ -423,8 +488,11 @@ def analyse_run(doc: dict) -> RunSignals:
             sig.total_links += 1
             if _PROVISION_URL.search(url):
                 sig.provision_links += 1
-                if url.replace("/id/", "/") not in tool_urls:
+                key = _norm_leg_url(url)
+                if key not in tool_urls:
                     sig.provision_links_manufactured += 1
+                elif key not in shown_urls:
+                    sig.provision_links_reconstructed += 1
             # Walk every candidate, not just the first: an instrument is routinely
             # cited by full title AND provision ("The X Regulations 2013,
             # regulation 2"), and the title matches first.
@@ -561,8 +629,11 @@ def cmd_summary(args) -> int:
     bl = sum(len(s.bad_links) for s in sigs)
     pl = sum(s.provision_links for s in sigs)
     pm = sum(s.provision_links_manufactured for s in sigs)
-    print(f"  provision URLs cited        {pl}, MANUFACTURED (never returned by a tool) {pm}"
+    pr = sum(s.provision_links_reconstructed for s in sigs)
+    print(f"  provision URLs cited        {pl}, MANUFACTURED (no tool returned it) {pm}"
           f"{f'  ({100*pm/pl:.0f}%)' if pl else ''}   <- B14 / P1.4, the provenance question")
+    print(f"    reconstructed (retrieved, but summarised away before the model saw it) {pr}"
+          f"{f'  ({100*pr/pl:.0f}%)' if pl else ''}   <- B14 / P1.6")
     print(f"  provision links             {tl}, wrong granularity {bl}"
           f"{f'  ({100*bl/tl:.1f}%)' if tl else ''}   <- B14 / P1.4")
     print(f"  bare negatives              {sum(s.bare_negatives for s in sigs)}"
@@ -676,6 +747,7 @@ _COMPARE_METRICS: list[tuple[str, str, str]] = [
     ("total_links", "provision links seen", ""),
     ("provision_links", "provision URLs cited", ""),
     ("provision_links_manufactured", "  MANUFACTURED (never retrieved)", "B14/P1.4"),
+    ("provision_links_reconstructed", "  reconstructed (summarised away)", "B14/P1.6"),
     ("n_bad_links", "  wrong granularity", "B14/P1.4"),
     ("halt_runs", "runs with a halted worker", "B1/P2.1"),
     ("halt_answer_runs", "runs with halt text shown", "B1/P2.1"),
@@ -715,6 +787,7 @@ def _agg(sigs: list[RunSignals]) -> dict:
         "turns_empty_answer", "turns_billed_but_empty",
         "turns_needing_clarification", "turns_errored", "delegations",
         "halts_undisclosed", "provision_links", "provision_links_manufactured",
+        "provision_links_reconstructed",
     ):
         out[f] = sum(getattr(s, f) for s in sigs)
     return out

@@ -409,7 +409,8 @@ async def test_audit_records_deep_research_step_metadata():
     set_audit_collector(audit)
 
     async def worker(query, model, cancel, num_ctx, parent_on_chunk=None,
-                     emit_tool_details=False, timing_collector=None, tool_memo=None):
+                     emit_tool_details=False, timing_collector=None, tool_memo=None,
+                         retrieved_urls=None):
         # The real run_worker_agent opens the delegation; emulate that here so
         # the test exercises the metadata hand-off rather than the whole worker.
         rec = audit.start_delegation(query)

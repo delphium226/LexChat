@@ -346,8 +346,11 @@ entire answer.
   in the corpus.
 
 - **B14's "regression" is the opposite of what it looks like.** `bad_links` rose 20 → 32, but the
-  metric cannot ask whether a URL was ever *returned by a tool*. Provision URLs that no tool
-  returned went **327/327 (100%) → 26/136 (19%)**. Before P1.4 the prompt *told* the model to
+  metric cannot ask whether a URL was ever *returned by a tool*. ~~Provision URLs that no tool
+  returned went **327/327 (100%) → 26/136 (19%)**.~~ **[Corrected in Session 5 — that signal read
+  only `final_result`, i.e. the SUMMARISED text, so every URL the summariser ate scored as
+  manufactured. True figures: manufactured 29 → 0, reconstructed 293 → 26. See Session 5 and
+  BASELINE's second *Correction*. The conclusion below still holds; the magnitude does not.]** Before P1.4 the prompt *told* the model to
   append `/section/{number}`, so every provision URL was invented — and most carried the right
   number, so the checker scored them **good**. A manufactured URL resolves to a real page and reads
   as a verified citation. The 32 flagged links are the residue of honesty: with no retrieved URL
@@ -424,3 +427,102 @@ is gone, as it should be after a successful `restore`.
 `max_turns`. P1.6 is available in parallel and is the cheapest row on the page. Note that **no
 session in the Wave 1 column is recorded as fixed**: it is n=1, and Wave 0's repetitions overturned
 three of nine negative verdicts, so any row claiming a fix still needs n=3.
+
+---
+
+## Session 5 — 2026-09-15 — P1.6, plus the ninth instrument correction
+
+**Done:**
+- **P1.6 complete.** `src/utils/citation_links.py`, wired at four seams. Two halves:
+  **(a) the cause** — `provision_url_block` appends the retrieval's own provision URLs
+  *after* summarisation (same trick as the Phase-2 nudge: the summariser cannot eat what
+  it never saw); **(b) the guarantee** — `enforce_provision_links` at the worker-report
+  seam, the Manager's final-answer seam and the Deep Research synthesis seam, against a
+  request-scoped set of every legislation.gov.uk URL any tool returned, harvested from
+  `raw_result`. A provision URL absent from that set is demoted to the Act when the Act
+  *was* retrieved, unlinked otherwise, and marked with one footnote.
+- **The measurement instrument was wrong again — ninth trap, and it inverted the row's
+  premise.** See *Surprises*. `replay_report`'s provenance signal now splits three ways
+  and is pinned by seven tests; there had been none.
+- **600 tests passing** (564 → 600: 28 in `test_citation_links.py`, 7 provenance tests in
+  `test_replay_tooling.py`, 1 rewritten). No replay sweep, no spend, as the row said.
+- FIX_PLAN P1.6 ticked and rewritten, P1.4's headline corrected, ledger header updated;
+  BASELINE's B14 section rewritten with the three-way split and a second *Correction*
+  section added; Session 4's entry carries an inline pointer to the corrected figure.
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **P1.6's stated premise was false, and the row would have passed without any code being
+  written.** The row said 19% of provision URLs are "the model disobeying that instruction
+  where it holds only an Act-level URL — 6365 appends `/section/21` and `/section/22` to
+  `asp/2000/1`, for provisions no tool retrieved." **Both URLs were retrieved.** They sit
+  in the `raw_result` of two summarised `search_legislation_sections` calls on `asp/2000/1`
+  (32K/34K raw → 3.6K/3.9K summarised). `_urls_returned_by_tools` read only `final_result`,
+  which **is the summarised text whenever summarisation fires**, and 70% of section searches
+  are summarised — the summary keeps the section numbers and drops every URL. So the model
+  was never *shown* the URL and had to rebuild it, and the detector called that
+  manufactured. Corrected: manufactured **29 → 0**, reconstructed **293 → 26**, shown
+  **5 → 110**. `provision_links_manufactured == 0` — the row's own acceptance — was already
+  true at Wave 1.
+
+- **100% should have been read as an artefact on sight.** "327 of 327 (100%)" is not a rate
+  a real system produces, and P1.4's row even explains it away ("100% is not a rounding
+  artefact"). Explaining a suspicious number rather than distrusting it is how it survived
+  a session. Session 4 recorded "the instrument is wrong more often than the product"; this
+  is the first case where the instrument error **reversed the direction** of a headline.
+
+- **The fix is a mechanism fix, not a live-wrong-answer fix, and the row is still worth it.**
+  Every one of the 26 reconstructed links currently points at a provision the run genuinely
+  retrieved. They are right by luck: the model is rebuilding a URL from an Act's base URI,
+  which is exactly the guessing P1.4 removed the *instruction* for. Invariant 2 says replace
+  it with enforcement, and now nothing depends on the model getting it right.
+
+- **A fix can be invisible to its own metric.** P1.6's block is appended after summarisation,
+  so `final_result` becomes prose plus a bracketed block — not JSON. The detector parsed
+  `final_result` as JSON, so post-fix it would have found no URLs there and gone on scoring
+  every link `reconstructed`. Caught while writing the test; there is now a test asserting
+  exactly this (`test_p1_6_citation_url_block_counts_as_shown`). **Check whether a fix is
+  observable by the instrument that grades it, before trusting a green row.**
+
+- **The disclosure wording is narrower than the obvious one, deliberately.** "Provision not
+  retrieved" would be **false** where a whole-Act `get_legislation_text` was read: that tool
+  returns one URL for the Act and none per section, so the text may well have been retrieved
+  while no provision URL exists. Invariant 1 requires a true disclosure, so the footnote
+  asserts only what is known — that no search returned a provision-level URL for the
+  citation. Pinned by `test_the_disclosure_claims_only_what_is_known`.
+
+- **P1.4 achieved more than was published.** Slimming the section payload cut the median raw
+  result 24.5K → 18K and the summarisation rate 87% → 70%, which is why 81% of cited
+  provision URLs are now copied verbatim against 1.5% before. That was never measured because
+  the signal could not see it.
+
+**Decisions taken this session:**
+- Keep the prompt's "do not append `/section/{number}`" instruction *and* enforce it in code
+  — same belt-and-braces pattern as the unconditional `<suggestions>` strip.
+- Keep `provision_links_manufactured` meaning "never retrieved anywhere" and add
+  `provision_links_reconstructed` alongside, rather than redefining the existing name. A
+  redefined metric with the same name silently invalidates every earlier reading of it.
+
+**State of the branch:** `fix/prepilot-defects`, Waves 0 and 1 complete plus P1.5 and P1.6.
+600 tests green. **Nothing pushed** — the whole-plan-then-one-push policy stands (Session 4
+decision); the target still runs the pre-pilot code.
+
+**Machine state a new session inherits:**
+- **No uvicorn started this session** — no server was needed (deterministic acceptance only).
+  Start a fresh one before any live work: Python loads modules at import, so a surviving
+  server would serve pre-P1.6 code.
+- Dev box untouched: `moonshotai/kimi-k3`, local prompt cache ON, no `tools/.replay_pin_state.json`.
+  **Re-pin before any measurement** (`replay.py pin`).
+- `evidence/replay/baseline/` (65 files) and `evidence/replay/wave1/` (41), both gitignored and
+  unchanged this session. **A Wave 2 sweep needs a NEW directory** — `replay.py run` silently
+  skips existing files. Compare with `replay_report compare --before <baseline> --after <dir>`
+  pointing at the real directories; it restricts both sides to rep 1 itself.
+- **Wave 5 (P5.1–P5.3) is still unopened** — external, unknown lead time, blocks nothing, and
+  idle now across five sessions. The draft questions are in `docs/prepilot-fixes/WAVE5_QUESTIONS.md`;
+  they need a human to send them.
+
+**Next action:** **P2.1**. Read its rewritten acceptance and the step-cap note in the same row
+before touching `max_turns`, and **refresh the cap figures on the completed Wave 1 sweep** — the
+numbers in the row are mid-sweep (30 of 41 sessions, with the halt-heavy 6382, 6384, 6396, 6407,
+6408 outstanding). P2.1 is also the moment to spend the `AUDIT_SCHEMA_VERSION` bump to 2. Do
+**P0.4** before the sweep P2.1's acceptance needs, not before its code.

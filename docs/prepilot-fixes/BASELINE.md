@@ -78,30 +78,46 @@ latency and cost defect.
 ### B14 — the metric says regression, the truth is the opposite
 
 `bad_links` went **20 → 32** and reads as P1.4 backfiring. It is not. That metric asks whether a
-link points at the *granularity* its label names. It cannot ask the question that matters: **was
-this provision URL ever returned by a tool, or did the model build it by appending `/section/{n}`
-to an Act's base URI?**
+link points at the *granularity* its label names. It cannot ask the question that matters: **where
+did this provision URL come from?**
 
-| | Wave 0 | Wave 1 |
-|---|---|---|
-| provision URLs cited | 327 | 136 |
-| **manufactured — never returned by any tool** | **327 (100%)** | **26 (19%)** |
+> **Corrected 2026-09-15 during P1.6 — the ninth instrument trap, and it was reading a third of
+> the answer.** This section originally reported one number, "manufactured 327 (100%) → 26 (19%)",
+> computed by asking whether the URL appeared in the tool's `final_result`. But `final_result` is
+> the **summarised** text whenever summarisation fired, and **70% of section searches are
+> summarised** — the summary keeps the section numbers and drops every URL. A provision URL the
+> retrieval genuinely returned therefore scored as manufactured, because the model had to rebuild
+> it. The corrected reading needs **three** outcomes, not two. Both are computed from the same run
+> files; nothing was re-run.
 
-100% is not a rounding artefact. Before P1.4 the Worker prompt *instructed* the model to append
-`/section/{number}`, so every provision URL in the corpus was invented. Most carried the right
-number, so the old checker scored them **good** — a URL pointing at a provision the system never
-retrieved, resolving to a real page, reading to a lawyer as a verified citation. That is more
-dangerous than a link which merely misses its provision, and it is what P1.4 actually fixed.
+| | Wave 0 | Wave 1 | |
+|---|---|---|---|
+| provision URLs cited | 327 | 136 | |
+| **shown** — copied from the text the model was handed | 5 (1.5%) | **110 (81%)** | the healthy case |
+| **reconstructed** — the tool returned it, the summariser dropped it | 293 (90%) | 26 (19%) | substantiated, but guessed |
+| **manufactured** — no tool returned it anywhere | **29 (9%)** | **0** | the citation is unsupported |
+
+Read this way P1.4 did **more** than was published, not less. Before it, the Worker prompt
+*instructed* the model to append `/section/{number}` and the unslimmed 24K response was summarised
+87% of the time, so essentially every provision URL in the corpus was composed rather than copied —
+and most carried the right number, so the old checker scored them **good**. Slimming the payload
+(median 24.5K → 18K, summarisation 87% → 70%) is what moved 81% of citations to a URL the model was
+actually shown, and **manufactured URLs to zero**.
 
 The 32 flagged links are the residue of honesty: forbidden from inventing a URL and lacking a
 retrieved one, the model now links the Act's contents page while naming a section. 6348 is the
 clean case — **zero** provision-level URLs were returned by any tool in that run, yet it cites
-FOISA ss.36 and 55. **The bad link is a symptom of citing an unretrieved provision**, which the
-manufactured URL previously concealed. Measured by the new `provision_links_manufactured` signal.
+FOISA ss.36 and 55. **A bad link is now a symptom of citing an unretrieved provision**, which the
+manufactured URL previously concealed.
 
-**The residual 19% is a live defect**, not noise: the model still disobeys where it holds only an
-Act-level URL (6365 appends `/section/21` and `/section/22` to `asp/2000/1`). Invariant 2 says
-replace the instruction with enforcement — new row **P1.6**.
+**What remains is the mechanism, and it is what P1.6 fixes.** 19% of cited provision links are
+still *rebuilt* rather than copied. They happen to be right today — every one of the 26 matches a
+provision the run genuinely retrieved, 6365's `asp/2000/1/section/21` and `/section/22` among them
+— and nothing made them so. ~~The residual 19% is the model disobeying where it holds only an
+Act-level URL.~~ It is not disobedience: the model was never shown the URL. Invariant 2 says
+replace the instruction with enforcement — **P1.6**, which hands the URLs back after summarisation
+and enforces provenance at the answer seam. The signal to watch on the next sweep is
+`provision_links_reconstructed`, not `provision_links_manufactured`.
 
 ### What did not improve, and what got worse
 
@@ -199,7 +215,7 @@ saw. The trace shows what the tool did.
 |---|---|---|---|
 | **B2** jurisdiction filter | P1.1 | **351 of 974** searches under a jurisdiction filter returned **nothing** to the model (36%); **478** (49%) demonstrably lost rows; **0 of 557** searches lost anything with the filter off | **Confirmed, cause isolated** |
 | **B5** count destroyed | P1.3 | **1,010 of 1,531** searches reported a `total` that was not the API's | **Confirmed, and independent of the filters** |
-| **B14** provision links | P1.4 | ~~88 of 376 (23.4%)~~ **20 of 376** provision-labelled links (5.3%) miss their provision — see *Correction* below | **Confirmed, but six-fold smaller than first published** |
+| **B14** provision links | P1.4 | ~~88 of 376 (23.4%)~~ **20 of 376** provision-labelled links (5.3%) miss their provision — see *Correction* below. Separately, **29 of 327 cited provision URLs (9%) were returned by no tool at all** (~~327 of 327~~ — see the second *Correction*); Wave 1 takes that to **0** | **Confirmed, but six-fold smaller than first published; the provenance half is closed** |
 | **B1** research halt | P2.1 | **10 of 41** runs had a halted worker; ~~7~~ **9** showed halt text (the detector was blind to a third of the wordings — see *Halt detector* below); **2 halted silently**, telling the lawyer nothing | **Confirmed, and worse than counted** |
 | **B4** in-force claims | P2.5 | **27** unsupported in-force assertions across 41 runs | **Confirmed** |
 | **B8** sources rail | P4.3 | 1,222 of 1,387 kept sources (88%) never cited; 62 turns cited none of theirs — but **more than half of that is a shadow of B1/B3**, see *B8 split* below. On turns that actually produced a report: **489 of 622 (79%), 9 turns** | **Confirmed, but two conditions were being counted as one** |
@@ -402,6 +418,55 @@ The uncomfortable part is that `tests/test_replay_tooling.py` already pinned
 synthetic labels that never contained an SI's real title. **A detector can be pinned by a
 green test and still be wrong on every real input.** The new tests use the verbatim
 strings that were mis-flagged.
+
+---
+
+## Correction — the provenance signal was blind to summarisation (found 2026-09-15, during P1.6)
+
+**This file first published "provision URLs never returned by a tool: 327 of 327 (100%) →
+26 of 136 (19%)". The true figures are 29 → 0 manufactured, with 293 → 26 reconstructed.**
+Ninth instrument error in five sessions, and the same signature as the other eight: *a
+number that disagreed with what the code said should happen.* Here the disagreement was
+loud — 100% is not a rate a real system produces, and it should have been read as a
+detector artefact the moment it was written down.
+
+`replay_report._urls_returned_by_tools` built its "returned by a tool" set from each tool
+record's **`final_result`**. That field is the tool's output *as the model received it* —
+which, whenever summarisation fired, is prose. The summariser keeps the section numbers
+and drops every URL, and **70% of `search_legislation_sections` calls are summarised**
+(87% before P1.4 slimmed the payload). So the URL the API returned was absent from
+`final_result` by construction, and every citation built from it counted as manufactured.
+`raw_result` sits in the same record, unclipped, and was never read.
+
+Three outcomes, not two:
+
+| | what happened | what it means |
+|---|---|---|
+| **shown** | the URL was in the text handed to the model | copied verbatim — the healthy case |
+| **reconstructed** | the tool returned it; the summariser dropped it; the model rebuilt it | the provision *was* retrieved, so the citation is substantiated — but the link was guessed |
+| **manufactured** | no tool returned it anywhere | the provision was never retrieved; the citation is unsupported |
+
+Verified on the run files: 6365's `asp/2000/1/section/21` and `/section/22` — the two URLs
+P1.6's row was opened to fix, described there as "for provisions no tool retrieved" —
+appear in the `raw_result` of two summarised `search_legislation_sections` calls on
+`asp/2000/1` (32K and 34K raw, 3.6K and 3.9K summarised). They were retrieved. The model
+rebuilt the link because the summary it was given had no URL in it.
+
+The detector now reads `raw_result` for provenance and scans `final_result` as **text**
+for what the model saw. The text scan matters twice over: P1.6 appends its citation-URL
+block after summarisation, so `final_result` becomes prose plus a bracketed block — not
+JSON — and a parse-first detector would have reported the fix as changing nothing.
+
+**What this does not change.** Every other number in this file: the split is computed from
+the same run files, and `bad_links`, B2, B5, B1 and B8 never consulted this set. **What it
+does change** is the reading of P1.4, which achieved more than was published, and the
+premise of P1.6, which is a mechanism fix rather than a live-wrong-answer fix.
+
+There was **no test at all** over this detector — `tests/test_replay_tooling.py` covered
+`bad_links` and the filter arithmetic and stopped there. That is the same lesson as the
+B14 correction above, one notch worse: a detector pinned by a green test can be wrong on
+every real input, and a detector pinned by nothing will be. Seven tests now cover it,
+including one asserting that P1.6's own block counts as *shown*.
 
 ---
 

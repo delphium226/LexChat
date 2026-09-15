@@ -12,6 +12,7 @@ import uuid
 from typing import Callable, Optional
 
 from ..utils.audit_trace import get_audit_collector
+from ..utils.citation_links import harvest_legislation_urls, provision_url_block
 from .provider_factory import get_request_provider_config
 from .summarisation import call_chunk, summarise_for_query
 from .tools import (
@@ -405,6 +406,7 @@ async def run_worker_tool(
     memo_count_redundant: bool = False,
     context_budget: Optional[dict] = None,
     audit_delegation: Optional[dict] = None,
+    retrieved_urls: Optional[set] = None,
 ) -> str:
     """Execute a single Worker tool call and return the (possibly summarised) result.
 
@@ -435,6 +437,11 @@ async def run_worker_tool(
             belongs to (evaluation harnesses only; None on /api/chat). Passed
             explicitly rather than read from a ContextVar so nesting stays
             correct if worker runs are ever parallelised.
+        retrieved_urls: Per-request set of every legislation.gov.uk URL any tool
+            returned, harvested from the RAW response (P1.6/B14). Feeds the
+            provision-link enforcement at the answer seam. None disables both the
+            harvest and, downstream, the enforcement — so a caller that does not
+            thread it keeps exactly the previous behaviour.
     """
     activity_id = uuid.uuid4().hex[:8]
 
@@ -467,6 +474,11 @@ async def run_worker_tool(
             # extraction on the stored RAW result against this step's accumulator.
             if source_accumulator is not None:
                 _extract_sources_from_tool(name, args, hit["raw"], source_accumulator)
+            # Same for the retrieved-URL set: the memo saves the fetch, not the
+            # provenance. A step reusing a memoised retrieval has still retrieved
+            # those provisions and must be allowed to cite them.
+            if retrieved_urls is not None:
+                harvest_legislation_urls(hit["raw"], into=retrieved_urls)
             if parent_on_chunk:
                 await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
                 await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done (cached)"})
@@ -554,6 +566,14 @@ async def run_worker_tool(
     # Extract sources from the raw structured response BEFORE summarisation compresses it.
     if source_accumulator is not None:
         _extract_sources_from_tool(name, args, result, source_accumulator)
+
+    # P1.6 (B14): record every legislation.gov.uk URL this retrieval returned,
+    # from the RAW response. "Did the research retrieve this provision" and "was
+    # the model shown the string" are different questions, and they diverge on
+    # the ~70% of section searches that get summarised — the summary keeps the
+    # section numbers and drops every URL.
+    if retrieved_urls is not None:
+        harvest_legislation_urls(raw_result, into=retrieved_urls)
 
     # For search_case_law: inject a Phase 2 nudge to call get_case_law_text for
     # the most relevant results, or a stop note on zero results.
@@ -896,6 +916,16 @@ async def run_worker_tool(
                 "id": summarise_id,
                 "result": result,
             })
+
+    # P1.6 (B14): hand the provision URLs back after summarisation. A 32K
+    # section retrieval summarises to ~3.5K of prose that names the sections and
+    # carries no URLs at all, so the model — forbidden from inventing one and
+    # holding none — rebuilds it from the Act's base URI. Appended here for the
+    # same reason the nudges are: the summariser cannot discard what it never
+    # saw. Only on the summarised path; an unsummarised result already carries
+    # its own `url` per row, and restating them would be noise.
+    if _audit_summarised:
+        result += provision_url_block(raw_result)
 
     # Append phase nudges after summarisation so they are not discarded
     # by the summariser and remain visible in the message the model receives.
