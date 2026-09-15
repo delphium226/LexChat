@@ -1051,3 +1051,55 @@ async def test_get_returns_rows_with_username_and_chat_title(
     assert rows[0]["chat_title"] == "Compulsory purchase"
     assert rows[0]["confidence"] == 5
     assert rows[0]["username"]
+
+
+@pytest.mark.asyncio
+async def test_transcripts_flag_deep_research_per_turn_not_per_thread(
+    client: AsyncClient, user_token: str, admin_token: str
+):
+    """P0.4. Thread-level `session_mode` reports `deep_research` for EVERY turn
+    of a thread that mixed the modes, so it cannot say which query ran a plan.
+
+    The alternative the replay set had to use was inferring it from the answer
+    text — which is structurally blind to a Deep Research turn that produced no
+    answer, and 15 turns across the pre-pilot corpus got no reply. That is
+    bucket B13, so the inference was blindest exactly where it mattered.
+
+    Note the trap this shares with the thread-level query: SQLAlchemy's JSON type
+    persists a Python None as the JSON literal `null`, not SQL NULL, so an
+    `IS NOT NULL` test marks every ordinary message as deep research.
+    """
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    chat = (await client.post(
+        "/api/chats/", json={"model": "mistral", "title": "Mixed"}, headers=user_headers
+    )).json()
+    await client.post(
+        f"/api/chats/{chat['id']}/messages",
+        json={"role": "user", "content": "A plain question"},
+        headers=user_headers,
+    )
+    await client.post(
+        f"/api/chats/{chat['id']}/messages",
+        json={"role": "assistant", "content": "A plain answer"},
+        headers=user_headers,
+    )
+    await client.post(
+        f"/api/chats/{chat['id']}/messages",
+        json={
+            "role": "assistant",
+            "content": "A deep research report",
+            "research_plan": {"scope_note": "n", "steps": [{"id": 1, "title": "t", "detail": "d"}]},
+        },
+        headers=user_headers,
+    )
+    await client.post(URL, json={"chat_id": chat["id"], "confidence": 4}, headers=user_headers)
+
+    body = (await client.get(
+        f"{URL}/transcripts", headers={"Authorization": f"Bearer {admin_token}"}
+    )).json()
+    flags = [(m["content"], m["deep_research"]) for m in body[0]["messages"]]
+    assert flags == [
+        ("A plain question", False),
+        ("A plain answer", False),
+        ("A deep research report", True),
+    ]

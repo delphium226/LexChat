@@ -126,6 +126,13 @@ class TranscriptMessageOut(BaseModel):
     cost_usd: float | None
     rating: int | None
     feedback_comment: str | None
+    # P0.4: did THIS turn run Deep Research? Thread-level `session_mode` cannot
+    # answer it — a thread that mixed the modes reports `deep_research` for all
+    # of its turns — and the alternative was to infer it from the answer text,
+    # which is structurally blind to a Deep Research turn that produced NO
+    # answer. 15 turns across the pre-pilot corpus got no reply, and that is
+    # bucket B13 itself, so the inference was blindest exactly where it mattered.
+    deep_research: bool
     created_at: str
 
 
@@ -463,6 +470,23 @@ async def submit_session_feedback(
 _CHAT_MODES = ("conversational", "research", "deep_research")
 
 
+def _ran_deep_research(message) -> bool:
+    """Did this message come from a Deep Research run?
+
+    `research_plan` is written only on a Deep Research assistant message, so its
+    presence is the observed signal — the same one `_session_mode` prefers over
+    the filter snapshot, applied per message rather than per thread.
+
+    **`IS NOT NULL` is not sufficient**, and the same trap applies here as in the
+    thread-level query: SQLAlchemy's JSON type persists a Python `None` as the
+    JSON literal `null`, not as SQL NULL, so every ordinary message carries a
+    non-NULL `research_plan` holding `null`. Tested in Python here rather than in
+    SQL because the rows are already loaded; the falsy check covers `null`, `{}`
+    and `[]` alike.
+    """
+    return bool(getattr(message, "research_plan", None))
+
+
 def _session_mode(filters: dict | None, ran_deep_research: bool) -> str | None:
     """Which mode a thread was worked in: 'conversational' / 'research' /
     'deep_research', or None where neither signal is available.
@@ -659,6 +683,7 @@ async def get_session_transcripts(
                 cost_usd=message.cost_usd,
                 rating=message.rating,
                 feedback_comment=message.feedback_comment,
+                deep_research=_ran_deep_research(message),
                 created_at=message.created_at.isoformat(),
             )
         )
