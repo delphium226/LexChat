@@ -281,6 +281,14 @@ class RunSignals:
     scots_gap_disclosures: int = 0  # B12
     bad_links: list = field(default_factory=list)  # B14
     total_links: int = 0
+    # B14's real question, and the one `bad_links` cannot answer: was this
+    # provision URL ever RETURNED by a tool, or did the model build it by
+    # appending `/section/{n}` to an Act's base URI? A manufactured URL usually
+    # resolves to a real page, so it reads as a verified citation and is not —
+    # which makes it more dangerous than a link that merely misses its
+    # provision. Baseline 257/260 (99%); Wave 1 26/134 (19%).
+    provision_links: int = 0
+    provision_links_manufactured: int = 0
     sources_kept: int = 0
     sources_unused: int = 0  # B8: kept but not textually cited
     turns_source_fallback: int = 0  # B8: rail showed an unvouched-for list
@@ -337,6 +345,33 @@ def _source_cited(src: dict, text: str) -> bool:
     return False
 
 
+_PROVISION_URL = re.compile(r"/(?:section|regulation|article|schedule|rule)/")
+
+
+def _urls_returned_by_tools(doc: dict) -> set:
+    """Every `url`/`uri` any tool handed back, normalised.
+
+    legislation.gov.uk serves the same resource at `/id/asp/2000/1/section/21`
+    and `/asp/2000/1/section/21`; the LEX endpoints use both spellings, so the
+    `/id/` segment is dropped before comparing or every link would look
+    manufactured.
+    """
+    out = set()
+    for t in doc.get("turns", []):
+        for dg in (t.get("audit") or {}).get("delegations", []):
+            for tl in dg.get("tools", []):
+                parsed = _json_or_none(tl.get("final_result"))
+                if not isinstance(parsed, dict):
+                    continue
+                for r in parsed.get("results") or []:
+                    if not isinstance(r, dict):
+                        continue
+                    u = r.get("url") or r.get("uri")
+                    if u:
+                        out.add(str(u).replace("/id/", "/"))
+    return out
+
+
 def analyse_run(doc: dict) -> RunSignals:
     sig = RunSignals(
         session_id=doc["session_id"],
@@ -350,6 +385,9 @@ def analyse_run(doc: dict) -> RunSignals:
         total_cost_usd=doc.get("total_cost_usd", 0.0),
         elapsed_s=doc.get("elapsed_s", 0.0),
     )
+    # Gathered once per run: a URL retrieved in turn 1 is legitimately cited in
+    # turn 4, so provenance is a run-level question, not a per-turn one.
+    tool_urls = _urls_returned_by_tools(doc)
 
     for t in doc.get("turns", []):
         sig.turns += 1
@@ -383,6 +421,10 @@ def analyse_run(doc: dict) -> RunSignals:
 
         for label, url in MD_LINK.findall(answer):
             sig.total_links += 1
+            if _PROVISION_URL.search(url):
+                sig.provision_links += 1
+                if url.replace("/id/", "/") not in tool_urls:
+                    sig.provision_links_manufactured += 1
             # Walk every candidate, not just the first: an instrument is routinely
             # cited by full title AND provision ("The X Regulations 2013,
             # regulation 2"), and the title matches first.
@@ -517,6 +559,10 @@ def cmd_summary(args) -> int:
     print(f"    real total not passed on  {sum(s.searches_total_misreported for s in sigs)}   <- B5 / P1.3")
     tl = sum(s.total_links for s in sigs)
     bl = sum(len(s.bad_links) for s in sigs)
+    pl = sum(s.provision_links for s in sigs)
+    pm = sum(s.provision_links_manufactured for s in sigs)
+    print(f"  provision URLs cited        {pl}, MANUFACTURED (never returned by a tool) {pm}"
+          f"{f'  ({100*pm/pl:.0f}%)' if pl else ''}   <- B14 / P1.4, the provenance question")
     print(f"  provision links             {tl}, wrong granularity {bl}"
           f"{f'  ({100*bl/tl:.1f}%)' if tl else ''}   <- B14 / P1.4")
     print(f"  bare negatives              {sum(s.bare_negatives for s in sigs)}"
@@ -628,6 +674,8 @@ _COMPARE_METRICS: list[tuple[str, str, str]] = [
     ("rows_lost_min", "  rows lost to filters (floor)", "B2/P1.1"),
     ("searches_total_misreported", "  real total not passed on", "B5/P1.3"),
     ("total_links", "provision links seen", ""),
+    ("provision_links", "provision URLs cited", ""),
+    ("provision_links_manufactured", "  MANUFACTURED (never retrieved)", "B14/P1.4"),
     ("n_bad_links", "  wrong granularity", "B14/P1.4"),
     ("halt_runs", "runs with a halted worker", "B1/P2.1"),
     ("halt_answer_runs", "runs with halt text shown", "B1/P2.1"),
@@ -666,7 +714,7 @@ def _agg(sigs: list[RunSignals]) -> dict:
         "sources_kept", "sources_unused", "turns_source_fallback",
         "turns_empty_answer", "turns_billed_but_empty",
         "turns_needing_clarification", "turns_errored", "delegations",
-        "halts_undisclosed",
+        "halts_undisclosed", "provision_links", "provision_links_manufactured",
     ):
         out[f] = sum(getattr(s, f) for s in sigs)
     return out

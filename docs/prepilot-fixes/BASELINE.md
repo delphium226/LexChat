@@ -26,6 +26,145 @@ python -m tools.replay_report --dir ../docs/prepilot-fixes/evidence/replay/basel
 
 ---
 
+## Wave 1 re-baseline (FIX_PLAN P1.5) — the second column
+
+| | Wave 0 | Wave 1 |
+|---|---|---|
+| **Run date** | 2026-09-14 | **2026-09-15** |
+| **HEAD** | `bc8e7a4` (no product code changed) | **`4c8878c`** — Waves 0+1. Run files record `6a5eeea`, which was rewritten mid-sweep by the ServerLogs purge: same tree minus those logs, **no product code touched during the sweep** (verified by diff). |
+| **Model** | `google/gemini-3.1-pro-preview`, pinned | same, pinned; **0 mismatches** |
+| **Scope** | 41 sessions, 155 turns | **identical** — 41 / 155, 0 errored turns |
+| **Repetitions** | n=1, then n=3 on 12 unsettled | **n=1** — see *What this column cannot settle* |
+| **Spend / wall clock** | $37.62 / 6.0 h | **$27.22 / 3.7 h** |
+
+Reproduce with:
+
+```
+python -m tools.replay_report compare --before <baseline rep-1 only> --after ../docs/prepilot-fixes/evidence/replay/wave1
+```
+
+**The rep-1 restriction is load-bearing.** The baseline directory holds 65 run files (the n=1 pass
+plus 24 targeted repetitions); a Wave 1 sweep holds 41. Comparing the directories whole inflates
+every Wave 0 figure by roughly half — 2,354 searches against 1,531, before any code is measured.
+`compare` restricts both sides to rep 1 and sums totals over the sessions present in both.
+
+### What Wave 1 did
+
+| | Wave 0 | Wave 1 | |
+|---|---|---|---|
+| searches emptied by filters | 351 / 1,531 | **3 / 790** | **−99%** |
+| filters demonstrably bit | 478 | **10** | −98% |
+| rows lost to filters (floor) | 2,147 | **37** | −98% |
+| `total` not passed to the model | 1,010 | **0** | **−100%** |
+| `search_legislation` calls | 1,531 | **790** | −48% |
+| worker delegations | 278 | **197** | −29% |
+| spend / wall clock | $37.62 / 6.0 h | **$27.22 / 3.7 h** | −28% / −38% |
+
+**B2 and B5 are closed.** All 13 jurisdiction-filtered sessions went to zero emptied searches. The
+only residual — 3 in 6357 — is `legislation_type=primary` correctly excluding SSIs, checked row by
+row: the dropped rows are `ssi/2022/54` and siblings, which a primary-only filter is meant to drop.
+
+**The defect cost money and time, not just results.** Search volume nearly halved and the sweep ran
+2.3 hours faster for the *same 155 turns*. When every search came back empty the model kept
+reformulating and retrying; with the filter working it finds what it needs and stops. Clearest
+cases: 6396 **172 searches → 1**, 6381 **80 → 6**, 6374 166 → 41, 6383 163 → 26, 6357 93 → 14
+($1.47 → $0.41, 18.9 min → 4.9 min). FIX_PLAN scoped B2 purely as lost results; it was also a
+latency and cost defect.
+
+### B14 — the metric says regression, the truth is the opposite
+
+`bad_links` went **20 → 32** and reads as P1.4 backfiring. It is not. That metric asks whether a
+link points at the *granularity* its label names. It cannot ask the question that matters: **was
+this provision URL ever returned by a tool, or did the model build it by appending `/section/{n}`
+to an Act's base URI?**
+
+| | Wave 0 | Wave 1 |
+|---|---|---|
+| provision URLs cited | 327 | 136 |
+| **manufactured — never returned by any tool** | **327 (100%)** | **26 (19%)** |
+
+100% is not a rounding artefact. Before P1.4 the Worker prompt *instructed* the model to append
+`/section/{number}`, so every provision URL in the corpus was invented. Most carried the right
+number, so the old checker scored them **good** — a URL pointing at a provision the system never
+retrieved, resolving to a real page, reading to a lawyer as a verified citation. That is more
+dangerous than a link which merely misses its provision, and it is what P1.4 actually fixed.
+
+The 32 flagged links are the residue of honesty: forbidden from inventing a URL and lacking a
+retrieved one, the model now links the Act's contents page while naming a section. 6348 is the
+clean case — **zero** provision-level URLs were returned by any tool in that run, yet it cites
+FOISA ss.36 and 55. **The bad link is a symptom of citing an unretrieved provision**, which the
+manufactured URL previously concealed. Measured by the new `provision_links_manufactured` signal.
+
+**The residual 19% is a live defect**, not noise: the model still disobeys where it holds only an
+Act-level URL (6365 appends `/section/21` and `/section/22` to `asp/2000/1`). Invariant 2 says
+replace the instruction with enforcement — new row **P1.6**.
+
+### What did not improve, and what got worse
+
+| | Wave 0 | Wave 1 | |
+|---|---|---|---|
+| unsupported in-force claims | 27 | **30** | **+11%** |
+| runs with a halted worker | 10 | 10 | = |
+| runs showing halt text | 9 | 6 | −33% |
+| **turns halted with NO mention** | 2 | **5** | **+150%** |
+| turns citing none of their sources | 62 | 59 | −5% |
+| billed-but-empty turns | 4 | 2 | −50% |
+
+**B4 did not fall, and that settles P1.5's open question: P2.5's scope does not shrink.** The
+hypothesis was that P1.2 removed the prompt line causing the in-force claims, so a sharp fall would
+shrink P2.5 before it is written. It rose. The mechanism is in P2.5's row: three sites in
+`prompts.py` still *instruct* the Worker to state in-force status (line 111: *"note … if the
+legislation is in force"*), and the only metadata it has is LEX's `status`, vocabulary
+`final`/`revised`, meaning *which text version is held*. P1.2 removed the filter's constraint
+block; the instruction survived it. Nearly every claim still reads *"currently in force (status:
+revised)"*.
+
+**The halt total is unchanged but redistributed, and silent halts more than doubled.** Halt text
+shown fell 9 → 6 while halts disclosed to nobody rose 2 → 5 — the exact trade P2.1's rewritten
+acceptance guards against, occurring here with **no code change at all**, which is what makes it
+stochastic rather than progress. Per session the movement is large in both directions: 6396 4 halts
+→ 0 and 6408 3 → 0, against 6409 0 → 3 and 6383 0 → 1.
+
+**Cap pressure rose** — p90 tool calls per delegation 15 → 20 (the p90 delegation now sits *at* the
+cap), and delegations at or over 20 went 6.3% → 11.2%. Fixing retrieval generates Phase-2 work
+where an emptied search was simply retried. Recorded in P2.1: **the cap decision must not be taken
+on the Wave 0 numbers.**
+
+### Sessions whose verdict changed, and why
+
+- **6381 — now answers, and the cause was B2.** Wave 0 said *"I am unable to locate the Victims and
+  Witnesses (Scotland) Act 2014"* three times: honest failure, correct under Invariant 1, and
+  caused by the filter emptying 30 of 80 searches. Wave 1 finds it and answers from `asp/2014/1`,
+  one delegation per turn instead of six. **A cause removed, not a new fix** — and not a lowered
+  evidence bar: the Act cited is the right one.
+- **6396 — a B10 case resolved by fixing B2.** Wave 0 spent 16 delegations and 172 searches, halted
+  four workers, and answered from a superseded **1984** Order. Wave 1 retrieves the correct modern
+  instrument (Cattle Identification (Scotland) Regulations 2007, `ssi/2007/174`) in **one**
+  delegation and one search, $0.04 against $1.11. Suggests part of B10 is downstream of B2 —
+  relevant to P3.1's scope.
+- **6407 — cost collapsed, links got worse.** $5.99 → $0.50 and both billed-but-empty turns gone,
+  but it now carries 19 of the 32 flagged links (Schedule/paragraph citations pointing at
+  `asp/2016/10`). The single largest contributor to the B14 count.
+- **6340 — a different failure again.** Wave 0 rep1 was a 69-char non-answer for $0.02; Wave 1 runs
+  29 searches for $1.44 and halts a worker. A third distinct failure mode across four runs.
+- **6370 — both billed-but-empty turns gone** (2 → 0). Not attributable: P4.2 is unbuilt.
+
+### What this column cannot settle
+
+1. **It is n=1.** Wave 0's repetitions overturned three of nine *does-not-reproduce* verdicts, so
+   **no session here may be recorded as fixed on this evidence.** The mechanical B2/B5 numbers are
+   safe — filter arithmetic is deterministic given the searches made — but *which* searches the
+   model makes is stochastic, so rates are firmer than absolute counts and any per-session verdict
+   needs n=3.
+2. **Three detectors were corrected mid-sweep** — B14's title-year false positives, B1's blind
+   paraphrase matching, B8's two-conditions-in-one. Both columns above are computed with the
+   corrected instrument; the *original* Wave 0 publication over-counted B14 six-fold and
+   under-counted halt disclosures. See the Correction sections below.
+3. **Wave 0's confounds all still apply** — unpinned summarisation model, re-drafted Deep Research
+   plans, local cache off, no documents or matter context, inferred Deep Research turns.
+
+---
+
 ## Headline
 
 **34 of 41 sessions still reproduce their original failure. 7 do not. None are left inconclusive.**

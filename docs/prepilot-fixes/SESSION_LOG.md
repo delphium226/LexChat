@@ -295,3 +295,121 @@ asserting "no halt text" on a session that no longer halts would pass without th
 6384 still halt and still leak the text, so they are the cases to keep; 6383 turn 1 is the
 strongest, having shown the raw `[Research halted: exceeded 20 tool-call steps]` string as its
 entire answer.
+
+## Session 4 — 2026-09-15 — P1.5 (re-baseline), plus five instrument corrections
+
+**Done:**
+- **P1.5 complete.** Re-ran the full replay set on the Wave 1 HEAD: 41 sessions, 155 turns,
+  **$27.22 / 3.7 h** against Wave 0's $37.62 / 6.0 h. Zero model mismatches, zero errored turns,
+  and no product code changed during the sweep (verified by diff). `BASELINE.md` has its second
+  column.
+- **B2 and B5 are closed.** Searches emptied by filters **351/1,531 → 3/790**; `total` misreported
+  **1,010 → 0**. All 13 jurisdiction-filtered sessions went to zero; the 3 residuals in 6357 are
+  `legislation_type=primary` correctly excluding SSIs, checked row by row.
+- Built `replay_report compare` for wave-over-wave reads, and added `halts_undisclosed` and
+  `provision_links_manufactured` signals. 560+ tests passing.
+- Purged 20 accidentally-committed pre-pilot server logs from branch history (user decision) and
+  fixed `.gitignore`.
+- New row **P1.6**; **P2.1's acceptance rewritten**; P2.5, P4.2 and P4.3 amended.
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **B2 was a cost and latency defect, not only a retrieval one, and the plan never said so.**
+  Searches fell 1,531 → 790 and delegations 278 → 197 *for the same 155 turns*, and the sweep ran
+  2.3 hours faster. An emptied search made the model reformulate and retry: 6396 went **172
+  searches → 1**, 6381 **80 → 6**, 6357 93 → 14 ($1.47 → $0.41). The filter was not just hiding
+  results, it was driving the model to flail.
+
+- **Five measurement traps this session, after three in Sessions 2–3 — and three of the five
+  numbers `BASELINE.md` published were wrong.** In order found: (1) comparing a 65-file baseline
+  against a 41-file sweep inflates every Wave 0 figure by half; (2) `bad_links` read an SI's title
+  year ("Regulations 2013") as a provision number — **73 of the 88 were false positives**, B14 was
+  20/376, not 88/376; (3) B8's 88% added together report turns (79%) and turns that never answered
+  (96%), where the rail hangs off B1 halts — **6341 turn 5 shows 40 sources behind a 333-char
+  "timed out" message**; (4) `HALT_PARAPHRASE` caught **9 of 14** real halt disclosures; (5)
+  `compare` summed each directory whole, so a skipped session would have read as an improvement.
+  **The pattern is now unmistakable: in this work the instrument is wrong more often than the
+  product.** Every one was caught by a number disagreeing with what the code said should happen.
+
+- **`test_bad_link_*` was green throughout**, and FIX_PLAN calls it "P1.4's stated acceptance
+  check". It was written against synthetic labels that never contained a real SI title. **A
+  detector can be pinned by a passing test and still be wrong on every real input.**
+
+- **P2.1's acceptance test was not merely broken, it was harmful.** "Produce no halt text" is
+  satisfied by saying nothing — and **2 turns in the Wave 0 rep-1 pass already halt silently**
+  (5 in Wave 1), returning a normal-looking report with no signal that it is incomplete. 6396 rep1
+  halted **four** workers and never mentions it. Under Invariant 1 that is worse than the text
+  leaking. The trivially-passing implementation of the old row was the worse product. Rewritten to
+  assert the answer *does* disclose, that the reason is **true** (a step cap, not "timed out"),
+  and that the halt is structured metadata. Also: **6383 turn 1's halt never appears in any
+  delegation report**, so a check reading only `delegations[].report` is blind to the starkest case
+  in the corpus.
+
+- **B14's "regression" is the opposite of what it looks like.** `bad_links` rose 20 → 32, but the
+  metric cannot ask whether a URL was ever *returned by a tool*. Provision URLs that no tool
+  returned went **327/327 (100%) → 26/136 (19%)**. Before P1.4 the prompt *told* the model to
+  append `/section/{number}`, so every provision URL was invented — and most carried the right
+  number, so the checker scored them **good**. A manufactured URL resolves to a real page and reads
+  as a verified citation. The 32 flagged links are the residue of honesty: with no retrieved URL
+  and forbidden from inventing one, the model links the Act's contents page. **In 6348, zero
+  provision URLs were returned by any tool yet it cites FOISA ss.36 and 55** — so a bad link is now
+  a *symptom of citing an unretrieved provision*, which the manufactured URL used to conceal.
+
+- **B4 rose 27 → 30, so P2.5's scope does NOT shrink** — the question P1.5 was asked to settle.
+  P1.2 removed the filter's constraint block, but three sites in `prompts.py` still *instruct* the
+  Worker to state in-force status (line 111), and the only metadata is LEX's `status`
+  (`final`/`revised` = which text version is held). Nearly every claim reads *"currently in force
+  (status: revised)"* — the model is faithfully reporting the field it was pointed at. **Third
+  instance of: before treating a defect as model behaviour, check whether a prompt instructs it.**
+  The obvious fix is a trap — "Jurisdiction & Status" is mandatory in `_REPORT_SECTIONS`, so
+  telling the model to omit it spends an A4 reformat call re-adding the heading.
+
+- **Fixing retrieval increased pressure on the 20-step cap.** p90 tool calls per delegation 15 → 20
+  (the p90 delegation now sits *at* the cap); at-or-over-cap 6.3% → 11.2%, while total delegations
+  fell 29%. A search that returns results generates Phase-2 work where an emptied search was just
+  retried. The cap question was parked behind a metric measured against a broken filter — Invariant
+  3 one level up. Recorded in P2.1; **still not a reason to bump 20 → 30 reflexively**, which would
+  mask the failure P2.1 exists to make honest.
+
+- **Two sessions changed verdict for the right reason, and both are P1.1's.** 6381 said *"I am
+  unable to locate the Victims and Witnesses (Scotland) Act 2014"* three times in Wave 0 — honest
+  failure caused by the filter — and now answers from the correct `asp/2014/1`. 6396 spent 16
+  delegations and 172 searches to answer from a superseded **1984** Order; it now retrieves the
+  correct 2007 Regulations in one delegation for $0.04. **Part of B10 may be downstream of B2** —
+  relevant to P3.1's scope.
+
+- **B13 is not confined to 6370/6407.** 6338 turn 2 blanked after 2 delegations and real API calls
+  (330 s, $0.40, `status: ok`, no `token` event). Researched the empty-answer question: `chat_loop`
+  **never reads `finish_reason`**, so an empty stream becomes an empty answer with no error. Google
+  has *reproduced* a Gemini 3 streaming + function-calling bug ending `finish_reason=STOP` with
+  empty text after a tool executes; Gemini's `MALFORMED_FUNCTION_CALL` is silently normalised to
+  `stop` with empty content. Recorded in P4.2 as a lead, not a diagnosis — **the first move there
+  is a diagnostic (capture `finish_reason`/`native_finish_reason`), not a fix.**
+
+- **A data-handling breach, found and purged.** Commit `302585e` had swept in 20 pre-pilot server
+  logs carrying **211 unredacted Worker delegation briefs** naming live casework topics. `.gitignore`
+  has `*.log`, which does not match `..._agent.log.2026-08-18` — the date is the extension. Tool
+  args were correctly redacted; the Manager's delegation brief is one of the two sites `CLAUDE.md`
+  records as deliberately un-redacted. Purged from history (unpushed, `main` untouched), local
+  copies kept outside the repo, `.gitignore` fixed with both patterns.
+
+**Decisions taken this session (user):**
+- Purge the committed server logs from branch history rather than untrack them going forward.
+- Read the sweep session-by-session as planned; record the cap findings in P2.1's row.
+
+**State of the branch:** `fix/prepilot-defects`, Waves 0 and 1 complete plus P1.5. Tests green.
+Dev box **restored** (`moonshotai/kimi-k3`, local prompt cache ON) — `tools/.replay_pin_state.json`
+is gone, as it should be after a successful `restore`.
+
+**Machine state a new session inherits:**
+- **No uvicorn running** — killed deliberately, same reason as Session 3: Python loads modules at
+  import, so a server surviving this session would serve pre-Wave-2 code.
+- `evidence/replay/baseline/` (65 files) and `evidence/replay/wave1/` (41 files), both gitignored.
+  A Wave 2 sweep needs a **new** directory; `replay.py run` silently skips existing files.
+- **Compare with `replay_report compare --before <baseline> --after <dir>`**, which defaults to
+  rep 1 on both sides. Do not compare directories whole.
+
+**Next action:** **P2.1**, with the rewritten acceptance — and read its cap note before touching
+`max_turns`. P1.6 is available in parallel and is the cheapest row on the page. Note that **no
+session in the Wave 1 column is recorded as fixed**: it is n=1, and Wave 0's repetitions overturned
+three of nine negative verdicts, so any row claiming a fix still needs n=3.

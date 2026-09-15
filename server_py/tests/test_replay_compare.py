@@ -379,3 +379,70 @@ def test_an_empty_answer_after_a_halt_is_b13_not_an_undisclosed_halt():
     sig = rr.analyse_run(doc)
     assert sig.halts_undisclosed == 0
     assert sig.turns_billed_but_empty == 1
+
+
+# --- provenance: was the provision URL ever retrieved? (P1.5) ----------------
+#
+# B14's `bad_links` asks whether a link points at the granularity its label
+# names. It cannot ask the more important question: did any tool ever return
+# this URL, or did the model build it by appending `/section/{n}`? A
+# manufactured URL usually resolves to a real page, so it reads to a lawyer as a
+# verified citation and is not. Baseline 257/260 (99%) manufactured; Wave 1
+# 26/134 (19%) — which is what P1.4 actually achieved, and the `bad_links`
+# count misreports as a regression.
+
+
+def _run_with_tool_url(answer, tool_url):
+    import json as _json
+    doc = _run(answer=answer, tools=[_tool(
+        "search_legislation_sections",
+        final_result=_json.dumps({"results": [{"url": tool_url}], "total": 1}),
+    )])
+    doc["session_id"], doc["rep"] = "6365", 1
+    return doc
+
+
+def test_a_cited_provision_url_the_tool_returned_is_not_manufactured():
+    doc = _run_with_tool_url(
+        "See [s.21](http://www.legislation.gov.uk/asp/2000/1/section/21).",
+        "http://www.legislation.gov.uk/asp/2000/1/section/21",
+    )
+    sig = rr.analyse_run(doc)
+    assert sig.provision_links == 1
+    assert sig.provision_links_manufactured == 0
+
+
+def test_the_id_spelling_is_normalised_before_comparing():
+    """legislation.gov.uk serves the same resource with and without `/id/`, and
+    the two LEX endpoints disagree on which they emit. Without normalising,
+    every link would look manufactured."""
+    doc = _run_with_tool_url(
+        "See [s.21](http://www.legislation.gov.uk/asp/2000/1/section/21).",
+        "http://www.legislation.gov.uk/id/asp/2000/1/section/21",
+    )
+    assert rr.analyse_run(doc).provision_links_manufactured == 0
+
+
+def test_a_provision_url_built_from_an_act_base_uri_is_manufactured():
+    """The exact residual Wave 1 shape: the tool returned only the Act, the
+    model appended /section/21."""
+    doc = _run_with_tool_url(
+        "See [s.21](http://www.legislation.gov.uk/asp/2000/1/section/21).",
+        "http://www.legislation.gov.uk/asp/2000/1",
+    )
+    sig = rr.analyse_run(doc)
+    assert sig.provision_links == 1
+    assert sig.provision_links_manufactured == 1
+
+
+def test_an_act_level_link_is_not_counted_as_a_provision_link_at_all():
+    """Linking the Act when you only have the Act is honest. It may still be
+    flagged by `bad_links` if the LABEL names a provision, but it is not a
+    manufactured provision URL and must not inflate this metric."""
+    doc = _run_with_tool_url(
+        "See [the Act](http://www.legislation.gov.uk/asp/2000/1).",
+        "http://www.legislation.gov.uk/asp/2000/1",
+    )
+    sig = rr.analyse_run(doc)
+    assert sig.provision_links == 0
+    assert sig.provision_links_manufactured == 0
