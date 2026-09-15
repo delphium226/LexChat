@@ -409,7 +409,9 @@ is gone, as it should be after a successful `restore`.
 - **Compare with `replay_report compare --before <baseline> --after <dir>`**, which defaults to
   rep 1 on both sides. Do not compare directories whole.
 
-**Next action:** **P2.1**, with the rewritten acceptance — and read its cap note before touching
+**Decision after the sweep (user, 2026-09-15):** **no wave-by-wave merging.** The branch is completed in full and pushed to `main` once, at the end. This reverses the original policy in *Merging back* and in the root `CLAUDE.md`, both now amended, along with the standing memory note. The accepted consequence: the target keeps running the pre-pilot code — including B2 — until that push. A later session must not push a finished wave early on its own judgement.
+
+**Next action:** **P1.6** (cheapest row on the page, deterministic acceptance, no replay needed), then **P2.1** with the rewritten acceptance — and read its cap note before touching
 `max_turns`. P1.6 is available in parallel and is the cheapest row on the page. Note that **no
 session in the Wave 1 column is recorded as fixed**: it is n=1, and Wave 0's repetitions overturned
 three of nine negative verdicts, so any row claiming a fix still needs n=3.

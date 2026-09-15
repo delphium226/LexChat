@@ -227,10 +227,22 @@ Use this to get from a bucket in the analysis to the rows that close it.
 
 ## Merging back
 
-`main` is the deployment branch and the target pulls `origin/main`, so **nothing here is pushed
-to `main` until the wave it belongs to is accepted**. Waves are independently mergeable and
-should be merged as they complete rather than held to the end — Wave 1 in particular is
-deterministic, self-contained, and fixes a defect that silently destroys every filtered search.
+`main` is the deployment branch and the target pulls `origin/main`.
+
+**Nothing is pushed to `main` until the whole plan is concluded (user decision, 2026-09-15).**
+~~Waves are independently mergeable and should be merged as they complete rather than held to
+the end.~~ That was the original policy and it is no longer in force: the branch is completed
+in full and merged once, in a single push.
+
+**Consequence a session must not talk itself out of.** The target keeps running the pre-pilot
+code until that push, including B2 — measured at P1.5 as emptying 351 of 974 filtered searches
+and costing 28% more and 38% longer per query. That is understood and accepted; it is not an
+argument for pushing Wave 1 early, and a later session should not re-open it. If the delay
+becomes untenable, raise it with the user rather than deciding unilaterally.
+
+**"Concluded" means Waves 0–4** — the code work. Wave 5 is external, has unknown lead time,
+and the plan already states those rows are not blockers for anything in Waves 0–4; they must
+not hold the merge hostage to a third party's reply.
 
 The frontend build rule still applies: any change under `client/src/` needs `npm run build` and
 a force-added `client/dist/` in the same commit (see the root `CLAUDE.md`).
