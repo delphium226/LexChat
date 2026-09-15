@@ -217,3 +217,69 @@ def test_per_session_rows_show_both_sides_so_a_headline_cannot_hide_a_swap(
     per = out.split("--- per session (before -> after) ---")[1]
     assert "10/10->1/1" in per
     assert "1/1->6/6" in per
+
+
+# --- the title-year false positive (found mid-P1.5, 2026-09-15) ---------------
+#
+# `PROVISION_LABEL` matches "regulations" + digits, so the NAME of every SI ever
+# cited read as a provision reference: "The X Regulations 2013" became
+# "regulation 2013" and the checker demanded `/regulation/2013`. Over the Wave 0
+# baseline that was 73 of the 88 links the report called wrong — it inflated B14
+# roughly six-fold, and flagged links that were correct.
+
+
+def _answer_run(answer):
+    doc = _run(answer=answer)
+    doc["session_id"], doc["rep"] = "6340", 1
+    return doc
+
+
+def test_an_si_cited_by_title_is_not_a_provision_reference():
+    """The exact false positive: a correct Act-level link to a named SI."""
+    doc = _answer_run(
+        "See [The Grant-Aided Secondary Schools (Scotland) Grant Amendment "
+        "Regulations 1979 - SI 1979/766]"
+        "(http://www.legislation.gov.uk/id/uksi/1979/766)."
+    )
+    assert rr.analyse_run(doc).bad_links == []
+
+
+def test_a_correct_provision_link_is_not_flagged_because_of_its_title_year():
+    """`/regulation/2` is right; the label's "Regulations 2020" must not demand
+    `/regulation/2020`. This shape was counted as a defect 73 times."""
+    doc = _answer_run(
+        "[The Health Protection (Coronavirus) Regulations 2020, regulation 2]"
+        "(http://www.legislation.gov.uk/id/uksi/2020/791/regulation/2)"
+    )
+    assert rr.analyse_run(doc).bad_links == []
+
+
+def test_the_real_provision_is_still_checked_when_a_title_year_precedes_it():
+    """Title first, provision second — the checker must walk past the title and
+    still catch a link that misses its provision."""
+    doc = _answer_run(
+        "[The Sale of Tobacco Regulations 2013, regulation 2]"
+        "(http://www.legislation.gov.uk/id/ssi/2013/85)"
+    )
+    bad = rr.analyse_run(doc).bad_links
+    assert len(bad) == 1
+    assert bad[0].expected_segment == "/regulation/2"
+
+
+def test_a_genuine_bad_provision_link_is_still_caught():
+    """The defect P1.4 fixes: a section-labelled link to the contents page."""
+    doc = _answer_run(
+        "[section 117 of the Education (Scotland) Act 1962]"
+        "(http://www.legislation.gov.uk/id/ukpga/1962/47)"
+    )
+    bad = rr.analyse_run(doc).bad_links
+    assert len(bad) == 1
+    assert bad[0].expected_segment == "/section/117"
+
+
+def test_year_like_numbers_are_recognised_and_ordinary_ones_are_not():
+    assert rr._is_title_year("1979") is True
+    assert rr._is_title_year("2020") is True
+    assert rr._is_title_year("117") is False   # the largest section in the corpus
+    assert rr._is_title_year("2") is False
+    assert rr._is_title_year("12A") is False   # provision numbers carry suffixes

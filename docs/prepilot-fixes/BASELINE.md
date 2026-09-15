@@ -56,7 +56,7 @@ saw. The trace shows what the tool did.
 |---|---|---|---|
 | **B2** jurisdiction filter | P1.1 | **351 of 974** searches under a jurisdiction filter returned **nothing** to the model (36%); **478** (49%) demonstrably lost rows; **0 of 557** searches lost anything with the filter off | **Confirmed, cause isolated** |
 | **B5** count destroyed | P1.3 | **1,010 of 1,531** searches reported a `total` that was not the API's | **Confirmed, and independent of the filters** |
-| **B14** provision links | P1.4 | **88 of 376** provision-labelled links (23.4%) miss their provision | **Confirmed, 7× the transcript rate** |
+| **B14** provision links | P1.4 | ~~88 of 376 (23.4%)~~ **20 of 376** provision-labelled links (5.3%) miss their provision — see *Correction* below | **Confirmed, but six-fold smaller than first published** |
 | **B1** research halt | P2.1 | **10 of 41** runs had a halted worker; **7** showed halt text to the lawyer | **Confirmed** |
 | **B4** in-force claims | P2.5 | **27** unsupported in-force assertions across 41 runs | **Confirmed** |
 | **B8** sources rail | P4.3 | **1,222 of 1,387** kept sources (88%) never cited; **62 turns** cited none of theirs | **Confirmed, now a rate** |
@@ -158,6 +158,47 @@ question, which should still be decided from `request_timings.max_turns_halted`,
 
 ---
 
+## Correction — B14 was over-counted six-fold (found 2026-09-15, during P1.5)
+
+**This file first published 88 of 376 (23.4%). The true figure is 20 of 376 (5.3%).**
+The error was in the measuring instrument, not the data, and it is the fourth of its
+kind in this work — the same signature as the other three: *a number that disagreed with
+what the code said should happen.*
+
+`replay_report.PROVISION_LABEL` matches the word "regulations" followed by digits. That
+fires on the **name of every SI ever cited**: "The Sale of Tobacco ... Regulations 2013"
+was read as "regulation 2013", and the checker then demanded `/regulation/2013` in the
+URL. **73 of the 88 flagged links were this false positive**, and many of them were links
+that were entirely correct — `.../uksi/2020/791/regulation/2`, labelled "…Regulations
+2020", was counted as missing its provision.
+
+Two changes fix it: a year-like number (four digits, 1200–2099) is never a provision
+number, and the checker now walks **every** candidate in a label rather than the first,
+so "The X Regulations 2013, regulation 2" is still checked against `/regulation/2`. That
+second half also *adds* true positives the old first-match logic hid, which is why the
+corrected count is 20 and not the 15 that simply removing false positives would give.
+
+| | first published | corrected |
+|---|---|---|
+| all links, rep-1 pass | 88 / 376 (23.4%) | **20 / 376 (5.3%)** |
+| 6406 | 43 / 61 | **16 / 61** |
+| 6389 | 13 / 18 | **0 / 18** |
+| 6375 | 11 / 15 | **3 / 15** |
+| 6341 | 10 / 53 | **0 / 53** |
+
+**B14 is still real** — 20 links do miss their provision, and 16 of the 20 are in 6406 —
+but it was never the 23% bucket this file claimed, and P1.4's "7× the transcript rate"
+headline was an artefact. **P1.4's acceptance is unaffected**: it passed on
+`tests/test_search_result_shape.py`, which tests the product, not this detector.
+
+The uncomfortable part is that `tests/test_replay_tooling.py` already pinned
+`test_bad_link_*` and those tests passed throughout, because they were written against
+synthetic labels that never contained an SI's real title. **A detector can be pinned by a
+green test and still be wrong on every real input.** The new tests use the verbatim
+strings that were mis-flagged.
+
+---
+
 ## B13 — four billed-but-empty turns, and one suspect eliminated
 
 | session | turn | billed | `token` events |
@@ -213,7 +254,7 @@ three times because a single draw does not settle them (Invariant 4).
 | 6372 | DEFECT | B8 | **N** *(n=3)* | Clean on every mechanical signal in all three reps, and all three open by asking which jurisdiction is meant rather than guessing. **Caveat: the misattribution itself is not machine-checkable** — confirming it needs a lawyer to check Rule 35.8 against the instrument cited |
 | 6373 | FAIL | B12 | R | Questioned the lawyer's citation twice — *"Could you verify the citation?"*, *"Could you check if the year or the SI number might be different?"* — rather than stating an index limit |
 | 6374 | FAIL | B3 | R | Orders in Council under s.126(8) still not retrieved; halt text shown |
-| 6375 | FAIL | B11 | **R** *(n=3)* | Bad provision links in every rep and getting worse — 11/15, 10/19, **15/16**. The B11 doctrine question (English common interest privilege analysed as Scots law) still needs a lawyer's read, but the session fails on B14 regardless |
+| 6375 | FAIL | B11 | **R** *(n=3)* | Bad provision links in every rep — ~~11/15, 10/19, 15/16~~ **3/15, 3/19, 9/16** (corrected detector). The B11 doctrine question (English common interest privilege analysed as Scots law) still needs a lawyer's read, but the session fails on B14 regardless |
 | 6378 | FAIL | B8 | R | A UK question answered England-only; SSI 2008/216 still absent from the answer |
 | 6380 | DEFECT | B10 | R | Legitimate expectations reached only after a clarifying exchange |
 | 6381 | FAIL | B5 | **N** *(n=3)* | **Improved** — now says plainly *"I am unable to locate the Victims and Witnesses (Scotland) Act 2014"* three times instead of answering silently from adjacent statutes. But the non-retrieval is now caused by the filter: 30 of 80 searches emptied |
@@ -222,7 +263,7 @@ three times because a single draw does not settle them (Invariant 4).
 | 6384 | FAIL | B1 | R | *"I am currently unable to retrieve the Courts Reform (Scotland) Act 2014"* — verbatim reproduction. It is in LEX |
 | 6385 | FAIL | B12 | R | English authorities only, no Scots-corpus disclosure |
 | 6387 | DEFECT | B13 | **N** *(n=3)* | No timeout; all three turns answered |
-| 6389 | DEFECT | B1 | **R** *(n=3, 1/3)* | **n=1 said no halt and was wrong** — rep3 halted a worker. Marginal but real; also 13–14 bad provision links per rep |
+| 6389 | DEFECT | B1 | **R** *(n=3, 1/3)* | **n=1 said no halt and was wrong** — rep3 halted a worker. Marginal but real; ~~also 13–14 bad provision links per rep~~ **no bad provision links in any rep** — those were all title-year false positives |
 | 6396 | FAIL | B10 | **R** *(n=3, 2/3)* | **n=1 said it answered and was wrong.** rep1 halted **four** workers, rep3 halted two; filters emptied 32/172, 6/23 and 16/73 searches across the three. rep2 answered cleanly, which is what a single draw would have recorded |
 | 6406 | FAIL | B1 | **N** *(n=3)* | **0 of 4 steps halted** on both Deep Research turns, against 4 of 4 in the pre-pilot. $0.72 and 14,090 chars against $2.36 and a report with no findings |
 | 6407 | DEFECT | B1 | R **+ B13** | Two blank billed turns; halt text shown. The most expensive run in the sweep at $5.99 / 50 min |

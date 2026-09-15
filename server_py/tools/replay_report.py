@@ -95,6 +95,29 @@ _LABEL_TO_PATH = {
 }
 
 
+def _is_title_year(num: str) -> bool:
+    """Is this "provision number" actually the year in an instrument's title?
+
+    `PROVISION_LABEL` matches the word "regulations" followed by digits, which
+    fires on the *name* of every SI ever cited: "The Sale of Tobacco ...
+    Regulations 2013" reads as
+    "regulation 2013" and the checker then demands `/regulation/2013` in the URL.
+    Measured over the Wave 0 baseline this was **73 of the 88** links the report
+    called wrong (83%), including links that were perfectly correct:
+    `.../uksi/2020/791/regulation/2` labelled "...Regulations 2020" was counted
+    as missing its provision. It inflated B14 roughly six-fold.
+
+    A real provision is never numbered like a year. Provision numbers run to a
+    few hundred at most (the largest in this corpus is s.117); a four-digit
+    1200-2099 token after "Regulations"/"Sections" is the instrument's year.
+
+    Deliberately NOT keyed on the URL's year segment alone: the model sometimes
+    links a *different* instrument than the one it names, so "Regulations 1979"
+    against `/uksi/1985/1272` would still be a title reference while the years
+    disagree."""
+    return len(num) == 4 and num.isdigit() and 1200 <= int(num) <= 2099
+
+
 def _json_or_none(s: Any) -> Any:
     """Parse the JSON object a tool result *starts* with.
 
@@ -333,19 +356,23 @@ def analyse_run(doc: dict) -> RunSignals:
 
         for label, url in MD_LINK.findall(answer):
             sig.total_links += 1
-            m = PROVISION_LABEL.search(label)
-            if not m:
-                continue
-            kind = _LABEL_TO_PATH.get(m.group(1).lower())
-            if not kind:
-                continue
-            num = m.group(2)
-            # `paragraph` has no stable legislation.gov.uk segment of its own
-            # (it lives under a schedule), so it is not asserted on.
-            if kind == "paragraph":
-                continue
-            if f"/{kind}/{num}" not in url:
-                sig.bad_links.append(BadLink(label, url, f"/{kind}/{num}"))
+            # Walk every candidate, not just the first: an instrument is routinely
+            # cited by full title AND provision ("The X Regulations 2013,
+            # regulation 2"), and the title matches first.
+            for m in PROVISION_LABEL.finditer(label):
+                kind = _LABEL_TO_PATH.get(m.group(1).lower())
+                if not kind:
+                    continue
+                num = m.group(2)
+                # `paragraph` has no stable legislation.gov.uk segment of its own
+                # (it lives under a schedule), so it is not asserted on.
+                if kind == "paragraph":
+                    continue
+                if _is_title_year(num):
+                    continue
+                if f"/{kind}/{num}" not in url:
+                    sig.bad_links.append(BadLink(label, url, f"/{kind}/{num}"))
+                break
 
         audit = t.get("audit") or {}
         sources = audit.get("sources") or []
