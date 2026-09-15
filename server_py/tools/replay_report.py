@@ -552,6 +552,144 @@ def cmd_baseline(args) -> int:
     return 0
 
 
+# --- Wave-over-wave comparison (FIX_PLAN P1.5 and every later re-baseline) ----
+
+# The signals a wave-over-wave read actually turns on, with the row that owns
+# each. Every one is summed from `analyse_run`; nothing here recomputes a metric,
+# so the single definition of "wiped out" or "bad link" stays in one tested place.
+_COMPARE_METRICS: list[tuple[str, str, str]] = [
+    ("searches", "search_legislation calls", ""),
+    ("searches_wiped_out", "  filters removed EVERYTHING", "B2/P1.1"),
+    ("searches_filters_bit", "  filters demonstrably bit", "B2/P1.1"),
+    ("rows_lost_min", "  rows lost to filters (floor)", "B2/P1.1"),
+    ("searches_total_misreported", "  real total not passed on", "B5/P1.3"),
+    ("total_links", "provision links seen", ""),
+    ("n_bad_links", "  wrong granularity", "B14/P1.4"),
+    ("halt_runs", "runs with a halted worker", "B1/P2.1"),
+    ("halt_answer_runs", "runs with halt text shown", "B1/P2.1"),
+    ("in_force_claims", "unsupported in-force claims", "B4/P2.5"),
+    ("bare_negatives", "bare negatives", "B5/P2.2"),
+    ("explained_negatives", "  (explained negatives)", ""),
+    ("sources_kept", "sources kept", "B8/P4.3"),
+    ("sources_unused", "  consulted, not cited", "B8/P4.3"),
+    ("turns_source_fallback", "  turns citing none of theirs", "B8/P4.3"),
+    ("turns_empty_answer", "turns with an empty answer", "B13/P4.2"),
+    ("turns_billed_but_empty", "  of those, billed >$0", "B13/P4.2"),
+    ("turns_needing_clarification", "turns that asked for clarification", ""),
+    ("turns_errored", "errored turns", ""),
+    ("delegations", "worker delegations", ""),
+]
+
+
+def _agg(sigs: list[RunSignals]) -> dict:
+    """Sum one directory's signals. `halt_runs` counts RUNS, not occurrences —
+    a run that halts twice is still one run that halted, which is how BASELINE.md
+    states it."""
+    out = {
+        "runs": len(sigs),
+        "turns": sum(s.turns for s in sigs),
+        "cost": sum(s.total_cost_usd for s in sigs),
+        "hours": sum(s.elapsed_s for s in sigs) / 3600,
+        "n_bad_links": sum(len(s.bad_links) for s in sigs),
+        "halt_runs": sum(1 for s in sigs if s.halt_in_worker_report),
+        "halt_answer_runs": sum(1 for s in sigs if s.halt_language_in_answer),
+    }
+    for f in (
+        "searches", "searches_wiped_out", "searches_filters_bit",
+        "searches_total_misreported", "rows_lost_min", "total_links",
+        "in_force_claims", "bare_negatives", "explained_negatives",
+        "sources_kept", "sources_unused", "turns_source_fallback",
+        "turns_empty_answer", "turns_billed_but_empty",
+        "turns_needing_clarification", "turns_errored", "delegations",
+    ):
+        out[f] = sum(getattr(s, f) for s in sigs)
+    return out
+
+
+def _delta(before: float, after: float) -> str:
+    if before == after:
+        return "="
+    if before == 0:
+        return f"+{after:g} (new)"
+    pct = 100.0 * (after - before) / before
+    return f"{after - before:+g} ({pct:+.0f}%)"
+
+
+def cmd_compare(args) -> int:
+    """Two replay directories, the same sessions, side by side.
+
+    **The denominators must match or every number lies.** A targeted-n=3
+    baseline holds more run files than a fresh n=1 sweep (65 against 41 for
+    Wave 0), so comparing whole directories measures the extra repetitions, not
+    the change. This restricts BOTH sides to rep 1 by default, which is the
+    comparison BASELINE.md's published totals were computed on.
+    """
+    before_docs = load_runs(Path(args.before))
+    after_docs = load_runs(Path(args.after))
+    if not before_docs or not after_docs:
+        print("Need run files in both --before and --after", file=sys.stderr)
+        return 1
+
+    if not args.all_reps:
+        before_docs = [d for d in before_docs if d.get("rep", 1) == 1]
+        after_docs = [d for d in after_docs if d.get("rep", 1) == 1]
+
+    b_sigs = [analyse_run(d) for d in before_docs]
+    a_sigs = [analyse_run(d) for d in after_docs]
+
+    b_ids = {s.session_id for s in b_sigs}
+    a_ids = {s.session_id for s in a_sigs}
+    only_b, only_a = sorted(b_ids - a_ids), sorted(a_ids - b_ids)
+
+    scope = "rep 1 only (like for like)" if not args.all_reps else "ALL reps"
+    print(f"BEFORE  {args.before}")
+    print(f"AFTER   {args.after}")
+    print(f"Scope:  {scope} — {len(b_sigs)} vs {len(a_sigs)} run(s), "
+          f"{len(b_ids & a_ids)} session(s) in common")
+    if only_b:
+        print(f"  [!] only in BEFORE: {', '.join(only_b)}")
+    if only_a:
+        print(f"  [!] only in AFTER:  {', '.join(only_a)}")
+    mism = sorted({m for s in a_sigs for m in s.model_mismatch})
+    if mism:
+        print(f"  [!] AFTER ran on a model other than the pin: {mism}")
+
+    b, a = _agg(b_sigs), _agg(a_sigs)
+    print()
+    print(f"{'':44}{'before':>10}{'after':>10}   change")
+    print("-" * 82)
+    print(f"{'runs / turns':44}{str(b['runs']) + '/' + str(b['turns']):>10}"
+          f"{str(a['runs']) + '/' + str(a['turns']):>10}")
+    print(f"{'spend':44}{'$' + format(b['cost'], '.2f'):>10}"
+          f"{'$' + format(a['cost'], '.2f'):>10}   {_delta(b['cost'], a['cost'])}")
+    print(f"{'wall clock (h)':44}{b['hours']:>10.1f}{a['hours']:>10.1f}")
+    print()
+    for key, label, row in _COMPARE_METRICS:
+        tag = f"  <- {row}" if row else ""
+        print(f"{label:44}{b[key]:>10}{a[key]:>10}   "
+              f"{_delta(b[key], a[key])}{tag}")
+
+    # Per session, so a headline that moves for the wrong reason is visible.
+    print()
+    print("--- per session (before -> after) ---")
+    print(f"{'sess':6}{'bkt':5}{'wiped/searches':>18}{'badlinks/links':>16}"
+          f"{'halt':>10}{'inforce':>11}{'empty':>9}{'cost':>16}")
+    by_b = {s.session_id: s for s in b_sigs}
+    by_a = {s.session_id: s for s in a_sigs}
+    for sid in sorted(b_ids & a_ids):
+        sb, sa = by_b[sid], by_a[sid]
+        print(
+            f"{sid:6}{sb.primary:5}"
+            f"{f'{sb.searches_wiped_out}/{sb.searches}->{sa.searches_wiped_out}/{sa.searches}':>18}"
+            f"{f'{len(sb.bad_links)}/{sb.total_links}->{len(sa.bad_links)}/{sa.total_links}':>16}"
+            f"{f'{sb.halt_in_worker_report}->{sa.halt_in_worker_report}':>10}"
+            f"{f'{sb.in_force_claims}->{sa.in_force_claims}':>11}"
+            f"{f'{sb.turns_empty_answer}->{sa.turns_empty_answer}':>9}"
+            f"{f'${sb.total_cost_usd:.2f}->${sa.total_cost_usd:.2f}':>16}"
+        )
+    return 0
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="replay_report")
     p.add_argument("--dir", default=str(
@@ -563,10 +701,19 @@ def main(argv: Iterable[str] | None = None) -> int:
     se.add_argument("--session", required=True)
     se.add_argument("--full", action="store_true")
     sub.add_parser("baseline")
+
+    c = sub.add_parser("compare", help="two replay dirs, same sessions, side by side")
+    c.add_argument("--before", required=True)
+    c.add_argument("--after", required=True)
+    c.add_argument("--all-reps", action="store_true",
+                   help="do not restrict to rep 1 (denominators will differ)")
     args = p.parse_args(list(argv) if argv is not None else None)
-    return {"summary": cmd_summary, "session": cmd_session, "baseline": cmd_baseline}[
-        args.cmd
-    ](args)
+    return {
+        "summary": cmd_summary,
+        "session": cmd_session,
+        "baseline": cmd_baseline,
+        "compare": cmd_compare,
+    }[args.cmd](args)
 
 
 if __name__ == "__main__":
