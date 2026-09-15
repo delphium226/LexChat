@@ -671,7 +671,7 @@ def cmd_compare(args) -> int:
     scope = "rep 1 only (like for like)" if not args.all_reps else "ALL reps"
     print(f"BEFORE  {args.before}")
     print(f"AFTER   {args.after}")
-    print(f"Scope:  {scope} — {len(b_sigs)} vs {len(a_sigs)} run(s), "
+    print(f"Scope:  {scope} — {len(b_sigs)} vs {len(a_sigs)} run(s); totals over the "
           f"{len(b_ids & a_ids)} session(s) in common")
     if only_b:
         print(f"  [!] only in BEFORE: {', '.join(only_b)}")
@@ -681,7 +681,13 @@ def cmd_compare(args) -> int:
     if mism:
         print(f"  [!] AFTER ran on a model other than the pin: {mism}")
 
-    b, a = _agg(b_sigs), _agg(a_sigs)
+    # Totals over the sessions present on BOTH sides only. A sweep that skipped
+    # or failed a session would otherwise shrink the "after" denominator and make
+    # every metric look better by exactly the amount that went missing — the same
+    # class of error as counting a targeted-n=3 baseline against an n=1 sweep.
+    common = b_ids & a_ids
+    b, a = (_agg([s for s in b_sigs if s.session_id in common]),
+            _agg([s for s in a_sigs if s.session_id in common]))
     print()
     print(f"{'':44}{'before':>10}{'after':>10}   change")
     print("-" * 82)

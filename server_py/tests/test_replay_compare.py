@@ -283,3 +283,23 @@ def test_year_like_numbers_are_recognised_and_ordinary_ones_are_not():
     assert rr._is_title_year("117") is False   # the largest section in the corpus
     assert rr._is_title_year("2") is False
     assert rr._is_title_year("12A") is False   # provision numbers carry suffixes
+
+
+def test_totals_ignore_sessions_missing_from_one_side(tmp_path, capsys):
+    """A sweep that skipped a session must not make every metric look better.
+
+    Before this, totals were summed over each directory whole, so a missing
+    "after" session removed its wiped searches from the after-column and read as
+    an improvement of exactly that size."""
+    before = _write(tmp_path, "before", [
+        _wiped_run("6354", 1, 5), _wiped_run("6382", 1, 5),
+    ])
+    # 6382 never ran on the after side.
+    after = _write(tmp_path, "after", [_wiped_run("6354", 1, 5)])
+
+    out = _capture(capsys, before, after)
+
+    assert "only in BEFORE: 6382" in out
+    # 5 -> 5 over the one common session, NOT 10 -> 5.
+    before_n, after_n, change = _metric(out, "  filters removed EVERYTHING")
+    assert (before_n, after_n, change) == (5, 5, "=")
