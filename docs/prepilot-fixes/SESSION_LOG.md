@@ -430,99 +430,153 @@ three of nine negative verdicts, so any row claiming a fix still needs n=3.
 
 ---
 
-## Session 5 — 2026-09-15 — P1.6, plus the ninth instrument correction
+## Session 5 — 2026-09-15 — P1.6, P2.1, P2.6, P0.4 (code half), and the ninth instrument correction
 
 **Done:**
-- **P1.6 complete.** `src/utils/citation_links.py`, wired at four seams. Two halves:
-  **(a) the cause** — `provision_url_block` appends the retrieval's own provision URLs
-  *after* summarisation (same trick as the Phase-2 nudge: the summariser cannot eat what
-  it never saw); **(b) the guarantee** — `enforce_provision_links` at the worker-report
-  seam, the Manager's final-answer seam and the Deep Research synthesis seam, against a
-  request-scoped set of every legislation.gov.uk URL any tool returned, harvested from
-  `raw_result`. A provision URL absent from that set is demoted to the Act when the Act
-  *was* retrieved, unlinked otherwise, and marked with one footnote.
-- **The measurement instrument was wrong again — ninth trap, and it inverted the row's
-  premise.** See *Surprises*. `replay_report`'s provenance signal now splits three ways
-  and is pinned by seven tests; there had been none.
-- **600 tests passing** (564 → 600: 28 in `test_citation_links.py`, 7 provenance tests in
-  `test_replay_tooling.py`, 1 rewritten). No replay sweep, no spend, as the row said.
-- FIX_PLAN P1.6 ticked and rewritten, P1.4's headline corrected, ledger header updated;
-  BASELINE's B14 section rewritten with the three-way split and a second *Correction*
-  section added; Session 4's entry carries an inline pointer to the corrected figure.
+- **P1.6 complete.** `src/utils/citation_links.py`, wired at four seams. **(a) the cause** —
+  `provision_url_block` appends the retrieval's own provision URLs *after* summarisation
+  (same trick as the Phase-2 nudge: the summariser cannot eat what it never saw);
+  **(b) the guarantee** — `enforce_provision_links` at the worker-report seam, the
+  Manager's final-answer seam and the DR synthesis seam, against a **request-scoped** set
+  of every legislation.gov.uk URL any tool returned, harvested from `raw_result`. A
+  provision URL absent from that set is demoted to the Act when the Act *was* retrieved,
+  unlinked otherwise, marked with one footnote.
+- **P2.1 complete, acceptance passed.** The halt now travels as structure
+  (`chat_loop` returns `{"halted": {reason, limit, steps}}`), a halted worker hands back a
+  statement addressed to the agent that reads it, and **code** — not a prompt — strips
+  every raw marker and prepends a disclosure at both the Manager and DR seams, naming the
+  plan steps where it knows them. `AUDIT_SCHEMA_VERSION` → **2** with
+  `delegations[].halted`; spec updated. Replay n=3 on 6382, 6384, 6383, 6340:
+  **12 runs, $8.63, 7 halted turns, 0 failing**, and no invented cause in any of them.
+- **The cap stays at 20**, decided on the completed sweep as the row required — and the
+  row's own figures were the wrong counter. See *Surprises*.
+- **P2.6 complete** — the A4 reformat retry no longer fires on a halted worker, keyed on
+  P2.1's `result["halted"]` (which is why it depended on P2.1 rather than duplicating its
+  detection). Narrow by design: an unhalted malformed report still gets its retry.
+- **P0.4's code half done, row left `[~]`** — per-turn `deep_research` on the transcript
+  export + CSV column, `client/dist/` rebuilt. The re-export stays blocked on target access.
+- **New row P2.7** — the legislation bot has no discovery budget; only the parliamentary
+  modes get one. Opened off P2.1's cap evidence.
+- **Wave 5 drafted at last** (`WAVE5_QUESTIONS.md`): all three questions written out in
+  full with the evidence attached, idle across five sessions only because they need a
+  human to send them. P5.1's answer decides whether B3 is buildable or permanently a
+  disclosure, so it is the one worth sending first.
+- **634 tests** (564 → 634). Dev box restored, no uvicorn left running.
 
 **Surprises / deviations from FIX_PLAN:**
 
-- **P1.6's stated premise was false, and the row would have passed without any code being
-  written.** The row said 19% of provision URLs are "the model disobeying that instruction
-  where it holds only an Act-level URL — 6365 appends `/section/21` and `/section/22` to
-  `asp/2000/1`, for provisions no tool retrieved." **Both URLs were retrieved.** They sit
-  in the `raw_result` of two summarised `search_legislation_sections` calls on `asp/2000/1`
-  (32K/34K raw → 3.6K/3.9K summarised). `_urls_returned_by_tools` read only `final_result`,
-  which **is the summarised text whenever summarisation fires**, and 70% of section searches
-  are summarised — the summary keeps the section numbers and drops every URL. So the model
-  was never *shown* the URL and had to rebuild it, and the detector called that
-  manufactured. Corrected: manufactured **29 → 0**, reconstructed **293 → 26**, shown
-  **5 → 110**. `provision_links_manufactured == 0` — the row's own acceptance — was already
-  true at Wave 1.
+- **P1.6's premise was the instrument, not the product — ninth trap in five sessions, and
+  the first to *invert* a headline.** The row said 19% of provision URLs are "the model
+  disobeying … for provisions no tool retrieved", citing 6365's `/section/21` and
+  `/section/22` on `asp/2000/1`. **Both were retrieved.** They sit in the `raw_result` of
+  two summarised `search_legislation_sections` calls (32K/34K raw → 3.6K/3.9K summarised).
+  `_urls_returned_by_tools` read only `final_result`, which **is** the summarised text
+  whenever summarisation fires — and **70% of section searches are summarised**, the
+  summary keeping the section numbers and dropping every URL. Corrected there are **three**
+  outcomes: shown **5 → 110**, reconstructed **293 → 26**, **manufactured 29 → 0**. So
+  `provision_links_manufactured == 0` — the row's own acceptance — **was already true at
+  Wave 1**, and P1.4 achieved more than was published.
 
-- **100% should have been read as an artefact on sight.** "327 of 327 (100%)" is not a rate
-  a real system produces, and P1.4's row even explains it away ("100% is not a rounding
-  artefact"). Explaining a suspicious number rather than distrusting it is how it survived
-  a session. Session 4 recorded "the instrument is wrong more often than the product"; this
-  is the first case where the instrument error **reversed the direction** of a headline.
+- **"100%" should have been read as an artefact on sight.** P1.4's row even argued it away
+  ("100% is not a rounding artefact"). Explaining a suspicious number instead of
+  distrusting it is how it survived a whole session.
 
-- **The fix is a mechanism fix, not a live-wrong-answer fix, and the row is still worth it.**
-  Every one of the 26 reconstructed links currently points at a provision the run genuinely
-  retrieved. They are right by luck: the model is rebuilding a URL from an Act's base URI,
-  which is exactly the guessing P1.4 removed the *instruction* for. Invariant 2 says replace
-  it with enforcement, and now nothing depends on the model getting it right.
+- **A fix can be invisible to the metric that grades it.** P1.6's block is appended after
+  summarisation, so `final_result` becomes prose plus a bracketed block — not JSON. The
+  detector parsed `final_result` as JSON, so post-fix it would have found nothing there and
+  gone on scoring every link `reconstructed`. Caught while writing the test, and there is
+  now a test asserting exactly this. **Applied forward at P2.1:** `HALT_AS_TIMEOUT` carries
+  negative lookbehinds so P2.1's own notice ("it is **not** a timeout") cannot match itself.
 
-- **A fix can be invisible to its own metric.** P1.6's block is appended after summarisation,
-  so `final_result` becomes prose plus a bracketed block — not JSON. The detector parsed
-  `final_result` as JSON, so post-fix it would have found no URLs there and gone on scoring
-  every link `reconstructed`. Caught while writing the test; there is now a test asserting
-  exactly this (`test_p1_6_citation_url_block_counts_as_shown`). **Check whether a fix is
-  observable by the instrument that grades it, before trusting a green row.**
+- **P2.1's cap figures counted tool calls against a cap on ReAct *rounds*.** A round issues
+  several tool calls in parallel and the Worker prompt instructs batching, so the two are
+  different quantities: **6341 turn 6 made 45 tool calls in 13 rounds**. On the completed
+  41-session sweep using `react_turns_max` — the counter the cap acts on, on every run file,
+  and the one the row itself said to read — **p90 17 → 13** and **at-cap 7.8% → 7.2%**.
+  Pressure **fell**; it did not nearly double. The mid-sweep sample made it worse: the 11
+  outstanding sessions were the halt-heavy ones the row named.
 
-- **The disclosure wording is narrower than the obvious one, deliberately.** "Provision not
-  retrieved" would be **false** where a whole-Act `get_legislation_text` was read: that tool
-  returns one URL for the Act and none per section, so the text may well have been retrieved
-  while no provision URL exists. Invariant 1 requires a true disclosure, so the footnote
-  asserts only what is known — that no search returned a provision-level URL for the
-  citation. Pinned by `test_the_disclosure_claims_only_what_is_known`.
+- **The turns that hit the cap are looping, not starved**, which settles the cap question:
+  **26% redundant tool calls against a 15% base rate**, with 6409 turn 7 spending **25
+  Phase-1 searches for 0 retrievals**. More rounds buys more of the same and would mask the
+  failure P2.1 exists to make honest. → **P2.7**.
 
-- **P1.4 achieved more than was published.** Slimming the section payload cut the median raw
-  result 24.5K → 18K and the summarisation rate 87% → 70%, which is why 81% of cited
-  provision URLs are now copied verbatim against 1.5% before. That was never measured because
-  the signal could not see it.
+- **6409 turn 7 is the worst case in the corpus, worse than 6340.** 25 searches, 0
+  retrievals, worker hit the cap, and the entire answer was *"The research agent could not
+  locate [the SSI] in the legislation database."* A step cap rendered as a **negative
+  retrieval finding** — an *untrue* honest failure, the one thing Invariant 1 cannot
+  survive. It is why the notice denies that reading explicitly rather than just describing
+  the cap. 6335 turn 7 carries a second invented cause, so the speculation is a pattern.
+
+- **The acceptance coverage is thinner than "4 sessions × 3 reps" sounds, and the write-up
+  says so.** Only **6340 and 6382** halted in 3 of 3 reps and so give full n=3 evidence;
+  6383 halted in 1 of 3 and **6384 in 0 of 3**. And **6383 turn 1 — the row's named
+  "strongest case" — did not halt in any rep**; the halt moved to turn 4. Grading is
+  therefore per halted **turn** over the directory, never per named session.
+
+- **The model's prose came along, which was not assumed.** The disclosure is code-emitted
+  precisely so it need not depend on the model — but all 7 halted turns *also* stated the
+  true reason in the model's own words, and 6383 rep 1 added its own *"this is not a
+  negative result or evidence that the material does not exist"*. That is the
+  per-occurrence instruction in the worker's replacement report working, and the reason it
+  lives in the tool result rather than in a system prompt.
+
+- **One residual, booked to P2.2 rather than widened into P2.1.** 6382 rep 2 still opens
+  with *"no SSIs … were found that contain the '£' symbol"* — drawn from the two steps that
+  halted. P2.1 makes the contradiction visible (the notice says in terms that this is not a
+  finding of absence, and the BLUF is hedged) but does not prevent it. A negative must state
+  the limits it was reached under, and **a halted step is one of those limits**.
+
+- **A large per-session drop that is NOT evidence of a fix.** 6384 turn 1 went from 14
+  Phase-1 searches to 1–2; 6383 turn 1 from a halt at 20 rounds to 2–6. Tempting to credit
+  P1.6 and wrong to: its block only fires *after* a summarised section retrieval, and 6384
+  turn 1 made two retrievals in Wave 1. Before-side is n=1. Recorded as variance so a later
+  session does not read it as a fix.
+
+- **The UI half of P2.1 is satisfied by the text, and a badge would be worse.**
+  `research_incomplete` has no DB column, so a badge would vanish on reload while the
+  prepended notice — which lives in `messages.content` — persists. A marker that disappears
+  on reload teaches the lawyer that its absence means complete.
 
 **Decisions taken this session:**
-- Keep the prompt's "do not append `/section/{number}`" instruction *and* enforce it in code
-  — same belt-and-braces pattern as the unconditional `<suggestions>` strip.
+- Keep the prompt's "do not append `/section/{number}`" instruction *and* enforce it in
+  code — the same belt-and-braces as the unconditional `<suggestions>` strip.
 - Keep `provision_links_manufactured` meaning "never retrieved anywhere" and add
   `provision_links_reconstructed` alongside, rather than redefining the existing name. A
-  redefined metric with the same name silently invalidates every earlier reading of it.
+  redefined metric under the same name silently invalidates every earlier reading of it.
+- Disclose a halt **unconditionally**, with no detector deciding whether the model already
+  disclosed it well enough. On this work the detectors have been wrong more often than the
+  product, and a false negative there is a lawyer relying on a partial answer.
 
-**State of the branch:** `fix/prepilot-defects`, Waves 0 and 1 complete plus P1.5 and P1.6.
-600 tests green. **Nothing pushed** — the whole-plan-then-one-push policy stands (Session 4
-decision); the target still runs the pre-pilot code.
+**State of the branch:** `fix/prepilot-defects`. Waves 0 and 1 complete plus P1.5, P1.6,
+P2.1 and P2.6; P0.4 half done; P2.7 opened. 634 tests green, tree clean. **Nothing
+pushed** — the whole-plan-then-one-push policy (Session 4, user) stands, and the target
+still runs the pre-pilot code.
 
 **Machine state a new session inherits:**
-- **No uvicorn started this session** — no server was needed (deterministic acceptance only).
-  Start a fresh one before any live work: Python loads modules at import, so a surviving
-  server would serve pre-P1.6 code.
-- Dev box untouched: `moonshotai/kimi-k3`, local prompt cache ON, no `tools/.replay_pin_state.json`.
-  **Re-pin before any measurement** (`replay.py pin`).
-- `evidence/replay/baseline/` (65 files) and `evidence/replay/wave1/` (41), both gitignored and
-  unchanged this session. **A Wave 2 sweep needs a NEW directory** — `replay.py run` silently
-  skips existing files. Compare with `replay_report compare --before <baseline> --after <dir>`
-  pointing at the real directories; it restricts both sides to rep 1 itself.
-- **Wave 5 (P5.1–P5.3) is still unopened** — external, unknown lead time, blocks nothing, and
-  idle now across five sessions. The draft questions are in `docs/prepilot-fixes/WAVE5_QUESTIONS.md`;
-  they need a human to send them.
+- **No uvicorn running** — stopped deliberately. Start a fresh one before any live work:
+  Python loads modules at import, so a surviving server serves stale code.
+- **Dev box restored** — `moonshotai/kimi-k3`, local prompt cache ON,
+  `tools/.replay_pin_state.json` gone, as it should be after a successful `restore`.
+  **Re-pin before any measurement.**
+- Three gitignored replay directories now: `baseline/` (65 files), `wave1/` (41) and
+  **`wave2_p21/` (12 — four sessions × three reps, P2.1's acceptance, NOT a full sweep)**.
+  A Wave 2 sweep needs a **new** directory; `replay.py run` silently skips existing files.
+- **Do not compare `wave2_p21/` against `wave1/` with `compare`** — it is 4 sessions
+  against 41 and every total would be nonsense. Use `replay_report --dir <dir> halts` for
+  it, which grades per halted turn and is what its acceptance is stated in.
+- **Provenance notes on `wave2_p21/`, recorded rather than hidden:** the files say
+  `git_head: 7a1c79b` (P1.6's commit) because P2.1 was loaded by the server but committed
+  minutes later as `4d3f4c1`; **P2.6 is NOT in those runs** (written after the server
+  started — visible as `report_reformat_retries: 1` on halted turns); and a cosmetic
+  plural-agreement fix to the notice landed mid-sweep, so runs naming more than one halted
+  step read "was … it" where HEAD reads "were … they". None changes a graded condition.
+- **Wave 5 is drafted and unsent** (`WAVE5_QUESTIONS.md`). It needs a human. P5.1 first.
 
-**Next action:** **P2.1**. Read its rewritten acceptance and the step-cap note in the same row
-before touching `max_turns`, and **refresh the cap figures on the completed Wave 1 sweep** — the
-numbers in the row are mid-sweep (30 of 41 sessions, with the halt-heavy 6382, 6384, 6396, 6407,
-6408 outstanding). P2.1 is also the moment to spend the `AUDIT_SCHEMA_VERSION` bump to 2. Do
-**P0.4** before the sweep P2.1's acceptance needs, not before its code.
+**Next action:** **P2.2** (B5, no bare negatives) — its `Depends on: P1.3, P2.1` is now
+satisfied, and this session amended it to cover the negative drawn from an **incomplete**
+search as well as from a filtered one. Note P2.3 depends on P2.2 and on P5.1's answer, so
+sending the Wave 5 questions before starting P2.2 is worth the five minutes. **P2.7** is
+available in parallel and is well-evidenced; **P2.5** is the other unblocked Wave 2 row and
+its scope did not shrink (B4 rose 27 → 30 at P1.5). Do the **P0.4 re-export** before the
+next full sweep if target access appears.

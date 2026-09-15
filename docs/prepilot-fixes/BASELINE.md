@@ -508,7 +508,36 @@ could compile the list.
 > it is **not** a finding that the material does not exist. Treat the coverage
 > below as partial, and consider asking again with a narrower question.
 
-Two things about that text are deliberate and were argued over:
+**Result: 12 runs, $8.63, 7 halted turns, 0 failing.** Every halted turn
+disclosed the halt, none leaked the raw marker, none called it a timeout, all
+carried the structured metadata — and reading the prose for the fifth condition,
+**none invented a cause**. 6340's *"a broad enabling power has generated a very
+large volume of statutory instruments over several decades"* is gone from all
+three of its replays, replaced by *"it reached an internal limit on the amount
+of work a single research step can perform"*.
+
+| session | reps | halted in | verdict |
+|---|---|---|---|
+| **6340** | 3 | **3 of 3** | full n=3, all clean |
+| **6382** | 3 | **3 of 3** | full n=3, all clean |
+| 6383 | 3 | 1 of 3 | the one halt clean; 2 non-contributing |
+| 6384 | 3 | 0 of 3 | never halted — contributes nothing |
+
+Invariant 4 asks for *n=3, all three clean* on a FAIL session. **6340 and 6382
+give exactly that.** 6383 and 6384 mostly stopped halting, so their condition is
+vacuous rather than passed — stated plainly here because "four sessions × three
+reps" would read as four times the evidence it is.
+
+**The model's own prose came along, which was not assumed.** The disclosure is
+code-emitted precisely so it does not depend on the model, but in all 7 turns the
+model *also* stated the true reason in its own words, and 6383 rep 1 carries a
+"Research Limitation" bullet of its own saying the step *"did not complete … due
+to an internal system limit"* and that *"this is not a negative result or
+evidence that the material does not exist"*. That is the per-occurrence
+instruction in the worker's replacement report doing its job, and it is why the
+instruction is carried in the tool result rather than added to a system prompt.
+
+Two things about the notice are deliberate and were argued over:
 
 - **It is prepended, not appended.** A warning read after the findings have been
   relied on is not a warning.
