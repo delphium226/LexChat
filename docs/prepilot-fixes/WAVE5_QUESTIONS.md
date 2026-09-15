@@ -1,6 +1,6 @@
 # Wave 5 — the external questions, drafted and ready to send
 
-**Status: P5.1 mostly ANSWERED HERE 2026-09-15 by reading the API's own OpenAPI spec — see below. P5.2 and P5.3 drafted, NOT YET SENT.** These need a human to send them;
+**Status 2026-09-15: P5.1 and P5.3 LARGELY ANSWERED HERE** by reading the API's own OpenAPI spec, `/api/stats` and `/healthcheck`, and by sampling coverage directly. **P5.2 is reframed by a finding in P5.3** — LEX holds case-law collections its API does not expose. What remains is a short, specific list for the LEX team, marked under each row. NOT YET SENT. These need a human to send them;
 nothing in the codebase can. They have been idle across five sessions, and the plan says to
 open them early precisely because they block nothing and have unknown lead time.
 
@@ -133,36 +133,104 @@ which no section text states. This is now **P3.6**.
 > Raised independently by three lawyers during the pre-pilot: AlistairC (*Clark* absent,
 > 6359), CambeulW (recency bias in what is returned, 6363) and EmmaM.
 >
+> **A lead found 2026-09-15 that may change this question entirely.** LEX's own `/healthcheck` reports
+> case-law collections in its vector store — `caselaw` **69,970** points, `caselaw_section`
+> **4,723,735**, `caselaw_summary` **61,107** — while `/openapi.json` exposes **no case-law endpoint**.
+> So a case-law corpus exists inside the system we already call, and we reach case law through the
+> National Archives instead. **Before treating this as procurement, ask whether that corpus is
+> reachable and whether it includes the Court of Session and the Sheriff Courts.** If it does, this
+> stops being a purchase and becomes an API request.
+>
 > The engineering half — disclosing the gap in the answer rather than answering around it —
 > is P2.4 and is not blocked on this. The question here is a product/procurement decision:
 > **is there a licensable source of Court of Session and Sheriff Court decisions we can
 > index, and is anyone willing to buy it?** A decision either way should be recorded; "no"
 > is an answer that makes P2.4 permanent rather than interim.
 
-## P5.3 — to the LEX team: coverage rules and refresh cadence
+## P5.3 — coverage rules and refresh cadence **LARGELY ANSWERED HERE, 2026-09-15**
 
-> We need to be able to tell a lawyer accurately why something was not found. At the moment
-> we can only say "not found in the index", which is vague enough to be unhelpful and, if the
-> index is simply behind, misleading.
->
-> Verified absent or incomplete as at September 2026:
->
-> | identifier | what we see |
-> |---|---|
-> | `ukpga/1962/47` (Education (Scotland) Act 1962) | 404 |
-> | `ssi/2026/170` | 404 |
-> | `ssi/2025/119` | record exists, `text` empty |
-> | Education (Scotland) Act 1945 | stub-only provisions |
->
-> 1. What are the index's **coverage rules** — is there a date floor, a category exclusion,
->    a repealed-instrument policy?
-> 2. What is the **refresh cadence** from legislation.gov.uk, and what is the typical lag for
->    a newly-made SSI?
-> 3. Is a 404 distinguishable from "not yet ingested"?
->
-> The purpose is narrow: so our "we could not find this" message can name the real reason.
+Answered the same way as P5.1: `GET /api/stats` and `GET /healthcheck` are public and
+undocumented in our notes, and coverage is directly measurable by sampling
+`/legislation/lookup`. Reproduce with `python -m tools.lex_probe --coverage`.
 
----
+### The corpus, and how fresh it is
+
+```
+GET /api/stats   acts_and_sis 220,022 · provisions 2,107,361 · amendments 2,580,915
+                 explanatory_sections 93,180 · last_updated "14:05 UTC"
+```
+
+**The index is refreshed daily and is current.** Records carry a `created_at`, and the
+newest observed across a 1,162-record sample was **2026-09-15T02:17** — today, this
+morning. Ingestion runs land around 02:00–02:30 UTC. `uksi/2026/772` (a Sentencing Act
+2026 commencement SI) was created **2026-09-08**. So staleness is *not* the problem.
+
+### The problem is per-instrument gaps, and they are large for 2026
+
+Sampled by `/legislation/lookup`, which is a definitive held/absent test:
+
+| series | held |
+|---|---|
+| **ASP 2025 and 2026** (Scottish Acts) | **100%** (10/10) |
+| SSI 2025 | **85%** (17/20) |
+| **SSI 2026** | **~5–27%** — 1/20 random over 1–170; contiguous bands: 1/15, 4/15, 2/15, 0/15 |
+| **UK SI 2026** | similarly sparse — 1/15, 2/15, 1/15, 2/15 across four bands spanning 1–774 |
+| UK Public General Acts 1962 | **6/16** (a sample around `ukpga/1962/47`) |
+
+Two things follow, and both matter more than the cadence question we set out to ask:
+
+- **2026 secondary legislation is only partially present** — roughly one instrument in
+  five — while the index refreshes daily. The gaps are spread evenly across the year, not
+  concentrated at either end, so this is not "the last few weeks haven't loaded yet".
+- **Old material is patchy per instrument, not cut off by date.** `ukpga/1962/47` is
+  absent, but `ukpga/1962/41`, `/42`, `/45`, `/50`, `/51` and `/55` are all held. So the
+  absence of the Education (Scotland) Act 1962 is **not** a date rule, and "we don't hold
+  pre-19xx" is the wrong story to tell a lawyer.
+
+### What this means for B5's wording — the reason the row exists
+
+**A "not found" for a 2026 SSI is far more likely to be a coverage gap than an absence in
+law.** On these numbers, roughly four out of five 2026 SSIs are simply not in the index.
+Telling a lawyer "no such instrument was found" without that caveat is close to telling
+them it does not exist. P2.2's negative must distinguish *we searched and the index does
+not hold it* from *it does not exist*, and for 2026 secondary legislation the honest
+default is the former.
+
+### P5.3's original claims, re-verified
+
+| claim | verdict |
+|---|---|
+| `ukpga/1962/47` → 404 | **confirmed** — and it is a per-instrument gap, not a year cliff |
+| `ssi/2026/170` → 404 | **confirmed** — consistent with ~20% coverage of SSI 2026 |
+| `ssi/2025/119` record exists, text empty | **confirmed**, and it is an explicit stub — see P5.1's correction |
+| stub-only provisions for the Education (Scotland) Act 1945 | not re-tested |
+
+### A method note, because it cost two wrong conclusions
+
+Point lookups are a **bad census instrument** and misled this probe twice. Twelve misses
+across `ssi/2026/{1..250}` read as "no 2026 SSIs at all"; a 20-point sample of UK SI 2026
+returning 0 read as "nothing from 2026", while `uksi/2026/772` was in the index the whole
+time and was created a week ago. In a corpus with ~20% coverage, a sparse sample of
+absences proves nothing. **Cross-check a lookup census against `/legislation/search` before
+concluding anything about coverage** — the same discipline the rest of this work applies to
+detectors.
+
+### What is left to ask the LEX team
+
+> 1. **Why is 2026 only ~20% ingested when the index refreshes daily?** Is a backfill in
+>    progress, is there a lag between an instrument being made and being indexed, or is
+>    something filtering them out? This is the single fact that most changes what we can
+>    honestly tell a lawyer about a "not found".
+> 2. **Is the patchiness of older material (6 of 16 sampled 1962 Acts) inherited from
+>    legislation.gov.uk, or a LEX-side rule?** We would like to tell users *why* something
+>    is missing, and the two have different answers.
+> 3. **Is there a published coverage statement** — series covered, date floor, exclusions —
+>    that we can point users at?
+> 4. **`/healthcheck` reports case-law collections** (`caselaw` 69,970 points,
+>    `caselaw_section` 4,723,735, `caselaw_summary` 61,107) **but `/openapi.json` exposes no
+>    case-law endpoint.** Is that corpus reachable, and does it include the Court of Session
+>    and the Sheriff Courts? **See P5.2 — this may change that question from procurement to
+>    an API request.**
 
 ## When a reply arrives
 

@@ -76,10 +76,77 @@ def amendments(legislation_id: str, search_amended: bool, size: int = 200) -> li
     return d if isinstance(d, list) else (d.get("results") or [])
 
 
+def coverage() -> int:
+    """P5.3: how much of each series is actually held, and how fresh is it?
+
+    **Point lookups are a bad census instrument and misled this probe twice** —
+    twelve misses across `ssi/2026/{1..250}` read as "no 2026 SSIs at all", and a
+    20-point sample of UK SI 2026 returning nothing read as "nothing from 2026",
+    while `uksi/2026/772` was in the index and had been created a week earlier.
+    In a series with ~20% coverage, a sparse sample of absences proves nothing.
+    Cross-check against `/legislation/search` before concluding anything.
+    """
+    import random
+
+    stats = httpx.get(f"{BASE}/api/stats", timeout=TIMEOUT).json()
+    print("GET /api/stats")
+    for k, v in stats.items():
+        print(f"    {k:22} {v}")
+
+    health = httpx.get(f"{BASE}/healthcheck", timeout=TIMEOUT).json()
+    print()
+    print("GET /healthcheck — collections in the vector store")
+    for name, det in (health.get("collection_details") or {}).items():
+        flag = "  <- no endpoint exposes this (see P5.2)" if "caselaw" in name else ""
+        print(f"    {name:22} {det.get('points'):>10,} points{flag}")
+
+    print()
+    print("--- held / absent by series (lookup is definitive) ---")
+    random.seed(7)
+    for lt, year, hi, label in (("asp", 2025, 10, "ASP 2025"),
+                                ("ssi", 2025, 390, "SSI 2025"),
+                                ("ssi", 2026, 170, "SSI 2026"),
+                                ("uksi", 2026, 800, "UK SI 2026"),
+                                ("ukpga", 1962, 60, "UKPGA 1962")):
+        picks = random.sample(range(1, hi + 1), min(20, hi))
+        hits = 0
+        for n in picks:
+            r = httpx.post(f"{BASE}/legislation/lookup",
+                           json={"legislation_type": lt, "year": year, "number": str(n)},
+                           timeout=TIMEOUT)
+            hits += r.status_code == 200
+        print(f"    {label:12} {hits:2}/{len(picks)} held  ({100*hits//len(picks):3}%)")
+    print("    NOTE: a 'not found' for 2026 secondary legislation is far more likely a")
+    print("          coverage gap than an absence in law. That is P2.2's wording problem.")
+
+    print()
+    print("--- freshness: newest `created_at` seen in a search sample ---")
+    newest = []
+    for q in ("regulations", "act", "order", "amendment", "scotland"):
+        r = httpx.post(f"{BASE}/legislation/search",
+                       json={"query": q, "limit": 50, "include_text": False}, timeout=TIMEOUT)
+        if r.status_code != 200:
+            continue
+        d = r.json()
+        for it in (d.get("results") if isinstance(d, dict) else d) or []:
+            if it.get("created_at"):
+                newest.append((it["created_at"], str(it.get("title") or "")[:44]))
+    newest.sort(reverse=True)
+    for ca, title in newest[:5]:
+        print(f"    {ca[:19]}  {title}")
+    print("    NOTE: ingestion runs land ~02:00-02:30 UTC daily. Staleness is NOT the problem;")
+    print("          per-instrument gaps are.")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="lex_probe")
     ap.add_argument("--surface", action="store_true", help="endpoint list only")
+    ap.add_argument("--coverage", action="store_true",
+                    help="P5.3: corpus size, freshness and per-series coverage")
     args = ap.parse_args(argv)
+    if args.coverage:
+        return coverage()
 
     print(f"LEX API surface ({BASE}/openapi.json)\n")
     called = {"/legislation/search", "/legislation/section/search", "/legislation/text"}

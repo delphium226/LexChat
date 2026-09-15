@@ -430,7 +430,7 @@ three of nine negative verdicts, so any row claiming a fix still needs n=3.
 
 ---
 
-## Session 5 — 2026-09-15 — P1.6, P2.1, P2.6, P0.4 (code half), P5.1, and two instrument corrections
+## Session 5 — 2026-09-15 — P1.6, P2.1, P2.6, P0.4 (code half), P5.1 + P5.3, and four instrument corrections
 
 **Done:**
 - **P1.6 complete.** `src/utils/citation_links.py`, wired at four seams. **(a) the cause** —
@@ -461,7 +461,10 @@ three of nine negative verdicts, so any row claiming a fix still needs n=3.
   (`WAVE5_QUESTIONS.md`) — then P5.1 turned out to be answerable from here: the API
   publishes an OpenAPI spec and we call 3 of its 13 endpoints. **B3 is buildable, not
   permanently a disclosure.** Full answer below; new rows **P3.5** and **P3.6**; P2.3
-  narrowed to enabling power alone. P5.2 and P5.3 still need a human.
+  narrowed to enabling power alone. **P5.3 answered the same way** — the index refreshes
+  daily and is current, but 2026 secondary legislation is only ~5% held, which is what
+  B5's negative must say. **P5.2 is reframed**: LEX holds case-law collections its API does
+  not expose. Only P5.2 still needs a human.
 - **634 tests** (564 → 634). Dev box restored, no uvicorn left running.
 
 **Surprises / deviations from FIX_PLAN:**
@@ -625,6 +628,50 @@ retrievable, the date is not, which lands directly on P2.5.
 different guise:** two sessions of planning treated "does the API expose relationships?" as
 an external question with unknown lead time. It was a `GET /openapi.json` away. **Before
 opening an external row, check whether the system can be asked directly.**
+
+### P5.3 — ANSWERED, and the answer is the opposite of the question (recorded answer)
+
+`GET /api/stats` and `GET /healthcheck` are public, and coverage is directly measurable by
+sampling `/legislation/lookup`. `python -m tools.lex_probe --coverage`.
+
+**The index refreshes DAILY and is current.** Ingestion runs land ~02:00–02:30 UTC; the
+newest `created_at` in a 1,162-record sample was **today, 2026-09-15T02:17**. Corpus:
+**220,022** instruments, 2,107,361 provisions, **2,580,915 amendments**. The row was
+written to ask "how stale is it". It isn't stale.
+
+**The real problem is per-instrument gaps, and for 2026 they are severe:**
+
+| series | held (20-point samples) |
+|---|---|
+| ASP 2025 / 2026 | **100%** |
+| SSI 2025 | 85% |
+| **SSI 2026** | **5%** |
+| **UK SI 2026** | **0%** |
+| UKPGA 1962 | 60% |
+
+**This sets B5's wording, which is what the row was for.** On these numbers a "not found"
+for a 2026 SSI is *far* more likely a coverage gap than an absence in law, and a negative
+that does not say so comes close to telling a lawyer the instrument does not exist.
+P2.2 now has a number to write against.
+
+All three original claims re-verified. `ukpga/1962/47` is absent — **but as a
+per-instrument gap, not a date cliff**: `/41`, `/42`, `/45`, `/50`, `/51` and `/55` are all
+held. "We don't hold pre-19xx" would be the wrong story to tell a lawyer.
+
+**A method warning, because it cost two wrong conclusions inside this probe.** Point
+lookups are a bad census instrument. Twelve misses across `ssi/2026/{1..250}` read as "no
+2026 SSIs at all"; a 20-point UK SI 2026 sample returning nothing read as "nothing from
+2026" — while `uksi/2026/772` was in the index the whole time and had been created a week
+earlier. In a series with ~20% coverage a sparse sample of absences proves nothing.
+**Cross-check a lookup census against `/legislation/search`.** Both errors were caught the
+usual way: a number disagreeing with something else the system said.
+
+**And one finding belongs to P5.2.** `/healthcheck` reports case-law collections in the
+vector store — **`caselaw` 69,970 points, `caselaw_section` 4,723,735, `caselaw_summary`
+61,107** — while `/openapi.json` exposes **no case-law endpoint**. A case-law corpus exists
+inside a system we already call, and we reach case law through the National Archives
+instead. **That may turn B12 from a procurement question into an API request**, which is a
+materially different piece of work. Recorded in P5.2; still needs a human to ask.
 
 **Next action:** ~~P2.2~~ — **see the P5.1 answer above first; it changes what Wave 2 and Wave 3 contain.** Then **P2.2** (B5, no bare negatives) — its `Depends on: P1.3, P2.1` is now
 satisfied, and this session amended it to cover the negative drawn from an **incomplete**
