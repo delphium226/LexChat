@@ -22,6 +22,12 @@ from ..prompts import (
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import enforce_provision_links
 from ..utils.research_halt import apply_halt_disclosure, halt_worker_report
+from ..utils.search_scope import (
+    answer_scope_footer,
+    incomplete_steps_note,
+    strip_scope_blocks,
+    worker_scope_block,
+)
 from ..utils.suggestions import diagnose_suggestions, extract_suggestions
 from .agent_shared import describe_agent_error, run_worker_tool
 from .federation_client import (
@@ -223,6 +229,12 @@ async def run_worker_agent(
     if retrieved_urls is None:
         retrieved_urls = set()
 
+    # P2.2 (B5): what this step searched for, and under what limits. Run-scoped
+    # rather than request-scoped (unlike `retrieved_urls`), because "what this
+    # step searched for" is a statement about one step and is rendered onto that
+    # step's report.
+    search_log: list = []
+
     async def worker_tool_executor(name: str, args: dict) -> str:
         return await run_worker_tool(
             name, args, query, summarise_chunk_fn, summarise_model,
@@ -236,6 +248,7 @@ async def run_worker_agent(
             context_budget=context_budget,
             audit_delegation=_audit_delegation,
             retrieved_urls=retrieved_urls,
+            search_log=search_log,
         )
 
     try:
@@ -326,6 +339,30 @@ async def run_worker_agent(
             {**{k: v for k, v in src.items() if not k.startswith("_")}, "n": i + 1}
             for i, src in enumerate(kept)
         ]
+
+    # P2.2 (B5): hand the search scope forward, in code, to the agent that will
+    # actually write the negative. The tool-result block instructs the WORKER;
+    # the Manager sees only this report, and the Deep Research synthesis sees
+    # only the step findings, so neither had ever seen a scope block. Measured in
+    # the first acceptance run: 6367 rep 1 carried the block in the Worker's
+    # context **27 times**, three of its four reports carried no scope language
+    # at all, and the answer still said a search "confirms" that no SSIs
+    # prescribe the detail. Same fix shape as `provision_url_block` — carry the
+    # fact across the lossy boundary rather than asking the model to.
+    #
+    # Appended LAST, after source filtering, and the order is load-bearing:
+    # `_source_is_used` matches a source on its bare `legislation_id`, and the
+    # record names the instruments that were section-searched. Appending before
+    # the filter would mark those sources as cited by our own footer and silently
+    # suppress P4.3's `turns_source_fallback` signal — a diagnostic corrupting
+    # the measurement of a different bucket.
+    _scope = worker_scope_block(search_log, cfg)
+    if _scope:
+        result["content"] = (result.get("content", "") or "") + _scope
+    # Carried out to the answer seam, where the lawyer-facing footer is written.
+    # One worker run is one delegation or one plan step; the caller accumulates
+    # across them, because the footer describes the whole turn.
+    result["searches"] = list(search_log)
 
     if _audit:
         _audit.end_delegation(
@@ -586,6 +623,9 @@ async def process_user_request(
     manager_tools = get_manager_tools(peer_descriptions)
 
     accumulated_sources: list = []
+    # P2.2 (B5): every legislation search this turn ran, across ALL delegations.
+    # The footer describes the turn the lawyer asked, not one delegation of it.
+    all_searches: list = []
 
     # Per-request tool-result memo (D8 Phase 4) — same mechanism as Deep
     # Research (see run_deep_research): exact (tool_name, canonical args)
@@ -665,6 +705,7 @@ async def process_user_request(
                     accumulated_sources.append(src)
             if result.get("halted"):
                 halts.append({**result["halted"], "scope": "delegation"})
+            all_searches.extend(result.get("searches") or [])
             return f"[Research Agent Result]\n{result['content']}"
 
         if name == "consult_peer":
@@ -733,6 +774,14 @@ async def process_user_request(
     # three outcomes, because the lawyer gets a normal-looking report with no
     # signal it is partial. The strip runs even with no halts, so a marker that
     # arrives by some other route still never renders.
+    # P2.2 (B5): the scope block is an instruction to this agent, not prose for a
+    # lawyer, and in research mode the Manager is told to pass the Worker's
+    # report through verbatim — so without an unconditional strip the
+    # bookkeeping renders on screen. Same shape and same reasoning as the halt
+    # marker strip directly below.
+    clean, _stripped = strip_scope_blocks(clean)
+    if _stripped:
+        logger.info("[Manager] Stripped %d search-scope block(s) from the answer", _stripped)
     clean, _disclosed = apply_halt_disclosure(clean, halts)
     if halts:
         logger.warning(
@@ -762,6 +811,15 @@ async def process_user_request(
             {**{k: v for k, v in s.items() if k != "n"}, "n": i + 1}
             for i, s in enumerate(accumulated_sources)
         ]
+
+    # P2.2 (B5): the lawyer-facing scope line, emitted by code because carrying
+    # the facts to this agent and asking it to state them got 52% of negatives,
+    # not all of them. Appended last — after the source block is built, so a
+    # query string in it can never be read as a citation. Empty on a turn that
+    # ran no legislation search, so a purely conversational reply is untouched.
+    final["content"] = (final.get("content") or "") + answer_scope_footer(
+        all_searches, _cfg
+    )
 
     return final
 
@@ -844,6 +902,8 @@ async def run_deep_research(
     # and approved title — only this loop knows them, and "step 4 is incomplete"
     # is far more use to a lawyer than "some research was incomplete".
     halts: list = []
+    # P2.2 (B5): every legislation search the plan ran, across all steps.
+    all_searches: list = []
 
     for i, step in enumerate(steps, 1):
         if cancel_event and cancel_event.is_set():
@@ -889,6 +949,7 @@ async def run_deep_research(
         for src in result.get("sources", []):
             if not _is_duplicate_source(src, accumulated_sources):
                 accumulated_sources.append(src)
+        all_searches.extend(result.get("searches") or [])
 
     if cancel_event and cancel_event.is_set():
         raise asyncio.CancelledError("Aborted")
@@ -904,6 +965,13 @@ async def run_deep_research(
         f"APPROVED RESEARCH PLAN SCOPE:\n{scope_note}\n\n"
         f"STEP FINDINGS:\n\n" + "\n\n---\n\n".join(findings_blocks)
     )
+    # P2.2 (B5), the half P2.1 narrows but cannot close: a negative reached under
+    # a halted step is a negative reached under a limit. 6382 rep 2 of P2.1's
+    # acceptance sweep still opened "no SSIs ... were found" — from the two steps
+    # that halted. Named here, in the payload, rather than in the synthesis
+    # system prompt, for the reason halt_worker_report is a tool result: an
+    # instruction about THESE steps travels with them.
+    synthesis_user += incomplete_steps_note(halts, len(steps))
     synthesis_messages = [
         {"role": "system", "content": DEEP_RESEARCH_SYNTHESIS_PROMPT},
         {"role": "user", "content": synthesis_user},
@@ -941,6 +1009,14 @@ async def run_deep_research(
     # halted step can vanish into a report that reads as complete — 6406 halted
     # ALL FOUR steps and produced a $2.36 report. The disclosure is code-emitted
     # and names the steps.
+    # P2.2 (B5). Synthesis composes its own prose and should not copy the block,
+    # but "should not" is not "cannot" — and a stray instruction block in a
+    # finished report is worse than the clutter it saves.
+    _content, _stripped = strip_scope_blocks(_content)
+    if _stripped:
+        logger.info(
+            "[DeepResearch] Stripped %d search-scope block(s) from the report", _stripped
+        )
     _content, _disclosed = apply_halt_disclosure(_content, halts)
     if halts:
         logger.warning(
@@ -960,5 +1036,12 @@ async def run_deep_research(
             {**{k: v for k, v in s.items() if k != "n"}, "n": i + 1}
             for i, s in enumerate(accumulated_sources)
         ]
+
+    # P2.2 (B5): same code-emitted scope line as the Manager path. A Deep
+    # Research report is composed from step findings and is the furthest any
+    # answer travels from the searches that produced it.
+    final["content"] = (final.get("content") or "") + answer_scope_footer(
+        all_searches, _get_cfg()
+    )
 
     return final

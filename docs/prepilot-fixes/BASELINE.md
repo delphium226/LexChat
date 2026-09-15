@@ -281,6 +281,159 @@ exactly 5 is cap-bound and is counted as evidence of nothing.
 
 ---
 
+## B5 — what a negative was actually drawn from (P2.2)
+
+Measured over the **Wave 1** directory, which is the before-column for P2.2.
+Reproduce with `python -m tools.replay_report --dir <dir> negatives`.
+
+**The row's premise is real and is 0.5% of the problem.** P2.2 was written against
+the missing zero-result nudge on `search_legislation` — the only search tool
+without one. That branch exists and is fixed, but:
+
+| | Wave 1 |
+|---|---|
+| `search_legislation` calls | 785 |
+| … that returned **0 results** to the model | **4** (1 empty from the API, 3 emptied by filters) |
+| … that were **windowed** (fewer rows shown than the API matched) | **783 of 783** measurable |
+| rows shown per call | 5 |
+| matches the API reported | median **141**, p90 185, max 220 |
+| turns asserting a research negative | **44** |
+| … that followed a zero-result search | **0** |
+
+So **every** bare negative in the corpus was drawn from a search that returned
+results — just not the wanted one. A fix confined to the empty branch would have
+moved none of the forty-four. "No commencement regulations have been made" —
+seven of the forty-four, verbatim, across 6409 and 6410 — is a conclusion of law
+drawn from the top 5 of a median 141 ranked matches, and nothing in the tool
+result told the model that is what it was holding.
+
+### The detector, and the artefact it started as
+
+The first `NEG_ASSERTED` scored **61 of 153 turns, 61 failing — 100%**, which
+under this file's own standing hazard is an artefact until proven otherwise. It
+was one: it could not tell a **research** negative from a **legal** one, and was
+counting *"no winding-up order may be made, except by the company's directors"*
+(6335 t2) and *"'sale of goods' does not include the sale of meals"* (6341 t4) —
+both correct statements of retrieved law. Grading those as bare negatives would
+have pushed the model to hedge findings it had actually retrieved, which is the
+regression Invariant 1 exists to prevent and which P3.3's row warns about from
+the other side.
+
+Tightened to require the *research* as the subject, the count is **44 turns**,
+a strict superset of the 17 the older `NOT_FOUND` screen found. The single
+commonest negative in the corpus turns out to be one `NOT_FOUND` never saw:
+
+> **"The available database does not contain information on this specific issue."**
+> — 27 occurrences across 21 turns, in the BLUF, with no query, no filter and no
+> statement of what the database is short of.
+
+`NOT_FOUND` and `NEGATIVE_EXPLAINED` are deliberately **left alone**, still
+reported as `bare_negatives`, because retightening a metric in place silently
+invalidates every earlier reading of it — the rule set when
+`provision_links_manufactured` was kept and `provision_links_reconstructed`
+added beside it.
+
+### Before-column: 0 of 44 explained
+
+Three conditions, each a distinct failure in the corpus: does the answer say
+**what was searched**, does it name the **limits** it ran under, is the miss
+attributed to the **index** rather than to the law or to the lawyer.
+
+| condition | turns satisfying it, of 44 |
+|---|---|
+| names its search terms | **6** |
+| names a filter, a year window, or that the search was ranked | **5** |
+| attributes the miss to the index/search | 31 |
+| **all three, and blames nobody's citation** | **0** |
+| blames the *lawyer's* citation (an outright fail) | **3** |
+
+Each condition is individually reachable, so 0/44 on the conjunction is a
+property of the product and not a dead detector. The three that blame the lawyer
+are the worst of the set and are all now verifiable as wrong at source: 6373
+questioned FrankieH's `SSI 2026/170` and 6409 questioned `SSI 2025/377` three
+times — **both citations are correct and both instruments are a 404 in LEX**
+(checked 2026-09-15). The tool asked the lawyer to disprove a gap in its own
+index.
+
+**6373 turn 2 is the whole bucket in one screen** (`negatives --answers`). Seven
+searches, including the bare id both ways, and then this, entire:
+
+```
+queries run:
+    Social Security (Up-rating) (Miscellaneous Amendments) (Scotland) Regulations 2026
+    Social Security (Up-rating) (Miscellaneous Amendments) (Scotland) Regulations
+    SSI 2026/170
+    ssi/2026/170
+    "polygamous marriages" "Social Security"
+    "Social Security (Up-rating) (Miscellaneous Amendments) (Scotland) Regulations"
+    polygamous marriages
+filters: {'research_mode': 'legislation_only', 'year_to': 2026, 'current_only': True}
+
+The Social Security (Up-rating) (Miscellaneous Amendments) (Scotland)
+Regulations 2026 (SSI 2026/170) could not be found in the legislation database.
+
+Could you confirm the year or the SI number?
+```
+
+Every one of those seven searches came back with rows — LEX ranks the whole
+corpus against the wording, so a query for a non-existent statute still returns
+185 results — and none held the instrument. The research was diligent, the
+conclusion was right, and the sentence the lawyer got was wrong in the only way
+that matters: it put the doubt on their citation instead of on the index. **Note
+also what no tool could do here.** `POST /legislation/lookup` answers "is
+`ssi/2026/170` held?" with a 200 or a 404 and we never call it — P3.7.
+
+
+### After — the acceptance, and what it cost to find out
+
+`evidence/replay/wave2_p22_final/` (n=3 on 6409 and 6367, $5.32). Graded per
+TURN with `replay_report --dir <dir> negatives`.
+
+| | Wave 1 (n=1) | instruction only (n=3) | **+ code footer (n=3)** |
+|---|---|---|---|
+| turns asserting a negative | 10 | 23 | 21 |
+| **explained — the row's bar** | **2 (20%)** | 13 (56%) | **19 (90%)** |
+| names its search terms | 20% | 82% | 90% |
+| attributes the miss to the index | 40% | 60% | 95% |
+| **blames the lawyer's citation** | **2 of 10** | **0** | **0** |
+| model's own prose explains it | 20% | 56% | 4% |
+
+**The middle column is the interesting one, because it is the fix the row asked
+for and it was not enough.** Carrying the scope to the agent that writes the
+answer — the Manager and the Deep Research synthesis, neither of which had ever
+seen a tool result — took explained negatives from 20% to 56%. The other 44% told
+a lawyer something was not found without saying what had been looked for. That is
+Invariant 2 arriving on schedule: the instruction reached the right reader and
+was still only sometimes obeyed, so the disclosure became code.
+
+**Two failures remain and they are the same shape.** Both are turns with **zero
+delegations** — a negative carried forward from an earlier turn's research
+(*"As noted in the previous search, SSI 2025/377 is not currently available in
+the legislation database"*). No search ran, so no footer was emitted. The footer
+is per-turn; a conversation is not. Recorded as a limitation rather than fixed,
+because restating the full scope on every follow-up would be noise.
+
+**The model-only column is not trustworthy and is printed anyway.** It swung
+**56% → 4%** between two sweeps the model could not tell apart: the only change
+was the footer, which is appended after the model has finished writing. n=3
+cannot produce that swing legitimately, so the column is unstable — a reading of
+the prose (`negatives --answers`) is the real check. What it does not affect is
+the verdict column, which is what the lawyer actually sees.
+
+**Two more instrument errors, and one of them was self-inflicted.** The footer's
+own words — *"anything reported above as not found was not found in this
+index"* — trip `NEG_ASSERTED`, so selecting the denominator on the full answer
+enrolled every researched turn including purely positive ones (23 → 34, model
+column crushed to 14%). **A product change corrupting the instrument measuring
+it** is a new failure mode for this work and the reason the denominator is now
+taken from the model's prose with the footer stripped. Separately, `terms`
+required quotation marks and so scored *"A search of the legislation index for
+commencement regulations did not return any results"* as naming nothing; the
+correction moved the before-side too (44/41 failing → 44/38), which is the check
+that it was not tuned to pass.
+
+---
+
 ## B1 — the halt is not confined to Deep Research
 
 **10 of 41 runs** hit the 20-step cap; **7 showed halt text to the lawyer.**

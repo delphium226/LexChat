@@ -22,6 +22,7 @@ import pytest
 
 from src.agent.agent_core import run_deep_research, run_worker_agent
 from src.agent.provider_factory import set_request_provider_config
+from src.utils.search_scope import strip_scope_blocks
 from src.routers.agent_request import (
     ChatRequest,
     ResearchPlanRequest,
@@ -201,7 +202,7 @@ async def test_audit_records_delegation_and_tools(monkeypatch):
     assert len(audit.delegations) == 1
     d = audit.delegations[0]
     assert d["brief"] == "the brief"
-    assert d["report"] == "THE REPORT"
+    assert strip_scope_blocks(d["report"])[0] == "THE REPORT"
     assert d["error"] is None
     assert [t["name"] for t in d["tools"]] == ["search_legislation"]
     assert d["tools"][0]["args"] == {"query": "housing"}
@@ -296,7 +297,9 @@ async def test_sniffer_passes_through_a_sync_on_chunk(monkeypatch):
     )
 
     # The run completes instead of dying on the await ...
-    assert result["content"] == "THE REPORT"
+    # P2.2 appends a code-emitted search-scope block to every worker report, so
+    # the assertion is that the MODEL's text is untouched, not that the report is.
+    assert strip_scope_blocks(result["content"])[0] == "THE REPORT"
     # ... the trace is still captured ...
     assert len(audit.delegations[0]["tools"][0]["api_calls"]) == 1
     # ... and the sync callback genuinely received what passed through.
@@ -476,7 +479,7 @@ async def test_no_collector_means_no_overhead_and_no_behaviour_change(monkeypatc
         _chat_loop_calling_tools([("search_legislation", {"query": "a"})]),
         _noop_summarise, "brief", "test-model", None, 0,
     )
-    assert result["content"] == "THE REPORT"
+    assert strip_scope_blocks(result["content"])[0] == "THE REPORT"
 
 
 def test_audit_event_shape():
@@ -585,7 +588,7 @@ async def test_system_chat_emits_audit_event_on_the_wire(client, auth_headers, m
     assert len(ev["delegations"]) == 1
     d = ev["delegations"][0]
     assert d["brief"] == "the brief"
-    assert d["report"] == "THE REPORT"
+    assert strip_scope_blocks(d["report"])[0] == "THE REPORT"
     assert [t["name"] for t in d["tools"]] == ["search_legislation"]
     assert d["tools"][0]["raw_result"] == "RAW"
     assert d["tools"][0]["final_result"] == "FINAL"

@@ -13,6 +13,11 @@ from typing import Callable, Optional
 
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import harvest_legislation_urls, provision_url_block
+from ..utils.search_scope import (
+    legislation_search_note,
+    record_search,
+    section_search_note,
+)
 from .provider_factory import get_request_provider_config
 from .summarisation import call_chunk, summarise_for_query
 from .tools import (
@@ -407,6 +412,7 @@ async def run_worker_tool(
     context_budget: Optional[dict] = None,
     audit_delegation: Optional[dict] = None,
     retrieved_urls: Optional[set] = None,
+    search_log: Optional[list] = None,
 ) -> str:
     """Execute a single Worker tool call and return the (possibly summarised) result.
 
@@ -442,6 +448,12 @@ async def run_worker_tool(
             provision-link enforcement at the answer seam. None disables both the
             harvest and, downstream, the enforcement — so a caller that does not
             thread it keeps exactly the previous behaviour.
+        search_log: Per-WORKER-RUN list of the searches this run issued (P2.2/B5).
+            Rendered onto the worker's report by `run_worker_agent`, because the
+            agent that writes the negative — the Manager, or the Deep Research
+            synthesis — never sees a tool result. Run-scoped, not request-scoped,
+            unlike `retrieved_urls`: "what this step searched for" is a statement
+            about one step. None disables the record.
     """
     activity_id = uuid.uuid4().hex[:8]
 
@@ -747,13 +759,25 @@ async def run_worker_tool(
     # For search_legislation: capture legislation_ids from the raw response before
     # any summarisation strips them, so we can inject a Phase 2 instruction into
     # the final result the model actually sees.
+    #
+    # P2.2 (B5) adds the scope block alongside. The row was written against the
+    # missing `else:` on `if id_pairs:` — the only search tool with no
+    # zero-result nudge — but that branch fires on 4 of 785 searches post-Wave-1,
+    # while **783 of 783** are windowed (5 rows of a median 141 matches) and all
+    # 17 measured bare negatives came from a NON-empty result. So the block is
+    # attached on both branches, and the non-empty one is the one that matters.
     phase2_note = ""
+    scope_note = ""
     if name == "search_legislation":
         try:
             raw_data = json.loads(result)
             id_pairs = extract_legislation_ids_from_search(raw_data)
             if timing_collector:
                 timing_collector.record_legislation_ids_seen(lid for lid, _ in id_pairs)
+            scope_note = legislation_search_note(
+                args, raw_data, get_request_provider_config()
+            )
+            record_search(search_log, name, args, raw_data)
             if id_pairs:
                 id_lines = "\n".join(
                     f'  - legislation_id: "{lid}"  ({title})'
@@ -769,6 +793,18 @@ async def run_worker_tool(
                 "\n\n[NEXT STEP: Call search_legislation_sections with the legislation_id "
                 "from this result to retrieve the actual legal text.]"
             )
+
+    # P2.2 (B5), second source of bare negatives: a provision absent from the
+    # ranked ten is not absent from the Act. 6335 turn 7 reported that a targeted
+    # search "returned no results" when it had returned results, and then
+    # invented a cause for it. This tool had no note of any kind before now.
+    if name == "search_legislation_sections":
+        try:
+            _sec_data = json.loads(result)
+            scope_note = section_search_note(args, _sec_data)
+            record_search(search_log, name, args, _sec_data)
+        except Exception:
+            scope_note = ""
 
     from .provider_factory import get_summarise_threshold
     # Two independent triggers: this result is large on its own, OR the run has
@@ -929,6 +965,10 @@ async def run_worker_tool(
 
     # Append phase nudges after summarisation so they are not discarded
     # by the summariser and remain visible in the message the model receives.
+    # P2.2's scope block goes on before the Phase-2 nudge, so the imperative
+    # ("call search_legislation_sections with these ids") stays the last thing
+    # the model reads on a productive search.
+    result += scope_note
     result += phase2_note
     result += sp_phase2_note
     result += sp_committee_phase2_note

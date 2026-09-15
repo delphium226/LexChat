@@ -417,6 +417,105 @@ def test_a_negative_that_names_its_search_and_filters_is_explained():
     assert sig.bare_negatives == 0
 
 
+# --- P2.2's acceptance detector, and the artefact it started as --------------
+#
+# The first `NEG_ASSERTED` scored 61 of 153 Wave-1 turns, 61 failing — 100%,
+# which this project treats as an artefact until proven otherwise. It was: it
+# could not tell a research negative from a legal one. These four tests pin the
+# distinction so the looser version cannot come back.
+
+
+@pytest.mark.parametrize("answer", [
+    "No commencement regulations have been made to date.",
+    "The available database does not contain information on this specific issue.",
+    "The research agent could not locate 'The X Regulations 2025' in the "
+    "legislation database.",
+    "SSI 2025/377 could not be found in the legislation database.",
+    "No relevant case law was found matching your keywords.",
+    "Comprehensive searches of the National Archives yielded no judgments "
+    "concerning Community Justice Scotland.",
+])
+def test_a_research_negative_is_recognised(answer):
+    """All six are real Wave-1 answers. The middle one — 27 occurrences across 21
+    turns — is the commonest negative in the corpus and the older `NOT_FOUND`
+    screen never saw it."""
+    assert rr.NEG_ASSERTED.search(answer), answer
+
+
+@pytest.mark.parametrize("answer", [
+    # 6335 turn 2 — a correct statement of retrieved law.
+    "No petition for winding up may be presented, and no winding-up order may "
+    "be made, except by the company's directors.",
+    # 6341 turn 4 — likewise, quoting s.43ZB(4).
+    'Section 43ZB(4) clarifies that the "sale of goods" does not include the '
+    "sale of meals, refreshments, or alcohol.",
+    # 6341 turn 5 — a finding about a provision that WAS retrieved.
+    "Section 3(2) of this Act does not provide a standalone definition but "
+    "instead incorporates historical definitions by reference.",
+])
+def test_a_finding_of_law_is_not_a_research_negative(answer):
+    """The failure that made the first draft a 100%. Grading these as bare
+    negatives would push the model to hedge findings it had actually retrieved —
+    the regression Invariant 1 exists to prevent, and the counter-pressure P3.3
+    records from the other side (these users reward grounded decisiveness)."""
+    assert not rr.NEG_ASSERTED.search(answer), answer
+
+
+@pytest.mark.parametrize("answer", [
+    # The exact sentence 6367 rep 1 produced, and the one the first version of
+    # NEG_TERMS scored as naming no search terms at all.
+    '*(Searched the legislation index 2 time(s) for: "Water Industry '
+    'Commission for Scotland reports accounts".',
+    'I searched for "care reform commencement" and found nothing.',
+    "A search of the index for 'polygamous marriages' returned no instruments.",
+    "The search terms used were: commencement, Social Security.",
+])
+def test_naming_the_search_terms_is_recognised_however_it_is_phrased(answer):
+    """The verb and its object are routinely separated — "searched the
+    legislation index … for" — and the first pattern demanded they be adjacent.
+    Third time on this work that the detector was the thing that was wrong."""
+    assert rr.NEG_TERMS.search(answer), answer
+
+
+def test_the_three_conditions_are_jointly_satisfiable():
+    """A dead conjunction would report 100% failing forever and look like a
+    product defect. This is the answer P2.2's scope block asks the model for."""
+    good = (
+        "I searched for \"commencement regulations Social Security (Amendment) "
+        "(Scotland) Act 2025\". No commencement regulations were found. The "
+        "filters in force were jurisdiction=Scotland, years 2025-2026. This was "
+        "a ranked keyword search of the LEX index and is not exhaustive; the "
+        "instrument may be held and simply not surfaced, and absence from the "
+        "index is not evidence of absence in law."
+    )
+    assert rr.NEG_ASSERTED.search(good)
+    assert rr.NEG_TERMS.search(good)
+    assert rr.NEG_LIMITS.search(good)
+    assert rr.NEG_BLAMED_INDEX.search(good)
+    assert not rr.NEG_BLAMED_USER.search(good)
+
+
+def test_questioning_the_lawyers_citation_is_its_own_failure():
+    """6373 questioned FrankieH's SSI 2026/170 and 6409 questioned SSI 2025/377
+    three times. Both citations were right; both instruments are a 404 in LEX.
+    The tool asked the lawyer to disprove a gap in its own index."""
+    assert rr.NEG_BLAMED_USER.search(
+        "SSI 2026/170 could not be found. Could you confirm the year or the SI "
+        "number?")
+    assert not rr.NEG_BLAMED_USER.search(
+        "SSI 2026/170 is not held in the index, which is incomplete for 2026.")
+
+
+def test_the_index_condition_survives_a_long_instrument_title():
+    """6409 turn 7's whole answer named the database 90 characters after the
+    "not", because the instrument's title is that long. A tight window scored the
+    one turn that DOES name the database as not naming it."""
+    assert rr.NEG_BLAMED_INDEX.search(
+        "The research agent could not locate 'The Social Security (Amendment) "
+        "(Scotland) Act 2025 (Commencement No. 1 and Saving and Transitional "
+        "Provisions) Regulations 2025' in the legislation database.")
+
+
 # --- B8 / P4.3: cited vs consulted -------------------------------------------
 
 

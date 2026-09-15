@@ -618,18 +618,28 @@ written to ask "how stale is it". It isn't stale.
 
 **The real problem is per-instrument gaps, and for 2026 they are severe:**
 
-| series | held (20-point samples) |
-|---|---|
-| ASP 2025 / 2026 | **100%** |
-| SSI 2025 | 85% |
-| **SSI 2026** | **5%** |
-| **UK SI 2026** | **0%** |
-| UKPGA 1962 | 60% |
+| series | held (20-point samples) | **corrected, 60-point (Session 6)** |
+|---|---|---|
+| ASP 2025 / 2026 | **100%** | 100% |
+| SSI 2025 | 85% | **87%** |
+| **SSI 2026** | ~~**5%**~~ | **2%** |
+| **UK SI 2026** | ~~**0%**~~ | **2%**, and ≥27 held instruments found by search |
+| UKPGA 1962 | 60% | (not re-sampled) |
 
 **This sets B5's wording, which is what the row was for.** On these numbers a "not found"
 for a 2026 SSI is *far* more likely a coverage gap than an absence in law, and a negative
 that does not say so comes close to telling a lawyer the instrument does not exist.
 P2.2 now has a number to write against.
+
+**Corrected 2026-09-15 (Session 6), by the cross-check this very section prescribes.**
+"UK SI 2026 **0%**" is the number to retire. It reads as *"nothing made in 2026 is in the
+index"*, and that is false: `/legislation/search` returns **27 distinct `uksi/2026/*`
+instruments**, spread from `/3` to `/856`, and **all 12 spot-checked resolve on
+`/legislation/lookup`**. A 60-point census puts the rate at ~2% — low single digits, not
+nothing, which is exactly what a 0/20 sample of a ~2% series looks like. The two readings
+never disagreed; the *wording* of the headline did. So the product string P2.2 writes says
+**"under 5%"** and never "none": a lawyer told none stops looking, and the eleventh
+instrument error would have been published in front of users rather than in a document.
 
 All three original claims re-verified. `ukpga/1962/47` is absent — **but as a
 per-instrument gap, not a date cliff**: `/41`, `/42`, `/45`, `/50`, `/51` and `/55` are all
@@ -821,3 +831,141 @@ sending the Wave 5 questions before starting P2.2 is worth the five minutes. **P
 available in parallel and is well-evidenced; **P2.5** is the other unblocked Wave 2 row and
 its scope did not shrink (B4 rose 27 → 30 at P1.5). Do the **P0.4 re-export** before the
 next full sweep if target access appears.
+
+---
+
+## Session 6 — 2026-09-15 — P2.2 (B5, no bare negatives), plus P3.7 opened and six instrument corrections
+
+**Done:**
+- **P2.2 complete, acceptance passed with one stated residual.** `src/utils/search_scope.py`,
+  wired at three seams. Replay n=3 on 6409 and 6367 (`evidence/replay/wave2_p22_final/`,
+  $5.32): **21 turns asserting a negative, 19 explained (90%)**, against **2 of 10 (20%)**
+  on the same sessions in Wave 1.
+- **New row P3.7** — `/legislation/lookup`, the deterministic held/absent test. Four of the
+  corpus's negatives ask "is this instrument, named by number, in the index?" and are
+  answered by ranked keyword search, which cannot answer it.
+- **P5.3's "UK SI 2026 ~0% held" retracted** and corrected to ~2%. It read as "nothing from
+  2026 is held", and that is false.
+- **711 tests** (643 → 711). `AUDIT_TRACE.md` amended.
+
+**The row's premise was 0.5% of the bucket, and the measurement said so before any code was
+written.** P2.2 was written against the missing zero-result nudge on `search_legislation` —
+genuinely the only search tool without one. Post-Wave-1 that branch fires on **4 of 785**
+searches, while **783 of 783** measurable searches are *windowed* (5 rows shown of a median
+**141** ranked candidates), and **not one of the 44 measured bare negatives followed an empty
+search**. Every one was drawn from a result set that had results, just not the wanted one.
+Building only what the row described would have moved none of the forty-four and could still
+have gone green on a loose detector.
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **A fix at the tool seam does not reach the agent that writes the answer, and the first
+  acceptance run is what proved it.** The Worker sees tool results; the **Manager sees only
+  the worker's report** and the **DR synthesis only the step findings**. 6367 rep 1 carried
+  the scope block in the Worker's context **27 times**, three of its four worker reports
+  carried no scope language at all, and the answer told the lawyer that a search *"confirms"*
+  that no SSIs prescribe the detail — the exact overclaim the block forbids. This is P2.1's
+  "a fix at one site leaves the others open" in a second place, and it is why
+  `worker_scope_block` exists: the facts are carried across the boundary in code, the same
+  shape as `provision_url_block`.
+
+- **Carrying the facts to the right reader got 56%, not 100% — so the disclosure became
+  code.** Instruction-only moved explained negatives from 20% to 56%; the remaining 44% still
+  told a lawyer something was not found without saying what had been looked for. Invariant 2
+  arriving exactly on schedule. `answer_scope_footer` is one lawyer-facing line emitted on
+  every researched answer.
+
+- **The mechanical acceptance is now circular, and the write-up says so.** The footer
+  satisfies all three conditions by construction, so `replay_report negatives` prints a second
+  **model column** graded with the footer stripped off. **That column is unstable and must not
+  be quoted as a result:** it swung **56% → 4%** between two sweeps the model could not
+  distinguish, since the footer is appended after the model has finished writing. n=3 cannot
+  produce that swing legitimately.
+
+- **A product change corrupted the instrument measuring it — a new failure mode here.** The
+  footer says *"anything reported above as not found was not found in this index"*, which
+  trips `NEG_ASSERTED`. Selecting the denominator on the full answer therefore enrolled every
+  researched turn, including purely positive ones: 23 → 34 negatives, and the model column
+  crushed to 14%. **The denominator is a fact about what the model wrote**, so it is now taken
+  from the footer-stripped prose. Worth generalising: every later row that emits text into an
+  answer must ask what its own words do to the detectors already reading them.
+
+- **Six instrument errors in one row, five of them under-reads.** (1) The first
+  `NEG_ASSERTED` scored **61 of 153 turns, 100% failing**, by counting *"no winding-up order
+  may be made, except by the company's directors"* — a correct statement of retrieved law — as
+  a bare negative; grading those would have pushed the model to hedge findings it had actually
+  retrieved, the regression Invariant 1 exists to prevent. (2)+(3) `terms` demanded "searched"
+  adjacent to "for", then demanded quotation marks; *"A search of the legislation index for
+  commencement regulations did not return any results"* names its terms perfectly well.
+  Patching twice failed twice, so it was rebuilt as **sentence-level co-occurrence** rather
+  than a guess at phrasings. (4) `index` was defeated by a 158-character instrument title —
+  and note the general trap: **every commencement SSI's title contains a full stop
+  ("Commencement No. 1"), so any sentence window keyed on `.` cannot cross the titles this
+  corpus is about.** (5) `limits` demanded the model recite an **inert** `year_to = 2026` that
+  excluded nothing; it is now `n/a` where no filter could have bitten. Every correction was
+  re-validated against Wave 1, which moved only 44/44 → 44/38 failing.
+
+- **The footer's first rendering exposed two defects unit tests had not.** It printed
+  `""Water Industry Commission for Scotland""` (the model quotes its own query; wrapping it
+  again doubles the quotes, and the quoted and unquoted forms listed as two searches), and
+  *"filters in force: years any-2026"* — **telling a lawyer a constraint was in force that was
+  not**. An overstated limit invites re-running a search that was never narrowed. The
+  lawyer-facing line now names only filters that could actually have excluded something; the
+  agent-facing block still reports every parameter, deliberately.
+
+- **The two remaining failures are the same shape and are a real limitation.** Both are turns
+  with **zero delegations** — a negative carried forward from an earlier turn (*"As noted in
+  the previous search, SSI 2025/377 is not currently available…"*). No search ran, so no footer
+  fired. The footer is per-turn; a conversation is not. Left unfixed: restating full scope on
+  every follow-up would be noise.
+
+- **P5.3's coverage headline was wrong in the direction that matters.** "UK SI 2026 ~0% held"
+  reads as *"nothing made in 2026 is in the index"*. `/legislation/search` returns **27
+  distinct `uksi/2026/*`** instruments and **all 12 spot-checked resolve on lookup**; a
+  60-point census puts it at ~2%. Low single digits, not nothing — so the product string says
+  **"under 5%"** and never "none", because a lawyer told "none" stops looking. Caught by the
+  cross-check P5.3's own method warning prescribes, applied to P5.3's own headline.
+
+- **Verified at source, and it settles 6373 and 6409 turns 9-11:** `ssi/2026/170` and
+  `ssi/2025/377` are **both 404 in LEX**, `ssi/2025/119` is held. FrankieH's citation was right
+  and AILA asked her to check it. Across 23 opportunities in the acceptance sweep, **no run
+  blamed a lawyer's citation** (Wave 1: 2 of 10 on these two sessions, 3 of 44 overall).
+
+**Decisions taken this session:**
+- **The footer is unconditional on any turn that searched**, not gated on a detector that
+  decides the answer contains a negative. A prose detector in the *product* fails silently —
+  an unrecognised phrasing means no footer and no signal — and that is the trap this work has
+  hit eleven times. The cost is a line of provenance on answers that found what they were
+  looking for. **This is the decision most open to being overruled.**
+- **Keep `NOT_FOUND` and `NEGATIVE_EXPLAINED` untouched** and report `bare_negatives`
+  alongside the new conditions, rather than retightening a metric in place — the rule set when
+  `provision_links_reconstructed` was added beside `provision_links_manufactured`.
+- **`/legislation/lookup` is a new row, not scope creep into P2.2.** P2.2 can only make a
+  negative honest; P3.7 is the only thing that can make it definite.
+
+**State of the branch:** `fix/prepilot-defects`. **711 tests green, NOTHING PUSHED** — the
+whole-plan-then-one-push policy stands, so the target still runs the pre-pilot code. Ledger:
+Waves 0 and 1 complete; **P1.6, P2.1, P2.2, P2.6, P4.4, P5.1 and P5.3 done**; P0.4 and P5.2 at
+`[~]`; **P3.7 opened this session**.
+
+**Machine state a new session inherits:**
+- **No uvicorn running** — stopped at the end of the session. Start a fresh one before any
+  live work: Python loads modules at import, so a surviving server serves stale code. **This
+  session proved the point three times over**: three sweeps were aborted and restarted because
+  wording changed after the server booted, and it is far cheaper to restart than to publish an
+  acceptance against code that is not HEAD.
+- **Dev box restored** — `moonshotai/kimi-k3`, local prompt cache ON, no pin file.
+  **Re-pin before any measurement.**
+- **Five gitignored replay directories:** `baseline/` (65), `wave1/` (41), `wave2_p21/` (12),
+  **`wave2_p22/` (6 — P2.2's instruction-only sweep, the 56% column)** and
+  **`wave2_p22_final/` (6 — P2.2's acceptance, the 90% column)**. Neither Wave 2 directory is a
+  sweep; do **not** feed them to `replay_report compare`. Read them with `replay_report --dir
+  <dir> negatives` (and `halts` for P2.1).
+- **`wave2_p22/` was run against code without the footer** and is kept deliberately: it is the
+  only measurement of what the instruction achieves on its own, and the row's argument for the
+  footer rests on it.
+
+**Next action:** **P2.4** is the cheapest — P5.2's probe already wrote its exact wording, and
+this session verified the two citations it turns on. **P2.3** is the one that matters, because
+it unblocks **P3.5** (`/amendment/search`), the highest-value row on the page. **P2.7** is
+available in parallel. **P0.4's re-export remains post-push** and blocks nothing.

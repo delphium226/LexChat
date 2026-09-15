@@ -28,6 +28,7 @@ import pytest
 
 from src.agent.agent_core import run_worker_agent
 from src.agent.provider_factory import set_request_provider_config
+from src.utils.search_scope import strip_scope_blocks
 from src.utils.citation_links import (
     PROVISION_FOOTNOTE,
     PROVISION_MARKER,
@@ -270,7 +271,10 @@ def test_a_provision_url_a_tool_returned_reaches_the_answer(_worker_config):
         result = asyncio.run(run_worker_agent(
             chat_loop, lambda *a, **k: None, "q", "test-model", None, 0,
         ))
-    assert result["content"] == _REPORT
+    # P2.2 appends a code-emitted search-scope block after this enforcement runs;
+    # stripping it back off asserts what this test is actually about — that a
+    # retrieved provision URL reaches the answer UNMODIFIED.
+    assert strip_scope_blocks(result["content"])[0].strip() == _REPORT.strip()
 
 
 def test_a_provision_url_no_tool_returned_does_not(_worker_config):
@@ -305,7 +309,7 @@ def test_the_retrieved_set_spans_the_whole_request_not_one_delegation(_worker_co
         chat_loop, lambda *a, **k: None, "q", "test-model", None, 0,
         retrieved_urls=shared,
     ))
-    assert result["content"] == _REPORT
+    assert strip_scope_blocks(result["content"])[0].strip() == _REPORT.strip()
 
 
 @pytest.mark.asyncio

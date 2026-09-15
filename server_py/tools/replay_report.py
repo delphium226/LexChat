@@ -93,9 +93,192 @@ NOT_FOUND = re.compile(
     re.I,
 )
 # A negative is "explained" if it says what was searched / under what filters.
+#
+# **Deliberately left as it was, and deliberately NOT used to grade P2.2.** It is
+# a coarse screen — the bare word "filter" anywhere in an answer satisfies it —
+# and it has been reported against the whole corpus since Wave 0. Tightening it
+# in place would silently redefine every earlier reading of `bare_negatives`,
+# which is the mistake `provision_links_manufactured` was explicitly not allowed
+# to make (SESSION_LOG, Session 5). P2.2's acceptance uses the three conditions
+# below instead, and `cmd_negatives` prints both so the two can be compared.
 NEGATIVE_EXPLAINED = re.compile(
     r"search(?:ed|ing)? (?:for|term|the)|filter|jurisdiction (?:filter|was set)"
     r"|scope of (?:the|my) search|query used|search terms",
+    re.I,
+)
+
+# --- P2.2 (B5) acceptance ----------------------------------------------------
+#
+# The row: *"6409 and 6367 name their search terms and active filters in the
+# negative answer"*, and **Invariant 1 applies with force** — the test is that
+# the negative is EXPLAINED, not that it becomes a positive. So nothing here
+# rewards finding something; `NEG_ASSERTED` turns are the denominator and the
+# three conditions are all about what the answer says *about its own limits*.
+#
+# Three conditions, each a different failure in the corpus:
+#
+#   1. TERMS   — the answer says what was looked for. 6409 turn 9's entire
+#                negative was "SSI 2025/377 could not be found in the
+#                legislation database. Could you verify the SSI number?"
+#   2. LIMITS  — it says under what constraint the search ran: a named filter, a
+#                stated year window, or the fact that it was a ranked search of
+#                an index rather than an enumeration.
+#   3. BLAMED  — the miss is attributed to the index or the search. The failing
+#                direction is attributing it to the LAW ("no such regulations
+#                have been made") or to the LAWYER ("could you confirm the SI
+#                number?", 6373 — where the citation was right and the index was
+#                short, verified 404 on 2026-09-15).
+#
+# All three are regex screens over prose and are therefore evidence, not proof.
+# `--answers` prints the negative in context because that reading is the actual
+# acceptance; these columns say which turns to read first.
+#
+# **The first draft of this regex was a detector artefact and is recorded here
+# rather than quietly replaced.** It opened `\b(?:no|not|never)\b[^.]{0,60}
+# \b(?:found|exist|made|in force|…)\b` plus a bare `(?:does|do|did) not
+# (?:contain|include|provide|…)`, which scored **61 of 153 turns, 61 failing —
+# 100%**. A rate of 100% is an artefact until proven otherwise (SESSION_LOG's
+# standing hazard 1), and it was: it could not tell a **research** negative from
+# a **legal** one. It fired on *"no winding-up order may be made, except by the
+# company's directors"* (6335 t2) and *"'sale of goods' does not include the
+# sale of meals"* (6341 t4) — both correct statements of retrieved law, and
+# neither anything to do with B5. Grading those as bare negatives would have
+# pushed the model to hedge findings it had actually retrieved, which is the
+# regression Invariant 1 and P3.3's counter-pressure note both warn about.
+#
+# So the subject has to be the *research*, not the law: something was looked for
+# and not found, or the corpus itself is named as falling short.
+NEG_ASSERTED = re.compile(
+    # something was looked for and not found
+    r"\bcould not (?:be )?(?:find|locate|retrieve|identify)"
+    r"|\b(?:not|never) (?:be )?(?:found|located|retrieved|identified)\b"
+    r"|\bno (?:relevant |specific |directly relevant )?"
+    r"(?:results?|matches?|records?|cases?|case law|judgments?|legislation|"
+    r"provisions?|regulations?|instruments?|ssis?|sis?|commencement)\b"
+    # the corpus named as falling short
+    r"|\b(?:database|index|corpus|collection|search(?: tools?)?|holdings?)\b"
+    r"[^.]{0,50}\b(?:does|do|did) not (?:contain|include|hold|index|cover|"
+    r"return|appear to)\b"
+    r"|\bnot (?:currently )?(?:available|held|present|indexed) in the\b"
+    r"|\bis a 404\b|\breturns? (?:a )?404\b"
+    # absence asserted of an instrument or a commencement — B5's signature
+    # sentence, and the one seven of the seventeen measured negatives use
+    r"|\bno (?:\w+ ){0,3}(?:regulations?|orders?|instruments?|ssis?|rules?|"
+    r"provisions?) (?:have|has|had|were|was) (?:yet )?been (?:made|laid|"
+    r"commenced|brought into force|enacted)\b"
+    r"|\b(?:have|has) not (?:yet )?been (?:made|commenced|brought into force)\b"
+    r"|\bno (?:\w+ ){0,3}(?:have|has) been made\b"
+    r"|\bthere (?:is|are) no (?:such|record|evidence|trace|indication)\b"
+    # "No Statutory Instruments **were found** prescribing …" (6367). Added
+    # 2026-09-15 after the first acceptance run scored that answer as asserting
+    # no negative at all. The noun list above could not reach it — "Statutory"
+    # is not in its adjective set — and widening the noun list is the wrong fix,
+    # because `no <anything> orders?` is what made the first draft count
+    # *"no winding-up order may be made"* as a bare negative. The discriminator
+    # is the VERB: "were found" is about the search, "may be made" is about the
+    # law. Re-validated over Wave 1 — it adds turns and none of them is a
+    # finding of law.
+    r"|\bno\b[^.\n]{0,60}\b(?:were|was|are|is) (?:found|located|retrieved|"
+    r"identified|returned|surfaced|available)\b",
+    re.I,
+)
+# **Rebuilt 2026-09-15, after patching it twice failed twice — which is the
+# lesson, not the patches.** The first version demanded "searched" immediately
+# followed by "for" and scored 6367 rep 1's *"Searched the legislation index 2
+# time(s) for: '…'"* as naming nothing. Widening the gap then still missed 6409
+# rep 2 turn 3's *"A search of the legislation index for commencement regulations
+# (using terms such as '…')"*. Each patch was a fresh guess at how a model might
+# phrase one idea, which is an unbounded set — the instrument was wrong in kind,
+# not in detail.
+#
+# So the test is now **sentence-level co-occurrence** rather than adjacency: a
+# sentence that talks about searching AND carries a quoted string is naming its
+# search terms, whatever order it puts them in. `_names_search_terms` applies it;
+# these two parts are the halves it looks for. A quoted run of ≥6 characters is
+# required so an ordinary "no" or a stray apostrophe cannot satisfy it.
+_SEARCH_WORD = re.compile(
+    r"\b(?:search(?:ed|es|ing)?|quer(?:y|ies|ied)|keywords?|search terms?|"
+    r"looked for)\b",
+    re.I,
+)
+_QUOTED_RUN = re.compile(r"[\"“][^\"”\n]{6,}[\"”]|'[^'\n]{8,}'")
+# A model naming its terms without quoting them: "a search of the legislation
+# index **for commencement regulations**". Found in the final acceptance sweep,
+# where requiring quotation marks scored a whole rep of genuinely explanatory
+# answers as naming nothing. `for` must have an object — "a search of the
+# database," on its own names no terms and must not count.
+_SEARCH_FOR_OBJECT = re.compile(r"\bsearch\w*\b[^.\n]{0,45}?\bfor\b\s+(?![\s.])\S", re.I)
+# Kept as the explicit-phrase fallback for an answer that names its terms without
+# quoting them ("the search terms used were: commencement, uprating").
+NEG_TERMS = re.compile(
+    r"\bsearch(?:es|ed)?\s+(?:terms?|quer(?:y|ies)|keywords?)\b"
+    r"|\bquer(?:y|ies)\s+(?:used|run|for|was|were)"
+    r"|\bkeywords?\s+(?:used|search)"
+    r"|\bsearch(?:ed|es|ing)?\b[^.\n]{0,60}?\bfor\b[:\s]*[\"'“]"
+    r"|\bterms such as\b|\bsearches (?:run|carried out|performed)\b",
+    re.I,
+)
+
+
+def _names_search_terms(answer: str) -> bool:
+    """Does the answer say what it searched for?
+
+    Sentence-level: a sentence that is about searching and contains a quoted
+    string is naming its terms. Falls back to the explicit-phrase patterns for
+    the unquoted forms.
+    """
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", answer or ""):
+        if _SEARCH_WORD.search(sentence) and (
+            _QUOTED_RUN.search(sentence) or _SEARCH_FOR_OBJECT.search(sentence)
+        ):
+            return True
+    return bool(NEG_TERMS.search(answer or ""))
+NEG_LIMITS = re.compile(
+    r"\bfilter(?:s|ed|ing)?\b"
+    r"|\bjurisdiction (?:filter|was set|of)\b"
+    r"|\branked (?:keyword )?search\b|\bkeyword search\b"
+    r"|\bnot (?:an )?exhaustive\b|\bnot a complete (?:list|search)\b"
+    r"|\btop \d+ (?:of|results)\b"
+    r"|\bdate range\b|\byear range\b|\brestricted to\b|\blimited to\b"
+    r"|\bthis answer is incomplete\b",     # P2.1's notice: a halt IS a limit
+    re.I,
+)
+# The index named as the thing that fell short, rather than the law or the user.
+#
+# The last alternative exists because of one measured miss, and the number is
+# worth recording. 6409 turn 7's whole answer was *"The research agent could not
+# locate 'The Social Security (Amendment) (Scotland) Act 2025 (Commencement No. 1
+# and Saving and Transitional Provisions) Regulations 2025' in the legislation
+# database"* — **158 characters** between the "not" and the "database", because
+# that is how long a commencement SSI's title is. A proximity window wide enough
+# to span it would span half a paragraph, so the verb-to-phrase alternative below
+# matches the attribution directly instead — and it spans NEWLINES rather than
+# sentences (`[^\n]`, not `[^.]`), because **every commencement instrument's title
+# contains a full stop**: "Commencement **No.** 1". A sentence window keyed on "."
+# cannot cross the exact titles this corpus is about, which is why the first
+# attempt at this alternative also missed. This is the easiest of the three
+# conditions to satisfy, which is correct: the discriminating power belongs in
+# `terms` and `limits`, which are what the row asks for ("name their search terms
+# and active filters").
+NEG_BLAMED_INDEX = re.compile(
+    r"\b(?:not|absent|missing)\b[^.]{0,100}\b(?:index(?:ed)?|database|corpus|"
+    r"collection|holdings?)\b"
+    r"|\b(?:find|found|locate|located|retriev\w+|identif\w+|search\w*)\b"
+    r"[^\n]{0,220}\bin (?:the|this|our) (?:legislation |case ?law |available )?"
+    r"(?:database|index|corpus|collection)\b"
+    r"|\b(?:index|database|corpus)\b[^.]{0,40}\b(?:does not (?:hold|contain|"
+    r"include|index)|is incomplete|coverage|gap)"
+    r"|\bnot held\b|\bcoverage (?:is|gap|of the)\b"
+    r"|\bnot (?:evidence|proof) (?:of|that)\b[^.]{0,40}\b(?:absence|does not exist)"
+    r"|\babsence from the index\b",
+    re.I,
+)
+# The failing direction: the lawyer's own citation questioned. 6373 and 6409.
+NEG_BLAMED_USER = re.compile(
+    r"(?:could|can) you (?:confirm|verify|check|clarify)[^.?]{0,60}"
+    r"(?:number|year|citation|reference|title)"
+    r"|\b(?:verify|confirm|double[- ]check) the (?:ssi|si|s\.?i\.?) number\b"
+    r"|\bare you sure\b|\bis that the correct (?:number|citation|reference)\b",
     re.I,
 )
 
@@ -971,6 +1154,168 @@ def cmd_halts(args) -> int:
     return 0 if bad == 0 else 1
 
 
+def _turn_queries(turn: dict) -> list:
+    """Every search query this turn actually ran, in order, deduped.
+
+    Read from the trace rather than inferred from the answer: "what was searched"
+    is a fact about the run, and the whole point of the row is that the answer
+    was not saying it.
+    """
+    out: list = []
+    for dg in (turn.get("audit") or {}).get("delegations", []):
+        for tl in dg.get("tools", []):
+            if tl.get("name") not in ("search_legislation",
+                                      "search_legislation_sections",
+                                      "search_case_law"):
+                continue
+            q = str((tl.get("args") or {}).get("query") or "").strip()
+            if q and q not in out:
+                out.append(q)
+    return out
+
+
+# P2.2's code-emitted lawyer-facing footer (`answer_scope_footer`). Stripped
+# before the MODEL column is graded — otherwise the footer satisfies the
+# conditions on every answer and the report stops being able to say whether the
+# model itself complied. The verdict column is graded on the WHOLE answer, since
+# what reaches the lawyer is what matters; the model column is the honest
+# measure of the instruction half, and both are printed.
+ANSWER_FOOTER = re.compile(r"\n*\*Search scope:.*?\*\s*$", re.I | re.S)
+
+
+def _without_footer(answer: str) -> str:
+    return ANSWER_FOOTER.sub("", answer or "").strip()
+
+
+def _filters_could_bite(doc: dict, turn: dict) -> bool:
+    """Was a filter in force that could actually have excluded material?
+
+    **This distinction was missing from the first version of the acceptance and
+    it was grading against something the row does not ask for.** The row requires
+    a negative to state "what was searched, under which filters"; where no filter
+    was set there are no filters to state, and demanding the model recite an
+    inert one is demanding noise. 6409 and 6367 both ran with
+    `{year_to: 2026, current_only: true}` — `current_only` no longer exists in
+    the product (P1.2 removed it) and a 2026 upper bound excluded nothing in
+    September 2026. So `limits` is reported as n/a for those turns rather than
+    failed.
+
+    Biting means: a jurisdiction or legislation_type filter, a lower year bound,
+    or an observed `removed_by_filters` on any search in the turn.
+    """
+    f = doc.get("filters") or {}
+    if f.get("jurisdiction") or f.get("legislation_type") or f.get("year_from"):
+        return True
+    for dg in (turn.get("audit") or {}).get("delegations", []):
+        for tl in dg.get("tools", []):
+            out = _json_or_none(tl.get("final_result"))
+            if isinstance(out, dict) and (out.get("removed_by_filters") or 0) > 0:
+                return True
+    return False
+
+
+def cmd_negatives(args) -> int:
+    """P2.2's acceptance, run over a replay directory, graded per TURN.
+
+    Per-turn and not per-session, for the reason P2.1's sweep established the
+    hard way: which turn carries the failure moves between reps (6383's halt
+    moved from turn 1 to turn 4; 6384 stopped halting altogether). Grading a
+    named session asks a stochastic question.
+
+    **Invariant 1 is the whole point of the output shape.** A turn that asserts
+    no negative at all is not a pass — it is not in the denominator. This command
+    cannot be satisfied by answering more; only by explaining better.
+    """
+    docs = load_runs(Path(args.dir))
+    if not docs:
+        print(f"No run files in {args.dir}")
+        return 1
+    print(f"P2.2 acceptance over {args.dir}")
+    print("  terms  = the answer says what was searched for")
+    print("  limits = it names a filter, a window, or that the search was ranked")
+    print("           (n/a where no filter in force could have excluded anything)")
+    print("  index  = the miss is attributed to the index/search …")
+    print("  USER   = … rather than to the lawyer's citation (a FAIL on its own)")
+    print("  model  = the same three, graded on the model's prose with P2.2's")
+    print("           code-emitted footer stripped off")
+    print()
+    print(f"{'session':>8} {'rep':>3} {'turn':>4} {'queries':>7} "
+          f"{'terms':>5} {'limits':>6} {'index':>5} {'USER':>4} {'loose':>5} "
+          f"{'model':>5}  verdict")
+    print("-" * 90)
+    neg_turns = 0
+    bad = 0
+    rows = []
+    model_turns: list = []
+    for doc in sorted(docs, key=lambda d: (d["session_id"], d.get("rep", 1))):
+        for t in doc.get("turns", []):
+            answer = t.get("answer") or ""
+            # **The denominator is selected on the MODEL's prose, not on the
+            # whole answer — and getting this wrong was the twelfth instrument
+            # error on this work, the first caused by the product change it was
+            # measuring.** P2.2's own footer says "anything reported above as
+            # not found was not found in this index", which trips
+            # `NEG_ASSERTED`. Selecting on the full answer therefore enrolled
+            # every researched turn, including purely positive ones: the count
+            # went 23 -> 34 and the model column fell 52% -> 14%, because the
+            # added turns had no negative to explain. Whether a negative was
+            # asserted is a fact about what the model wrote.
+            bare = _without_footer(answer)
+            if not answer.strip() or not NEG_ASSERTED.search(bare):
+                continue
+            neg_turns += 1
+            queries = _turn_queries(t)
+            terms = _names_search_terms(answer)
+            biting = _filters_could_bite(doc, t)
+            limits = bool(NEG_LIMITS.search(answer))
+            index = bool(NEG_BLAMED_INDEX.search(answer))
+            user = bool(NEG_BLAMED_USER.search(answer))
+            loose = bool(NEGATIVE_EXPLAINED.search(answer))
+            ok = terms and index and not user and (limits or not biting)
+            # The same three conditions against the model's own prose only.
+            model_ok = (
+                _names_search_terms(bare)
+                and bool(NEG_BLAMED_INDEX.search(bare))
+                and not bool(NEG_BLAMED_USER.search(bare))
+                and (bool(NEG_LIMITS.search(bare)) or not biting)
+            )
+            model_turns.append(model_ok)
+            bad += 0 if ok else 1
+            rows.append((doc, t, ok))
+            lim_cell = ("yes" if limits else "NO") if biting else (
+                "yes" if limits else "n/a")
+            print(f"{doc['session_id']:>8} {doc.get('rep',1):>3} {t['turn']:>4} "
+                  f"{len(queries):>7} {('yes' if terms else 'NO'):>5} "
+                  f"{lim_cell:>6} {('yes' if index else 'NO'):>5} "
+                  f"{('YES' if user else '-'):>4} {('yes' if loose else 'no'):>5}  "
+                  f"{('yes' if model_ok else 'no'):>5}  "
+                  f"{'PASS' if ok else 'FAIL'}")
+    print()
+    print(f"{neg_turns} turn(s) asserting a negative; {bad} failing.")
+    if model_turns:
+        mo = sum(model_turns)
+        print(f"Of those, {mo} ({100 * mo // len(model_turns)}%) are explained by the "
+              f"MODEL's own prose, with the code-emitted footer removed. That is the "
+              f"number that measures the instruction half;\n      the verdict "
+              f"column measures what the lawyer actually sees.")
+    print("NOTE: a turn that asserts no negative is NOT in this denominator. "
+          "Under Invariant 1\n      this test cannot be passed by answering more, "
+          "only by explaining better.")
+    if args.answers:
+        for doc, t, ok in rows:
+            if args.failing_only and ok:
+                continue
+            print()
+            print(f"=== {doc['session_id']} rep{doc.get('rep',1)} turn {t['turn']} "
+                  f"({'PASS' if ok else 'FAIL'}) ===")
+            print("queries run:")
+            for q in _turn_queries(t):
+                print(f"    {q[:150]}")
+            print("filters:", {k: v for k, v in (doc.get("filters") or {}).items() if v})
+            print((t.get("answer") or "")[: args.chars])
+    return 0 if bad == 0 else 1
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="replay_report")
     p.add_argument("--dir", default=str(
@@ -992,6 +1337,13 @@ def main(argv: Iterable[str] | None = None) -> int:
     h = sub.add_parser("halts", help="P2.1 acceptance: every halted turn, graded")
     h.add_argument("--answers", action="store_true", help="print the answers too")
     h.add_argument("--chars", type=int, default=1200)
+
+    n = sub.add_parser("negatives",
+                       help="P2.2 acceptance: every turn asserting a negative, graded")
+    n.add_argument("--answers", action="store_true", help="print the answers too")
+    n.add_argument("--failing-only", action="store_true",
+                   help="with --answers, print only the failing turns")
+    n.add_argument("--chars", type=int, default=1600)
     args = p.parse_args(list(argv) if argv is not None else None)
     return {
         "summary": cmd_summary,
@@ -999,6 +1351,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "baseline": cmd_baseline,
         "compare": cmd_compare,
         "halts": cmd_halts,
+        "negatives": cmd_negatives,
     }[args.cmd](args)
 
 
