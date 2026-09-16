@@ -1667,9 +1667,9 @@ P2.2, P2.3, P2.5, P2.6, P3.5, P4.4, P5.1 and P5.3 done**; P0.4 and P5.2 at
   before any live work.
 - **Dev box restored** — `moonshotai/kimi-k3`, local prompt cache ON, no pin
   file. **Re-pin before any measurement.**
-- **Nine gitignored replay directories:** `baseline/` (65), `wave1/` (41),
+- **Ten gitignored replay directories:** `baseline/` (65), `wave1/` (41),
   `wave2_p21/` (12), `wave2_p22/` (6), `wave2_p22_final/` (6), `wave2_p23/`
-  (12), `wave3_p35/` (9), **`wave2_p25/` (8 — P2.5's acceptance)** and **`wave2_p25b/` (4 — 6411 re-run on the strengthened prompt, plus the 6383 blank-report re-test)**.
+  (12), `wave3_p35/` (9), **`wave2_p25/` (8 — P2.5's acceptance)** and **`wave2_p25b/` (4 — 6411 re-run on the strengthened prompt, plus the 6383 blank-report re-test)** and **`wave2_p25_smoke/` (2 — the two smoke runs, kept because they are the primary evidence for the footer and paraphrase findings)**.
   None of the per-row dirs is a sweep; do **not** feed them to `replay_report
   compare`. Read them with `replay_report --dir <dir>` plus `currency` (P2.5,
   `--drops` for the both-directions audit and `--before <dir>` for Invariant 1),
