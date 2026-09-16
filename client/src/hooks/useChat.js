@@ -94,6 +94,11 @@ export function useChat({
   const [historyLoading, setHistoryLoading] = useState(false);
   const [agentStatus, setAgentStatus] = useState('');
   const [activities, setActivities] = useState(EMPTY_ACTIVITIES);
+  // P4.2 (B13), the perceived-latency half. A 5.5-minute turn was reported as
+  // "around 15 minutes": the status line changes wording but nothing
+  // accumulates, so there is no anchor for how long the wait has been or how
+  // much has happened. Mirror of run.steps/run.startedAt for the VISIBLE run.
+  const [agentProgress, setAgentProgress] = useState(null);
   // Deep Research: drafted plan awaiting review/approval for the VISIBLE chat
   // (mirror of run.pendingPlan, which is the source of truth)
   const [pendingPlan, setPendingPlan] = useState(null);
@@ -199,9 +204,11 @@ export function useChat({
             const label = toolLabel(status.tool);
             if (status.id) run.activities.set(status.id, label);
             run.agentStatus = label;
+            run.steps += 1;
             if (isVisible(run)) {
               setActivities(new Map(run.activities));
               setAgentStatus(label);
+              setAgentProgress({ steps: run.steps, startedAt: run.startedAt });
             }
           } else if (status.type === 'tool_end') {
             if (status.id) run.activities.delete(status.id);
@@ -361,6 +368,7 @@ export function useChat({
     run.agentStatus = chatMode === 'deep_research' ? 'Drafting research plan…' : 'Thinking…';
     setAgentStatus(run.agentStatus);
     setActivities(EMPTY_ACTIVITIES);
+    setAgentProgress({ steps: run.steps, startedAt: run.startedAt });
     bumpSummaries();
     let activeChatId = currentChatId;
 
@@ -454,6 +462,7 @@ export function useChat({
     run.agentStatus = 'Executing research plan…';
     setAgentStatus(run.agentStatus);
     setActivities(EMPTY_ACTIVITIES);
+    setAgentProgress({ steps: run.steps, startedAt: run.startedAt });
 
     try {
       await runExchange([...messages], run, approvedPlan);
@@ -531,6 +540,9 @@ export function useChat({
       setActiveSourcesMsgId(run?.sourcesMsgId ?? null);
       setAgentStatus(isActive(run) ? run.agentStatus : '');
       setActivities(isActive(run) ? new Map(run.activities) : EMPTY_ACTIVITIES);
+      setAgentProgress(
+        isActive(run) ? { steps: run.steps, startedAt: run.startedAt } : null
+      );
       setPendingPlan(run?.pendingPlan ?? null);
       setVisibleRun(run);
 
@@ -594,6 +606,7 @@ export function useChat({
     runLimitNotice,
     dismissRunLimitNotice,
     agentStatus,
+    agentProgress,
     activities,
     chatScrollRef,
     textareaRef,

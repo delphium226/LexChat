@@ -54,6 +54,16 @@ import { useModals } from './hooks/useModals';
 import { useMatters } from './hooks/useMatters';
 import { useChat } from './hooks/useChat';
 
+// P4.2 (B13). Elapsed wall-clock for the status line, in the coarsest form that
+// is still an anchor: seconds under a minute, minutes and seconds above. No
+// milliseconds — a figure that twitches reads as instrumentation, not as
+// reassurance, and the point is to make a long wait legible.
+function formatElapsed(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  if (total < 60) return `${total}s`;
+  return `${Math.floor(total / 60)}m ${String(total % 60).padStart(2, '0')}s`;
+}
+
 // ── Main app ───────────────────────────────────────────────────
 
 function AppContent() {
@@ -236,6 +246,7 @@ function AppContent() {
     runLimitNotice,
     dismissRunLimitNotice,
     agentStatus,
+    agentProgress,
     activities,
     chatScrollRef,
     textareaRef,
@@ -272,6 +283,19 @@ function AppContent() {
       updatePreferences({ chat_mode: 'conversational' }).catch(() => {});
     },
   });
+
+  // P4.2 (B13). One interval for the whole app, running only while a run is
+  // streaming, so an idle tab ticks nothing. The elapsed figure is derived from
+  // run.startedAt rather than counted up here — a re-render, a chat switch or a
+  // backgrounded tab must not reset or skew the clock.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!streaming) return undefined;
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [streaming]);
+  const elapsedMs = agentProgress?.startedAt ? nowMs - agentProgress.startedAt : 0;
 
   // ── Bot identity (name/branding/favicon) — driven by `anyRunActive`, so the
   // favicon keeps animating while a backgrounded chat is still researching ──
@@ -869,11 +893,32 @@ function AppContent() {
                         .map(([label, n]) => (n > 1 ? `${label} (${n})` : label))
                         .join(', ');
                     }
+                    // P4.2 (B13), the perceived-latency half. A 5.5-minute
+                    // turn was reported as "around 15 minutes". The status line
+                    // already changes wording, but nothing accumulates, so
+                    // there is no anchor for how long the wait has been or how
+                    // much has happened — and an unanchored wait is
+                    // systematically over-estimated.
+                    //
+                    // **No denominator, deliberately.** "Step 3 of 8" would be
+                    // a claim about how much is left, and outside Deep Research
+                    // nothing knows the total — the model decides how many
+                    // retrievals a question needs as it goes. A bare count is
+                    // the honest form of the same reassurance, and Invariant 1
+                    // applies to progress claims as much as to legal ones.
+                    const steps = agentProgress?.steps || 0;
                     return (
                       <div style={{ padding: '8px 0', fontSize: 13, color: 'var(--ink-500)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <div className="lex-thinking-dot" />
                           <span style={{ flex: 1 }}>{statusText}</span>
+                          <span
+                            className="font-ui"
+                            style={{ color: 'var(--ink-400)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
+                          >
+                            {steps > 0 && `${steps} ${steps === 1 ? 'step' : 'steps'} · `}
+                            {formatElapsed(elapsedMs)}
+                          </span>
                         </div>
                       </div>
                     );
