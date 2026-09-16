@@ -1851,3 +1851,87 @@ proper 2,278-char report on the re-run, against 0 in `wave2_p25`. So the blank
 was an empty provider completion and P2.5's longer synthesis prompt is not
 implicated — which is what the re-run was for, and is cheaper than an argument
 about it.
+
+---
+
+## B5 — the searches the record never mentioned (P2.9)
+
+`search_log` is per-WORKER-RUN; the tool memo is per-REQUEST. A Deep Research step
+repeating a search an earlier step already made was served from the memo, and the
+memo branch of `run_worker_tool` never called `record_search` — so that query never
+entered its own run's record.
+
+### Before-column
+
+    python -m tools.replay_report --dir evidence/replay/<dir> scoperecord
+
+Over the **six** directories that have a scope block (`wave2_p22`,
+`wave2_p22_final`, `wave2_p23`, `wave3_p35`, `wave2_p25`, `wave2_p25b`):
+
+| | |
+|---|---|
+| worker runs with a scope block | **259** |
+| `search_legislation` calls issued | **1,189** |
+| of which memo hits | **277 (23%)** |
+| recorded in the run's own block | **912** |
+| **missing from the record** | **277 (23%)** |
+| runs losing ≥1 query | **86 (33%)** |
+| runs recording **no** search at all | **11** |
+| `issued − recorded == memo hits` | **True, per run, 0 exceptions** |
+
+**That identity is the finding.** It holds in aggregate and in every single one of
+the 259 runs, across six independently-produced directories. Nothing other than a
+memo hit eats the record — which is what makes a one-line fix the whole answer
+rather than one fix among several.
+
+~~`wave1` + `wave2_p21`: 359 of 1,497 memo hits, 78 of 358 runs losing a query.~~
+**Those two directories predate P2.2 and carry no scope block at all** (182 and 56
+worker runs), so they cannot lose anything and must be excluded rather than
+counted. Including them deflated the loss rate from 33% to 22%.
+
+### The defect is not a short count
+
+**11 of the 86 lossy runs made every one of their searches via the memo.** Their
+block therefore carries no searched-for line at all — while still carrying the
+instruction that a negative *"MUST quote the search terms above"*. There were none
+above. This is 6374 rep 1 turn 2, and what its worker actually handed the Manager:
+
+> `[SEARCH SCOPE — what this research step actually did]`
+> `Searched within 1 instrument(s) for specific provisions: ukpga/1998/46 …`
+> `Filters in force for the whole step: jurisdiction=scotland, years any-2026.`
+> `NONE of this can establish that something does not exist. If any part of the`
+> `answer you write reports something as not found, it MUST quote the search terms`
+> `above …`
+
+The step had searched for `"Scotland Act 1998"`. The record does not say so,
+because an earlier step had searched for it first.
+
+**6374 is the session Invariant 1 is built on** — CambeulW scored it 5/5 *because*
+AILA said it could not find something. The disclosure that earns that trust was
+instructing the model to quote terms it had withheld.
+
+### After
+
+By construction, not by sweep. Every search a run issues is now recorded, so
+`scoperecord` exits 0 on any directory produced after the fix — and no such
+directory exists yet, so the next sweep any row runs is the first observation.
+The behaviour is pinned by five unit tests, **three of which fail without the
+fix**; the other two guard the opposite direction (a memoised
+`get_legislation_text` must not be logged as a search of the index, and the
+non-memo path must still record exactly once now that a third call site exists).
+
+`replay_report negatives` re-run over all six post-P2.2 directories: unchanged, as
+it must be — the fix touches product code, not the detector.
+
+### One instrument correction, caught the usual way
+
+The first version of `scope_record_gap` inferred block-absence from `recorded == 0`.
+That cannot tell a **pre-P2.2 run** (no block exists) from an **all-memo run** (a
+block exists and records nothing) — they look identical on the count alone. It
+reported `wave1` as 13 runs "with a scope block" losing 100% of their searches, and
+put the corpus-wide loss at 1,127 queries across 277 runs, roughly four times the
+truth. Keying on the block **marker** settles it, and is pinned by a test.
+
+That is the fourth published figure in three sessions to move the moment a command
+was put behind it, and the second this session — the row's own numbers were the
+first.

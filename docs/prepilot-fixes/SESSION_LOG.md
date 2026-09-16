@@ -1861,3 +1861,110 @@ measure-before-building with the command already written. **P2.7**, **P2.8**,
 largest unfixed bucket, with P3.2, P3.3, P3.4 and P4.3 all behind it — and
 finishing Wave 2 is the critical path to it. **P5.2 is the live external one**
 and the LEX-team question is still free and still unasked.
+
+---
+
+## Session 11 — 2026-09-16 — P2.9 (B5, the memo-served search missing from the record)
+
+**Done:**
+- **P2.9 complete, acceptance passed.** A memo-served search now enters its own
+  worker run's record. B5 drops to waiting on **P2.8 and P3.7** only.
+- **1009 tests** (998 → 1009). New tooling: `replay_report scoperecord`.
+- **No spend.** The acceptance is deterministic and the before-column is measured
+  over existing run files.
+
+**The row's published numbers were computed on a denominator that included two
+directories where the feature does not exist.**
+
+The row said "23% of `search_legislation` calls are memo hits (359 of 1,497), and
+78 of 358 worker runs (22%) lose at least one query — 150 distinct queries across
+47 turns", measured over `wave1` + `wave2_p21` + `wave2_p22_final` + `wave2_p23`.
+**`wave1` and `wave2_p21` predate P2.2 and carry no scope block at all** — 182 and
+56 worker runs respectively. A run with no block cannot lose anything from it, so
+those runs belong outside the denominator, not inside it. Over the six directories
+that do have a block: **277 of 1,189 searches (23%) missing, in 86 of 259 runs
+(33%)**. The memo-hit rate was right; the loss rate was deflated by a third.
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **The identity is the finding, and it is stronger than the row claimed.**
+  `issued − recorded == memo hits` holds **exactly, per run, with zero exceptions
+  across all 259 runs and all six directories**. Nothing other than a memo hit eats
+  the record. That is what makes a one-line fix the whole answer rather than one
+  fix among several — and it is checkable, so if a later session sees the identity
+  break, something new is wrong.
+
+- **The defect is not a short count, and its worst case is in the session
+  Invariant 1 is built on.** 11 of the 86 lossy runs made **every** one of their
+  searches via the memo, so their block carries no searched-for line at all —
+  while still carrying the instruction that a negative *"MUST quote the search
+  terms above"*. **The disclosure contradicted itself.** The measured case is 6374
+  rep 1 turn 2: the step searched for `"Scotland Act 1998"`, its block does not say
+  so because an earlier step searched for it first, and **6374 is the session
+  CambeulW scored 5/5 *because* AILA said it could not find something**. The
+  mechanism that earns that trust was telling the model to quote terms it had
+  withheld. Neither the row nor P2.3's NOTE anticipated this case; both described
+  a count running short.
+
+- **`record_search` does not self-gate on the tool name and `record_currency`
+  does.** The three recorders already on the memo path (`record_enabling_power`,
+  `record_relations`, `record_currency`) are called unconditionally because each
+  dispatches on `name` internally. `record_search` does not — its two call sites on
+  the non-memo path gate it, so the memo path is the third gate, not a fourth
+  unconditional call. Adding it unconditionally would have logged every memoised
+  retrieval as a search of the index, inflating the exact count this row exists to
+  correct. There is a test for that direction.
+
+- **My own detector was wrong, in the alarming direction, and the command caught
+  it.** The first `scope_record_gap` inferred block-absence from `recorded == 0`.
+  That cannot distinguish a **pre-P2.2 run** (no block exists) from an **all-memo
+  run** (a block exists and records nothing) — identical on the count alone. It
+  reported `wave1` as 13 runs "with a scope block" losing 100% of their searches,
+  and put corpus-wide loss at **1,127 queries across 277 runs**, roughly four times
+  the truth. Keying on the block **marker** (`[/SEARCH SCOPE]`) settles it, and is
+  pinned by a test that states both halves. Fourth published figure in three
+  sessions to move once a command was put behind it; second this session.
+
+- **The after-column is by construction and deliberately not bought.** The row's
+  acceptance is *(deterministic)*, and the fix makes `issued == recorded`
+  identically — there is no rate left to estimate. `scoperecord` exits 0 on any
+  directory produced after this commit, and **no such directory exists yet**, so
+  the next sweep any row runs is the first observation. Spending on a sweep to
+  confirm an arithmetic identity would have bought nothing.
+
+**Decisions taken this session:**
+- **Gate on the tool name, mirroring the non-memo path exactly.** Parity is the
+  rule this path has followed three times already (sources, URLs, enabling power,
+  relations, currency): the memo saves the API call, not the provenance.
+- **`recorded == 0` is the honest reading for an all-memo run**, not a null. The
+  block exists and it recorded no search; that is a real state and it is the worst
+  one in the bucket.
+- **`scoperecord` exits 1 when the record is incomplete**, joining `halts`,
+  `negatives`, `derivations` and `blanks`. A pre-P2.2 directory exits 0 because it
+  has nothing countable — not a pass, an absence, and the output says so on its
+  first line.
+- **`replay_report negatives` re-run over all six post-P2.2 directories and
+  recorded as unchanged.** It must be: the fix touches product code, not the
+  detector. Run anyway, because that is the check that catches an accidental
+  detector edit.
+
+**State of the branch:** `fix/prepilot-defects`. **1009 tests green, NOTHING
+PUSHED**. Ledger: **20 of 34 rows, 6 of 14 buckets closed**. **Wave 2 is 6 of 10**;
+the four open rows are **P2.4, P2.7, P2.8, P2.10**, and Wave 2 is the gate on
+**P3.1**, which gates P3.2, P3.3, P3.4 and P4.3.
+
+**Machine state a new session inherits:**
+- **No uvicorn running.**
+- **Dev box untouched and unpinned** — `moonshotai/kimi-k3`, local prompt cache ON,
+  no pin file. **Re-pin before anything that produces a number.**
+- **Still ten replay directories.** This row added none and needed none.
+- **`python -m tools.replay_report --dir <dir> scoperecord`** is the new command.
+  `scope_record_gap` is unit-tested in `tests/test_replay_tooling.py`; the product
+  fix is in `tests/test_search_scope.py` (five tests, three of which fail without
+  the fix).
+
+**Next action:** **P2.10** is the cheapest — it is a *measurement*, not a build,
+and the command is already written in Session 9's notes; it may well resolve to
+"not a rate, do not build". Then **P2.4**, **P2.7**, **P2.8** to finish Wave 2 and
+unblock P3.1. **P5.2 is still the live external one**, still free, still unasked,
+and B12 cannot close without it.
