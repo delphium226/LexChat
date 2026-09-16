@@ -1458,9 +1458,15 @@ _DERIV_PRESENTED = re.compile(
     # the single largest unverifiable claim in the corpus. Found by reading the
     # `--drops` audit over wave2_p21, which is what that audit is for.
     r"|\bthere (?:are|is|were|was)\b", re.I)
+# `\bno\b(?!\s*\.)` and not `\bno\b`, and this is the SAME trap a third time.
+# "Commencement **No.** 1" is in the title of every commencement instrument in
+# this corpus, so a bare `\bno\b` reads every derivation claim about one as
+# negated and silently drops it — in the row whose whole job is to count them.
+# SESSION_LOG records the trap for `NEG_BLAMED_INDEX` (a sentence window keyed
+# on `.` cannot cross these titles) and again for the sentence splitter above.
 _DERIV_NEG = re.compile(
-    r"\bno\b|\bnot\b|\bnone\b|\bnever\b|\bcannot\b|\bunable\b|\bwithout\b"
-    r"|\bfail(?:s|ed)? to\b|\bnothing\b", re.I)
+    r"\bno\b(?!\s*\.)|\bnot\b|\bnone\b|\bnever\b|\bcannot\b|\bunable\b"
+    r"|\bwithout\b|\bfail(?:s|ed)? to\b|\bnothing\b", re.I)
 _DERIV_MODAL = re.compile(
     r"\b(?:may|must|can|could|would|shall|should|will|might)\b", re.I)
 # Any sentence in the same vocabulary — the denominator for the `--drops` audit.
@@ -1480,10 +1486,31 @@ _DERIV_RECITAL = re.compile(
     r"|has determined under section", re.I)
 
 
+# **Abbreviation dots, and this corpus is made of them.** SESSION_LOG records the
+# trap once already — every commencement SSI's title contains "Commencement
+# No. 1", so a sentence window keyed on `.` cannot cross the titles this work is
+# about — and the derivation detector walked into the same wall from the other
+# side. The very first acceptance run scored *"S.I. 1963/2111 was made under
+# section 69(4) of the National Insurance Act 1946"* as no claim at all, because
+# the splitter cut it into "For example, S.", "I.", "1963/2111 was made under
+# …", and the fragment that kept the predicate had lost its instrument.
+#
+# So the dots inside an abbreviation are masked before splitting and restored
+# after. `\b[A-Za-z]\.` covers the initial-style forms (S.I., S.S.I., s., r.)
+# in one rule; the rest are the multi-letter legal abbreviations that end a
+# token without ending a sentence.
+_ABBREV = re.compile(
+    r"\b(?:[A-Za-z]|No|Nos|ss|reg|regs|art|arts|para|paras|sch|sched|ch|cl|rr"
+    r"|cf|etc|vs|approx|Sess)\.",
+    re.I)
+_DOT = "\x00"
+
+
 def _sentences(text: str):
     for para in (text or "").split("\n"):
-        for s in re.split(r"(?<=[.!?])\s+", para):
-            s = s.strip()
+        masked = _ABBREV.sub(lambda m: m.group(0).replace(".", _DOT), para)
+        for s in re.split(r"(?<=[.!?])\s+", masked):
+            s = s.replace(_DOT, ".").strip()
             if s:
                 yield s
 

@@ -852,3 +852,40 @@ def test_a_turn_that_retrieved_no_preamble_reports_none():
             "full_text": "Section 1) Citation and commencement"}),
     }]}]}}
     assert rr.retrieved_enabling(turn) == []
+
+
+@pytest.mark.parametrize("answer", [
+    # The exact sentence the FIRST acceptance run produced, and the one the
+    # splitter cut into "For example, S.", "I.", "1963/2111 was made under …".
+    "For example, S.I. 1963/2111 was made under section 69(4) of the National "
+    "Insurance Act 1946, S.I. 1977/1261 was made under section 116 of the "
+    "Education (Scotland) Act 1962.",
+    # The title form SESSION_LOG already records as a trap, from the other side.
+    "The Care Reform (Scotland) Act 2025 (Commencement No. 1) Regulations 2025 "
+    "was made under section 82 of the 2025 Act.",
+    "SSI 2019/29 (reg. 4) is made under section 95 of the 2018 Act.",
+])
+def test_abbreviation_dots_do_not_hide_a_claim(answer):
+    """**The same full-stop trap, walked into from the other side.**
+
+    SESSION_LOG records it for `NEG_BLAMED_INDEX`: every commencement SSI's
+    title contains "Commencement No. 1", so a sentence window keyed on `.`
+    cannot cross the titles this corpus is about. The derivation detector hit it
+    on the very first acceptance run — the fragment that kept the predicate had
+    lost its instrument, so a real claim scored as none.
+
+    An under-read here is not harmless: it would have reported a turn making
+    three derivation claims as making none, in the acceptance for the row that
+    exists to count them."""
+    assert rr.derivation_claims(answer)[0], answer
+
+
+def test_masking_abbreviations_does_not_merge_real_sentences():
+    """The mask must not swallow a genuine sentence break, or two sentences
+    become one and a negation in the first would suppress a claim in the
+    second."""
+    text = ("No SSIs were found under section 95. SSI 2019/29 was made under "
+            "section 95 of the 2018 Act.")
+    asserted, filtered = rr.derivation_claims(text)
+    assert len(asserted) == 1
+    assert asserted[0].startswith("SSI 2019/29")
