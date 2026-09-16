@@ -1221,13 +1221,15 @@ def _currency_limb(log: Optional[list]) -> str:
         )
     parts.append(
         " So in the Jurisdiction & Status section, state territorial extent from "
-        "the metadata, and for currency state ONLY what is listed above. If "
+        "the metadata, and for currency state ONLY what is listed above — and "
+        "state it, rather than calling a tool and reporting nothing from it. If "
         "nothing is listed, say that in-force status could not be verified from "
-        "the available sources and say what would establish it. Do NOT write that "
-        "legislation is currently in force, that it is in force with a text "
-        "version in brackets, or that all cited legislation is in force — those "
-        "are the claims this instruction exists to stop, and none of them is "
-        "supported by anything this system retrieves."
+        "the available sources and say what would establish it. The prohibition "
+        "is on the PROPOSITION and not on a form of words: \"currently in "
+        "force\", \"in operation\", \"still good law\", \"current law\", "
+        "\"active status\", \"continues to apply\" and \"all cited legislation "
+        "is in force\" are the same unsupported claim in different words, and a "
+        "judgment citing an Act is not evidence that the Act is in force today."
     )
     return "".join(parts)
 

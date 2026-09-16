@@ -2114,14 +2114,31 @@ def _invariant_one(before: Path, after: Path) -> None:
 #     failure.
 _CUR_SUBORDINATE = re.compile(
     r"\b(?:while|whilst|where|when|if|during|unless|until|whenever|any|an?)\b"
-    r"[^.;:]{0,70}\b(?:is|are|remains?|was|were)\s+in[- ]force\b",
+    r"[^.;:]{0,70}\b(?:is|are|remains?|was|were)\s+"
+    r"(?:in[- ]force|in operation|in effect|operative)\b",
     re.I,
 )
 _CUR_NEGATED = re.compile("|".join([
-    r"\b(?:not|never|no longer|nor|neither)\b[^.;:]{0,30}\bin[- ]force\b",
+    r"\b(?:not|never|no longer|nor|neither)\b[^.;:]{0,30}"
+    r"\b(?:in[- ]force|in operation|in effect|current law|operative)\b",
     r"\bin[- ]force\b[^.;:]{0,20}\b(?:not|no longer)\b",
     r"\b(?:partially|partly|part) in[- ]force\b",
     r"\bnot (?:yet )?(?:been )?(?:brought |commenced )?in(?:to)? force\b",
+]), re.I)
+# **A statement that currency could NOT be established is the answer this row
+# wants, and it must never be counted as the defect.** Found by the both-
+# directions audit: `baseline` 6383 t4 says *"nor could their active status in
+# Scotland be verified"* — an honest negative that the standalone branch read as
+# an assertion. Left in, a post-fix answer saying "in-force status was not
+# verified" would have been scored as the failure, so the error ran against the
+# fix rather than for it; either way the instrument would have been wrong.
+_CUR_DISCLAIM_VERB = (r"(?:verif(?:y|ied|iable)|establish(?:ed)?|"
+                      r"determin(?:e|ed|able)|confirm(?:ed)?|ascertain(?:ed)?)")
+_CUR_UNVERIFIED = re.compile("|".join([
+    r"\b(?:not|never|no|nor|neither|cannot|can ?not|could ?n[o']t|unable|"
+    r"without)\b[^.;:]{0,60}\b" + _CUR_DISCLAIM_VERB + r"\b",
+    r"\b" + _CUR_DISCLAIM_VERB + r"\b[^.;:]{0,30}\b(?:not|no)\b",
+    r"\bun(?:verified|confirmed|established|determined)\b",
 ]), re.I)
 # The three text-version values, which is the whole of the currency vocabulary
 # the index actually has. Interpolated rather than repeated because it appears
@@ -2161,6 +2178,39 @@ _CUR_FROM_VERSION = re.compile("|".join([
     + _CUR_VERSION,
     r"in[- ]force[^.;\n]{0,60}\bstatus(?:es)?\b[^.;\n]{0,40}" + _CUR_VERSION,
 ]), re.I)
+# **The paraphrase branch, and it exists because the fix provoked it.** The
+# second smoke run — with the prohibition on "in force" in place — came back
+# with *"Yes, the Scotland Act 1998 IS IN OPERATION and remains a fundamental
+# pillar of the UK constitution"*, sourced to a 2026 UKSC judgment that
+# *"confirms its ACTIVE STATUS"*. That is the same unsupported proposition in
+# different words, and it is 6411's original diagnosis verbatim: *"determined
+# in-force status by reference to case law"*. A detector blind to the evasion
+# its own fix causes would have read zero and published it.
+#
+# **Two halves, both required, and the second is what keeps case law out.** A
+# legislation noun must appear in the sentence, because "*Donoghue* remains good
+# law" and "that principle continues to apply" are statements about a judgment —
+# a different question, answered by different tools, belonging to the case-law
+# prompt's "Jurisdiction & Currency" section. "good law" is therefore NOT in the
+# vocabulary at all, deliberately: there is no way to tell its subject from the
+# sentence, and over-counting a legitimate case-currency statement would move a
+# number wrongly.
+_CUR_LEGISLATION_NOUN = re.compile(
+    r"\b(?:act|acts|regulations?|order|orders|instrument|instruments|"
+    r"legislation|statute|statutes|provisions?|section|sections|schedule|"
+    r"s\.|ss\.|ssi|uksi|asp|ukpga)\b",
+    re.I,
+)
+_CUR_PARAPHRASE = re.compile("|".join([
+    r"\b(?:is|are|remains?|remain)\s+(?:still\s+|currently\s+|now\s+)?"
+    r"(?:in operation|operative|current law|the current law|in effect)\b",
+    r"\b(?:continues?|continue)\s+to\s+(?:apply|have effect|be in force)\b",
+    r"\b(?:is|are)\s+still\s+appl(?:ies|y|icable)\b",
+]), re.I)
+# Phrases whose subject is a pronoun, so the legislation noun is in the previous
+# sentence. Matched alone because neither is said of a case.
+_CUR_PARAPHRASE_STANDALONE = re.compile(
+    r"\bactive status\b|\bstill on the statute book and in force\b", re.I)
 # A dated commencement statement. Retrievable since P3.5 (by the second hop into
 # the commencing instrument), and invented in 6411 — so graded, not excluded.
 _CUR_DATED = re.compile("|".join([
@@ -2170,7 +2220,35 @@ _CUR_DATED = re.compile("|".join([
 ]), re.I)
 # Any currency vocabulary at all — the denominator for `--drops`, so the
 # both-directions audit reads everything the classifier chose to let through.
-_CUR_CONTEXT = re.compile(r"\bin[- ]force\b|\binto force\b", re.I)
+_CUR_CONTEXT = re.compile(
+    r"\bin[- ]force\b|\binto force\b|\bin operation\b|\boperative\b"
+    r"|\bcurrent law\b|\bactive status\b|\bcontinues? to apply\b"
+    r"|\b(?:is|are|remains?)\s+(?:still\s+)?in effect\b",
+    re.I,
+)
+
+
+def _currency_asserted(sentence: str) -> bool:
+    """Does this sentence assert that legislation is currently in force?
+
+    One place, so the product test, `cmd_currency` and any later row read the
+    same rule. The paraphrase branch needs a legislation noun; see
+    `_CUR_PARAPHRASE`.
+    """
+    if _CUR_NEGATED.search(sentence) or _CUR_SUBORDINATE.search(sentence):
+        return bool(_CUR_FROM_VERSION.search(sentence))
+    if _CUR_ASSERT.search(sentence) or _CUR_FROM_VERSION.search(sentence):
+        return True
+    # The paraphrase branches only, and only where the sentence is not itself
+    # saying that currency could not be established. `_CUR_ASSERT` above does
+    # not need the guard: "is currently in force" is not a sentence anyone
+    # writes while disclaiming it, and `_CUR_NEGATED` already covers "is not".
+    if _CUR_UNVERIFIED.search(sentence):
+        return False
+    if _CUR_PARAPHRASE_STANDALONE.search(sentence):
+        return True
+    return bool(_CUR_LEGISLATION_NOUN.search(sentence)
+                and _CUR_PARAPHRASE.search(sentence))
 
 
 def _currency_support(turn: dict) -> dict:
@@ -2266,9 +2344,7 @@ def currency_verdict(answer: str, support: dict) -> tuple:
     for s in sents:
         if _CUR_FROM_VERSION.search(s):
             version.append(s)
-        if (_CUR_ASSERT.search(s)
-                and not _CUR_NEGATED.search(s)
-                and not _CUR_SUBORDINATE.search(s)):
+        if _currency_asserted(s):
             asserts.append(s)
         if _CUR_DATED.search(s) and not _CUR_NEGATED.search(s):
             dated.append(s)

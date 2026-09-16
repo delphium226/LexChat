@@ -579,6 +579,18 @@ MUST_ASSERT = [
     "Yes, the Scotland Act 1998 is in force.",
     "*   **In-Force Status:** All identified legislation is enacted and currently in force, with commencement dates ranging from 2013 to exit day.",
     "The identified Orders in Council are also in force (final/revised status).",
+    # The paraphrases, which the FIX ITSELF provoked. Both are verbatim from the
+    # second smoke run, made with the prohibition on "in force" already in
+    # place: the same unsupported proposition in different words, the second
+    # sourced to a judgment — which is 6411's original diagnosis verbatim.
+    "Yes, the Scotland Act 1998 is in operation and remains a fundamental pillar "
+    "of the UK constitution.",
+    "recent case law such as In the matter of an application by Martina Dillon "
+    "[2026] UKSC 15 confirms its active status.",
+    "The Regulations are still operative.",
+    "The 2018 Act is the current law in Scotland.",
+    "Sections 1 to 5 of the Act continue to apply.",
+    "The Order remains in effect.",
 ]
 
 MUST_NOT = [
@@ -604,19 +616,35 @@ MUST_NOT = [
     "The core reporting and accounting duties were brought into force on 1 July 2005.",
     "Sections 2, 9, 17, 20, 21, 22, and 23 were brought into force by SSI 2025/119.",
     "The revised text held shows that section 9 came into force on 10 May 2025.",
+    # **Case-law currency is a different question**, answered by different tools
+    # and belonging to the case-law prompt's "Jurisdiction & Currency" section.
+    # "good law" is therefore absent from the paraphrase vocabulary entirely:
+    # there is no way to tell its subject from the sentence, and over-counting a
+    # legitimate case-currency statement would move a number wrongly.
+    "Donoghue v Stevenson remains good law.",
+    "The decision is still good law and was applied in 2024.",
+    "That principle continues to apply.",
+    # negated paraphrases
+    "The Regulations are no longer in operation.",
+    "Section 38 is not in effect.",
+    # conditional use of a paraphrase
+    "Where an interim order is in operation, no proceedings may be commenced.",
+    # **A statement that currency could NOT be established is the answer this
+    # row wants.** Found by the both-directions audit against `baseline` 6383
+    # t4, where the standalone branch read an honest negative as an assertion —
+    # which would have scored the fixed behaviour as the defect.
+    "Because the database did not return the primary legislation or any "
+    "associated SSIs enacted under its provisions, no analysis could be "
+    "conducted regarding the general provisions of such instruments, nor could "
+    "their active status in Scotland be verified.",
+    "The Act's active status could not be confirmed from the available sources.",
+    "It was not possible to determine whether the Regulations are in operation.",
 ]
 
 
 def _asserts(sentence: str) -> bool:
-    from tools.replay_report import (
-        _CUR_ASSERT, _CUR_FROM_VERSION, _CUR_NEGATED, _CUR_SUBORDINATE,
-    )
-    return bool(
-        (_CUR_ASSERT.search(sentence)
-         and not _CUR_NEGATED.search(sentence)
-         and not _CUR_SUBORDINATE.search(sentence))
-        or _CUR_FROM_VERSION.search(sentence)
-    )
+    from tools.replay_report import _currency_asserted
+    return _currency_asserted(sentence)
 
 
 @pytest.mark.parametrize("sentence", MUST_ASSERT)
