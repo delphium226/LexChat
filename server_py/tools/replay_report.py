@@ -1678,6 +1678,108 @@ def cmd_derivations(args) -> int:
     return 0 if bad == 0 else 1
 
 
+def cmd_corpus(args) -> int:
+    """The retrieval shape of a replay directory — every number P2.3 published.
+
+    **Why this exists.** Session 6 set the rule after `replay_report negatives`
+    had to grow a search-shape header: *a number with no command behind it
+    cannot be checked by the next session*. P2.3 then published six such numbers
+    out of throwaway scripts — how much raw retrieval there is, how many
+    instrument preambles it ever contained, whether `description` survives
+    slimming, which route the Worker actually uses to touch an instrument, and
+    how much the tool memo costs P2.2's search record. They are the numbers that
+    decided the row's design and its scope, so they belong behind a command.
+    """
+    docs = load_runs(Path(args.dir))
+    if not docs:
+        print(f"No run files in {args.dir}")
+        return 1
+
+    tools = Counter()
+    raw_chars = 0
+    search_rows = with_description = 0
+    recitals = []
+    secondary_touch = Counter()
+    memo = Counter()
+    lost_runs = lost_queries = 0
+    runs = 0
+    lost_turns = set()
+
+    for doc in docs:
+        for t in doc.get("turns", []):
+            for dg in (t.get("audit") or {}).get("delegations", []):
+                runs += 1
+                recorded, memoed = set(), set()
+                for tl in dg.get("tools", []):
+                    nm = tl.get("name") or "?"
+                    tools[nm] += 1
+                    raw = tl.get("raw_result")
+                    if isinstance(raw, str):
+                        raw_chars += len(raw)
+                    if tl.get("memo_hit"):
+                        memo[nm] += 1
+                    lid = str((tl.get("args") or {}).get("legislation_id") or "")
+                    if nm in ("get_legislation_text", "search_legislation_sections") \
+                            and lid.split("/")[0].lower() in _SECONDARY_SERIES:
+                        secondary_touch[nm] += 1
+                    if nm == "search_legislation":
+                        q = str((tl.get("args") or {}).get("query") or "")
+                        (memoed if tl.get("memo_hit") else recorded).add(q)
+                    o = _json_or_none(raw)
+                    if not isinstance(o, dict):
+                        continue
+                    if nm == "search_legislation":
+                        for r in (o.get("results") or []):
+                            if isinstance(r, dict):
+                                search_rows += 1
+                                if r.get("description"):
+                                    with_description += 1
+                    leg = o.get("legislation")
+                    if isinstance(leg, dict):
+                        d = str(leg.get("description") or "")
+                        if d and _DERIV_RECITAL.search(d):
+                            recitals.append((lid, d[:120]))
+                missing = memoed - recorded
+                if missing:
+                    lost_runs += 1
+                    lost_queries += len(missing)
+                    lost_turns.add((doc["session_id"], doc.get("rep", 1), t["turn"]))
+
+    print(f"Retrieval shape over {args.dir}  ({len(docs)} run file(s))")
+    print()
+    print(f"  raw retrieval                 {raw_chars / 1e6:.1f}M chars over "
+          f"{sum(tools.values())} tool result(s)")
+    for nm, n in tools.most_common():
+        print(f"    {nm:34} {n:5}   ({memo[nm]} served from the tool memo)")
+    print()
+    print("  P2.3 — where an enabling power can come from")
+    print(f"    search rows seen                 {search_rows:5}")
+    print(f"    ... carrying a `description`     {with_description:5}   "
+          "<- _slim_search_results strips it (P3.6)")
+    print(f"    instrument preambles retrieved   {len(recitals):5}   "
+          "<- the ONLY route, via legislation.description")
+    for lid, d in recitals[:5]:
+        print(f"      {lid or '(id not in args)':18} {d!r}")
+    print(f"    instruments touched by section search {secondary_touch['search_legislation_sections']:5}")
+    print(f"    instruments touched by text retrieval {secondary_touch['get_legislation_text']:5}   "
+          "<- the rare route; record BOTH")
+    print()
+    print("  P2.9 — what the tool memo costs P2.2's search record")
+    print(f"    worker runs                                    {runs:5}")
+    print(f"    ... losing a memo-served query from their own")
+    print(f"        record (no `record_search` on that path)   {lost_runs:5}   "
+          f"({100 * lost_runs / runs if runs else 0:.0f}%)")
+    print(f"    distinct queries lost from a worker report     {lost_queries:5}")
+    print(f"    turns affected                                 {len(lost_turns):5}")
+    print("    Those queries never reach worker_scope_block or answer_scope_footer,")
+    print("    so the disclosure under-reports what was actually searched.")
+    return 0
+
+
+_SECONDARY_SERIES = ("ssi", "uksi", "nisr", "wsi", "ssr", "uksro", "nisro",
+                     "ukci", "ukmo")
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="replay_report")
     p.add_argument("--dir", default=str(
@@ -1716,6 +1818,10 @@ def main(argv: Iterable[str] | None = None) -> int:
     dv.add_argument("--drops", action="store_true",
                     help="print every sentence in the same vocabulary that was "
                          "NOT counted — the both-directions audit")
+
+    sub.add_parser("corpus",
+                   help="retrieval shape: raw volume, where an enabling power "
+                        "can come from, and what the tool memo costs P2.2")
     args = p.parse_args(list(argv) if argv is not None else None)
     return {
         "summary": cmd_summary,
@@ -1725,6 +1831,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "halts": cmd_halts,
         "negatives": cmd_negatives,
         "derivations": cmd_derivations,
+        "corpus": cmd_corpus,
     }[args.cmd](args)
 
 

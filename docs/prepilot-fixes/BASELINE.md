@@ -1043,9 +1043,20 @@ the material supports, and nothing downstream would flag that.
 So the permitted branch of P2.3's rule is **live**, and for the Scottish corpus
 these lawyers work in it is **empty**. The rule is a near-total prohibition, and
 the product says so rather than dressing it as a conditional. Over the whole
-post-Wave-1 replay corpus — 33M characters of raw retrieval across 1,907 tool
-results — exactly **two** instrument-level recitals were ever returned, both in
-6340.
+post-Wave-1 replay corpus — **38.8M characters of raw retrieval across 2,504
+tool results** — only **12 results carried an instrument preamble**, covering
+**6 distinct instruments, every one of them in session 6340** (all pre-1990 UK
+SIs). Reproduce with `replay_report --dir <dir> corpus`.
+
+~~33M characters across 1,907 tool results, exactly two recitals, both in
+6340.~~ **Corrected 2026-09-16, after the numbers were put behind a command.**
+Two errors, and they are the reason the command exists: the character and result
+counts silently **omitted `wave2_p21`** while claiming to cover the whole
+post-Wave-1 corpus, and the recital screen used to produce "two" required the
+phrase to be followed by `Act <year>`, which misses the 1963 form — *"Whereas the
+Treasury has determined under section 69(4) of the National Insurance Act 1946(a)
+…"*. The qualitative claim survives and is stronger: still one session, and now
+six instruments rather than two.
 
 **This also settles P3.6's ordering:** it is not a prerequisite. P3.6 would put
 the same `description` on *search* rows at Phase 1, which is worth having for

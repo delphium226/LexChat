@@ -1033,8 +1033,10 @@ design.**
   **18/25**, `uksi` 1990-2009 **0/25**, `uksi` 2010+ **0/25**, `ssi` 1990-2009
   **0/13**, `ssi` 2010+ **0/15**. **Zero for Scottish instruments in either
   era** — the corpus these lawyers work in. Over the whole post-Wave-1 replay
-  corpus (33M chars of raw retrieval, 1,907 tool results) exactly **two**
-  instrument-level recitals were ever returned, both in 6340.
+  corpus (**38.8M chars of raw retrieval, 2,504 tool results**) only **12
+  results carried an instrument preamble**, covering **6 distinct instruments,
+  every one in session 6340**. ~~33M chars, 1,907 results, exactly two recitals~~
+  — **corrected below, and it is the fifteenth instrument error.**
 
 **Surprises / deviations from FIX_PLAN:**
 
@@ -1120,6 +1122,40 @@ design.**
   about materiality to be true. Session 6 aborted three sweeps for the same
   reason.
 
+- **New row P2.9, and it is a defect in a shipped fix.** `run_worker_tool` returns
+  early on a **tool-memo hit** and that path does not call `record_search`. The memo
+  is per-REQUEST; `search_log` is per-WORKER-RUN. So when a Deep Research step
+  repeats a search an earlier step already made, that query never enters its own
+  run's record and is therefore absent from `worker_scope_block` and from the
+  lawyer-facing `answer_scope_footer` — **P2.2's disclosure under-reports what was
+  searched.** Measured over all four post-Wave-1 directories: 23% of
+  `search_legislation` calls are memo hits, and **78 of 358 worker runs (22%) lose
+  at least one query from their own record — 150 distinct queries across 47
+  turns.** Found while wiring P2.3's record alongside it; deliberately NOT fixed
+  here, because the one-line fix moves P2.2's published footer contents and needs
+  its own before/after. P2.3's `record_enabling_power` is called on both paths.
+
+- **A published number of my own was wrong, and putting the numbers behind a
+  command is what caught it — the fifteenth instrument error.** I wrote "33M chars
+  of raw retrieval, 1,907 tool results, exactly **two** instrument-level recitals,
+  both in 6340". Two errors: the counts silently **omitted `wave2_p21`** while
+  claiming to describe the whole post-Wave-1 corpus, and the screen that produced
+  "two" required `Act <year>` to follow the phrase, which misses the 1963 form
+  *"Whereas the Treasury has determined under section 69(4) of the National
+  Insurance Act 1946(a) …"*. The true figures are **38.8M chars over 2,504 tool
+  results, 12 results carrying an instrument preamble, covering 6 distinct
+  instruments — every one of them in session 6340**. The qualitative claim
+  survives and is **stronger**. Corrected in all four places it was published.
+
+- **`replay_report corpus` is new, and exists because of the above.** Session 6's
+  rule — *a number with no command behind it cannot be checked by the next
+  session* — and P2.3 published six such numbers out of throwaway scripts: raw
+  retrieval volume, how many preambles it ever contained, whether `description`
+  survives slimming (**0 of 7,399 search rows**), which route the Worker actually
+  uses to touch an instrument, and what the memo costs P2.2's record. The scripts
+  were in a scratch directory that does not survive the session. They are one
+  command now.
+
 **Decisions taken this session:**
 - **P3.6 is NOT a prerequisite for P2.3** — the permitted branch is already
   reachable through `get_legislation_text`. Recorded in the row so the ordering
@@ -1141,8 +1177,8 @@ design.**
 **State of the branch:** `fix/prepilot-defects`. **764 tests green, NOTHING
 PUSHED** — the whole-plan-then-one-push policy stands, so the target still runs
 the pre-pilot code. Ledger: Waves 0 and 1 complete; **P1.6, P2.1, P2.2, P2.3,
-P2.6, P4.4, P5.1 and P5.3 done**; P0.4 and P5.2 at `[~]`. **P3.5 is unblocked and
-is the row to take next.**
+P2.6, P4.4, P5.1 and P5.3 done**; P0.4 and P5.2 at `[~]`; **P2.9 opened this
+session**. **P3.5 is unblocked and is the row to take next.**
 
 **Machine state a new session inherits:**
 - **No uvicorn running** — stopped at the end of the session. Start a fresh one
@@ -1154,7 +1190,8 @@ is the row to take next.**
   **`wave2_p23/` (12 — P2.3's acceptance)**. None of the wave2 dirs is a sweep;
   do **not** feed them to `replay_report compare`. Read them with
   `replay_report --dir <dir> derivations` (`--drops` for the both-directions
-  audit), `negatives` for P2.2 and `halts` for P2.1.
+  audit), `negatives` for P2.2, `halts` for P2.1, and **`corpus`** for the
+  retrieval shape every P2.3 number was drawn from.
 
 **Spend this session: ~$7.2** on replay — $7.10 for the acceptance plus ~$0.1 of
 the aborted restart. Cheaper than Session 6 because the four sessions are short;

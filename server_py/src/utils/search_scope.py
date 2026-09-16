@@ -359,8 +359,10 @@ def section_search_note(args: dict, data: Any) -> str:
 # and calling it a conditional would misdescribe the product.
 #
 # Nothing else in the tool set carries the relation. Over the whole post-Wave-1
-# replay corpus — 33M characters of raw retrieval, 1,907 tool results — exactly
-# **two** instrument-level recitals were ever returned, both in 6340.
+# replay corpus — 38.8M characters of raw retrieval over 2,504 tool results —
+# only **12 results carried an instrument preamble**, covering **6 distinct
+# instruments, every one of them in session 6340**, and all of them pre-1990 UK
+# SIs. Reproduce with `python -m tools.replay_report --dir <dir> corpus`.
 
 # The recital an SI's preamble opens with. Deliberately broader than "in
 # exercise of the powers conferred by": the corpus also uses "under and by
