@@ -417,7 +417,23 @@ def test_the_footer_clause_says_no_currency_check_was_run_when_none_was():
     clause = _currency_footer_clause(log)
     assert "not something this index reports" in clause
     assert "no change record was consulted" in clause
-    assert "ukpga/1967/81" in clause
+
+
+def test_the_footer_does_not_name_a_repealed_row_the_answer_never_cited():
+    """**Found by the smoke run, on the row's own acceptance session.** The
+    marker is recorded per search ROW, so the footer on an answer about the
+    Scotland Act 1998 read *"the index's own title for uksi/2024/697 marks it as
+    repealed"* — an unrelated instrument that happened to rank on the same page.
+    Noise in a disclosure a lawyer must read, and the only way to filter it is
+    the prose detector this module refuses to put in the product. The marker
+    still reaches the model via `currency_note` and `_currency_limb`."""
+    log = _log_from(("search_legislation", {},
+                     _slim_search_results(_api_search(
+                         ("ukpga/1967/81", "Companies Act 1967 (repealed)")))))
+    clause = _currency_footer_clause(log)
+    assert "ukpga/1967/81" not in clause
+    # But it is still in front of both agents that could act on it.
+    assert "ukpga/1967/81" in _currency_limb(log)
 
 
 def test_the_footer_clause_says_what_was_checked_when_something_was():
@@ -483,6 +499,25 @@ def test_all_three_legislation_worker_prompts_carry_the_rule(name):
     assert "IN-FORCE STATUS (whether legislation is current law)" in prompt
     assert "NEVER write a blanket currency claim" in prompt
     assert "`Commencement Order` is NOT" in prompt
+
+
+def test_quick_lookup_mode_can_still_reach_the_route():
+    """**Found by the smoke run, and it is P3.5's gap rather than this row's.**
+    P3.5 appended `_RELATIONSHIP_RULE` to all three worker prompts but gave a
+    PHASE 2b only to `WORKER_SYSTEM_PROMPT`. The conversational prompt's phase
+    structure names four tools, says "keep it tight" and "Do not iterate", and
+    explicitly forbids one fallback — so the model follows the phases and not
+    the appended rule. Asked *"Is the Scotland Act 1998 in force?"* it made four
+    calls, none of them `get_legislation_changes`, and then wrote that
+    establishing the answer *"would require retrieving its specific change
+    records"*. It knew the route and the prompt had routed it away.
+
+    Conditional, so quick-lookup mode stays cheap on every turn that is not
+    about currency — which is the large majority."""
+    assert "PHASE 2b — RELATIONSHIPS" in WORKER_SYSTEM_PROMPT_CONVERSATIONAL
+    assert "only when the question turns on one" in WORKER_SYSTEM_PROMPT_CONVERSATIONAL
+    for prompt in (WORKER_SYSTEM_PROMPT, WORKER_SYSTEM_PROMPT_CONVERSATIONAL):
+        assert "PHASE 2b" in prompt
 
 
 def test_the_rule_does_not_forbid_a_sourced_statement():

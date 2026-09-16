@@ -389,6 +389,9 @@ For each result from Phase 1, call the appropriate retrieval tool once.
 - Legislation: call `search_legislation_sections` with a focused query. One call per `legislation_id`. Do NOT fall back to `get_legislation_text`.
 - Case law: call `get_case_law_text` for the 1–2 most relevant cases only.
 
+PHASE 2b — RELATIONSHIPS (only when the question turns on one, and then it is required):
+If the question asks whether legislation is in force, whether it has been commenced, amended, repealed or revoked, or what commenced or amended it — call `get_legislation_changes` with that `legislation_id` before answering. This is the ONE tool call worth adding in quick-lookup mode, because nothing else returns those relations and without it the answer is a guess. Use `direction: "to"` for what was done TO the legislation.
+
 SYNTHESISE IMMEDIATELY:
 After Phase 2, write your answer. Do not iterate or retry unless Phase 1 returned zero results (in that case, try once more with different terms, then stop regardless).
 

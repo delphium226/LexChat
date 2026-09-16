@@ -1247,6 +1247,16 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
     which is the thing 42 of 62 pre-pilot sessions could not have known, because
     the UI was telling them the opposite.
 
+    **The title-marker limb was drafted here and removed after the smoke run.**
+    The marker is recorded per SEARCH ROW, not per cited instrument, so the
+    footer read *"the index's own title for uksi/2024/697 marks it as repealed"*
+    on an answer about the Scotland Act 1998 — an unrelated row that happened to
+    rank on the same page. Naming it is not provenance, it is noise in a
+    disclosure a lawyer has to read, and the alternative (check whether the
+    answer cites it) is the prose detector this module refuses to put in the
+    product. The marker still reaches the model twice, via `currency_note` and
+    `_currency_limb`, which is where it can actually be acted on.
+
     Worded to stay clear of `NEG_ASSERTED` (P2.2), `DERIVATION_ASSERTED` (P2.3),
     P3.5's commencement detectors and this row's own `CURRENCY_ASSERTED`. P2.2's
     footer tripped its own denominator and P2.3's first two drafts tripped two
@@ -1256,17 +1266,12 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
     rows = [e for e in (entries or []) if e.get("tool") == "currency"]
     if not rows:
         return ""
-    sourced, marked = [], []
+    sourced = []
     for e in rows:
         if e.get("kind") == "relations":
             lid = e.get("legislation_id") or ""
             if lid and (e.get("commenced") or e.get("repeals")) and lid not in sourced:
                 sourced.append(lid)
-        elif e.get("kind") == "title_marker":
-            for m in e.get("marked") or []:
-                lid = m.get("legislation_id") or ""
-                if lid and lid not in marked:
-                    marked.append(lid)
     lead = (
         " Whether legislation is in force is not something this index reports, so "
         "nothing above has been checked against a commencement date"
@@ -1279,11 +1284,6 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
         )
     else:
         lead += " and no change record was consulted for this answer."
-    if marked:
-        lead += (
-            f" The index's own title for {', '.join(sorted(marked)[:3])} marks it "
-            "as repealed or revoked."
-        )
     return lead
 
 
