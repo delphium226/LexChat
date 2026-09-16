@@ -841,7 +841,7 @@ next full sweep if target access appears.
   wired at three seams. Replay n=3 on 6409 and 6367 (`evidence/replay/wave2_p22_final/`,
   $5.32): **21 turns asserting a negative, 19 explained (90%)**, against **2 of 10 (20%)**
   on the same sessions in Wave 1.
-- **New row P3.7** — `/legislation/lookup`, the deterministic held/absent test. Four of the
+- **New rows P3.7 and P2.8.** P3.7 — `/legislation/lookup`, the deterministic held/absent test. Four of the
   corpus's negatives ask "is this instrument, named by number, in the index?" and are
   answered by ranked keyword search, which cannot answer it.
 - **P5.3's "UK SI 2026 ~0% held" retracted** and corrected to ~2%. It read as "nothing from
@@ -850,7 +850,7 @@ next full sweep if target access appears.
 
 **The row's premise was 0.5% of the bucket, and the measurement said so before any code was
 written.** P2.2 was written against the missing zero-result nudge on `search_legislation` —
-genuinely the only search tool without one. Post-Wave-1 that branch fires on **4 of 785**
+genuinely the only search tool without one. Post-Wave-1 that branch fires on **4 of 790**
 searches, while **783 of 783** measurable searches are *windowed* (5 rows shown of a median
 **141** ranked candidates), and **not one of the 44 measured bare negatives followed an empty
 search**. Every one was drawn from a result set that had results, just not the wanted one.
@@ -913,11 +913,15 @@ have gone green on a loose detector.
   lawyer-facing line now names only filters that could actually have excluded something; the
   agent-facing block still reports every parameter, deliberately.
 
-- **The two remaining failures are the same shape and are a real limitation.** Both are turns
-  with **zero delegations** — a negative carried forward from an earlier turn (*"As noted in
-  the previous search, SSI 2025/377 is not currently available…"*). No search ran, so no footer
-  fired. The footer is per-turn; a conversation is not. Left unfixed: restating full scope on
-  every follow-up would be noise.
+- **The two remaining failures are the same shape, and they became a row (P2.8).** Both are
+  turns with **zero delegations** — a negative carried forward from an earlier turn (*"As noted
+  in the previous search, SSI 2025/377 is not currently available…"*). No search ran, so no
+  footer fired: the footer is per-turn and a conversation is not. **2 of 21 negative turns, and
+  the rate will be higher in real use than in a replay**, because a lawyer follows up more than
+  a script does. Booked as **P2.8** rather than a note, per the re-planning protocol — it is
+  measured, reproducible and has a known mechanism. Note what NOT to do: emitting the footer on
+  every turn regardless would describe searches that did not happen, which is a worse lie than
+  silence.
 
 - **P5.3's coverage headline was wrong in the direction that matters.** "UK SI 2026 ~0% held"
   reads as *"nothing made in 2026 is in the index"*. `/legislation/search` returns **27
@@ -925,6 +929,25 @@ have gone green on a loose detector.
   60-point census puts it at ~2%. Low single digits, not nothing — so the product string says
   **"under 5%"** and never "none", because a lawyer told "none" stops looking. Caught by the
   cross-check P5.3's own method warning prescribes, applied to P5.3's own headline.
+
+- **The replacement coverage figure was falsified the next day, by the same command.** "Under
+  5%" went into the product string from one 60-point sample of SSI 2026 (1/60). Re-running
+  `lex_probe --coverage` on 16 Sep returned **5/60 — 8%**. That is ordinary noise at n=60 and
+  it is enough to make a claim false in a string a government lawyer reads. **Every coverage
+  figure in the product is now a bound chosen to survive the spread** ("roughly 85%", "under
+  10%"), not the last number measured, and a test pins the hedging words. The general rule,
+  which cost two corrections in two days to learn: **a sampled rate quoted at a user needs a
+  bound, not a point estimate** — and widen the bound rather than chase the sample.
+
+- **The probe now runs its own cross-check instead of recommending one.** `lex_probe
+  --coverage` was still executing the 20-point census that produced the retracted headline, so
+  a future session re-running the documented command would have got the wrong number back.
+  Samples are 60 points, and the `/legislation/search` cross-check that caught the error runs
+  every time. Same principle applied to `replay_report negatives`, which now prints the search
+  shape (790 calls, 4 zero-result, 783/783 windowed, median 141) — those numbers decided this
+  row's design and had existed only in throwaway scripts. **A number with no command behind it
+  cannot be checked by the next session.** Note the count was `785` in the first write-up and
+  is `790`: the script skipped turns with empty answers.
 
 - **Verified at source, and it settles 6373 and 6409 turns 9-11:** `ssi/2026/170` and
   `ssi/2025/377` are **both 404 in LEX**, `ssi/2025/119` is held. FrankieH's citation was right
@@ -946,7 +969,7 @@ have gone green on a loose detector.
 **State of the branch:** `fix/prepilot-defects`. **711 tests green, NOTHING PUSHED** — the
 whole-plan-then-one-push policy stands, so the target still runs the pre-pilot code. Ledger:
 Waves 0 and 1 complete; **P1.6, P2.1, P2.2, P2.6, P4.4, P5.1 and P5.3 done**; P0.4 and P5.2 at
-`[~]`; **P3.7 opened this session**.
+`[~]`; **P2.8 and P3.7 opened this session**.
 
 **Machine state a new session inherits:**
 - **No uvicorn running** — stopped at the end of the session. Start a fresh one before any
@@ -964,6 +987,12 @@ Waves 0 and 1 complete; **P1.6, P2.1, P2.2, P2.6, P4.4, P5.1 and P5.3 done**; P0
 - **`wave2_p22/` was run against code without the footer** and is kept deliberately: it is the
   only measurement of what the instruction achieves on its own, and the row's argument for the
   footer rests on it.
+
+**Spend this session: ~$11.4** on replay — $4.97 (instruction-only acceptance), $5.32 (final
+acceptance), $0.52 (a single 6367 probe run), plus ~$0.6 of aborted partial sweeps. **Three
+sweeps were aborted and restarted** because wording changed after the server had booted; each
+abort cost a few minutes and a few dollars, and each was cheaper than publishing an acceptance
+against code that was not HEAD. Budget for that when planning a row whose fix is a string.
 
 **Next action:** **P2.4** is the cheapest — P5.2's probe already wrote its exact wording, and
 this session verified the two citations it turns on. **P2.3** is the one that matters, because

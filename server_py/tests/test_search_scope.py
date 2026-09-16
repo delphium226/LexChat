@@ -12,7 +12,7 @@ against the missing `else:` on `if id_pairs:` — `search_legislation` is the on
 search tool with no zero-result nudge. That is fixed here and is tested, but it
 is not where B5 lives. Measured over the Wave 1 replay directory:
 
-  * zero-result `search_legislation` calls: **4 of 785**;
+  * zero-result `search_legislation` calls: **4 of 790**;
   * `search_legislation` calls that were windowed (5 rows shown of N matched):
     **783 of 783**, median N = 141, p90 185, max 220;
   * turns asserting a negative: **17**, of which **0** followed an empty search.
@@ -20,10 +20,11 @@ is not where B5 lives. Measured over the Wave 1 replay directory:
 So a fix confined to the empty branch would have moved none of the seventeen and
 could still have gone green on a loose detector. The scope block therefore goes
 on **both** branches, and `test_the_window_note_fires_on_a_productive_search` is
-the one that matters — it is the branch 783 of 785 calls take.
+the one that matters — it is the branch 783 of 790 calls take.
 """
 
 import json
+import re
 
 import pytest
 
@@ -61,7 +62,7 @@ def _search_result(shown=5, matched=141, removed=0):
 
 
 # ---------------------------------------------------------------------------
-# The window — the branch 783 of 785 searches take
+# The window — the branch 783 of 790 searches take
 # ---------------------------------------------------------------------------
 
 def test_the_window_note_fires_on_a_productive_search():
@@ -181,10 +182,28 @@ def test_the_coverage_sentence_never_says_none_of_a_series_is_held():
     it at ~2%. "Under 5%" is true; "none" would not be, and a lawyer told "none"
     would stop looking."""
     s = LEX_COVERAGE_SENTENCE.lower()
-    assert "under 5%" in s
-    assert "0%" not in s and "none of" not in s
+    assert "under 10%" in s
+    # The claim to exclude is "0% of the series is held" — not the characters
+    # "0%", which "under 10%" legitimately contains. (That substring collision
+    # failed this test the moment the bound widened from 5% to 10%.)
+    assert not re.search(r"(?<![1-9])0%", s)
+    assert "none of" not in s
     assert "2026" in s and "sampled" in s          # dated, because it will move
     assert "not evidence of absence in law" in s
+
+
+def test_the_coverage_figures_are_bounds_not_the_last_sample():
+    """**Caught by re-running the probe, one day after the figure shipped.** The
+    string first said "under 5%", written from a single 60-point sample of SSI
+    2026 that returned 1/60. The next day the same command returned 5/60 — 8%,
+    falsifying a claim already sitting in a string a government lawyer reads.
+    That is ordinary noise at n=60, so a product claim has to be true across the
+    spread, not equal to the last draw. Hedging words are load-bearing here."""
+    s = LEX_COVERAGE_SENTENCE.lower()
+    assert "roughly" in s and "under" in s
+    # No bare equality claim about a sampled rate.
+    for exact in ("exactly", "precisely", "is 85%", "is 2%", "is 8%"):
+        assert exact not in s
 
 
 def test_the_search_terms_requirement_is_bounded():

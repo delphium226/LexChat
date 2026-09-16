@@ -762,7 +762,7 @@ async def run_worker_tool(
     #
     # P2.2 (B5) adds the scope block alongside. The row was written against the
     # missing `else:` on `if id_pairs:` — the only search tool with no
-    # zero-result nudge — but that branch fires on 4 of 785 searches post-Wave-1,
+    # zero-result nudge — but that branch fires on 4 of 790 searches post-Wave-1,
     # while **783 of 783** are windowed (5 rows of a median 141 matches) and all
     # 17 measured bare negatives came from a NON-empty result. So the block is
     # attached on both branches, and the non-empty one is the one that matters.

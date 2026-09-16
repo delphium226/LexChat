@@ -292,7 +292,7 @@ without one. That branch exists and is fixed, but:
 
 | | Wave 1 |
 |---|---|
-| `search_legislation` calls | 785 |
+| `search_legislation` calls | 790 |
 | … that returned **0 results** to the model | **4** (1 empty from the API, 3 emptied by filters) |
 | … that were **windowed** (fewer rows shown than the API matched) | **783 of 783** measurable |
 | rows shown per call | 5 |
@@ -387,7 +387,14 @@ also what no tool could do here.** `POST /legislation/lookup` answers "is
 ### After — the acceptance, and what it cost to find out
 
 `evidence/replay/wave2_p22_final/` (n=3 on 6409 and 6367, $5.32). Graded per
-TURN with `replay_report --dir <dir> negatives`.
+TURN with `replay_report --dir <dir> negatives`, which also prints the search
+shape this section's numbers come from:
+
+```
+Search shape: 790 search_legislation call(s); 4 returned ZERO results;
+              783/783 measurable were WINDOWED (median 141 candidates
+              ranked, p90 185, max 220).
+```
 
 | | Wave 1 (n=1) | instruction only (n=3) | **+ code footer (n=3)** |
 |---|---|---|---|

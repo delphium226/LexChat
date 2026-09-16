@@ -7,7 +7,7 @@ model is never told the difference.
 **What the measurement showed, and it is not what the row assumed.** The row was
 written against the missing zero-result nudge on `search_legislation` — the only
 search tool without one. That branch is real and is fixed here, but post-Wave-1
-it fires on **4 of 785** searches. Meanwhile **17 turns asserted a negative and
+it fires on **4 of 790** searches. Meanwhile **17 turns asserted a negative and
 not one of them came from an empty search**: every one was drawn from a result
 set that had results, just not the wanted one. So the bare negative is not
 mainly a zero-result problem. It is a **window** problem:
@@ -46,10 +46,17 @@ reads as "nothing from 2026 is in the index" and it is **false**: a
 `/legislation/search` cross-check returns **27 distinct `uksi/2026/*`
 instruments, and all 12 spot-checked resolve on lookup**. A 60-point census puts
 the rate at ~2%, not 0 — low single digits, not nothing. So the wording below
-says "under 5%" and never "none". That is the probe's own warning (a sparse
-sample of absences proves nothing about a corpus) applying to the probe's own
-headline, and it is why nothing here quotes a bare percentage at a lawyer
-without saying when it was sampled.
+never says "none": a lawyer told none stops looking. That is the probe's own
+warning (a sparse sample of absences proves nothing about a corpus) applying to
+the probe's own headline.
+
+**And the same trap caught the replacement figure a day later.** "Under 5%" was
+written from one 60-point sample; re-running `lex_probe --coverage` the next day
+returned **8%** for the same series. Ordinary noise at n=60 (1 hit vs 5) — and
+enough to falsify a claim already sitting in a string lawyers read. Every figure
+below is now a **bound chosen to survive the spread**, not the last number
+measured, and nothing here quotes a bare percentage without saying when it was
+sampled.
 """
 
 from __future__ import annotations
@@ -69,21 +76,29 @@ __all__ = [
     "incomplete_steps_note",
 ]
 
-# Measured 2026-09-15 (`tools/lex_probe.py --coverage`, plus the 60-point census
-# and the search cross-check recorded in the module docstring). Dated, because it
-# will move: the index ingests daily and the 2026 series fills up over the year.
-# Re-measure before quoting it anywhere else.
+# Measured with `python -m tools.lex_probe --coverage`, which also runs the
+# search cross-check. **Two independent 60-point samples of the same series,
+# taken a day apart, and they disagree:**
 #
-#     ASP 2025/2026   10/10   (100%)
-#     SSI 2025        52/60   ( 87%)
-#     SSI 2026         1/60   (  2%)
-#     UK SI 2026       1/60   (  2%)   <- P5.3's "0%" was a 20-point artefact
-#     UKPGA 1962      12/20   ( 60%)   <- per-instrument, not a date cliff
+#                      2026-09-15      2026-09-16
+#     ASP 2025          10/10 (100%)    10/10 (100%)
+#     SSI 2025          52/60 ( 87%)    51/60 ( 85%)
+#     SSI 2026           1/60 (  2%)     5/60 (  8%)   <- 4x apart
+#     UK SI 2026         1/60 (  2%)     1/60 (  1%)   <- P5.3's "0%" was an artefact
+#     UKPGA 1962        12/20 ( 60%)    28/60 ( 46%)
+#
+# **So the figures below are stated as bounds that survive the spread, not as
+# the last number measured.** Writing "under 5%" from the first sample would
+# have been contradicted by the second the following day — in a string a
+# government lawyer reads and may rely on. A 2%-vs-8% spread on n=60 is ordinary
+# sampling noise (1 hit vs 5); a product claim has to be true across it.
+# Re-measure before quoting it anywhere, and widen the bound rather than chasing
+# the sample.
 LEX_COVERAGE_SENTENCE = (
-    "The index is incomplete and unevenly so (sampled 15 Sep 2026: Acts of the "
-    "Scottish Parliament complete, 2025 SSIs ~87% held, under 5% of instruments "
-    "made in 2026 held, and older gaps are per-instrument rather than by date). "
-    "Absence from the index is therefore NOT evidence of absence in law."
+    "The index is incomplete and unevenly so (sampled Sep 2026: Acts of the "
+    "Scottish Parliament complete, roughly 85% of 2025 SSIs held, under 10% of "
+    "instruments made in 2026, and older gaps are per-instrument rather than by "
+    "date). Absence from the index is therefore NOT evidence of absence in law."
 )
 
 # What any negative drawn from a search must carry. One string, so the
@@ -212,7 +227,7 @@ def legislation_search_note(
             f"{LEX_COVERAGE_SENTENCE} {_REPORTING_RULE}]"
         )
 
-    # Zero results. Rare since Wave 1 (4 of 785), but it is the one case where
+    # Zero results. Rare since Wave 1 (4 of 790), but it is the one case where
     # the model sees literally nothing and has to say so unaided.
     counts = []
     if isinstance(matched, int):
@@ -552,8 +567,9 @@ def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) ->
     return (
         f"\n\n*Search scope: the legislation index was searched for {quoted}{more}; "
         f"{filters_phrase}. This is a ranked search of an index that is known to be "
-        "incomplete — about 87% of 2025 Scottish SIs and under 5% of instruments "
-        "made in 2026 are held (sampled 15 Sep 2026) — so anything reported above "
+        "incomplete — roughly 85% of 2025 Scottish SIs and under 10% of "
+        "instruments made in 2026 are held (sampled Sep 2026) — so anything "
+        "reported above "
         "as not found was not found in this index, which is not the same as being "
         "absent from the law.*"
     )

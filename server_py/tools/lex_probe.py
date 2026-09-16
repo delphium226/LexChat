@@ -34,6 +34,7 @@ re-discovered:
 import argparse
 import collections
 import json
+import re
 import sys
 
 import httpx
@@ -79,12 +80,25 @@ def amendments(legislation_id: str, search_amended: bool, size: int = 200) -> li
 def coverage() -> int:
     """P5.3: how much of each series is actually held, and how fresh is it?
 
-    **Point lookups are a bad census instrument and misled this probe twice** —
-    twelve misses across `ssi/2026/{1..250}` read as "no 2026 SSIs at all", and a
-    20-point sample of UK SI 2026 returning nothing read as "nothing from 2026",
-    while `uksi/2026/772` was in the index and had been created a week earlier.
-    In a series with ~20% coverage, a sparse sample of absences proves nothing.
-    Cross-check against `/legislation/search` before concluding anything.
+    **Point lookups are a bad census instrument and misled this probe three
+    times.** Twelve misses across `ssi/2026/{1..250}` read as "no 2026 SSIs at
+    all", and a 20-point sample of UK SI 2026 returning nothing read as "nothing
+    from 2026" — while `uksi/2026/772` was in the index the whole time and had
+    been created a week earlier. A sparse sample of absences proves nothing about
+    a corpus.
+
+    **The third time, the warning above was already written and was ignored
+    anyway, and the number reached a published row.** P5.3 recorded "UK SI 2026
+    **~0%** held" off the 20-point sample. It is false in the direction that
+    matters: `/legislation/search` surfaces **27 distinct `uksi/2026/*`**
+    instruments and every one spot-checked resolves on lookup. The real rate is
+    ~2% on 60 points — low single digits, not nothing. Retracted at P2.2
+    (2026-09-15), where the wording that reached lawyers became "under 5%" and
+    never "none", because a lawyer told "none" stops looking.
+
+    So the cross-check is no longer advice in a docstring: it **runs**, below,
+    every time this does. Samples are 60 points rather than 20 for the same
+    reason.
     """
     import random
 
@@ -102,13 +116,14 @@ def coverage() -> int:
 
     print()
     print("--- held / absent by series (lookup is definitive) ---")
+    print("    (60-point samples since 2026-09-15 — see the cross-check below for why)")
     random.seed(7)
     for lt, year, hi, label in (("asp", 2025, 10, "ASP 2025"),
                                 ("ssi", 2025, 390, "SSI 2025"),
-                                ("ssi", 2026, 170, "SSI 2026"),
-                                ("uksi", 2026, 800, "UK SI 2026"),
+                                ("ssi", 2026, 180, "SSI 2026"),
+                                ("uksi", 2026, 860, "UK SI 2026"),
                                 ("ukpga", 1962, 60, "UKPGA 1962")):
-        picks = random.sample(range(1, hi + 1), min(20, hi))
+        picks = random.sample(range(1, hi + 1), min(60, hi))
         hits = 0
         for n in picks:
             r = httpx.post(f"{BASE}/legislation/lookup",
@@ -118,6 +133,46 @@ def coverage() -> int:
         print(f"    {label:12} {hits:2}/{len(picks)} held  ({100*hits//len(picks):3}%)")
     print("    NOTE: a 'not found' for 2026 secondary legislation is far more likely a")
     print("          coverage gap than an absence in law. That is P2.2's wording problem.")
+
+    # ---------------------------------------------------------------------
+    # The cross-check this script's own method warning demands — added
+    # 2026-09-15 (P2.2) after the warning was ignored and the headline it
+    # produced had to be retracted.
+    #
+    # P5.3 published "UK SI 2026 ~0% held" off a 20-point lookup sample. That
+    # reads as "nothing made in 2026 is in the index", which is FALSE: search
+    # surfaces dozens of held 2026 instruments. A 0/20 sample of a ~2% series
+    # looks identical to an empty one, and only a second route can tell them
+    # apart. The wording that reached the product says "under 5%", never
+    # "none", because a lawyer told "none" stops looking.
+    # ---------------------------------------------------------------------
+    print()
+    print("--- cross-check: does SEARCH find instruments the lookup census missed? ---")
+    for lt, year in (("ssi", 2026), ("uksi", 2026)):
+        found = set()
+        for q in ("regulations", "order", "amendment", "scotland", "commencement"):
+            r = httpx.post(f"{BASE}/legislation/search",
+                           json={"query": f"{q} {year}", "limit": 50,
+                                 "year_from": year, "include_text": False},
+                           timeout=TIMEOUT)
+            if r.status_code != 200:
+                continue
+            d = r.json()
+            for it in (d.get("results") if isinstance(d, dict) else d) or []:
+                m = re.search(rf"/{lt}/{year}/(\d+)", it.get("uri", ""))
+                if m:
+                    found.add(int(m.group(1)))
+        resolves = 0
+        for n in sorted(found)[:12]:
+            r = httpx.post(f"{BASE}/legislation/lookup",
+                           json={"legislation_type": lt, "year": year, "number": str(n)},
+                           timeout=TIMEOUT)
+            resolves += r.status_code == 200
+        probe = sorted(found)[:12]
+        print(f"    {lt}/{year}: search surfaced {len(found):3} distinct instrument(s); "
+              f"{resolves}/{len(probe)} spot-checked resolve on lookup")
+    print("    NOTE: a sparse sample of ABSENCES proves nothing about a corpus. If these two")
+    print("          routes disagree, the sample is the instrument — not the index.")
 
     print()
     print("--- freshness: newest `created_at` seen in a search sample ---")

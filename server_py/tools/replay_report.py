@@ -1239,6 +1239,49 @@ def cmd_negatives(args) -> int:
     print("  model  = the same three, graded on the model's prose with P2.2's")
     print("           code-emitted footer stripped off")
     print()
+    # The search-shape numbers BASELINE.md's B5 section quotes. Printed here
+    # rather than left to a throwaway script, because they are the numbers that
+    # decided this row's design — the zero-result branch it was written against
+    # fires on 4 of 790 searches, while 783 of 783 are windowed — and a number
+    # with no command behind it cannot be checked by the next session.
+    import statistics
+    shape = {"searches": 0, "zero": 0, "windowed": 0, "measurable": 0}
+    matched_counts = []
+    for doc in docs:
+        for t in doc.get("turns", []):
+            for dg in (t.get("audit") or {}).get("delegations", []):
+                for tl in dg.get("tools", []):
+                    if tl.get("name") != "search_legislation":
+                        continue
+                    shape["searches"] += 1
+                    out = _json_or_none(tl.get("final_result"))
+                    if not isinstance(out, dict):
+                        continue
+                    res = out.get("results")
+                    shown = len(res) if isinstance(res, list) else out.get("returned")
+                    total = out.get("total_matched")
+                    if not isinstance(total, int):
+                        total = out.get("total") if isinstance(out.get("total"), int) else None
+                    if shown == 0:
+                        shape["zero"] += 1
+                    if isinstance(shown, int) and isinstance(total, int):
+                        shape["measurable"] += 1
+                        matched_counts.append(total)
+                        if total > shown:
+                            shape["windowed"] += 1
+    if shape["searches"]:
+        med = statistics.median(matched_counts) if matched_counts else 0
+        p90 = sorted(matched_counts)[int(len(matched_counts) * 0.9)] if matched_counts else 0
+        print(f"Search shape: {shape['searches']} search_legislation call(s); "
+              f"{shape['zero']} returned ZERO results; "
+              f"{shape['windowed']}/{shape['measurable']} measurable were WINDOWED "
+              f"(median {med:.0f} candidates ranked, p90 {p90}, max "
+              f"{max(matched_counts) if matched_counts else 0}).")
+        print("  A windowed search shows the top few of a ranked list, so absence")
+        print("  from it is not absence from the corpus. That is what B5's")
+        print("  negatives were drawn from.")
+        print()
+
     print(f"{'session':>8} {'rep':>3} {'turn':>4} {'queries':>7} "
           f"{'terms':>5} {'limits':>6} {'index':>5} {'USER':>4} {'loose':>5} "
           f"{'model':>5}  verdict")
