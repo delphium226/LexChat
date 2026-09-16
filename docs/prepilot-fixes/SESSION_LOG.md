@@ -1375,8 +1375,16 @@ P2.6, P3.5, P4.4, P5.1 and P5.3 done**; P0.4 and P5.2 at `[~]`.
   and **`wave3_p35/` (9 — P3.5's acceptance)**. None of the wave2/wave3 dirs is a
   sweep; do **not** feed them to `replay_report compare`. Read them with
   `replay_report --dir <dir>` plus `commencements` (P3.5, `--drops` for the
-  both-directions audit), `derivations` (P2.3), `negatives` (P2.2), `halts`
-  (P2.1) and `corpus`.
+  both-directions audit and **`--before <dir>` for the Invariant 1 check** —
+  did the answers shrink to buy the number, compared over the sessions the two
+  directories SHARE), `derivations` (P2.3), `negatives` (P2.2), `halts` (P2.1)
+  and `corpus` (retrieval shape, block leaks, duplicated footers, P1.6 daggers).
+- **`python -m tools.plan_status`** prints where the ledger stands — by wave, by
+  bucket, and weighted by the sessions each bucket was the primary diagnosis
+  for. Added at the end of this session because the progress view was being
+  re-derived by hand, and a summary in prose goes stale the moment a row is
+  ticked. It reads `FIX_PLAN.md` and `classification.json` live and costs
+  nothing.
 
 **Spend this session: ~$5.8** on replay — $4.10 for the acceptance, ~$1.5 for the
 aborted first attempt, $0.07 for the smoke run and ~$0.1 of probes. The LEX
