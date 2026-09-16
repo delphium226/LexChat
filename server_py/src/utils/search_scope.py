@@ -84,6 +84,7 @@ __all__ = [
     "worker_scope_block",
     "strip_scope_blocks",
     "answer_scope_footer",
+    "strip_answer_footer",
     "incomplete_steps_note",
 ]
 
@@ -1169,6 +1170,40 @@ def _enabling_footer_clause(entries: Optional[list]) -> str:
         "preamble that states it, so any such derivation given above is "
         "unverified."
     )
+
+
+# The footer the model sometimes copies back, and the reason it must be removed
+# before a fresh one is appended.
+#
+# **Found live during P3.5's smoke run, and it is P2.2's defect, not P3.5's** —
+# it is visible in `wave2_p22_final` too. The footer is prose addressed to the
+# lawyer, so `strip_scope_blocks` leaves it alone (correctly); it then travels
+# into the next turn's conversation history, the model reproduces it verbatim at
+# the end of its answer, and the code appends its own. The lawyer reads the same
+# disclosure twice, which is exactly how a disclosure stops being read at all.
+#
+# Anchored to the end and matched line by line because the footer is a single
+# line with no newlines inside it. A greedy dot-all run from the first
+# occurrence would delete any answer text a model happened to put after a copied
+# footer; this cannot.
+_ECHOED_FOOTER = re.compile(
+    r"(?:\n*^\*Search scope:[^\n]*\*[ \t]*)+\s*\Z", re.M
+)
+
+
+def strip_answer_footer(text: str) -> str:
+    """Remove a scope footer the model copied out of the previous turn.
+
+    Applied immediately before `answer_scope_footer` appends the real one, so
+    exactly one reaches the lawyer and it is the one computed from THIS turn's
+    searches. Never raises.
+    """
+    if not text:
+        return text
+    try:
+        return _ECHOED_FOOTER.sub("", text).rstrip()
+    except Exception:
+        return text
 
 
 def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) -> str:

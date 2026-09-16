@@ -1194,3 +1194,48 @@ def test_the_footer_never_renders_an_unbalanced_quote():
     assert quoted.count('"') % 2 == 0, quoted
     assert '""' not in line
     assert "Education (Scotland) Act 1962 117" in line
+
+
+# --- the footer the model copies back (P2.2 defect, found during P3.5) ---------
+
+def test_an_echoed_footer_is_removed_before_a_fresh_one_is_appended():
+    """**Found live in P3.5's smoke run, and it is P2.2's defect.**
+
+    The footer is prose addressed to the lawyer, so `strip_scope_blocks` leaves
+    it alone — correctly. It then travels into the next turn's conversation
+    history, the model reproduces it verbatim at the end of its answer, and the
+    code appends its own. The lawyer reads the same disclosure twice, which is
+    how a disclosure stops being read. Visible in `wave2_p22_final` as well as
+    in the P3.5 smoke run, so it predates this row.
+    """
+    from src.utils.search_scope import strip_answer_footer
+
+    log = [{"tool": "search_legislation", "query": "Care Reform", "shown": 5,
+            "matched": 141, "legislation_id": ""}]
+    footer = answer_scope_footer(log, {})
+    answer = "Yes, SSI 2025/388 has been made." + footer
+    assert strip_answer_footer(answer) == "Yes, SSI 2025/388 has been made."
+    # Two of them, which is what actually reached the screen.
+    assert strip_answer_footer(answer + footer) == "Yes, SSI 2025/388 has been made."
+    # And appending after the strip leaves exactly one.
+    assert (strip_answer_footer(answer) + footer).count("*Search scope:") == 1
+
+
+def test_the_strip_leaves_an_answer_without_a_footer_alone():
+    from src.utils.search_scope import strip_answer_footer
+
+    for text in ("", "A plain answer.", "An answer with *emphasis* in it.",
+                 "A line.\n\n*Not a search scope line at all.*"):
+        assert strip_answer_footer(text) == (text.rstrip() if text else text)
+
+
+def test_the_strip_cannot_eat_answer_text_that_follows_a_copied_footer():
+    """A dot-all run from the first `*Search scope:` to the end of the string
+    would delete whatever came after it. Matched line by line instead, because
+    the footer is a single line and the risk is not worth the brevity."""
+    from src.utils.search_scope import strip_answer_footer
+
+    log = [{"tool": "search_legislation", "query": "q", "shown": 1,
+            "matched": 2, "legislation_id": ""}]
+    text = "Answer." + answer_scope_footer(log, {}) + "\n\nA later paragraph."
+    assert strip_answer_footer(text) == text

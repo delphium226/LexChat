@@ -24,6 +24,7 @@ from ..utils.citation_links import enforce_provision_links
 from ..utils.research_halt import apply_halt_disclosure, halt_worker_report
 from ..utils.search_scope import (
     answer_scope_footer,
+    strip_answer_footer,
     incomplete_steps_note,
     strip_scope_blocks,
     worker_scope_block,
@@ -817,9 +818,13 @@ async def process_user_request(
     # not all of them. Appended last — after the source block is built, so a
     # query string in it can never be read as a citation. Empty on a turn that
     # ran no legislation search, so a purely conversational reply is untouched.
-    final["content"] = (final.get("content") or "") + answer_scope_footer(
-        all_searches, _cfg
-    )
+    # P3.5 found a P2.2 defect here: the footer is prose, so it survives into the
+    # next turn's history, the model copies it back verbatim, and the code then
+    # appends its own — the lawyer reads the same disclosure twice. Strip any
+    # echo before appending the one computed from THIS turn's searches.
+    final["content"] = strip_answer_footer(
+        final.get("content") or ""
+    ) + answer_scope_footer(all_searches, _cfg)
 
     return final
 
@@ -1040,8 +1045,8 @@ async def run_deep_research(
     # P2.2 (B5): same code-emitted scope line as the Manager path. A Deep
     # Research report is composed from step findings and is the furthest any
     # answer travels from the searches that produced it.
-    final["content"] = (final.get("content") or "") + answer_scope_footer(
-        all_searches, _get_cfg()
-    )
+    final["content"] = strip_answer_footer(
+        final.get("content") or ""
+    ) + answer_scope_footer(all_searches, _get_cfg())
 
     return final
