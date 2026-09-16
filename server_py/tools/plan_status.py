@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from collections import Counter
 from pathlib import Path
 
@@ -77,7 +78,32 @@ def _buckets() -> dict:
     return out
 
 
+def _utf8_stdout() -> None:
+    """Make stdout survive being redirected on Windows.
+
+    **Found during the Session 9 handover audit, and the failure mode is why it
+    is worth a helper.** On this box `sys.stdout` is cp1252 when redirected to a
+    file or a pipe (the console itself copes), so printing a replay answer that
+    contains a character the model happened to use — a warning sign, an em dash
+    in the wrong form, a quotation mark — raises `UnicodeEncodeError`. It dies
+    **partway through**, so the redirected output looks TRUNCATED rather than
+    failed, and the exit code is the only tell. `replay_report --dir <dir>
+    currency --drops --before <dir> > out.txt` hit it on a 101-row drops list,
+    which is exactly the shape of command a session redirects to a file.
+
+    `errors="replace"` rather than a sanitiser at each print site: there are six
+    sites that echo answer text in this file alone, and the next one added would
+    not know to sanitise.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
 def main(argv=None) -> int:
+    _utf8_stdout()
     rows = _rows()
     if not rows:
         print(f"No ledger rows found in {FIX_PLAN}")

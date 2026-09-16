@@ -598,6 +598,10 @@ MUST_ASSERT = [
     "of the UK constitution.",
     "recent case law such as In the matter of an application by Martina Dillon "
     "[2026] UKSC 15 confirms its active status.",
+    # The bare form of the same evasion, with the subject elided to a pronoun —
+    # which is why `_CUR_PARAPHRASE_STANDALONE` matches "active status" without
+    # requiring a legislation noun in the sentence.
+    "recent case law confirms its active status.",
     "The Regulations are still operative.",
     "The 2018 Act is the current law in Scotland.",
     "Sections 1 to 5 of the Act continue to apply.",
@@ -638,6 +642,24 @@ MUST_NOT = [
     "The core reporting and accounting duties were brought into force on 1 July 2005.",
     "Sections 2, 9, 17, 20, 21, 22, and 23 were brought into force by SSI 2025/119.",
     "The revised text held shows that section 9 came into force on 10 May 2025.",
+    "It brings sections 2, 9, 17, 20, 21, 22, and 23 of the Social Security "
+    "(Amendment) (Scotland) Act 2025 into force on 10 May 2025.",
+    "No commencement regulations have been made yet to bring the remaining "
+    "provisions into force.",
+    # The product's own footer and limb sentences, as literals. They are also
+    # checked by generation in
+    # `test_the_detector_does_not_read_the_products_own_new_wording`, which is
+    # the stronger test; these pin the exact wording a reader will grep for.
+    "Whether legislation is in force is not something this index reports, so "
+    "nothing above has been checked against a commencement date.",
+    "The held text is stated to be up to date to 11 March 2026, which is a "
+    "text-version date and not an in-force date.",
+    # A disclaimer whose subject is the status and whose object is "every
+    # individual provision" — the clause the second smoke run hedged with
+    # before asserting in the NEXT sentence. The hedge alone must not count;
+    # the assertion is caught on its own.
+    "The research tools cannot verify the exact in-force status of every "
+    "individual provision today.",
     # **Case-law currency is a different question**, answered by different tools
     # and belonging to the case-law prompt's "Jurisdiction & Currency" section.
     # "good law" is therefore absent from the paraphrase vocabulary entirely:

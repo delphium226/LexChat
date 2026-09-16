@@ -1623,13 +1623,24 @@ suppression**:
 
 ### The cost side, stated rather than buried
 
-**Three of 8 turns in 6341 rep 1 carry a currency disclaimer on a question that
-never asked about currency.** That is `_currency_limb` speaking on every step
-that touched legislation, and it is the intended trade rather than noise:
-"Jurisdiction & Status" is a mandatory section that has to say *something*, and
-what it said before was *"All referenced legislation is currently in force"*
-about a session citing an Act whose ss. 38-39 are repealed. It is still a change
-to answers nobody asked for, so it is recorded here.
+**10 of the 30 turns whose question never mentioned currency carry a currency
+disclaimer anyway (33%)** — `python -m tools.replay_report --dir
+evidence/replay/wave2_p25 currency --unasked`. ~~3 of 8 turns in 6341 rep 1~~:
+that was one rep, quoted before the measure had a command behind it, and the
+directory-wide figure is the one to use.
+
+That is `_currency_limb` speaking on every step that touched legislation, and it
+is the intended trade rather than noise: "Jurisdiction & Status" is a mandatory
+section that has to say *something*, and what it said before was *"All
+referenced legislation is currently in force"* about a session citing an Act
+whose ss. 38-39 are repealed. It is still a change to answers nobody asked for,
+so it is measured and recorded rather than assumed away.
+
+**The shape of the 10 is the reassuring part**: all of them are 6341, the
+session where nothing was retrievable, and only **1 of the 11 turns that DID ask
+about currency** carries a disclaimer — because the rest got a sourced answer
+instead. The disclaimer appears where the record is empty, which is where it
+belongs.
 
 **The limb costs 873 characters on every legislation worker report**, and the
 `search_legislation` clause is one sentence for the same reason: it rides on 790

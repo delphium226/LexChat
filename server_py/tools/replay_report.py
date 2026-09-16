@@ -2016,6 +2016,71 @@ def cmd_commencements(args) -> int:
     return 0
 
 
+# A question that asks about currency, loosely. Deliberately loose: this is the
+# denominator for a COST measure, and over-counting "asked" understates the cost.
+_CUR_QUESTION = re.compile(
+    r"\bin[- ]force\b|\bcommenc|\brepeal|\brevok|\bcurrent\b|\bup to date\b"
+    r"|\bstill (?:appl|good|valid)", re.I)
+# The disclaimer the fix produces, as it reaches a lawyer.
+_CUR_DISCLOSED = re.compile(
+    r"in[- ]force status (?:was|could|is)?\s?(?:not|n't)\s?(?:be |been )?"
+    r"(?:verified|established|confirmed|determined|reported)"
+    r"|not (?:possible to |able to )?(?:verif|establish|confirm|determin)\w*"
+    r"[^.;\n]{0,40}in[- ]force"
+    r"|in[- ]force status (?:is|was) not (?:recorded|reported|established)"
+    r"|does not (?:report|record) (?:whether|in[- ]force)",
+    re.I,
+)
+
+
+def _currency_on_unasked_turns(docs) -> None:
+    """The measured COST of `_currency_limb` speaking unconditionally.
+
+    **This exists because `BASELINE.md` quotes the number, and a number quoted
+    at a reader needs a command behind it.** The limb fires on every step that
+    touched legislation, not only on the ones asked a currency question, so a
+    question about the definition of "shop" can come back carrying an "in-force
+    status was not verified" paragraph.
+
+    That is judged the right trade rather than noise — "Jurisdiction & Status"
+    is a mandatory report section that has to say *something*, and what it said
+    before was *"All referenced legislation is currently in force"* about a
+    session citing an Act whose ss. 38-39 are repealed. But it is a change to
+    answers nobody asked for, so it is measured rather than assumed away.
+    """
+    asked = unasked = asked_disc = unasked_disc = 0
+    rows = []
+    for doc in sorted(docs, key=lambda d: (str(d.get("session_id")), d.get("rep", 1))):
+        for t in doc.get("turns", []):
+            body = _without_footer(t.get("answer") or "")
+            if not body.strip():
+                continue
+            q = t.get("question") or ""
+            was_asked = bool(_CUR_QUESTION.search(q))
+            disc = [x.strip() for x in _sentences(body) if _CUR_DISCLOSED.search(x)]
+            if was_asked:
+                asked += 1
+                asked_disc += bool(disc)
+            else:
+                unasked += 1
+                unasked_disc += bool(disc)
+            if disc:
+                rows.append((doc["session_id"], doc.get("rep", 1), t.get("turn"),
+                             was_asked, disc))
+    print()
+    print("  --unasked: the cost of a limb that speaks unconditionally")
+    print("    question DID ask about currency            %5d" % asked)
+    print("    ... carrying a currency disclaimer         %5d   <- wanted" % asked_disc)
+    print("    question did NOT ask about currency        %5d" % unasked)
+    print("    ... carrying one anyway                    %5d   <- the cost"
+          % unasked_disc)
+    for sid, rep, turn, was_asked, disc in rows:
+        print("    %s %s rep%s t%s" % ("ASKED  " if was_asked else "UNASKED",
+                                       sid, rep, turn))
+        for d in disc[:2]:
+            print("        %s" % d[:160])
+
+
 def _invariant_one(before: Path, after: Path) -> None:
     """Did the answers SHRINK to buy the number?
 
@@ -2592,6 +2657,8 @@ def cmd_currency(args) -> int:
               % len(drops))
         for sid, rep, turn, s in drops:
             print("    %s rep%s t%s: %s" % (sid, rep, turn, s.strip()[:170]))
+    if args.unasked:
+        _currency_on_unasked_turns(docs)
     if args.before:
         _invariant_one(Path(args.before), Path(args.dir))
     return 0
@@ -2733,7 +2800,32 @@ _SECONDARY_SERIES = ("ssi", "uksi", "nisr", "wsi", "ssr", "uksro", "nisro",
                      "ukci", "ukmo")
 
 
+def _utf8_stdout() -> None:
+    """Make stdout survive being redirected on Windows.
+
+    **Found during the Session 9 handover audit, and the failure mode is why it
+    is worth a helper.** On this box `sys.stdout` is cp1252 when redirected to a
+    file or a pipe (the console itself copes), so printing a replay answer that
+    contains a character the model happened to use — a warning sign, an em dash
+    in the wrong form, a quotation mark — raises `UnicodeEncodeError`. It dies
+    **partway through**, so the redirected output looks TRUNCATED rather than
+    failed, and the exit code is the only tell. `replay_report --dir <dir>
+    currency --drops --before <dir> > out.txt` hit it on a 101-row drops list,
+    which is exactly the shape of command a session redirects to a file.
+
+    `errors="replace"` rather than a sanitiser at each print site: there are six
+    sites that echo answer text in this file alone, and the next one added would
+    not know to sanitise.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
 def main(argv: Iterable[str] | None = None) -> int:
+    _utf8_stdout()
     p = argparse.ArgumentParser(prog="replay_report")
     p.add_argument("--dir", default=str(
         Path(__file__).resolve().parents[2]
@@ -2790,6 +2882,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     cu.add_argument("--before", metavar="DIR",
                     help="a replay dir to compare answer lengths against "
                          "(Invariant 1: did the answers shrink to buy the number)")
+    cu.add_argument("--unasked", action="store_true",
+                    help="the measured cost: turns carrying a currency "
+                         "disclaimer whose question never asked about currency")
     sub.add_parser("corpus",
                    help="retrieval shape: raw volume, where an enabling power "
                         "can come from, and what the tool memo costs P2.2")

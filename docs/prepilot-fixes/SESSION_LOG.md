@@ -1582,6 +1582,46 @@ survive measurement, and two of them changed the build.**
   cited a text version (*"SSI 2020/475 is in force (status: revised)"*), which
   is the residual this row removes.
 
+- **Two findings this row does NOT own, recorded so they are not re-found.**
+  **(a) The zero-tool-call negative (now row P2.10).** 6341 rep 2 turn 2
+  asserted a negative having made **no tool call at all**, so
+  `answer_scope_footer` attached nothing (it is gated on having searched) and
+  `worker_scope_block` was silent (`if not log: return ""`). First instance in
+  209 answered turns across five directories, and the same turn answered
+  normally in reps 1 and 3 — so n=1 and possibly stochastic. **The check, which
+  P2.10 needs before anyone builds for it:**
+
+      python - <<'EOF'
+      import json, glob, sys; sys.path.insert(0, '.')
+      import tools.replay_report as R
+      for d in ('wave1','wave2_p22_final','wave2_p23','wave3_p35','wave2_p25'):
+          hits = []
+          for p in sorted(glob.glob(f'../docs/prepilot-fixes/evidence/replay/{d}/*.json')):
+              x = json.load(open(p, encoding='utf-8'))
+              for t in x['turns']:
+                  a = t.get('answer') or ''
+                  if not a.strip():
+                      continue
+                  n = sum(len(dg.get('tools') or [])
+                          for dg in (t.get('audit') or {}).get('delegations') or [])
+                  if n == 0 and R.NOT_FOUND.search(R._without_footer(a)):
+                      hits.append(f"{x['session_id']}r{x.get('rep',1)}t{t['turn']}")
+          print(d, len(hits), hits)
+      EOF
+
+  **(b) A meta-question about the index answered from training knowledge, and no
+  row owns it.** 6341 turn 8 asks *"what do you mean when you say legislation is
+  noted as a stub"* and the answer explains stub records, which instruments tend
+  to be stubs and what to consult instead — none of it retrieved, all of it
+  plausible, and one clause ("Statutory Instruments that were revoked or
+  superseded before the database was comprehensively populated") is a guess
+  about LEX's coverage presented as fact. It is not B4 (no currency claim), not
+  B5 (no negative asserted) and not B3(b). **The nearest owner is P2.7's
+  no-speculation family**; flagged there rather than given a row, because one
+  turn is not a rate. Same shape as `section_search_note`'s reason for existing:
+  6335 turn 7 invented *"the database is having difficulty parsing the Schedule
+  B1 structure."*
+
 **Decisions taken this session:**
 - **Rename the field rather than instruct around it.** `status` reaches the model
   as `text_version`. 48 of `wave1`'s 66 assertions quote the text version as
@@ -1635,6 +1675,34 @@ P2.2, P2.3, P2.5, P2.6, P3.5, P4.4, P5.1 and P5.3 done**; P0.4 and P5.2 at
   `--drops` for the both-directions audit and `--before <dir>` for Invariant 1),
   `commencements` (P3.5), `derivations` (P2.3), `negatives` (P2.2), `halts`
   (P2.1) and `corpus`.
+- **`replay_report currency --unasked` was added during the handover audit,
+  because `BASELINE.md` quoted a number with no command behind it.** It measures
+  the cost of `_currency_limb` speaking unconditionally: turns carrying a
+  currency disclaimer whose question never mentioned currency. Putting it behind
+  a command immediately corrected the figure — I had published **3 of 8 turns in
+  6341 rep 1**, scoped to one rep; over the whole directory it is **10 of 30
+  (33%)**, and only **1 of the 11 turns that DID ask** carries a disclaimer,
+  because the rest got a sourced answer. Third time this session that a figure
+  moved the moment a command was put behind it.
+- **The smoke runs are kept**, at `evidence/replay/wave2_p25_smoke/`
+  (`6411_smoke1.json` pre-paraphrase-fix, `6411_smoke2.json` post-PHASE-2b).
+  They are the primary evidence for two findings quoted verbatim above — the
+  footer naming an unrelated repealed instrument, and the *"is in operation …
+  active status"* evasion — and both would otherwise have lived only in a
+  scratch directory.
+- **Two things about the report tool that cost me time this session, both now
+  true of the code.** (a) **`replay_report`, `lex_probe` and `plan_status` now
+  force UTF-8 on stdout.** On this box a redirected stdout is cp1252, so
+  printing a replay answer containing a character the model happened to use
+  raised `UnicodeEncodeError` **partway through** — which makes redirected
+  output look TRUNCATED rather than failed, with the exit code the only tell.
+  `currency --drops --before … > out.txt` hit it on a 101-row drops list.
+  (b) **`halts`, `negatives` and `derivations` exit 1 when findings exist**
+  (`return 0 if bad == 0 else 1`); `summary`, `session`, `baseline`, `compare`,
+  `commencements`, `currency` and `corpus` always exit 0. That is deliberate and
+  not a bug — do not "fix" it — but a shell check of the form
+  `cmd > /dev/null && echo OK` reports those three as failures, which is how I
+  briefly mis-read a clean run as broken.
 - **`python -m tools.plan_status`** prints where the ledger stands.
 
 **Spend this session: ~$12.4** on replay — $9.76 for the acceptance,
