@@ -852,27 +852,128 @@ including one asserting that P1.6's own block counts as *shown*.
 
 ---
 
-## B13 — four billed-but-empty turns, and one suspect eliminated
+## B13 — ~~four~~ **eight** billed-but-empty turns, and what they turned out to be (P4.2)
 
-| session | turn | billed | `token` events |
-|---|---|---|---|
-| 6370 | 2 | $0.0602 | **none** |
-| 6370 | 3 | $0.0764 | **none** |
-| 6407 | 1 | $0.0420 | **none** |
-| 6407 | 2 | $0.0371 | **none** |
+~~Four billed-but-empty turns, all in `baseline`.~~ **An undercount, corrected when
+P4.2 was built (Session 10). There are NINE blank-body turns across the ten replay
+directories, EIGHT of them billed** — and three of the nine (6406, 6359, 6374) were
+not in the ledger row's evidence list at all.
 
-All four ran real research first — 6370 turn 2 made 5 tool calls, 5 API calls and produced a
-976-char Worker report citing SSI 2017/114 — then returned an empty body, with `status: ok` and
-`audit.error: null`.
+| turn | dir | mode | delegations | worker tools | cost |
+|---|---|---|---|---|---|
+| 6370 r1 t2 | baseline | conversational | 1 | 5 | $0.0602 |
+| 6370 r1 t3 | baseline | conversational | 2 | 8 | $0.0764 |
+| 6406 r3 t7 | baseline | conversational | 1 | 6 | $0.1056 |
+| 6407 r1 t1 | baseline | conversational | 1 | 3 | $0.0420 |
+| 6407 r1 t2 | baseline | conversational | 1 | 3 | $0.0371 |
+| 6338 r1 t2 | wave1 | research | 2 | 27 | $0.3996 |
+| 6359 r1 t2 | wave1 | conversational | 1 | 4 | $0.0809 |
+| 6383 r1 t4 | wave2_p25 | deep_research | 3 | 30 | $0.4518 |
+| 6374 r3 t3 | wave2_p23 | conversational | **0** | **0** | **$0** |
 
-**None of the four emitted a single `token` event.** P4.2 lists a `<suggestions>` strip consuming
-the whole body as its first suspect; that requires a body to strip, and there was never one. The
-evidence points at the plan's suspect (2), a tool-call-only final message. Suspect (3), the
-stream-retry guard re-raising, is not supported — no error event was emitted on any of the four.
+**8 billed blanks in 616 turns (1.3%)**, six sessions, three chat modes, every one
+`status: ok` with `audit.error: null` and not one `token` event. Reproduce with:
 
-**P4.2's acceptance test cannot assert on a specific turn.** The plan cites 6370 message #8; the
-replay blanked at turns 2 and 3, and the pre-pilot's turn 2 answered normally. The invariant the
-row already states — non-empty body whenever recorded cost > 0 — is the assertion that survives.
+    python -m tools.replay_report --dir evidence/replay/<dir> blanks
+
+**Cost is `timing.total_cost_usd`.** There is no `cost_usd` key on a run file, and
+reading one grades every turn as free — the instrument failing silent in the
+flattering direction.
+
+### The three things the table settles
+
+**Zero `token` events on all nine** kills two of the row's four suspects
+universally, not just for the baseline four: there was never a body for the
+`<suggestions>` strip to consume, and no error event for the stream-retry guard to
+have re-raised.
+
+**Suspect (2) — "a tool-call-only final message" — is right about eight and wrong
+as a rule.** 6383's own synthesis call declared **no tools at all** (`agent_core.py`
+passes `[]` and `_no_tools_executor`; the log reads `tools=0, msgs=2, ~21421
+chars`). So the failure is not confined to tool-call turns, and this is the finding
+that shaped the fix: a guard scoped to "after a tool ran" would have missed the
+worst instance in the corpus. **It is also stochastic, not deterministic** — 6383's
+DR turn produced 9,190 / 6,503 / 7,490 / 8,672 chars on four prior runs and 2,278 on
+the re-run, so the same payload succeeded five times and failed once. That is
+precisely the condition a bounded retry answers.
+
+**6374 r3 t3 is a different animal and is excluded.** 0 delegations, 0 tools, $0 —
+the one turn where nothing ran, rather than something running and the answer being
+lost. The invariant is worded against **cost**, not against blankness, for exactly
+this reason.
+
+### The cause, and the part of it that was ours
+
+**An empty provider completion that the code could not see.** `chat_loop`
+accumulated `delta.content` and `delta.tool_calls` and read neither `finish_reason`
+nor `native_finish_reason`; an empty stream became `{"role": "assistant", "content":
+""}` and was returned as the answer with `status: ok` and full billing. The existing
+stream retry could not catch it — it fires on an *exception* raised while nothing has
+been emitted, and a clean 200 carrying no content raises nothing.
+
+Four mechanisms produce that signature and the stored evidence cannot tell them
+apart, which is why this row could never name a cause. They are distinguishable at
+the seam, so the diagnostic landed first (as the row required) and captures all
+four: `completion_tokens` (~0 = the provider returned nothing), `reasoning_chars`
+(> 0 with no content = the model spent the completion on thinking tokens),
+`stream_error` / `finish_reason: "error"` with `native_finish_reason` (a mid-stream
+failure), and otherwise the model choosing to say nothing.
+
+**The `error` payload is the one that was ours.** OpenRouter reports a mid-stream
+failure as an `error` object on the SSE stream. Nothing in `chat_loop` read it — it
+looked only at `usage` and `choices` — so such a stream ended indistinguishable from
+an ordinary empty completion. That is a parser gap, not a provider bug, and it is
+now captured.
+
+All of it is surfaced as **audit schema v3's `empty_completions[]`**, `[]` on a
+healthy request, with `retried: true` marking an attempt the retry recovered from.
+A directory can therefore show zero violations **and** a non-zero rate of the
+underlying provider fault — which is the whole reason the diagnostic was built
+before the fix.
+
+### The fix, and the line Invariant 1 draws through it
+
+A bounded retry in both clients on any empty completion; a tool-call-only message is
+never retried (that is the normal ReAct shape, and replaying it re-runs the turn's
+research). The abandoned attempt's cost is banked — under-reporting it would hide
+the very spend that makes a blank turn a defect rather than a slow one.
+
+For the residual, two fallbacks: Deep Research to the step findings (6383 had three
+intact reports of 4,836 / 5,777 / 7,190 chars sitting behind its empty body), the
+Manager to the worker reports it already holds, or a plain notice where there are
+none. **Both are labelled as fallbacks.** Research the answering step never used is
+not an answer, and the entire complaint in this bucket is that the lawyer could not
+tell a lost answer from a finished one — so the fallback opens by naming the
+failure, says what has and has not been done to the material below, and reorders
+nothing.
+
+### The detector, and why it grades the body rather than the answer
+
+**Since P2.2 a blank turn is not an empty string.** 6383 rep 1 turn 4's `answer` is
+**1,293 characters** — entirely the code-emitted scope footer, with nothing above
+it. That is what the lawyer saw. A detector grading `answer` scores it as fine;
+`blank_verdict` grades `_without_footer(answer)`.
+
+Validated in both directions across all ten directories. It finds exactly the 8
+billed blanks and the 1 free blank counted by hand, and the shortest bodies it
+leaves alone are real content — a 46-char halt marker, 50-char clarifying questions
+("Which jurisdiction have you changed the filter to?"). No before-column number
+anywhere else moved.
+
+### The latency half
+
+6387's timeout did not reproduce. What survives is MoniqueM reporting a 5.5-minute
+turn as "around 15 minutes" — the status line changes wording as the agent works,
+but nothing accumulates, so there is no anchor, and an unanchored wait is
+systematically over-estimated.
+
+A step count and an elapsed clock now sit in the status line, both derived
+client-side from data already arriving (`tool_start` events, the run's existing
+`startedAt`): no new SSE events, no backend change, nothing added to retrieval.
+**No denominator, deliberately** — outside Deep Research nothing knows the total, so
+"step 3 of 8" would be a claim about how much is left. Live-verified through a real
+research turn: *"Researching · 13 steps · 1m 01s"*, advancing on both figures,
+tracking Researching → Analysing findings → Typing, and clearing on completion.
 
 ---
 

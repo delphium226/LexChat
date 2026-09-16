@@ -1715,3 +1715,149 @@ P2.2's published numbers. **P2.7**, **P2.8**, **P3.6** and **P3.7** are open;
 **Wave 4** is 9 sessions, mostly frontend, independently shippable, and nothing
 depends on it. **P5.2 is the live external one** and the LEX-team question is
 still free and still unasked.
+
+---
+
+## Session 10 — 2026-09-16 — P4.2 (B13, lost turns and blank replies), both halves
+
+**Done:**
+- **P4.2 complete, acceptance passed, B13 closes.** The cause is an **empty
+  provider completion the code could not see**. The diagnostic landed first, as
+  the row required; the fix is a bounded retry plus two labelled fallbacks.
+- **The latency half is built too** — a step count and an elapsed clock in the
+  status line, derived entirely client-side from data already arriving.
+- **998 tests** (963 → 998). New tooling: `replay_report blanks`. Audit trace
+  goes to **schema v3** (`empty_completions[]`); `AUDIT_TRACE.md` and `CLAUDE.md`
+  updated in the same commits.
+- **Spend: ~$0.27** — one live smoke turn to verify the status line. The
+  acceptance is deterministic and needed no replay sweep.
+
+**The row's own evidence list was the thing that was wrong this time, and that is
+a new place for it to be wrong.**
+
+Eighteen instrument corrections over nine sessions have all been in *detectors*.
+This one was in the **handover**: the row said "4 billed-but-empty turns (6370
+×2, 6407 ×2)". Counted over all ten replay directories there are **nine
+blank-body turns, eight of them billed** — and **6406, 6359 and 6374 appear
+nowhere in the row's evidence list**. 8 in 616 turns (1.3%), six sessions, three
+chat modes. The correction did not change the fix, but it doubled the measured
+base rate, and a row scoped against 6370/6407 would have been accepted on a
+directory that never contained most of the defect.
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **6383's synthesis call declared NO tools, and that changed the shape of the
+  fix.** The handover flagged this as a question to decide. Eight of the nine
+  blanks follow tool execution, matching the public reports of streaming +
+  function calling returning an empty final message — so the obvious guard is
+  "retry an empty completion *after a tool ran*". 6383 is the counter-example:
+  `agent_core.py` passes `[]` and `_no_tools_executor`, and the log reads
+  `tools=0, msgs=2, ~21421 chars`. A guard scoped to tool-call turns would have
+  missed the worst instance in the corpus — a $0.45 Deep Research report with 30
+  tool calls and 219 commencement relations behind an empty body. **The retry
+  keys on an empty completion, full stop.** It is also *stochastic*, not
+  deterministic: the same payload produced 9,190 / 6,503 / 7,490 / 8,672 chars on
+  four prior runs and 2,278 on the re-run, failing once in six. That is the
+  condition a bounded retry answers, so the answer to the row's "is a bounded
+  retry sufficient" is yes, with the fallbacks for the residual.
+
+- **One of the four mechanisms is OURS, and it was found by writing the
+  diagnostic rather than by reasoning about it.** OpenRouter reports a mid-stream
+  failure as an `error` object on the SSE stream. `chat_loop` read only `usage`
+  and `choices` — **nothing looked at `error`** — so a mid-stream failure ended
+  indistinguishable from an ordinary empty completion: `status: ok`, no error,
+  full billing. That is a parser gap, not a provider bug. The row's framing ("the
+  fix may not be ours") was half right: the retry is the answer either way, but
+  one of the four ways in is a line we never read.
+
+- **P2.2 changed what this failure looks like on screen, and a detector written
+  before it would score the worst case as fine.** A blank turn is no longer an
+  empty string: 6383 rep 1 turn 4's `answer` is **1,293 characters**, all of it
+  the code-emitted scope footer, with nothing above it. `blank_verdict` grades
+  `_without_footer(answer)` for that reason. Seven of the eight billed blanks
+  predate the footer and have `answer == ""`; the one that does not is the one
+  the row cares most about.
+
+- **The reasoning-token mechanism cannot be ruled out from stored data, and that
+  is why the diagnostic exists.** A thinking model that spends its whole
+  completion on reasoning emits no content and is billed for it — the identical
+  signature. Run files record only aggregate `llm_calls` and `total_cost_usd`, no
+  per-call token counts, so nothing in eight sessions of stored evidence
+  separates it from a lost answer. `reasoning_chars` now does. Neither
+  `delta.reasoning` nor `delta.reasoning_content` was read anywhere in `src/`
+  before this.
+
+- **There is no frontend test runner in this repo** (no vitest, no jest, no
+  `npm test`), so the latency half has no unit test and was verified live through
+  Playwright instead: the line read *"Researching · 13 steps · 1m 01s"*, advanced
+  on both figures, tracked Researching → Analysing findings → Typing, and cleared
+  on completion. The same turn returned a full research report with no
+  `EmptyCompletion` warnings and no tracebacks, which exercises the backend half
+  end to end. Worth knowing before anyone plans a frontend row (Wave 4 is mostly
+  frontend): a UI change here is verified by driving it or not at all.
+
+- **`replay_report blanks` joins the three subcommands that exit 1 on findings.**
+  `halts`, `negatives` and `derivations` already do; `blanks` is an acceptance
+  assertion of the same kind, so it does too. The other seven always exit 0. A
+  shell check of the form `cmd > /dev/null && echo OK` reports all four as
+  failures — deliberate, still not a bug.
+
+**Decisions taken this session:**
+- **A tool-call-only message is never retried.** No content with a tool call is
+  the normal ReAct shape; treating it as empty would re-run the turn's research
+  and double its cost. `is_empty_completion` requires *both* to be absent.
+- **The discarded attempt's cost is banked; `llm_calls` is deliberately not
+  incremented.** Under-reporting the spend would hide the very thing that makes a
+  blank turn a defect rather than a slow one. `llm_calls` is left alone because
+  the pre-existing timeout retry does not count its abandoned attempts either,
+  and moving that counter would shift a metric other rows' numbers were measured
+  against.
+- **Both fallbacks are labelled as fallbacks (Invariant 1).** Research the
+  answering step never used is not an answer. The whole complaint in this bucket
+  is that a lawyer could not tell a lost answer from a finished one, so the
+  fallback opens by naming the failure, states what has and has not been done to
+  the material below, and reorders nothing. `run_deep_research` sets
+  `synthesis_failed`; the Manager sets `answer_failed`.
+- **The Manager keeps its worker reports.** Two lines in `manager_tool_executor`,
+  read only on the failure path. Discarding a completed research report to show
+  "something went wrong" would throw away retrieval the lawyer paid for, which is
+  the complaint this bucket is about.
+- **Audit schema bumped to v3 deliberately.** `AUDIT_TRACE.md` says the version
+  is incremented on *any* change to the shape, so an additive key still bumps it.
+  `empty_completions` is `[]` on a healthy request — present and empty, so a
+  consumer can tell "nothing was lost" from "this trace predates the field"
+  without reading `schema_version`.
+- **No denominator on the step counter.** "Step 3 of 8" is a claim about how much
+  is left, and outside Deep Research nothing knows the total — the model decides
+  how many retrievals a question needs as it goes. Invariant 1 applies to
+  progress claims as much as to legal ones.
+- **Elapsed is derived from `run.startedAt`, not counted up in the interval**, so
+  a re-render, a chat switch or a backgrounded tab cannot reset or skew it. It
+  includes queue wait, which is the wait the lawyer actually experiences.
+
+**State of the branch:** `fix/prepilot-defects`. **998 tests green, NOTHING
+PUSHED** — the whole-plan-then-one-push policy stands, so the target still runs
+the pre-pilot code. Ledger: **19 of 34 rows, 6 of 14 buckets closed** (B1, B2,
+B3, B4, **B13**, B14). Waves 0 and 1 complete; **P1.6, P2.1, P2.2, P2.3, P2.5,
+P2.6, P3.5, P4.2, P4.4, P5.1 and P5.3 done**; P0.4 and P5.2 at `[~]`.
+
+**Machine state a new session inherits:**
+- **No uvicorn running** — started for the live smoke, stopped at the end.
+- **Dev box untouched and unpinned** — still `moonshotai/kimi-k3`, local prompt
+  cache ON, no pin file. **The smoke turn ran on that configuration on purpose:**
+  it was a smoke, not a measurement, so the pin was neither needed nor wanted.
+  **Re-pin before anything that produces a number.**
+- **Still ten replay directories** — this row added none, and needed none. Its
+  acceptance reads the existing ones.
+- **`python -m tools.replay_report --dir <dir> blanks`** is the new command.
+  `blank_verdict` is unit-tested in `tests/test_replay_tooling.py`; the product
+  fix is in `tests/test_empty_completion.py` (28 tests).
+
+**Next action:** unchanged from Session 9's advice, minus this row. **P2.4** is
+the cheapest open row and B12's other half. **P2.9** is still a one-line fix that
+moves P2.2's published numbers and needs its own before/after. **P2.10** is
+measure-before-building with the command already written. **P2.7**, **P2.8**,
+**P3.6** and **P3.7** are open and unblocked. **P3.1 is the keystone** — the
+largest unfixed bucket, with P3.2, P3.3, P3.4 and P4.3 all behind it — and
+finishing Wave 2 is the critical path to it. **P5.2 is the live external one**
+and the LEX-team question is still free and still unasked.
