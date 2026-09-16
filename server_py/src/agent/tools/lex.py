@@ -290,13 +290,19 @@ _TYPE_CODES: dict[str, set[str]] = {
 #
 # 1. **A bare JSON list**, not `{results: []}` — the same shape trap
 #    `_slim_section_results` already handles.
-# 2. **31% of rows are scheme duplicates.** The same relation is returned twice,
+# 2. **35% of rows are scheme duplicates.** The same relation is returned twice,
 #    once with `http://` URLs and once with `https://`, and the API's own `id`
-#    embeds the scheme so they are not equal by id. Measured over 6,266 rows on
-#    eight instruments: 4,319 distinct, 1,947 duplicates (31%), concentrated in
-#    the Scottish material this corpus is about — `asp/2025/2` returns 71 rows
-#    for 36 relations, `asp/2018/9` 956 for 484. A tool that counts rows
-#    therefore reports roughly double, and "15 provisions commenced" would be 8.
+#    embeds the scheme so they are not equal by id. Measured over 6,738 rows on
+#    eight instruments in both directions: 4,363 distinct, 2,375 duplicates
+#    (35%), concentrated in the Scottish material this corpus is about —
+#    `asp/2025/2` returns 71 rows for 36 relations, `asp/2018/9` 956 for 484,
+#    `asp/2014/18` 607 for 309, while `ukpga/1998/46`, `asp/2000/1` and
+#    `ukpga/1981/67` have none at all. A tool that counts rows therefore reports
+#    roughly double, and "15 provisions commenced" would be 8.
+#    ~~31% over 6,266 rows~~ — that first figure was itself computed from a
+#    `size=2000` sample, which truncated `ukpga/2010/15` at 2,000 of its 2,472
+#    rows. The measurement had the exact defect the escalation below exists to
+#    avoid, and putting it behind `lex_probe --commencement` is what caught it.
 # 3. **`type_of_effect` is sometimes null** (19% over P5.1's 1,358-row sample;
 #    6% on `ukpga/1998/46`). These are **labelled, not dropped**: the row still
 #    records that an instrument changed a provision, which is a real retrieval,

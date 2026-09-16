@@ -9,7 +9,7 @@ P2.3's risk was over-claiming from nothing; P3.5's is over-claiming from
 something. Three properties of the raw feed make a naive pass-through assert
 things that are not true, and every one of them is a test below:
 
-  * **31% of rows are http/https duplicates of one relation** — `asp/2025/2`
+  * **35% of rows are http/https duplicates of one relation** — `asp/2025/2`
     returns 71 rows for 36 relations. A tool that counts rows says "15
     provisions commenced" where the truth is 8.
   * **`type_of_effect` is sometimes null** — labelled `"not stated"`, never
@@ -106,7 +106,7 @@ def test_http_and_https_twins_collapse_to_one_relation():
     """**The correction the handover into this row did not have.**
 
     `asp/2025/2` returns 71 rows for 36 relations; `asp/2018/9` 956 for 484.
-    Measured over 6,266 rows on eight instruments: 31% duplicates, concentrated
+    Measured over 6,738 rows on eight instruments: 35% duplicates, concentrated
     in the Scottish material. Counting rows would report roughly double, and
     "15 provisions commenced by SSI" would be 8.
     """
@@ -253,7 +253,7 @@ def test_the_block_names_the_unstated_effect_rows():
 
 
 def test_an_empty_change_record_is_an_honest_negative_not_a_finding():
-    """Invariant 1. 112 of the 271 legislation_ids the replay corpus touched have
+    """Invariant 1. 113 of the 272 legislation_ids the replay corpus touched have
     no recorded relation at all, so this branch is common — and the difference
     between "nothing is recorded" and "nothing happened" is the whole of B5."""
     note = amendment_search_note({"legislation_id": "ukpga/1962/47"}, _slim([]))
@@ -610,7 +610,7 @@ def test_a_complete_record_is_fetched_once(monkeypatch):
 def test_a_cap_bound_record_is_refetched_past_the_cap(monkeypatch):
     """**P1.3's defect, not repeated.** `size` truncates silently and the
     response carries no count field of any kind, so exactly `size` rows can only
-    mean the cap bound. Measured over the 271 legislation_ids the replay corpus
+    mean the cap bound. Measured over the legislation_ids the replay corpus
     touched, 13 (4.8%) exceed 2,000 and every one of them completes at the
     escalated size."""
     from src.agent.tools import executor
@@ -715,3 +715,50 @@ def test_the_subject_acts_own_url_comes_from_the_feed():
     result — and it is the feed's, never composed."""
     out = _slim_amendment_results([_row(scheme="http")], "asp/2025/2", "to")
     assert out["url"] == "https://www.legislation.gov.uk/id/asp/2025/2"
+
+
+def test_a_denial_of_the_REMAINDER_is_the_right_answer_not_the_defect():
+    """**Found by the acceptance run, and correcting it did not move a
+    before-column number.**
+
+    6410 rep 2 turn 2 answered *"SSI 2025/388 … Based on the recorded changes to
+    the Act, no further commencement regulations have been found"* — true,
+    sourced, and exactly the answer this row exists to produce: the change
+    record holds precisely one commencing instrument. Grading it as the defect
+    would punish the fix.
+    """
+    from tools.replay_report import commencement_verdict
+    for sentence in (
+        "SSI 2025/388 has been made. Based on the recorded changes to the Act, "
+        "no further commencement regulations have been found.",
+        "SSI 2025/388 commenced several sections. No subsequent commencement "
+        "regulations have been recorded for the Act.",
+    ):
+        assert commencement_verdict("6410", sentence)[0] == "correct"
+
+
+def test_a_qualifier_attached_to_the_WRONG_NOUN_is_still_a_flat_denial():
+    """The exclusion is scoped to the noun phrase, and this is why.
+
+    `wave2_p22` 6409 rep 3 turn 6 says *"no commencement regulations bringing
+    FURTHER sections into force were identified"* — "further" attaches to
+    *sections*, and the sentence denies that any commencing regulation was
+    found. A bare `\bfurther\b` anywhere in the sentence would have dropped it,
+    moving a BEFORE-column number to make the after-column look better.
+    """
+    from tools.replay_report import commencement_verdict
+    verdict, _, denials = commencement_verdict(
+        "6409",
+        "Sections 24 to 28 came into force automatically the day after Royal "
+        "Assent, but no commencement regulations bringing further sections into "
+        "force were identified in the completed portion of this research.")
+    assert verdict == "false"
+    assert len(denials) == 1
+
+
+def test_a_remainder_denial_naming_nothing_is_still_graded():
+    """A remainder is only a remainder of something. An answer that denies
+    "further" instruments while naming none has not delivered the relation."""
+    from tools.replay_report import commencement_verdict
+    assert commencement_verdict(
+        "6410", "No further commencement regulations have been made.")[0] == "false"

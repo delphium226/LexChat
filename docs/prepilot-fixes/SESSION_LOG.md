@@ -1201,3 +1201,190 @@ the aborted restart. Cheaper than Session 6 because the four sessions are short;
 highest-value row on the page, with its design notes already written from P5.1's
 probe. **P2.4** remains the cheapest; **P2.7** and **P2.8** are available in
 parallel. **P5.2 is the live external one** and the LEX-team question is free.
+
+---
+
+## Session 8 — 2026-09-16 — P3.5 (B3, the relationship retrieved), plus a P2.2 defect fixed
+
+**Done:**
+- **P3.5 complete, acceptance passed.** Turns delivering the commencement
+  relation went **0 of 8 → 24 of 24**; flat false negatives **6 of 8 → 0**;
+  tool calls per answered turn **10.4 → 4.4**. `evidence/replay/wave3_p35/`,
+  n=3 on 6409/6410/6383, 9 runs, **$4.10**, 37 min, zero model mismatches.
+- **`/amendment/search` is the fourth LEX endpoint AILA calls**, as the
+  `get_legislation_changes` worker tool. B3 — the largest bucket — is retrieved
+  rather than disclosed.
+- **833 tests** (764 → 833). New tooling: `lex_probe --commencement`,
+  `replay_report commencements` (with `--drops`).
+
+**Three of the facts handed to this row did not survive contact with the feed,
+and two of them change what the tool reports.**
+
+- **35% of rows are `http`/`https` duplicates of ONE relation**, and the API's
+  own `id` embeds the scheme, so a dedupe keyed on it removes nothing. 6,738
+  rows over eight instruments → 4,363 distinct, and it is concentrated in the
+  Scottish material: `asp/2025/2` 71 rows for 36 relations, `asp/2018/9` 956 for
+  484, `asp/2014/18` 607 for 309, while `ukpga/1998/46`, `asp/2000/1` and
+  `ukpga/1981/67` have none at all. **The handover's "15 commencements by
+  `ssi/2025/119`" is that double count** — it is 8 by SSI, seven by
+  `ssi/2025/119` and one by `ssi/2025/377`. A tool that counted rows would have
+  told a lawyer roughly double.
+- **The cap can be fetched past, cheaply, so the tool does that rather than
+  stating a window.** Over the legislation_ids the replay corpus actually
+  touched (272 at the last run): median 12 relation rows, p90 870, **13 (4.8%) over 2,000** — and
+  every one of those completes at 20,000 (largest 5,185 rows / 5.3 MB / 2.3 s).
+  So the row's "either fetch past the cap or state the window" resolves to the
+  first, with the second kept for a bind never observed.
+- **`type_of_effect: null` is labelled, not dropped**, decided explicitly as the
+  row asked. The row still records that an instrument changed a provision, so
+  dropping it would make the tool the reason a relation went missing — the one
+  thing a slimmer must never be.
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **The change graph knows about instruments the text index does not hold.**
+  `ssi/2025/377` is a **404 on `/legislation/text`** — it is the instrument 6409
+  was asked three times to re-check, and P2.2's module docstring records the
+  404 — yet `/amendment/search` returns it commencing s. 18 of `asp/2025/2`. So
+  a relation can be retrieved for an instrument whose text cannot be. The
+  acceptance answers say so explicitly: *"SSI 2025/377 (the exact title is not
+  currently held in the index, but it is recorded as bringing section 18 into
+  force)"*.
+
+- **The before-column is zero in every wave, and P2.2 is why it looks different
+  rather than better.** `baseline/` 0 of 8, `wave1/` 0 of 8,
+  `wave2_p22_final/` 0 of 18. What P2.2 changed was the **shape** of the
+  failure: the flat *"No commencement regulations have been made yet"* became
+  *"A search of the legislation index … did not return any results"* — honest,
+  properly scoped, and still not the answer. That is why the headline metric is
+  **delivered**, a fact check against an external ground truth needing no prose
+  classification, and the false/limited/silent split below it is diagnosis.
+
+- **Picking the denominator was the hard part, and the first draft got it
+  wrong in the flattering direction.** Grading every answered turn scored six of
+  `wave1`'s eighteen as correct — including **6409 turn 8, whose entire question
+  is "SSI 2025/119"**. Repeating back an instrument the lawyer supplied is not a
+  retrieved relation. In scope now means the *question* asks about commencement
+  and does not itself name one of the graded instruments.
+
+- **One detector correction, and the scoping of it is the whole lesson.** 6410
+  rep 2 turn 2 named `ssi/2025/388` and added *"no further commencement
+  regulations have been found"* — true, sourced, and exactly the answer the row
+  exists to produce. A denial of the **remainder** is not a denial of existence.
+  But `wave2_p22` 6409 rep 3 turn 6 says *"no commencement regulations bringing
+  **further** sections into force were identified"*, where the qualifier attaches
+  to *sections* and the sentence is a flat denial. **A bare `\bfurther\b` would
+  have dropped it and moved a BEFORE-column number to make the after-column look
+  better.** The exclusion is scoped to the noun phrase and requires the turn to
+  name a real instrument; re-run over all six historical directories, **not one
+  before-column number moved.**
+
+- **Invariant 1 held in both directions, which was this row's real risk.** A
+  retrieved relation invites over-claiming where P2.3's prohibition invited
+  hedging. Answers **grew in 13 of 17 matched turn slots**, no scope block
+  leaked in any of 51 answers, and P2.3 did not regress (1 of 51 turns asserts
+  an unverified derivation, against 2 of 29 in its own acceptance). The four
+  slots that shrank are the model no longer padding a non-answer — and **6409
+  turn 10 stopped questioning a correct citation**, which is P2.4's exact
+  failure, going from *"Are you certain of the SSI number and year?"* to
+  confirming it against the change record.
+
+- **P2.5 is answerable today, and one rep proved it unprompted.** The relation
+  carries no date, and the tool block tells the model to retrieve the commencing
+  instrument if the question turns on one. 6409 rep 2 did exactly that: it
+  called `get_legislation_text` on `ssi/2025/119` and reported *"these sections
+  came into force on 10 May 2025"*, which is verbatim in that record's
+  `description`. P2.5 is now about making that hop reliable, not about finding a
+  route.
+
+- **A P2.2 defect this sweep exposed, and it was on half of all turns.** The
+  footer is prose, so `strip_scope_blocks` leaves it alone — correctly. It then
+  travels into the next turn's history, the model reproduces it verbatim, and
+  the code appends its own. **18 of 36 answered turns in `wave2_p22_final` carry
+  it twice (50%)**, against **0 of 51** after the fix. Found by reading a smoke
+  run rather than by any detector, because every detector already strips from
+  the first footer to the end of the answer.
+
+- **The sweep was aborted once and restarted, deliberately — the fourth time in
+  three sessions.** A pre-sweep review changed product code (a distinct id per
+  HTTP call, a guard on the window stamp) after the server had booted. Neither
+  change can fire for these three sessions — no instrument among them is
+  cap-bound and every response is the expected shape — and the sweep was
+  restarted anyway, costing about $1.50 and fifteen minutes, because "the
+  acceptance ran against HEAD" should not need an argument about materiality.
+
+- **Two bash-level own goals worth recording, because both wrote invisible
+  damage.** Generating Python with regexes inside a **non-raw** string wrote
+  literal backspace characters (`\x08`) where `\b` was intended — eight of them,
+  in a detector, silently making `\bno\b` into `no`. It showed up as the
+  detector reading **zero** denials in `wave1` where six exist. Checked for with
+  `sum(1 for c in s if ord(c) < 9 or 13 < ord(c) < 32)` and now zero across every
+  file touched.
+
+- **A published number of my own was wrong, and putting it behind a command is
+  what caught it — the same pattern as Session 7's.** I wrote "31% duplicates
+  over 6,266 rows". The script that produced it asked for `size=2000`, which
+  **truncated `ukpga/2010/15` at 2,000 of its 2,472 rows** — so the measurement
+  that justified escalating past the cap had itself been capped. The true figure
+  over the full data is **35% over 6,738 rows (4,363 relations)**. It is now
+  printed by `lex_probe --commencement`, which is how it was found, and the
+  qualitative claim is unchanged and slightly stronger.
+- **And the Invariant 1 comparison had the same shape of error.** Its first
+  version selected the before-column on "has a ground truth", which let `wave1`'s
+  **6382** into a comparison whose after-column has no 6382 at all, moving the
+  tool-rate from 10.4 to 13.4. It compares the **shared sessions** now. Two
+  populations are not a before and an after.
+
+**Decisions taken this session:**
+- **One tool, not two.** `/amendment/section/search` narrows the same data from a
+  `provision_id`, and the instrument-level endpoint already returns
+  provision-level rows on both sides, so it is a filter over data already held.
+  Every acceptance session is instrument-level. Recorded rather than left
+  unasked.
+- **No `type_of_effect` filter argument.** The `effects` histogram plus the
+  grouping makes narrowing unnecessary, and a wrong effect string would return
+  nothing — a silent false negative, which is the failure mode Invariant 1
+  forbids.
+- **Provision labels, not provision URLs.** 45-70 KB on the large Acts against
+  3.7 KB on `asp/2025/2`, for a citation form a commencement answer does not use.
+  Measured cost: **1 of 51 turns** carries a P1.6 dagger.
+- **Unclassified for phase**, like `get_member_info`. Counting it Phase 2 would
+  raise `phase2_retrieval_calls` without raising `sources_kept` and move every
+  efficiency number published in Waves 0-2, against which later rows are
+  measured. Still counted in `worker_tool_calls` and still keyed for redundancy.
+- **Keyed for redundancy on `legislation_id` + `direction`**, because the two
+  directions are different questions (`asp/2025/2` returns 36 one way and 143 the
+  other) and `max_redundant_tool_calls` is 0 on this profile.
+- **Admitted to `CACHEABLE_TOOLS`** after the check the allowlist exists to
+  force: a `legislation_id` and a direction in, published statutory data out, no
+  user content on either side.
+
+**State of the branch:** `fix/prepilot-defects`. **833 tests green, NOTHING
+PUSHED** — the whole-plan-then-one-push policy stands, so the target still runs
+the pre-pilot code. Ledger: Waves 0 and 1 complete; **P1.6, P2.1, P2.2, P2.3,
+P2.6, P3.5, P4.4, P5.1 and P5.3 done**; P0.4 and P5.2 at `[~]`.
+
+**Machine state a new session inherits:**
+- **No uvicorn running** — stopped at the end of the session. Start a fresh one
+  before any live work; this session restarted three times for exactly that
+  reason.
+- **Dev box restored** — `moonshotai/kimi-k3`, local prompt cache ON, no pin
+  file. **Re-pin before any measurement.**
+- **Seven gitignored replay directories:** `baseline/` (65), `wave1/` (41),
+  `wave2_p21/` (12), `wave2_p22/` (6), `wave2_p22_final/` (6), `wave2_p23/` (12)
+  and **`wave3_p35/` (9 — P3.5's acceptance)**. None of the wave2/wave3 dirs is a
+  sweep; do **not** feed them to `replay_report compare`. Read them with
+  `replay_report --dir <dir>` plus `commencements` (P3.5, `--drops` for the
+  both-directions audit), `derivations` (P2.3), `negatives` (P2.2), `halts`
+  (P2.1) and `corpus`.
+
+**Spend this session: ~$5.8** on replay — $4.10 for the acceptance, ~$1.5 for the
+aborted first attempt, $0.07 for the smoke run and ~$0.1 of probes. The LEX
+probing itself is free.
+
+**Next action:** **P2.5** is the row this one most changed — the commencement
+date is reachable by a second hop that one acceptance rep made unprompted, so
+that row is now about reliability rather than discovery. **P2.4** is still the
+cheapest and now has fresh evidence (6409 turn 10). **P2.9**, **P2.7**, **P2.8**,
+**P3.6** and **P3.7** are all open. **P5.2 is the live external one** and the
+LEX-team question is free.

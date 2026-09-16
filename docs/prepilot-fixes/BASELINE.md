@@ -1223,3 +1223,188 @@ only the OUTER quotes from a query, so the model's own field syntax rendered to
 the lawyer as `"Education (Scotland) Act 1962" 117"` — unbalanced, and reading as
 two searches where there was one. Every quote character is removed before
 re-quoting now; the exact queries are in the audit trace.
+
+---
+
+## B3 — the commencement relation, retrieved (P3.5)
+
+Measured with `python -m tools.replay_report --dir <dir> commencements`, whose
+ground truth is re-printed live by `python -m tools.lex_probe --commencement`.
+
+**This row is graded against an external fact, and that is unusual here on
+purpose.** Every other acceptance in this plan grades what an answer says about
+its own limits. P3.5 grades whether a specific true thing reached the lawyer, and
+it can, because the thing is small, checkable and independent of the model:
+`asp/2025/2` has eight provisions commenced by SSI and `asp/2025/9` has twenty,
+and both sessions were told *"No commencement regulations have been made yet."*
+
+### What the change record actually holds
+
+| session | Act | rows | distinct relations | coming into force | by the Act itself | by another instrument |
+|---|---|---|---|---|---|---|
+| 6409 | `asp/2025/2` | 71 | **36** | 36 | 28 | **8** — 7 by `ssi/2025/119`, 1 by `ssi/2025/377` |
+| 6410 | `asp/2025/9` | 100 | **60** | 60 | 40 | **20** — all by `ssi/2025/388` |
+| 6382/6383 | `asp/2018/9` | 956 | **484** | 184 | 0 | **184** — 58 by `ssi/2018/298`, 33 by `ssi/2019/269`, 26 by `ssi/2020/295`, 23 by `ssi/2018/393`, and six more |
+
+Three things in that table are the design of the tool rather than decoration.
+
+**The row counts are roughly double the relation counts**, because the feed
+returns the same relation twice — once with `http://` URLs and once with
+`https://` — and the API's own `id` embeds the scheme, so the twins are not equal
+by id and a dedupe keyed on it removes nothing. Measured over **6,738 rows on
+eight instruments in both directions: 4,363 distinct, 2,375 duplicates (35%)**,
+and it is concentrated in exactly the Scottish material this corpus is about
+(`asp/2014/18` 607 -> 309) while `ukpga/1998/46`, `asp/2000/1` and
+`ukpga/1981/67` have none at all. ~~"71 rows, 15 of them commencements by
+`ssi/2025/119`"~~ — **that figure, carried into this row by the handover, is the
+double count.** The truth is 36 relations, 8 by an SSI, seven by `ssi/2025/119`
+and one by `ssi/2025/377` — the instrument the LEX **text** index 404s on, and
+whose number 6409 was asked three times to re-check. The change graph knows about
+instruments the text index does not hold.
+
+**Most of `asp/2025/2`'s commencements are the Act commencing itself.** 28 of the
+36 are `asp/2025/2` acting on its own sections under its own s. 27, which is not
+commencement by regulation and is the literal question 6409 asked. A tool that
+does not separate the two answers that question wrongly, in the direction that
+looks most convincing.
+
+**There is no date on any of it**, confirmed again here. "s. 9 was commenced by
+`ssi/2025/119`" is retrievable; "on 10 May 2025" is not, and needs a second hop
+into that instrument — see the last section below, where the model made it.
+
+### Before-column
+
+The denominator is structural: a turn is in scope when its **question** asks
+about commencement and does not itself name one of the instruments being graded.
+Picking it was the hard part. The first draft graded every answered turn and
+scored six of `wave1`'s eighteen as correct — including 6409 turn 8, whose entire
+question is *"SSI 2025/119"*. Repeating back an instrument the lawyer supplied is
+not a retrieved relation, and counting it would have shown a before-column that
+already half-passes.
+
+| | answered | in scope | **delivered the relation** | denied one exists | blamed a stated limit | said neither |
+|---|---|---|---|---|---|---|
+| `baseline/` | 18 | 8 | **0** | 4 | 0 | 4 |
+| `wave1/` | 18 | 8 | **0** | 6 | 1 | 1 |
+| `wave2_p22_final/` (n=3, under P2.2) | 33 | 18 | **0** | 5 | 0 | 13 |
+
+**Zero in every column that matters, across three waves.** What P2.2 changed was
+the *shape* of the failure, not the outcome: the flat *"No commencement
+regulations have been made yet"* became *"A search of the legislation index for
+commencement regulations did not return any results"* — honest, properly scoped,
+and still not the answer. That is why `delivered` is the headline and the prose
+split below it is diagnosis: `delivered` needs no prose classification at all and
+so cannot be a detector artefact.
+
+The discovery loop underneath it is the other half of the cost. **6409 turn 6 ran
+41 `search_legislation` calls** hunting a commencement instrument by title —
+`"…(Commencement"`, `title:"…" AND title:"Commencement"`, `"appointed day"`,
+`"day appointed"`, `"comes into force"` — and the Deep Research run halted at the
+step cap with nothing. Turn 7 ran 25 more. One `/amendment/search` call answers
+both.
+
+### After — the acceptance
+
+`evidence/replay/wave3_p35/` (n=3 on 6409, 6410 and 6383; 9 runs, **$4.10**,
+37 min, zero model mismatches, all at `head=16696ce`).
+
+| | before (`wave1`) | **after (`wave3_p35`)** |
+|---|---|---|
+| answered turns in the graded sessions | 17 | 51 |
+| … that consulted the change record | 0 | **31** |
+| in scope | 8 | 24 |
+| **delivered the relation** | **0** | **24 (100%)** |
+| denied one exists, naming none | **6** | **0** |
+| blamed a stated limit | 1 | 0 |
+| said neither | 1 | 0 |
+| tool calls per answered turn | 10.4 | **4.4** |
+
+> *"No commencement regulations have been made yet for the Care Reform (Scotland)
+> Act 2025."* — 6410, before
+
+> *"The Care Reform (Scotland) Act 2025 (Commencement No. 1) Regulations 2025
+> (SSI 2025/388) have brought several sections into force, including sections 1,
+> 9–11, 13, 14, 16, 18, 20–25, 31–34, and 36."* — 6410, after
+
+**Invariant 1 held in both directions, which was this row's real risk.** A
+retrieved relation invites over-claiming. It did not happen: answers **grew in 13
+of the 17 matched turn slots** (6410 t2 87 -> 900 chars; 6409 t5 147 -> 944; 6409
+t11 205 -> 1,175), **no scope block leaked in any of the 51 answers**, and
+**P2.3 did not regress** — 1 of 51 turns asserts an unverified derivation,
+against 2 of 29 in P2.3's own acceptance.
+
+**The four turns that shrank are the model no longer padding a non-answer**, and
+one of them lands on a different bucket entirely. 6409 turn 10 went from
+
+> *"The research agent could not find … (SSI 2025/377) in the legislation
+> database. Are you certain of the SSI number and year …?"*
+
+— which is **P2.4's exact failure**, questioning a citation that was right — to
+
+> *"That aligns with the legislative change records, which confirm that SSI
+> 2025/377 brings section 18 … into force."*
+
+### One detector correction, found by the acceptance run
+
+6410 rep 2 turn 2 named `ssi/2025/388` and added *"Based on the recorded changes
+to the Act, no further commencement regulations have been found"*. That is true,
+sourced, and exactly the answer this row exists to produce — the record holds one
+commencing instrument — and the first draft graded it as the defect.
+
+**The exclusion is scoped to the noun phrase, and that is load-bearing.**
+`wave2_p22` 6409 rep 3 turn 6 says *"no commencement regulations bringing
+**further** sections into force were identified"*, where the qualifier attaches to
+*sections* and the sentence is a flat denial that any commencing regulation was
+found. A bare `\bfurther\b` anywhere in the sentence would have dropped it —
+**moving a before-column number to make the after-column look better**, which is
+the precise trap this work keeps recording. Re-run over all six historical
+directories after the correction: **not one before-column number moved.**
+
+**Validated in both directions.** `commencements --drops` prints **134**
+commencement-vocabulary sentences that were not graded as denials; all were read.
+They are retrieved positives (*"Sections 2, 9, 17, 20, 21, 22, and 23 were
+brought into force by SSI 2025/119"*) and true statements about what is still
+uncommenced (*"The remaining sections of the Act are not yet recorded as having
+been commenced"*). Nothing in the after-column is a denial the detector missed.
+
+### An unlooked-for result: P2.5 becomes answerable by a second hop
+
+The relation carries no date and the tool block says so in terms, telling the
+model to retrieve the commencing instrument if the question turns on one. **6409
+rep 2 did exactly that, unprompted**: it called `get_legislation_text` on
+`ssi/2025/119` and reported *"these sections came into force on 10 May 2025"* —
+which is in that record's `description`, verbatim. So P2.5's missing commencement
+date is reachable today, by the two-step the block already describes; what it
+needs is to be made reliable rather than discovered.
+
+### A P2.2 defect this sweep exposed, and fixed
+
+The scope footer is prose, so `strip_scope_blocks` leaves it alone — correctly.
+It then travels into the next turn's history, the model reproduces it verbatim,
+and the code appends its own. Measured: **18 of 36 answered turns in
+`wave2_p22_final` carry the footer twice (50%)**, against **0 of 51** after the
+fix. Display-only and it moves no measured number — `ANSWER_FOOTER` is dot-all
+and anchored to the end, so every detector already stripped from the first footer
+through to the last.
+
+### Two numbers of my own that were wrong, and the commands that caught them
+
+~~31% duplicates over 6,266 rows.~~ The script that produced that asked for
+`size=2000`, which **truncated `ukpga/2010/15` at 2,000 of its 2,472 rows** — so
+the measurement justifying an escalation past the cap had itself been capped.
+The figure over the full data is **35% over 6,738 rows (4,363 relations)**, and
+it is printed by `lex_probe --commencement` now, which is how it was found.
+
+~~Tool calls per answered turn 10.4 -> 4.4.~~ Right, but the first version of the
+command that reproduces it selected the before-column on "has a ground truth",
+which let `wave1`'s **6382** into a comparison whose after-column contains no
+6382 — reading 13.4 -> 4.4. `commencements --before` compares the **shared
+sessions** now, and reads 10.4 -> 4.4. Two populations are not a before and an
+after.
+
+**Reproduce everything above with four commands:**
+
+    python -m tools.lex_probe --commencement
+    python -m tools.replay_report --dir <dir> commencements [--drops]
+    python -m tools.replay_report --dir wave3_p35 commencements --before wave1
+    python -m tools.replay_report --dir <dir> corpus

@@ -364,7 +364,100 @@ def commencement() -> int:
     print("  `search_legislation_sections` and `get_legislation_text`. 6409 ran 41 "
           "searches")
     print("  for one of them and halted at the step cap with nothing.")
+
+    print()
+    print("--- the two numbers that shape the tool, measured rather than asserted ---")
+    _duplicate_rate()
+    _size_distribution()
     return 0
+
+
+def _duplicate_rate() -> None:
+    """How much of the feed is the same relation twice.
+
+    The API emits each relation under BOTH URL schemes and its own `id` embeds
+    the scheme, so the twins are not equal by id and a dedupe keyed on it removes
+    nothing. This is the number that turns "15 commencements by ssi/2025/119"
+    into 8, and it is concentrated rather than uniform.
+    """
+    sample = ("asp/2025/2", "asp/2018/9", "ukpga/1998/46", "asp/2014/18",
+              "ukpga/2010/15", "ssi/2020/295", "asp/2000/1", "ukpga/1981/67")
+    tot = dedup = 0
+    print("  http/https duplicate rows (dedupe key is scheme-free):")
+    for lid in sample:
+        for direction in (True, False):
+            try:
+                rows = amendments(lid, direction, size=20000)
+            except Exception as e:
+                print(f"    ! {lid} {direction}: {type(e).__name__}")
+                continue
+            keys = {(r.get("changed_legislation"), r.get("changed_provision"),
+                     r.get("affecting_legislation"), r.get("affecting_provision"),
+                     r.get("type_of_effect")) for r in rows}
+            tot += len(rows)
+            dedup += len(keys)
+            if direction:
+                print(f"    {lid:14} {len(rows):>5} rows -> {len(keys):>5} relations "
+                      f"({len(rows) - len(keys):>5} duplicates)")
+    pct = 100 * (tot - dedup) / max(tot, 1)
+    print(f"    TOTAL (both directions) {tot} rows -> {dedup} relations = "
+          f"{pct:.0f}% duplicates")
+
+
+def _size_distribution() -> None:
+    """How often `size` binds, over the instruments a lawyer actually asked about.
+
+    `size` truncates silently and the response carries no count field, so the
+    only way to know a result is complete is to ask for more than it holds. This
+    is what decides `_AMENDMENT_FETCH_SIZE` and its escalation, so it is measured
+    against the real distribution rather than a guess — the legislation_ids the
+    replay corpus touched, read out of the gitignored run files.
+    """
+    import statistics
+    from pathlib import Path
+
+    base = (Path(__file__).resolve().parents[2]
+            / "docs" / "prepilot-fixes" / "evidence" / "replay")
+    lids = set()
+    for run in base.glob("*/*.json"):
+        try:
+            doc = json.loads(run.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for t in doc.get("turns", []):
+            for dg in (t.get("audit") or {}).get("delegations", []):
+                for tl in dg.get("tools", []):
+                    lid = str((tl.get("args") or {}).get("legislation_id") or "").strip()
+                    if lid:
+                        lids.add(lid)
+    if not lids:
+        print("  size distribution: no replay run files present — skipped")
+        return
+    cap = 2000
+    counts = []
+    bound = []
+    for lid in sorted(lids):
+        try:
+            n = len(amendments(lid, True, size=cap))
+        except Exception:
+            continue
+        counts.append(n)
+        if n >= cap:
+            bound.append(lid)
+    counts.sort()
+    print(f"  relation rows over the {len(counts)} legislation_ids the replay "
+          f"corpus touched:")
+    print(f"    zero relations {sum(1 for c in counts if c == 0)}   "
+          f"median {statistics.median(counts):.0f}   "
+          f"p90 {counts[int(0.9 * len(counts)) - 1]}   max {max(counts)}")
+    print(f"    cap-bound at size={cap}: {len(bound)} "
+          f"({100 * len(bound) / max(len(counts), 1):.1f}%) -> {', '.join(bound)}")
+    for lid in bound:
+        try:
+            print(f"      {lid:16} completes at 20000 with "
+                  f"{len(amendments(lid, True, size=20000))} rows")
+        except Exception:
+            pass
 
 
 def main(argv=None) -> int:

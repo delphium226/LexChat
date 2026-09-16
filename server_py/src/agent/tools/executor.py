@@ -334,9 +334,12 @@ async def execute_worker_tool(
                 # windowing defect `search_legislation` had, where `total` was
                 # misreported on 1,010 of 1,531 searches.
                 #
-                # Measured over the 271 distinct legislation_ids the replay
-                # corpus actually touched: median 14 relation rows, p90 870, and
-                # **13 (4.8%) exceed 2,000**. Every one of those 13 completes at
+                # Measured over the distinct legislation_ids the replay
+                # corpus actually touched (272 at the last run): median 12
+                # relation rows, p90 870, and **13 (4.8%) exceed 2,000** —
+                # re-run with `python -m tools.lex_probe --commencement`, which
+                # reads the ids out of the run files, so the median drifts as
+                # the corpus grows while the 4.8% is what decided this value. Every one of those 13 completes at
                 # `_ESCALATED_SIZE` (largest 5,185 rows / 5.3 MB / 2.3 s), so one
                 # escalation on 5% of calls buys a true count on all of them.
                 # A large `size` costs nothing when the relations are few — the

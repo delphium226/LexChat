@@ -1749,6 +1749,27 @@ _CMC_DENIED = re.compile(
     re.I,
 )
 
+# **A denial of the REMAINDER is not a denial of existence**, and the acceptance
+# run is what forced the distinction. 6410 rep 2 turn 2 answered *"SSI 2025/388
+# ... Based on the recorded changes to the Act, no further commencement
+# regulations have been found"* — which is **true, sourced and exactly the answer
+# the row exists to produce**: the change record holds precisely one commencing
+# instrument. Grading it as the defect would punish the fix.
+#
+# **The exclusion is scoped to the noun phrase, and that is load-bearing rather
+# than fussy.** `wave2_p22` 6409 rep 3 turn 6 says *"no commencement regulations
+# bringing FURTHER sections into force were identified"* — the qualifier there
+# attaches to *sections*, and the sentence is a flat denial that any commencing
+# regulation was found. A bare `further` anywhere in the sentence would have
+# dropped it, moving a BEFORE-column number to make the after-column look
+# better. So the qualifier must sit immediately after "no", and the turn must
+# also name a real instrument — a remainder is only a remainder of something.
+_CMC_REMAINDER = re.compile(
+    r"\bno\s+(?:further|subsequent|additional|other|more)\s+(?:\w+\s+){0,2}"
+    r"(?:regulations?|orders?|instruments?|s\.?s\.?i\.?s?|ssis?|sis?)\b",
+    re.I,
+)
+
 # **The denominator is structural, and picking it was the hard part.**
 #
 # The first draft graded every answered turn in a session with a known truth,
@@ -1867,6 +1888,11 @@ def commencement_verdict(session_id: str, answer: str,
     denials = [s for s in _sentences(answer)
                if _CMC_CONTEXT.search(s) and _CMC_DENIED.search(s)]
     if named and denials:
+        # A denial of the remainder, by a turn that named the instrument the
+        # record does hold, is the right answer and not a hedge — see
+        # `_CMC_REMAINDER`.
+        if all(_CMC_REMAINDER.search(d) for d in denials):
+            return "correct", named, []
         return "mixed", named, denials
     if named:
         return "correct", named, []
@@ -1985,7 +2011,69 @@ def cmd_commencements(args) -> int:
               % len(drops))
         for sid, rep, turn, sent in drops:
             print("    %s rep%s t%s: %s" % (sid, rep, turn, sent[:180]))
+    if args.before:
+        _invariant_one(Path(args.before), Path(args.dir))
     return 0
+
+
+def _invariant_one(before: Path, after: Path) -> None:
+    """Did the answers SHRINK to buy the number?
+
+    **The check this row most needed, and the one a bare pass rate hides.** A
+    retrieved relation invites over-claiming where P2.3's prohibition invited
+    hedging, and either failure shows up as answers getting shorter while the
+    metric improves. Compared per TURN SLOT and averaged across reps, because the
+    two directories have different rep counts and a raw mean would be dominated
+    by whichever session was replayed more.
+    """
+    def sessions_in(d: Path) -> set:
+        return {json.loads(f.read_text(encoding="utf-8")).get("session_id")
+                for f in d.glob("*.json")}
+
+    # **Compare the SHARED sessions only.** The first version keyed on "has a
+    # ground truth", which let `wave1`'s 6382 into the before column while the
+    # after column has no 6382 at all — and it moved the tool-rate from 10.4 to
+    # 13.4, a number that would have been published. Two populations are not a
+    # before and an after.
+    shared = sessions_in(before) & sessions_in(after)
+
+    def lengths(d: Path):
+        out, calls, turns = {}, 0, 0
+        for f in sorted(d.glob("*.json")):
+            doc = json.loads(f.read_text(encoding="utf-8"))
+            if doc.get("session_id") not in shared:
+                continue
+            for t in doc.get("turns", []):
+                a = t.get("answer") or ""
+                if not a.strip():
+                    continue
+                turns += 1
+                out.setdefault((doc["session_id"], t["turn"]), []).append(len(a))
+                for dg in (t.get("audit") or {}).get("delegations", []):
+                    calls += len(dg.get("tools", []))
+        return out, calls / max(turns, 1)
+
+    (a, a_rate), (b, b_rate) = lengths(before), lengths(after)
+    common = sorted(set(a) & set(b))
+    if not common:
+        print("\n  --before: no matching turn slots")
+        return
+    grew = 0
+    print("\n  Invariant 1 — mean answer length per turn slot, %s -> %s"
+          % (before.name, after.name))
+    for k in common:
+        am = sum(a[k]) / len(a[k])
+        bm = sum(b[k]) / len(b[k])
+        grew += bm > am
+        print("    %s t%-3s %7.0f -> %7.0f  %s"
+              % (k[0], k[1], am, bm, "grew" if bm > am else "shrank"))
+    print("    %d of %d turn slots grew. A fix that buys its number by making "
+          "answers" % (grew, len(common)))
+    print("    shorter is a regression even where the row goes green.")
+    # Scoped to the GRADED sessions, unlike `corpus`, which reports the whole
+    # directory — the two answer different questions and the numbers differ.
+    print("    tool calls per answered turn (graded sessions only): "
+          "%.1f -> %.1f" % (a_rate, b_rate))
 
 
 def cmd_corpus(args) -> int:
@@ -2014,9 +2102,20 @@ def cmd_corpus(args) -> int:
     lost_runs = lost_queries = 0
     runs = 0
     lost_turns = set()
+    answered = leaked = dup_footer = dagger = 0
 
     for doc in docs:
         for t in doc.get("turns", []):
+            _ans = t.get("answer") or ""
+            if _ans.strip():
+                answered += 1
+                if any(m in _ans for m in
+                       ("[SEARCH SCOPE", "[ENABLING POWER", "[CHANGE RECORD")):
+                    leaked += 1
+                if _ans.count("*Search scope:") > 1:
+                    dup_footer += 1
+                if PROVISION_MARKER in _ans:
+                    dagger += 1
             for dg in (t.get("audit") or {}).get("delegations", []):
                 runs += 1
                 recorded, memoed = set(), set()
@@ -2083,8 +2182,26 @@ def cmd_corpus(args) -> int:
     print(f"    turns affected                                 {len(lost_turns):5}")
     print("    Those queries never reach worker_scope_block or answer_scope_footer,")
     print("    so the disclosure under-reports what was actually searched.")
+
+    # P3.5's shape numbers, here for the same reason all the others are: they
+    # decided the row and they were published, so they must be re-runnable.
+    print()
+    print("  P3.5 — answer hygiene and loop cost")
+    print(f"    answered turns                                 {answered:5}")
+    print(f"    tool calls per answered turn                   "
+          f"{sum(tools.values()) / max(answered, 1):5.1f}")
+    print(f"    turns whose answer LEAKED an agent-facing block{leaked:5}   "
+          "<- must be 0")
+    print(f"    turns carrying the scope footer TWICE          {dup_footer:5}   "
+          "<- P2.2 defect, fixed at P3.5")
+    print(f"    turns carrying a P1.6 provision dagger         {dagger:5}   "
+          "<- the measured cost of labels-not-URLs")
     return 0
 
+
+# P1.6's demotion marker, counted by `corpus` as the measured cost of P3.5's
+# decision to emit provision LABELS rather than provision URLs.
+PROVISION_MARKER = "\u2020"
 
 _SECONDARY_SERIES = ("ssi", "uksi", "nisr", "wsi", "ssr", "uksro", "nisro",
                      "ukci", "ukmo")
@@ -2134,6 +2251,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     cm.add_argument("--answers", action="store_true", help="print every turn")
     cm.add_argument("--drops", action="store_true",
                     help="every commencement sentence NOT graded as a denial")
+    cm.add_argument("--before", default=None,
+                    help="a second replay dir: prints the Invariant 1 check "
+                         "(did answers shrink to buy the number?)")
 
     sub.add_parser("corpus",
                    help="retrieval shape: raw volume, where an enabling power "
