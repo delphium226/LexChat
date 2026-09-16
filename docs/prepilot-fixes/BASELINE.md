@@ -1556,3 +1556,186 @@ removes.
 
 `sourced` is 0 in every pre-P3.5 directory for a structural reason:
 `get_legislation_changes` did not exist.
+
+### After — the acceptance
+
+`evidence/replay/wave2_p25/` — 6341 and 6411 at n=3 (the row's two named
+sessions) and **6409 and 6383 at n=1, which are in the sweep for one reason: the
+suppression check.** 6341 asks definition questions and 6411's Act has no
+`coming into force` relation at all, so `sourced` is legitimately 0 on both —
+and a fix that drove the defect to zero by silencing answers the material
+supports would look identical on those two. 8 runs, 42 answered turns,
+**$9.76**, ~2 h, zero model mismatches, zero errored turns.
+
+| | before (`wave1`, same four sessions) | **after (`wave2_p25`)** |
+|---|---|---|
+| answered turns | 24 | 42 |
+| **asserts currency with NO commencement relation retrieved** | **7** | **0** |
+| asserts currency with a record in hand (`sourced`) | 0 | **1** |
+| assertion sentences | 16 | **1** |
+| **… citing a text version as the evidence** | **13** | **0** |
+| commencement-date sentences | 2 | 0 |
+| turns matching the old `IN_FORCE_CLAIM` | 3 | 1 |
+
+> *"**Status:** The Scotland Act 1998 is currently in force (revised status)."*
+> — 6374, before (the same signature 6341 and 6411 carried)
+
+> *"**Shops Act 1934:** No change records were retrieved for this instrument.
+> In-force status was not verified — the legislation index does not report it,
+> and no commencement or repeal record was retrieved. Verification would require
+> consulting a fully updated statute book."*
+> — 6341, after
+
+> *"**The Health Protection (Coronavirus, Wearing of Face Coverings in a Relevant
+> Place) (England) Regulations 2020:** The index title marks this instrument as
+> "(revoked)", and the change record confirms a revocation relation,
+> establishing that it is no longer in force."*
+> — 6341, after: both of the retrievable negative signals, used together
+
+The one turn still matching the old detector is 6409 t6, and it is the `sourced`
+one — an in-force statement made with 72 commencement relations in hand. **That
+is the old instrument being unable to tell a sourced statement from an
+unsupported one**, which is the whole reason the new one grades against a
+structural fact.
+
+**The suppression check passes, and it is the number this row could most easily
+have faked.** Graded with `replay_report commencements` over the same directory:
+
+| | `wave1` | `wave3_p35` (P3.5) | **`wave2_p25`** |
+|---|---|---|---|
+| in scope | 8 | 24 | 6 |
+| **delivered the commencement relation** | **0** | **24** | **6 (100%)** |
+| denied one exists, naming none | 6 | 0 | **0** |
+
+P3.5's win survives intact. Nothing about the currency prohibition stopped the
+model naming `ssi/2025/119` and the provisions it commenced.
+
+**Invariant 1: 18 of 24 matched turn slots grew**, tool calls per answered turn
+15.5 → 15.2. The six that shrank were each read, and **none is currency
+suppression**:
+
+| slot | before → after | what happened |
+|---|---|---|
+| 6341 t2 | 4,016 → 1,581 | declined to re-research a near-duplicate question and redirected on mode — correctly, the session is `legislation_only` and the question asked for case law |
+| 6383 t4 | 9,190 → 1,293 | **a blank Deep Research report.** See below; the cause is an empty provider completion, not this fix |
+| 6409 t7 | 378 → 236 | **shorter and strictly better** — *"could not locate … in the legislation database"* (a false negative; the instrument exists) became *"That instrument is SSI 2025/119 … brought sections 2, 9, 17, 20, 21, 22, and 23 into force"*. P2.4's failure, removed |
+| 6409 t8, t9, t10 | 277/146/286 → 57/57/134 | the Manager asking *"what specific information do you need about SSI 2025/119?"* to a bare citation. **Behaviour that predates this row** — `wave3_p35` asked the identical question at t8 in all three reps and at t10 in rep 1 |
+
+### The cost side, stated rather than buried
+
+**Three of 8 turns in 6341 rep 1 carry a currency disclaimer on a question that
+never asked about currency.** That is `_currency_limb` speaking on every step
+that touched legislation, and it is the intended trade rather than noise:
+"Jurisdiction & Status" is a mandatory section that has to say *something*, and
+what it said before was *"All referenced legislation is currently in force"*
+about a session citing an Act whose ss. 38-39 are repealed. It is still a change
+to answers nobody asked for, so it is recorded here.
+
+**The limb costs 873 characters on every legislation worker report**, and the
+`search_legislation` clause is one sentence for the same reason: it rides on 790
+searches in a full sweep, and `test_a_long_query_is_capped_not_dropped` bounds
+the whole block at 2,000 characters — which the first draft broke.
+
+On 6341 rep 1 against `wave1` rep 1: cost $2.09 → $2.24 (+7%), tool calls
+198 → 180, mean answer 4,205 → 6,245 chars.
+
+### A blank Deep Research report, and it is not this fix
+
+6383 rep 1 turn 4 returned a report whose **body was empty** — the lawyer saw
+the scope footer and nothing else — with `status: ok`, no error, 30 tool calls,
+three intact step reports (4,836 / 5,777 / 7,190 chars) and 219 commencement
+relations retrieved. **First blank in 218 answered turns across eight replay
+directories**, and 6383's DR turn produced 9,190 / 6,503 / 7,490 / 8,672 chars
+on the four prior runs.
+
+**The cause is an empty provider completion at the synthesis call.** The request
+went out at `tools=0, msgs=2, ~21421 chars` and the task finished **9 seconds
+later**; `strip_scope_blocks` never fired, which is checkable because it logs
+when it does and the log carries no such line. Two gaps follow, and both are
+`P4.2`'s (bucket B13) rather than this row's: `chat_loop`'s stream retry only
+fires while nothing has been emitted and cannot see a successful 200 carrying no
+content chunks, and `run_deep_research` never checks that the synthesis produced
+anything before footering it and returning.
+
+### The instrument was wrong seven times, in both directions
+
+Every one was found by reading output rather than by trusting a number, and after
+each correction all seven historical directories were re-measured: **not one
+before-column number moved.**
+
+1. **The title marker used symmetrically.** It is asymmetric — present means not
+   in force, absent means nothing — and the first draft graded 6411's *"Yes, the
+   Scotland Act 1998 is in force"* as SOURCED because an unrelated repeal-marked
+   row ranked on the same search page.
+2. **A sentence merely starting with "In force" read as a claim**, so *"In-force
+   status: not verified"* — the sentence the fix produces — scored as the defect.
+   `_CUR_NEGATED` catches the no-colon form and misses that one, because its
+   character class excludes `:`.
+3. **The first guard for that was too broad**, matching any negated
+   establishment verb anywhere, which would have dropped *"While we cannot
+   verify every provision, the Act is currently in force"* — a false negative in
+   the flattering direction.
+4. **A bare section heading** — `*   **In-Force Status:**` — read as an
+   assertion, because `_sentences` splits by line and the content is on the
+   lines below.
+5. **The distance windows between subject and negation were set from a sample**,
+   and a 95-character parenthetical list broke them.
+6. **`_CUR_SUBORDINATE` had no adverb slot** where `_CUR_ASSERT` has one, so
+   *"To determine if a specific section is currently in force, we would need
+   to …"* was graded as an assertion. Two patterns that must agree about a
+   phrase, only one of which knew about adverbs.
+7. **Adding that slot then over-corrected** and swallowed a concessive clause
+   followed by a main-clause assertion. The comma settles it: the trigger and
+   the phrase have to be in the same clause.
+
+Items 2, 4 and 5 were found by reading the after-column of the acceptance run's
+**first rep**, where the model wrote exactly what the product now asks for and
+the detector called it the failure. Items 1, 3 and 7 were found by the
+both-directions audit over the historical corpus.
+
+**Reproduce everything above with three commands:**
+
+    python -m tools.lex_probe --inforce [--full]
+    python -m tools.replay_report --dir <dir> currency [--drops] [--before <dir>]
+    python -m tools.replay_report --dir <dir> commencements
+
+### The second directory, and why the row needed one
+
+`evidence/replay/wave2_p25b/` — 6411 at n=3 plus one 6383, **$0.90**.
+
+6411's acceptance bar was met in the main sweep (0 unsupported, n=3), but its
+answers did not grow: mean 437 chars against `wave1`'s 480, and **1 of 3 reps
+obeyed the rule's *"if you DID call `get_legislation_changes`, report what it
+holds"* clause.** Reps 1 (218 chars) and 3 (713) each had **29 repeal relations
+in hand and reported none**; rep 2 (380) did. The conversational worker prompt
+demands "2-5 sentences of concise prose" and concision won.
+
+That is not a failure of the row's stated bar, and leaving it would have been a
+failure of Invariant 1 read in the inverse direction — 6411 is this row's
+headline session. One line was added to the conversational PHASE 2b requiring
+the model to report what the route returned before reporting what it does not
+establish, and 6411 re-run:
+
+| | `wave1` | `wave2_p25` | **`wave2_p25b`** |
+|---|---|---|---|
+| unsupported | 1 of 1 | 0 of 3 | **0 of 3** |
+| citing a text version | 1 | 0 | **0** |
+| reports the retrieved repeals | — | 1 of 3 | **2 of 3** |
+| mean answer chars | 480 | 437 | **741** |
+
+> *"The official change record lists 857 changes made to the Act by other
+> legislation, including 29 repeals. While the legislation database does not
+> provide a definitive in-force flag for the Act as a whole, it does list
+> [The Scotland Act 1998 (Commencement) Order 1998](…/uksi/1998/3178)."*
+> — 6411, after the strengthening: the record reported, the limit stated, and
+> the commencement order **retrieved** rather than recalled
+
+The pre-pilot answer to this question named "the Scotland Act 1998
+(Commencement) Order 1998" and a date, neither retrieved. The same instrument is
+now cited with a URL the tool returned.
+
+**And the blank report did not recur.** 6383's Deep Research turn produced a
+proper 2,278-char report on the re-run, against 0 in `wave2_p25`. So the blank
+was an empty provider completion and P2.5's longer synthesis prompt is not
+implicated — which is what the re-run was for, and is cheaper than an argument
+about it.

@@ -1396,3 +1396,254 @@ that row is now about reliability rather than discovery. **P2.4** is still the
 cheapest and now has fresh evidence (6409 turn 10). **P2.9**, **P2.7**, **P2.8**,
 **P3.6** and **P3.7** are all open. **P5.2 is the live external one** and the
 LEX-team question is free.
+
+---
+
+## Session 9 — 2026-09-16 — P2.5 (B4, in-force status), plus a P3.5 trap closed
+
+**Done:**
+- **P2.5 complete, acceptance passed.** Turns asserting currency with no
+  commencement relation retrieved went **7 of 24 to 0 of 42**; assertions
+  citing a text version as the evidence **13 to 0**. P3.5's win survived
+  intact (the commencement relation still delivered in **6 of 6** in-scope
+  turns), and **18 of 24 matched turn slots grew**.
+- **B4 closes**, and with it the last partial bucket in Wave 2 apart from B5.
+- **A trap P3.5 left open is closed**: `Commencement Order` is not the subject's
+  commencement, and `ukpga/1998/46` has 29 of them and no `coming into force`
+  row at all.
+- **957 tests** (939 → 957). New tooling: `lex_probe --inforce [--full]`,
+  `replay_report currency` (with `--drops` and `--before`).
+
+**Three of the six facts written into this row at the end of Session 8 did not
+survive measurement, and two of them changed the build.**
+
+- **`ukpga/1998/46` does NOT have "857 relations and zero commencement rows".**
+  It has **29 `Commencement Order` relations**. Session 8's probe filtered
+  `type_of_effect == "coming into force"` exactly, which is right for the
+  question P3.5 asked and hid this one. **The handover's conclusion survives for
+  a better reason than it gave, and the difference is a trap:** across the
+  **1,355** such relations the corpus produces, `changed_provision` is one of
+  **eight placeholder values** (`specified amended provision(s)` 1,068, `None`
+  199, `C/O` 73, `specified provision(s)` 11, four variants, one `Act`) and
+  never a provision of the subject — against 5,180 distinct real provisions over
+  19,031 `coming into force` rows. The row means *another Act's commencement
+  order brought into force an amendment TO the subject*: `ssi/2001/81`, the
+  Adults with Incapacity (Scotland) Act 2000 (Commencement No. 1) Order 2001,
+  appears against `ukpga/1963/41` because `asp/2000/4` substituted words in its
+  s. 90(1). `uksi/1999/1075` is the *Road Traffic (NHS Charges) Act 1999*
+  Commencement Order and appears against the **Scotland Act 1998**. P3.5's block
+  invites the model to state any relation the record lists, citing the
+  instrument named against it — so left merged, the fix for 6411's unsourced
+  *"the Scotland Act 1998 (Commencement) Order 1998"* would have been a
+  **differently-sourced wrong answer**.
+- **The `status` vocabulary is three values, not two**: `final` 60.3%, `revised`
+  38.8%, **`stub` 0.9%** over 15,160 model-visible search rows. P1.2's row and
+  its test docstring both said two. The conclusion is unchanged and slightly
+  stronger.
+- **The title marker is a flag, not a date route.** 258 of 15,160 rows (1.7%),
+  43 distinct titles, and a date on **8 of the 258**. It is **asymmetric** —
+  present means not in force, absent means nothing — and the first draft of this
+  row's own detector used it symmetrically, grading 6411's *"Yes, the Scotland
+  Act 1998 is in force"* as SOURCED because an unrelated repeal-marked row
+  ranked on the same page.
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **The fix provoked its own evasion, and the second smoke run caught it.** With
+  "in force" prohibited, the model came back with *"Yes, the Scotland Act 1998
+  IS IN OPERATION and remains a fundamental pillar of the UK constitution"*,
+  sourced to a 2026 UKSC judgment that *"confirms its ACTIVE STATUS"*. Same
+  proposition, different words — and the second half is **6411's original
+  diagnosis verbatim**: *determined in-force status by reference to case law*.
+  The rule now prohibits the proposition rather than a form of words, names the
+  paraphrases, and forbids inferring currency from a judgment. A detector blind
+  to the evasion its own fix causes would have read zero and published it.
+
+- **The site with no instruction was the site with the defect.** The row warned
+  against assuming P2.3's and P3.5's three-prompt symmetry. That was right about
+  the Status *lines* — three different sites, two worker prompts and the DR
+  synthesis — and wrong about the *rule*: `WORKER_SYSTEM_PROMPT_CONVERSATIONAL`
+  had no in-force instruction at all, and `get_worker_system_prompt` returns it
+  whenever `_chat_mode == "conversational"`, **which is the mode 6411 ran in**.
+
+- **And quick-lookup mode never called the route, which is P3.5's gap.** P3.5
+  appended `_RELATIONSHIP_RULE` to all three worker prompts but gave a PHASE 2b
+  only to `WORKER_SYSTEM_PROMPT`. The conversational prompt's phases name four
+  tools, say "keep it tight" and explicitly forbid one fallback — so the model
+  follows the phases. Asked *"Is the Scotland Act 1998 in force?"* it made four
+  calls, none of them `get_legislation_changes`, and then wrote that the answer
+  *"would require retrieving its specific change records"*. It knew the route
+  and the prompt had routed it away. A conditional PHASE 2b fixed it in one
+  call.
+
+- **A fourth lead, chased and closed so the next session need not.** The effect
+  STRING does carry dates — `saved (6.5.1999)`, `amended (1.7.1999)`,
+  `repealed (1.1.1996)` — so P3.5's flat *"there is no DATE on any relation"*
+  reads wrong. Over all 272 corpus legislation_ids in both directions:
+  **552 of 89,465 relations (0.6%) embed a date, and 0 of the 19,031 `coming
+  into force` rows do.** P3.5's statement stands exactly where it matters and
+  the second hop is still required.
+
+- **The instrument was wrong EIGHT times, in both directions, and every one was
+  found by reading output rather than by trusting a number.** (1) The title
+  marker used symmetrically, grading 6411's claim as SOURCED off an unrelated
+  repeal-marked row on the same search page. (2) `_CUR_ASSERT`'s Status-bullet
+  branch matches a sentence merely *starting* with "In force", so **"In-force
+  status: not verified"** — the sentence the fix produces — scored as the defect;
+  `_CUR_NEGATED` catches the no-colon form and misses that one because its
+  character class excludes `:`. (3) The first guard for that matched any negated
+  establishment verb anywhere, which would have dropped *"While we cannot verify
+  every provision, the Act is currently in force"* — a false negative in the
+  flattering direction. (4) A **bare section heading** — `*   **In-Force
+  Status:**` — read as an assertion, because `_sentences` splits by line.
+  (5) The distance windows between subject and negation were set from a sample
+  and a 95-character parenthetical list broke them. (6) `_CUR_SUBORDINATE` had
+  no adverb slot where `_CUR_ASSERT` has one, so *"To determine if a specific
+  section is currently in force…"* counted — two patterns that must agree about
+  a phrase, only one of which knew about adverbs. (7) Adding that slot then
+  over-corrected and swallowed a concessive clause followed by a main-clause
+  assertion; **the comma settles it** — the trigger and the phrase must be in
+  the same clause. (8) An infinitival purpose clause, *"To establish exactly
+  which provisions are currently in force today, you would need to consult the
+  specific commencement orders"*, counted because no trigger word appears in it
+  — and adding `which` to the trigger list would have suppressed *"the
+  provisions which are currently in force include ss. 1-5"*, so that guard is
+  the shape too.
+
+  **Five of the eight were found by reading the after-column of a live run**,
+  where the model wrote exactly what the product now asks for and the detector
+  called it the failure. **The last four all ran in that direction**, so the
+  after-column has been pessimistic rather than flattering — safer, and no less
+  wrong. After every correction, re-run over all seven historical directories:
+  **not one before-column number moved.**
+
+- **The acceptance needed a second directory, and the reason is worth stating.**
+  6411 obeyed the rule's *"report what the change record holds"* clause in **1
+  of 3** reps: reps 1 (218 chars) and 3 (713) each had 29 repeal relations in
+  hand and reported none, while rep 2 (380) did. The conversational worker
+  prompt demands "2-5 sentences of concise prose" and concision won. The bar in
+  the row was already met — the defect was 0 in all three — but 6411 is this
+  row's headline session and leaving it thinner than the material supports is
+  the inverse of Invariant 1. One line on the conversational PHASE 2b plus a
+  **$0.90** re-run (`wave2_p25b`) moved it to **2 of 3 reporting the repeals and
+  a mean of 741 chars against wave1's 480** — and rep 1 went and fetched the
+  actual Scotland Act 1998 (Commencement) Order 1998 with a real URL. So the
+  acceptance is `wave2_p25` for 6341/6409 and `wave2_p25b` for 6411; both are
+  0 unsupported and 0 text-version.
+
+- **A blank Deep Research report, and it did NOT recur.** 6383 rep 1 in
+  `wave2_p25` returned a report whose **body was empty** — the lawyer saw the
+  scope footer and nothing else — with `status: ok`, no error, 30 tool calls,
+  three intact step reports (4,836 / 5,777 / 7,190 chars) and 219 commencement
+  relations retrieved. First blank in 218 answered turns across eight replay
+  directories. **The cause is an empty provider completion at the synthesis
+  call**: the request went out at `tools=0, msgs=2, ~21421 chars` and the task
+  finished **9 seconds later**, and `strip_scope_blocks` never fired — checkable,
+  because it logs when it does and the log carries no such line. **The re-run
+  produced a proper 2,278-char report**, so P2.5's longer synthesis prompt is
+  not implicated. Two gaps it exposed are recorded against **P4.2** (B13), not
+  here: `chat_loop`'s stream retry only fires while nothing has been emitted and
+  cannot see a successful 200 carrying no content chunks, and
+  `run_deep_research` never checks that the synthesis produced anything before
+  footering it and returning.
+
+- **The sweep's two phases record different `git_head` values and the product
+  code was identical.** Phase 1 says `c302f00`, phase 2 `843dee0`, because
+  detector fixes were committed between them and `replay.py` reads HEAD at run
+  start. `git diff --stat c302f00 93c1fbd -- src/ client/` is **empty** and the
+  server was started once at `c302f00` and never restarted, so the executing
+  product code did not change. Recorded so a later session does not read the
+  discrepancy as two different systems.
+
+- **One 6m19s silence was a slow stream, not a hang.** 6383 turn 2 completed at
+  **378.6s**, the slowest turn of the sweep. Worth knowing before killing a
+  sweep that looks stalled: the `read=180.0` timeout resets per chunk, and the
+  log only writes on completion events.
+
+- **The old detector undercounts by 30% and is left byte-identical.**
+  `IN_FORCE_CLAIM` produced the published 27 → 30 series. It requires
+  "is/are/remains/currently in force" and so catches none of the bare Status
+  bullets that are the purest form of the defect — `In force (revised).` (6341
+  ×3, 6384 ×6, 6389 ×3), `Status: Revised (In force).` (6406 ×4). Properly
+  counted `wave1` is **43 turns / 66 assertions**, not 30 / 34. Widening it
+  would have moved a number already in `BASELINE.md`, so `cmd_currency` prints
+  both.
+
+- **A published figure of mine was wrong within the session, and the command is
+  what caught it.** I wrote the title-marker rate as "256 of 12,640 (2.0%), 42
+  titles" from a one-off script that walked five of the seven replay
+  directories. `lex_probe --inforce` walks all seven and reads **258 of 15,160
+  (1.7%), 43 titles**. Same shape as Session 7's and Session 8's retractions:
+  the figure behind the command wins.
+
+- **`wave3_p35` already showed the shape this row wants, and that is not this
+  fix.** P3.5's own acceptance sessions read 0 unsupported / 4 sourced, because
+  the question routes the Worker to the change record. Two of those four still
+  cited a text version (*"SSI 2020/475 is in force (status: revised)"*), which
+  is the residual this row removes.
+
+**Decisions taken this session:**
+- **Rename the field rather than instruct around it.** `status` reaches the model
+  as `text_version`. 48 of `wave1`'s 66 assertions quote the text version as
+  their evidence; the model was not inventing a source. `extract_sources` reads
+  the new key with a `status` fallback, so the Sources rail is byte-identical
+  and no frontend rebuild is needed (checked: nothing in `client/src` reads it).
+- **Keep the mandatory section, change what it may say.** Telling the model to
+  omit "Jurisdiction & Status" makes `_report_needs_reformat` judge the report
+  malformed and spends an A4 reformat call re-adding the heading — the trap the
+  row flagged.
+- **`_currency_limb` speaks even when its step found nothing** — the opposite
+  gate from `_enabling_limb` and `_relations_limb`. A step that established
+  nothing about currency is exactly the step whose report says "all cited
+  legislation is currently in force", and the agent writing that sentence has
+  seen no tool result. Measured cost: 873 characters on every legislation
+  worker report.
+- **`valid_date` is the substitution that keeps this inside Invariant 1.**
+  `2026-03-11` for the Scotland Act 1998 — the date the held revised text is up
+  to date to, available on the 18% of turns that reach Phase 3 and rising under
+  P3.5. Not an in-force date, and the honest thing a Status line can say
+  instead of nothing.
+- **Only a retrieved `coming into force` relation counts as support** for an
+  affirmative assertion in the instrument. A repeal relation and a title marker
+  are collected and printed but do not count: both support only a negative, and
+  *"the Act remains in force except ss. 38-39, repealed by uksi/2014/486"* would
+  otherwise score SOURCED off the repeal while the overclaim sits in the other
+  half of the sentence.
+- **The title-marker limb was dropped from the lawyer-facing footer** after the
+  first smoke run put *"the index's own title for uksi/2024/697 marks it as
+  repealed"* on an answer about the Scotland Act 1998. The marker is recorded
+  per search ROW; filtering it to cited instruments needs a prose detector,
+  which this module refuses to put in the product. It still reaches the model
+  twice.
+
+**State of the branch:** `fix/prepilot-defects`. **957 tests green,
+NOTHING PUSHED** — the whole-plan-then-one-push policy stands, so the target
+still runs the pre-pilot code. Ledger: Waves 0 and 1 complete; **P1.6, P2.1,
+P2.2, P2.3, P2.5, P2.6, P3.5, P4.4, P5.1 and P5.3 done**; P0.4 and P5.2 at
+`[~]`. **B4 is closed.**
+
+**Machine state a new session inherits:**
+- **No uvicorn running** — stopped at the end of the session. Start a fresh one
+  before any live work.
+- **Dev box restored** — `moonshotai/kimi-k3`, local prompt cache ON, no pin
+  file. **Re-pin before any measurement.**
+- **Nine gitignored replay directories:** `baseline/` (65), `wave1/` (41),
+  `wave2_p21/` (12), `wave2_p22/` (6), `wave2_p22_final/` (6), `wave2_p23/`
+  (12), `wave3_p35/` (9), **`wave2_p25/` (8 — P2.5's acceptance)** and **`wave2_p25b/` (4 — 6411 re-run on the strengthened prompt, plus the 6383 blank-report re-test)**.
+  None of the per-row dirs is a sweep; do **not** feed them to `replay_report
+  compare`. Read them with `replay_report --dir <dir>` plus `currency` (P2.5,
+  `--drops` for the both-directions audit and `--before <dir>` for Invariant 1),
+  `commencements` (P3.5), `derivations` (P2.3), `negatives` (P2.2), `halts`
+  (P2.1) and `corpus`.
+- **`python -m tools.plan_status`** prints where the ledger stands.
+
+**Spend this session: ~$12.4** on replay — $9.76 for the acceptance,
+$0.26 for two smoke runs, and a few cents of probes. The LEX probing is free.
+
+**Next action:** **P2.4** is the cheapest open row and its evidence has only
+grown (P3.5's sweep produced 6409 turn 10; this session's did not touch it).
+**P2.9** is still a one-line fix to a measured P2.2 defect and still moves
+P2.2's published numbers. **P2.7**, **P2.8**, **P3.6** and **P3.7** are open;
+**Wave 4** is 9 sessions, mostly frontend, independently shippable, and nothing
+depends on it. **P5.2 is the live external one** and the LEX-team question is
+still free and still unasked.
