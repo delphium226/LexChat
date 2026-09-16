@@ -1172,3 +1172,25 @@ async def test_the_whole_seam_end_to_end(monkeypatch):
     assert "ENABLING POWER" not in content
     assert "SEARCH SCOPE" not in content
     assert "Enabling power: NOT retrieved" not in content
+
+
+def test_the_footer_never_renders_an_unbalanced_quote():
+    """Found by P2.3's acceptance sweep, in front of a lawyer.
+
+    `.strip('"')` removes only the OUTER quotes, so the model's own
+    field-syntax query rendered as `"Education (Scotland) Act 1962" 117"` —
+    unbalanced, and reading as two searches where there was one. Phrase-search
+    quoting is deliberately dropped: this line is provenance prose and the exact
+    queries live in the audit trace.
+    """
+    log = [{"tool": "search_legislation",
+            "query": '"Education (Scotland) Act 1962" 117', "shown": 5,
+            "matched": 141},
+           {"tool": "search_legislation",
+            "query": '"Social Security (Scotland) Act 2018" "95" "£"',
+            "shown": 5, "matched": 141}]
+    line = answer_scope_footer(log, {})
+    quoted = line[line.index("searched for"):line.index("; ")]
+    assert quoted.count('"') % 2 == 0, quoted
+    assert '""' not in line
+    assert "Education (Scotland) Act 1962 117" in line

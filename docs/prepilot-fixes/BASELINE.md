@@ -1000,3 +1000,215 @@ Runs are serial by design. Three parallel Deep Research runs fan out to a shared
 API; `_request_with_retry` backs off on 429 and eventually returns the error, which would appear
 in the trace as a degraded retrieval — a failure reproducing when it did not. A corrupted baseline
 costs more than the hours saved.
+
+---
+
+## B3(b) — what an enabling-power claim was actually drawn from (P2.3)
+
+Measured with `python -m tools.replay_report --dir <dir> derivations`, which also
+prints every near-miss under `--drops`.
+
+**A derivation claim is not a citation, and the whole row turns on the
+difference.** *"Under section 91 of the Act, Ministers must consult"* is correct
+legal writing about a retrieved provision. *"SSI 2018/273 was made under section
+91"* is the B3 claim — an assertion about a relation **no endpoint we call
+returns**. A detector that cannot tell them apart grades correct writing as a
+defect and pushes the model to hedge what it retrieved, which is the regression
+Invariant 1 exists to prevent.
+
+### Where the enabling power actually is retrievable
+
+The handover into this row recorded that the "retrieved preamble" route does not
+exist, on the strength of `/legislation/text` for `ssi/2020/295`: 545 characters
+of `full_text` opening at *"Section 1) Citation and commencement"*, with no
+recital anywhere. That is correct about `full_text`, correct about that
+instrument, and **the conclusion drawn from it is wrong**. The recital arrives in
+`legislation.description`, and `get_legislation_text` returns the response
+unslimmed.
+
+`python -m tools.lex_probe --enabling`, 103 instruments, sampled 2026-09-16:
+
+| series / era | sampled | held | carry a recital |
+|---|---|---|---|
+| `uksi` pre-1990 | 25 | 25 | **18 (72%)** |
+| `uksi` 1990–2009 | 25 | 25 | 0 |
+| `uksi` 2010+ | 25 | 25 | 0 |
+| `ssi` 1990–2009 | 13 | 13 | **0** |
+| `ssi` 2010+ | 15 | 15 | **0** |
+
+One further instrument carried it in `full_text` and not in `description`, which
+is why the product checks both: a rule that misses a real recital forbids a claim
+the material supports, and nothing downstream would flag that.
+
+So the permitted branch of P2.3's rule is **live**, and for the Scottish corpus
+these lawyers work in it is **empty**. The rule is a near-total prohibition, and
+the product says so rather than dressing it as a conditional. Over the whole
+post-Wave-1 replay corpus — 33M characters of raw retrieval across 1,907 tool
+results — exactly **two** instrument-level recitals were ever returned, both in
+6340.
+
+**This also settles P3.6's ordering:** it is not a prerequisite. P3.6 would put
+the same `description` on *search* rows at Phase 1, which is worth having for
+commencement dates and for cheapness, but it adds no enabling-power reach that
+`get_legislation_text` does not already have — and on the Scottish corpus it adds
+none at all.
+
+### Before-column
+
+`baseline/` records **0 of 222** answered turns asserting a derivation, and that
+is not a good score. Pre-Wave-1 the jurisdiction filter emptied the searches, so
+there was nothing retrieved to derive from: 6382 and 6383's baseline answers are
+all negatives. **B3(b) is a defect surface Wave 1 opened** — fixing retrieval is
+what gave the model instruments to make claims about.
+
+Post-Wave-1, over `wave1/` + `wave2_p21/` + `wave2_p22_final/` (219 answered
+turns):
+
+| | turns | claims |
+|---|---|---|
+| assert a derivation | **13** | **20** |
+| … with **no** enabling-power text retrieved | **12** | **18** |
+| … supported by a retrieved recital | 1 | 2 |
+
+The single supported turn is **6340 rep 1**, which read `uksi/1979/766`'s
+preamble verbatim and reported its enabling powers correctly. The one turn in the
+corpus that gets this right is in the session the row was written against.
+
+The heaviest failures are 6383's, and they assert knowledge of a document part
+the tool boundary never returns:
+
+> **"Over 130 instruments explicitly cite section 95 in their preamble"**
+> — 6383 rep 2 turn 4
+
+> **"A search of the legislative database for instruments containing the preamble
+> phrase _'in exercise of the powers conferred by section 95 of the Social
+> Security (Scotland) Act 2018'_ returns over 130 matches."**
+> — 6383 rep 3 turn 4
+
+No search we run matches preamble text, and `description` is stripped from every
+search row before the model sees it. The second sentence describes a search that
+cannot have happened.
+
+### The detector, and the four corrections it needed
+
+It was an artefact twice before it was right, and then twice more in the
+acceptance run itself. All four are in `replay_report.py` rather than quietly
+replaced, because on this work **the measuring instrument has been wrong more
+often than the product**.
+
+1. **69 of 155 turns.** A regex alternation that reduced to a bare `\bis` —
+   `r"\bis|are|was|were\s+enabled by"` groups as `\bis` OR `are` OR … — plus an
+   instrument screen the bare word "regulations" satisfied.
+2. **1 turn.** Over-corrected by compiling that screen case-sensitively, so it
+   missed every claim opening *"Several SSIs …"* — including the largest in the
+   corpus.
+3. **The full-stop trap, second face.** The sentence splitter cut *"For example,
+   S.I. 1963/2111 was made under section 69(4) of the National Insurance Act
+   1946"* into `"For example, S."`, `"I."`, `"1963/2111 was made under …"`; the
+   fragment that kept the predicate had lost its instrument. Abbreviation dots
+   are masked before the split now.
+4. **The full-stop trap, third face.** With the sentence intact, *"Commencement
+   **No.** 1"* then tripped `\bno\b` and the claim was filtered as negated —
+   and that phrase is in the title of every commencement instrument this corpus
+   is about. `\bno\b(?!\s*\.)` now.
+
+Corrections 3 and 4 were found by the **first acceptance run**, where they would
+have scored a turn making three supported claims as making none. Both are
+under-reads, and every correction was re-validated against `baseline/`, `wave1/`,
+`wave2_p21/` and `wave2_p22_final/`: **not one before-column number moved**,
+which is the check that none of them was tuned to pass.
+
+**Validated in both directions.** `derivations --drops` prints every sentence in
+the same vocabulary that was *not* counted, and all of them were read. The one
+that matters most is 6383 turn 2:
+
+> *"However, the agent could not retrieve the preamble to definitively confirm if
+> it was made under section 95 of the Social Security (Scotland) Act 2018."*
+
+That is the **right** answer — the exact sentence this row exists to produce —
+and a detector that counted it would reward the defect and punish the fix.
+
+**One known under-read, stated rather than patched:** an anaphoric subject
+(*"It is made under powers including section 95"*, 6383 rep 1 turn 1) is not
+counted, because admitting `it` as an instrument reference would be unboundedly
+over-broad. It under-reads the before and after columns equally.
+
+### After — the acceptance
+
+`evidence/replay/wave2_p23/` (n=3 on 6340, 6374, 6382 and 6383; 12 runs, **$7.10**,
+1 h 5 m, zero model mismatches). Graded per TURN with `replay_report --dir <dir>
+derivations`.
+
+| | before (`wave1` + `wave2_p21`) | **after (`wave2_p23`)** |
+|---|---|---|
+| answered turns | 28 | 29 |
+| turns asserting a derivation | 13 | **5** |
+| claims asserted | 20 | **10** |
+| **turns asserting an UNVERIFIED derivation** | **12 (43%)** | **2 (7%)** |
+| unverified claims | 18 | **3** |
+| … carrying a disclosure that it is unverified | **0** | **2 (both)** |
+| turns asserting a SUPPORTED derivation | 1 | 3 |
+| median answer length | 796 chars | 2,786 chars |
+
+**The sessions that carried the bucket went to zero.** 6383 — 7 of the 13
+before-column claim-turns, across 12 turns in three reps — asserts **no**
+unverified derivation at all, and neither does 6382 in any rep. What replaced the
+claim is the point:
+
+> *"Yes, several Scottish Statutory Instruments (SSIs) **have been made under the
+> enabling powers of section 95** … **Over 130 instruments explicitly cite section
+> 95 in their preamble**."* — 6383, before
+
+> *"… it **could not be verified** whether any specific Scottish Statutory
+> Instruments (SSIs) have been made under this section … the retrieved texts
+> **lack enabling power recitals**."* — 6383 turn 4, after
+
+**Invariant 1 held in both directions, which was the real risk.** The answers did
+not shrink to buy the number — per turn they grew in 8 of the 10 turn slots, and
+6383's three conversational turns roughly doubled (548 → 1,377; 604 → 1,380; 614
+→ 1,570 chars) because the model now explains the gap instead of asserting across
+it. 6382 still reports the substantive finding it was asked for (SSI 2019/29
+carries the "£" symbol in regs 11–13, four other SSIs do not) and separately says
+the enabling power cannot be confirmed. And **6340, the only session that
+exercises the permitted branch, asserts supported derivations in all three reps** —
+now phrased *"explicitly states it was made under …"*, which is the attribution
+the block asks for.
+
+**The best answers explain the mechanism, not just the limit.** Several now tell
+the lawyer what to do next:
+
+> *"The reason it did not appear in the initial search is that our legislation
+> index does not record the enabling powers (the 'made under' relationship) for
+> statutory instruments. Because the initial search relied on finding 'section
+> 95' in the indexed text, instruments that only cite the enabling power in their
+> preamble (which is not indexed) were missed."*
+
+**The two residuals are both 6374, and they are the mild shape.** Both are
+class-level — *"various Orders in Council made under section 126(8)(b)"*, *"several
+Statutory Instruments have been made under this power"* — where the parent Act's
+own s.126(8) does say offices may be "specified in an Order in Council made under
+this subsection". The instance-level link is inferred rather than retrieved, so
+the mechanical verdict is correct, and **both now carry the code-emitted line
+saying the derivation is unverified**, which none of the twelve before them did.
+6374 rep 3 asserts nothing at all.
+
+**Validated in both directions on the after-column too.** `derivations --drops`
+prints **72** sentences in the same vocabulary that were not counted; all were
+read and all are correct drops — overwhelmingly explicit *"could not be
+verified"* statements, plus statements of law about a class (*"regulations made
+under section 95 are subject to the affirmative procedure"*). Nothing in the
+after-column is a claim the detector missed.
+
+**One known gap, measured rather than asserted.** The lawyer-facing clause is
+gated on the turn having retrieved an instrument. **12 of the 13 before-column
+claim-turns did**, so the gate covers the bucket — but a turn that names
+instruments from search rows alone and retrieves none of them gets no clause
+(6383 rep 2 turn 3 in `wave2_p21`, 1 of 13). Closing it would mean firing the
+clause on any turn whose search returned an SI, which is most legislation turns,
+for an 8% gain. Left as a limitation.
+
+**A P2.2 defect this sweep exposed, and fixed.** `answer_scope_footer` stripped
+only the OUTER quotes from a query, so the model's own field syntax rendered to
+the lawyer as `"Education (Scotland) Act 1962" 117"` — unbalanced, and reading as
+two searches where there was one. Every quote character is removed before
+re-quoting now; the exact queries are in the audit trace.

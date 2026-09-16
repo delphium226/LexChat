@@ -898,9 +898,18 @@ def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) ->
     # The model routinely quotes its own query ('"Water Industry Commission"'),
     # which wrapped again renders as `""…""`. Strip the model's quoting and
     # dedupe case-insensitively before re-quoting once.
+    #
+    # **Every quote character, not just the outer ones**, and P2.3's acceptance
+    # sweep is what showed why. `.strip('"')` on `"Education (Scotland) Act
+    # 1962" 117` removes the leading quote and leaves the internal one, so the
+    # lawyer read `"Education (Scotland) Act 1962" 117"` — unbalanced, and it
+    # reads as two searches where there was one. Phrase-search quoting is
+    # deliberately lost here: this line is provenance prose, and the exact
+    # queries are in the audit trace.
     terms, seen = [], set()
     for s in searches:
-        q = (s.get("query") or "").strip().strip("\"'“”").strip()
+        q = re.sub(r"[\"'“”]+", " ", s.get("query") or "")
+        q = re.sub(r"\s+", " ", q).strip()
         if q and q.lower() not in seen:
             seen.add(q.lower())
             terms.append(q)

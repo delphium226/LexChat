@@ -998,3 +998,169 @@ against code that was not HEAD. Budget for that when planning a row whose fix is
 this session verified the two citations it turns on. **P2.3** is the one that matters, because
 it unblocks **P3.5** (`/amendment/search`), the highest-value row on the page. **P2.7** is
 available in parallel. **P0.4's re-export remains post-push** and blocks nothing.
+
+---
+
+## Session 7 — 2026-09-16 — P2.3 (B3b, unverified "made under"), plus a P2.2 defect fixed
+
+**Done:**
+- **P2.3 complete, acceptance passed.** Turns asserting an **unverified** derivation
+  fell **12 of 28 (43%) → 2 of 29 (7%)**; unverified claims 18 → 3; and **both
+  survivors carry a code-emitted line saying so, where none of the twelve before
+  them did.** `evidence/replay/wave2_p23/`, n=3 on 6340/6374/6382/6383, 12 runs,
+  **$7.10**, 1 h 5 m, zero model mismatches.
+- **P3.5 is now unblocked** — the highest-value row on the page.
+- **764 tests** (712 → 764). New tooling: `lex_probe --enabling`,
+  `replay_report derivations` (with `--drops`).
+
+**Two of the three findings handed to this row did not hold, and one decided the
+design.**
+
+- **The "retrieved preamble" route EXISTS.** The handover recorded it as absent,
+  on the strength of `/legislation/text` for `ssi/2020/295` returning 545 chars
+  of `full_text` opening at "Section 1) Citation and commencement". That is right
+  about `full_text` and right about that instrument, and **the conclusion drawn
+  from it is wrong**: the recital lives in `legislation.description`, and
+  `get_legislation_text` returns the response unslimmed. **6340 rep 1 had already
+  been using it** — it read `uksi/1979/766`'s preamble verbatim and reported its
+  enabling powers correctly. The one turn in the whole corpus that makes a
+  *supported* derivation claim is in the session the row was written against.
+- **So P3.6 is not a prerequisite**, and the decision is recorded rather than
+  assumed. P3.6 moves the same field to Phase 1 — worth having for commencement
+  dates and for cheapness, not for reachability.
+- **But the rule is a near-total prohibition and now says so in the product.**
+  `lex_probe --enabling` (new, 103 instruments, 2026-09-16): `uksi` pre-1990
+  **18/25**, `uksi` 1990-2009 **0/25**, `uksi` 2010+ **0/25**, `ssi` 1990-2009
+  **0/13**, `ssi` 2010+ **0/15**. **Zero for Scottish instruments in either
+  era** — the corpus these lawyers work in. Over the whole post-Wave-1 replay
+  corpus (33M chars of raw retrieval, 1,907 tool results) exactly **two**
+  instrument-level recitals were ever returned, both in 6340.
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **B3(b) is a defect surface Wave 1 OPENED, and the baseline column proves it
+  rather than flattering it.** `baseline/` scores **0 of 222** answered turns
+  asserting a derivation — which looks like a perfect before-column and is
+  nothing of the kind. Pre-Wave-1 the jurisdiction filter emptied the searches,
+  so there was nothing retrieved to derive from and 6382/6383's answers are all
+  negatives. Fixing retrieval is what gave the model instruments to make claims
+  about. **A wave-over-wave number can improve because the system got worse.**
+
+- **"A provision" cannot be a permitted route, and measuring it is what showed
+  that.** The row allowed a claim supported by "a retrieved preamble, provision
+  or `description`". 6374 produced what looked like the middle case — it said
+  *"Both confirm the Orders are made under section 126(8)"*, and s.126(8),
+  retrieved, does say offices may be "specified in an Order in Council made under
+  this subsection". A screen for that fired on **11 of the 12** before-column
+  unverified turns, because generic regulation-making boilerplate is in
+  essentially every enabling Act, so the signal is present whenever the parent
+  Act was retrieved at all. It could not separate 6374's short sound inference
+  from 6383's *"Over 130 instruments explicitly cite section 95 in their
+  preamble"*. **Deleted, with the reasoning left in place of the code, and the
+  ROW narrowed instead: a provision states the CLASS, never the INSTANCE.** Only
+  a preamble or a `description` names an individual instrument.
+
+- **The same full-stop trap, twice more, and the acceptance run is what found
+  both.** SESSION_LOG already records it for `NEG_BLAMED_INDEX`. (1) The sentence
+  splitter cut *"For example, S.I. 1963/2111 was made under section 69(4) of the
+  National Insurance Act 1946"* into `"For example, S."`, `"I."`, `"1963/2111 was
+  made under …"` — the fragment keeping the predicate had lost its instrument.
+  (2) With the sentence intact, *"Commencement **No.** 1"* then tripped `\bno\b`
+  and the claim was filtered as negated. Both are **under-reads that would have
+  scored the acceptance run's three supported claims as no claims at all**, in
+  the row whose job is to count them. **Fourteen instrument errors across seven
+  sessions now.**
+
+- **Every correction was re-validated against all four historical directories and
+  not one before-column number moved.** That is the check that none of them was
+  tuned to pass, and it is cheap — four commands.
+
+- **Invariant 1 held in both directions, and that was the real risk of this row.**
+  A prohibition on asserting a relation invites the model to hedge things it
+  actually retrieved. It did not: **answers grew in 8 of the 10 turn slots**,
+  6383's conversational turns roughly doubling (548→1,377, 604→1,380, 614→1,570
+  chars) because the model now explains the gap instead of asserting across it.
+  6382 still delivers the substantive finding it was asked for (SSI 2019/29
+  carries the "£" symbol in regs 11-13; four others do not) while saying the
+  enabling power cannot be confirmed. And 6340 asserts **supported** derivations
+  in all three reps, now phrased *"explicitly states it was made under …"* — the
+  attribution the block asks for.
+
+- **The best answers now explain the mechanism, not just the limit.** *"The
+  reason it did not appear in the initial search is that our legislation index
+  does not record the enabling powers … instruments that only cite the enabling
+  power in their preamble (which is not indexed) were missed."* That tells a
+  lawyer what to do next, which a bare limit does not.
+
+- **A review before the sweep found the fix wired to the rare route.** The
+  enabling-power record was on `get_legislation_text` only — 32 calls across the
+  corpus against **628** `search_legislation_sections` calls — so the report
+  block and the lawyer-facing clause would have been silent on almost every turn
+  where a claim can arise, including most of 6383's. Both routes are recorded
+  now; only `get_legislation_text` can ever set `stated`, because a preamble is
+  not a ranked provision.
+
+- **The strip needed widening, and that was a live defect**: `[ENABLING POWER …]`
+  is not `[SEARCH SCOPE …]`, and `_TOOL_BLOCK` matched only the latter. Without
+  the change an agent-facing block would have rendered to a lawyer. Found by
+  writing the test, not by the sweep.
+
+- **P2.2's footer had a defect this sweep put in front of a lawyer.**
+  `answer_scope_footer` stripped only the OUTER quotes from a query, so the
+  model's own field syntax rendered as `"Education (Scotland) Act 1962" 117"` —
+  unbalanced, and reading as two searches where there was one. Fixed and pinned;
+  the change is display-only and post-acceptance, and the detectors grade
+  footer-stripped prose, so it does not disturb the numbers above.
+
+- **The sweep was aborted once and restarted, deliberately.** A pre-sweep review
+  changed product code after the server had booted. The change was checked and
+  found immaterial to these four sessions — every `get_legislation_text` call in
+  them returns 200 — and the sweep was restarted anyway, for one file and about a
+  minute, because "the acceptance ran against HEAD" should not need an argument
+  about materiality to be true. Session 6 aborted three sweeps for the same
+  reason.
+
+**Decisions taken this session:**
+- **P3.6 is NOT a prerequisite for P2.3** — the permitted branch is already
+  reachable through `get_legislation_text`. Recorded in the row so the ordering
+  is not re-derived.
+- **The permitted branch is narrowed from three routes to two** (preamble or
+  `description`, never "a provision"), on the 11-of-12 measurement above.
+- **The lawyer-facing clause is gated on a STRUCTURAL fact** — did this turn
+  retrieve an instrument — and never on a prose detector deciding whether the
+  answer contains a derivation claim. A prose detector in the product fails
+  silently. The measured cost is one gap: **12 of 13** before-column claim-turns
+  retrieved an instrument, so a turn naming instruments from search rows alone
+  gets no clause. Closing it would fire the clause on nearly every legislation
+  turn for an 8% gain. **Left as a limitation.**
+- **The known under-read is stated, not patched**: an anaphoric subject (*"It is
+  made under powers including section 95"*) is not counted, because admitting
+  `it` as an instrument reference would be unboundedly over-broad. It under-reads
+  before and after equally.
+
+**State of the branch:** `fix/prepilot-defects`. **764 tests green, NOTHING
+PUSHED** — the whole-plan-then-one-push policy stands, so the target still runs
+the pre-pilot code. Ledger: Waves 0 and 1 complete; **P1.6, P2.1, P2.2, P2.3,
+P2.6, P4.4, P5.1 and P5.3 done**; P0.4 and P5.2 at `[~]`. **P3.5 is unblocked and
+is the row to take next.**
+
+**Machine state a new session inherits:**
+- **No uvicorn running** — stopped at the end of the session. Start a fresh one
+  before any live work; this session restarted once for exactly that reason.
+- **Dev box restored** — `moonshotai/kimi-k3`, local prompt cache ON, no pin
+  file. **Re-pin before any measurement.**
+- **Six gitignored replay directories:** `baseline/` (65), `wave1/` (41),
+  `wave2_p21/` (12), `wave2_p22/` (6), `wave2_p22_final/` (6) and
+  **`wave2_p23/` (12 — P2.3's acceptance)**. None of the wave2 dirs is a sweep;
+  do **not** feed them to `replay_report compare`. Read them with
+  `replay_report --dir <dir> derivations` (`--drops` for the both-directions
+  audit), `negatives` for P2.2 and `halts` for P2.1.
+
+**Spend this session: ~$7.2** on replay — $7.10 for the acceptance plus ~$0.1 of
+the aborted restart. Cheaper than Session 6 because the four sessions are short;
+6374 is the expensive one at ~$1.30 a rep (two Deep Research turns).
+
+**Next action:** **P3.5** (`/amendment/search`) — unblocked by this row and the
+highest-value row on the page, with its design notes already written from P5.1's
+probe. **P2.4** remains the cheapest; **P2.7** and **P2.8** are available in
+parallel. **P5.2 is the live external one** and the LEX-team question is free.
