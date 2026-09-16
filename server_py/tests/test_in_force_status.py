@@ -591,6 +591,12 @@ MUST_ASSERT = [
     "The 2018 Act is the current law in Scotland.",
     "Sections 1 to 5 of the Act continue to apply.",
     "The Order remains in effect.",
+    # **A sentence that hedges and then asserts still counts.** A guard on any
+    # negated establishment verb anywhere in the sentence would drop this, which
+    # is a false negative in the flattering direction — the worse of the two
+    # errors, and the shape the second smoke run came back with.
+    "While we cannot verify every provision, the Act is currently in force.",
+    "Although the index is incomplete, the Regulations are still in force.",
 ]
 
 MUST_NOT = [
@@ -639,6 +645,16 @@ MUST_NOT = [
     "their active status in Scotland be verified.",
     "The Act's active status could not be confirmed from the available sources.",
     "It was not possible to determine whether the Regulations are in operation.",
+    # **What the product now tells the model to write**, in the shapes it will
+    # actually write it. The Status-bullet branch of `_CUR_ASSERT` matches a
+    # sentence merely STARTING with "In force", and `_CUR_NEGATED` misses the
+    # colon form because its character class excludes `:` — so without the
+    # disclaimer guard the detector would score the FIXED behaviour as the
+    # defect on exactly the sentence the fix produces.
+    "In-force status: not verified.",
+    "In-force status was not verified — the legislation index does not report it.",
+    "in-force status could not be verified from the available sources.",
+    "The current in-force status of the Act could not be determined.",
 ]
 
 

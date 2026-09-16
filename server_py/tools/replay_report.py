@@ -2112,8 +2112,16 @@ def _invariant_one(before: Path, after: Path) -> None:
 #     statements, and the qualified ones are the answer this row wants, not the
 #     defect. A detector that counted them would score an honest answer as the
 #     failure.
+# A subordinate or interrogative clause is not an assertion. `whether` is in the
+# list because an indirect question is never a claim — "it was not possible to
+# determine WHETHER the Regulations are in operation" is the answer this row
+# wants, and `_CUR_NEGATED`'s 30-character window is too short to reach across
+# the intervening clause. Known and accepted edge: a sentence that asks and then
+# answers ("the record does not say whether s. 9 is in force, but it is") is
+# suppressed, which `while` and `if` have always done here too.
 _CUR_SUBORDINATE = re.compile(
-    r"\b(?:while|whilst|where|when|if|during|unless|until|whenever|any|an?)\b"
+    r"\b(?:while|whilst|where|when|whether|if|during|unless|until|whenever|"
+    r"any|an?)\b"
     r"[^.;:]{0,70}\b(?:is|are|remains?|was|were)\s+"
     r"(?:in[- ]force|in operation|in effect|operative)\b",
     re.I,
@@ -2126,19 +2134,51 @@ _CUR_NEGATED = re.compile("|".join([
     r"\bnot (?:yet )?(?:been )?(?:brought |commenced )?in(?:to)? force\b",
 ]), re.I)
 # **A statement that currency could NOT be established is the answer this row
-# wants, and it must never be counted as the defect.** Found by the both-
-# directions audit: `baseline` 6383 t4 says *"nor could their active status in
-# Scotland be verified"* — an honest negative that the standalone branch read as
-# an assertion. Left in, a post-fix answer saying "in-force status was not
-# verified" would have been scored as the failure, so the error ran against the
-# fix rather than for it; either way the instrument would have been wrong.
-_CUR_DISCLAIM_VERB = (r"(?:verif(?:y|ied|iable)|establish(?:ed)?|"
-                      r"determin(?:e|ed|able)|confirm(?:ed)?|ascertain(?:ed)?)")
+# wants, and it must never be counted as the defect.**
+#
+# Two errors were found writing this guard, one in each direction, and the
+# shape it ended up with is what avoids both.
+#
+# *Found by the both-directions audit over the historical corpus:* `baseline`
+# 6383 t4 says *"nor could their active status in Scotland be verified"* — an
+# honest negative that the standalone paraphrase branch read as an assertion.
+# Left in, a post-fix answer saying so would have been scored as the failure,
+# which runs against the fix rather than for it.
+#
+# *Found by reading `_CUR_ASSERT` against the product's own new wording:* its
+# Status-bullet branch matches a sentence merely STARTING with "In force", so
+# **"In-force status: not verified"** — which `_currency_limb` now tells the
+# model to write — scores as the defect. `_CUR_NEGATED` catches *"in-force
+# status was not verified"* (via "in-force" + <=20 chars + "not") but not the
+# colon form, because its character class excludes `:`.
+#
+# *And the fix for those must not become the opposite error.* A guard on any
+# negated establishment verb anywhere in the sentence would drop *"While we
+# cannot verify every provision, the Act is currently in force"* — a false
+# negative in the flattering direction, which is the worse of the two. So the
+# guard is scoped to the **disclaimer shape**: the subject is the status and the
+# predicate is a negated establishment verb. A sentence that disclaims and then
+# asserts still counts, because the assertion is not about the status's
+# verifiability.
+_CUR_STATUS_SUBJECT = (
+    r"(?:in[- ]force status|in[- ]force position|currency|active status|"
+    r"commencement status|current status|current in[- ]force status)")
+_CUR_NEG_WORD = (r"(?:not|never|nor|neither|no|cannot|can ?not|could ?n[o']t|"
+                 r"unable|without)")
+_CUR_ESTABLISH_VERB = (
+    r"(?:verif(?:y|ied|iable)|establish(?:ed)?|determin(?:e|ed|able)|"
+    r"confirm(?:ed)?|ascertain(?:ed)?|report(?:ed)?)")
 _CUR_UNVERIFIED = re.compile("|".join([
-    r"\b(?:not|never|no|nor|neither|cannot|can ?not|could ?n[o']t|unable|"
-    r"without)\b[^.;:]{0,60}\b" + _CUR_DISCLAIM_VERB + r"\b",
-    r"\b" + _CUR_DISCLAIM_VERB + r"\b[^.;:]{0,30}\b(?:not|no)\b",
-    r"\bun(?:verified|confirmed|established|determined)\b",
+    _CUR_STATUS_SUBJECT + r"\b[^.;\n]{0,50}\b" + _CUR_NEG_WORD
+    + r"\b[^.;\n]{0,30}\b" + _CUR_ESTABLISH_VERB + r"\b",
+    r"\b" + _CUR_NEG_WORD + r"\b[^.;\n]{0,40}" + _CUR_STATUS_SUBJECT
+    + r"\b[^.;\n]{0,50}\b" + _CUR_ESTABLISH_VERB + r"\b",
+    r"\b" + _CUR_NEG_WORD + r"\b[^.;\n]{0,30}\b" + _CUR_ESTABLISH_VERB
+    + r"\b[^.;\n]{0,50}" + _CUR_STATUS_SUBJECT + r"\b",
+    _CUR_STATUS_SUBJECT
+    + r"\b[^.;\n]{0,40}\bun(?:verified|confirmed|established|determined)\b",
+    # The footer's own sentence, which contains "in force" by necessity.
+    r"is not something this index reports",
 ]), re.I)
 # The three text-version values, which is the whole of the currency vocabulary
 # the index actually has. Interpolated rather than repeated because it appears
@@ -2235,16 +2275,22 @@ def _currency_asserted(sentence: str) -> bool:
     same rule. The paraphrase branch needs a legislation noun; see
     `_CUR_PARAPHRASE`.
     """
-    if _CUR_NEGATED.search(sentence) or _CUR_SUBORDINATE.search(sentence):
-        return bool(_CUR_FROM_VERSION.search(sentence))
-    if _CUR_ASSERT.search(sentence) or _CUR_FROM_VERSION.search(sentence):
+    # `_CUR_FROM_VERSION` is never guarded: a text version offered as the
+    # evidence for currency is not a supportable claim under any hedging, so it
+    # counts even in a sentence that also negates or disclaims.
+    if _CUR_FROM_VERSION.search(sentence):
         return True
-    # The paraphrase branches only, and only where the sentence is not itself
-    # saying that currency could not be established. `_CUR_ASSERT` above does
-    # not need the guard: "is currently in force" is not a sentence anyone
-    # writes while disclaiming it, and `_CUR_NEGATED` already covers "is not".
+    if _CUR_NEGATED.search(sentence) or _CUR_SUBORDINATE.search(sentence):
+        return False
+    # The disclaimer guard applies to `_CUR_ASSERT` as well as to the paraphrase
+    # branches, because the Status-bullet branch matches a sentence merely
+    # starting with "In force" and "In-force status: not verified" is what the
+    # product now tells the model to write. Scoped to the disclaimer SHAPE so a
+    # sentence that hedges and then asserts still counts — see `_CUR_UNVERIFIED`.
     if _CUR_UNVERIFIED.search(sentence):
         return False
+    if _CUR_ASSERT.search(sentence):
+        return True
     if _CUR_PARAPHRASE_STANDALONE.search(sentence):
         return True
     return bool(_CUR_LEGISLATION_NOUN.search(sentence)
@@ -2499,8 +2545,13 @@ def cmd_corpus(args) -> int:
             _ans = t.get("answer") or ""
             if _ans.strip():
                 answered += 1
+                # `[CURRENCY` added at P2.5. The list has to grow with
+                # `_TOOL_BLOCK` in `search_scope.py` or a new block's leak is
+                # invisible here — which is how P2.3 shipped
+                # `[ENABLING POWER …]` with the strip un-widened.
                 if any(m in _ans for m in
-                       ("[SEARCH SCOPE", "[ENABLING POWER", "[CHANGE RECORD")):
+                       ("[SEARCH SCOPE", "[ENABLING POWER", "[CHANGE RECORD",
+                        "[CURRENCY")):
                     leaked += 1
                 if _ans.count("*Search scope:") > 1:
                     dup_footer += 1
