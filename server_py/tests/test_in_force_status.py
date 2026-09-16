@@ -608,6 +608,11 @@ MUST_ASSERT = [
     # errors, and the shape the second smoke run came back with.
     "While we cannot verify every provision, the Act is currently in force.",
     "Although the index is incomplete, the Regulations are still in force.",
+    # The advice guard must not reach these: both halves of its shape are
+    # required, and a real assertion that merely mentions checking keeps its
+    # main clause.
+    "The provisions which are currently in force include sections 1 to 5.",
+    "We checked the change record and the Act is currently in force.",
 ]
 
 MUST_NOT = [
@@ -687,6 +692,19 @@ MUST_NOT = [
     "check the individual commencement orders made under the Act.",
     "The change record shows that 29 specific provisions have been repealed or "
     "revoked, meaning those parts are no longer in force.",
+    # **Advice about what establishing currency WOULD take is not a claim that
+    # it is established.** 6411 rep 2 on the strengthened prompt; an infinitival
+    # purpose clause with an embedded interrogative, and no `_CUR_SUBORDINATE`
+    # trigger word in it. Adding `which` to that list would suppress a real
+    # assertion ("the provisions which are currently in force include ss. 1-5"),
+    # so the guard is the shape.
+    "To establish exactly which provisions are currently in force today, you "
+    "would need to consult the specific commencement orders or check the "
+    "up-to-date revised status on legislation.gov.uk.",
+    "To establish current in-force status, a check of the change records for "
+    "each specific Act would be required.",
+    "To verify whether these provisions are in force you should consult a fully "
+    "updated statute book.",
 ]
 
 

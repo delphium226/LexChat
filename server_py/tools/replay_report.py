@@ -2212,13 +2212,43 @@ _CUR_DISCLAIMER_LITERAL = re.compile(
 )
 
 
+# **Advice about what establishing currency WOULD take is not a claim that it
+# is established.** 6411 rep 2, on the strengthened prompt, wrote *"To establish
+# exactly which provisions are currently in force today, you would need to
+# consult the specific commencement orders"* — an infinitival purpose clause
+# with an embedded interrogative, graded as an assertion because no
+# `_CUR_SUBORDINATE` trigger word appears in it.
+#
+# **Adding `which` to that trigger list is the wrong fix**: "The provisions
+# which are currently in force include ss. 1-5" IS an assertion and would be
+# suppressed. So the guard is the SHAPE again — a purpose clause naming an
+# establishment verb, plus advice about what it would take. Both halves are
+# required, because the purpose clause alone appears inside real assertions
+# ("we checked whether it is in force and it is").
+_CUR_ESTABLISH_INF = (
+    r"(?:establish|determine|confirm|verify|check|ascertain|find out)")
+_CUR_ADVICE_CLAUSE = (
+    r"(?:you|one|a reader|the reader)?\s*would (?:need|have) to"
+    r"|would (?:be )?requir(?:e|ed)"
+    r"|you (?:should|can|must|may want to|will need to)\s+"
+    r"(?:consult|check|refer|review|look)"
+    r"|it would be necessary to")
+_CUR_ADVICE = re.compile(
+    r"\bto\s+" + _CUR_ESTABLISH_INF + r"\b[^.;\n]{0,120}(?:"
+    + _CUR_ADVICE_CLAUSE + r")"
+    r"|(?:" + _CUR_ADVICE_CLAUSE + r")[^.;\n]{0,120}\bto\s+"
+    + _CUR_ESTABLISH_INF + r"\b",
+    re.I,
+)
+
+
 def _currency_disclaimed(sentence: str) -> bool:
     """Is this sentence saying that currency could NOT be established?
 
     See the note above `_CUR_NEGATED_VERB`. Two conditions, neither of them a
     distance window across a clause boundary.
     """
-    if _CUR_DISCLAIMER_LITERAL.search(sentence):
+    if _CUR_DISCLAIMER_LITERAL.search(sentence) or _CUR_ADVICE.search(sentence):
         return True
     return bool(_CUR_SUBJECT_RE.search(sentence)
                 and _CUR_NEGATED_VERB.search(sentence))
