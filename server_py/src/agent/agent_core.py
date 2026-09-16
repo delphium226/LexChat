@@ -21,6 +21,11 @@ from ..prompts import (
 )
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import enforce_provision_links
+from ..utils.empty_completion import (
+    LOST_ANSWER_NOTICE,
+    fallback_from_reports,
+    is_empty_completion,
+)
 from ..utils.research_halt import apply_halt_disclosure, halt_worker_report
 from ..utils.search_scope import (
     answer_scope_footer,
@@ -650,6 +655,11 @@ async def process_user_request(
     # precisely that the answer does not mention it.
     halts: list = []
 
+    # P4.2 (B13): every completed worker report, kept so an empty Manager
+    # completion does not also discard the research the lawyer already paid for.
+    # Read only on that failure path; ordinary turns never touch it.
+    worker_reports: list = []
+
     async def manager_tool_executor(name: str, args: dict) -> str:
         if name == "delegate_research":
             if timing_collector:
@@ -707,6 +717,11 @@ async def process_user_request(
             if result.get("halted"):
                 halts.append({**result["halted"], "scope": "delegation"})
             all_searches.extend(result.get("searches") or [])
+            if (result.get("content") or "").strip():
+                worker_reports.append({
+                    "title": f"Research step {len(worker_reports) + 1}",
+                    "content": result["content"],
+                })
             return f"[Research Agent Result]\n{result['content']}"
 
         if name == "consult_peer":
@@ -740,6 +755,25 @@ async def process_user_request(
         emit_tool_details=emit_tool_details,
         timing_collector=timing_collector,
     )
+
+    # P4.2 (B13). Last line of defence, above every strip below - all of which
+    # are no-ops on an empty body, so without this the scope footer is appended
+    # to nothing and the lawyer is shown a footer with no answer above it. That
+    # is the exact shape of all nine blank turns measured across the replay
+    # directories. `chat_loop` has already retried three times by the time this
+    # runs, so reaching here means the provider returned nothing on every
+    # attempt; the choice is between the research already in hand, labelled, and
+    # a blank screen.
+    if is_empty_completion(final.get("content"), None):
+        logger.error(
+            "[Manager] Empty completion returned as the answer - "
+            "falling back to %d worker report(s)", len(worker_reports),
+        )
+        final["content"] = (
+            fallback_from_reports(worker_reports, kind="manager")
+            if worker_reports else LOST_ANSWER_NOTICE
+        )
+        final["answer_failed"] = True
 
     # Strip the model's <suggestions> block off the answer and attach it to the
     # result. This is the single manager return behind BOTH /api/chat and
@@ -992,6 +1026,27 @@ async def run_deep_research(
         emit_tool_details=emit_tool_details,
         timing_collector=timing_collector,
     )
+
+    # P4.2 (B13). `chat_loop` has already retried an empty completion up to three
+    # times; this is what the lawyer gets if all three came back empty. 6383 rep 1
+    # of P2.5's sweep is the measured case: 30 tool calls, 219 commencement
+    # relations, three intact step reports of 4,836 / 5,777 / 7,190 chars — and a
+    # report whose body was empty, footered and returned as though it were an
+    # answer. Nothing downstream checked, so the failure was invisible.
+    if is_empty_completion(final.get("content"), None):
+        logger.error(
+            "[DeepResearch] Synthesis returned no text after %d step(s) — "
+            "falling back to the step findings, labelled as such",
+            len(step_findings),
+        )
+        final["content"] = fallback_from_reports(
+            [
+                {"title": f"Step {i}: {f['title']}", "content": f["content"]}
+                for i, f in enumerate(step_findings, 1)
+            ],
+            kind="synthesis",
+        )
+        final["synthesis_failed"] = True
 
     # Belt and braces: Deep Research reports are out of scope for suggestions
     # (the synthesis prompt never asks for a block), but this guarantees a stray

@@ -2664,6 +2664,122 @@ def cmd_currency(args) -> int:
     return 0
 
 
+def _turn_tool_calls(turn: dict) -> int:
+    """Worker tool calls recorded on this turn, across every delegation."""
+    return sum(len(dg.get("tools") or [])
+               for dg in ((turn.get("audit") or {}).get("delegations") or []))
+
+
+def blank_verdict(turn: dict) -> tuple:
+    """Grade one stored turn against P4.2's invariant.
+
+    Returns `(kind, cost, body_chars, answer_chars)` where kind is one of:
+
+      "ok"          — the lawyer got a body.
+      "billed"      — **the violation.** No body, and the turn was charged for.
+      "free"        — no body and no charge. Reported, never counted as a
+                      violation: 6374 rep 3 turn 3 is the one such turn in 616
+                      (0 delegations, 0 tools, $0) and it is a different failure
+                      — nothing ran at all, rather than something ran and the
+                      answer was lost. The row's acceptance excludes it by
+                      construction, which is why the invariant is worded against
+                      cost rather than against blankness.
+
+    **The body, not the answer.** `_without_footer` strips the code-emitted scope
+    footer P2.2 appends. A blank turn since P2.2 is not an empty string — it is a
+    footer with nothing above it, which is what 6383 rep 1 turn 4 looked like on
+    screen. Grading on `answer` alone would have scored that turn as fine.
+
+    **Cost is `timing.total_cost_usd`.** There is no `cost_usd` key on a run file;
+    looking for one silently grades every turn as free.
+    """
+    answer = turn.get("answer") or ""
+    body = _without_footer(answer)
+    cost = float((turn.get("timing") or {}).get("total_cost_usd") or 0.0)
+    if body.strip():
+        return "ok", cost, len(body.strip()), len(answer)
+    return ("billed" if cost > 0 else "free"), cost, 0, len(answer)
+
+
+def cmd_blanks(args) -> int:
+    """P4.2 acceptance (deterministic): a non-empty body whenever cost > 0.
+
+    **Why the acceptance is an invariant and not a session-turn pair.** The row
+    cites 6370 message #8; the baseline replay blanked at turns 2 and 3 while the
+    pre-pilot's turn 2 answered normally, and 6383's Deep Research turn blanked on
+    the run after four runs that produced 6,503-9,190 chars. The turn moves. What
+    does not move is that a lawyer was charged for a turn that showed them
+    nothing.
+
+    Reads `audit.empty_completions` (schema v3) where present: after the fix a
+    recovered retry still leaves a record, so a directory can show zero
+    violations and a non-zero rate of the underlying provider fault. That
+    distinction is the whole reason the diagnostic was built before the fix.
+    """
+    docs = load_runs(Path(args.dir))
+    if not docs:
+        print(f"No run files in {args.dir}")
+        return 1
+    print(f"P4.2 acceptance over {args.dir}")
+    print()
+    rows = []
+    turns = free = recovered = unrecovered = 0
+    probes_seen = False
+    for doc in sorted(docs, key=lambda d: (d["session_id"], d.get("rep", 1))):
+        for t in doc.get("turns", []):
+            turns += 1
+            kind, cost, body_chars, answer_chars = blank_verdict(t)
+            probes = ((t.get("audit") or {}).get("empty_completions")) or []
+            if probes:
+                probes_seen = True
+                for pr in probes:
+                    if pr.get("retried"):
+                        recovered += 1
+                    else:
+                        unrecovered += 1
+            if kind == "ok":
+                continue
+            if kind == "free":
+                free += 1
+            rows.append((doc["session_id"], doc.get("rep", 1), t.get("turn"),
+                         kind, cost, answer_chars, t.get("chat_mode"),
+                         _turn_tool_calls(t), probes))
+
+    bad = [r for r in rows if r[3] == "billed"]
+    if rows:
+        print(f"{'session':>8} {'rep':>3} {'turn':>4} {'kind':>7} {'cost':>9} "
+              f"{'answer':>7} {'tools':>5}  mode")
+        print("-" * 72)
+        for sid, rep, turn, kind, cost, answer_chars, mode, ntools, probes in rows:
+            print(f"{sid:>8} {rep:>3} {turn:>4} {kind:>7} {cost:>9.4f} "
+                  f"{answer_chars:>7} {ntools:>5}  {mode or '?'}")
+            for pr in probes:
+                print(f"{'':>26}   probe: finish_reason={pr.get('finish_reason')} "
+                      f"native={pr.get('native_finish_reason')} "
+                      f"completion_tokens={pr.get('completion_tokens')} "
+                      f"reasoning_chars={pr.get('reasoning_chars')} "
+                      f"stream_error={pr.get('stream_error')} "
+                      f"retried={pr.get('retried')}")
+        print()
+
+    print(f"turns                      {turns}")
+    print(f"blank AND billed (VIOLATION) {len(bad)}")
+    print(f"blank but free (excluded)    {free}")
+    if probes_seen:
+        print(f"empty completions, recovered by retry   {recovered}")
+        print(f"empty completions, NOT recovered        {unrecovered}")
+    else:
+        print("empty-completion probes: none recorded "
+              "(directory predates audit schema v3)")
+    print()
+    if bad:
+        print("INVARIANT BROKEN: a turn was charged for and showed the lawyer "
+              "no body.")
+    else:
+        print("Invariant holds: every billed turn returned a body.")
+    return 0 if not bad else 1
+
+
 def cmd_corpus(args) -> int:
     """The retrieval shape of a replay directory — every number P2.3 published.
 
@@ -2885,6 +3001,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     cu.add_argument("--unasked", action="store_true",
                     help="the measured cost: turns carrying a currency "
                          "disclaimer whose question never asked about currency")
+    sub.add_parser("blanks",
+                   help="P4.2 acceptance: every turn that showed the lawyer no "
+                        "body, and whether it was billed for")
     sub.add_parser("corpus",
                    help="retrieval shape: raw volume, where an enabling power "
                         "can come from, and what the tool memo costs P2.2")
@@ -2899,6 +3018,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "derivations": cmd_derivations,
         "commencements": cmd_commencements,
         "currency": cmd_currency,
+        "blanks": cmd_blanks,
         "corpus": cmd_corpus,
     }[args.cmd](args)
 

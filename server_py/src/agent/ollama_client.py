@@ -7,6 +7,11 @@ from typing import AsyncGenerator, Callable, Optional
 import httpx
 
 from ..config import MODEL_LIST, settings
+from ..utils.empty_completion import (
+    build_probe,
+    is_empty_completion,
+    report_empty_completion,
+)
 from ..utils.research_halt import halt_marker_text
 from . import agent_core
 from .summarisation import call_chunk, summarise_prompt
@@ -146,6 +151,12 @@ async def chat_loop(
         final_stats = {}
         t_send = time.perf_counter()
         first_content_time = None
+        # P4.2 (B13) diagnostic — see utils/empty_completion.py. Ollama names
+        # these `done_reason` and `thinking`; the record they feed is shared
+        # with the OpenRouter path so a trace reads the same either way.
+        finish_reason = None
+        stream_error = None
+        reasoning_chars = 0
 
         try:
             async with httpx.AsyncClient(timeout=stream_timeout, verify=False) as client:
@@ -169,8 +180,12 @@ async def chat_loop(
                         except json.JSONDecodeError:
                             continue
 
+                        if data.get("error"):
+                            stream_error = data["error"]
+
                         msg = data.get("message", {})
                         content = msg.get("content", "")
+                        reasoning_chars += len(msg.get("thinking") or "")
 
                         if content:
                             if first_content_time is None:
@@ -183,12 +198,36 @@ async def chat_loop(
                             tool_calls.extend(msg["tool_calls"])
 
                         if data.get("done"):
+                            finish_reason = data.get("done_reason") or finish_reason
                             final_stats = {
                                 "prompt_eval_count": data.get("prompt_eval_count", 0),
                                 "eval_count": data.get("eval_count", 0),
                                 "total_duration": data.get("total_duration", 0),
                                 "load_duration": data.get("load_duration", 0),
                             }
+
+            # P4.2 (B13). A clean stream that carried nothing is the blank-reply
+            # failure, not a finished answer — retry it like a stall.
+            if is_empty_completion(full_content, tool_calls):
+                retrying = attempt < _MAX_STREAM_ATTEMPTS - 1
+                report_empty_completion(
+                    build_probe(
+                        provider="Ollama",
+                        model=model,
+                        attempt=attempt,
+                        attempts_max=_MAX_STREAM_ATTEMPTS,
+                        finish_reason=finish_reason,
+                        reasoning_chars=reasoning_chars,
+                        stream_error=stream_error,
+                        usage=final_stats,
+                        sent_chars=total_chars,
+                        turn=_turn,
+                    ),
+                    retrying=retrying,
+                )
+                if retrying:
+                    await asyncio.sleep(_STREAM_RETRY_BASE_S * (2 ** attempt))
+                    continue
             break
 
         except httpx.TimeoutException as e:

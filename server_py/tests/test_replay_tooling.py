@@ -889,3 +889,84 @@ def test_masking_abbreviations_does_not_merge_real_sentences():
     asserted, filtered = rr.derivation_claims(text)
     assert len(asserted) == 1
     assert asserted[0].startswith("SSI 2019/29")
+
+
+# ---------------------------------------------------------------------------
+# blank_verdict — P4.2's acceptance detector (bucket B13)
+# ---------------------------------------------------------------------------
+#
+# The detector that grades a stored turn against "non-empty body whenever cost
+# > 0". Validated in both directions over all ten replay directories: it finds
+# exactly the 8 billed blanks and the 1 free blank counted by hand, and the
+# shortest bodies it leaves alone are real content (a 46-char halt marker, a
+# 50-char clarifying question).
+
+_FOOTER = (
+    "\n\n*Search scope: the legislation index was searched for "
+    '"Social Security (Scotland) Act 2018"; filters in force: '
+    "jurisdiction = scotland.*"
+)
+
+
+def _turn(answer="", cost=0.0, **kw):
+    t = {"answer": answer, "timing": {"total_cost_usd": cost}, "turn": 1}
+    t.update(kw)
+    return t
+
+
+def test_blank_and_billed_is_the_violation():
+    kind, cost, body, _ = rr.blank_verdict(_turn("", 0.0602))
+    assert kind == "billed"
+    assert cost == 0.0602 and body == 0
+
+
+def test_a_footer_with_nothing_above_it_is_blank():
+    """6383 rep 1 turn 4, the shape that made this row worse than it read.
+
+    Since P2.2 a blank answer is not an empty string — the code-emitted scope
+    footer is appended unconditionally, so the lawyer is shown 1,293 characters
+    of footer and no answer. A detector grading `answer` rather than the body
+    scores that turn as fine.
+    """
+    kind, _, body, answer_chars = rr.blank_verdict(_turn(_FOOTER, 0.4518))
+    assert kind == "billed"
+    assert body == 0
+    assert answer_chars > 100  # there WAS text; none of it was an answer
+
+
+def test_blank_and_free_is_excluded_not_counted():
+    """6374 rep 3 turn 3: 0 delegations, 0 tools, $0. Nothing ran, so nothing
+    was lost — a different failure from a turn that researched and then lost
+    its answer, and the row's invariant excludes it by construction."""
+    kind, cost, _, _ = rr.blank_verdict(_turn("", 0.0))
+    assert kind == "free" and cost == 0.0
+
+
+def test_a_short_real_answer_is_not_blank():
+    """The false-positive direction. The shortest bodies in the corpus are
+    clarifying questions of ~50 characters, and they are answers."""
+    kind, _, body, _ = rr.blank_verdict(
+        _turn("Which jurisdiction have you changed the filter to?" + _FOOTER, 0.02)
+    )
+    assert kind == "ok" and body == 50
+
+
+def test_whitespace_only_body_is_blank():
+    kind, _, _, _ = rr.blank_verdict(_turn("   \n\n\t " + _FOOTER, 0.01))
+    assert kind == "billed"
+
+
+def test_cost_is_read_from_total_cost_usd_not_cost_usd():
+    """There is no `cost_usd` key on a run file. Reading one grades every turn
+    as free and reports a clean directory — the instrument failing silent in
+    the flattering direction, which is the failure mode this work has hit
+    eighteen times."""
+    t = {"answer": "", "timing": {"cost_usd": 0.5}, "turn": 1}
+    assert rr.blank_verdict(t)[0] == "free"
+    t["timing"]["total_cost_usd"] = 0.5
+    assert rr.blank_verdict(t)[0] == "billed"
+
+
+def test_missing_timing_does_not_raise():
+    assert rr.blank_verdict({"answer": "", "turn": 1})[0] == "free"
+    assert rr.blank_verdict({"turn": 1})[0] == "free"

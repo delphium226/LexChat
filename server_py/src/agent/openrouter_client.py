@@ -9,6 +9,11 @@ from typing import AsyncGenerator, Callable, Optional
 import httpx
 
 from ..config import OPENROUTER_MODEL_LIST, settings
+from ..utils.empty_completion import (
+    build_probe,
+    is_empty_completion,
+    report_empty_completion,
+)
 from ..utils.research_halt import halt_marker_text
 from . import agent_core
 from .summarisation import call_chunk, summarise_prompt
@@ -124,6 +129,12 @@ def _apply_anthropic_cache_control(openai_messages: list, model: str) -> list:
 # tool result already gathered for it. Retried only while nothing has been emitted
 # yet — once tokens have reached the user or tool-call deltas have accumulated,
 # replaying the request would duplicate them, so the error is re-raised.
+#
+# P4.2 (B13): the same bounded retry also covers a *successful* 200 that carries
+# no content and no tool-call deltas. That raises no exception, so the guard
+# below could not see it, and the empty completion was returned as the answer
+# with `status: ok` and full billing. Replaying is safe for the same reason it is
+# safe on a timeout — nothing has been emitted, so nothing can be duplicated.
 _MAX_STREAM_ATTEMPTS = 3
 _STREAM_RETRY_BASE_S = 2.0
 
@@ -214,6 +225,13 @@ async def chat_loop(
         usage_stats = {}
         t_send = time.perf_counter()
         first_content_time = None
+        # P4.2 (B13) diagnostic. Nothing downstream reads these unless the
+        # completion comes back empty; see utils/empty_completion.py for what
+        # each one rules in or out.
+        finish_reason = None
+        native_finish_reason = None
+        reasoning_chars = 0
+        stream_error = None
 
         try:
             async with httpx.AsyncClient(timeout=stream_timeout, verify=False, proxy=_get_proxy()) as client:
@@ -245,11 +263,35 @@ async def chat_loop(
                         if data.get("usage"):
                             usage_stats = data["usage"]
 
+                        # P4.2 (B13). OpenRouter reports a mid-stream failure as
+                        # an `error` payload on the SSE stream; nothing here read
+                        # it, so such a stream ended as a normal empty completion.
+                        if data.get("error"):
+                            stream_error = data["error"]
+
                         choices = data.get("choices", [])
                         if not choices:
                             continue
 
+                        # P4.2 (B13). `finish_reason` distinguishes "the model
+                        # chose to stop" from "the stream failed" ("error", with
+                        # the provider's own code in native_finish_reason) and
+                        # from a normalised malformed tool call. Kept only for
+                        # the diagnostic — no control flow reads it.
+                        if choices[0].get("finish_reason"):
+                            finish_reason = choices[0]["finish_reason"]
+                        if choices[0].get("native_finish_reason"):
+                            native_finish_reason = choices[0]["native_finish_reason"]
+
                         delta = choices[0].get("delta", {})
+
+                        # P4.2 (B13). A reasoning model that spends its whole
+                        # completion on thinking tokens emits no content and is
+                        # billed for it — the same signature as a lost answer,
+                        # and only this counter tells them apart.
+                        reasoning_chars += len(
+                            delta.get("reasoning") or delta.get("reasoning_content") or ""
+                        )
 
                         # Accumulate content tokens
                         content = delta.get("content") or ""
@@ -277,6 +319,36 @@ async def chat_loop(
                                 entry["function"]["name"] += func["name"]
                             if func.get("arguments"):
                                 entry["function"]["arguments"] += func["arguments"]
+
+            # P4.2 (B13). The stream finished cleanly. If it carried nothing,
+            # this is the blank-reply failure — retry it like a stall.
+            if is_empty_completion(full_content, tool_calls_map):
+                retrying = attempt < _MAX_STREAM_ATTEMPTS - 1
+                report_empty_completion(
+                    build_probe(
+                        provider="OpenRouter",
+                        model=model,
+                        attempt=attempt,
+                        attempts_max=_MAX_STREAM_ATTEMPTS,
+                        finish_reason=finish_reason,
+                        native_finish_reason=native_finish_reason,
+                        reasoning_chars=reasoning_chars,
+                        stream_error=stream_error,
+                        usage=usage_stats,
+                        sent_chars=total_chars,
+                        turn=_turn,
+                    ),
+                    retrying=retrying,
+                )
+                if retrying:
+                    # The abandoned attempt was billed. Bank it before the reset
+                    # so the request's recorded cost stays honest — under-reporting
+                    # here would hide the very spend that makes this a defect.
+                    _discarded = (usage_stats.get("cost") or 0) if usage_stats else 0
+                    if _discarded and timing_collector:
+                        timing_collector.record_cost(float(_discarded))
+                    await asyncio.sleep(_STREAM_RETRY_BASE_S * (2 ** attempt))
+                    continue
             break
 
         except httpx.TimeoutException as e:

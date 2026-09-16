@@ -106,7 +106,7 @@ One event per request, emitted immediately **before** `result`, so a consumer th
 ```jsonc
 {
   "type": "audit",
-  "schema_version": 2,
+  "schema_version": 3,
   "request_id": "a1b2c3d4",
 
   "chat_mode": "research",
@@ -172,6 +172,18 @@ One event per request, emitted immediately **before** `result`, so a consumer th
     { "peer_id": "parliament_bot", "peer_name": "...", "question": "...", "answer": "..." }
   ],
 
+  // v3. Empty on a healthy request. One record per provider completion that
+  // carried no content and no tool calls, whether or not the retry recovered.
+  "empty_completions": [
+    {
+      "provider": "OpenRouter", "model": "google/gemini-3.1-pro-preview",
+      "attempt": 1, "attempts_max": 3, "retried": true,
+      "finish_reason": "stop", "native_finish_reason": null,
+      "completion_tokens": 0, "reasoning_chars": 0, "stream_error": null,
+      "sent_chars": 21421, "react_turn": 4
+    }
+  ],
+
   "timings": { "total_ms": 64210, "llm_calls": 7, "total_cost_usd": 0.184 },
   "error": null
 }
@@ -185,7 +197,8 @@ One event per request, emitted immediately **before** `result`, so a consumer th
 - **`budget_blocked`** applies to parliamentary modes only, and indicates that the model exhausted its three-call discovery budget and the search was hard-stopped.
 - **`error`** is populated at whichever level failed. A failed run still emits the audit event, carrying whatever was captured before the failure; a failed run remains a valid evaluation data point.
 - **`halted`** *(v2)* is `null` unless the Worker's ReAct loop stopped at the step cap, in which case it is `{"reason": "step_cap", "limit": 20, "steps": 20}`. Before v2 the only signal was the literal string `[Research halted: exceeded N tool-call steps]` appearing in `report` — which was never reliable and is no longer present. Two reasons it was not reliable: the Manager's **own** loop can halt, producing no delegation at all (so no `report` to match on), and a halted worker's `report` is now replaced with a structured incompleteness statement. A halt is a first-class outcome and should be read from this field; `request_timings.max_turns_halted` remains the request-level flag.
-- **`schema_version`** is incremented on any change to this shape and should be asserted on by consumers. **v2** (Sept 2026) adds `delegations[].halted`; it is additive, so a v1 consumer sees one unknown key and is otherwise unaffected.
+- **`empty_completions`** *(v3)* records provider completions that returned no content **and** no tool calls. It is `[]` on a healthy request, and a non-empty list does **not** imply the request failed — `chat_loop` retries such a completion up to three times, and `retried: true` marks an attempt the retry then recovered from. The fields exist to separate four mechanisms that were previously indistinguishable in the data: the provider returned nothing (`completion_tokens` ~0); the model spent the completion on thinking tokens (`reasoning_chars` > 0); a mid-stream failure arrived as a payload the parser used to ignore (`stream_error` set, and/or `finish_reason: "error"` with the provider's own code in `native_finish_reason`); or the model chose to say nothing. A harness watching for lost answers should treat a record with `retried: false` as one — the answer for that call was empty on every attempt, and the caller fell back to labelled research output or a notice.
+- **`schema_version`** is incremented on any change to this shape and should be asserted on by consumers. **v2** (Sept 2026) adds `delegations[].halted`; **v3** (Sept 2026) adds top-level `empty_completions[]`. Both are additive, so an older consumer sees an unknown key and is otherwise unaffected — and in v3's case a key that is almost always `[]`.
 
 ### Implementation
 

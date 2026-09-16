@@ -54,7 +54,11 @@ _audit_ctx: ContextVar[Optional["AuditCollector"]] = ContextVar("audit_collector
 # v2 (2026-09-15, FIX_PLAN P2.1): `delegations[].halted` — {reason, limit,
 # steps} when a worker stopped at the ReAct step cap, else None. Additive:
 # a v1 consumer sees an unknown key and is otherwise unaffected.
-AUDIT_SCHEMA_VERSION = 2
+# v3 (2026-09-16, FIX_PLAN P4.2): top-level `empty_completions[]` — one record
+# per provider completion that carried no content and no tool calls, whether or
+# not the retry then recovered. Additive, and **empty on a healthy request**, so
+# a v1/v2 consumer sees one unknown key that is almost always `[]`.
+AUDIT_SCHEMA_VERSION = 3
 
 
 def set_audit_collector(collector: Optional["AuditCollector"]) -> None:
@@ -85,6 +89,11 @@ class AuditCollector:
         self.max_field_chars = max_field_chars
         self.delegations: list[dict] = []
         self.peer_consults: list[dict] = []
+        # P4.2 (B13), schema v3. Empty on a healthy request. A blank reply was
+        # previously invisible in the trace — `status: ok`, `error: null`, a
+        # billed turn and nothing in `answer` — so a harness could not tell a
+        # lost answer from a short one.
+        self.empty_completions: list[dict] = []
         self.answer: str = ""
         self.suggestions: list[str] = []
         self.sources: list[dict] = []
@@ -321,6 +330,14 @@ class AuditCollector:
         except Exception:
             logger.debug("[Audit] record_final failed", exc_info=True)
 
+    def record_empty_completion(self, probe: dict) -> None:
+        """One provider completion that returned nothing. See
+        `utils/empty_completion.py` for what the fields distinguish."""
+        try:
+            self.empty_completions.append(dict(probe))
+        except Exception:
+            logger.debug("[Audit] record_empty_completion failed", exc_info=True)
+
     def record_error(self, message: str) -> None:
         try:
             self.error = message
@@ -367,6 +384,7 @@ class AuditCollector:
                 "sources": self.sources,
                 "delegations": self.delegations,
                 "peer_consults": self.peer_consults,
+                "empty_completions": self.empty_completions,
                 "timings": timings or {},
                 "error": self.error,
             }
