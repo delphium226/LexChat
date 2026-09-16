@@ -823,11 +823,8 @@ async def run_worker_tool(
     # the time the model reads the text the evidence has gone.
     enabling_note = ""
     if name == "get_legislation_text":
-        try:
-            enabling_note = enabling_power_note(args, json.loads(raw_result))
-        except Exception:
-            enabling_note = ""
-        record_enabling_power(search_log, name, args, raw_result)
+        enabling_note = enabling_power_note(args, raw_result)
+    record_enabling_power(search_log, name, args, raw_result)
 
     from .provider_factory import get_summarise_threshold
     # Two independent triggers: this result is large on its own, OR the run has

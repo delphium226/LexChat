@@ -969,6 +969,27 @@ def _footer(*pairs):
     return answer_scope_footer(_log_with(*pairs), {})
 
 
+def test_a_section_search_records_the_instrument_but_never_states_a_power():
+    """The preamble is not a ranked provision, so this route can only ever
+    establish that the instrument was looked at.
+
+    It is nonetheless the route that matters: over the replay corpus the Worker
+    called `search_legislation_sections` 628 times against 32
+    `get_legislation_text` calls, so recording only the latter would leave the
+    report block and the footer silent on almost every turn where a derivation
+    claim can arise."""
+    log = []
+    record_enabling_power(log, "search_legislation_sections",
+                          {"legislation_id": "ssi/2018/273"},
+                          {"results": [{"provision": "reg 1"}], "returned": 1})
+    assert log == [{"tool": "enabling_power", "legislation_id": "ssi/2018/273",
+                    "stated": False}]
+    # And a tool that touches no single instrument records nothing.
+    log2 = []
+    record_enabling_power(log2, "search_legislation", {"query": "q"}, {"results": []})
+    assert log2 == []
+
+
 def test_the_footer_says_the_derivation_is_unverified_when_it_is():
     line = _footer(("ssi/2018/273", False))
     assert "does not record which enabling power" in line

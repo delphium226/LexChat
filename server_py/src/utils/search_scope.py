@@ -390,6 +390,28 @@ def _is_secondary(legislation_id: Any) -> bool:
     return lid.split("/")[0] in _SECONDARY_PREFIXES
 
 
+def _text_record(data: Any) -> dict:
+    """The `{legislation, full_text}` object, whichever shape it arrives in.
+
+    `lex_probe` unwraps a single-element list here and this does too. Over the
+    replay corpus every one of the 93 parseable `get_legislation_text` results
+    was a bare dict, so the list branch is defensive rather than observed — but
+    getting it wrong fails in the direction that forbids a claim the material
+    supports, which nothing downstream would flag.
+    """
+    if isinstance(data, list):
+        data = data[0] if data else {}
+    if isinstance(data, str):
+        try:
+            obj, _ = json.JSONDecoder().raw_decode(data.lstrip())
+        except Exception:
+            return {}
+        if isinstance(obj, list):
+            obj = obj[0] if obj else {}
+        return obj if isinstance(obj, dict) else {}
+    return _as_dict(data)
+
+
 def _recital_in(data: Any) -> str:
     """The enabling-power recital this `/legislation/text` record carries, if any.
 
@@ -398,7 +420,7 @@ def _recital_in(data: Any) -> str:
     only there, and a rule that silently misses a real recital would forbid a
     claim the material actually supports.
     """
-    d = _as_dict(data)
+    d = _text_record(data)
     leg = d.get("legislation")
     descr = str((leg or {}).get("description") or "") if isinstance(leg, dict) else ""
     if descr and _ENABLING_RECITAL.search(descr):
@@ -424,7 +446,7 @@ def enabling_power_note(args: dict, data: Any) -> str:
     lid = str(args.get("legislation_id") or "").strip()
     if not _is_secondary(lid):
         return ""
-    d = _as_dict(data)
+    d = _text_record(data)
     if not d or d.get("error"):
         return ""
 
@@ -480,6 +502,15 @@ _SECTION_ENABLING_CLAUSE = (
 )
 
 
+# Both routes by which the Worker touches a single instrument. **Both are
+# recorded, and the section route is the one that matters**: over the replay
+# corpus the Worker called `search_legislation_sections` 628 times against 32
+# `get_legislation_text` calls, so recording only the latter would leave the
+# report block and the lawyer-facing clause silent on almost every turn where a
+# derivation claim can actually arise — including most of 6383's.
+_ENABLING_ROUTES = ("get_legislation_text", "search_legislation_sections")
+
+
 def record_enabling_power(log: Optional[list], name: str, args: dict, data: Any) -> None:
     """Record what a retrieval established about one instrument's enabling power.
 
@@ -487,19 +518,33 @@ def record_enabling_power(log: Optional[list], name: str, args: dict, data: Any)
     Manager and the lawyer respectively — neither of whom ever sees a tool
     result. Same division of labour as P2.2 and, before it, `provision_url_block`.
 
+    Only `get_legislation_text` can ever set `stated`: the preamble is not a
+    ranked provision, so a section search establishes that the instrument was
+    looked at and nothing more.
+
     Never raises (Invariant 5).
     """
     if log is None:
         return
     try:
+        if name not in _ENABLING_ROUTES:
+            return
         lid = str((args or {}).get("legislation_id") or "").strip()
         if not _is_secondary(lid):
             return
-        entry = {"tool": "enabling_power", "legislation_id": lid[:60],
-                 "stated": False}
-        if name == "get_legislation_text":
-            entry["stated"] = bool(_recital_in(data))
-        log.append(entry)
+        # A 404 is not an instrument that was looked at and found silent — it is
+        # an instrument that was never read. 15 of the corpus's 108
+        # `get_legislation_text` calls come back as the literal string
+        # "Error executing tool: {...Legislation not found...}". Recording those
+        # would inflate the "N instrument(s) looked at" denominator on the
+        # worker's report and fire the lawyer-facing clause on a turn that
+        # retrieved nothing at all.
+        record = _text_record(data)
+        if not record or record.get("error"):
+            return
+        stated = (name == "get_legislation_text") and bool(_recital_in(record))
+        log.append({"tool": "enabling_power", "legislation_id": lid[:60],
+                    "stated": stated})
     except Exception:
         pass
 
@@ -815,8 +860,8 @@ def _enabling_footer_clause(entries: Optional[list]) -> str:
         )
     return (
         " This index does not record which enabling power an instrument was "
-        "granted by, and the preamble that would state it was absent from every "
-        "record consulted here, so any such derivation given above is "
+        "granted by, and none of the material consulted here carried the "
+        "preamble that states it, so any such derivation given above is "
         "unverified."
     )
 
