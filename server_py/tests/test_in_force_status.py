@@ -668,6 +668,14 @@ MUST_NOT = [
     "1936 Acts, as well as the 1950, 1963, and 1974 Orders) was not verified.",
     "Establishing whether these specific provisions remain current law would "
     "require retrieving the change records for each Act.",
+    # 6411 rep 2. A plainly conditional clause, missed because `_CUR_SUBORDINATE`
+    # had no adverb slot where `_CUR_ASSERT` has one — so `is` was not adjacent
+    # to `in force`. Two patterns that must agree about a phrase, only one of
+    # which knew about adverbs.
+    "To determine if a specific section is currently in force, we would need to "
+    "check the individual commencement orders made under the Act.",
+    "The change record shows that 29 specific provisions have been repealed or "
+    "revoked, meaning those parts are no longer in force.",
 ]
 
 

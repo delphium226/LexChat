@@ -2122,7 +2122,22 @@ def _invariant_one(before: Path, after: Path) -> None:
 _CUR_SUBORDINATE = re.compile(
     r"\b(?:while|whilst|where|when|whether|if|during|unless|until|whenever|"
     r"any|an?)\b"
-    r"[^.;:]{0,70}\b(?:is|are|remains?|remain|was|were)\s+"
+    # **The comma is load-bearing and is the whole of the distinction.** The
+    # trigger and the in-force phrase must be in the SAME clause. With the
+    # adverb slot below but a comma allowed in the gap, *"While we cannot verify
+    # every provision, the Act is currently in force"* matched — a concessive
+    # clause about verification followed by a main-clause assertion, which is
+    # exactly the sentence that must still count. With the comma excluded,
+    # *"To determine if a specific section is currently in force, we would need
+    # to check the individual commencement orders"* (6411 rep 2) still matches,
+    # because there the `if` and the phrase sit together.
+    r"[^.;:,]{0,70}\b(?:is|are|remains?|remain|was|were)\s+"
+    # The same optional adverb slot `_CUR_ASSERT` has, and it must stay in step
+    # with it. Without it, 6411 rep 2's conditional was graded as an assertion
+    # because `is` was no longer adjacent to `in force`. Two patterns that have
+    # to agree about a phrase, only one of which knows about adverbs, is a
+    # detector waiting to be wrong.
+    r"(?:still\s+|currently\s+|now\s+|already\s+)?"
     r"(?:in[- ]force|in operation|in effect|operative|(?:the )?current law)\b",
     re.I,
 )
