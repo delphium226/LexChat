@@ -541,12 +541,25 @@ async def run_worker_tool(
             # those provisions and must be allowed to cite them.
             if retrieved_urls is not None:
                 harvest_legislation_urls(hit["raw"], into=retrieved_urls)
+            # P2.9 (B5): the search itself, which P2.2 did not record on this
+            # path. `search_log` is per-WORKER-RUN while the memo is
+            # per-REQUEST, so a step served from an earlier step's search had
+            # that query missing from its own record — and the block still told
+            # the agent writing the negative that it "MUST quote the search
+            # terms above", with none above. Measured over the six replay
+            # directories that have a scope block (`replay_report scoperecord`):
+            # 277 of 1,189 searches (23%) absent, in 86 of 259 worker runs
+            # (33%), 11 of which recorded NO search at all; and `issued -
+            # recorded == memo hits` exactly, per run, with no exceptions across
+            # all six — which is what identifies the memo as the sole cause.
+            # Gated on the tool name here because `record_search` does not
+            # self-gate: the two call sites on the non-memo path do it, and this
+            # is the third.
+            if name in ("search_legislation", "search_legislation_sections"):
+                record_search(search_log, name, args, hit["raw"])
             # P2.3 (B3b): a memo hit is still a retrieval for this step, and the
             # enabling-power record drives a PERMISSION as well as a prohibition
             # — omitting it here would forbid a claim the material supports.
-            # NOTE the asymmetry with `record_search` above, which P2.2 does not
-            # call on this path: correcting that would move P2.2's published
-            # footer contents and is its row's call, not this one's.
             record_enabling_power(search_log, name, args, hit["raw"])
             # P3.5 (B3): and the change record, for the same reason — a step
             # reusing a memoised retrieval has still consulted it, and the

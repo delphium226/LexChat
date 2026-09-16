@@ -1264,3 +1264,139 @@ def test_the_strip_cannot_eat_answer_text_that_follows_a_copied_footer():
             "matched": 2, "legislation_id": ""}]
     text = "Answer." + answer_scope_footer(log, {}) + "\n\nA later paragraph."
     assert strip_answer_footer(text) == text
+
+
+# ---------------------------------------------------------------------------
+# P2.9 (B5) — a memo-served search must still enter its own run's record
+# ---------------------------------------------------------------------------
+#
+# `search_log` is per-WORKER-RUN; the tool memo is per-REQUEST. So when a Deep
+# Research step repeats a search an earlier step already made, the second step
+# was served from the memo and that query never entered its own record — absent
+# from `worker_scope_block` (what the agent writing the negative is told was
+# searched) and from `answer_scope_footer` (what the lawyer is told).
+#
+# Measured before the fix with `replay_report scoperecord`, over the six replay
+# directories that have a scope block: 277 of 1,189 `search_legislation` calls
+# (23%) missing, in 86 of 259 worker runs (33%), 11 of which recorded no search
+# at all; and `issued - recorded == memo hits` **exactly, per run, with no
+# exceptions across all six** — which is what identifies the memo as the sole
+# cause rather than one cause among several.
+
+from unittest.mock import AsyncMock, patch  # noqa: E402
+
+from src.agent.agent_shared import run_worker_tool  # noqa: E402
+
+_SEARCH_ARGS = {"query": "Scotland Act 1998"}
+
+
+async def _p29_chunk(*a, **k):
+    return None
+
+
+def _p29_call(tool_memo, search_log, name="search_legislation", args=None):
+    return run_worker_tool(
+        name, dict(args if args is not None else _SEARCH_ARGS), "brief",
+        _p29_chunk, "test-model",
+        tool_memo=tool_memo,
+        search_log=search_log,
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_memo_served_search_lands_in_the_reusing_runs_record():
+    """The row's acceptance. Two worker runs in one request, each with its own
+    per-run log; the second is served from the shared memo and must still
+    record the query as its own."""
+    memo = {}
+    log_step1, log_step2 = [], []
+    with patch(
+        "src.agent.agent_shared.execute_worker_tool",
+        new=AsyncMock(return_value=json.dumps(_search_result())),
+    ) as mock_exec:
+        await _p29_call(memo, log_step1)
+        await _p29_call(memo, log_step2)
+
+    assert mock_exec.await_count == 1                      # still served from memo
+    searches = [e for e in log_step2 if e["tool"] == "search_legislation"]
+    assert len(searches) == 1
+    assert searches[0]["query"] == "Scotland Act 1998"
+    # And the counts come off the stored RAW result, not a placeholder.
+    assert searches[0]["shown"] == 5
+    assert searches[0]["matched"] == 141
+
+
+@pytest.mark.asyncio
+async def test_the_block_no_longer_demands_terms_it_has_withheld():
+    """6374 rep 1 turn 2 is the measured case, and it is worse than a short
+    count. That step's ONLY search was a memo hit, so its block carried no
+    "Searched the legislation index" line at all — while still instructing the
+    agent that a negative "MUST quote the search terms above". There were none
+    above. The disclosure contradicted itself."""
+    memo = {}
+    log_step1, log_step2 = [], []
+    with patch(
+        "src.agent.agent_shared.execute_worker_tool",
+        new=AsyncMock(return_value=json.dumps(_search_result())),
+    ):
+        await _p29_call(memo, log_step1)
+        await _p29_call(memo, log_step2)
+
+    block = worker_scope_block(log_step2)
+    assert "MUST quote the search terms above" in block
+    assert "Searched the legislation index 1 time(s)" in block
+    assert '"Scotland Act 1998"' in block
+
+
+@pytest.mark.asyncio
+async def test_a_memo_hit_on_a_non_search_tool_records_no_search():
+    """`record_search` does not self-gate on the tool name — both call sites on
+    the non-memo path do it, and so must this one. Without the gate every
+    memoised retrieval would be logged as a search of the index, inflating the
+    very count this row exists to correct."""
+    memo = {}
+    log1, log2 = [], []
+    with patch(
+        "src.agent.agent_shared.execute_worker_tool",
+        new=AsyncMock(return_value=json.dumps({"legislation": {}, "full_text": "x"})),
+    ):
+        args = {"legislation_id": "ukpga/1998/46"}
+        await _p29_call(memo, log1, name="get_legislation_text", args=args)
+        await _p29_call(memo, log2, name="get_legislation_text", args=args)
+
+    assert [e for e in log2 if e["tool"] == "search_legislation"] == []
+    assert worker_scope_block(log2).count("Searched the legislation index") == 0
+
+
+@pytest.mark.asyncio
+async def test_section_searches_are_recorded_on_the_memo_path_too():
+    """The non-memo path records both search tools; parity means both here."""
+    memo = {}
+    log1, log2 = [], []
+    sections = json.dumps({"title": "t", "url": "u", "sections": []})
+    with patch(
+        "src.agent.agent_shared.execute_worker_tool",
+        new=AsyncMock(return_value=sections),
+    ):
+        args = {"legislation_id": "ukpga/1998/46", "query": "commencement"}
+        await _p29_call(memo, log1, name="search_legislation_sections", args=args)
+        await _p29_call(memo, log2, name="search_legislation_sections", args=args)
+
+    secs = [e for e in log2 if e["tool"] == "search_legislation_sections"]
+    assert len(secs) == 1
+    assert secs[0]["legislation_id"] == "ukpga/1998/46"
+    assert "ukpga/1998/46" in worker_scope_block(log2)
+
+
+@pytest.mark.asyncio
+async def test_a_run_with_no_memo_is_unchanged():
+    """The non-memo path must record exactly once, not twice — the fix adds a
+    third `record_search` call site and a double-count would overstate the
+    footer in the opposite direction."""
+    log = []
+    with patch(
+        "src.agent.agent_shared.execute_worker_tool",
+        new=AsyncMock(return_value=json.dumps(_search_result())),
+    ):
+        await _p29_call(None, log)
+    assert len([e for e in log if e["tool"] == "search_legislation"]) == 1

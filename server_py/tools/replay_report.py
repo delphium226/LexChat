@@ -37,7 +37,7 @@ import sys
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Optional
 
 # --- Detectors ---------------------------------------------------------------
 
@@ -2780,6 +2780,130 @@ def cmd_blanks(args) -> int:
     return 0 if not bad else 1
 
 
+_SCOPE_COUNT = re.compile(r"Searched the legislation index (\d+) time\(s\)")
+_SCOPE_SECTIONS = re.compile(r"Searched within (\d+) instrument\(s\)")
+_SCOPE_BLOCK_CLOSE = "[/SEARCH SCOPE]"
+
+
+def scope_record_gap(delegation: dict) -> Optional[tuple]:
+    """P2.9 acceptance: did this worker run record every search it issued?
+
+    Returns `(issued, memo_hits, recorded)` for one delegation that issued at
+    least one `search_legislation` call, or None if it issued none.
+
+    **Read the block, not the log.** `search_log` is not serialised onto a run
+    file; what IS serialised is the worker's report with `worker_scope_block`
+    appended, and that block states `Searched the legislation index N time(s)`.
+    Comparing N against the delegation's own `tools[]` is therefore a direct
+    measure of what the agent writing the negative was actually told.
+
+    **A run whose every search was a memo hit produces no such line at all** —
+    the block is still emitted (the other recorders populate `search_log`) but
+    carries no searched-for sentence, while still instructing that a negative
+    "MUST quote the search terms above". `recorded` is 0 for those, which is the
+    honest reading: nothing was recorded.
+    """
+    tools = [t for t in (delegation.get("tools") or [])
+             if t.get("name") == "search_legislation"]
+    if not tools:
+        return None
+    report = delegation.get("report") or ""
+    if _SCOPE_BLOCK_CLOSE not in report:
+        # No block at all — this run predates P2.2. Distinguished by the MARKER,
+        # not by a recorded count of zero: an all-memo run legitimately has a
+        # block with no searched-for line, and inferring block-absence from
+        # "recorded == 0" mislabels it as pre-P2.2. That misread made `wave1`
+        # report 13 runs "with a scope block" when it has none.
+        return None
+    m = _SCOPE_COUNT.search(report)
+    return len(tools), sum(1 for t in tools if t.get("memo_hit")), (int(m.group(1)) if m else 0)
+
+
+def cmd_scoperecord(args) -> int:
+    """P2.9 acceptance: every search a worker run issued must be in its own record.
+
+    `search_log` is per-WORKER-RUN; the tool memo is per-REQUEST. A step served
+    from an earlier step's identical search never recorded that query as its
+    own, so it went missing from `worker_scope_block` (what the agent writing
+    the negative is told) and from `answer_scope_footer` (what the lawyer is
+    told), and the footer's count ran short.
+
+    **`wave1` and `wave2_p21` predate P2.2 and have no scope block at all**, so
+    they are reported separately rather than counted — treating "no block" as
+    "recorded nothing" inflates the loss roughly fourfold, which is the first
+    answer this command gave and it was wrong.
+    """
+    docs = load_runs(Path(args.dir))
+    if not docs:
+        print(f"No run files in {args.dir}")
+        return 1
+    print(f"P2.9 acceptance over {args.dir}")
+    print()
+    runs = issued = memo = recorded = 0
+    no_block = 0
+    lossy, mismatch = [], []
+    for doc in sorted(docs, key=lambda d: (d["session_id"], d.get("rep", 1))):
+        for t in doc.get("turns", []):
+            for dg in ((t.get("audit") or {}).get("delegations") or []):
+                if not [x for x in (dg.get("tools") or [])
+                        if x.get("name") == "search_legislation"]:
+                    continue
+                got = scope_record_gap(dg)
+                if got is None:
+                    no_block += 1
+                    continue
+                n, mh, rec = got
+                tag = f"{doc['session_id']}r{doc.get('rep', 1)}t{t.get('turn')}"
+                runs += 1
+                issued += n
+                memo += mh
+                recorded += rec
+                lost = n - rec
+                if lost > 0:
+                    lossy.append((tag, n, rec, mh))
+                    if lost != mh:
+                        mismatch.append((tag, n, rec, mh))
+
+    if no_block:
+        print(f"[!] {no_block} worker run(s) carry no scope block at all — this "
+              f"directory predates P2.2. Not counted below.")
+        print()
+    if not runs:
+        print("No worker run in this directory has a scope block to check.")
+        return 0
+
+    if lossy:
+        print(f"{'run':>18} {'issued':>7} {'recorded':>9} {'memo':>5} {'lost':>5}")
+        print("-" * 48)
+        for tag, n, rec, mh in lossy:
+            print(f"{tag:>18} {n:>7} {rec:>9} {mh:>5} {n - rec:>5}")
+        print()
+
+    print(f"worker runs with a scope block        {runs}")
+    print(f"search_legislation calls issued       {issued}")
+    print(f"  of which memo hits                  {memo}"
+          f"  ({100 * memo / issued:.0f}%)" if issued else "")
+    print(f"recorded in the run's own block       {recorded}")
+    print(f"MISSING from the record               {issued - recorded}")
+    print(f"runs losing >=1 query                 {len(lossy)}"
+          f"  ({100 * len(lossy) / runs:.0f}%)")
+    print()
+    # The identity is what identifies the memo as the SOLE cause. If it ever
+    # fails, something other than a memo hit is eating the record and this row's
+    # one-line fix is not the whole answer.
+    print(f"identity  (issued - recorded) == memo hits : "
+          f"{issued - recorded == memo}")
+    print(f"runs where the loss is NOT the memo count  : {len(mismatch)}"
+          + (f"  {mismatch[:5]}" if mismatch else ""))
+    print()
+    if issued - recorded:
+        print("RECORD INCOMPLETE: a search the run issued is absent from the "
+              "record it hands the agent that writes the negative.")
+    else:
+        print("Record complete: every search issued is in its run's own record.")
+    return 0 if issued == recorded else 1
+
+
 def cmd_corpus(args) -> int:
     """The retrieval shape of a replay directory — every number P2.3 published.
 
@@ -3001,6 +3125,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     cu.add_argument("--unasked", action="store_true",
                     help="the measured cost: turns carrying a currency "
                          "disclaimer whose question never asked about currency")
+    sub.add_parser("scoperecord",
+                   help="P2.9 acceptance: every search a worker run issued, "
+                        "against what its own scope block recorded")
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")
@@ -3018,6 +3145,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "derivations": cmd_derivations,
         "commencements": cmd_commencements,
         "currency": cmd_currency,
+        "scoperecord": cmd_scoperecord,
         "blanks": cmd_blanks,
         "corpus": cmd_corpus,
     }[args.cmd](args)

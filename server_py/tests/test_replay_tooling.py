@@ -970,3 +970,79 @@ def test_cost_is_read_from_total_cost_usd_not_cost_usd():
 def test_missing_timing_does_not_raise():
     assert rr.blank_verdict({"answer": "", "turn": 1})[0] == "free"
     assert rr.blank_verdict({"turn": 1})[0] == "free"
+
+
+# ---------------------------------------------------------------------------
+# scope_record_gap — P2.9's acceptance detector (bucket B5)
+# ---------------------------------------------------------------------------
+#
+# Did a worker run record every search it issued? Compares the delegation's own
+# `tools[]` against the `Searched the legislation index N time(s)` line in the
+# scope block appended to its report — a direct measure of what the agent
+# writing the negative was actually told.
+#
+# The discrimination that matters is pre-P2.2 vs all-memo, and the first version
+# of this detector got it wrong in the alarming direction.
+
+_BLOCK_OPEN = "[SEARCH SCOPE — what this research step actually did]"
+_BLOCK_CLOSE = "[/SEARCH SCOPE]"
+
+
+def _dg(n_calls, n_memo, recorded=None, block=True):
+    """A delegation record: n_calls searches, n_memo of them memo hits, and a
+    report whose scope block claims `recorded` searches (None = no such line)."""
+    tools = [{"name": "search_legislation", "memo_hit": i < n_memo}
+             for i in range(n_calls)]
+    report = "findings"
+    if block:
+        report += f"\n\n{_BLOCK_OPEN}\n"
+        if recorded is not None:
+            report += f"Searched the legislation index {recorded} time(s) for: \"q\"\n"
+        report += "Filters in force for the whole step: none.\n" + _BLOCK_CLOSE
+    return {"tools": tools, "report": report}
+
+
+def test_a_complete_record_reports_no_gap():
+    assert rr.scope_record_gap(_dg(3, 0, recorded=3)) == (3, 0, 3)
+
+
+def test_a_memo_served_search_shows_as_missing():
+    """The defect: 4 issued, 1 of them memo-served, 3 recorded."""
+    issued, memo, recorded = rr.scope_record_gap(_dg(4, 1, recorded=3))
+    assert (issued, memo, recorded) == (4, 1, 3)
+    assert issued - recorded == memo
+
+
+def test_an_all_memo_run_has_a_block_but_records_nothing():
+    """6374 rep 1 turn 2. Its only search was a memo hit, so the block carries
+    no searched-for line at all — while still instructing that a negative "MUST
+    quote the search terms above". `recorded` is 0, and that is the honest
+    reading: the block exists, and it recorded no search."""
+    assert rr.scope_record_gap(_dg(1, 1, recorded=None)) == (1, 1, 0)
+
+
+def test_a_run_predating_p2_2_is_excluded_not_counted_as_total_loss():
+    """The correction. `wave1` and `wave2_p21` have no scope block at all — the
+    feature did not exist — so "recorded nothing" there means "nothing records
+    anything", not "the memo ate it".
+
+    The first version inferred block-absence from `recorded == 0`, which cannot
+    tell a pre-P2.2 run from an all-memo one, and reported `wave1` as having 13
+    runs "with a scope block" losing 100% of their searches. Keying on the block
+    MARKER settles it: `wave1` is 182 runs excluded, none counted.
+    """
+    assert rr.scope_record_gap(_dg(3, 3, recorded=None, block=False)) is None
+    # ...and the all-memo run above, which looks identical on the count alone,
+    # is still counted.
+    assert rr.scope_record_gap(_dg(3, 3, recorded=None, block=True)) == (3, 3, 0)
+
+
+def test_a_run_that_issued_no_search_is_not_in_the_denominator():
+    """A worker that only retrieved text has nothing to under-record."""
+    assert rr.scope_record_gap({"tools": [{"name": "get_legislation_text"}],
+                                "report": f"{_BLOCK_OPEN}\n{_BLOCK_CLOSE}"}) is None
+    assert rr.scope_record_gap({"tools": [], "report": ""}) is None
+
+
+def test_missing_keys_do_not_raise():
+    assert rr.scope_record_gap({}) is None
