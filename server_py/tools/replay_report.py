@@ -1538,6 +1538,30 @@ def derivation_claims(answer: str) -> tuple:
     return asserted, filtered
 
 
+# **A third route was built here, measured, and deleted — recorded so it is not
+# rebuilt.** The row's wording permits a claim where "a retrieved preamble,
+# provision or `description` states it", and the first acceptance run produced a
+# case that looked like the middle one: 6374 said *"Both confirm the Orders are
+# made under section 126(8)"*, and Scotland Act 1998 s.126(8) — retrieved —
+# does say "any other office ... specified in an Order in Council made under
+# this subsection".
+#
+# So a `retrieved_enabling_provision` screen was added for
+# `made under this (subsection|section)` and its relatives. Measured over the
+# before-column it fired on **11 of the 12 unverified turns**, which under this
+# file's standing hazard makes it an artefact, and it is one: **generic
+# regulation-making boilerplate appears in essentially every enabling Act**, so
+# the signal is present whenever the parent Act was retrieved at all — which is
+# always. It could not separate 6374's short sound inference from 6383's *"Over
+# 130 instruments explicitly cite section 95 in their preamble"*.
+#
+# The finding is the useful part, and it narrows the ROW: **a provision states
+# the class, never the instance.** "Orders in Council made under this subsection"
+# does not establish that *this* Order was one. Only a preamble or a
+# `description` names an individual instrument, so those are the only two routes
+# that can support a claim about one.
+
+
 def retrieved_enabling(turn: dict) -> list:
     """Instruments whose enabling-power recital this turn actually retrieved.
 
@@ -1606,7 +1630,7 @@ def cmd_derivations(args) -> int:
         print("grades correct legal writing as a defect (Invariant 1).")
         return 0
 
-    print(f"{'session':>8} {'rep':>3} {'turn':>4} {'claims':>6} {'retrieved':>9}  verdict")
+    print(f"{'session':>8} {'rep':>3} {'turn':>4} {'claims':>6} {'preamble':>9}  verdict")
     print("-" * 74)
     turns = bad = 0
     total_turns = 0
@@ -1630,7 +1654,7 @@ def cmd_derivations(args) -> int:
             rows.append((doc, t, asserted, ret, ok))
             print(f"{doc['session_id']:>8} {doc.get('rep', 1):>3} {t['turn']:>4} "
                   f"{len(asserted):>6} {len(ret):>9}  "
-                  f"{'ok (recital retrieved)' if ok else 'UNVERIFIED'}")
+                  f"{'ok (preamble retrieved)' if ok else 'UNVERIFIED'}")
     print()
     claims_total = sum(len(r[2]) for r in rows)
     claims_bad = sum(len(r[2]) for r in rows if not r[4])
