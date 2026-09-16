@@ -1,4 +1,11 @@
-"""B5 — a negative must state the limits it was reached under (FIX_PLAN P2.2).
+"""What a retrieval can and cannot establish — FIX_PLAN P2.2 (B5) and P2.3 (B3b).
+
+Two rows, one module, because they are the same fix at the same four seams: the
+tool result, the worker's report, the lawyer-facing footer, and the
+unconditional strip. **P2.2** says a negative must state the limits it was
+reached under. **P2.3** says an instrument's enabling power may be asserted only
+where it was retrieved — see the B3(b) section further down for its own
+measurement and its own reasoning.
 
 A "not found" from this system is read by a lawyer as a statement about the
 statute book. Measured over the Wave 1 sweep it usually is not one, and the
@@ -69,7 +76,9 @@ __all__ = [
     "LEX_COVERAGE_SENTENCE",
     "legislation_search_note",
     "section_search_note",
+    "enabling_power_note",
     "record_search",
+    "record_enabling_power",
     "worker_scope_block",
     "strip_scope_blocks",
     "answer_scope_footer",
@@ -215,6 +224,16 @@ def legislation_search_note(
             if removed
             else ""
         )
+        # P2.3 (B3b): only where a derivation claim can arise — a page of Acts
+        # cannot produce one, and an unconditional clause would be noise on the
+        # majority of searches.
+        adjacency = (
+            _ADJACENCY_CLAUSE
+            if isinstance(results, list)
+            and any(_is_secondary(r.get("legislation_id")) for r in results
+                    if isinstance(r, dict))
+            else ""
+        )
         return (
             f"\n\n[SEARCH SCOPE — {window} for {query_phrase}. Filters in force: "
             f"{filters}.{removed_phrase} The index ranks the whole corpus against "
@@ -223,7 +242,7 @@ def legislation_search_note(
             "it does mean is that a ranked search cannot establish absence: an "
             "instrument, commencement, amendment or provision missing from these "
             "rows may still be held, and may still exist. Do NOT state that "
-            f"anything does not exist on the strength of this result. "
+            f"anything does not exist on the strength of this result.{adjacency} "
             f"{LEX_COVERAGE_SENTENCE} {_REPORTING_RULE}]"
         )
 
@@ -275,6 +294,11 @@ def section_search_note(args: dict, data: Any) -> str:
     if not isinstance(shown, int):
         return ""
 
+    # P2.3 (B3b): the preamble is not a ranked provision, so a section search of
+    # an SI can never establish its enabling power — and this is the route the
+    # Worker actually uses for instruments (628 calls across the replay corpus,
+    # against 32 `get_legislation_text`).
+    enabling = _SECTION_ENABLING_CLAUSE if _is_secondary(leg) else ""
     if shown:
         return (
             f"\n\n[SEARCH SCOPE — {shown} provision(s) of {leg}, ranked by "
@@ -282,8 +306,8 @@ def section_search_note(args: dict, data: Any) -> str:
             "instrument: a provision that does not appear here may still be in "
             "it. Do NOT state that a provision, power or duty is absent from "
             f"{leg} on the strength of this result, and do NOT speculate about "
-            "why a provision was not returned. If you report something as not "
-            "found, say what was searched for and in which instrument.]"
+            f"why a provision was not returned.{enabling} If you report something "
+            "as not found, say what was searched for and in which instrument.]"
         )
     return (
         f"\n\n[SEARCH SCOPE — 0 provisions of {leg} matched {query_phrase}. That "
@@ -292,6 +316,227 @@ def section_search_note(args: dict, data: Any) -> str:
         "not speculate about the cause; you do not know it. If you report this, "
         "say what was searched for and in which instrument, and say the search "
         "did not locate it rather than that it does not exist.]"
+    )
+
+
+# ---------------------------------------------------------------------------
+# B3(b) — an enabling power may be asserted only where it was retrieved
+# (FIX_PLAN P2.3)
+# ---------------------------------------------------------------------------
+#
+# *Made under* is the one relation of B3's five that `/amendment/search` cannot
+# supply (P5.1): amendment, commencement, repeal and revocation are retrievable
+# and get P3.5, this one gets a rule. The model was answering it from
+# **search-result adjacency** — in 6340 it listed three real, correctly cited SIs
+# as made under s.117 of the Education (Scotland) Act 1962, which is a 404 in
+# LEX; they were simply the top keyword hits for the Act's title. Link-checking
+# cannot catch that, which is what makes it the worst bucket.
+#
+# **Where the enabling power actually IS retrievable, measured rather than
+# assumed — and the handover's premise was half wrong.** It is NOT in `full_text`
+# (`ssi/2020/295` opens at "Section 1) Citation and commencement"; the "In
+# exercise of the powers conferred by ..." recital is absent). It IS in
+# `legislation.description` on the `/legislation/text` response, which
+# `get_legislation_text` returns unslimmed — so the permitted branch is live
+# today and needs nothing from P3.6. 6340 rep 1 exercised it: the model read
+# `uksi/1979/766`'s recital verbatim and reported its enabling powers correctly.
+#
+# **Coverage, 103 instruments sampled live 2026-09-16 (`lex_probe --enabling`):**
+#
+#     uksi pre-1990        18/25 (72%) carry a recital
+#     uksi 1990-2009        0/25
+#     uksi 2010+            0/25
+#     ssi 1990-2009         0/13      <- the corpus these lawyers work in
+#     ssi 2010+             0/15
+#
+# One further instrument carried the recital in `full_text` and not in
+# `description`, which is why `_recital_in` checks both: a rule that missed a
+# real recital would forbid a claim the material actually supports.
+#
+# So for Scottish instruments the rule is in practice a **total** prohibition,
+# and for modern UK SIs very nearly one. That is stated here rather than left
+# implicit: a rule whose permitted branch almost never fires is a prohibition,
+# and calling it a conditional would misdescribe the product.
+#
+# Nothing else in the tool set carries the relation. Over the whole post-Wave-1
+# replay corpus — 33M characters of raw retrieval, 1,907 tool results — exactly
+# **two** instrument-level recitals were ever returned, both in 6340.
+
+# The recital an SI's preamble opens with. Deliberately broader than "in
+# exercise of the powers conferred by": the corpus also uses "under and by
+# virtue of the powers conferred on them by", "by virtue and in exercise of the
+# powers in that behalf conferred by", and the 1963 form "Whereas the Treasury
+# has determined under section 69(4) ...". All are statements of derivation.
+_ENABLING_RECITAL = re.compile(
+    r"in exercise of (?:the |his |her |their |its )?powers?"
+    r"|powers? (?:in that behalf )?conferred (?:on|upon|by)"
+    r"|by virtue of (?:the )?powers?"
+    r"|makes? the following (?:Regulations|Order|Rules|Scheme)"
+    r"|has determined under section",
+    re.I,
+)
+
+# Secondary legislation, by `legislation_id` prefix. An Act has no enabling
+# power of its own, so the whole block is silent on `ukpga`/`asp`/`anaw`/`nia`
+# — telling a model not to assert something that cannot arise is noise, and
+# noise in a block is what gets the block ignored.
+_SECONDARY_PREFIXES = (
+    "ssi", "uksi", "nisr", "wsi", "ssr", "uksro", "nisro", "ukci", "ukmo",
+)
+
+
+def _is_secondary(legislation_id: Any) -> bool:
+    lid = str(legislation_id or "").strip().lower().lstrip("/")
+    return lid.split("/")[0] in _SECONDARY_PREFIXES
+
+
+def _recital_in(data: Any) -> str:
+    """The enabling-power recital this `/legislation/text` record carries, if any.
+
+    Checks `legislation.description` first because that is where it lives, and
+    then the head of `full_text` — 1 of the 103 sampled instruments carried it
+    only there, and a rule that silently misses a real recital would forbid a
+    claim the material actually supports.
+    """
+    d = _as_dict(data)
+    leg = d.get("legislation")
+    descr = str((leg or {}).get("description") or "") if isinstance(leg, dict) else ""
+    if descr and _ENABLING_RECITAL.search(descr):
+        return descr.strip()
+    head = str(d.get("full_text") or "")[:1200]
+    if head and _ENABLING_RECITAL.search(head):
+        return head.strip()
+    return ""
+
+
+def enabling_power_note(args: dict, data: Any) -> str:
+    """The block appended to every `get_legislation_text` result for an SI/SSI.
+
+    Two branches, and unlike the search notes the *empty* one is the common case:
+    0 of 28 sampled Scottish instruments state their enabling power. Both are
+    statements of fact about this record, computed in code, which is the point —
+    the model cannot tell "the preamble is absent from what I was given" from
+    "the preamble does not exist", and it has been guessing the difference.
+
+    Silent for primary legislation and for an errored result.
+    """
+    args = args or {}
+    lid = str(args.get("legislation_id") or "").strip()
+    if not _is_secondary(lid):
+        return ""
+    d = _as_dict(data)
+    if not d or d.get("error"):
+        return ""
+
+    recital = _recital_in(d)
+    if recital:
+        # Bounded: a preamble runs to a few hundred characters and the point is
+        # to hand back the words, not the document.
+        #
+        # Square brackets are removed from the quote, and that is load-bearing
+        # rather than cosmetic: `strip_scope_blocks` matches this block with
+        # `\[ENABLING POWER[^\[\]]*\]`, so a `[` or `]` inside the recital would
+        # end the match early and leave agent-facing bookkeeping rendering in
+        # front of a lawyer. The same single-bracket form as the other tool
+        # block, and the same reason it stays balanced.
+        quoted = recital[:600].replace("[", "(").replace("]", ")")
+        quoted += "..." if len(recital) > 600 else ""
+        return (
+            f"\n\n[ENABLING POWER — this record DOES state what {lid} was made "
+            f"under, and these words are the only evidence of it you have:\n"
+            f'  "{quoted}"\n'
+            f"You MAY state the enabling power of {lid}, citing this text. Do NOT "
+            "extend the claim to any other instrument: each one states its own, "
+            "and most records do not state it at all.]"
+        )
+    return (
+        f"\n\n[ENABLING POWER — this record does NOT state what {lid} was made "
+        "under. No endpoint we call returns a made-under relation, and this "
+        "record carries no enabling-power recital, so nothing you hold "
+        f"establishes it. Do NOT write that {lid} was made under, cites, or "
+        "relies on any provision as its enabling power, and do not infer one "
+        "from the instrument's title or subject matter. If the question turns "
+        "on it, say the enabling power could not be verified from the available "
+        "material.]"
+    )
+
+
+# Appended to `search_legislation` and `search_legislation_sections` results.
+# Short on purpose: it rides on blocks that already exist and are already long,
+# and it is gated so it only appears where a derivation claim can actually
+# arise. 6340's mechanism was adjacency — three SIs that merely ranked highly
+# for an Act's title were reported as made under it — so the sentence names
+# that inference and forbids it.
+_ADJACENCY_CLAUSE = (
+    " These rows carry NO relationship data: nothing here states what any "
+    "instrument was made under. An instrument ranking highly in a search for an "
+    "Act's title has NOT thereby been shown to be made under that Act — do not "
+    "say that it was."
+)
+_SECTION_ENABLING_CLAUSE = (
+    " Ranked provisions do not include the preamble, so this result cannot tell "
+    "you what this instrument was made under; do not state an enabling power "
+    "from it."
+)
+
+
+def record_enabling_power(log: Optional[list], name: str, args: dict, data: Any) -> None:
+    """Record what a retrieval established about one instrument's enabling power.
+
+    Read by `worker_scope_block` and `answer_scope_footer`, which address the
+    Manager and the lawyer respectively — neither of whom ever sees a tool
+    result. Same division of labour as P2.2 and, before it, `provision_url_block`.
+
+    Never raises (Invariant 5).
+    """
+    if log is None:
+        return
+    try:
+        lid = str((args or {}).get("legislation_id") or "").strip()
+        if not _is_secondary(lid):
+            return
+        entry = {"tool": "enabling_power", "legislation_id": lid[:60],
+                 "stated": False}
+        if name == "get_legislation_text":
+            entry["stated"] = bool(_recital_in(data))
+        log.append(entry)
+    except Exception:
+        pass
+
+
+def _enabling_limb(log: Optional[list]) -> str:
+    """The enabling-power limb of the worker's report block.
+
+    Returns "" when the step touched no secondary legislation, because then no
+    derivation claim about an instrument can arise and the sentence would be
+    noise.
+    """
+    rows = [e for e in (log or []) if e.get("tool") == "enabling_power"]
+    if not rows:
+        return ""
+    stated, silent = [], []
+    for e in rows:
+        lid = e.get("legislation_id") or ""
+        bucket = stated if e.get("stated") else silent
+        if lid and lid not in bucket:
+            bucket.append(lid)
+    silent = [x for x in silent if x not in stated]
+    total = len(stated) + len(silent)
+    if stated:
+        return (
+            f"Enabling power: retrieved for {len(stated)} of {total} instrument(s) "
+            f"looked at — {', '.join(stated[:8])} (their own preambles state it). "
+            "For EVERY other instrument named in this report the enabling power "
+            "was NOT retrieved and is NOT known: do not write that it was made "
+            "under, cites or relies on any provision."
+        )
+    return (
+        f"Enabling power: NOT retrieved for any of the {total} instrument(s) "
+        "looked at. No endpoint we call returns a made-under relation and none "
+        "of these records states one. Do NOT write that any instrument was made "
+        "under, cites or relies on a provision as its enabling power — say it "
+        "could not be verified instead. Ranking near an Act in a keyword search "
+        "is not evidence of being made under it."
     )
 
 
@@ -388,7 +633,7 @@ _WORKER_BLOCK_CLOSE = "[/SEARCH SCOPE]"
 _WORKER_BLOCK = re.compile(
     r"\[SEARCH SCOPE[^\]]*research step[^\]]*\][\s\S]*?\[/SEARCH SCOPE\]", re.I
 )
-_TOOL_BLOCK = re.compile(r"\[/?SEARCH SCOPE[^\[\]]*\]", re.I)
+_TOOL_BLOCK = re.compile(r"\[/?(?:SEARCH SCOPE|ENABLING POWER)[^\[\]]*\]", re.I)
 
 
 def record_search(log: Optional[list], name: str, args: dict, data: Any) -> None:
@@ -470,6 +715,12 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
         )
     filters = _filters_phrase(cfg, {})
     lines.append(f"Filters in force for the whole step: {filters}.")
+    # P2.3 (B3b). Same reason as everything else in this block: the Worker saw
+    # the per-instrument ENABLING POWER notes, and the agent that writes the
+    # report's claims never does.
+    _enabling = _enabling_limb(log)
+    if _enabling:
+        lines.append(_enabling)
     lines.append(
         "NONE of this can establish that something does not exist. If any part "
         "of the answer you write reports something as not found, it MUST quote "
@@ -521,6 +772,55 @@ def _lawyer_filters_phrase(cfg: Optional[dict]) -> str:
     return "filters in force: " + ", ".join(bits)
 
 
+def _enabling_footer_clause(entries: Optional[list]) -> str:
+    """The lawyer-facing half of P2.3, as one clause on the existing footer.
+
+    **Not a second footer, and not unconditional.** P2.2 put one line of
+    provenance on every researched answer and recorded that as the decision most
+    open to being overruled; adding a second on every answer would double a cost
+    already judged marginal. This one is gated on a *structural* fact — did this
+    turn retrieve the text of any statutory instrument — not on a prose detector
+    deciding whether the answer contains a derivation claim. A prose detector in
+    the product fails silently, which is the trap this work has hit twelve times.
+
+    It is true whether or not the model asserted anything, which is what makes an
+    unconditional-within-its-gate statement safe: "where the answer states one"
+    is vacuous on an answer that states none.
+
+    Worded to stay out of the way of the detectors already reading these answers
+    — `NEG_ASSERTED` (P2.2) and `DERIVATION_ASSERTED` (P2.3) — because P2.2's own
+    footer tripped `NEG_ASSERTED` and corrupted its denominator. Pinned by
+    `test_search_scope.py::test_footer_trips_no_detector`.
+    """
+    rows = [e for e in (entries or []) if e.get("tool") == "enabling_power"]
+    if not rows:
+        return ""
+    stated = [e.get("legislation_id") for e in rows if e.get("stated")]
+    stated = [x for x in dict.fromkeys(stated) if x]
+    # The wording dodges `NEG_ASSERTED` deliberately, and the first draft did
+    # not: "no instrument consulted here carried the preamble" trips its
+    # `\bno … instruments?` limb, which would have enrolled every turn carrying
+    # this clause into P2.2's negatives denominator — P2.2's own error,
+    # repeated one row later. The test is what caught it.
+    if stated:
+        # "The enabling power OF an instrument … uksi/1979/766" was the first
+        # draft and it tripped P2.3's OWN detector — an instrument id plus
+        # "enabling power of" is a derivation phrase in ordinary prose, which is
+        # the point of the detector and not something to loosen. The clause
+        # moves instead.
+        return (
+            " An instrument's enabling power is recorded here only where its own "
+            f"preamble states it; that applied only to {', '.join(stated[:4])}, "
+            "and for anything else mentioned above the derivation is unverified."
+        )
+    return (
+        " This index does not record which enabling power an instrument was "
+        "granted by, and the preamble that would state it was absent from every "
+        "record consulted here, so any such derivation given above is "
+        "unverified."
+    )
+
+
 def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) -> str:
     """The lawyer-facing scope line, emitted by code on every researched answer.
 
@@ -546,7 +846,8 @@ def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) ->
     Distinct from `worker_scope_block`, which is an instruction addressed to an
     agent and is stripped before rendering; this is prose addressed to a lawyer.
     """
-    searches = [s for s in (searches or []) if s.get("tool") == "search_legislation"]
+    all_entries = list(searches or [])
+    searches = [s for s in all_entries if s.get("tool") == "search_legislation"]
     if not searches:
         return ""
     # The model routinely quotes its own query ('"Water Industry Commission"'),
@@ -571,7 +872,7 @@ def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) ->
         "instruments made in 2026 are held (sampled Sep 2026) — so anything "
         "reported above "
         "as not found was not found in this index, which is not the same as being "
-        "absent from the law.*"
+        f"absent from the law.{_enabling_footer_clause(all_entries)}*"
     )
 
 

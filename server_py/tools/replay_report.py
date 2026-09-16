@@ -1359,6 +1359,274 @@ def cmd_negatives(args) -> int:
     return 0 if bad == 0 else 1
 
 
+# --- P2.3 (B3b) acceptance ---------------------------------------------------
+#
+# *"SSI X was made under section 91"* is the B3 claim. *"Under section 91 of the
+# Act, Ministers must consult"* is correct legal writing about a retrieved
+# provision. **A detector that cannot tell them apart grades correct writing as a
+# defect and pushes the model to hedge what it retrieved** — the regression
+# Invariant 1 exists to prevent, and precisely how P2.2's first `NEG_ASSERTED`
+# failed (61 of 153 turns, 100% failing).
+#
+# So a derivation needs THREE things in one sentence, and neither negation nor
+# pure modality:
+#     (1) an instrument reference,
+#     (2) a derivation predicate,
+#     (3) the provision or Act it is said to derive from.
+#
+# **Two drafts were artefacts and are recorded rather than quietly replaced.**
+# Draft 1 scored **69 of 155 turns** on two bugs: a regex alternation that
+# reduced to a bare `\bis` (`r"\bis|are|was|were\s+enabled by"` — the alternation
+# binds looser than the concatenation), and an instrument screen so loose that
+# the bare word "regulations" satisfied it. Draft 2 over-corrected to 1 turn by
+# compiling the instrument screen case-SENSITIVELY, which missed the heaviest
+# claim in the corpus because it opens "Several SSIs ...".
+#
+# **Validated in both directions on real answers.** Over the post-Wave-1 corpus
+# it counts 12 turns and drops 21 sentences carrying the same vocabulary; all 21
+# drops were read and all 21 are correct — negatives ("no SSIs made under s.95
+# were found"), statements of law about a class ("regulations made under s.95
+# are subject to the affirmative procedure"), the Act's own power-conferring
+# provision ("section 27(2) provides the enabling power"), a restatement of the
+# user's query, and — the one that matters most — 6383 t2's *"the agent could
+# not retrieve the preamble to definitively confirm if it was made under section
+# 95"*, which is the exactly right answer and must never be graded as a defect.
+# Reproduce the drop set with `--drops`.
+_DERIV_TITLE = re.compile(
+    r"(?:The\s+)?[A-Z][A-Za-z0-9'’—\-,.&/() ]{6,160}?"
+    r"\s(?:Regulations|Rules|Order|Orders|Scheme)\s+\d{4}")
+_DERIV_NUMBERED = re.compile(
+    r"(?:S\.?S\.?I\.?|S\.?I\.?)\s*\d{4}[/ ]\d+|(?:ssi|uksi|nisr|wsi|ssr)/\d{4}/\d+",
+    re.I)
+_DERIV_DEICTIC = re.compile(
+    r"\bthis instrument\b|\bthese Regulations\b|\bthese Rules\b|\bthis Order\b"
+    r"|\bthis SSI\b|\bthis SI\b|\bthe \d{4} (?:Regulations|Order|Rules)\b", re.I)
+# Indefinite but quantified — "several SSIs", "multiple Scottish Statutory
+# Instruments" — still a claim about real instruments. The gap admits bracketed
+# words because of "several Scottish Administration (Offices) Orders".
+_DERIV_QUANTIFIED = re.compile(
+    r"\b(?:several|multiple|various|numerous|a number of|the following|both|"
+    r"two|three|four|five|six|seven|eight|nine|ten)\s+"
+    r"(?:[\w()'’\-]+\s+){0,5}?"
+    r"(?:SSIs?|SIs?|instruments?|regulations?|orders?|rules?)\b"
+    # A numeral counts too — 6383 rep 2 t4's *"Over 130 instruments explicitly
+    # cite section 95 in their preamble"* is the single largest unverifiable
+    # claim in the corpus. But a bare `\d+` with a wide gap is what made draft 1
+    # read "Paragraph 1 specifies that an Order made under section 126(8) …" as
+    # a claim, so the numeral must sit next to the noun it counts.
+    # An explicit "over 130" can sit further from its noun ("over 130 Scottish
+    # Statutory Instruments"), so the modifier buys a wider gap; a BARE numeral
+    # must be adjacent.
+    r"|\b(?:over|more than|at least|around|approximately|some)\s+\d+\s+"
+    r"(?:[\w'’\-]+\s+){0,3}?"
+    r"(?:SSIs?|SIs?|instruments?|regulations?|orders?|rules?)\b"
+    r"|\b\d+\s+(?:[\w'’\-]+\s+){0,1}?"
+    r"(?:SSIs?|SIs?|instruments?|regulations?|orders?|rules?)\b", re.I)
+# A finite predicate asserts derivation of its subject.
+_DERIV_FINITE = re.compile(
+    r"\b(?:was|were|is|are|has been|have been|had been)\s+"
+    r"(?:\w+\s+){0,2}?made\s+(?:under|pursuant to|by virtue of|in exercise of)\b"
+    r"|\b(?:was|were|is|are)\s+enabled\s+by\b"
+    r"|\bcit(?:e|es|ed|ing)\b[^.\n]{0,90}?\bas\s+(?:its|their|the)\s+"
+    r"enabling\s+(?:power|powers|authority)"
+    r"|\bcit(?:e|es|ed|ing)\s+(?:\w+\s+){0,2}?(?:section|sections|s\.|ss\.|"
+    r"subsection)\s*\d"
+    r"|\brel(?:y|ies|ied)\s+(?:on|upon)\s+(?:\w+\s+){0,2}?(?:section|s\.|"
+    r"subsection)\s*\d"
+    # 6374 t4 carries the derivation on a fronted adverbial, not a predicate:
+    # "Pursuant to the enabling power in section 126(8), several ... Orders
+    # have designated additional offices."
+    r"|\b(?:pursuant to|under|by virtue of)\s+the\s+enabling\s+"
+    r"(?:power|powers|authority)\b", re.I)
+# A participial "X made under s.Y" is a NOUN PHRASE describing a class, not a
+# claim — "regulations made under s.95 are subject to the affirmative
+# procedure" is a statement of law read straight off s.96.
+_DERIV_PARTICIPIAL = re.compile(
+    r"\bmade\s+(?:under|pursuant to|by virtue of|in exercise of)\b"
+    r"|\benabling\s+(?:power|authority)\s+(?:for|behind|of)\b", re.I)
+_DERIV_SRC = re.compile(
+    r"\b(?:section|sections|s\.|ss\.|subsection)\s*\d+"
+    r"|\bthe\s+[A-Z][A-Za-z0-9'’()\-,. ]{4,120}?\bAct\s+\d{4}"
+    r"|\b(?:this|that|the)\s+(?:enabling\s+)?(?:power|authority)\b"
+    r"|\bthe\s+\d{4}\s+Act\b|\bthe\s+Act\b", re.I)
+# The model presenting the class as something it found, which makes even a
+# participial assertive: "here are two examples of other SSIs made under s.95:"
+_DERIV_PRESENTED = re.compile(
+    r"\bhere (?:are|is)\b|\bthese are\b|\bthe following\b|\bexamples? of\b"
+    r"|\binclude[sd]?\b|\bidentified\b|\bwere found\b"
+    # "Yes, there ARE over 130 SSIs made under section 95" — existential, and
+    # the single largest unverifiable claim in the corpus. Found by reading the
+    # `--drops` audit over wave2_p21, which is what that audit is for.
+    r"|\bthere (?:are|is|were|was)\b", re.I)
+_DERIV_NEG = re.compile(
+    r"\bno\b|\bnot\b|\bnone\b|\bnever\b|\bcannot\b|\bunable\b|\bwithout\b"
+    r"|\bfail(?:s|ed)? to\b|\bnothing\b", re.I)
+_DERIV_MODAL = re.compile(
+    r"\b(?:may|must|can|could|would|shall|should|will|might)\b", re.I)
+# Any sentence in the same vocabulary — the denominator for the `--drops` audit.
+_DERIV_LOOSE = re.compile(
+    r"\bmade under\b|\benabling (?:power|authority)\b|\benabled by\b"
+    r"|\bpowers? conferred\b|\bin exercise of\b|\bpursuant to (?:section|s\.)"
+    r"|\bmade (?:pursuant to|by virtue of|in exercise of)\b"
+    r"|\bunder the (?:power|authority)\b", re.I)
+# The instrument-preamble recital, as it arrives in `legislation.description`.
+# Mirrors `search_scope._ENABLING_RECITAL`; kept separate because a tool must
+# not import the product it is grading.
+_DERIV_RECITAL = re.compile(
+    r"in exercise of (?:the |his |her |their |its )?powers?"
+    r"|powers? (?:in that behalf )?conferred (?:on|upon|by)"
+    r"|by virtue of (?:the )?powers?"
+    r"|makes? the following (?:Regulations|Order|Rules|Scheme)"
+    r"|has determined under section", re.I)
+
+
+def _sentences(text: str):
+    for para in (text or "").split("\n"):
+        for s in re.split(r"(?<=[.!?])\s+", para):
+            s = s.strip()
+            if s:
+                yield s
+
+
+def derivation_claims(answer: str) -> tuple:
+    """(asserted, filtered) — sentences claiming a derivation, and near-misses."""
+    asserted, filtered = [], []
+    for s in _sentences(answer):
+        if not _DERIV_SRC.search(s):
+            continue
+        specific = bool(_DERIV_TITLE.search(s) or _DERIV_NUMBERED.search(s)
+                        or _DERIV_DEICTIC.search(s))
+        if _DERIV_FINITE.search(s):
+            ok = specific or bool(_DERIV_QUANTIFIED.search(s))
+        elif _DERIV_PARTICIPIAL.search(s):
+            ok = specific or (bool(_DERIV_PRESENTED.search(s))
+                              and bool(_DERIV_QUANTIFIED.search(s)))
+        else:
+            continue
+        if not ok:
+            continue
+        neg = bool(_DERIV_NEG.search(s))
+        mod = bool(_DERIV_MODAL.search(s))
+        (filtered if (neg or mod) else asserted).append(s)
+    return asserted, filtered
+
+
+def retrieved_enabling(turn: dict) -> list:
+    """Instruments whose enabling-power recital this turn actually retrieved.
+
+    Read from `raw_result`, because the recital lives in
+    `legislation.description` and is the first thing a summariser drops.
+    """
+    out = []
+    for dg in (turn.get("audit") or {}).get("delegations", []):
+        for tl in dg.get("tools", []):
+            o = _json_or_none(tl.get("raw_result"))
+            if not isinstance(o, dict):
+                continue
+            cands = []
+            leg = o.get("legislation")
+            if isinstance(leg, dict):
+                cands.append((str(leg.get("legislation_id")
+                                  or (tl.get("args") or {}).get("legislation_id") or ""),
+                              str(leg.get("description") or "")))
+            for r in (o.get("results") or []):
+                if isinstance(r, dict) and r.get("description"):
+                    cands.append((str(r.get("legislation_id") or ""), str(r["description"])))
+            for lid, descr in cands:
+                if descr and _DERIV_RECITAL.search(descr) and lid not in [x[0] for x in out]:
+                    out.append((lid, descr[:200]))
+    return out
+
+
+# P2.3's own clause on the lawyer-facing footer contains the words "made under"
+# and "enabling power". `_without_footer` strips the whole trailing italic run,
+# so the model column is clean — the check that this is so is
+# `test_search_scope.py::test_footer_trips_no_detector`, because P2.2's footer
+# corrupting P2.2's own denominator is the failure mode this line exists to
+# avoid repeating.
+def cmd_derivations(args) -> int:
+    """P2.3's acceptance, over a replay directory, graded per TURN.
+
+    Denominator: turns asserting that a named instrument was made under a
+    provision. **A turn that makes no such claim is not in it** — as with P2.2,
+    this test cannot be passed by saying less about the law, only by not
+    claiming a derivation the retrieval never established.
+    """
+    docs = load_runs(Path(args.dir))
+    if not docs:
+        print(f"No run files in {args.dir}")
+        return 1
+    print(f"P2.3 acceptance over {args.dir}")
+    print("  A derivation claim = a named instrument + a derivation predicate +")
+    print("  the provision it is said to derive from, not negated, not modal.")
+    print("  Citing a provision ('under s.91, Ministers must ...') is NOT one.")
+    print()
+
+    if args.drops:
+        n = 0
+        for doc in sorted(docs, key=lambda d: (d["session_id"], d.get("rep", 1))):
+            for t in doc.get("turns", []):
+                ans = _without_footer(t.get("answer") or "")
+                a, f = derivation_claims(ans)
+                kept = set(a) | set(f)
+                for s in _sentences(ans):
+                    if _DERIV_LOOSE.search(s) and s not in kept:
+                        n += 1
+                        print(f"  {doc['session_id']} t{t['turn']}: {s[:200]}")
+        print()
+        print(f"{n} sentence(s) in the same vocabulary NOT counted as a claim.")
+        print("Read them: an under-read here forbids nothing, and an over-read")
+        print("grades correct legal writing as a defect (Invariant 1).")
+        return 0
+
+    print(f"{'session':>8} {'rep':>3} {'turn':>4} {'claims':>6} {'retrieved':>9}  verdict")
+    print("-" * 74)
+    turns = bad = 0
+    total_turns = 0
+    rows = []
+    for doc in sorted(docs, key=lambda d: (d["session_id"], d.get("rep", 1))):
+        for t in doc.get("turns", []):
+            answer = t.get("answer") or ""
+            if answer.strip():
+                total_turns += 1
+            # Graded on the model's prose: P2.3's footer clause uses this
+            # vocabulary, and a product change must not enrol turns into the
+            # denominator of the instrument measuring it (P2.2, error 12).
+            asserted, _ = derivation_claims(_without_footer(answer))
+            if not asserted:
+                continue
+            turns += 1
+            ret = retrieved_enabling(t)
+            ok = bool(ret)
+            if not ok:
+                bad += 1
+            rows.append((doc, t, asserted, ret, ok))
+            print(f"{doc['session_id']:>8} {doc.get('rep', 1):>3} {t['turn']:>4} "
+                  f"{len(asserted):>6} {len(ret):>9}  "
+                  f"{'ok (recital retrieved)' if ok else 'UNVERIFIED'}")
+    print()
+    claims_total = sum(len(r[2]) for r in rows)
+    claims_bad = sum(len(r[2]) for r in rows if not r[4])
+    print(f"{turns} of {total_turns} answered turn(s) assert a derivation "
+          f"({claims_total} claim(s) in total); {bad} turn(s) and {claims_bad} "
+          f"claim(s) with NO enabling-power text retrieved.")
+    print("NOTE: a turn asserting no derivation is NOT in this denominator, and")
+    print("      'could not verify what it was made under' is a PASS, not a miss.")
+    if args.answers:
+        for doc, t, asserted, ret, ok in rows:
+            if args.failing_only and ok:
+                continue
+            print()
+            print(f"=== {doc['session_id']} rep{doc.get('rep', 1)} turn {t['turn']} "
+                  f"({'ok' if ok else 'UNVERIFIED'}) ===")
+            print("question:", (t.get("question") or "")[:200])
+            for s in asserted:
+                print(f"   CLAIM > {s[:300]}")
+            for lid, descr in ret:
+                print(f"   RECITAL [{lid}]: {descr[:170]!r}")
+    return 0 if bad == 0 else 1
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="replay_report")
     p.add_argument("--dir", default=str(
@@ -1387,6 +1655,16 @@ def main(argv: Iterable[str] | None = None) -> int:
     n.add_argument("--failing-only", action="store_true",
                    help="with --answers, print only the failing turns")
     n.add_argument("--chars", type=int, default=1600)
+
+    dv = sub.add_parser("derivations",
+                        help="P2.3 acceptance: every turn asserting a "
+                             "'made under' derivation, graded")
+    dv.add_argument("--answers", action="store_true", help="print the claims in context")
+    dv.add_argument("--failing-only", action="store_true",
+                    help="with --answers, print only the unverified turns")
+    dv.add_argument("--drops", action="store_true",
+                    help="print every sentence in the same vocabulary that was "
+                         "NOT counted — the both-directions audit")
     args = p.parse_args(list(argv) if argv is not None else None)
     return {
         "summary": cmd_summary,
@@ -1395,6 +1673,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "compare": cmd_compare,
         "halts": cmd_halts,
         "negatives": cmd_negatives,
+        "derivations": cmd_derivations,
     }[args.cmd](args)
 
 

@@ -194,14 +194,123 @@ def coverage() -> int:
     return 0
 
 
+def enabling(sample: int = 25) -> int:
+    """P2.3: where, if anywhere, is an instrument's ENABLING POWER retrievable?
+
+    **The handover into P2.3 said this route did not exist, and it was half
+    wrong in a way that decides the row.** The claim was that
+    `/legislation/text` does not carry the preamble, checked on `ssi/2020/295`,
+    whose `full_text` opens at "Section 1) Citation and commencement" with no
+    recital anywhere. True of `full_text`, and true of that instrument. But the
+    recital arrives in **`legislation.description`**, and `get_legislation_text`
+    returns the response unslimmed — so the permitted branch of P2.3's rule is
+    live today and needs nothing from P3.6.
+
+    What decides how much it is worth is the *distribution*, not the existence:
+
+        uksi pre-1990     18/25 (72%)      sampled 2026-09-16
+        uksi 1990-2009     0/25
+        uksi 2010+         0/25
+        ssi  1990-2009     0/13   <- the corpus these lawyers actually work in
+        ssi  2010+         0/15
+
+    So for Scottish instruments the rule is a total prohibition and for modern
+    UK SIs very nearly one. Modern descriptions say what an instrument
+    *commences*, not what it was *made under*.
+
+    Same method warning as `coverage()`: these are small samples of a
+    heterogeneous corpus. Quote a bound, not a point estimate, and re-run this
+    before quoting anything at all.
+    """
+    import random
+
+    RECITAL = re.compile(
+        r"in exercise of (?:the |his |her |their |its )?powers?"
+        r"|powers? (?:in that behalf )?conferred (?:on|upon|by)"
+        r"|by virtue of (?:the )?powers?"
+        r"|makes? the following (?:Regulations|Order|Rules|Scheme)"
+        r"|has determined under section", re.I)
+
+    def _search(q, **kw):
+        body = {"query": q, "limit": 50, "include_text": False}
+        body.update(kw)
+        r = httpx.post(f"{BASE}/legislation/search", json=body, timeout=TIMEOUT)
+        if r.status_code != 200:
+            return []
+        d = r.json()
+        return (d.get("results") if isinstance(d, dict) else d) or []
+
+    buckets = collections.defaultdict(set)
+    windows = ((None, None), (1950, 1989), (1990, 2009))
+    for q in ("regulations", "order", "rules", "amendment", "commencement",
+              "scotland", "education", "social security"):
+        for yf, yt in windows:
+            kw = {"year_from": yf, "year_to": yt} if yf else {}
+            for it in _search(q, **kw):
+                m = re.search(r"/((?:ssi|uksi|ssr|uksro))/(\d{4})/(\d+)",
+                              it.get("uri", ""))
+                if not m:
+                    continue
+                series, year = m.group(1), int(m.group(2))
+                era = ("pre-1990" if year < 1990
+                       else "1990-2009" if year < 2010 else "2010+")
+                buckets[(series, era)].add(f"{series}/{year}/{m.group(3)}")
+
+    random.seed(11)
+    print("--- is the enabling-power recital retrievable, and for what? ---")
+    print(f"{'series/era':20} {'n':>3} {'held':>5} {'has description':>16} "
+          f"{'RECITAL':>8}")
+    print("-" * 58)
+    examples, only_full_text = [], 0
+    tot = {"n": 0, "held": 0, "desc": 0, "rec": 0}
+    for key in sorted(buckets):
+        picks = random.sample(sorted(buckets[key]), min(sample, len(buckets[key])))
+        held = desc = rec = 0
+        for lid in picks:
+            r = httpx.post(f"{BASE}/legislation/text",
+                           json={"legislation_id": lid}, timeout=TIMEOUT)
+            if r.status_code != 200:
+                continue
+            d = r.json()
+            item = d[0] if isinstance(d, list) and d else d
+            held += 1
+            descr = str((item.get("legislation") or {}).get("description") or "")
+            ft = str(item.get("full_text") or "")
+            if descr:
+                desc += 1
+            if RECITAL.search(descr):
+                rec += 1
+                if len(examples) < 5:
+                    examples.append((lid, descr[:190]))
+            elif RECITAL.search(ft[:1500]):
+                only_full_text += 1
+        tot["n"] += len(picks)
+        tot["held"] += held
+        tot["desc"] += desc
+        tot["rec"] += rec
+        print(f"{key[0] + '/' + key[1]:20} {len(picks):>3} {held:>5} {desc:>16} {rec:>8}")
+    print("-" * 58)
+    print(f"{'TOTAL':20} {tot['n']:>3} {tot['held']:>5} {tot['desc']:>16} {tot['rec']:>8}")
+    print(f"  recital present in full_text but NOT description: {only_full_text}")
+    print("  NOTE: the recital is in `legislation.description`, NOT `full_text` —")
+    print("        checking full_text alone says the route does not exist.")
+    for lid, d in examples:
+        print(f"    * {lid}: {d!r}")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="lex_probe")
     ap.add_argument("--surface", action="store_true", help="endpoint list only")
     ap.add_argument("--coverage", action="store_true",
                     help="P5.3: corpus size, freshness and per-series coverage")
+    ap.add_argument("--enabling", action="store_true",
+                    help="P2.3: where an instrument's enabling power is retrievable")
     args = ap.parse_args(argv)
     if args.coverage:
         return coverage()
+    if args.enabling:
+        return enabling()
 
     print(f"LEX API surface ({BASE}/openapi.json)\n")
     called = {"/legislation/search", "/legislation/section/search", "/legislation/text"}

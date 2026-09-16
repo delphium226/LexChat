@@ -64,6 +64,27 @@ When you ask a clarifying question, put the QUESTION ONLY in the body, then foll
 
 MANAGER_SYSTEM_PROMPT = _MANAGER_BODY + "\n\n" + _MANAGER_CHIPS
 
+# P2.3 (B3b) — *made under* is the one B3 relation nothing retrieves.
+#
+# One string, shared by every worker prompt whose tool set includes the
+# legislation tools, so the three cannot drift apart — the same reason
+# `_REPORTING_RULE` in `search_scope.py` is one string. Kept SHORT because the
+# load-bearing half of this fix is code (`enabling_power_note`,
+# `_enabling_limb`, `_enabling_footer_clause`): P2.2 measured the
+# instruction-only version of exactly this shape at 56% compliance, so the
+# prompt is belt-and-braces and is written to be belt-and-braces.
+#
+# Note what it does NOT say. It does not forbid citing a provision, and it says
+# so explicitly: "Under section 91, Ministers must ..." is correct legal
+# writing, and a rule that made the model hedge provisions it had retrieved
+# would be the regression Invariant 1 exists to prevent.
+_ENABLING_POWER_RULE = """ENABLING POWER (what an instrument was MADE UNDER):
+- No search or retrieval tool returns a "made under" relation. The ONLY evidence of it is an instrument's own preamble, which arrives in a `get_legislation_text` result for some instruments and not others. Where it is present, the tool result says so explicitly in an [ENABLING POWER] block and quotes it.
+- So: state that an instrument was made under, cites, or relies on a provision ONLY where an [ENABLING POWER] block has given you those words. Otherwise say the enabling power could not be verified from the available material.
+- An instrument appearing in the results of a search for an Act's title has NOT been shown to be made under that Act. Ranked keyword adjacency is not a derivation, and the Act may not even be in the index.
+- This is about DERIVATION, not citation. Describing what a provision says or does — "under section 91, Ministers must consult" — is correct and expected. Claiming that a named instrument was MADE under it is the assertion that needs evidence."""
+
+
 WORKER_SYSTEM_PROMPT = """You are a specialized Legal Research Support Agent for UK Law.
 Your output will be reviewed by government lawyers who require absolute precision.
 
@@ -128,7 +149,9 @@ CITATION PROTOCOL:
   - If no URL is provided for a provision, cite it in bold text rather than
     guessing a URL.
 
-Review your answer before responding: Does every claim have a corresponding source from the API? If yes, proceed."""
+Review your answer before responding: Does every claim have a corresponding source from the API? If yes, proceed.
+
+""" + _ENABLING_POWER_RULE
 
 WORKER_SYSTEM_PROMPT_CASE_LAW = """You are a specialized Legal Research Support Agent for UK Case Law.
 Your output will be reviewed by government lawyers who require absolute precision.
@@ -234,7 +257,9 @@ OUTPUT STRUCTURE (Use Markdown):
 2. **Statutory Framework:** Relevant legislative provisions with citations.
 3. **Key Cases:** How courts have interpreted and applied the legislation.
 4. **Jurisdiction & Status:** Geographic scope, whether legislation is in force, whether cases remain good law.
-5. **References:** Complete list of all sources used. This section is MANDATORY — a report without it is incomplete."""
+5. **References:** Complete list of all sources used. This section is MANDATORY — a report without it is incomplete.
+
+""" + _ENABLING_POWER_RULE
 
 
 _MANAGER_CONV_BODY = """You are a legal assistant for a UK government legal department.
@@ -309,7 +334,9 @@ OUTPUT:
 
 CITATION FORMAT:
 Inline only. Example: "Under s.7 of the [Acquisition of Land Act 1981](URL), ..."
-Do not produce a standalone References list."""
+Do not produce a standalone References list.
+
+""" + _ENABLING_POWER_RULE
 
 
 _LEGISLATION_TYPE_LABELS = {

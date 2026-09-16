@@ -14,7 +14,9 @@ from typing import Callable, Optional
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import harvest_legislation_urls, provision_url_block
 from ..utils.search_scope import (
+    enabling_power_note,
     legislation_search_note,
+    record_enabling_power,
     record_search,
     section_search_note,
 )
@@ -491,6 +493,13 @@ async def run_worker_tool(
             # those provisions and must be allowed to cite them.
             if retrieved_urls is not None:
                 harvest_legislation_urls(hit["raw"], into=retrieved_urls)
+            # P2.3 (B3b): a memo hit is still a retrieval for this step, and the
+            # enabling-power record drives a PERMISSION as well as a prohibition
+            # — omitting it here would forbid a claim the material supports.
+            # NOTE the asymmetry with `record_search` above, which P2.2 does not
+            # call on this path: correcting that would move P2.2's published
+            # footer contents and is its row's call, not this one's.
+            record_enabling_power(search_log, name, args, hit["raw"])
             if parent_on_chunk:
                 await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
                 await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done (cached)"})
@@ -806,6 +815,20 @@ async def run_worker_tool(
         except Exception:
             scope_note = ""
 
+    # P2.3 (B3b): *made under* is the one B3 relation no endpoint returns, so the
+    # only evidence of it is an instrument's own preamble — which arrives in
+    # `legislation.description` on this response and nowhere else. Computed from
+    # the RAW result for the same reason `provision_url_block` is: a large
+    # instrument gets summarised and the summariser drops the preamble, so by
+    # the time the model reads the text the evidence has gone.
+    enabling_note = ""
+    if name == "get_legislation_text":
+        try:
+            enabling_note = enabling_power_note(args, json.loads(raw_result))
+        except Exception:
+            enabling_note = ""
+        record_enabling_power(search_log, name, args, raw_result)
+
     from .provider_factory import get_summarise_threshold
     # Two independent triggers: this result is large on its own, OR the run has
     # accumulated enough context that even a modest addition is no longer free.
@@ -969,6 +992,7 @@ async def run_worker_tool(
     # ("call search_legislation_sections with these ids") stays the last thing
     # the model reads on a productive search.
     result += scope_note
+    result += enabling_note
     result += phase2_note
     result += sp_phase2_note
     result += sp_committee_phase2_note

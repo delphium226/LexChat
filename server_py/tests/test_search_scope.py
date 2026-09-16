@@ -34,8 +34,10 @@ from src.utils.research_halt import halt_worker_report
 from src.utils.search_scope import (
     LEX_COVERAGE_SENTENCE,
     answer_scope_footer,
+    enabling_power_note,
     incomplete_steps_note,
     legislation_search_note,
+    record_enabling_power,
     record_search,
     section_search_note,
     strip_scope_blocks,
@@ -794,3 +796,358 @@ async def test_the_footer_reaches_the_answer_and_sits_after_the_sources(monkeypa
     assert "SEARCH SCOPE" not in final["content"]
     # And it is last, so nothing reads a query string as part of the answer body.
     assert final["content"].rstrip().endswith("absent from the law.*")
+
+
+# ---------------------------------------------------------------------------
+# P2.3 (B3b) — an enabling power may be asserted only where it was retrieved
+# ---------------------------------------------------------------------------
+#
+# The hazard this whole section is written against: **citing a provision is not
+# asserting a derivation.** "Under section 91 of the Act, Ministers must
+# consult" is correct legal writing about retrieved text; "SSI 2018/273 was made
+# under section 91" is the B3 claim. A fix — or a test — that cannot tell them
+# apart pushes the model to hedge findings it actually retrieved, which is the
+# regression Invariant 1 exists to prevent.
+
+# The two real preambles the replay corpus ever returned, both from 6340 rep 1's
+# `get_legislation_text` calls. Pinned as fixtures rather than invented, because
+# the whole permitted branch rests on this text existing in this field.
+_REAL_RECITAL = (
+    "In exercise of the powers conferred upon me by sections 75(c) and 144(5) "
+    "of the Education (Scotland) Act 1962(a) and of all other powers enabling "
+    "me in that behalf, I hereby make the following regulations:-"
+)
+_NOT_A_RECITAL = (
+    "These Regulations bring sections 31 and 36 and schedules 5 and 10 of the "
+    "Social Security (Scotland) Act 2018 into force on 8 October 2020."
+)
+
+
+def _text_result(description="", full_text="Section 1) Citation and commencement"):
+    """A `/legislation/text` response in its real shape.
+
+    `{legislation, full_text}` — NOT `text`. The nested `legislation.text` key is
+    empty for everything, including fully held Acts (P5.1's correction), and the
+    preamble arrives in `legislation.description`.
+    """
+    return {
+        "legislation": {
+            "legislation_id": "uksi/1979/766",
+            "title": "The ... Regulations 1979",
+            "description": description,
+            "text": "",
+        },
+        "full_text": full_text,
+    }
+
+
+def test_a_retrieved_preamble_permits_the_claim_and_hands_back_the_words():
+    note = enabling_power_note({"legislation_id": "uksi/1979/766"},
+                               _text_result(description=_REAL_RECITAL))
+    assert "ENABLING POWER" in note
+    assert "DOES state" in note
+    assert "sections 75(c) and 144(5)" in note      # the words, not a paraphrase
+    assert "You MAY state the enabling power" in note
+
+
+def test_a_record_without_a_preamble_forbids_the_claim():
+    note = enabling_power_note({"legislation_id": "ssi/2020/295"},
+                               _text_result(description=_NOT_A_RECITAL))
+    assert "does NOT state" in note
+    assert "Do NOT write" in note
+    # And it must say what to do instead — Invariant 1: the honest negative is
+    # the right answer, not silence.
+    assert "could not be verified" in note
+
+
+def test_the_recital_is_found_in_full_text_when_the_description_lacks_it():
+    """1 of the 103 instruments sampled live carried it only there.
+
+    A rule that missed a real recital would forbid a claim the material
+    supports, which is the failing direction nobody would notice."""
+    note = enabling_power_note(
+        {"legislation_id": "uksi/1966/1171"},
+        _text_result(description="",
+                     full_text="Her Majesty, by virtue and in exercise of the "
+                               "powers in that behalf conferred by the Foreign "
+                               "Jurisdiction Act 1890(a) ..."))
+    assert "DOES state" in note
+
+
+def test_primary_legislation_gets_no_block_at_all():
+    """An Act has no enabling power of its own, so the block cannot apply.
+
+    Noise in a block is what gets the block ignored."""
+    for lid in ("asp/2018/9", "ukpga/1962/47", "anaw/2014/4"):
+        assert enabling_power_note({"legislation_id": lid},
+                                   _text_result(description=_REAL_RECITAL)) == ""
+
+
+@pytest.mark.parametrize("data", [{}, {"error": "boom"}, "not json", None])
+def test_a_failed_retrieval_produces_no_block(data):
+    assert enabling_power_note({"legislation_id": "ssi/2020/295"}, data) == ""
+
+
+def test_the_search_block_names_adjacency_only_where_an_si_is_in_the_rows():
+    """6340's mechanism exactly: three SIs that merely ranked highly for an
+    Act's title were reported as made under it."""
+    acts_only = legislation_search_note({"query": "q"}, _search_result())
+    assert "made under" not in acts_only
+
+    with_si = _search_result()
+    with_si["results"][0]["legislation_id"] = "ssi/2018/273"
+    note = legislation_search_note({"query": "q"}, with_si)
+    assert "NO relationship data" in note
+    assert "has NOT thereby been shown to be made under" in note
+
+
+def test_a_section_search_of_an_instrument_says_it_cannot_establish_the_power():
+    """The route the Worker actually uses for instruments — and the preamble is
+    not a ranked provision, so it can never appear here."""
+    si = section_search_note({"legislation_id": "ssi/2018/273", "query": "q"},
+                             {"results": [{"provision": "reg 1"}], "returned": 1})
+    assert "cannot tell you what this instrument was made under" in si
+    act = section_search_note({"legislation_id": "asp/2018/9", "query": "q"},
+                              {"results": [{"provision": "s 95"}], "returned": 1})
+    assert "made under" not in act
+
+
+# --- the worker-report seam: the Manager never sees a tool result -------------
+
+def _log_with(*pairs):
+    log = [{"tool": "search_legislation", "query": "q", "legislation_id": "",
+            "shown": 5, "matched": 141}]
+    for lid, stated in pairs:
+        record_enabling_power(
+            log, "get_legislation_text", {"legislation_id": lid},
+            _text_result(description=_REAL_RECITAL if stated else _NOT_A_RECITAL))
+    return log
+
+
+def test_the_report_block_forbids_the_claim_when_nothing_was_retrieved():
+    block = worker_scope_block(_log_with(("ssi/2018/273", False),
+                                         ("ssi/2019/269", False)), {})
+    assert "Enabling power: NOT retrieved for any of the 2 instrument(s)" in block
+    assert "Ranking near an Act in a keyword search is not evidence" in block
+
+
+def test_the_report_block_names_the_instruments_it_may_be_claimed_for():
+    block = worker_scope_block(_log_with(("uksi/1979/766", True),
+                                         ("ssi/2018/273", False)), {})
+    assert "retrieved for 1 of 2 instrument(s)" in block
+    assert "uksi/1979/766" in block
+    assert "For EVERY other instrument" in block
+
+
+def test_a_step_that_touched_no_instrument_says_nothing_about_enabling_power():
+    """No derivation claim can arise, so the sentence would be noise."""
+    log = [{"tool": "search_legislation", "query": "q", "legislation_id": "",
+            "shown": 5, "matched": 141}]
+    assert "Enabling power" not in worker_scope_block(log, {})
+
+
+def test_primary_legislation_is_not_recorded_at_all():
+    log = []
+    record_enabling_power(log, "get_legislation_text",
+                          {"legislation_id": "asp/2018/9"},
+                          _text_result(description=_REAL_RECITAL))
+    assert log == []
+
+
+def test_recording_never_raises_on_anything():
+    """Invariant 5 — a diagnostic must never be the reason a retrieval fails."""
+    for args, data in (({"legislation_id": None}, None),
+                       ({}, "not json"),
+                       ({"legislation_id": "ssi/2020/1"}, object())):
+        record_enabling_power([], "get_legislation_text", args, data)
+    record_enabling_power(None, "get_legislation_text", {"legislation_id": "ssi/1/1"}, {})
+
+
+# --- the lawyer-facing seam ---------------------------------------------------
+
+def _footer(*pairs):
+    return answer_scope_footer(_log_with(*pairs), {})
+
+
+def test_the_footer_says_the_derivation_is_unverified_when_it_is():
+    line = _footer(("ssi/2018/273", False))
+    assert "does not record which enabling power" in line
+    assert "unverified" in line
+
+
+def test_the_footer_names_the_instrument_where_the_preamble_gave_it():
+    line = _footer(("uksi/1979/766", True))
+    assert "uksi/1979/766" in line
+    assert "for anything else mentioned above the derivation is unverified" in line
+    assert "applied only to" in line
+
+
+def test_a_turn_that_retrieved_no_instrument_gets_no_enabling_clause():
+    """Gated on a STRUCTURAL fact, not on a prose detector deciding whether the
+    answer contains a derivation claim. A prose detector in the product fails
+    silently — an unrecognised phrasing means no disclosure and no signal."""
+    log = [{"tool": "search_legislation", "query": "commencement", "shown": 5,
+            "matched": 141}]
+    line = answer_scope_footer(log, {})
+    assert line and "enabling power" not in line
+
+
+def test_footer_trips_no_detector():
+    """**P2.2's twelfth instrument error, pre-empted.**
+
+    P2.2's own footer said "anything reported above as not found was not found
+    in this index", which trips `NEG_ASSERTED` — so selecting the denominator on
+    the full answer enrolled every researched turn and crushed the model column
+    from 52% to 14%. A product change corrupting the instrument measuring it.
+
+    This clause uses the words "made under" and "enabling power", so it is
+    checked against BOTH detectors that read these answers.
+
+    Graded on the CLAUSE, not on the whole footer: P2.2's half of the footer
+    trips `NEG_ASSERTED` by design and by record, which is exactly why
+    `_without_footer` exists. The first assertion is that the strip covers the
+    lengthened footer; the rest are that this row adds no new trip of its own.
+    """
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from src.utils.search_scope import _enabling_footer_clause
+    from tools.replay_report import NEG_ASSERTED, derivation_claims, _without_footer
+
+    for pair in (("ssi/2018/273", False), ("uksi/1979/766", True)):
+        answer = "The Act commenced on 1 April 2025." + _footer(pair)
+        # The footer is stripped whole, so neither detector ever sees it.
+        assert _without_footer(answer).strip() == "The Act commenced on 1 April 2025."
+        clause = _enabling_footer_clause(_log_with(pair))
+        assert clause
+        assert not NEG_ASSERTED.search(clause)
+        assert derivation_claims(clause)[0] == []
+
+
+def test_the_enabling_block_is_stripped_before_a_lawyer_sees_it():
+    """The block is an instruction to an agent. In research mode the Manager is
+    told to pass a Worker's report through verbatim, so without an
+    unconditional strip the bookkeeping renders on screen."""
+    note = enabling_power_note({"legislation_id": "uksi/1979/766"},
+                               _text_result(description=_REAL_RECITAL))
+    out, n = strip_scope_blocks("Here is the answer." + note)
+    assert n == 1
+    assert out == "Here is the answer."
+    assert "ENABLING POWER" not in out
+
+
+def test_a_recital_containing_brackets_still_strips_cleanly():
+    r"""The strip matches `\[ENABLING POWER[^\[\]]*\]`, so a bracket inside the
+    quoted preamble would end the match early and leave agent-facing text in
+    front of a lawyer. The quote is rewritten to keep it balanced."""
+    note = enabling_power_note(
+        {"legislation_id": "uksi/1979/766"},
+        _text_result(description="In exercise of the powers conferred by "
+                                 "section 75 [as amended] of the 1962 Act"))
+    out, n = strip_scope_blocks("Answer." + note)
+    assert n == 1 and out == "Answer."
+
+
+# --- the wiring: the block must reach the model, the clause must reach the page
+
+@pytest.mark.asyncio
+async def test_the_enabling_block_reaches_what_the_worker_actually_receives(monkeypatch):
+    """Asserted on the string `run_worker_tool` returns, not on the builder.
+
+    It is computed from the RAW result and appended AFTER summarisation for the
+    same reason `provision_url_block` is: the preamble lives in
+    `legislation.description`, a large instrument gets summarised, and the
+    summariser drops it. Compute it downstream and the evidence has gone.
+    """
+    from src.agent import agent_shared
+
+    set_request_provider_config({"_provider": "openrouter", "model": "test-model"})
+    try:
+        async def fake_exec(name, args, on_chunk=None, timing_collector=None):
+            return json.dumps(_text_result(description=_REAL_RECITAL))
+
+        monkeypatch.setattr(agent_shared, "execute_worker_tool", fake_exec)
+        out = await agent_shared.run_worker_tool(
+            "get_legislation_text", {"legislation_id": "uksi/1979/766"}, "q", None, "m",
+        )
+        assert "[ENABLING POWER" in out
+        assert "sections 75(c) and 144(5)" in out
+    finally:
+        set_request_provider_config({})
+
+
+@pytest.mark.asyncio
+async def test_an_instrument_with_no_preamble_gets_the_prohibition(monkeypatch):
+    from src.agent import agent_shared
+
+    set_request_provider_config({"_provider": "openrouter", "model": "test-model"})
+    try:
+        async def fake_exec(name, args, on_chunk=None, timing_collector=None):
+            return json.dumps(_text_result(description=_NOT_A_RECITAL))
+
+        monkeypatch.setattr(agent_shared, "execute_worker_tool", fake_exec)
+        out = await agent_shared.run_worker_tool(
+            "get_legislation_text", {"legislation_id": "ssi/2020/295"}, "q", None, "m",
+        )
+        assert "does NOT state" in out
+        assert "could not be verified" in out
+    finally:
+        set_request_provider_config({})
+
+
+@pytest.mark.asyncio
+async def test_the_whole_seam_end_to_end(monkeypatch):
+    """Worker retrieves an instrument with no preamble; the Manager's answer
+    carries the lawyer-facing clause and none of the agent-facing bookkeeping.
+
+    This is the seam P2.2's first acceptance run found open: the Worker sees
+    tool results, the Manager sees only the report, so a fix at the tool
+    boundary never reaches the agent that writes the claim.
+    """
+    from src.agent import agent_shared
+    from src.agent.agent_core import process_user_request
+
+    set_request_provider_config({"_provider": "openrouter", "model": "test-model"})
+
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None):
+        if name == "search_legislation":
+            return json.dumps(_search_result())
+        return json.dumps(_text_result(description=_NOT_A_RECITAL))
+
+    async def worker_chat_loop(messages, model, cancel_event, num_ctx, tools,
+                               executor, on_chunk=None, emit_tool_details=False,
+                               timing_collector=None):
+        await executor("search_legislation", {"query": "social security"})
+        await executor("get_legislation_text", {"legislation_id": "ssi/2018/273"})
+        return {"role": "assistant", "content": (
+            "1. **Summary Answer (BLUF):** SSI 2018/273 was made under s.95.\n"
+            "2. **References:** ssi/2018/273")}
+
+    async def worker(*a, **kw):
+        return await run_worker_agent(
+            worker_chat_loop, lambda *x, **y: None, "q", "test-model", None, 0,
+        )
+
+    async def manager(messages, model, cancel_event, num_ctx, tools, tool_executor,
+                      on_chunk=None, **kw):
+        report = await tool_executor("delegate_research", {"query": "q"})
+        # The Manager passes the Worker's report through, as it is told to in
+        # research mode — so whatever the report carries must be stripped here.
+        return {"role": "assistant", "content": report}
+
+    monkeypatch.setattr(agent_shared, "execute_worker_tool", fake_exec)
+    try:
+        final = await process_user_request(
+            manager, worker, [{"role": "user", "content": "q"}],
+            "test-model", None, None, 0,
+        )
+    finally:
+        set_request_provider_config({})
+
+    content = final["content"]
+    # The lawyer gets the disclosure …
+    assert "the derivation is unverified" in content or "is unverified" in content
+    # … and none of the agent-facing blocks.
+    assert "ENABLING POWER" not in content
+    assert "SEARCH SCOPE" not in content
+    assert "Enabling power: NOT retrieved" not in content

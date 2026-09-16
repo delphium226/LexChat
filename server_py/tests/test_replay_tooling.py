@@ -698,3 +698,157 @@ def test_the_raw_marker_reaching_the_answer_is_counted_separately():
     sig = rr.analyse_run(_run(answer="[Research halted: exceeded 20 tool-call steps]"))
     assert sig.halt_raw_marker_in_answer == 1
     assert sig.halt_language_in_answer == 1   # it does count as a mention
+
+
+# --- P2.3's acceptance detector, and the two artefacts it started as ---------
+#
+# Draft 1 scored **69 of 155 Wave-1 turns** on two bugs. The first was a regex
+# alternation that reduced to a bare `\bis`: `r"\bis|are|was|were\s+enabled by"`
+# groups as `\bis` OR `are` OR `was` OR `were\s+enabled by`, so every sentence
+# containing "is" matched. The second was an instrument screen that accepted the
+# bare word "regulations". Draft 2 over-corrected to **1 turn** by compiling the
+# instrument screen case-SENSITIVELY, and so missed the heaviest claim in the
+# corpus, which opens "Several SSIs ...".
+#
+# A rate of 100% is an artefact until proven otherwise; so, on this work, is a
+# rate of nearly zero. These tests pin the shape in both directions, and every
+# string below is a real sentence from a replay run.
+
+
+@pytest.mark.parametrize("answer", [
+    # 6383 t4 (wave1) — the heaviest claim in the corpus, and the BLUF.
+    "Yes, multiple Scottish Statutory Instruments (SSIs) have been made under "
+    "the enabling authority of section 95 of the Social Security (Scotland) "
+    "Act 2018.",
+    # 6383 t4 — a claim about preamble content no tool returns.
+    "Several SSIs explicitly cite Section 95 to establish the judicial "
+    "machinery for Scottish social security appeals:",
+    # 6383 rep2 t4 (wave2_p21) — quantified, and entirely unretrievable.
+    "Over 130 instruments explicitly cite section 95 in their preamble, "
+    "including procedural rules.",
+    # 6383 t3 — presentational, so the participial is assertive.
+    "Yes, here are two examples of other Scottish Statutory Instruments made "
+    "under section 95 of the Social Security (Scotland) Act 2018:",
+    # 6374 t4 — the derivation rides a fronted adverbial.
+    "Pursuant to the enabling power in section 126(8), several Scottish "
+    "Administration (Offices) Orders have designated additional offices.",
+    # 6340 t1 — a named instrument and an explicit enabling-power claim. TRUE
+    # here, as it happens, and still a claim that needs the evidence.
+    "*   **The Grant-Aided Secondary Schools (Scotland) Grant Amendment "
+    "Regulations 1979 (SI 1979/766):** This instrument cites sections 75(c) "
+    "and 144(5) of the 1962 Act as its enabling powers.",
+    # 6383 rep1 t1 (wave2_p21) — a single named instrument, flat assertion.
+    "The Council Tax Reduction (Scotland) Amendment Regulations 2019 "
+    "(SSI 2019/29) is made under section 95 of the Social Security (Scotland) "
+    "Act 2018 and contains the '£' symbol.",
+])
+def test_a_derivation_claim_is_recognised(answer):
+    assert rr.derivation_claims(answer)[0], answer
+
+
+@pytest.mark.parametrize("answer", [
+    # THE hazard. Citing a provision is not asserting a derivation, and a
+    # detector that cannot tell them apart pushes the model to hedge what it
+    # retrieved — the regression Invariant 1 exists to prevent.
+    "Under section 91 of the Act, Ministers must consult before making an "
+    "order.",
+    # 6383 t4 — a statement of law read straight off s.96, about a CLASS.
+    "Under Section 96(4), regulations made under Section 95 are subject to "
+    "the affirmative procedure if they add to the text of an Act.",
+    # 6409 t6 — the Act's own power-conferring provision, correctly cited.
+    "For the remaining provisions, section 27(2) provides the enabling power, "
+    "stating that they come into force on such day as the Scottish Ministers "
+    "may by regulations appoint.",
+    # 6383 t4 — likewise.
+    "Section 95 permits Scottish Ministers to make incidental, supplementary "
+    "and consequential provisions.",
+    # 6374 t4 — a statement about procedure, not about an instrument.
+    'Paragraph 1 specifies that an Order made under section 126(8) is subject '
+    'to "Type H" procedure.',
+    # 6383 t1 — the user's own question restated, not a finding.
+    "The search for all Scottish Statutory Instruments made under section 95 "
+    "of the Social Security (Scotland) Act 2018 containing a '£' symbol is "
+    "too broad and timed out.",
+    # 6384 t4 / 6367 t1 — "made under" of something that is not an instrument.
+    "This definition is expressly restricted to applications made under "
+    "Section 14.",
+    "A summary of action taken in response to representations made under the "
+    "Consumers, Estate Agents and Redress Act 2007.",
+])
+def test_citing_a_provision_is_not_asserting_a_derivation(answer):
+    """The whole point of the row's detector, and of Invariant 1.
+
+    P2.2's first `NEG_ASSERTED` failed in exactly this shape and scored 100%."""
+    assert rr.derivation_claims(answer)[0] == [], answer
+
+
+@pytest.mark.parametrize("answer", [
+    # 6383 t2 — the RIGHT answer, and it must never be graded as a defect.
+    "However, the agent could not retrieve the preamble to definitively "
+    "confirm if it was made under section 95 of the Social Security "
+    "(Scotland) Act 2018.",
+    # 6340 t1 — an honest negative about the derivation.
+    "The research agent was unable to identify any Statutory Instruments that "
+    "cite section 117 of the Education (Scotland) Act 1962 as their enabling "
+    "power.",
+    # 6409 t6 — a negative, correctly hedged.
+    "The specific Scottish Statutory Instruments (SSIs) made under section "
+    "27(2) to commence the remaining provisions of the Act have not been "
+    "identified in this report.",
+])
+def test_an_honest_negative_about_the_derivation_is_a_pass(answer):
+    """Invariant 1 is load-bearing here: "I cannot verify what this instrument
+    was made under" is the CORRECT answer this row is trying to produce. A
+    detector that counted it would reward the defect and punish the fix."""
+    assert rr.derivation_claims(answer)[0] == [], answer
+
+
+def test_a_modal_statement_about_what_such_regulations_may_do_is_not_a_claim():
+    """6409 t6, read off s.27(3) — about a class, in the subjunctive."""
+    answer = ("Section 27(3) specifies that regulations made under this "
+              "commencement power may include transitional, transitory, or "
+              "saving provisions.")
+    asserted, filtered = rr.derivation_claims(answer)
+    assert asserted == []
+
+
+def test_the_recital_screen_finds_a_real_preamble_and_not_a_commencement_note():
+    """The two shapes `legislation.description` actually carries, both real."""
+    assert rr._DERIV_RECITAL.search(
+        "In exercise of the powers conferred upon me by sections 75(c) and "
+        "144(5) of the Education (Scotland) Act 1962(a)")
+    assert not rr._DERIV_RECITAL.search(
+        "These Regulations bring sections 31 and 36 and schedules 5 and 10 of "
+        "the Social Security (Scotland) Act 2018 into force on 8 October 2020.")
+
+
+def test_the_retrieval_check_reads_the_raw_result_not_the_final_one():
+    """The recital is in `legislation.description` and a summariser drops it
+    first. Grading on `final_result` would report every supported claim as
+    unverified — the failing direction that forbids a claim the material
+    supports."""
+    turn = {"audit": {"delegations": [{"tools": [{
+        "name": "get_legislation_text",
+        "args": {"legislation_id": "uksi/1979/766"},
+        "raw_result": json.dumps({"legislation": {
+            "legislation_id": "uksi/1979/766",
+            "description": "In exercise of the powers conferred upon me by "
+                           "sections 75(c) and 144(5) of the Education "
+                           "(Scotland) Act 1962(a)"}}),
+        "final_result": "The regulations set out grant arrangements.",
+    }]}]}}
+    found = rr.retrieved_enabling(turn)
+    assert [lid for lid, _ in found] == ["uksi/1979/766"]
+
+
+def test_a_turn_that_retrieved_no_preamble_reports_none():
+    turn = {"audit": {"delegations": [{"tools": [{
+        "name": "get_legislation_text",
+        "args": {"legislation_id": "ssi/2020/295"},
+        "raw_result": json.dumps({"legislation": {
+            "legislation_id": "ssi/2020/295",
+            "description": "These Regulations bring sections 31 and 36 into "
+                           "force on 8 October 2020."},
+            "full_text": "Section 1) Citation and commencement"}),
+    }]}]}}
+    assert rr.retrieved_enabling(turn) == []
