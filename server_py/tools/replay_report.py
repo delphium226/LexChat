@@ -2122,8 +2122,8 @@ def _invariant_one(before: Path, after: Path) -> None:
 _CUR_SUBORDINATE = re.compile(
     r"\b(?:while|whilst|where|when|whether|if|during|unless|until|whenever|"
     r"any|an?)\b"
-    r"[^.;:]{0,70}\b(?:is|are|remains?|was|were)\s+"
-    r"(?:in[- ]force|in operation|in effect|operative)\b",
+    r"[^.;:]{0,70}\b(?:is|are|remains?|remain|was|were)\s+"
+    r"(?:in[- ]force|in operation|in effect|operative|(?:the )?current law)\b",
     re.I,
 )
 _CUR_NEGATED = re.compile("|".join([
@@ -2168,18 +2168,55 @@ _CUR_NEG_WORD = (r"(?:not|never|nor|neither|no|cannot|can ?not|could ?n[o']t|"
 _CUR_ESTABLISH_VERB = (
     r"(?:verif(?:y|ied|iable)|establish(?:ed)?|determin(?:e|ed|able)|"
     r"confirm(?:ed)?|ascertain(?:ed)?|report(?:ed)?)")
-_CUR_UNVERIFIED = re.compile("|".join([
-    _CUR_STATUS_SUBJECT + r"\b[^.;\n]{0,50}\b" + _CUR_NEG_WORD
-    + r"\b[^.;\n]{0,30}\b" + _CUR_ESTABLISH_VERB + r"\b",
-    r"\b" + _CUR_NEG_WORD + r"\b[^.;\n]{0,40}" + _CUR_STATUS_SUBJECT
-    + r"\b[^.;\n]{0,50}\b" + _CUR_ESTABLISH_VERB + r"\b",
-    r"\b" + _CUR_NEG_WORD + r"\b[^.;\n]{0,30}\b" + _CUR_ESTABLISH_VERB
-    + r"\b[^.;\n]{0,50}" + _CUR_STATUS_SUBJECT + r"\b",
-    _CUR_STATUS_SUBJECT
-    + r"\b[^.;\n]{0,40}\bun(?:verified|confirmed|established|determined)\b",
-    # The footer's own sentence, which contains "in force" by necessity.
-    r"is not something this index reports",
+#
+# **The distance windows between the subject and the negation were wrong, and
+# the acceptance run's first rep is what showed it.** The model wrote exactly
+# the sentence `_currency_limb` asks for — *"In-force status for the remaining
+# instruments (the 1886, 1912, 1930, and 1936 Acts, as well as the 1950, 1963,
+# and 1974 Orders) was not verified"* — and 95 characters of parenthetical list
+# put "was not verified" outside a 50-character window, so the disclaimer was
+# graded as the defect. Windows between clauses cannot be set from a sample.
+#
+# So the rule is **positional only where position carries meaning**: the status
+# subject anywhere in the sentence, plus a negation ADJACENT to an establishment
+# verb. The adjacency is what keeps *"While we cannot verify every provision,
+# the Act is currently in force"* counted — it has the adjacency but no status
+# subject, because its subject is the Act.
+_CUR_NEGATED_VERB = re.compile("|".join([
+    r"\b" + _CUR_NEG_WORD + r"\b[^.;\n]{0,60}\b" + _CUR_ESTABLISH_VERB + r"\b",
+    r"\b" + _CUR_ESTABLISH_VERB + r"\b[^.;\n]{0,30}\b(?:not|no)\b",
+    r"\bun(?:verified|confirmed|established|determined)\b",
 ]), re.I)
+_CUR_SUBJECT_RE = re.compile(_CUR_STATUS_SUBJECT, re.I)
+# The footer's own sentence, which contains "in force" by necessity, plus the
+# limb's own "could not be verified" phrasing where the subject is elided.
+_CUR_DISCLAIMER_LITERAL = re.compile(
+    r"is not something this index reports"
+    r"|no (?:commencement|change) record was (?:retrieved|consulted)",
+    re.I,
+)
+
+
+def _currency_disclaimed(sentence: str) -> bool:
+    """Is this sentence saying that currency could NOT be established?
+
+    See the note above `_CUR_NEGATED_VERB`. Two conditions, neither of them a
+    distance window across a clause boundary.
+    """
+    if _CUR_DISCLAIMER_LITERAL.search(sentence):
+        return True
+    return bool(_CUR_SUBJECT_RE.search(sentence)
+                and _CUR_NEGATED_VERB.search(sentence))
+
+
+# A bare section heading is not a claim. `_sentences` splits by line, so
+# `*   **In-Force Status:**` arrives on its own with its content on the lines
+# below — and `_CUR_ASSERT`'s `\*\*` branch matches the "In-Force" straight
+# after the bold marker. Found in the acceptance run's 6341 rep 1 turn 7, where
+# the heading was scored as an assertion and the paragraph under it was an
+# honest disclaimer.
+_CUR_BARE_HEADING = re.compile(
+    r"^[\s*\-•>#]*\**\s*[A-Za-z][^:\n]{0,48}:\**\s*$")
 # The three text-version values, which is the whole of the currency vocabulary
 # the index actually has. Interpolated rather than repeated because it appears
 # in seven alternatives below and a divergent copy is how a detector goes blind.
@@ -2280,14 +2317,17 @@ def _currency_asserted(sentence: str) -> bool:
     # counts even in a sentence that also negates or disclaims.
     if _CUR_FROM_VERSION.search(sentence):
         return True
+    if _CUR_BARE_HEADING.match(sentence):
+        return False
     if _CUR_NEGATED.search(sentence) or _CUR_SUBORDINATE.search(sentence):
         return False
     # The disclaimer guard applies to `_CUR_ASSERT` as well as to the paraphrase
     # branches, because the Status-bullet branch matches a sentence merely
     # starting with "In force" and "In-force status: not verified" is what the
     # product now tells the model to write. Scoped to the disclaimer SHAPE so a
-    # sentence that hedges and then asserts still counts — see `_CUR_UNVERIFIED`.
-    if _CUR_UNVERIFIED.search(sentence):
+    # sentence that hedges and then asserts still counts — see
+    # `_CUR_NEGATED_VERB`.
+    if _currency_disclaimed(sentence):
         return False
     if _CUR_ASSERT.search(sentence):
         return True

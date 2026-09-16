@@ -655,6 +655,19 @@ MUST_NOT = [
     "In-force status was not verified — the legislation index does not report it.",
     "in-force status could not be verified from the available sources.",
     "The current in-force status of the Act could not be determined.",
+    # **All three verbatim from the acceptance run's first rep**, where the model
+    # wrote exactly what `_currency_limb` asks for and the first version of this
+    # detector scored all three as the defect. A section heading is not a claim;
+    # a 95-character parenthetical list is not a reason to stop reading; and
+    # "whether these provisions remain current law" is a question.
+    "*   **In-Force Status:**",
+    "*   **Status:** In-force status was not verified — the legislation index "
+    "does not report it, and no commencement or repeal record was retrieved for "
+    "these instruments.",
+    "In-force status for the remaining instruments (the 1886, 1912, 1930, and "
+    "1936 Acts, as well as the 1950, 1963, and 1974 Orders) was not verified.",
+    "Establishing whether these specific provisions remain current law would "
+    "require retrieving the change records for each Act.",
 ]
 
 
