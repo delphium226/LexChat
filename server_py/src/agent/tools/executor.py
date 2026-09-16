@@ -345,7 +345,13 @@ async def execute_worker_tool(
                 # 13,681 rows / 11.9 MB) off the common path.
                 rows = []
                 requested = _AMENDMENT_FETCH_SIZE
-                for requested in (_AMENDMENT_FETCH_SIZE, _AMENDMENT_ESCALATED_SIZE):
+                for attempt, requested in enumerate(
+                    (_AMENDMENT_FETCH_SIZE, _AMENDMENT_ESCALATED_SIZE)
+                ):
+                    # Two requests, two ids: the escalation is a second HTTP
+                    # call and a trace that showed one would be wrong about what
+                    # the run actually did.
+                    this_id = call_id if not attempt else f"{call_id}-escalated"
                     payload = {
                         "legislation_id": legislation_id,
                         "search_amended": direction == "to",
@@ -354,7 +360,7 @@ async def execute_worker_tool(
 
                     await _emit(on_chunk, {
                         "type": "api_call_start",
-                        "id": call_id,
+                        "id": this_id,
                         "url": url,
                         "method": "POST",
                         "payload": payload,
@@ -376,7 +382,7 @@ async def execute_worker_tool(
 
                     await _emit(on_chunk, {
                         "type": "api_call_end",
-                        "id": call_id,
+                        "id": this_id,
                         "url": url,
                         "status": resp.status_code,
                         "response": resp_json,
@@ -384,14 +390,17 @@ async def execute_worker_tool(
                     })
 
                     resp.raise_for_status()
-                    rows = resp_json if isinstance(resp_json, list) else resp_json
+                    rows = resp_json
                     # Exactly `size` rows can only mean the cap bound. Escalate
                     # once; a second bind is reported rather than chased.
                     if not (isinstance(rows, list) and len(rows) >= requested):
                         break
 
                 slimmed = _slim_amendment_results(rows, legislation_id, direction)
-                if isinstance(slimmed, dict):
+                # Stamped only on our own shape. An unexpected response passes
+                # through the slimmer untouched, and marking it "complete" would
+                # be a statement about a payload we did not understand.
+                if isinstance(slimmed, dict) and "relations" in slimmed:
                     slimmed["window_complete"] = not (
                         isinstance(rows, list) and len(rows) >= requested
                     )
