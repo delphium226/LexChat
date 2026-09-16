@@ -15,8 +15,10 @@ from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import harvest_legislation_urls, provision_url_block
 from ..utils.search_scope import (
     amendment_search_note,
+    currency_note,
     enabling_power_note,
     legislation_search_note,
+    record_currency,
     record_enabling_power,
     record_relations,
     record_search,
@@ -106,7 +108,10 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                 "kind": _legislation_kind(lid),
                 "title": item.get("title") or lid,
                 "url": item.get("url") or "",
-                "meta": item.get("status") or "",
+                # P2.5 renamed the slimmed key to `text_version` (see
+                # `_slim_search_results`); `status` is read as a fallback so a
+                # cached or replayed pre-P2.5 result still populates the rail.
+                "meta": item.get("text_version") or item.get("status") or "",
                 "year": item.get("year"),
                 "extent": item.get("extent") or [],
                 "cite": lid,
@@ -549,6 +554,13 @@ async def run_worker_tool(
             # disclosure. Silent here, the worker's report would say the step
             # never looked.
             record_relations(search_log, name, args, hit["raw"])
+            # P2.5 (B4): and the currency evidence. Same argument a third time,
+            # and it bites hardest here: `_currency_limb` speaks on every step
+            # that touched legislation, so a memo hit that did not record its
+            # `valid_date` or its `coming into force` count would leave the
+            # report block forbidding a currency statement the step's own
+            # retrieval supports.
+            record_currency(search_log, name, args, hit["raw"])
             if parent_on_chunk:
                 await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
                 await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done (cached)"})
@@ -836,6 +848,11 @@ async def run_worker_tool(
                 args, raw_data, get_request_provider_config()
             )
             record_search(search_log, name, args, raw_data)
+            # P2.5 (B4): the repeal/revocation marker legislation.gov.uk puts in
+            # the title itself — the only currency signal a search result
+            # carries, on 1.7% of rows, and the one a lawyer must not miss.
+            scope_note += currency_note(args, raw_data)
+            record_currency(search_log, name, args, raw_data)
             if id_pairs:
                 id_lines = "\n".join(
                     f'  - legislation_id: "{lid}"  ({title})'
@@ -883,6 +900,21 @@ async def run_worker_tool(
     if name == "get_legislation_changes":
         relations_note = amendment_search_note(args, raw_result)
     record_relations(search_log, name, args, raw_result)
+
+    # P2.5 (B4): the change record's currency-bearing counts, and `valid_date`
+    # off a `/legislation/text` response. From the RAW result for the reason
+    # every other recorder at this seam is — a summarised change record keeps
+    # the prose and drops the counts, and a summarised instrument drops the
+    # metadata block `valid_date` lives in.
+    #
+    # **Name-gated here rather than left to `record_currency`'s own dispatch.**
+    # `record_currency` also handles `search_legislation`, and that call is made
+    # further up next to `currency_note`, which needs the same parsed page. At
+    # this point `raw_result` is still the executor's own output — summarisation
+    # is below — so the two calls would see identical data and record the page
+    # twice. One seam per tool.
+    if name in ("get_legislation_changes", "get_legislation_text"):
+        record_currency(search_log, name, args, raw_result)
 
     from .provider_factory import get_summarise_threshold
     # Two independent triggers: this result is large on its own, OR the run has

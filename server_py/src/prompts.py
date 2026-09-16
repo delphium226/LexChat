@@ -104,6 +104,49 @@ _RELATIONSHIP_RULE = """COMMENCEMENT, AMENDMENT, REPEAL AND REVOCATION (relation
 - The change record gives no DATES. It establishes that an instrument commenced a provision, never when it came into force; for a date, retrieve the commencing instrument itself.
 - The change record says nothing about ENABLING POWER either. The rule above still governs what an instrument was made under."""
 
+# P2.5 (B4) — what the Status line is PERMITTED to say, rather than whether it
+# exists. Third of the three rules in this group and it sits with them because
+# it is the same shape: `_ENABLING_POWER_RULE` forbids a derivation nothing
+# returns, `_RELATIONSHIP_RULE` routes to what something does return, and this
+# one governs the sentence written when that route comes back empty.
+#
+# **Removing the section was the obvious fix and is a trap.** "Jurisdiction &
+# Status" is mandatory in `_REPORT_SECTIONS` (agent_core.py), so an instruction
+# to omit it makes `_report_needs_reformat` judge the report malformed and spends
+# an A4 reformat call re-adding the heading — which the model then fills with the
+# same conflation. So the heading stays and the permitted content changes.
+#
+# **And it must not forbid the claim outright.** P3.5 made commencement and
+# repeal retrievable and routes the Worker to `get_legislation_changes` for
+# exactly these questions; a flat prohibition would suppress answers that are
+# now properly sourced, which is Invariant 1 read backwards. The prohibition is
+# on the *blanket* claim and on the text-version marker, not on a sourced
+# provision-level statement.
+#
+# **This rule is on ALL THREE legislation worker prompts, including the
+# conversational one, and that is load-bearing rather than tidy.** The
+# conversational worker prompt carries no Status section and carried no in-force
+# instruction at all — and `get_worker_system_prompt` returns it whenever
+# `_chat_mode == "conversational"`, which is the mode session 6411 ran in when it
+# answered *"Yes, the Scotland Act 1998 is in force"* and named a commencement
+# order it had not retrieved. The site with no instruction was the site with the
+# defect.
+#
+# Belt-and-braces, like its two neighbours: the load-bearing half is code
+# (`_slim_search_results`'s `text_version`, `_currency_limb`,
+# `_relation_currency_limb`, `_currency_footer_clause`). P2.2 measured the
+# instruction-only version of this shape at 56% compliance.
+_IN_FORCE_RULE = """IN-FORCE STATUS (whether legislation is current law):
+- NOTHING in your tool surface reports in-force status. `text_version` on a search result (`final`, `revised`, `stub`) records which text version the index holds — it is NOT an in-force flag. Never write that legislation is in force because its text version is `revised`, and never put a text version in brackets after an in-force statement.
+- NEVER write a blanket currency claim — "all cited legislation is currently in force", "the Act is in force", "the referenced provisions are in force". You cannot establish that, for any instrument, from anything you can retrieve.
+- What you MAY state, citing the source:
+  (a) a `coming into force` relation from `get_legislation_changes` — that named provision was commenced by that named instrument. The relation carries no date; for a date, retrieve the commencing instrument and quote it.
+  (b) a repeal or revocation relation from `get_legislation_changes` — that named provision is no longer in force.
+  (c) a repeal or revocation marker in the index's own title, e.g. "Companies Act 1967 (repealed)" — treat that instrument as repealed.
+  (d) the `valid_date` on a `get_legislation_text` response — the date the held text is stated to be up to date to. Say it as that, never as a date the legislation came into force.
+- `Commencement Order` is NOT (a). Those relations are commencement orders for an amendment made to the legislation by some other Act, and the provision against them is a placeholder. Never name one as having commenced the legislation you were asked about.
+- If none of (a)-(d) was retrieved, say so: "in-force status was not verified — the legislation index does not report it, and no commencement or repeal record was retrieved for this instrument." Then say what would establish it. An honest "not verified" is the right answer here and is what these users have praised; a confident "in force" is the defect this rule exists to stop."""
+
 WORKER_SYSTEM_PROMPT = """You are a specialized Legal Research Support Agent for UK Law.
 Your output will be reviewed by government lawyers who require absolute precision.
 
@@ -152,7 +195,7 @@ TOOL GUIDANCE:
 OUTPUT STRUCTURE (Use Markdown):
 1. **Summary Answer (BLUF):** A 2-3 sentence direct answer to the question based on the retrieved text.
 2. **Detailed Analysis:** Break down the legislation logic. Quote relevant sections of the text if necessary.
-3. **Jurisdiction & Status:** If available in the metadata, note if the law applies to the UK, Scotland, or E&W, and if the legislation is in force.
+3. **Jurisdiction & Status:** Note the territorial extent from the metadata (UK, Scotland, E&W). For in-force status, see the IN-FORCE STATUS rule below — state only what a retrieved source establishes, and say plainly when nothing does. Do NOT omit this section.
 4. **References:** A list of all sources used.
 
 CITATION PROTOCOL:
@@ -174,7 +217,7 @@ CITATION PROTOCOL:
 
 Review your answer before responding: Does every claim have a corresponding source from the API? If yes, proceed.
 
-""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE
+""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE + "\n\n" + _IN_FORCE_RULE
 
 WORKER_SYSTEM_PROMPT_CASE_LAW = """You are a specialized Legal Research Support Agent for UK Case Law.
 Your output will be reviewed by government lawyers who require absolute precision.
@@ -279,10 +322,10 @@ OUTPUT STRUCTURE (Use Markdown):
 1. **Summary Answer (BLUF):** Direct answer grounded in legislation and case law.
 2. **Statutory Framework:** Relevant legislative provisions with citations.
 3. **Key Cases:** How courts have interpreted and applied the legislation.
-4. **Jurisdiction & Status:** Geographic scope, whether legislation is in force, whether cases remain good law.
+4. **Jurisdiction & Status:** Geographic scope from the metadata; whether cases remain good law. For whether legislation is in force, see the IN-FORCE STATUS rule below — state only what a retrieved source establishes, and say plainly when nothing does. Do NOT omit this section.
 5. **References:** Complete list of all sources used. This section is MANDATORY — a report without it is incomplete.
 
-""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE
+""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE + "\n\n" + _IN_FORCE_RULE
 
 
 _MANAGER_CONV_BODY = """You are a legal assistant for a UK government legal department.
@@ -359,7 +402,7 @@ CITATION FORMAT:
 Inline only. Example: "Under s.7 of the [Acquisition of Land Act 1981](URL), ..."
 Do not produce a standalone References list.
 
-""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE
+""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE + "\n\n" + _IN_FORCE_RULE
 
 
 _LEGISLATION_TYPE_LABELS = {
@@ -1093,7 +1136,7 @@ OUTPUT STRUCTURE (Use Markdown):
    on an aspect of the question, say so in the summary (e.g. "No reported case law was found on X").
 2. **Detailed Analysis:** The integrated substance, organised by issue (not by research step). Quote
    key statutory text or judicial language where the findings provide it.
-3. **Jurisdiction & Status:** Territorial extent and in-force status where the findings report them.
+3. **Jurisdiction & Status:** Territorial extent where the findings report it. For in-force status, report ONLY a commencement, repeal or revocation that a step finding attributes to a retrieved change record, and name the instrument it came from. Where the findings do not establish currency — which is the usual case — say that in-force status was not verified, rather than omitting the question or asserting that the legislation is current. A text-version marker (`final`, `revised`, `stub`) is not evidence of currency, and neither is the absence of a repeal from the findings. Never write that all cited legislation is in force. Do NOT omit this section.
 4. **References:** A complete list of ALL sources cited across every step. Never drop this section.
 
 Review before responding: does every claim trace to a step finding, and is every citation preserved

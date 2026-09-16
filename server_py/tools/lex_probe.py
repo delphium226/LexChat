@@ -313,6 +313,258 @@ ACCEPTANCE_ACTS = [
     ("6382/6383", "asp/2018/9", "Social Security (Scotland) Act 2018"),
 ]
 
+# P2.5's acceptance sessions, plus the two instruments that make its point.
+# `ukpga/1998/46` is 6411's Scotland Act 1998 and has ZERO `coming into force`
+# relations and 29 `Commencement Order` ones; `ukpga/Geo6/14/28` is 6341's Shops
+# Act 1950 under its REGNAL id, which `search_legislation` returns and which
+# `/amendment/search` holds nothing for either way. `ukpga/1963/41` is the
+# Offices, Shops and Railway Premises Act 1963, which 6341 actually cited and
+# which carries both effect classes plus 24 repeal relations.
+IN_FORCE_ACTS = [
+    ("6411", "ukpga/1998/46", "Scotland Act 1998"),
+    ("6341", "ukpga/Geo6/14/28", "Shops Act 1950 (regnal id)"),
+    ("6341", "ukpga/1950/28", "Shops Act 1950 (year/number id — a 404)"),
+    ("6341", "ukpga/1963/41", "Offices, Shops and Railway Premises Act 1963"),
+    ("—", "asp/2000/4", "Adults with Incapacity (Scotland) Act 2000 — carries both"),
+    ("6409", "asp/2025/2", "Social Security (Amendment) (Scotland) Act 2025"),
+]
+
+# The eight placeholder values `Commencement Order` rows use for
+# `changed_provision`, measured over all 1,355 such relations the replay
+# corpus's legislation_ids produce. Not one is a provision of the subject.
+_CO_PLACEHOLDERS = {
+    "specified amended provision(s)", "none", "c/o", "specified provision(s)",
+    "specified amended provisions(s)", "act",
+}
+_DATE_IN_EFFECT = re.compile(r"\(\s*(?:temp\.?\s*(?:until)?\s*)?[^)]*\d{4}[^)]*\)")
+
+
+def _replay_search_rows():
+    """Every model-visible `search_legislation` result row in the replay dirs.
+
+    Local and free. Read out of the gitignored run files the same way
+    `_size_distribution` reads its legislation_ids, so the two censuses below
+    cost nothing and describe the population the product actually showed.
+    """
+    from pathlib import Path
+
+    base = (Path(__file__).resolve().parents[2]
+            / "docs" / "prepilot-fixes" / "evidence" / "replay")
+    for run in base.glob("*/*.json"):
+        try:
+            doc = json.loads(run.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for t in doc.get("turns", []):
+            for dg in (t.get("audit") or {}).get("delegations", []):
+                for tl in dg.get("tools", []):
+                    if tl.get("name") != "search_legislation":
+                        continue
+                    raw = tl.get("final_result")
+                    if isinstance(raw, str):
+                        try:
+                            raw, _ = json.JSONDecoder().raw_decode(raw.lstrip())
+                        except Exception:
+                            continue
+                    if not isinstance(raw, dict):
+                        continue
+                    for row in raw.get("results") or []:
+                        if isinstance(row, dict):
+                            yield row
+
+
+def in_force(full: bool = False) -> int:
+    """P2.5: what, if anything, in the tool surface reports in-force status.
+
+    The answer is nothing, and this prints the four near-misses that make the
+    model think otherwise — each one a figure quoted in `BASELINE.md`'s B4
+    section and in `search_scope.py`'s P2.5 header.
+
+    `--full` walks every legislation_id the replay corpus touched (272 at the
+    last run, both directions, ~10 minutes) instead of the named sample. The
+    published duplicate-and-date figures come from the full walk; the sample is
+    for a quick re-check.
+    """
+    print("P2.5 ground truth — is there ANY in-force signal in the tool surface?")
+    print()
+
+    # --- 1. the field the model reads as currency ---------------------------
+    status = collections.Counter()
+    marked = collections.Counter()
+    marked_dated = 0
+    marked_titles = set()
+    rows = 0
+    marker = re.compile(r"\((repealed|revoked|expired|spent)\b([^)]*)\)", re.I)
+    for row in _replay_search_rows():
+        rows += 1
+        status[row.get("text_version", row.get("status", ""))] += 1
+        m = marker.search(str(row.get("title") or ""))
+        if m:
+            marked[m.group(1).lower()] += 1
+            marked_titles.add(str(row.get("title")))
+            if m.group(2).strip():
+                marked_dated += 1
+    if not rows:
+        print("  no replay run files present — the two local censuses are skipped")
+    else:
+        print(f"  `status` over {rows} model-visible search rows "
+              f"(the field the model quoted as currency):")
+        for k, v in status.most_common():
+            print(f"    {v:>6}  {100*v/rows:5.2f}%  {k!r}")
+        print("    NONE of these is an in-force signal. It records which text")
+        print("    version legislation.gov.uk holds. `stub` is the third value the")
+        print("    plan did not have.")
+        print()
+        tot_marked = sum(marked.values())
+        print(f"  the ONLY currency signal a search row carries — a marker in the")
+        print(f"  TITLE: {tot_marked} of {rows} rows ({100*tot_marked/max(rows,1):.1f}%), "
+              f"{len(marked_titles)} distinct titles")
+        for k, v in marked.most_common():
+            print(f"    {v:>6}  ({k})")
+        print(f"    ... of which carrying a DATE after the keyword: {marked_dated}")
+        print("    So it is a FLAG and not a date route. And it is asymmetric:")
+        print("    present means not in force, absent means nothing at all.")
+    print()
+
+    # --- 2. the two commencement effect classes ----------------------------
+    print("--- `coming into force` vs `Commencement Order`: NOT the same relation ---")
+    for session, lid, title in IN_FORCE_ACTS:
+        try:
+            rows_to = amendments(lid, True, size=20000)
+        except Exception as e:
+            print(f"  {lid:20} {type(e).__name__}")
+            continue
+        seen, cif, co, rep = set(), [], [], 0
+        for r in rows_to:
+            k = (r.get("changed_legislation"), r.get("changed_provision"),
+                 r.get("affecting_legislation"), r.get("affecting_provision"),
+                 r.get("type_of_effect"))
+            if k in seen:
+                continue
+            seen.add(k)
+            e = str(r.get("type_of_effect") or "")
+            if e == "coming into force":
+                cif.append(r)
+            elif e == "Commencement Order":
+                co.append(r)
+            if any(tok in e.lower() for tok in ("repeal", "revok", "revoc")):
+                rep += 1
+        print(f"  {lid:20} ({session}) {title}")
+        print(f"    {len(rows_to):>5} rows -> {len(seen):>5} relations   "
+              f"coming into force {len(cif):>4}   Commencement Order {len(co):>4}   "
+              f"repeal family {rep:>4}")
+        if co:
+            provs = sorted({str(r.get("changed_provision")) for r in co})
+            real = [p for p in provs if p.lower() not in _CO_PLACEHOLDERS]
+            print(f"      Commencement Order changed_provision values: "
+                  f"{', '.join(provs[:5])}")
+            print(f"      ... of which name a real provision of {lid}: "
+                  f"{len(real)}  <- placeholders, every one")
+            insts = collections.Counter(r.get("affecting_legislation") for r in co)
+            print(f"      affecting instruments: {', '.join(list(insts)[:4])}")
+            print("      Those are commencement orders for an AMENDMENT made to")
+            print("      this Act by another Act — NOT this Act's commencement.")
+        if cif:
+            provs = sorted({str(r.get("changed_provision")) for r in cif})
+            print(f"      coming into force names real provisions: "
+                  f"{', '.join(provs[:8])}")
+    print()
+
+    # --- 3. is the date ever in the effect string? -------------------------
+    if full:
+        lids = sorted(_corpus_legislation_ids())
+        print(f"--- a DATE in `type_of_effect`? over all {len(lids)} corpus "
+              "legislation_ids, both directions ---")
+    else:
+        lids = [lid for _, lid, _ in IN_FORCE_ACTS] + [lid for _, lid, _ in ACCEPTANCE_ACTS]
+        lids = sorted(set(lids))
+        print(f"--- a DATE in `type_of_effect`? over the {len(lids)}-instrument "
+              "sample (pass --full for all 272) ---")
+    eff = collections.Counter()
+    dated = collections.Counter()
+    cif_dated = 0
+    cif_total = 0
+    for lid in lids:
+        for direction in (True, False):
+            try:
+                rows_d = amendments(lid, direction, size=20000)
+            except Exception:
+                continue
+            seen = set()
+            for r in rows_d:
+                k = (r.get("changed_legislation"), r.get("changed_provision"),
+                     r.get("affecting_legislation"), r.get("affecting_provision"),
+                     r.get("type_of_effect"))
+                if k in seen:
+                    continue
+                seen.add(k)
+                e = str(r.get("type_of_effect") or "NULL")
+                eff[e] += 1
+                if e == "coming into force":
+                    cif_total += 1
+                if _DATE_IN_EFFECT.search(e):
+                    dated[e] += 1
+                    if e.startswith("coming into force"):
+                        cif_dated += 1
+    tot = sum(eff.values())
+    n_dated = sum(dated.values())
+    print(f"  {tot} distinct relations, {len(eff)} distinct effect strings")
+    print(f"  effect strings embedding a date: {n_dated} "
+          f"({100*n_dated/max(tot,1):.1f}%) over {len(dated)} distinct strings")
+    for e, n in dated.most_common(8):
+        print(f"    {n:>5}  {e[:70]}")
+    print(f"  `coming into force` relations: {cif_total}, of which date-bearing: "
+          f"{cif_dated}")
+    # Printed from the same walk so both commencement-class totals are behind
+    # one command. Over all 272 corpus legislation_ids this reads 19,031 and
+    # 1,355 — the pair that decides `_slim_amendment_results`'s split.
+    print(f"  `Commencement Order` relations: {eff.get('Commencement Order', 0)}  "
+          "<- a DIFFERENT relation: see section 2 above")
+    print("  So P3.5's 'no DATE on any relation' stands exactly where it matters.")
+    print("  A commencement date still needs the second hop into the commencing")
+    print("  instrument's own record (`legislation.description`).")
+    print()
+
+    # --- 4. the one date the tool surface does report ----------------------
+    print("--- `valid_date` on /legislation/text: a TEXT-VERSION date ---")
+    for lid in ("ukpga/1998/46", "asp/2018/9", "ssi/2025/119"):
+        try:
+            r = httpx.post(f"{BASE}/legislation/text",
+                           json={"legislation_id": lid}, timeout=TIMEOUT)
+            leg = (r.json() or {}).get("legislation") or {}
+        except Exception as e:
+            print(f"  {lid:16} {type(e).__name__}")
+            continue
+        print(f"  {lid:16} status={leg.get('status')!r:12} "
+              f"valid_date={leg.get('valid_date')!r:14} "
+              f"enactment_date={leg.get('enactment_date')!r}")
+    print("  `valid_date` is the date the held revised text is stated to be up to")
+    print("  date to. It is NOT a commencement date and must never be given as one,")
+    print("  but it is the honest thing a Status line can say when nothing else is")
+    print("  retrievable — a substitution rather than a silence.")
+    return 0
+
+
+def _corpus_legislation_ids() -> set:
+    """Every legislation_id the replay corpus passed to a tool."""
+    from pathlib import Path
+
+    base = (Path(__file__).resolve().parents[2]
+            / "docs" / "prepilot-fixes" / "evidence" / "replay")
+    lids = set()
+    for run in base.glob("*/*.json"):
+        try:
+            doc = json.loads(run.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for t in doc.get("turns", []):
+            for dg in (t.get("audit") or {}).get("delegations", []):
+                for tl in dg.get("tools", []):
+                    lid = str((tl.get("args") or {}).get("legislation_id") or "").strip()
+                    if lid:
+                        lids.add(lid)
+    return lids
+
 
 def commencement() -> int:
     """P3.5: what the change record actually holds for the acceptance sessions.
@@ -469,7 +721,15 @@ def main(argv=None) -> int:
                     help="P2.3: where an instrument's enabling power is retrievable")
     ap.add_argument("--commencement", action="store_true",
                     help="P3.5: the change record for the acceptance sessions' Acts")
+    ap.add_argument("--inforce", action="store_true",
+                    help="P2.5: what (nothing) reports in-force status, and the "
+                         "four near-misses that make the model think otherwise")
+    ap.add_argument("--full", action="store_true",
+                    help="with --inforce: walk all 272 corpus legislation_ids "
+                         "rather than the named sample (~10 min)")
     args = ap.parse_args(argv)
+    if args.inforce:
+        return in_force(full=args.full)
     if args.coverage:
         return coverage()
     if args.enabling:

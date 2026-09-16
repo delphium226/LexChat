@@ -1,10 +1,15 @@
 """P1.2 — the `current_only` filter is gone (bucket B4).
 
 The filter tested the LEX `status` field for `{repealed, revoked, spent,
-expired, not in force}`. That field's vocabulary is `final` and `revised` only:
-it records **which text version is held**, not in-force status. So the filter
-excluded nothing, and could not be repaired by extending the word list — there
-is no in-force signal anywhere in the tool surface.
+expired, not in force}`. ~~That field's vocabulary is `final` and `revised`
+only~~ — **corrected at P2.5: it is `final`, `revised` and `stub`**, measured at
+60.3% / 38.8% / 0.9% over the 15,160 model-visible search rows in the replay
+corpus (`python -m tools.lex_probe --inforce`). Three values, and the conclusion
+is unchanged and slightly stronger: none of them records in-force status, all
+three record **which text version is held**. So the filter excluded nothing, and
+could not be repaired by extending the word list — there is no in-force signal
+anywhere in the tool surface. P2.5 renamed the model-visible key to
+`text_version` for that reason; see `tests/test_in_force_status.py`.
 
 Two things made that worse than a dead control, and both are what these tests
 pin:

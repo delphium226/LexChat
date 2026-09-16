@@ -19,6 +19,24 @@ def _slim_search_results(resp_json: dict) -> dict:
 
     legislation_id is derived from the URI and included explicitly so the model
     can pass it directly to search_legislation_sections.
+
+    **`status` is emitted as `text_version`, and the rename is FIX_PLAN P2.5
+    (bucket B4).** The API field records which text version legislation.gov.uk
+    holds. Its measured vocabulary over the 15,160 model-visible search rows in
+    the replay corpus is `final` (60.3%), `revised` (38.8%) and `stub` (0.9%) —
+    three values, not the two the plan recorded — and **not one of them says
+    anything about whether the instrument is in force.** Under the key `status`
+    the model read it as currency and said so: of the 34 in-force sentences in
+    the Wave 1 sweep almost every one reads *"is currently in force (status:
+    revised)"* or *"(revised)"*. That is not the model inventing a source; it is
+    the model quoting the only field that looked like one.
+
+    So the affordance is removed rather than argued with, which is Invariant 2 —
+    P2.2 measured the tell-the-model-to version of this shape at 56%. A model
+    that sees `text_version: "revised"` can still say the revised text is held,
+    which is true; it cannot read currency out of the key. `extract_sources`
+    still reads it into the Sources rail's `meta`, so what a lawyer sees there is
+    byte-identical.
     """
     slimmed = []
     for item in resp_json.get("results", []):
@@ -32,7 +50,8 @@ def _slim_search_results(resp_json: dict) -> dict:
             "legislation_id": legislation_id,
             "title": item.get("title", ""),
             "url": uri,
-            "status": item.get("status", ""),
+            # See the note above: the key is deliberately NOT `status`.
+            "text_version": item.get("status", ""),
             "year": item.get("year"),
             "extent": item.get("extent", []),
         })
@@ -373,6 +392,65 @@ def _https(url) -> str:
     return re.sub(r"^http://", "https://", str(url or ""))
 
 
+# FIX_PLAN P2.5 (B4): the two commencement effect strings are NOT the same
+# relation, and merging them answers "what commenced this Act" with instruments
+# that commenced something else.
+#
+# `coming into force` names a real provision of the subject: 19,031 relations
+# over 5,180 distinct `changed_provision` values across the legislation_ids the
+# replay corpus touches. That is the subject's own commencement and it is what
+# P3.5 retrieves.
+#
+# `Commencement Order` never does. Across **1,355 of those relations the
+# `changed_provision` is one of eight placeholder values** — `specified amended
+# provision(s)` (1,068), `None` (199), `C/O` (73), `specified provision(s)` (11)
+# and four casing/typo variants — and not one of them is a provision. The row
+# means *some other Act's commencement order brought into force an amendment TO
+# the subject*: `ssi/2001/81`, the Adults with Incapacity (Scotland) Act 2000
+# (Commencement No. 1) Order 2001, appears against `ukpga/1963/41` because
+# `asp/2000/4` substituted words in its s. 90(1) and that order commenced the
+# substitution.
+#
+# **This is the trap P3.5 left open and the reason it matters here.**
+# `ukpga/1998/46` — 6411's Scotland Act 1998, the acceptance session for this
+# row — has **zero `coming into force` relations and 29 `Commencement Order`
+# ones**, whose affecting instruments include two commencement orders for
+# entirely unrelated Acts. P3.5's block invites the model to state any relation
+# it lists, citing the instrument named against it. Left merged, the fix for
+# 6411's unsourced *"the Scotland Act 1998 (Commencement) Order 1998"* would
+# have been a differently-sourced wrong answer. `asp/2000/4` carries both
+# classes (35 real, 14 placeholder), so the split is not academic.
+#
+# Re-measure with `python -m tools.lex_probe --inforce`.
+_COMMENCEMENT_OF_SUBJECT = "coming into force"
+_COMMENCEMENT_ORDER_EFFECT = "commencement order"
+
+# The repeal/revocation family, matched on the effect string. Deliberately a
+# substring test rather than a fixed set: the vocabulary has 2,912 distinct
+# values over the same sample and the family spans `repealed` (2,957), `words
+# repealed` (1,182), `revoked` (525), `word repealed` (376), `repealed in part`
+# (210), `repeal` (194), `entry repealed`, `repealed (1.1.1996)` and more. A
+# fixed set would silently miss the tail, and missing a repeal is the direction
+# this row exists to stop.
+_REPEAL_EFFECT_TOKENS = ("repeal", "revok", "revoc")
+
+
+def _effect_is_commencement_of_subject(effect: str) -> bool:
+    """True only for the effect that names a provision of the subject."""
+    return str(effect or "").strip().lower() == _COMMENCEMENT_OF_SUBJECT
+
+
+def _effect_is_commencement_order(effect: str) -> bool:
+    """True for a `Commencement Order` row — a commencement of an AMENDMENT."""
+    return str(effect or "").strip().lower() == _COMMENCEMENT_ORDER_EFFECT
+
+
+def _effect_is_repeal(effect: str) -> bool:
+    """True for anything in the repeal/revocation family. See `_REPEAL_EFFECT_TOKENS`."""
+    low = str(effect or "").lower()
+    return any(tok in low for tok in _REPEAL_EFFECT_TOKENS)
+
+
 def _slim_amendment_results(resp_json, legislation_id: str, direction: str) -> dict:
     """Collapse an `/amendment/search` response into grouped, deduplicated relations.
 
@@ -434,6 +512,11 @@ def _slim_amendment_results(resp_json, legislation_id: str, direction: str) -> d
             "url": _https(item.get(other_url_key)),
             "self": bool(other) and other == lid,
             "type_of_effect": effect,
+            # P2.5: `Commencement Order` rows do not commence the subject — see
+            # the note above. Emitted only on those rows, so a group without the
+            # key is not thereby asserted to commence anything.
+            **({"commences_this_legislation": False}
+               if _effect_is_commencement_order(effect) else {}),
             "count": 0,
             "changed_provisions": [],
             "effected_by": [],
@@ -458,8 +541,16 @@ def _slim_amendment_results(resp_json, legislation_id: str, direction: str) -> d
         )[:_MAX_EFFECTING_PROVISIONS]
         related.append(g)
     # Relations by another instrument first: that is the answer to "commenced by
-    # regulation", and the self-referential block is context for it.
-    related.sort(key=lambda g: (g["self"], -g["count"], g["legislation_id"]))
+    # regulation", and the self-referential block is context for it. P2.5 sends
+    # `Commencement Order` groups to the same back of the queue as the
+    # self-referential ones, and for the same reason: neither is an answer to
+    # "what commenced this", so neither should displace a real relation at
+    # `_MAX_RELATED_INSTRUMENTS`. On `ukpga/1998/46` that is 29 groups of one row
+    # each against 857 relations.
+    related.sort(key=lambda g: (
+        g["self"] or _effect_is_commencement_order(g["type_of_effect"]),
+        -g["count"], g["legislation_id"],
+    ))
 
     by_self = sum(g["count"] for g in related if g["self"])
     # The subject's own URL, taken from the feed rather than composed. Two
@@ -490,6 +581,18 @@ def _slim_amendment_results(resp_json, legislation_id: str, direction: str) -> d
         "by_other_legislation": len(seen) - by_self,
         "by_this_legislation_itself": by_self,
         "effects": dict(sorted(effects.items(), key=lambda kv: (-kv[1], kv[0]))),
+        # P2.5 (B4): the three currency-bearing counts, separated in code so no
+        # agent downstream has to parse the effect vocabulary to tell them
+        # apart. `commencement_orders_of_amendments` is the trap.
+        "provisions_commenced": sum(
+            v for k, v in effects.items() if _effect_is_commencement_of_subject(k)
+        ),
+        "commencement_orders_of_amendments": sum(
+            v for k, v in effects.items() if _effect_is_commencement_order(k)
+        ),
+        "repeal_or_revocation_relations": sum(
+            v for k, v in effects.items() if _effect_is_repeal(k)
+        ),
         "related_instruments": len(related),
         "related": related[:_MAX_RELATED_INSTRUMENTS],
     }

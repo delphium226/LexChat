@@ -2076,6 +2076,320 @@ def _invariant_one(before: Path, after: Path) -> None:
           "%.1f -> %.1f" % (a_rate, b_rate))
 
 
+# --- P2.5 (B4): in-force claims, and whether anything retrieved supports them --
+#
+# **`IN_FORCE_CLAIM` above is deliberately left alone.** It produced the
+# published 27 -> 30 series and widening it would move a number already in
+# `BASELINE.md`, which is the trap Session 8 recorded. It is also blind to the
+# purest form of the defect: it requires "is/are/remains/currently in force" and
+# so catches none of `wave1`'s bare Status bullets — `In force (revised).`
+# (6341 x3, 6384 x6, 6389 x3), `Status: Revised (In force).` (6406 x4),
+# `Status: Revised (In Force).` (6335). Counted properly there are **24 turns
+# and 47 assertions** in `wave1`, not 30 and 34. Both instruments are reported
+# below so the old series stays comparable and the new one is the real picture.
+#
+# Three classes, because they need different handling and only the middle one is
+# always wrong:
+#
+#   * an **assertion** that legislation is in force (`_CUR_ASSERT`);
+#   * an assertion whose stated evidence is the **text version**
+#     (`_CUR_FROM_VERSION`) — "is currently in force (revised)", "Status:
+#     Revised (In force)". This is the signature, it is never supportable, and
+#     it must go to zero;
+#   * a **commencement-date** statement (`_CUR_DATED`) — "came into force on
+#     1 July 1999". Graded separately: P3.5 made some of these retrievable, and
+#     6411's is the one that was invented.
+#
+# What is NOT an assertion, validated against all 86 `in force` sentences in
+# `wave1` and re-checked in both directions with `--drops`:
+#
+#   * **subordinate and conditional uses**, which are usually statutory text
+#     being quoted — "while an interim order is in force, no other proceedings
+#     ..." (6335 t4, quoting s. 252(2)(b)), "while certain administrative
+#     sections came into force the day after Royal Assent" (6357 t6);
+#   * **negatives and partials** — "not yet in force", "no longer in force",
+#     "only partially in force" (6410 t1). Those are repeal or non-commencement
+#     statements, and the qualified ones are the answer this row wants, not the
+#     defect. A detector that counted them would score an honest answer as the
+#     failure.
+_CUR_SUBORDINATE = re.compile(
+    r"\b(?:while|whilst|where|when|if|during|unless|until|whenever|any|an?)\b"
+    r"[^.;:]{0,70}\b(?:is|are|remains?|was|were)\s+in[- ]force\b",
+    re.I,
+)
+_CUR_NEGATED = re.compile("|".join([
+    r"\b(?:not|never|no longer|nor|neither)\b[^.;:]{0,30}\bin[- ]force\b",
+    r"\bin[- ]force\b[^.;:]{0,20}\b(?:not|no longer)\b",
+    r"\b(?:partially|partly|part) in[- ]force\b",
+    r"\bnot (?:yet )?(?:been )?(?:brought |commenced )?in(?:to)? force\b",
+]), re.I)
+# The three text-version values, which is the whole of the currency vocabulary
+# the index actually has. Interpolated rather than repeated because it appears
+# in seven alternatives below and a divergent copy is how a detector goes blind.
+_CUR_VERSION = r"(?:revised|final|stub)"
+# The affirmative assertion, in the five shapes the corpus uses. The fourth
+# alternative is the one the old `IN_FORCE_CLAIM` has no equivalent of: a bare
+# Status bullet whose entire value is the claim.
+_CUR_ASSERT = re.compile("|".join([
+    r"\b(?:is|are|remains?|remain)\s+"
+    r"(?:still\s+|currently\s+|now\s+|already\s+)?in[- ]force\b",
+    r"\bcurrently in[- ]force\b",
+    r"\bin[- ]force as (?:at|of)\b",
+    r"(?:^|\*\*|\||\bstatus(?:es)?\b[^\n:]{0,20}:\s*)\s*\(?in[- ]force\b",
+    r"\b" + _CUR_VERSION + r"\s*[/(]\s*in[- ]force\b",
+]), re.I | re.M)
+# The signature: the text version offered as the evidence for currency. Never
+# supportable, so this column must reach zero on its own. Seven alternatives
+# because the corpus writes it in both orders, inside one bracket and across
+# two, and after a `Status:` label — "In force (revised)", "Status: Revised (In
+# force)", "(Status: In force / Revised)", "is on the statute book (Revised / In
+# force)", "currently in force, with statuses recorded as either final or
+# revised". **A bare co-occurrence test is deliberately NOT used**: it would
+# trip on the legitimate post-P3.5 sentence "the revised text held shows that
+# section 9 came into force on 10 May 2025", so the version token has to be
+# bracketed or sit behind a `Status` label.
+_CUR_FROM_VERSION = re.compile("|".join([
+    r"\(\s*(?:status\s*[:=]\s*)?[^)\n]{0,25}" + _CUR_VERSION
+    + r"[^)\n]{0,25}\)[^.;\n]{0,45}in[- ]force",
+    r"in[- ]force[^.;\n]{0,45}\(\s*(?:status\s*[:=]\s*)?[^)\n]{0,25}"
+    + _CUR_VERSION + r"[^)\n]{0,25}\)",
+    r"\([^)\n]{0,30}in[- ]force[^)\n]{0,30}" + _CUR_VERSION + r"[^)\n]{0,15}\)",
+    r"\([^)\n]{0,30}" + _CUR_VERSION + r"[^)\n]{0,30}in[- ]force[^)\n]{0,15}\)",
+    r"\bstatus(?:es)?\b[^.;\n]{0,20}[:=][^.;\n]{0,30}" + _CUR_VERSION
+    + r"[^.;\n]{0,30}in[- ]force",
+    r"\bstatus(?:es)?\b[^.;\n]{0,20}[:=][^.;\n]{0,30}in[- ]force[^.;\n]{0,30}"
+    + _CUR_VERSION,
+    r"in[- ]force[^.;\n]{0,60}\bstatus(?:es)?\b[^.;\n]{0,40}" + _CUR_VERSION,
+]), re.I)
+# A dated commencement statement. Retrievable since P3.5 (by the second hop into
+# the commencing instrument), and invented in 6411 — so graded, not excluded.
+_CUR_DATED = re.compile("|".join([
+    r"\b(?:came|come|comes|coming|brought|bring|brings)\s+in(?:to)?\s+force\b"
+    r"[^.;\n]{0,80}\b(?:on|from|with effect from)\b[^.;\n]{0,40}\b\d{4}\b",
+    r"\bin[- ]force (?:on|from|with effect from)\b[^.;\n]{0,40}\b\d{4}\b",
+]), re.I)
+# Any currency vocabulary at all — the denominator for `--drops`, so the
+# both-directions audit reads everything the classifier chose to let through.
+_CUR_CONTEXT = re.compile(r"\bin[- ]force\b|\binto force\b", re.I)
+
+
+def _currency_support(turn: dict) -> dict:
+    """What this turn actually retrieved that could support a currency claim.
+
+    **Structural, computed from the audit trace, and that is the whole point.**
+    The prose half of this grading asks only "does the answer assert currency";
+    whether anything supports it is read off the tools, so the headline is a
+    conjunction of one prose test and one fact about the run rather than a
+    judgement about a sentence's sourcing. Detectors on this work have been
+    wrong seventeen times; the trace has not.
+
+    All four facts are collected and printed, and **only `commenced` counts as
+    support for an affirmative assertion.** The first draft counted the title
+    marker too, and that was wrong in the flattering direction: it graded 6411's
+    *"Yes, the Scotland Act 1998 is in force"* as SOURCED because an unrelated
+    `uksi/2024/697` appeared repeal-marked somewhere in the same turn's search
+    results. The marker is an **asymmetric** signal — its presence is evidence
+    an instrument is NOT in force, its absence is evidence of nothing — so it
+    can support only a negative, and `_CUR_NEGATED` already keeps negatives out
+    of the assertion count. A **repeal relation** is excluded for the same
+    reason and a sharper one: an answer reading "the Act remains in force except
+    ss. 38-39, repealed by uksi/2014/486" would score SOURCED off the repeal
+    while the overclaim is in the other half of the sentence.
+
+    `valid_date` is deliberately not support either. It is the date the held text
+    is up to date to, which is a text-version date — treating it as currency
+    evidence here would be the same conflation the row is about, committed by
+    its own instrument.
+    """
+    out = {"commenced": 0, "repeals": 0, "orders": 0, "marked": [], "changes": 0}
+    marker = re.compile(r"\((repealed|revoked|expired|spent)\b[^)]*\)", re.I)
+    for dg in (turn.get("audit") or {}).get("delegations", []):
+        for tl in dg.get("tools", []):
+            name = tl.get("name")
+            o = _json_or_none(tl.get("raw_result"))
+            if name == "get_legislation_changes" and isinstance(o, dict):
+                out["changes"] += 1
+                # Prefer the counts the slimmer computes (P2.5 added them); fall
+                # back to the effect histogram so a PRE-P2.5 run file still
+                # grades — which is what makes the before-column measurable.
+                eff = o.get("effects") if isinstance(o.get("effects"), dict) else {}
+                c = o.get("provisions_commenced")
+                if not isinstance(c, int):
+                    c = sum(v for k, v in eff.items()
+                            if str(k).strip().lower() == "coming into force")
+                r = o.get("repeal_or_revocation_relations")
+                if not isinstance(r, int):
+                    r = sum(v for k, v in eff.items()
+                            if any(tok in str(k).lower()
+                                   for tok in ("repeal", "revok", "revoc")))
+                ords = o.get("commencement_orders_of_amendments")
+                if not isinstance(ords, int):
+                    ords = sum(v for k, v in eff.items()
+                               if str(k).strip().lower() == "commencement order")
+                out["commenced"] += c
+                out["repeals"] += r
+                out["orders"] += ords
+            elif name == "search_legislation" and isinstance(o, dict):
+                for row in o.get("results") or []:
+                    if not isinstance(row, dict):
+                        continue
+                    if marker.search(str(row.get("title") or "")):
+                        lid = str(row.get("legislation_id") or "")
+                        if lid and lid not in out["marked"]:
+                            out["marked"].append(lid)
+    return out
+
+
+def currency_verdict(answer: str, support: dict) -> tuple:
+    """(verdict, assertions, version_cited, dated) for one answered turn.
+
+    Four verdicts:
+
+      * ``"unsupported"`` — the answer asserts that legislation is in force and
+        the run retrieved **no** commencement relation, **no** repeal relation
+        and **no** repeal-marked title. Nothing it could have relied on. This is
+        the defect and it must reach zero.
+      * ``"sourced"``     — it asserts currency and the run retrieved a `coming
+        into force` relation. **Not a claim that the sentence is right** — a
+        commencement relation for ss. 9 and 20 does not make "the Act is in
+        force" true — only that a record was in hand. `unsupported` is the
+        headline because it is the unambiguous half. **`sourced` is the
+        suppression check and must not fall to zero**, or the fix bought its
+        number by silencing answers the material now supports.
+      * ``"none"``        — no assertion. The intended state for an instrument
+        with no commencement record.
+      * ``"dated_only"``  — no bare assertion, but a commencement DATE is stated.
+        Split out because the date needs a second hop and 6411's was invented.
+    """
+    sents = [s for s in _sentences(answer) if _CUR_CONTEXT.search(s)]
+    asserts, version, dated = [], [], []
+    for s in sents:
+        if _CUR_FROM_VERSION.search(s):
+            version.append(s)
+        if (_CUR_ASSERT.search(s)
+                and not _CUR_NEGATED.search(s)
+                and not _CUR_SUBORDINATE.search(s)):
+            asserts.append(s)
+        if _CUR_DATED.search(s) and not _CUR_NEGATED.search(s):
+            dated.append(s)
+    # ONLY a retrieved `coming into force` relation. See `_currency_support`
+    # for why the repeal relation and the title marker are printed and not
+    # counted — both can support a negative and neither can support this.
+    supported = bool(support["commenced"])
+    if asserts or version:
+        return ("sourced" if supported else "unsupported"), asserts, version, dated
+    if dated:
+        return "dated_only", asserts, version, dated
+    return "none", asserts, version, dated
+
+
+def cmd_currency(args) -> int:
+    """P2.5's acceptance (B4), over a replay directory, graded per TURN.
+
+    **The headline is `UNSUPPORTED`: the answer said legislation is in force and
+    the run retrieved nothing that could establish it.** One prose test
+    (`_CUR_ASSERT`) against one structural fact (`_currency_support`, read off
+    the audit trace), so the number cannot be moved by a wording change in the
+    product — which is what happened to P2.2's denominator.
+
+    **`SOURCED` beside it is the suppression check and is as important.** P3.5
+    made commencement and repeal retrievable; a fix for this row that simply
+    forbade the claim would drive `unsupported` to zero by driving `sourced`
+    there too, and Invariant 1 read in the inverse direction says that is a
+    regression. `--before` adds the answer-length comparison for the same reason.
+
+    `--drops` prints every currency-vocabulary sentence NOT graded as an
+    assertion, which is the both-directions audit. The ones that must stay
+    uncounted are statutory quotations ("while an interim order is in force"),
+    negatives ("not yet in force"), qualified partials ("only partially in
+    force") and commencement dates, which are graded in their own column.
+    """
+    docs = load_runs(Path(args.dir))
+    if not docs:
+        print("No run files in %s" % args.dir)
+        return 1
+
+    tally = Counter()
+    answered = 0
+    old_turns = old_sentences = 0
+    new_sentences = version_sentences = dated_sentences = 0
+    rows, drops = [], []
+    for doc in sorted(docs, key=lambda d: (str(d.get("session_id")), d.get("rep", 1))):
+        sid = str(doc.get("session_id"))
+        for t in doc.get("turns", []):
+            ans = t.get("answer") or ""
+            if not ans.strip():
+                continue
+            answered += 1
+            body = _without_footer(ans)
+            # The old instrument, unchanged, so the published series stays
+            # comparable. Counted on the same body as the new one.
+            old_hits = [s for s in _sentences(body) if IN_FORCE_CLAIM.search(s)]
+            if old_hits:
+                old_turns += 1
+                old_sentences += len(old_hits)
+            support = _currency_support(t)
+            verdict, asserts, version, dated = currency_verdict(body, support)
+            tally[verdict] += 1
+            new_sentences += len(asserts)
+            version_sentences += len(version)
+            dated_sentences += len(dated)
+            if verdict != "none" or args.answers:
+                rows.append((sid, doc.get("rep", 1), t.get("turn"), verdict,
+                             asserts, version, dated, support))
+            if args.drops:
+                for s in _sentences(body):
+                    if not _CUR_CONTEXT.search(s):
+                        continue
+                    if s in asserts or s in version:
+                        continue
+                    drops.append((sid, doc.get("rep", 1), t.get("turn"), s))
+
+    print("P2.5 (B4) — in-force claims over %s  (%d run file(s))"
+          % (args.dir, len(docs)))
+    print()
+    print("  answered turns                             %5d" % answered)
+    print("  UNSUPPORTED — asserts legislation is in force and")
+    print("    retrieved NO commencement relation        %5d   <- the defect"
+          % tally["unsupported"])
+    print("  SOURCED — asserts it with a `coming into")
+    print("    force` record in hand                     %5d   <- must NOT reach 0"
+          % tally["sourced"])
+    print("  states a commencement DATE only            %5d" % tally["dated_only"])
+    print("  asserts nothing about currency             %5d" % tally["none"])
+    print()
+    print("  assertion sentences (new instrument)       %5d" % new_sentences)
+    print("  ... citing a TEXT VERSION as the evidence  %5d   <- must reach 0"
+          % version_sentences)
+    print("  commencement-date sentences                %5d" % dated_sentences)
+    print("  turns matching the OLD `IN_FORCE_CLAIM`    %5d  (%d sentence(s)) "
+          "<- the published 27->30 series" % (old_turns, old_sentences))
+    print()
+    for sid, rep, turn, verdict, asserts, version, dated, sup in rows:
+        mark = {"unsupported": "UNSUP", "sourced": "SRCED", "dated_only": "DATE ",
+                "none": "-    "}[verdict]
+        print("  %s %s rep%s t%s   retrieved: commenced=%d repeals=%d orders=%d "
+              "marked=%s"
+              % (mark, sid, rep, turn, sup["commenced"], sup["repeals"],
+                 sup["orders"], ",".join(sup["marked"][:3]) or "none"))
+        for s in version:
+            print("        VERSION-AS-EVIDENCE: %s" % s.strip()[:170])
+        for s in asserts:
+            if s not in version:
+                print("        ASSERTS: %s" % s.strip()[:170])
+        for s in dated:
+            print("        DATED:   %s" % s.strip()[:170])
+    if args.drops:
+        print()
+        print("  --drops: %d currency sentence(s) NOT graded as an assertion"
+              % len(drops))
+        for sid, rep, turn, s in drops:
+            print("    %s rep%s t%s: %s" % (sid, rep, turn, s.strip()[:170]))
+    if args.before:
+        _invariant_one(Path(args.before), Path(args.dir))
+    return 0
+
+
 def cmd_corpus(args) -> int:
     """The retrieval shape of a replay directory — every number P2.3 published.
 
@@ -2255,6 +2569,15 @@ def main(argv: Iterable[str] | None = None) -> int:
                     help="a second replay dir: prints the Invariant 1 check "
                          "(did answers shrink to buy the number?)")
 
+    cu = sub.add_parser("currency",
+                        help="P2.5 acceptance: in-force claims, graded per turn")
+    cu.add_argument("--drops", action="store_true",
+                    help="print every currency sentence NOT graded as an assertion")
+    cu.add_argument("--answers", action="store_true",
+                    help="list turns that assert nothing too")
+    cu.add_argument("--before", metavar="DIR",
+                    help="a replay dir to compare answer lengths against "
+                         "(Invariant 1: did the answers shrink to buy the number)")
     sub.add_parser("corpus",
                    help="retrieval shape: raw volume, where an enabling power "
                         "can come from, and what the tool memo costs P2.2")
@@ -2268,6 +2591,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "negatives": cmd_negatives,
         "derivations": cmd_derivations,
         "commencements": cmd_commencements,
+        "currency": cmd_currency,
         "corpus": cmd_corpus,
     }[args.cmd](args)
 

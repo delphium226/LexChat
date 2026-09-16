@@ -78,9 +78,11 @@ __all__ = [
     "section_search_note",
     "enabling_power_note",
     "amendment_search_note",
+    "currency_note",
     "record_search",
     "record_enabling_power",
     "record_relations",
+    "record_currency",
     "worker_scope_block",
     "strip_scope_blocks",
     "answer_scope_footer",
@@ -264,7 +266,8 @@ def legislation_search_note(
             "it does mean is that a ranked search cannot establish absence: an "
             "instrument, commencement, amendment or provision missing from these "
             "rows may still be held, and may still exist. Do NOT state that "
-            f"anything does not exist on the strength of this result.{adjacency}{_RELATION_ROUTE_CLAUSE} "
+            f"anything does not exist on the strength of this result.{adjacency}"
+            f"{_RELATION_ROUTE_CLAUSE}{_CURRENCY_CLAUSE} "
             f"{LEX_COVERAGE_SENTENCE} {_REPORTING_RULE}]"
         )
 
@@ -722,6 +725,11 @@ def amendment_search_note(args: dict, data: Any) -> str:
             "instruments and provisions below are real, but the list is NOT "
             "complete and you must not present it as exhaustive."
         )
+    # P2.5 (B4): which of these relations bear on currency, and — the branch
+    # that corrects rather than extends P3.5 — which of them look as though they
+    # do and do not. Placed before the closing caveats so the caveats still end
+    # the block.
+    bits.append(_relation_currency_limb(d))
     bits.append(
         " Two things this record does NOT contain, whatever it shows: there is no "
         "DATE on any relation, so you cannot say when a provision came into force "
@@ -882,6 +890,403 @@ def _relations_footer_clause(entries: Optional[list]) -> str:
     return lead
 
 
+# ---------------------------------------------------------------------------
+# B4 — in-force status, which nothing in the tool surface establishes (P2.5)
+# ---------------------------------------------------------------------------
+#
+# P1.2 removed the `current_only` filter and the two places it asserted currency
+# — the "In force as at <today>" pill and the system-prompt line *"Status:
+# In-force legislation only"*. This is the model half, and the re-baseline
+# measured that removing the filter did **not** clear the bucket: in-force
+# claims went 27 -> 30 across the sweep, because three prompt sites still tell
+# the Worker to state currency and the report structure makes
+# "Jurisdiction & Status" a mandatory section.
+#
+# **The model was not inventing a source. It was quoting the only field that
+# looked like one.** 30 turns of the Wave 1 sweep carry 34 in-force sentences
+# and almost every one reads *"is currently in force (revised)"* or *"(status:
+# revised)"*. `status` records which text version legislation.gov.uk holds —
+# `final` 60.3%, `revised` 38.8%, `stub` 0.9% over 15,160 model-visible rows —
+# and says nothing about currency. `_slim_search_results` now emits it as
+# `text_version`, which removes the affordance instead of arguing with it.
+#
+# **What this row may NOT do is forbid the claim.** P3.5 made commencement
+# retrievable and routes the Worker to `get_legislation_changes` for exactly
+# these questions; a blanket prohibition would suppress answers that are now
+# properly sourced, which is Invariant 1 read in the inverse direction. So the
+# rule is about the *blanket* claim, and the seams below separate the evidence
+# that exists from the claim that does not:
+#
+#   * **`text_version`** — a text-version marker. No currency content at all.
+#   * **a `(repealed …)` / `(revoked …)` / `(expired)` marker in the TITLE** —
+#     a real negative signal, on **258 of 15,160** model-visible search rows
+#     (1.7%, 43 distinct titles). Asymmetric and that is the point: its presence
+#     is evidence the instrument is NOT in force, its absence is no evidence
+#     either way. A **date** follows the keyword in only **8 of those 256**, so
+#     the title is a flag and not a date route.
+#     ~~256 of 12,640, 2.0%, 42 titles~~ — that was five of the seven replay
+#     directories. `lex_probe --inforce` walks all seven and is the figure.
+#   * **`coming into force` relations** — P3.5's route. Provision-level, sourced,
+#     and carries no date: **0 of 19,031** such relations embed one in
+#     `type_of_effect` (552 of 89,465 relations do, none of them commencement),
+#     so the date still needs the second hop into the commencing instrument.
+#   * **the repeal/revocation family** — provision-level and sourced, the
+#     negative counterpart of the above.
+#   * **`Commencement Order` relations** — NOT the subject's commencement. See
+#     `_slim_amendment_results`; this is the one that would have turned 6411's
+#     unsourced answer into a differently-sourced wrong one.
+#   * **`valid_date` on `/legislation/text`** — the date the held revised text is
+#     stated to be up to date to (`2026-03-11` for the Scotland Act 1998).
+#     Available on the 18% of turns that reach Phase 3, and rising under P3.5.
+#     It is not an in-force date, and it is the honest thing the Status line can
+#     say when nothing else is retrievable — a substitution rather than a
+#     silence, which is what keeps this fix on the right side of Invariant 1.
+#
+# None of them establishes that an Act **as a whole** is in force as at today,
+# and that is the specific claim the corpus is full of: *"All referenced
+# legislation is currently in force"* (6341), *"Yes, the Scotland Act 1998 is in
+# force"* (6411), *"All cited legislation is currently in force"* (6363, 6375).
+#
+# Reproduce every figure above with `python -m tools.lex_probe --inforce` and
+# `python -m tools.replay_report --dir <dir> currency`.
+
+# What the title marker looks like. legislation.gov.uk appends it to the short
+# title of a wholly repealed or revoked instrument. Anchored to the opening
+# parenthesis so an Act *named* "… (Repeals) Act" is not caught, and the 42
+# distinct matching titles in the corpus were read one by one before this was
+# relied on.
+_TITLE_STATUS_MARKER = re.compile(
+    r"\((repealed|revoked|expired|spent)\b([^)]*)\)", re.I
+)
+
+# `valid_date` on a `/legislation/text` response: the date the held revised text
+# is stated to be up to date to. NOT an in-force date, and the wording below
+# never lets it become one.
+_VALID_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _title_markers(results: Any) -> list:
+    """Titles among these search rows that carry a repeal/revocation marker.
+
+    Returns `[(legislation_id, keyword, tail)]`, tail being whatever followed the
+    keyword inside the bracket — a date on 8 of the 258 corpus rows that match,
+    empty on the rest.
+    """
+    out = []
+    if not isinstance(results, list):
+        return out
+    for r in results:
+        if not isinstance(r, dict):
+            continue
+        m = _TITLE_STATUS_MARKER.search(str(r.get("title") or ""))
+        if not m:
+            continue
+        out.append((
+            str(r.get("legislation_id") or "")[:60],
+            m.group(1).lower(),
+            m.group(2).strip()[:40],
+        ))
+    return out
+
+
+# The currency limb of the `search_legislation` scope block. Unconditional on
+# the non-empty branch, like everything else in that block: a detector deciding
+# whether *this* search is about currency would have to read the model's intent
+# before the model has formed it.
+#
+# **Kept to one sentence, and that is a measured constraint rather than taste.**
+# This clause rides on every productive `search_legislation` result — 790 of
+# them in one sweep — so each 100 characters here is ~80 KB of Worker context
+# across a run, and `test_a_long_query_is_capped_not_dropped` bounds the whole
+# block at 2,000 characters for that reason. The load-bearing half of this row
+# is elsewhere (`text_version` itself, `_currency_limb`, `_IN_FORCE_RULE`); this
+# is the reminder at the point of misreading.
+_CURRENCY_CLAUSE = (
+    " `text_version` is which text version the index holds (`final`, `revised`, "
+    "`stub`) and is NOT evidence that anything is in force: state currency only "
+    "from a `get_legislation_changes` relation, never from these rows."
+)
+
+
+def currency_note(args: dict, data: Any) -> str:
+    """The currency limb for a `search_legislation` result. Empty unless it earns it.
+
+    Two parts, and only this one is conditional: the standing warning about
+    `text_version` rides on the main search block (`_CURRENCY_CLAUSE`), and this
+    adds the **positive** finding when the page actually contains one — a title
+    carrying `(repealed)` or `(revoked)`.
+
+    That branch is worth its own block because it is the rare case where a search
+    result *does* say something about currency, and it says it in the direction a
+    lawyer must not miss. 1.7% of rows, so on 98% of searches this returns "".
+    """
+    d = _as_dict(data)
+    if not d or d.get("error"):
+        return ""
+    marked = _title_markers(d.get("results"))
+    if not marked:
+        return ""
+    listed = "; ".join(
+        f"{lid or '(unidentified)'} — title says " + kw + (f" {tail}" if tail else "")
+        for lid, kw, tail in marked[:6]
+    )
+    more = len(marked) - 6
+    return (
+        f"\n\n[CURRENCY — {len(marked)} of the rows above carry a repeal or "
+        f"revocation marker in the TITLE itself: {listed}"
+        + (f" (and {more} more)" if more > 0 else "")
+        + ". That marker is legislation.gov.uk's own and you MAY rely on it: "
+        "treat those instruments as repealed or revoked and do NOT present them "
+        "as current law. Where the marker carries no date, the date of repeal is "
+        "not established by it. The absence of a marker on the other rows is NOT "
+        "evidence that they are in force — nothing in a search result is.]"
+    )
+
+
+def _relation_currency_limb(d: dict) -> str:
+    """The three currency-bearing relation classes, appended to a change record.
+
+    Only the middle branch is a *correction* of P3.5 rather than an addition to
+    it: P3.5's block invites the model to state any relation the record lists,
+    citing the instrument named against it, and 29 of `ukpga/1998/46`'s
+    relations are `Commencement Order` rows belonging to other Acts' amendments.
+    """
+    commenced = d.get("provisions_commenced")
+    orders = d.get("commencement_orders_of_amendments")
+    repeals = d.get("repeal_or_revocation_relations")
+    bits = []
+    if isinstance(commenced, int) and commenced:
+        bits.append(
+            f" {commenced} relation(s) are `coming into force` and name a "
+            "provision of this legislation: those ARE its own commencement and "
+            "you may state them, citing the instrument against each."
+        )
+    if isinstance(orders, int) and orders:
+        bits.append(
+            f" {orders} relation(s) carry the effect `Commencement Order` and are "
+            "marked `commences_this_legislation: false`. Those are NOT "
+            "commencements of this legislation: each is a commencement order for "
+            "an AMENDMENT made to it by some other Act, which is why the "
+            "provision against them is a placeholder and not a section number. "
+            "Do NOT name any of those instruments as having commenced this "
+            "legislation or any of its provisions."
+        )
+    if isinstance(repeals, int) and repeals:
+        bits.append(
+            f" {repeals} relation(s) are repeals or revocations: those establish "
+            "that the named provision is no longer in force, and you may state "
+            "them the same way. The record gives no date for them either."
+        )
+    if isinstance(commenced, int) and not commenced:
+        bits.append(
+            " NO relation here is a `coming into force` relation for this "
+            "legislation, so this record does NOT establish when or whether any "
+            "of its provisions were commenced. Say that the commencement is not "
+            "recorded here; do not conclude it was never commenced, and do not "
+            "substitute a `Commencement Order` row for it."
+        )
+    bits.append(
+        " Whatever this record shows, it CANNOT establish that this legislation "
+        "is in force as a whole, as at today. Do not write that it is."
+    )
+    return "".join(bits)
+
+
+def record_currency(log: Optional[list], name: str, args: dict, data: Any) -> None:
+    """Record the currency evidence one tool call actually produced. Never raises.
+
+    Called from `run_worker_tool` for the three tools that can produce any:
+    `search_legislation` (a title marker), `get_legislation_changes` (a relation)
+    and `get_legislation_text` (`valid_date`). Same division of labour as
+    `record_search`, `record_enabling_power` and `record_relations` — the Worker
+    sees the tool results, and the agent that writes *"all cited legislation is
+    currently in force"* has seen none of them.
+    """
+    if log is None:
+        return
+    try:
+        d = _as_dict(data)
+        if not d or d.get("error"):
+            return
+        if name == "search_legislation":
+            marked = _title_markers(d.get("results"))
+            if marked:
+                log.append({
+                    "tool": "currency",
+                    "kind": "title_marker",
+                    "marked": [
+                        {"legislation_id": lid, "keyword": kw, "tail": tail}
+                        for lid, kw, tail in marked[:8]
+                    ],
+                })
+        elif name == "get_legislation_changes":
+            lid = str(d.get("legislation_id") or args.get("legislation_id") or "")[:60]
+            log.append({
+                "tool": "currency",
+                "kind": "relations",
+                "legislation_id": lid,
+                "commenced": d.get("provisions_commenced") or 0,
+                "orders": d.get("commencement_orders_of_amendments") or 0,
+                "repeals": d.get("repeal_or_revocation_relations") or 0,
+            })
+        elif name == "get_legislation_text":
+            # `_text_record` returns the `{legislation, full_text}` wrapper, and
+            # `valid_date` is on the NESTED record — the same shape trap
+            # `lex_probe`'s docstring records for `text` vs `full_text`. Reading
+            # it off the wrapper is silently always empty, which would forbid a
+            # statement the material supports and flag nothing.
+            leg = _text_record(d).get("legislation")
+            leg = leg if isinstance(leg, dict) else {}
+            vd = str(leg.get("valid_date") or "")
+            if _VALID_DATE.match(vd):
+                log.append({
+                    "tool": "currency",
+                    "kind": "valid_date",
+                    "legislation_id": str(
+                        args.get("legislation_id") or leg.get("id") or ""
+                    )[:60],
+                    "valid_date": vd,
+                })
+    except Exception:
+        pass
+
+
+def _currency_limb(log: Optional[list]) -> str:
+    """The currency limb of the worker's report block.
+
+    **Not silent when the step produced no currency evidence**, which is the
+    opposite gate from `_enabling_limb` and `_relations_limb` and is deliberate:
+    a step that established nothing about currency is exactly the step whose
+    report says *"all cited legislation is currently in force"*. So the gate is
+    "did this step touch legislation at all", and the two branches differ in what
+    they permit rather than in whether they speak.
+    """
+    if not log:
+        return ""
+    touched = [
+        e for e in log
+        if e.get("tool") in ("search_legislation", "search_legislation_sections",
+                             "change_record")
+    ]
+    rows = [e for e in log if e.get("tool") == "currency"]
+    if not touched and not rows:
+        return ""
+
+    marked, commenced, repealed, valid = [], [], [], []
+    for e in rows:
+        kind = e.get("kind")
+        if kind == "title_marker":
+            for m in e.get("marked") or []:
+                label = f"{m.get('legislation_id') or '?'} ({m.get('keyword')})"
+                if label not in marked:
+                    marked.append(label)
+        elif kind == "relations":
+            lid = e.get("legislation_id") or "?"
+            if e.get("commenced") and lid not in commenced:
+                commenced.append(lid)
+            if e.get("repeals") and lid not in repealed:
+                repealed.append(lid)
+        elif kind == "valid_date":
+            label = f"{e.get('legislation_id') or '?'} to {e.get('valid_date')}"
+            if label not in valid:
+                valid.append(label)
+
+    parts = [
+        "In-force status: NOTHING in this step establishes that any instrument is "
+        "in force as at today. The index records which text version it holds, not "
+        "currency, and no tool returns an in-force flag."
+    ]
+    if commenced:
+        parts.append(
+            f" Commencement relations WERE retrieved for {', '.join(commenced[:6])}"
+            " — a provision-level statement about those, citing the commencing "
+            "instrument, is supported. The relations carry no dates."
+        )
+    if repealed:
+        parts.append(
+            " Repeal or revocation relations were retrieved for "
+            f"{', '.join(repealed[:6])} — a statement that those provisions are no "
+            "longer in force is supported, again without a date."
+        )
+    if marked:
+        parts.append(
+            " These carry a repeal or revocation marker in their own title and "
+            f"must NOT be presented as current law: {', '.join(marked[:6])}."
+        )
+    if valid:
+        parts.append(
+            f" The held text is stated to be up to date to: {', '.join(valid[:4])}"
+            " — that is a text-version date, not an in-force date, and it is the "
+            "most a Status section can say about currency for those instruments."
+        )
+    parts.append(
+        " So in the Jurisdiction & Status section, state territorial extent from "
+        "the metadata, and for currency state ONLY what is listed above. If "
+        "nothing is listed, say that in-force status could not be verified from "
+        "the available sources and say what would establish it. Do NOT write that "
+        "legislation is currently in force, that it is in force with a text "
+        "version in brackets, or that all cited legislation is in force — those "
+        "are the claims this instruction exists to stop, and none of them is "
+        "supported by anything this system retrieves."
+    )
+    return "".join(parts)
+
+
+def _currency_footer_clause(entries: Optional[list]) -> str:
+    """The lawyer-facing half of P2.5, as one clause on the existing footer.
+
+    Gated on the **structural** fact that this turn searched the legislation
+    index — the same gate the footer itself has — rather than on a prose detector
+    deciding whether the answer contains a currency claim. Every other clause on
+    this footer is gated the same way, for the reason recorded above
+    `_enabling_footer_clause`: a prose detector in the product fails silently.
+
+    Two branches. Where a commencement or repeal relation was retrieved the
+    lawyer needs to know the statement is provision-level and undated; where none
+    was, the lawyer needs to know that no currency check was performed at all —
+    which is the thing 42 of 62 pre-pilot sessions could not have known, because
+    the UI was telling them the opposite.
+
+    Worded to stay clear of `NEG_ASSERTED` (P2.2), `DERIVATION_ASSERTED` (P2.3),
+    P3.5's commencement detectors and this row's own `CURRENCY_ASSERTED`. P2.2's
+    footer tripped its own denominator and P2.3's first two drafts tripped two
+    detectors; `test_footer_trips_no_detector` now covers four rows' clauses
+    because of it.
+    """
+    rows = [e for e in (entries or []) if e.get("tool") == "currency"]
+    if not rows:
+        return ""
+    sourced, marked = [], []
+    for e in rows:
+        if e.get("kind") == "relations":
+            lid = e.get("legislation_id") or ""
+            if lid and (e.get("commenced") or e.get("repeals")) and lid not in sourced:
+                sourced.append(lid)
+        elif e.get("kind") == "title_marker":
+            for m in e.get("marked") or []:
+                lid = m.get("legislation_id") or ""
+                if lid and lid not in marked:
+                    marked.append(lid)
+    lead = (
+        " Whether legislation is in force is not something this index reports, so "
+        "nothing above has been checked against a commencement date"
+    )
+    if sourced:
+        lead += (
+            "; what was checked is the recorded changes for "
+            f"{', '.join(sorted(sourced)[:3])}, which name the instruments "
+            "involved provision by provision but carry no dates."
+        )
+    else:
+        lead += " and no change record was consulted for this answer."
+    if marked:
+        lead += (
+            f" The index's own title for {', '.join(sorted(marked)[:3])} marks it "
+            "as repealed or revoked."
+        )
+    return lead
+
+
 def incomplete_steps_note(halts: list, steps_total: int = 0) -> str:
     """Instruction to the Deep Research synthesis when a plan step was cut short.
 
@@ -976,7 +1381,7 @@ _WORKER_BLOCK = re.compile(
     r"\[SEARCH SCOPE[^\]]*research step[^\]]*\][\s\S]*?\[/SEARCH SCOPE\]", re.I
 )
 _TOOL_BLOCK = re.compile(
-    r"\[/?(?:SEARCH SCOPE|ENABLING POWER|CHANGE RECORD)[^\[\]]*\]", re.I
+    r"\[/?(?:SEARCH SCOPE|ENABLING POWER|CHANGE RECORD|CURRENCY)[^\[\]]*\]", re.I
 )
 
 
@@ -1072,6 +1477,12 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     _relations = _relations_limb(log)
     if _relations:
         lines.append(_relations)
+    # P2.5 (B4). The one limb here that speaks even when its step found nothing,
+    # because "nothing found" is the state in which the blanket in-force claim
+    # gets written — see `_currency_limb`.
+    _currency = _currency_limb(log)
+    if _currency:
+        lines.append(_currency)
     lines.append(
         "NONE of this can establish that something does not exist. If any part "
         "of the answer you write reports something as not found, it MUST quote "
@@ -1267,7 +1678,8 @@ def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) ->
         "reported above "
         "as not found was not found in this index, which is not the same as being "
         f"absent from the law.{_enabling_footer_clause(all_entries)}"
-        f"{_relations_footer_clause(all_entries)}*"
+        f"{_relations_footer_clause(all_entries)}"
+        f"{_currency_footer_clause(all_entries)}*"
     )
 
 

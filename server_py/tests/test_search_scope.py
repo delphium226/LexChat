@@ -1028,11 +1028,19 @@ def test_footer_trips_no_detector():
     trips `NEG_ASSERTED` by design and by record, which is exactly why
     `_without_footer` exists. The first assertion is that the strip covers the
     lengthened footer; the rest are that this row adds no new trip of its own.
+
+    **P2.5's clause is checked here too**, which makes this four rows' worth,
+    and it is the one with the most exposure: it contains the words "in force"
+    and is read by a detector built to find exactly those. Its own
+    both-directions validation is in `test_in_force_status.py`; this is the
+    cross-check against the three detectors the other rows own.
     """
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from src.utils.search_scope import _enabling_footer_clause
+    from src.utils.search_scope import (
+        _currency_footer_clause, _enabling_footer_clause, record_currency,
+    )
     from tools.replay_report import NEG_ASSERTED, derivation_claims, _without_footer
 
     for pair in (("ssi/2018/273", False), ("uksi/1979/766", True)):
@@ -1040,6 +1048,23 @@ def test_footer_trips_no_detector():
         # The footer is stripped whole, so neither detector ever sees it.
         assert _without_footer(answer).strip() == "The Act commenced on 1 April 2025."
         clause = _enabling_footer_clause(_log_with(pair))
+        assert clause
+        assert not NEG_ASSERTED.search(clause)
+        assert derivation_claims(clause)[0] == []
+
+    # P2.5, both branches of its clause.
+    empty_log = []
+    record_currency(empty_log, "search_legislation", {}, {"results": [
+        {"legislation_id": "ukpga/1967/81",
+         "title": "Companies Act 1967 (repealed)"}]})
+    sourced_log = []
+    record_currency(sourced_log, "get_legislation_changes",
+                    {"legislation_id": "asp/2025/2"},
+                    {"legislation_id": "asp/2025/2", "provisions_commenced": 8,
+                     "commencement_orders_of_amendments": 0,
+                     "repeal_or_revocation_relations": 0})
+    for log in (empty_log, sourced_log):
+        clause = _currency_footer_clause(log)
         assert clause
         assert not NEG_ASSERTED.search(clause)
         assert derivation_claims(clause)[0] == []
