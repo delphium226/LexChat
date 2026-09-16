@@ -1408,3 +1408,151 @@ after.
     python -m tools.replay_report --dir <dir> commencements [--drops]
     python -m tools.replay_report --dir wave3_p35 commencements --before wave1
     python -m tools.replay_report --dir <dir> corpus
+
+---
+
+## B4 — in-force status, and the four things that look like it (P2.5)
+
+Measured with `python -m tools.replay_report --dir <dir> currency`, whose ground
+truth about the tool surface is re-printed live by
+`python -m tools.lex_probe --inforce [--full]`.
+
+**The model was not inventing a source. It was quoting the only field that
+looked like one.** Of the 66 in-force assertion sentences in `wave1`, **48 cite
+a text version as the evidence** — *"is currently in force (revised)"*, *"Status:
+Revised (In force)"*, *"currently in force, with statuses recorded as either
+final or revised"*. P1.2 had already removed the two places the product asserted
+currency outright (the *"In force as at <today>"* pill and the system-prompt line
+*"Status: In-force legislation only"*), and the re-baseline measured claims going
+**27 → 30**, not down. Three prompt sites still instructed the claim, and
+"Jurisdiction & Status" is a mandatory report section.
+
+### What the tool surface actually reports, and it is nothing
+
+Four near-misses, each of which a model can mistake for a currency signal. Every
+figure below is printed by `lex_probe --inforce`.
+
+| signal | where | what it establishes | coverage |
+|---|---|---|---|
+| `status` → `text_version` | every `search_legislation` row | which text version is held | 100% of rows, **0% currency content** |
+| a `(repealed …)` marker in the **title** | a `search_legislation` row | that instrument is repealed or revoked | **258 of 15,160 rows (1.7%)**, 43 distinct titles; a date on **8 of the 258** |
+| `coming into force` | `get_legislation_changes` | that **provision** was commenced by that instrument | 19,031 of 89,465 relations, over 101 of 272 legislation_ids |
+| the repeal / revocation family | `get_legislation_changes` | that **provision** is no longer in force | 2,957 `repealed` + 1,182 `words repealed` + 525 `revoked` + 376 `word repealed` + 210 `repealed in part` + 194 `repeal` + a tail |
+| `Commencement Order` | `get_legislation_changes` | **NOT the subject's commencement.** See below. | 1,355 relations over 53 legislation_ids |
+| `valid_date` | `/legislation/text` | the date the held revised text is up to date to | present on the 18% of turns that reach Phase 3; `None` on some instruments (`ssi/2025/119`) |
+
+**Not one of them establishes that an Act as a whole is in force as at today**,
+and that is the specific claim the corpus is full of: *"All referenced
+legislation is currently in force"* (6341), *"Yes, the Scotland Act 1998 is in
+force"* (6411), *"All cited legislation is currently in force"* (6363, 6375),
+*"The identified provisions are currently in force"* (6365).
+
+**`status` has three values, not the two the plan recorded.** Over all 15,160
+model-visible search rows: `final` 60.3%, `revised` 38.8%, **`stub` 0.9%**. The
+conclusion is unchanged and slightly stronger — all three record which text
+version legislation.gov.uk holds. P1.2's row and
+`tests/test_current_only_removed.py`'s docstring are corrected.
+
+### `Commencement Order` is a different relation, and it is the trap P3.5 left
+
+The handover into this row said `ukpga/1998/46` — 6411's Scotland Act 1998 —
+"returns 857 relations and ZERO `coming into force` rows". That is true of the
+exact string and it is **not** true that the change record holds no commencement
+material: there are **29 `Commencement Order` relations**. Session 8's probe
+filtered `type_of_effect == "coming into force"`, which is right for the question
+P3.5 asked and hid this one.
+
+**The two are not the same relation, and the discriminator is mechanical.**
+
+| | relations | `changed_provision` |
+|---|---|---|
+| `coming into force` | 19,031 | **5,180 distinct real provisions** (`s. 9`, `reg. 2`, `Sch. 6 para. 11`) |
+| `Commencement Order` | 1,355 | **8 values, every one a placeholder**: `specified amended provision(s)` 1,068, `None` 199, `C/O` 73, `specified provision(s)` 11, plus four casing/typo variants and one `Act` |
+
+A `Commencement Order` row means *another Act's commencement order brought into
+force an amendment **to** the subject*. `ssi/2001/81` — the Adults with
+Incapacity (Scotland) Act 2000 (Commencement No. 1) Order 2001 — appears against
+`ukpga/1963/41` because `asp/2000/4` substituted words in its s. 90(1) and that
+order commenced the substitution. `uksi/1999/1075` is the *Road Traffic (NHS
+Charges) Act 1999* Commencement Order and appears against the **Scotland Act
+1998** for the same reason.
+
+**This matters because P3.5's block invites the model to state any relation the
+record lists, citing the instrument named against it.** Left merged, the fix for
+6411's unsourced *"the Scotland Act 1998 (Commencement) Order 1998"* would have
+been a **differently-sourced wrong answer** — a named SSI, retrieved, cited, and
+about a different Act. `asp/2000/4` carries both classes (35 real, 14
+placeholder), so the split is not academic.
+
+### Two leads chased and closed, so the next session need not
+
+**The date is in the effect string — but never where it matters.** `saved
+(6.5.1999)`, `amended (1.7.1999)`, `repealed (1.1.1996)`: the `type_of_effect`
+string does sometimes carry a date, so P3.5's flat *"there is no DATE on any
+relation"* reads wrong. Measured over all 272 corpus legislation_ids in both
+directions: **552 of 89,465 relations (0.6%) embed a date, and 0 of the 19,031
+`coming into force` rows do.** P3.5's statement stands exactly where it matters
+and the second hop into the commencing instrument is still the only route to a
+commencement date.
+
+**The title marker is a flag, not a date route.** The row's unmeasured lead (5)
+was that some titles carry the repeal *and its date* — *"Shops (Early Closing
+Days) Act 1965 (repealed 1.12.1994)"*. Measured: **258 of 15,160 rows carry a
+marker (1.7%, 43 distinct titles) and only 8 of the 258 carry a date.** It is
+worth reading and it is **asymmetric** — present means not in force, absent means
+nothing at all — which is exactly the shape a Status line needs, and which the
+first draft of this row's own detector got wrong in the flattering direction.
+
+### The instrument, and why the old one is left alone
+
+`IN_FORCE_CLAIM` produced the published 27 → 30 series and is **byte-identical
+after this row**. It also **undercounts turns by 30%**: it requires
+"is/are/remains/currently in force" and so catches none of the bare Status
+bullets that are the purest form of the defect — `In force (revised).` (6341 ×3,
+6384 ×6, 6389 ×3), `Status: Revised (In force).` (6406 ×4), `Status: Revised (In
+Force).` (6335). `cmd_currency` prints both instruments so the old series stays
+comparable and the new one is the real picture.
+
+The new one grades per TURN on **one prose test against one structural fact read
+off the audit trace**, so the headline cannot be moved by a wording change in the
+product — which is what happened to P2.2's denominator.
+
+**`SOURCED` beside `UNSUPPORTED` is the suppression check, and for this row it is
+as important as the headline.** P3.5 made commencement and repeal retrievable; a
+fix that simply forbade the claim would drive `unsupported` to zero by driving
+`sourced` there too, and Invariant 1 read in the inverse direction says that is a
+regression.
+
+**Support for an affirmative assertion is a retrieved `coming into force`
+relation and nothing else.** The repeal relation and the title marker are
+collected and printed but do not count: both can support only a *negative*, and
+an answer reading *"the Act remains in force except ss. 38-39, repealed by
+uksi/2014/486"* would otherwise score SOURCED off the repeal while the overclaim
+sits in the other half of the sentence.
+
+### Before-column
+
+Every historical directory, on the new instrument (`baseline/` and `wave1/` are
+sweeps; the rest are per-row acceptance sets and are not comparable to each
+other):
+
+| | answered | **unsupported** | sourced | assertion sentences | … citing a text version | old `IN_FORCE_CLAIM` |
+|---|---|---|---|---|---|---|
+| `baseline/` | 222 | **54** | 0 | 68 | 30 | 41 turns / 54 sentences |
+| `wave1/` | 153 | **43** | 0 | 66 | **48** | 30 / 34 |
+| `wave2_p21/` | 30 | 7 | 0 | 23 | 15 | 6 / 12 |
+| `wave2_p22/` | 36 | 4 | 0 | 4 | 3 | 4 / 4 |
+| `wave2_p22_final/` | 36 | 5 | 0 | 5 | 2 | 5 / 5 |
+| `wave2_p23/` | 29 | 10 | 0 | 18 | 14 | 10 / 16 |
+| `wave3_p35/` | 51 | **0** | **4** | 5 | 2 | 3 / 4 |
+
+**`wave3_p35` is the interesting row and it is not this fix.** P3.5's own
+acceptance sessions already show the shape P2.5 wants — zero unsupported, four
+sourced — because the question they ask routes the Worker to the change record.
+Two of those four still cite a text version (*"SSI 2020/475 is in force (status:
+revised); SSI 2019/269 is in force (status: final)"*, said of instruments for
+which no commencement relation was retrieved), which is the residual this row
+removes.
+
+`sourced` is 0 in every pre-P3.5 directory for a structural reason:
+`get_legislation_changes` did not exist.

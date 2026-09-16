@@ -520,6 +520,17 @@ def test_quick_lookup_mode_can_still_reach_the_route():
         assert "PHASE 2b" in prompt
 
 
+def test_quick_lookup_must_report_what_the_route_returned():
+    """**The acceptance sweep's own finding.** 6411 obeyed the rule's "report
+    what the change record holds" clause in **1 of 3** reps: reps 1 (218 chars)
+    and 3 (713) both had 29 repeal relations in hand and reported none, while
+    rep 2 (380) did. The conversational prompt demands "2-5 sentences of concise
+    prose" and concision won — so the requirement goes in the prompt the worker
+    is actually following, next to the call it is told to make."""
+    assert "Then REPORT what it returned" in WORKER_SYSTEM_PROMPT_CONVERSATIONAL
+    assert "does NOT license calling a tool and saying nothing"         in WORKER_SYSTEM_PROMPT_CONVERSATIONAL
+
+
 def test_the_rule_does_not_forbid_a_sourced_statement():
     """P3.5 routes the Worker to `get_legislation_changes` for exactly these
     questions. A flat prohibition would fight it and suppress answers that are

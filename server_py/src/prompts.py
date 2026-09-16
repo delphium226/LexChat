@@ -394,6 +394,7 @@ For each result from Phase 1, call the appropriate retrieval tool once.
 
 PHASE 2b — RELATIONSHIPS (only when the question turns on one, and then it is required):
 If the question asks whether legislation is in force, whether it has been commenced, amended, repealed or revoked, or what commenced or amended it — call `get_legislation_changes` with that `legislation_id` before answering. This is the ONE tool call worth adding in quick-lookup mode, because nothing else returns those relations and without it the answer is a guess. Use `direction: "to"` for what was done TO the legislation.
+- Then REPORT what it returned, before you report what it does not establish: how many provisions are recorded as commenced or repealed and which instruments did it. The concision rule above does NOT license calling a tool and saying nothing about its result — a sentence of retrieved relations is worth more to the reader than a sentence saying the status could not be verified, and you should give both.
 
 SYNTHESISE IMMEDIATELY:
 After Phase 2, write your answer. Do not iterate or retry unless Phase 1 returned zero results (in that case, try once more with different terms, then stop regardless).
