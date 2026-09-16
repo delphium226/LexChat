@@ -1,5 +1,6 @@
 """LEX API result slimming and legislation-search helpers."""
 
+import re
 from urllib.parse import urlparse
 
 from ...config import settings
@@ -262,3 +263,230 @@ _TYPE_CODES: dict[str, set[str]] = {
                   "eur", "eudn", "eudr"},
     "draft":     {"ukdsi", "sdsi"},
 }
+
+
+# ---------------------------------------------------------------------------
+# P3.5 (bucket B3) — relationship retrieval over /amendment/search
+# ---------------------------------------------------------------------------
+#
+# B3 is the largest bucket and it was assumed to be permanently a disclosure.
+# P5.1 found the API publishes an OpenAPI spec listing 13 endpoints of which we
+# called 3, and that `/amendment/search` returns **commencement, amendment,
+# repeal and revocation** relations — provision-to-provision, with a resolvable
+# URL on both sides and a `search_amended` flag carrying the direction. P2.3
+# forbade the unverified claim; this retrieves the verifiable one.
+#
+# **What it refutes.** 6409 asked which sections of the Social Security
+# (Amendment) (Scotland) Act 2025 had been commenced by regulation and was told
+# "No commencement regulations have been made yet." `asp/2025/2` has eight
+# provisions commenced by SSI (seven by `ssi/2025/119`, one by `ssi/2025/377`).
+# 6410 got the same sentence about the Care Reform (Scotland) Act 2025;
+# `asp/2025/9` has twenty provisions commenced by `ssi/2025/388`. Both are false
+# negatives against data that was one endpoint away. Reproduce either with
+# `python -m tools.lex_probe --commencement`.
+#
+# Four properties of the raw feed decide the shape of this function, and three
+# of them make a naive pass-through wrong:
+#
+# 1. **A bare JSON list**, not `{results: []}` — the same shape trap
+#    `_slim_section_results` already handles.
+# 2. **31% of rows are scheme duplicates.** The same relation is returned twice,
+#    once with `http://` URLs and once with `https://`, and the API's own `id`
+#    embeds the scheme so they are not equal by id. Measured over 6,266 rows on
+#    eight instruments: 4,319 distinct, 1,947 duplicates (31%), concentrated in
+#    the Scottish material this corpus is about — `asp/2025/2` returns 71 rows
+#    for 36 relations, `asp/2018/9` 956 for 484. A tool that counts rows
+#    therefore reports roughly double, and "15 provisions commenced" would be 8.
+# 3. **`type_of_effect` is sometimes null** (19% over P5.1's 1,358-row sample;
+#    6% on `ukpga/1998/46`). These are **labelled, not dropped**: the row still
+#    records that an instrument changed a provision, which is a real retrieval,
+#    and dropping it would make the tool the reason a relation went missing. The
+#    label is the literal "not stated" and the tool block forbids describing
+#    such a row as a commencement, amendment or repeal.
+# 4. **Commencement rows are frequently self-referential** — 28 of `asp/2025/2`'s
+#    36 relations are the Act commencing its own sections under s. 27, not a
+#    regulation. `self` and the two top-level counts separate them, because
+#    "commenced by regulation" and "commenced by the Act itself" are different
+#    answers to the question 6409 actually asked.
+#
+# There is **no date** on a relation row (confirmed at P5.1 and again here), so
+# this tool can establish that s. 9 was commenced by `ssi/2025/119` and never
+# that it came into force on a given day. That bears on P2.5, and the tool block
+# says it in terms.
+
+# **Provision labels, not provision URLs, and that is a decision rather than an
+# omission.** Emitting a URL beside every listed provision costs 45-70 KB on the
+# large Acts (measured: `ukpga/2004/33` 26 KB -> 70 KB, `asp/2018/9` 18 -> 48)
+# against 3.7 KB on `asp/2025/2`, which is a lot of context for a citation form
+# a commencement answer does not use — a lawyer writes "ss. 2, 9, 17 and 20-23",
+# not eight hyperlinks. What the result does carry is the subject Act's own URL
+# and each related instrument's, which is what a commencement answer cites.
+#
+# The consequence is bounded and already handled: a model that does link a
+# provision of the subject Act is covered by P1.6 either way — the section
+# search almost always run in the same turn harvests those URLs (6409 turn 5 and
+# 6410 turn 1 both called it on the Act in question), and where it was not,
+# `enforce_provision_links` demotes the link to the Act and marks it, which is
+# the designed behaviour and not a defect.
+
+# What one group of relations may list before it starts counting instead. Taken
+# from the measured shape rather than picked: the largest real commencement
+# group in the corpus is `asp/2018/9`'s 58 provisions commenced by
+# `ssi/2018/298`, and a commencement answer that stops at 40 of them is a worse
+# answer than one that lists them. Above this the count carries the fact and the
+# list carries the examples.
+_MAX_CHANGED_PROVISIONS = 60
+# How many related instruments are listed. `ukpga/2004/33` reaches 369 groups;
+# no answer is improved by the 41st, and the total is reported either way.
+_MAX_RELATED_INSTRUMENTS = 40
+# The operative provision on the other side ("reg. 2 sch.") — a handful is
+# provenance, a hundred is noise.
+_MAX_EFFECTING_PROVISIONS = 6
+
+
+def _provision_sort_key(label) -> list:
+    """Natural order for provision labels: s. 2 before s. 10, Sch. 6 para. 2 before 10.
+
+    The API returns rows in no useful order, and a lawyer reading "s. 9, s. 21,
+    s. 20, s. 17" cannot see at a glance which sections are commenced. Digit
+    runs compare numerically, everything else case-insensitively as text.
+    """
+    parts = re.split(r"(\d+)", str(label or ""))
+    return [(1, int(p)) if p.isdigit() else (0, p.lower()) for p in parts if p != ""]
+
+
+def _https(url) -> str:
+    """Upgrade a legislation.gov.uk URL to https.
+
+    The feed emits both schemes for the same resource (see note 2 above). One
+    spelling is emitted so a citation copied out of this result is stable, and
+    https is the one legislation.gov.uk actually serves. `normalise_leg_url`
+    (P1.6) already treats the two as equal, so link enforcement is unaffected
+    either way — this is for the reader.
+    """
+    return re.sub(r"^http://", "https://", str(url or ""))
+
+
+def _slim_amendment_results(resp_json, legislation_id: str, direction: str) -> dict:
+    """Collapse an `/amendment/search` response into grouped, deduplicated relations.
+
+    `direction` is the model's word for the API's `search_amended` flag:
+
+      * ``"to"`` — changes made **to** `legislation_id` (``search_amended=True``).
+        This is the direction that answers "has it been commenced, amended or
+        repealed", and it is the default.
+      * ``"by"`` — changes `legislation_id` makes **to** other legislation
+        (``search_amended=False``).
+
+    Two field mappings fall out of that, and they are **direction-independent**,
+    which is what lets one shape serve both: `changed_provision` is always the
+    provision that was changed, and `affecting_provision` is always the
+    provision that effected the change. Only the *grouping* side flips — the
+    other instrument is the affecting one under ``"to"`` and the changed one
+    under ``"by"``.
+
+    Anything that is not a list of dicts is passed through untouched, for the
+    reason `_slim_section_results` does: a slimmer must never be the reason a
+    retrieval goes missing.
+    """
+    items = resp_json if isinstance(resp_json, list) else (
+        resp_json.get("results") if isinstance(resp_json, dict) else None
+    )
+    if not isinstance(items, list):
+        return resp_json
+
+    lid = _short_legislation_id(legislation_id)
+    other_key = "affecting_legislation" if direction == "to" else "changed_legislation"
+    other_url_key = "affecting_url" if direction == "to" else "changed_url"
+
+    seen = set()
+    groups = {}
+    effects = {}
+    rows_returned = 0
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        rows_returned += 1
+        # Identity WITHOUT the URLs, which is what collapses the http/https
+        # twins. Everything that distinguishes two real relations is here:
+        # which provision of what was changed, which provision of what did it,
+        # and the effect.
+        key = (
+            item.get("changed_legislation"), item.get("changed_provision"),
+            item.get("affecting_legislation"), item.get("affecting_provision"),
+            item.get("type_of_effect"),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+
+        effect = item.get("type_of_effect") or "not stated"
+        effects[effect] = effects.get(effect, 0) + 1
+        other = _short_legislation_id(item.get(other_key) or "")
+        g = groups.setdefault((other, effect), {
+            "legislation_id": other,
+            "url": _https(item.get(other_url_key)),
+            "self": bool(other) and other == lid,
+            "type_of_effect": effect,
+            "count": 0,
+            "changed_provisions": [],
+            "effected_by": [],
+        })
+        g["count"] += 1
+        prov = item.get("changed_provision")
+        if prov and prov not in g["changed_provisions"]:
+            g["changed_provisions"].append(prov)
+        eff_prov = item.get("affecting_provision")
+        if eff_prov and eff_prov not in g["effected_by"]:
+            g["effected_by"].append(eff_prov)
+
+    related = []
+    for g in groups.values():
+        g["changed_provisions"].sort(key=_provision_sort_key)
+        held = len(g["changed_provisions"])
+        if held > _MAX_CHANGED_PROVISIONS:
+            g["changed_provisions"] = g["changed_provisions"][:_MAX_CHANGED_PROVISIONS]
+            g["changed_provisions_not_listed"] = held - _MAX_CHANGED_PROVISIONS
+        g["effected_by"] = sorted(
+            g["effected_by"], key=_provision_sort_key
+        )[:_MAX_EFFECTING_PROVISIONS]
+        related.append(g)
+    # Relations by another instrument first: that is the answer to "commenced by
+    # regulation", and the self-referential block is context for it.
+    related.sort(key=lambda g: (g["self"], -g["count"], g["legislation_id"]))
+
+    by_self = sum(g["count"] for g in related if g["self"])
+    # The subject's own URL, taken from the feed rather than composed. Two
+    # consumers need it and neither is obvious: the model, to cite the Act it
+    # is answering about, and `enforce_provision_links` (P1.6), which demotes an
+    # unverified provision link to the Act only when the Act's URL was returned
+    # by some tool. Per-provision URLs are deliberately NOT emitted — see the
+    # note above `_MAX_CHANGED_PROVISIONS`.
+    subject_url = ""
+    for item in items:
+        if isinstance(item, dict):
+            key = "changed_url" if direction == "to" else "affecting_url"
+            if _short_legislation_id(item.get(key.replace("_url", "_legislation"))) == lid:
+                subject_url = _https(item.get(key))
+                break
+    out = {
+        "legislation_id": lid,
+        "url": subject_url,
+        "direction": direction,
+        "relations_are": (
+            "changes made TO %s by the legislation listed below" % lid
+            if direction == "to"
+            else "changes made BY %s to the legislation listed below" % lid
+        ),
+        "rows_returned": rows_returned,
+        "relations": len(seen),
+        "duplicate_rows_collapsed": rows_returned - len(seen),
+        "by_other_legislation": len(seen) - by_self,
+        "by_this_legislation_itself": by_self,
+        "effects": dict(sorted(effects.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "related_instruments": len(related),
+        "related": related[:_MAX_RELATED_INSTRUMENTS],
+    }
+    if len(related) > _MAX_RELATED_INSTRUMENTS:
+        out["related_instruments_not_listed"] = len(related) - _MAX_RELATED_INSTRUMENTS
+    return out

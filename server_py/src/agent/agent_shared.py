@@ -14,9 +14,11 @@ from typing import Callable, Optional
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import harvest_legislation_urls, provision_url_block
 from ..utils.search_scope import (
+    amendment_search_note,
     enabling_power_note,
     legislation_search_note,
     record_enabling_power,
+    record_relations,
     record_search,
     section_search_note,
 )
@@ -153,6 +155,36 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                 "excerpt": excerpt,
                 "cite": lid,
                 "url": data.get("url") or "",
+            })
+
+    elif name == "get_legislation_changes":
+        # P3.5 (B3). The instruments a change record names are the answer to a
+        # commencement question, so an answer citing SSI 2025/119 must be able
+        # to show it in the References rail.
+        #
+        # **Deliberately no excerpt, and the subtitle says what was established.**
+        # The change record proves that this instrument commenced or amended
+        # provisions of the subject; it does NOT mean its text was read.
+        # `_source_is_used` keeps a source unconditionally when it carries an
+        # excerpt, so giving one here would pin every related instrument into the
+        # rail whether or not the answer cited it — overstating what the research
+        # did and inflating `sources_kept`. Without one, only the instruments the
+        # answer actually names survive the filter.
+        for group in (data.get("related") or [])[:10]:
+            if not isinstance(group, dict) or group.get("self"):
+                continue
+            rel_lid = group.get("legislation_id") or ""
+            if not rel_lid or any(s.get("_lid") == rel_lid for s in accumulator):
+                continue
+            effect = group.get("type_of_effect") or "change"
+            subject = data.get("legislation_id") or args.get("legislation_id") or ""
+            accumulator.append({
+                "_lid": rel_lid,
+                "kind": "Statute",
+                "title": rel_lid,
+                "sub": f"recorded as {effect} for provisions of {subject}",
+                "cite": rel_lid,
+                "url": group.get("url") or "",
             })
 
     elif name == "search_case_law":
@@ -391,8 +423,19 @@ def _worker_tool_key_arg(args: dict) -> Optional[str]:
     A transcript's identity is (meeting_id, iob_id) — two different agenda
     items of one meeting are legitimate distinct retrievals, not redundant.
     slug is derivable and must NOT be part of the key.
+
+    **P3.5 adds `direction` to the key for the same reason** (bucket B3).
+    `get_legislation_changes` is the first legislation tool that takes a second
+    identifying argument: the two directions over one `legislation_id` are
+    different questions — what commenced this Act, and what this Act commences —
+    and on `asp/2025/2` they return 36 and 143 relations respectively. Keyed on
+    the id alone, asking both would be scored a redundant re-fetch and, on the
+    legislation profile where `max_redundant_tool_calls` is 0, would write an
+    EFFICIENCY breach for correct behaviour.
     """
     key_arg = args.get("legislation_id") or args.get("url") or args.get("gid") or args.get("debate_ext_id")
+    if key_arg and args.get("direction"):
+        key_arg = f"{key_arg}:{args['direction']}"
     if not key_arg and args.get("meeting_id"):
         key_arg = f"{args['meeting_id']}:{args.get('iob_id', '')}"
     return key_arg
@@ -500,6 +543,12 @@ async def run_worker_tool(
             # call on this path: correcting that would move P2.2's published
             # footer contents and is its row's call, not this one's.
             record_enabling_power(search_log, name, args, hit["raw"])
+            # P3.5 (B3): and the change record, for the same reason — a step
+            # reusing a memoised retrieval has still consulted it, and the
+            # record drives a PERMISSION (state the relation) as well as a
+            # disclosure. Silent here, the worker's report would say the step
+            # never looked.
+            record_relations(search_log, name, args, hit["raw"])
             if parent_on_chunk:
                 await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
                 await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done (cached)"})
@@ -826,6 +875,15 @@ async def run_worker_tool(
         enabling_note = enabling_power_note(args, raw_result)
     record_enabling_power(search_log, name, args, raw_result)
 
+    # P3.5 (B3): the other four relations of the bucket, which ARE retrievable.
+    # Computed from the RAW result for the same reason as everything else at
+    # this seam — a large change record is summarised, and a summary of a
+    # relation list keeps the prose and drops the counts the block is about.
+    relations_note = ""
+    if name == "get_legislation_changes":
+        relations_note = amendment_search_note(args, raw_result)
+    record_relations(search_log, name, args, raw_result)
+
     from .provider_factory import get_summarise_threshold
     # Two independent triggers: this result is large on its own, OR the run has
     # accumulated enough context that even a modest addition is no longer free.
@@ -990,6 +1048,7 @@ async def run_worker_tool(
     # the model reads on a productive search.
     result += scope_note
     result += enabling_note
+    result += relations_note
     result += phase2_note
     result += sp_phase2_note
     result += sp_committee_phase2_note

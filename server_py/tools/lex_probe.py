@@ -299,6 +299,74 @@ def enabling(sample: int = 25) -> int:
     return 0
 
 
+
+# The instruments the P3.5 acceptance sessions asked about, and the ONLY reason
+# this mode exists: `replay_report commencements` grades the *before* column,
+# where no change-record call was made and there is therefore nothing in the run
+# file to grade against. That column needs an external ground truth, and a
+# constant nobody can re-derive is the thing SESSION_LOG keeps warning about.
+# So the constant lives in `replay_report.COMMENCEMENT_TRUTH` and this command
+# re-prints it from the live API.
+ACCEPTANCE_ACTS = [
+    ("6409", "asp/2025/2", "Social Security (Amendment) (Scotland) Act 2025"),
+    ("6410", "asp/2025/9", "Care Reform (Scotland) Act 2025"),
+    ("6382/6383", "asp/2018/9", "Social Security (Scotland) Act 2018"),
+]
+
+
+def commencement() -> int:
+    """P3.5: what the change record actually holds for the acceptance sessions.
+
+    Both sessions were told *"No commencement regulations have been made yet"*.
+    They were wrong, and this prints by how much.
+
+    It also prints the two numbers that decide the tool's shape and that the
+    handover into P3.5 did not have: how many rows collapse as **http/https
+    duplicates of one relation**, and how many relations are the Act commencing
+    **its own** provisions rather than a regulation doing it.
+    """
+    print("P3.5 ground truth — /amendment/search, search_amended=True")
+    print()
+    for session, lid, title in ACCEPTANCE_ACTS:
+        try:
+            rows = amendments(lid, True, size=20000)
+        except Exception as e:
+            print(f"  {lid}: {type(e).__name__} {e}")
+            continue
+        seen, uniq = set(), []
+        for r in rows:
+            k = (r.get("changed_legislation"), r.get("changed_provision"),
+                 r.get("affecting_legislation"), r.get("affecting_provision"),
+                 r.get("type_of_effect"))
+            if k in seen:
+                continue
+            seen.add(k)
+            uniq.append(r)
+        cif = [r for r in uniq if r.get("type_of_effect") == "coming into force"]
+        selfref = [r for r in cif if r.get("affecting_legislation") == lid]
+        byother = [r for r in cif if r.get("affecting_legislation") != lid]
+        by = collections.Counter(r.get("affecting_legislation") for r in byother)
+        provs = sorted({r.get("changed_provision") for r in byother if r.get("changed_provision")})
+        print(f"  session {session}  {lid}  {title}")
+        print(f"    {len(rows)} rows -> {len(uniq)} distinct relations "
+              f"({len(rows) - len(uniq)} http/https duplicates of the same relation)")
+        print(f"    coming into force: {len(cif)}  "
+              f"(self-referential {len(selfref)}, by another instrument {len(byother)})")
+        for inst, n in by.most_common():
+            print(f"      {n:>4} provision(s) commenced by {inst}")
+        print(f"    provisions commenced by another instrument: "
+              f"{', '.join(provs[:30])}{' ...' if len(provs) > 30 else ''}")
+        print(f"    COMMENCEMENT_TRUTH entry: "
+              f'"{session}": ("{lid}", {sorted(by)!r}),')
+        print()
+    print("  Every `coming into force` relation above is invisible to "
+          "`search_legislation`,")
+    print("  `search_legislation_sections` and `get_legislation_text`. 6409 ran 41 "
+          "searches")
+    print("  for one of them and halted at the step cap with nothing.")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="lex_probe")
     ap.add_argument("--surface", action="store_true", help="endpoint list only")
@@ -306,11 +374,15 @@ def main(argv=None) -> int:
                     help="P5.3: corpus size, freshness and per-series coverage")
     ap.add_argument("--enabling", action="store_true",
                     help="P2.3: where an instrument's enabling power is retrievable")
+    ap.add_argument("--commencement", action="store_true",
+                    help="P3.5: the change record for the acceptance sessions' Acts")
     args = ap.parse_args(argv)
     if args.coverage:
         return coverage()
     if args.enabling:
         return enabling()
+    if args.commencement:
+        return commencement()
 
     print(f"LEX API surface ({BASE}/openapi.json)\n")
     called = {"/legislation/search", "/legislation/section/search", "/legislation/text"}

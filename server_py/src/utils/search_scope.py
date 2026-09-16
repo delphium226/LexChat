@@ -77,8 +77,10 @@ __all__ = [
     "legislation_search_note",
     "section_search_note",
     "enabling_power_note",
+    "amendment_search_note",
     "record_search",
     "record_enabling_power",
+    "record_relations",
     "worker_scope_block",
     "strip_scope_blocks",
     "answer_scope_footer",
@@ -178,6 +180,25 @@ def _as_dict(data: Any) -> dict:
     return {}
 
 
+# P3.5 (B3): the routing clause, on both search blocks. It is one sentence and
+# it earns its place from the measured turns. 6409 turn 5 concluded "no
+# commencement regulations have been made yet" after five `search_legislation`
+# calls and one section search; 6409 turn 6 ran **41** searches hunting a
+# commencement instrument by title and halted at the step cap with nothing;
+# 6410 turn 1 read `asp/2025/9`'s own s. 39 ("the Scottish Ministers may by
+# regulations appoint a day") and concluded from it that no day had been
+# appointed. Every one of those is the moment a false negative forms, and every
+# one of them is a search block away from the tool that answers it. The prompt
+# already carries the rule; P2.2 measured the prompt-only version of this shape
+# at 56%.
+_RELATION_ROUTE_CLAUSE = (
+    " Commencement, amendment, repeal and revocation are a special case: do NOT "
+    "conclude anything about them from these rows. Call `get_legislation_changes` "
+    "with the legislation_id — it is the only tool that returns those relations, "
+    "and it answers in one call what no number of searches can."
+)
+
+
 def legislation_search_note(
     args: dict, data: Any, cfg: Optional[dict] = None
 ) -> str:
@@ -242,7 +263,7 @@ def legislation_search_note(
             "it does mean is that a ranked search cannot establish absence: an "
             "instrument, commencement, amendment or provision missing from these "
             "rows may still be held, and may still exist. Do NOT state that "
-            f"anything does not exist on the strength of this result.{adjacency} "
+            f"anything does not exist on the strength of this result.{adjacency}{_RELATION_ROUTE_CLAUSE} "
             f"{LEX_COVERAGE_SENTENCE} {_REPORTING_RULE}]"
         )
 
@@ -306,7 +327,7 @@ def section_search_note(args: dict, data: Any) -> str:
             "instrument: a provision that does not appear here may still be in "
             "it. Do NOT state that a provision, power or duty is absent from "
             f"{leg} on the strength of this result, and do NOT speculate about "
-            f"why a provision was not returned.{enabling} If you report something "
+            f"why a provision was not returned.{enabling}{_RELATION_ROUTE_CLAUSE} If you report something "
             "as not found, say what was searched for and in which instrument.]"
         )
     return (
@@ -587,6 +608,279 @@ def _enabling_limb(log: Optional[list]) -> str:
     )
 
 
+# ---------------------------------------------------------------------------
+# B3 — the relationship, retrieved (FIX_PLAN P3.5)
+# ---------------------------------------------------------------------------
+#
+# P2.3 forbade the unverified *made under* claim. This is the other four fifths
+# of B3, and it goes the opposite way: commencement, amendment, repeal and
+# revocation ARE retrievable (`/amendment/search`, found at P5.1), so the rule
+# is *go and get it*, not *do not say it*.
+#
+# **The measured failure.** 6409 asked which sections of `asp/2025/2` had been
+# commenced by regulation and was told "No commencement regulations have been
+# made yet"; the record holds eight provisions commenced by SSI. 6410 got the
+# same sentence about `asp/2025/9`; the record holds twenty commenced by
+# `ssi/2025/388`. Neither is a hedge that went too far — both are confident
+# negatives against data one endpoint away.
+#
+# **A retrieved relation invites the opposite error, and that is what this
+# module guards.** P2.3's risk was over-claiming from nothing; P3.5's is
+# over-claiming from something — reading a `not stated` effect as a
+# commencement, reading the Act's own commencement section as a regulation,
+# or reading a truncated window as a complete list. Each of those is a
+# **structural** fact about the result, so each is stated in code rather than
+# left to the model to notice.
+
+# Rows whose `type_of_effect` is null are kept and labelled with this, never
+# dropped — see `_slim_amendment_results`. The block below names the label so
+# the model cannot treat it as an effect it recognises.
+_EFFECT_NOT_STATED = "not stated"
+
+
+def amendment_search_note(args: dict, data: Any) -> str:
+    """The scope block appended to every `get_legislation_changes` result.
+
+    Four branches' worth of facts, all computed from the result rather than
+    asserted in general terms:
+
+    * **what this can and cannot establish** — the relation, never a date, and
+      never an enabling power (P2.3 still owns that one);
+    * **the self-referential split** — an Act commencing its own sections under
+      its own commencement provision is not commencement by regulation, and 28
+      of `asp/2025/2`'s 36 relations are exactly that;
+    * **the window** — if the fetch was cap-bound the list is a prefix of an
+      unknown larger set, and saying so is the whole of P1.3's lesson;
+    * **the empty case** — which is the one that produced 6409's and 6410's
+      false negatives, and which must stay an honest negative rather than
+      become a confident one in the other direction.
+    """
+    args = args or {}
+    d = _as_dict(data)
+    if not d or d.get("error"):
+        return ""
+
+    lid = str(d.get("legislation_id") or args.get("legislation_id") or "this legislation")
+    direction = d.get("direction") or "to"
+    relations = d.get("relations")
+    if not isinstance(relations, int):
+        return ""
+
+    if not relations:
+        # Honest failure, in the direction Invariant 1 protects. An empty
+        # change record is a real and common answer — 112 of the 271
+        # legislation_ids the replay corpus touched have none — but the index
+        # is incomplete, so "nothing is recorded" is not "nothing happened".
+        return (
+            f"\n\n[CHANGE RECORD — no commencement, amendment, repeal or revocation "
+            f"relation is recorded for {lid} in this direction. That is the change "
+            "record being empty, NOT proof that the instrument has never been "
+            "commenced or amended: a change not yet recorded here is invisible to "
+            "this tool. Say that no such change is recorded, and say where you "
+            f"looked. {LEX_COVERAGE_SENTENCE}]"
+        )
+
+    by_other = d.get("by_other_legislation")
+    by_self = d.get("by_this_legislation_itself")
+    effects = d.get("effects") if isinstance(d.get("effects"), dict) else {}
+
+    bits = [
+        f"\n\n[CHANGE RECORD — {relations} recorded relation(s) for {lid}: "
+        + (
+            "changes made TO it by other legislation"
+            if direction == "to"
+            else "changes it makes TO other legislation"
+        )
+        + ". These are legislation.gov.uk's own change records and are the only "
+        "evidence of a commencement, amendment, repeal or revocation you have; "
+        "you MAY state a relation listed here, citing the instrument named "
+        "against it."
+    ]
+
+    if isinstance(by_self, int) and by_self:
+        bits.append(
+            f" {by_self} of them are marked `self: true` — {lid} acting on its OWN "
+            "provisions under its own commencement or transitional provision. That "
+            "is NOT commencement by regulation and NOT an amendment by another "
+            f"instrument: if you are asked what commenced {lid}, the answer is the "
+            f"{by_other if isinstance(by_other, int) else 0} relation(s) with "
+            "`self: false`, and the self-referential ones are the Act commencing "
+            "itself."
+        )
+    if effects.get(_EFFECT_NOT_STATED):
+        bits.append(
+            f" {effects[_EFFECT_NOT_STATED]} row(s) carry `type_of_effect: \"not "
+            "stated\"` — the record shows a change was made and does NOT say what "
+            "kind. Do not describe those as a commencement, an amendment or a "
+            "repeal; say a change is recorded without a stated effect."
+        )
+    if d.get("window_complete") is False:
+        bits.append(
+            f" This list is TRUNCATED at {d.get('window_size')} rows and the API "
+            "reports no total, so it is a window onto an unknown larger set: the "
+            "instruments and provisions below are real, but the list is NOT "
+            "complete and you must not present it as exhaustive."
+        )
+    bits.append(
+        " Two things this record does NOT contain, whatever it shows: there is no "
+        "DATE on any relation, so you cannot say when a provision came into force "
+        "from this — retrieve the commencing instrument for that; and there is no "
+        "made-under relation, so it says nothing about any instrument's enabling "
+        "power.]"
+    )
+    return "".join(bits)
+
+
+def record_relations(log: Optional[list], name: str, args: dict, data: Any) -> None:
+    """Record what a change-record retrieval established, for the two agents downstream.
+
+    Same division of labour as P2.2's `record_search` and P2.3's
+    `record_enabling_power`: the Worker sees the tool result, and the agent that
+    writes the answer — a Manager holding a `delegate_research` result, or the
+    Deep Research synthesis holding a step's findings — never does.
+
+    Never raises (Invariant 5).
+    """
+    if log is None:
+        return
+    try:
+        if name != "get_legislation_changes":
+            return
+        d = _as_dict(data)
+        if not d or d.get("error"):
+            return
+        relations = d.get("relations")
+        if not isinstance(relations, int):
+            return
+        others = []
+        for g in (d.get("related") or []):
+            if isinstance(g, dict) and not g.get("self") and g.get("legislation_id"):
+                if g["legislation_id"] not in others:
+                    others.append(g["legislation_id"])
+        log.append({
+            "tool": "change_record",
+            "legislation_id": str(
+                d.get("legislation_id") or args.get("legislation_id") or ""
+            )[:60],
+            "direction": d.get("direction") or "to",
+            "relations": relations,
+            "by_other": d.get("by_other_legislation") if isinstance(
+                d.get("by_other_legislation"), int) else 0,
+            "others": others[:8],
+            "complete": d.get("window_complete") is not False,
+        })
+    except Exception:
+        pass
+
+
+def _relations_limb(log: Optional[list]) -> str:
+    """The change-record limb of the worker's report block.
+
+    Silent when the step consulted no change record, because then nothing about
+    commencement or amendment was established either way and the sentence would
+    be noise — the same gate as `_enabling_limb`.
+
+    **The empty-record case is the one that matters here.** A step that looked
+    and found nothing is the step whose report says "no commencement regulations
+    have been made", and the Manager writing that sentence has seen neither the
+    tool result nor the note on it.
+    """
+    rows = [e for e in (log or []) if e.get("tool") == "change_record"]
+    if not rows:
+        return ""
+    looked, found, empty, truncated = [], [], [], False
+    for e in rows:
+        lid = e.get("legislation_id") or ""
+        if lid and lid not in looked:
+            looked.append(lid)
+        if e.get("by_other"):
+            for o in e.get("others") or []:
+                if o not in found:
+                    found.append(o)
+        elif not e.get("relations"):
+            if lid and lid not in empty:
+                empty.append(lid)
+        if not e.get("complete"):
+            truncated = True
+    parts = [
+        f"Change record (commencement / amendment / repeal / revocation): consulted "
+        f"for {', '.join(looked[:8]) or 'n/a'}."
+    ]
+    if found:
+        parts.append(
+            f" Relations by another instrument were retrieved and name "
+            f"{', '.join(found[:8])} — you MAY state those, citing the instrument."
+        )
+    if empty:
+        parts.append(
+            f" NO relation is recorded for {', '.join(empty[:8])}. Report that as "
+            "nothing being recorded in the change record, NOT as a finding that no "
+            "commencement or amendment has been made."
+        )
+    if truncated:
+        parts.append(
+            " At least one of those lists was truncated, so it is not exhaustive."
+        )
+    parts.append(
+        " The change record carries no dates and no made-under relation: do not "
+        "state a commencement date, or an enabling power, from it."
+    )
+    return "".join(parts)
+
+
+def _relations_footer_clause(entries: Optional[list]) -> str:
+    """The lawyer-facing half of P3.5, as one clause on the existing footer.
+
+    Gated on the **structural** fact that this turn consulted a change record,
+    for the reason `_enabling_footer_clause` is: a prose detector deciding
+    whether the answer contains a commencement claim fails silently, and this
+    work has been burned by that repeatedly.
+
+    Two things a lawyer cannot otherwise tell apart, and both are the reason the
+    clause exists rather than a general disclaimer: whether a stated
+    commencement was retrieved or inferred, and whether a "nothing found" was a
+    search that came back empty or a change record that came back empty. The
+    second is what 6409 and 6410 were told.
+
+    Worded to stay clear of `NEG_ASSERTED` (P2.2) and `DERIVATION_ASSERTED`
+    (P2.3), which read these answers — P2.2's own footer tripped the first and
+    corrupted its denominator. Pinned by `test_footer_trips_no_detector`.
+    """
+    rows = [e for e in (entries or []) if e.get("tool") == "change_record"]
+    if not rows:
+        return ""
+    consulted = []
+    for e in rows:
+        lid = e.get("legislation_id") or ""
+        if lid and lid not in consulted:
+            consulted.append(lid)
+    any_found = any(e.get("by_other") for e in rows)
+    truncated = any(not e.get("complete") for e in rows)
+    lead = (
+        " Commencement and amendment relations above come from legislation.gov.uk's "
+        f"recorded changes for {', '.join(consulted[:3])}, which this research "
+        "consulted directly"
+    )
+    if any_found:
+        lead += (
+            "; those records carry no dates, so any date given above was read from "
+            "the instrument itself and not from the relation."
+        )
+    else:
+        lead += (
+            ", and those records list nothing in the direction consulted. An empty "
+            "change record means the change is not recorded, which is a weaker "
+            "statement than the change never having been made."
+        )
+    if truncated:
+        lead += (
+            " At least one record was longer than could be listed in full, so "
+            "treat the instruments named above as examples rather than a complete "
+            "set."
+        )
+    return lead
+
+
 def incomplete_steps_note(halts: list, steps_total: int = 0) -> str:
     """Instruction to the Deep Research synthesis when a plan step was cut short.
 
@@ -680,7 +974,9 @@ _WORKER_BLOCK_CLOSE = "[/SEARCH SCOPE]"
 _WORKER_BLOCK = re.compile(
     r"\[SEARCH SCOPE[^\]]*research step[^\]]*\][\s\S]*?\[/SEARCH SCOPE\]", re.I
 )
-_TOOL_BLOCK = re.compile(r"\[/?(?:SEARCH SCOPE|ENABLING POWER)[^\[\]]*\]", re.I)
+_TOOL_BLOCK = re.compile(
+    r"\[/?(?:SEARCH SCOPE|ENABLING POWER|CHANGE RECORD)[^\[\]]*\]", re.I
+)
 
 
 def record_search(log: Optional[list], name: str, args: dict, data: Any) -> None:
@@ -768,6 +1064,13 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     _enabling = _enabling_limb(log)
     if _enabling:
         lines.append(_enabling)
+    # P3.5 (B3). Same reason again, and it is the sharpest case of it: the
+    # sentence "no commencement regulations have been made" is written by the
+    # Manager or the DR synthesis, neither of which has seen the change record
+    # the Worker consulted — or failed to consult.
+    _relations = _relations_limb(log)
+    if _relations:
+        lines.append(_relations)
     lines.append(
         "NONE of this can establish that something does not exist. If any part "
         "of the answer you write reports something as not found, it MUST quote "
@@ -928,7 +1231,8 @@ def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) ->
         "instruments made in 2026 are held (sampled Sep 2026) — so anything "
         "reported above "
         "as not found was not found in this index, which is not the same as being "
-        f"absent from the law.{_enabling_footer_clause(all_entries)}*"
+        f"absent from the law.{_enabling_footer_clause(all_entries)}"
+        f"{_relations_footer_clause(all_entries)}*"
     )
 
 

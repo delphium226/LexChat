@@ -1678,6 +1678,316 @@ def cmd_derivations(args) -> int:
     return 0 if bad == 0 else 1
 
 
+# --- P3.5 (B3) acceptance ----------------------------------------------------
+#
+# **This row is graded against an external ground truth, and that is unusual
+# here on purpose.** Every other acceptance in this plan grades what the answer
+# says about its own limits; P3.5 grades whether a specific true fact reached
+# the lawyer. It can, because the fact is small, checkable and independent of
+# the model: `asp/2025/2` has eight provisions commenced by SSI and `asp/2025/9`
+# has twenty, and both sessions were told "No commencement regulations have been
+# made yet".
+#
+# Sampled live 2026-09-16; re-print with `python -m tools.lex_probe
+# --commencement`, which emits these entries in exactly this shape so the next
+# session can diff rather than trust. A constant nobody can re-derive is the
+# failure this plan keeps recording.
+COMMENCEMENT_TRUTH = {
+    "6409": ("asp/2025/2", ["ssi/2025/119", "ssi/2025/377"]),
+    "6410": ("asp/2025/9", ["ssi/2025/388"]),
+    "6382": ("asp/2018/9", ["ssi/2018/250", "ssi/2018/298", "ssi/2018/357",
+                            "ssi/2018/393", "ssi/2019/269", "ssi/2020/127",
+                            "ssi/2020/295", "ssi/2020/75", "ssi/2021/474",
+                            "ssi/2024/57"]),
+    "6383": ("asp/2018/9", ["ssi/2018/250", "ssi/2018/298", "ssi/2018/357",
+                            "ssi/2018/393", "ssi/2019/269", "ssi/2020/127",
+                            "ssi/2020/295", "ssi/2020/75", "ssi/2021/474",
+                            "ssi/2024/57"]),
+}
+
+# Is this sentence about commencement at all? The screen, not the verdict — a
+# sentence has to be in this vocabulary before the denial test is applied to it.
+_CMC_CONTEXT = re.compile(
+    r"\bcommenc(?:e|ed|es|ement|ing)\b|\b(?:in|into) force\b"
+    r"|\bappointed day\b",
+    re.I,
+)
+
+# The denial, and **the discriminator is the NOUN, not the verb.**
+#
+# "The remaining provisions have not yet been brought into force" is TRUE of
+# `asp/2025/2` — twenty of its twenty-eight sections are uncommenced — and
+# grading it as a defect would push the model to hedge a correct statement,
+# which is the regression Invariant 1 exists to prevent and exactly how P2.2's
+# first `NEG_ASSERTED` failed at 100%. The defect is denying that a commencing
+# INSTRUMENT exists, so the negated noun must be an instrument (regulations,
+# orders, SSIs) and never a provision, section or Part.
+#
+# The second limb is the "not found" shape P2.2's fix produced — "no
+# commencement regulations were found in the index". Post-P3.5 that is still a
+# false negative when the change record holds one, and it is the shape the
+# after-column is most likely to take, so it must be counted.
+_CMC_DENIED = re.compile(
+    r"\bno\b(?:\s+\w+){0,3}\s+"
+    r"(?:regulations?|orders?|instruments?|s\.?s\.?i\.?s?|ssis?|sis?)\b"
+    r"[^.\n]{0,40}?\b(?:have|has|had|were|was)\b[^.\n]{0,25}?\bbeen\b"
+    # `found` and its relatives sit in this limb as well as the next one, and
+    # that is a measured correction rather than belt and braces. Under P2.2 the
+    # shape moved from "no commencement regulations have been MADE" to "...have
+    # been FOUND" (6409 rep 1 turn 5, `wave2_p22_final`), which the first draft
+    # of this limb missed entirely and scored as addressing commencement not at
+    # all — an under-read in the before-column of the row that has to move it.
+    r"[^.\n]{0,25}?\b(?:made|laid|enacted|issued|brought into force"
+    r"|found|located|identified|retrieved|returned|recorded)\b"
+    r"|\bno\b(?:\s+\w+){0,3}\s+"
+    r"(?:regulations?|orders?|instruments?|s\.?s\.?i\.?s?|ssis?|sis?)\b"
+    r"[^.\n]{0,40}?\b(?:were|was|are|is)\s+"
+    r"(?:found|located|identified|retrieved|returned|in force|in existence)\b"
+    r"|\bno\s+commencement\s+"
+    r"(?:regulations?|orders?|instruments?|ssis?|sis?)\b"
+    r"[^.\n]{0,40}?\b(?:exist|exists|could be found|are recorded|is recorded)\b",
+    re.I,
+)
+
+# **The denominator is structural, and picking it was the hard part.**
+#
+# The first draft graded every answered turn in a session with a known truth,
+# and scored six of wave1's eighteen as `correct` — including 6409 turn 8, whose
+# entire question is *"SSI 2025/119"*. Repeating back an instrument the LAWYER
+# supplied is not a retrieved relation, and counting it would have shown a
+# before-column that already half-passes. The same trap in the other direction
+# would exclude the turns the row exists for.
+#
+# So a turn is in scope when its QUESTION asks about commencement and does not
+# itself name one of the instruments being graded. That is 6409 turns 1-6 and
+# 6410 turns 1-2 — exactly the turns that produced "No commencement regulations
+# have been made yet" — and it is computed, not listed.
+_CMC_QUESTION = re.compile(
+    r"\bcommenc(?:e|ed|es|ement|ing)\b|\b(?:in|into) force\b"
+    r"|\bappointed day\b|\bwhen did .{0,40}(?:come|came) into\b",
+    re.I,
+)
+
+
+def _truth_for(session_id: str):
+    return COMMENCEMENT_TRUTH.get(str(session_id))
+
+
+def _names_instrument(text: str, instruments) -> list:
+    """Which of these instruments the text actually names.
+
+    Matched on the year/number pair rather than on the `ssi/2025/119` spelling,
+    because a lawyer-facing answer writes "SSI 2025/119", "S.S.I. 2025 No. 119"
+    or "the Commencement No. 1 Regulations 2025 (SSI 2025/119)". A bare
+    `2025/119` is deliberately NOT enough — it would match a great deal that is
+    not an instrument reference.
+    """
+    found = []
+    for lid in instruments:
+        parts = lid.split("/")
+        if len(parts) != 3:
+            continue
+        series, year, num = parts
+        pat = re.compile(
+            r"\b" + series + "/" + year + "/" + num + r"\b"
+            r"|\b(?:s\.?s\.?i\.?|s\.?i\.?)\.?\s*(?:No\.?\s*)?"
+            + year + r"[/ ]\s*(?:No\.?\s*)?" + num + r"\b"
+            r"|\b" + year + "/" + num + r"\s*\([Cc]\.",
+            re.I,
+        )
+        if pat.search(text or ""):
+            found.append(lid)
+    return found
+
+
+def _consulted_changes(turn: dict) -> list:
+    """The change-record calls this turn made, and what each returned."""
+    out = []
+    for dg in (turn.get("audit") or {}).get("delegations", []):
+        for tl in dg.get("tools", []):
+            if tl.get("name") != "get_legislation_changes":
+                continue
+            o = _json_or_none(tl.get("raw_result"))
+            named = []
+            if isinstance(o, dict):
+                for g in (o.get("related") or []):
+                    if isinstance(g, dict) and not g.get("self") \
+                            and g.get("legislation_id") \
+                            and g["legislation_id"] not in named:
+                        named.append(g["legislation_id"])
+            out.append({
+                "args": tl.get("args") or {},
+                "relations": o.get("relations") if isinstance(o, dict) else None,
+                "others": named,
+            })
+    return out
+
+
+# A denial that names the reason the research fell short is a different thing
+# from a denial about the law, and grading them the same would punish the
+# behaviour three lawyers praised. Both detectors are P2.1's and P2.2's, reused
+# rather than reinvented: a halt disclosure, or the index named as the thing
+# that came up short.
+def _denial_is_attributed(sentence: str) -> bool:
+    return bool(HALT_PARAPHRASE.search(sentence)
+                or NEG_BLAMED_INDEX.search(sentence))
+
+
+def commencement_verdict(session_id: str, answer: str,
+                         consulted_others=()) -> tuple:
+    """(verdict, instruments_named, denial_sentences) for one in-scope turn.
+
+    Five verdicts, and the separation of the last two is the whole care in this
+    function:
+
+      * ``"correct"`` — the answer names an instrument that really did commence
+        provisions of the Act, and does not deny that any exists.
+      * ``"false"``   — it denies a commencing instrument exists and names none,
+        with no limit stated. This is what 6409 and 6410 were told.
+      * ``"mixed"``   — it does both, which is a real shape (naming one SSI while
+        denying that others exist) and must not be scored as a clean pass.
+      * ``"limited"`` — it says none was found AND attributes that to a stated
+        limit of the research (a halt, or the index). **Honest, and still not
+        the answer**, so it is neither a pass nor the defect: P2.1 and P2.2 own
+        that failure and P3.5 must not take credit for it. 6409 turn 6 is the
+        case — the run halted and said so.
+      * ``"silent"``  — the answer addresses neither, which on an in-scope turn
+        is a non-answer rather than a pass.
+
+    **`consulted_others` overrides the attribution excuse**, and that is what
+    keeps the after-column strict. If this turn actually called
+    `get_legislation_changes` and the record named a commencing instrument, then
+    the material was in hand and a denial is a plain defect however politely it
+    is hedged.
+    """
+    truth = _truth_for(session_id)
+    if not truth:
+        return "silent", [], []
+    named = _names_instrument(answer, truth[1])
+    denials = [s for s in _sentences(answer)
+               if _CMC_CONTEXT.search(s) and _CMC_DENIED.search(s)]
+    if named and denials:
+        return "mixed", named, denials
+    if named:
+        return "correct", named, []
+    if denials:
+        if not consulted_others and all(_denial_is_attributed(d) for d in denials):
+            return "limited", [], denials
+        return "false", [], denials
+    return "silent", [], []
+
+
+def cmd_commencements(args) -> int:
+    """P3.5's acceptance, over a replay directory, graded per TURN.
+
+    Grades only the sessions in `COMMENCEMENT_TRUTH`, because the verdict needs
+    an independently verified answer and there is one only for those.
+
+    **The headline is `DELIVERED`, and that is deliberate.** It rests on a fact
+    check against an externally verified ground truth — did the answer name an
+    instrument that really did commence provisions of this Act — and needs no
+    prose classification at all, so it cannot be a detector artefact. The
+    `false` / `limited` / `silent` split below it is diagnosis, and it is the
+    part that reads prose.
+
+    That split is deliberately conservative about what counts as the defect.
+    *"A search of the legislation index for commencement regulations did not
+    return any results"* (6409 rep 1 turn 1, `wave2_p22_final`) is scored
+    `silent`, not `false`: it asserts something about the search rather than
+    about the statute book, which is exactly what P2.2 was built to produce, and
+    counting it here would book P2.2's win as P3.5's defect and push the model
+    back toward hedging. The lawyer is still not told about `ssi/2025/119` —
+    which is why `DELIVERED` is the headline and not `false`.
+
+    `--drops` prints every commencement-vocabulary sentence that was NOT graded
+    as a denial, which is the both-directions audit this work requires of any
+    new detector. Read them: the ones that must stay uncounted are true
+    statements about provisions ("the remaining sections are not yet in force")
+    and honest limits ("no commencement record is held for this Act").
+    """
+    docs = load_runs(Path(args.dir))
+    docs = [d for d in docs if _truth_for(d.get("session_id"))]
+    if not docs:
+        print("No graded session in %s (expected any of %s)"
+              % (args.dir, ", ".join(sorted(COMMENCEMENT_TRUTH))))
+        return 1
+
+    tally = Counter()
+    answered = in_scope = consulted_turns = 0
+    rows, drops = [], []
+    for doc in sorted(docs, key=lambda d: (str(d.get("session_id")), d.get("rep", 1))):
+        sid = str(doc.get("session_id"))
+        truth = _truth_for(sid)
+        for t in doc.get("turns", []):
+            ans = t.get("answer") or ""
+            if not ans.strip():
+                continue
+            answered += 1
+            question = t.get("question") or ""
+            calls = _consulted_changes(t)
+            if calls:
+                consulted_turns += 1
+            scoped = bool(_CMC_QUESTION.search(question)) and not _names_instrument(
+                question, truth[1])
+            if not scoped:
+                if args.answers:
+                    rows.append((sid, doc.get("rep", 1), t.get("turn"), "out",
+                                 [], [], calls, question))
+                continue
+            in_scope += 1
+            body = _without_footer(ans)
+            retrieved = [o for c in calls for o in c["others"]]
+            verdict, named, denials = commencement_verdict(sid, body, retrieved)
+            tally[verdict] += 1
+            rows.append((sid, doc.get("rep", 1), t.get("turn"), verdict,
+                         named, denials, calls, question))
+            if args.drops:
+                for sent in _sentences(body):
+                    if _CMC_CONTEXT.search(sent) and not _CMC_DENIED.search(sent):
+                        drops.append((sid, doc.get("rep", 1), t.get("turn"), sent))
+
+    print("P3.5 (B3) — commencement relations over %s  (%d graded run file(s))"
+          % (args.dir, len(docs)))
+    print()
+    print("  answered turns in graded sessions        %5d" % answered)
+    print("  ... that consulted the change record     %5d" % consulted_turns)
+    print("  IN SCOPE (question asks about commencement")
+    print("           and does not name the instrument) %5d" % in_scope)
+    print("  DELIVERED the relation                     %5d" % tally["correct"])
+    print("  did NOT                                    %5d"
+          % (in_scope - tally["correct"]))
+    print()
+    print("    naming a real commencing instrument      %5d" % tally["correct"])
+    print("    DENYING one exists, naming none          %5d   <- the defect"
+          % tally["false"])
+    print("    doing both                               %5d" % tally["mixed"])
+    print("    saying none found, blaming a stated limit %5d   "
+          "<- honest, still unanswered" % tally["limited"])
+    print("    saying neither                           %5d" % tally["silent"])
+    print()
+    for sid, rep, turn, verdict, named, denials, calls, question in rows:
+        mark = {"correct": "OK   ", "false": "FALSE", "mixed": "MIXED",
+                "limited": "LIMIT", "silent": "NONE ", "out": "-    "}[verdict]
+        print("  %s %s rep%s t%s  %s" % (mark, sid, rep, turn, question[:70]))
+        for c in calls:
+            a = c["args"]
+            print("        called get_legislation_changes %s direction=%s -> %s "
+                  "relation(s), others: %s"
+                  % (a.get("legislation_id"), a.get("direction", "to"),
+                     c["relations"], ", ".join(c["others"][:6]) or "none"))
+        if named:
+            print("        names: %s" % ", ".join(named))
+        for d in denials:
+            print("        DENIAL: %s" % d[:200])
+    if args.drops:
+        print()
+        print("  --drops: %d commencement sentence(s) NOT graded as a denial"
+              % len(drops))
+        for sid, rep, turn, sent in drops:
+            print("    %s rep%s t%s: %s" % (sid, rep, turn, sent[:180]))
+    return 0
+
+
 def cmd_corpus(args) -> int:
     """The retrieval shape of a replay directory — every number P2.3 published.
 
@@ -1819,6 +2129,12 @@ def main(argv: Iterable[str] | None = None) -> int:
                     help="print every sentence in the same vocabulary that was "
                          "NOT counted — the both-directions audit")
 
+    cm = sub.add_parser("commencements",
+                        help="P3.5 acceptance: commencement relations, graded per turn")
+    cm.add_argument("--answers", action="store_true", help="print every turn")
+    cm.add_argument("--drops", action="store_true",
+                    help="every commencement sentence NOT graded as a denial")
+
     sub.add_parser("corpus",
                    help="retrieval shape: raw volume, where an enabling power "
                         "can come from, and what the tool memo costs P2.2")
@@ -1831,6 +2147,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "halts": cmd_halts,
         "negatives": cmd_negatives,
         "derivations": cmd_derivations,
+        "commencements": cmd_commencements,
         "corpus": cmd_corpus,
     }[args.cmd](args)
 

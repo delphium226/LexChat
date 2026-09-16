@@ -30,6 +30,10 @@ import json
 SAFE_ARG_KEYS = frozenset({
     "legislation_id",
     "legislation_type",
+    # P3.5: `get_legislation_changes`'s direction flag — one of two literals,
+    # never user content, and the log line is useless without it (the two
+    # directions over one legislation_id are different questions).
+    "direction",
     "jurisdiction",
     "current_only",
     "year_from",

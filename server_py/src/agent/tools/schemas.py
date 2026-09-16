@@ -125,6 +125,56 @@ WORKER_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "get_legislation_changes",
+            # P3.5 (bucket B3). Named for what a lawyer asks about rather than
+            # for the endpoint: legislation.gov.uk calls this table "Changes to
+            # legislation", and the measured failures (6409, 6410) are
+            # commencement questions, which a tool called "amendments" reads as
+            # not covering. Commencement is therefore first in the sentence.
+            #
+            # The description states the negative too. B3's defect is the model
+            # answering a relationship question from search-result adjacency,
+            # and a tool that says only what it CAN do leaves the model to guess
+            # what to do when the answer is empty.
+            "description": (
+                "Retrieve the recorded relationships between one piece of legislation and others: "
+                "which provisions have been COMMENCED (brought into force) and by which instrument, "
+                "and what has been AMENDED, REPEALED or REVOKED, and by what. "
+                "Use this for any question of the form 'is it in force', 'have commencement "
+                "regulations been made', 'what commenced section N', 'what amended/repealed this', "
+                "or 'what does this instrument amend'. "
+                "These relations come from legislation.gov.uk's own change records — they are the "
+                "ONLY source for them, and a keyword search cannot establish any of them. "
+                "Returns relations grouped by the other instrument, each with the provisions "
+                "affected. It does NOT return dates, and it does NOT say what an instrument was "
+                "made under (its enabling power)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "legislation_id": {
+                        "type": "string",
+                        "description": 'The legislation ID to look up (e.g. "asp/2025/2", "ukpga/2010/15"). Must be obtained from a prior search_legislation call.',
+                    },
+                    "direction": {
+                        "type": "string",
+                        "enum": ["to", "by"],
+                        "description": (
+                            "Which way the relationship runs. "
+                            "'to' (default) = changes made TO this legislation by others — use this "
+                            "for commencement, amendment or repeal OF the Act or instrument you named. "
+                            "'by' = changes this legislation makes to OTHER legislation — use this "
+                            "when you want to know what an amending or commencement instrument does."
+                        ),
+                    },
+                },
+                "required": ["legislation_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_legislation_text",
             "description": (
                 "Get the FULL text of a piece of legislation. "

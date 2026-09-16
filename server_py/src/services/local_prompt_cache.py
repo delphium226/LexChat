@@ -51,6 +51,15 @@ logger = logging.getLogger("app")
 CACHEABLE_TOOLS = frozenset({
     # Legislation (LEX)
     "search_legislation", "search_legislation_sections", "get_legislation_text",
+    # P3.5: `get_legislation_changes` returns legislation.gov.uk's published
+    # change record for one instrument (`/amendment/search`). Admitted after
+    # the check this allowlist exists to force: its arguments are a
+    # `legislation_id` and a direction, its output is public statutory data,
+    # and no part of either is user content — so nothing about one lawyer's
+    # matter can reach the shared table through it. Note the cache only ever
+    # engages on the summarisation path, and a slimmed change record is 1-23KB,
+    # so in practice this admits the rare very large one and little else.
+    "get_legislation_changes",
     # Case law (Find Case Law)
     "search_case_law", "get_case_law_text",
     # Scottish Parliament (Official Report / TWFY / bills API)

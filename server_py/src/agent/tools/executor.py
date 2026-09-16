@@ -19,6 +19,7 @@ from .lex import (
     LEX_API_URL,
     _TYPE_CODES,
     _matches_jurisdiction,
+    _slim_amendment_results,
     _slim_search_results,
     _slim_section_results,
     extract_legislation_ids_from_search,
@@ -32,6 +33,16 @@ logger = logging.getLogger("agent")
 # loss — a search returning exactly this many is cap-bound and says nothing
 # about whether the filters removed anything (see `tools/replay_report.py`).
 _MAX_SEARCH_RESULTS = 5
+
+# P3.5: the two `size` values `get_legislation_changes` asks `/amendment/search`
+# for. `size` silently truncates and the response carries no count field, so the
+# only way to know a result is complete is to ask for more than it holds. The
+# first value covers 95% of the instruments the replay corpus touches; the
+# second completes every one of the remaining 13 (largest 5,185 rows) and the
+# pathological `ukpga/1988/1` (13,681) besides. A second bind is reported, not
+# chased — see the branch for the measurements.
+_AMENDMENT_FETCH_SIZE = 2000
+_AMENDMENT_ESCALATED_SIZE = 20000
 
 # -----------------------------------------------------------------------
 # Retry / backoff for the (rate-limited) LEX API
@@ -304,6 +315,89 @@ async def execute_worker_tool(
                 # own provision-level URL so citations link to the provision
                 # rather than to the Act's contents page.
                 return json.dumps(_slim_section_results(resp_json))
+
+            elif name == "get_legislation_changes":
+                # P3.5 (bucket B3): the relation itself, instead of a
+                # prohibition on claiming it. See `_slim_amendment_results` for
+                # what the feed actually looks like and why it cannot be passed
+                # through raw.
+                url = f"{LEX_API_URL}/amendment/search"
+                direction = "by" if str(
+                    args.get("direction") or ""
+                ).strip().lower() == "by" else "to"
+                legislation_id = args["legislation_id"]
+
+                # **Fetch past the cap rather than misreport it (P1.3's lesson).**
+                # `size` silently truncates and the response carries NO count
+                # field of any kind, so a modest `size` under-reports the
+                # relations with nothing to signal it — which is exactly the
+                # windowing defect `search_legislation` had, where `total` was
+                # misreported on 1,010 of 1,531 searches.
+                #
+                # Measured over the 271 distinct legislation_ids the replay
+                # corpus actually touched: median 14 relation rows, p90 870, and
+                # **13 (4.8%) exceed 2,000**. Every one of those 13 completes at
+                # `_ESCALATED_SIZE` (largest 5,185 rows / 5.3 MB / 2.3 s), so one
+                # escalation on 5% of calls buys a true count on all of them.
+                # A large `size` costs nothing when the relations are few — the
+                # API returns what exists — so the only reason to start at 2,000
+                # at all is to keep the pathological instrument (`ukpga/1988/1`,
+                # 13,681 rows / 11.9 MB) off the common path.
+                rows = []
+                requested = _AMENDMENT_FETCH_SIZE
+                for requested in (_AMENDMENT_FETCH_SIZE, _AMENDMENT_ESCALATED_SIZE):
+                    payload = {
+                        "legislation_id": legislation_id,
+                        "search_amended": direction == "to",
+                        "size": requested,
+                    }
+
+                    await _emit(on_chunk, {
+                        "type": "api_call_start",
+                        "id": call_id,
+                        "url": url,
+                        "method": "POST",
+                        "payload": payload,
+                    })
+
+                    t0 = time.perf_counter()
+                    resp = await _request_with_retry(
+                        client, "POST", url, name=name, json=payload, timeout=120.0
+                    )
+                    elapsed_ms = (time.perf_counter() - t0) * 1000
+
+                    if timing_collector:
+                        timing_collector.record_lex_api_call(name, elapsed_ms)
+
+                    try:
+                        resp_json = resp.json()
+                    except ValueError:
+                        resp_json = {"text": resp.text}
+
+                    await _emit(on_chunk, {
+                        "type": "api_call_end",
+                        "id": call_id,
+                        "url": url,
+                        "status": resp.status_code,
+                        "response": resp_json,
+                        "elapsed_ms": round(elapsed_ms),
+                    })
+
+                    resp.raise_for_status()
+                    rows = resp_json if isinstance(resp_json, list) else resp_json
+                    # Exactly `size` rows can only mean the cap bound. Escalate
+                    # once; a second bind is reported rather than chased.
+                    if not (isinstance(rows, list) and len(rows) >= requested):
+                        break
+
+                slimmed = _slim_amendment_results(rows, legislation_id, direction)
+                if isinstance(slimmed, dict):
+                    slimmed["window_complete"] = not (
+                        isinstance(rows, list) and len(rows) >= requested
+                    )
+                    if not slimmed["window_complete"]:
+                        slimmed["window_size"] = requested
+                return json.dumps(slimmed)
 
             elif name == "get_legislation_text":
                 url = f"{LEX_API_URL}/legislation/text"

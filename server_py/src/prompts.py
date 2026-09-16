@@ -85,6 +85,25 @@ _ENABLING_POWER_RULE = """ENABLING POWER (what an instrument was MADE UNDER):
 - This is about DERIVATION, not citation. Describing what a provision says or does — "under section 91, Ministers must consult" — is correct and expected. Claiming that a named instrument was MADE under it is the assertion that needs evidence."""
 
 
+# P3.5 (B3) — the four relations that ARE retrievable, and the tool that gets
+# them. The mirror image of `_ENABLING_POWER_RULE` above and deliberately
+# adjacent to it: one says *do not assert what nothing returns*, the other says
+# *go and retrieve what something does*, and a model given only the first learns
+# to hedge relationship questions it could have answered. 6409 and 6410 were
+# both told "no commencement regulations have been made yet" about Acts whose
+# change record names the commencing SSI.
+#
+# Short, and belt-and-braces, for the reason recorded above `_ENABLING_POWER_RULE`:
+# the load-bearing half of this fix is code (`amendment_search_note`,
+# `_relations_limb`, `_relations_footer_clause`). P2.2 measured the
+# instruction-only version of this shape at 56% compliance.
+_RELATIONSHIP_RULE = """COMMENCEMENT, AMENDMENT, REPEAL AND REVOCATION (relations between instruments):
+- These four relations ARE retrievable, and only by `get_legislation_changes`. A keyword search cannot establish any of them: an instrument ranking highly in a search for an Act's title has not thereby been shown to commence or amend it.
+- So if the question asks whether something is in force, whether commencement regulations have been made, what commenced or amended a provision, or what an instrument amends or revokes, you MUST call `get_legislation_changes` before answering. Do not answer any of those from search results, from section text, or from memory.
+- NEVER write that no commencement regulations have been made, or that nothing has amended or repealed a provision, unless you have called `get_legislation_changes` for that legislation and it came back empty — and then say that no such change is recorded, not that none was made.
+- The change record gives no DATES. It establishes that an instrument commenced a provision, never when it came into force; for a date, retrieve the commencing instrument itself.
+- The change record says nothing about ENABLING POWER either. The rule above still governs what an instrument was made under."""
+
 WORKER_SYSTEM_PROMPT = """You are a specialized Legal Research Support Agent for UK Law.
 Your output will be reviewed by government lawyers who require absolute precision.
 
@@ -109,6 +128,9 @@ For each `legislation_id` obtained in Phase 1, call `search_legislation_sections
 - You MUST complete Phase 2 before composing your answer. It is incorrect to stop at Phase 1 search results — they do not contain the actual legislative text needed to answer legal questions.
 - Issue all Phase 2 section searches in a single turn — batch them together.
 
+PHASE 2b — RELATIONSHIPS (required whenever the question involves one):
+If the question asks whether legislation is in force, whether it has been commenced, amended, repealed or revoked, what commenced or amended it, or what it amends — call `get_legislation_changes` with that `legislation_id`. This is the only tool that returns those relations; section text and search results do not contain them. Use `direction: "to"` for what was done TO the Act, `direction: "by"` for what the Act does to others.
+
 PHASE 3 — FALLBACK (only if Phase 2 is insufficient):
 Call `get_legislation_text` only if `search_legislation_sections` returns no useful results for a given Act, or if the question genuinely requires the full Act structure (e.g. a comprehensive structural overview).
 
@@ -123,6 +145,7 @@ TOOL GUIDANCE:
   - If a year is known, set `year_from` and `year_to` to the same value to pin the search.
   - Use the exact short title of the Act, not a topic description.
 - `search_legislation_sections`: The primary retrieval tool. Use after `search_legislation` to pull specific provisions from a known Act. Pass the `legislation_id` and a query describing the specific provision (e.g. "general duty of employer", "penalty", "definition of worker"). This is how you get the actual legal text — use it for every Act found in Phase 1.
+- `get_legislation_changes`: The ONLY source of commencement, amendment, repeal and revocation relations. Pass a `legislation_id` and a direction. Returns the instruments involved and the provisions affected, grouped — but no dates, and no enabling power.
 - `get_legislation_text`: Fallback only. Use when `search_legislation_sections` returns nothing useful, or when the question genuinely requires the full Act text. Do not use as a first step.
 - Never answer from memory alone. If you have not called at least `search_legislation` followed by `search_legislation_sections`, you have not done your job.
 
@@ -151,7 +174,7 @@ CITATION PROTOCOL:
 
 Review your answer before responding: Does every claim have a corresponding source from the API? If yes, proceed.
 
-""" + _ENABLING_POWER_RULE
+""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE
 
 WORKER_SYSTEM_PROMPT_CASE_LAW = """You are a specialized Legal Research Support Agent for UK Case Law.
 Your output will be reviewed by government lawyers who require absolute precision.
@@ -259,7 +282,7 @@ OUTPUT STRUCTURE (Use Markdown):
 4. **Jurisdiction & Status:** Geographic scope, whether legislation is in force, whether cases remain good law.
 5. **References:** Complete list of all sources used. This section is MANDATORY — a report without it is incomplete.
 
-""" + _ENABLING_POWER_RULE
+""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE
 
 
 _MANAGER_CONV_BODY = """You are a legal assistant for a UK government legal department.
@@ -336,7 +359,7 @@ CITATION FORMAT:
 Inline only. Example: "Under s.7 of the [Acquisition of Land Act 1981](URL), ..."
 Do not produce a standalone References list.
 
-""" + _ENABLING_POWER_RULE
+""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE
 
 
 _LEGISLATION_TYPE_LABELS = {

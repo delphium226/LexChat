@@ -25,6 +25,10 @@ const toolLabel = tool =>
     'Worker: search_legislation': 'Querying legislation database…',
     'Worker: search_legislation_sections': 'Retrieving statutory sections…',
     'Worker: get_legislation_text': 'Reviewing statutory text…',
+    // P3.5: commencement / amendment / repeal relations. Labelled for what
+    // a lawyer asked, not for the endpoint — the measured questions are
+    // "is it in force" and "have commencement regulations been made".
+    'Worker: get_legislation_changes': 'Checking commencements and amendments…',
     'Worker: search_case_law': 'Searching case law database…',
     'Worker: get_case_law_text': 'Retrieving case law judgment…',
     // Scottish Parliament (Holyrood) bot
