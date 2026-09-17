@@ -2444,3 +2444,176 @@ P2.8 trade: the product never gates on reading the question.
 The row estimated about $4 for n=3 plus $1.30 for the smoke run. 6375 ran at
 $0.70–1.78 and 7.3–11.2 minutes per rep, against an estimate of $0.94 and 6–7
 minutes.
+
+---
+
+## The discovery budget (P2.7)
+
+`run_worker_agent` gave a search budget only to the parliamentary modes. A
+legislation Worker could therefore search until `chat_loop`'s 20-round step cap
+stopped it — and a halted worker writes **no findings at all**, so every
+retrieval it paid for is lost to the answer.
+
+### The unit is rounds, and that is the finding this row turns on
+
+The row's pre-flight fitted a budget of N **issued calls**. That is the wrong
+unit, and the data says so in two directions.
+
+- **The cap counts rounds, and the model batches.** 6341's broad question
+  ("every statutory definition of shop in Scots law") completes delegations that
+  issue 9-21 searches in 6-16 rounds. A call budget cuts those exactly as hard
+  as it cuts a flail.
+- **Search rounds separate the two groups; calls do not.** Per worker run, over
+  the post-P3.5 pool (`wave3_p35`, `wave2_p25`, `wave2_p28`; 162 runs):
+
+| per worker run | halted (13) | completed (149) |
+|---|---|---|
+| `search_legislation` issued | median 12, max 24 | median 2, p90 7, max 21 |
+| **rounds in which it searched** | **median 14, min 6** | **median 2, p90 5, max 9** |
+
+  A budget of **8 search rounds** stops 11 of 13 halted runs and 1 of 149
+  completed. The best call budget (N=10) stops 8 of 13 and 9 of 149, and the
+  nine it stops are 6341 delegations that finished.
+
+- **Memo hits count, and that decision came from the same data.** 57 of the 81
+  memo hits on halted runs repeat a search the same step had already made
+  (6383: 5 issued, 9 repeats). So the legislation check runs BEFORE the memo
+  lookup, unlike the parliamentary one. Charging by round keeps the cost to a
+  Deep Research step that legitimately reuses an earlier step's search at one
+  round.
+
+- **`search_case_law` is not budgeted** (user decision): no halted run in any
+  directory issued one, and completed 6375 steps use up to 9 case-law rounds.
+
+Checked on the other pools at K=8: `wave2_p21`+`wave2_p23` 10 of 14 halted and
+0 of 99 completed; the P2.2-era directories (6409's flail) 14 of 14 and 6 of
+113; the five P2.4 directories, which have no halts, 0 of 115 completed.
+
+### Before — measured at HEAD, because no 6341 run existed at a post-P2.4 head
+
+`wave2_p27_pre`, head `7a98e60`, n=3 on 6341 and 6374, **$13.58**. Both
+sessions halt in **3 of 3 reps**: 12 halted turns, 15 halted worker runs. All 12
+were disclosed correctly (`halts` 0 failing) — P2.1 is doing its job; what the
+halts cost is the research thrown away.
+
+| per worker run, at HEAD | halted (15) | completed (45) |
+|---|---|---|
+| `search_legislation` issued | median 14, max 32 | median 4, max 20 |
+| rounds in which it searched | median 13, min 8 | median 3, max 11 |
+
+K=8 would stop 14 of the 15 halted runs and 4 of 45 completed — and those four
+ran to 14-18 rounds, within six of the cap.
+
+### After (`wave2_p27`, head `bbb5416`, n=3 on both, $13.57)
+
+| | before | after |
+|---|---|---|
+| **halted worker runs** | **15** | **2** |
+| halted turns | 12 | 2 |
+| 6341: halted runs / rep | 3.3 | **0.0** |
+| 6341: turns at the step cap / rep | 2.7 | **0.0** |
+| 6374: halted runs / rep | 1.7 | 0.7 |
+| 6341: **sources kept / rep** | 57.7 | **59.3** |
+| 6374: **sources kept / rep** | 35.0 | **35.7** |
+| 6341: search rounds / rep | 67.3 | 54.0 |
+| 6374: search rounds / rep | 47.3 | 29.3 |
+| 6341: retrieval calls / rep | 92.0 | 99.3 |
+| 6374: retrieval calls / rep | 69.0 | 72.0 |
+| turns asserting a negative, failing | 19, **0** | 24, **0** |
+
+**Attribution is not uniform, and the write-up says so.** The budget fired in
+all three 6341 reps (4, 3 and 3 refusals) and its halted runs went 5, 2, 3 ->
+**0, 0, 0**. In 6374 it fired **once in three reps**, and its halts went 3, 1, 1
+-> 1, 1, 0: movement inside the noise, not this fix. Invariant 4 asks for n=3
+all clean on a FAIL session; **6341 gives exactly that**, and 6374 does not
+contribute the same weight.
+
+**The two halts that remain are not discovery-bound, which is the honest
+limit of this row.** Both are 6374 turn 4, Deep Research step 3, at **6 and 8
+search rounds** — at or under the budget, so it never fired on them. Their 20
+rounds went on retrieval: 8 section searches and 6 change lookups in one; 13
+section searches, 4 text retrievals and 10 same-resource repeats in the other.
+That is the shape **P3.8** was opened for, and no discovery budget can touch it.
+
+### Invariant 1, graded on the prose with the footer removed
+
+`sources_kept` per rep **rose** in both sessions. Per turn slot it fell in 2 of
+8 (6341) and 2 of 4 (6374) — **against a noise floor of 3 of 8**, measured
+between `wave2_p25` and `wave2_p28`, two sweeps of 6341 that differ only by
+P2.8, which does not touch a researched turn.
+
+6341's prose grew in 5 of 8 slots, and its Deep Research turn nearly doubled
+(6,784 -> 13,389 characters) because the steps now finish and write findings
+instead of halting. 6374's shrank in 3 of 4, and its turn 2 is the one to
+explain: it dropped in all three reps (6,640/9,263/8,786 -> 5,914/5,507/6,643).
+**No refusal ever fired on that turn in either sweep.** Its Deep Research plan
+was drafted differently (3 steps per rep before, 4 after; 34 searches -> 12,
+36 section searches -> 23), which is the planner stochasticity the replay
+configuration already records as a confound for every replayed DR turn.
+
+### What the lawyer is told, and what the model then said
+
+The clause fired on **7 of 7** stopped turns, with the right count in each
+("one research step ... 1 further search"; "2 research steps ... 2 further
+searches"). In **5 of those 7** the model also stated the limit in its own
+prose, unprompted by any system rule:
+
+> *Searching was cut short by a limit on how much one step may search, so the
+> text for the Protection of Workers ... could not be verified.*
+
+Nothing manufactured a negative out of a stop: `negatives` grades 24 turns
+asserting a negative and **0 failing**, and `nosearch` reports 0 UNQUALIFIED and
+0 MISATTRIBUTED.
+
+### Every exit-1 subcommand, and the two that exit 1
+
+`halts` **0 failing** (and 0 halted turns), `negatives` 0 failing, `blanks` 0
+violations and 0 unrecovered calls, `scoperecord` complete, `nosearch` 0/0.
+Two exit 1, and neither is this row's:
+
+- **`derivations`: 2 UNVERIFIED claims, both 6374, and the count is identical
+  before (2) and after (2).** It is P2.3's residual shape — "made under section
+  126(8)" with no preamble retrieved — and it is present in `wave2_p23` and
+  `wave3_p35` too.
+- **`caselaw`: 1 TWO_LINES, 6341 rep 2 turn 2.** The answer carries two
+  `*Search scope:` lines, and **the first is the model's own imitation**, written
+  mid-answer ("among 8 searches in total"; "no filters were applied" — not the
+  code's wording), so `strip_answer_footer`, which is anchored to the end, cannot
+  reach it. **It is not from the budget:** that turn recorded no refusal, its
+  worker report carries no limb, and its "8 searches" is the 8 searches it
+  actually made, not the budget's 8 rounds. Base rate over every directory since
+  P3.5 added the echo strip: **1 in 513 answered turns (95% Wilson 0.03-1.10%)**;
+  the only other instance is `wave2_p22_final`, which predates that strip and has
+  18. Recorded against the footer family (P2.2/P2.8), not here. **If it recurs,
+  the new row belongs in Wave 4** — a P2 row would re-block P3.1 and P4.1, which
+  depend on `P2.*`.
+
+### Free observations
+
+- **The budget bound as designed:** 11 refusals in 10 of 60 worker runs, and no
+  completed run in the after-directory exceeds 8 search rounds.
+- **No fail-open in live traffic:** across both sweeps the server logged no
+  "no ReAct round" warning and no budget error, so the ContextVar reached every
+  tool call `chat_loop` made.
+- **P4.5's running count is now 7 unrecovered provider calls in 250 answered
+  turns** (95% Wilson **1.4-5.7%**) over the ten schema-v3 directories: the one
+  new instance is `wave2_p27_pre/6374 rep 3 turn 4`, a Deep Research step whose
+  report is its scope block alone. The synthesis covered the gap from the other
+  steps and asserted nothing false about it, so the trap did not close on the
+  lawyer this time.
+- **A model sentence about a budget stop trips `HALT_PARAPHRASE`** ("a system
+  limit"), which `summary` and `compare` count as halt language. Those run only
+  over full sweeps; `halts` is unaffected, because a halted turn always carries
+  P2.1's code notice. Worth remembering at the next full sweep.
+
+### Spend
+
+| | | |
+|---|---|---|
+| `wave2_p27_pre` (before, head `7a98e60`) | 6 runs | $13.58 |
+| `wave2_p27_smoke` (n=1, head `a38ff98`) | 2 runs | $3.69 |
+| **`wave2_p27`** (acceptance, head `bbb5416`) | 6 runs | **$13.57** |
+| **total** | | **$30.84** |
+
+Against the row's estimate of about $25. 6341 ran at $2.25-2.96 and 13-21
+minutes per rep; 6374 at $1.43-2.67 and 8-17 minutes.

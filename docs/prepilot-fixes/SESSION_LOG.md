@@ -2677,3 +2677,185 @@ request so that the P2.7 session re-derives nothing.
 3. **Still with the user:** **P5.2** (the LEX question in
    `WAVE5_QUESTIONS.md`) is what B12 now waits on. An alternative Scottish
    case-law supplier is also still unresearched.
+
+---
+
+## Session 15 — 2026-09-17 — P2.7 (the legislation discovery budget), and Wave 2 closed
+
+**Done:**
+- **P2.7 built and accepted.** A legislation Worker now gets **8 ReAct rounds
+  in which `search_legislation` may run**, per worker run
+  (`src/utils/discovery_budget.py`). **Wave 2 is complete (10 of 10)**, so
+  **P3.1 (the keystone) and P4.1 are unblocked** — both depend on `P2.*`.
+- **Acceptance: halted worker runs 15 → 2, halted turns 12 → 2, and
+  `sources_kept` per rep ROSE in both sessions** (6341 57.7 → 59.3, 6374 35.0
+  → 35.7). `wave2_p27` at head `bbb5416`, n=3 on 6341 and 6374, against a
+  like-for-like HEAD before-column `wave2_p27_pre` at `7a98e60`.
+- **New row P3.8** — the same-resource retrieval shape — **placed in Wave 3,
+  not Wave 2**, because P3.1 and P4.1 depend on `P2.*` and a P2 row would
+  re-block the keystone. It also carries the observation that a halted worker
+  discards every finding it had.
+- **New tooling.** `replay_report discovery` now prints search ROUNDS per run
+  (rebuilt from `started_at`), refused calls, a K table, and
+  **`--before DIR --only S`**, this row's pass bar (halts and `sources_kept`
+  per turn slot). `_ran()` keeps a refused call out of every count of searches
+  that ran, at seven sites.
+- **66 new tests** (1130 → 1196). Proven to fail without the fix: 14 with the
+  wiring removed, 20 with the functions stubbed, 3 more with the instrument
+  guard removed. The rest guard the parliamentary paths, silence, over-reach
+  and fail-soft.
+- **Spend: $30.84** ($13.58 before, $3.69 smoke, $13.57 acceptance) and about
+  3h 20m of replay, against the row's ~$25 and 3-3.5h.
+- **Ledger (`plan_status`): 24 of 36 rows; 6 of 14 buckets closed, 2 partial.**
+  P2.7 maps to no bucket, so no bucket count moved, exactly as the handover
+  said.
+
+**The design, and the decisions put to the user before building.**
+- **The unit is ROUNDS, not calls, and this is the row's real finding.** The
+  cap counts rounds and the model batches: 6341 completes delegations that
+  issue 9-21 searches in 6-16 rounds. Over the post-P3.5 pool, halted runs
+  search in a median of **14 rounds** (min 6) and completed ones in **2** (p90
+  5, max 9), so **K=8 stops 11 of 13 halted and 1 of 149 completed**, where the
+  best call budget (N=10) stops 8 of 13 and **9** of 149 — and the nine are
+  6341 delegations that finished.
+- **A memo-served search is charged**, so the check runs BEFORE the memo
+  lookup: 57 of the 81 memo hits on halted runs repeat the same step's own
+  search. By round, a Deep Research step reusing an earlier step's search pays
+  at most one round.
+- **`search_case_law` is not budgeted**; no halted run ever issued one.
+- **The lawyer gets one clause inside the existing footer line**, and the agent
+  gets a stop that is explicitly NOT the parliamentary one (which says to
+  answer that "no relevant records were found" — the bare negative P2.2
+  exists to stop).
+- All four were put to the user with the numbers, and all four recommendations
+  were taken.
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **The handover's unit was wrong, and only the round distribution showed it.**
+  Fitting N issued calls looked reasonable on the row's own table; the same
+  data split by round separates halted from completed runs almost cleanly
+  (median 14 vs 2). The pre-flight had every number needed to see this and
+  drew the per-call table instead. **Where a budget and a cap count different
+  things, measure in the cap's unit.**
+
+- **The budget's effect is attributable on ONE of the two sessions, and the
+  write-up says so.** 6341: the budget fired in all three reps (4, 3, 3
+  refusals), halts 5, 2, 3 → **0, 0, 0**. 6374: **one refusal in three reps**,
+  halts 3, 1, 1 → 1, 1, 0 — inside the noise. Invariant 4's *n=3, all clean* is
+  carried by 6341 alone. Reporting "halts 15 → 2" without that split would
+  claim twice the evidence there is.
+
+- **The two halts that remain are the ones the row predicted it could not
+  touch.** Both are 6374 turn 4 step 3, at **6 and 8 search rounds** — at or
+  under the budget, so it never fired — with their 20 rounds spent on
+  retrieval (13 section searches and 10 same-resource repeats in one). That is
+  P3.8's shape, and it is why P3.8 exists.
+
+- **A prose drop that looks like Invariant 1 and is not.** 6374 turn 2 shrank
+  in all three reps (6,640/9,263/8,786 → 5,914/5,507/6,643) with `sources_kept`
+  8.0 → 4.0. **No refusal ever fired on that turn.** Its Deep Research plan was
+  drafted with 4 steps rather than 3 (34 searches → 12, 36 section searches →
+  23): the planner stochasticity the replay configuration records as a
+  confound for every replayed DR turn. Checking the refusal count per turn is
+  what separated it from an effect.
+
+- **A noise floor had to be measured before the pass bar could be read.**
+  `sources_kept` per turn slot "fell" in 3 of 8 slots between `wave2_p25` and
+  `wave2_p28` — two 6341 sweeps differing only by P2.8, which does not touch a
+  researched turn. After the budget it fell in 2 of 8 and 2 of 4. **Build the
+  comparison, then measure what it reads on a pair where nothing changed**,
+  before quoting it on the pair where something did.
+
+- **`caselaw` exits 1 on the acceptance, and the cause is the model writing
+  its own footer.** 6341 rep 2 turn 2 carries two `*Search scope:` lines; the
+  first is the model's imitation, mid-answer ("among 8 searches in total"; "no
+  filters were applied"), which `strip_answer_footer`'s end-anchor cannot
+  reach. **It is not from the budget**: that turn had no refusal, no limb, and
+  its "8 searches" is its own 8 calls — the collision with K=8 is a
+  coincidence, and checking the turn's refusal count is what showed it. Base
+  rate **1 in 513 answered turns since P3.5's echo strip (95% Wilson
+  0.03-1.10%)**; the only other instance is `wave2_p22_final`, which predates
+  the strip and has 18. Booked to the footer family. **If it recurs, its row
+  goes in Wave 4** — a P2 row would re-block P3.1 and P4.1.
+
+- **`derivations` exits 1 before AND after, with the same count.** 2 UNVERIFIED
+  claims on 6374, P2.3's residual shape, also present in `wave2_p23` and
+  `wave3_p35`. Running the exit-1 set on the **before** directory is what made
+  that a known quantity instead of a scare at the end.
+
+- **The smoke run earned its keep on a cosmetic defect.** The worker limb
+  printed `""shop" means"` and `""meaning of \"shop\""`: the model quotes and
+  backslash-escapes its own queries. Fixed with the footer's own clean-up, and
+  the acceptance ran on the commit that includes it.
+
+- **A model sentence about a budget stop trips `HALT_PARAPHRASE`** ("a system
+  limit"), which `summary` and `compare` count as halt language. They run only
+  over full sweeps, and `halts` is unaffected because a halted turn always
+  carries P2.1's code notice. Worth remembering at the next full sweep.
+
+- **P4.5 gained a seventh instance**, in the before-column:
+  `wave2_p27_pre/6374 r3 t4`, a Deep Research step whose report is its scope
+  block alone after three empty completions. The synthesis covered the gap
+  from the other steps and asserted nothing false, so the trap did not close
+  on the lawyer. Running count: **7 unrecovered provider calls in 250 answered
+  turns (95% Wilson 1.4-5.7%)**.
+
+**Decisions taken this session (all four put to the user, all four accepted):**
+- **8 search rounds**, counted per worker run, memo hits included.
+- **`search_case_law` unbudgeted**, with no case-law budget on `case_law_only`.
+- **One clause in the lawyer's existing footer line**, not a prepended notice
+  (a budget stop still produced a report, so a halt-style banner overstates it)
+  and not agent-only (P2.2 measured instruction-only at 56%).
+- **The section-search shape becomes its own row (P3.8), not this one.**
+- Two more taken without asking, and stated here: the legislation efficiency
+  profile gets a `budget_blocked` **indicator band only** (no breach rule, the
+  reformat band's reasoning — a budget stop is the designed outcome of a broad
+  question); and the parliamentary branch now also tests `"remaining" in
+  search_budget`, so a parliamentary tool name hallucinated under a legislation
+  budget is not a `KeyError`.
+
+**How this session worked, for whoever repeats it.**
+- **Start the paid before-column first, then build while it runs.** The server
+  loads modules at startup, so edits to `src/` do not reach a running sweep,
+  and `replay.py` stamps `git_head` once at the start. The pre-measurement and
+  the whole build overlapped.
+- **To count ReAct rounds from a run file**, group a delegation's tools by
+  `started_at` with a gap of ~1s: the calls of one round start together and
+  rounds are separated by an LLM call. Checked against the halt metadata: the
+  rebuilt count equals the halt metadata on **58 of 58** halted runs, across
+  all ten directories that have one. `replay_report discovery` prints that agreement
+  every time, so a drift in the method shows up where it is used.
+- **Watch the server log during a sweep** for `no ReAct round` — the budget's
+  fail-open path. Thirty minutes of silence on a live sweep is the evidence
+  that a ContextVar written in `chat_loop` reaches the tool tasks.
+- **The heredoc backslash trap, avoided this time**: every edit carrying
+  backslashes or CRLF files went through the Write/Edit tools or a Python
+  script operating on bytes. `FIX_PLAN.md`, `SESSION_LOG.md` and `BASELINE.md`
+  are all CRLF; `Path.write_text` would rewrite the whole file.
+- **Replay timings, measured this session:** 6341 $2.25-2.96 and 13-21 min per
+  rep; 6374 $1.43-2.67 and 8-17 min.
+
+**State of the branch:** `fix/prepilot-defects`, no upstream, **NOTHING
+PUSHED**. Whole-plan-then-one-push stands. **1196 tests green.** Ledger:
+**24 of 36 rows, 6 of 14 buckets closed, 2 partial**. **Wave 2 is complete.**
+
+**Machine state a new session inherits:**
+- **No uvicorn running**, and the dev box is **restored** (`moonshotai/kimi-k3`,
+  local prompt cache ON, no pin file). Re-pin before any measurement.
+- **Twenty gitignored replay directories.** The three new ones:
+  - `wave2_p27_pre`: head `7a98e60`, 6341 ×3 and 6374 ×3. The before-column.
+  - `wave2_p27_smoke`: head `a38ff98`, n=1 on both.
+  - `wave2_p27`: head `bbb5416`, n=3 on both. **The acceptance.**
+- **New command surface:** `discovery` gains `--before DIR`, search rounds, a
+  K table and a refused-calls line. It still always exits 0.
+
+**Next action:**
+1. **P3.1** (B10, right Act wrong depth) is the keystone and is now unblocked.
+   Its row says to verify `_slim_search_results`'s docstring claim about the
+   ranked sections array **against a live response** before building on it.
+2. **P3.8** is deliberately parked behind P3.1: measure the same-resource shape
+   again after Phase 2 changes, with `discovery --all`.
+3. **P4.5** has a rate (7 in 250, 1.4-5.7%) and a measured false negative that
+   reached a lawyer; its fix must cover the Deep Research synthesis.
+4. **Still with the user:** **P5.2**, which is what B12 waits on.
