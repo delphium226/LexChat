@@ -500,6 +500,9 @@ def test_the_limb_names_the_limit_the_count_and_the_queries():
     assert "MUST also say that searching was stopped by a limit" in limb
     assert "delegate_research again with the same brief" in limb
     assert "1 further search it asked for was not run" in _budget_limb(_stops("a"))
+    # The smoke run's queries, verbatim: quoted and backslash-escaped.
+    messy = _budget_limb(_stops('"shop" means', '"meaning of \\"shop\\""', "“shop” includes"))
+    assert '(for: "shop means"; "meaning of shop"; "shop includes")' in messy
 
 
 async def _worker_run(monkeypatch, rounds, research_mode="legislation_only"):

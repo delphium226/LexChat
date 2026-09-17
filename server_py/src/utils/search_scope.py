@@ -1476,7 +1476,11 @@ def _budget_limb(log: Optional[list]) -> str:
         limit = next((e.get("limit") for e in rows if e.get("limit")), None)
         terms = []
         for e in rows:
-            q = (e.get("query") or "").strip()
+            # The model quotes (and sometimes backslash-escapes) its own query;
+            # wrapped again that read `""shop" means"` in the smoke run.
+            # Same clean-up as `_listed_terms`, plus the backslashes.
+            q = re.sub(r"[\"'“”\\]+", " ", str(e.get("query") or ""))
+            q = re.sub(r"\s+", " ", q).strip()
             if q and q not in terms:
                 terms.append(q)
         n = len(rows)
