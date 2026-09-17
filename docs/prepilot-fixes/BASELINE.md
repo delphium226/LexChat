@@ -1935,3 +1935,49 @@ truth. Keying on the block **marker** settles it, and is pinned by a test.
 That is the fourth published figure in three sessions to move the moment a command
 was put behind it, and the second this session — the row's own numbers were the
 first.
+
+---
+
+## B5 / B7 — negatives from turns that searched nothing (P2.10, measured, not built)
+
+Run over all ten replay directories: **608 answered turns**. The script and its
+expected output are in `SESSION_LOG.md` Session 12.
+
+| shape | turns | owner |
+|---|---|---|
+| **(A)** no delegation, and the answer asserts a negative | **1** (`wave2_p25/6341 r2 t2`) | **P2.10** |
+| **(B)** a Worker delegated to, **zero** tool calls | **14**, in 6343, 6346, 6347 and 6350 | **P4.1** (B7) |
+| of (B), the final answer is graded a negative by `NOT_FOUND` | 3, all from 6350 | see below |
+
+~~First instance in 209 answered turns across five directories.~~ Over all ten
+directories it is still **exactly one, in 608 answered turns**. Shape (A) is not
+a rate, and P2.10 has not been built. Whether to close the row is pending the
+user's decision.
+
+### Why (B) cannot measure P4.1's anchoring bug
+
+All 14 are case-law questions asked under `legislation_only`. The Worker has no
+case-law tool, searches nothing, and opens its report with *"The available
+database does not contain information on this specific issue."*
+
+**The transcript export records no research mode for these sessions.**
+`Filter: Research mode` and `Session mode` are blank on every row.
+`replay_set.py` reads the mode once per session and falls back to
+`legislation_only`. So the replay kept that mode on every turn, including *"I have
+changed the mode, please proceed"*.
+
+The mode therefore never changed in the replay. A refusal on those turns is
+correct about the tool set, and it is not the anchoring P4.1 describes. What (B)
+does show is how the refusal is worded. The sentence makes a claim about the
+**corpus**, when the true statement is about the **tool set**.
+
+### The detector does not count that sentence
+
+    NOT_FOUND.search("The available database does not contain information on this specific issue.")  ->  False
+    NOT_FOUND.search("The research agent returned no results for case law.")                            ->  True
+
+The first sentence is the one the Worker writes. The second is how 6350's Manager
+rephrased it, and it is the only reason 3 of the 14 were counted. This blind spot
+makes the negatives numbers look better than they are. **It has not been fixed.**
+Widening `NOT_FOUND` would change P2.2's published before-column and
+after-column, so it needs its own before/after measurement.

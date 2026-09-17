@@ -1968,3 +1968,152 @@ and the command is already written in Session 9's notes; it may well resolve to
 "not a rate, do not build". Then **P2.4**, **P2.7**, **P2.8** to finish Wave 2 and
 unblock P3.1. **P5.2 is still the live external one**, still free, still unasked,
 and B12 cannot close without it.
+
+---
+
+## Session 12 — 2026-09-17 — P2.10 measured, NOT built, decision pending; three findings for P4.1 and P2.2
+
+**Done:**
+- **P2.10's measurement, over all ten replay directories.** Its own defect is
+  **n=1 in 608 answered turns**. Session 9 counted it over five directories and
+  209 turns; the count did not grow.
+- **P2.10 is NOT ticked.** My recommendation is to close it as measured and not
+  built (reasoning below). **That is the user's decision and it has not been
+  made.** The next session should ask before ticking it.
+- **No code changed. No spend.** Documentation only: this entry, P2.10's and
+  P4.1's rows, and a `BASELINE.md` section.
+
+**The measurement split into two different defects, and the first version
+conflated them.** "A turn that asserts a negative having made zero tool calls"
+fires on four turns. Three of the four are a different shape from the one the row
+describes:
+
+| shape | turns | what it is |
+|---|---|---|
+| **(A)** 0 delegations, asserts a negative | **1** — `wave2_p25/6341 r2 t2` | **P2.10's defect.** The Manager answers from history, cites a search made in an earlier turn, and gets no footer. |
+| **(B)** at least one delegation, **zero** tool calls | **14** — 4 sessions (6343, 6346, 6347, 6350), in `baseline` and `wave1` only | **Not P2.10's.** A case-law question under `legislation_only`, so the Worker has no case-law tool, searches nothing, and reports a negative. |
+| of (B), final answer matched by `NOT_FOUND` | 3 (all 6350) | see finding 3 |
+
+Reproduce with the following script. There is deliberately no subcommand yet. If
+P2.10 is built, promote this to `replay_report` first, because the A/B split is
+exactly the kind of rule an ad-hoc script gets wrong:
+
+    python - <<'EOF'
+    import json, glob, sys; sys.path.insert(0, '.')
+    import tools.replay_report as R
+    dirs = ('baseline','wave1','wave2_p21','wave2_p22','wave2_p22_final',
+            'wave2_p23','wave3_p35','wave2_p25','wave2_p25b','wave2_p25_smoke')
+    A, B, ans = [], [], 0
+    for d in dirs:
+        for p in sorted(glob.glob(f'../docs/prepilot-fixes/evidence/replay/{d}/*.json')):
+            x = json.load(open(p, encoding='utf-8'))
+            for t in x['turns']:
+                a = t.get('answer') or ''
+                if not a.strip():
+                    continue
+                ans += 1
+                dgs = (t.get('audit') or {}).get('delegations') or []
+                n = sum(len(g.get('tools') or []) for g in dgs)
+                neg = bool(R.NOT_FOUND.search(R._without_footer(a)))
+                tag = f"{d}/{x['session_id']}r{x.get('rep',1)}t{t['turn']}"
+                if not dgs and neg: A.append(tag)
+                if dgs and n == 0: B.append((tag, neg))
+    print(ans, 'answered'); print('A', len(A), A); print('B', len(B), B)
+    EOF
+
+(Run from `server_py/`. Expected: 608 answered, A = 1, B = 14.)
+
+**Why I recommend closing P2.10 without building.** At 1 in 608 (0.16%) it is not
+a rate. It is also stochastic: the same turn answered normally in reps 1 and 3.
+The row allows two fixes. The first is to carry the previous turn's scope forward,
+which means new cross-turn state. The second is to fire the footer on a turn that
+asserts a negative, which puts a prose detector in the product, and
+`search_scope.py` refuses that by design. Neither is justified at this rate. **The
+case for building anyway** is that the one instance is a real negative shown to a
+lawyer with no disclosure. That trade is the user's to make.
+
+**Surprises / findings. Three of them belong to other rows.**
+
+- **1. The replay cannot test P4.1's anchoring bug, and the reason is in the data,
+  not the harness logic.** (B)'s 14 turns cover **four of P4.1's five evidence
+  sessions** (6343, 6346, 6347, 6350). It is tempting to read them as P4.1's
+  before-column. They are not. **The transcript export records NO research mode
+  for these sessions:** `Filter: Research mode` and `Session mode` are blank on
+  every row of 6346 and 6350. `replay_set.py` reads the mode once per session from
+  the first row (`head.get("Filter: Research mode")`) and falls back to
+  `DEFAULT_RESEARCH_MODE = "legislation_only"`. So every replayed turn ran under
+  `legislation_only`, including *"I have changed the mode, please proceed"*.
+  **In the replay the mode never changed, so a refusal on those turns is correct
+  about the tool set.** P4.1's bug (a) is that the model anchors on its earlier
+  refusal *after* a real mode change, and no stored run file can show that. Two
+  consequences for whoever builds P4.1:
+  - its acceptance must be the scripted two-turn sequence the row already names.
+    It cannot be a corpus replay.
+  - **the harness sends one `research_mode` per session**, so that scripted
+    sequence needs a per-turn mode that `replay.py` does not support today.
+    Budget for adding it.
+
+- **2. What (B) does measure is the wording of the refusal, which is P4.1's (b)
+  and (c) and a B5-shaped false negative.** All 14 Worker reports open *"The
+  available database does not contain information on this specific issue."* That
+  is a claim about the **corpus**. The truth is a claim about the **tool set**: no
+  case-law tool is loaded in this mode. The sentence is false in the way B5 cares
+  about. 6350's Manager then told the lawyer to switch to *"Legislation & Case Law"
+  mode*, which is P4.1(b)'s wrong control name.
+
+- **3. P2.2's `NOT_FOUND` detector is blind to that sentence.**
+  `NOT_FOUND.search("The available database does not contain information on this
+  specific issue.")` is **False**. So is the tool-set variant (*"…do not contain
+  case law"*). *"The research agent returned no results"* is **True**, and that
+  phrase is why exactly 3 of the 14 counted: 6350's Manager wrapped the report in
+  it. **The blind spot runs in the flattering direction.** A negative about the
+  corpus that `replay_report negatives` never grades is a negative P2.2's
+  published numbers never saw. **I did not fix it.** Widening `NOT_FOUND` moves
+  P2.2's published before and after columns, so it needs its own before/after,
+  for the same reason P2.9 did. It is not yet a row. The owner is P2.2's detector
+  family, and the nearest open row is **P2.8**. Flag it there, or give it a row,
+  before anyone relies on the negatives rate again.
+
+- **4. A correction to something I told the user this session.** I said (B)
+  "reproduces in both `baseline` and `wave1` — same sessions, same turns". The
+  sessions are the same. **The turns are not.** 6346 t4/t5, 6347 t1 and 6350
+  t3/t4 recur in both sweeps. 6346 t2 and 6350 t2 are `baseline`-only. 6346 t3
+  and 6343 t2 are `wave1`-only. Whether a given turn searches is stochastic; the
+  refusal pattern for the session is not.
+
+**Decisions taken this session:**
+- **P2.10 left unticked.** Closing a row on a measurement is within the row's own
+  terms ("a measured rate first, then a unit test pinning whichever fix is
+  chosen"). Choosing *no* fix is still a choice with a defensible alternative, so
+  it waits for the user.
+- **The `NOT_FOUND` blind spot is recorded, not fixed.** Same reasoning as P2.9:
+  any change to a published instrument needs its own before/after.
+- **No `zerotool` subcommand.** The script is recorded verbatim above, as Session 9
+  recorded this row's first check. Promote it before building.
+
+**State of the branch:** `fix/prepilot-defects`, **73 commits, no upstream, NOTHING
+PUSHED**. Whole-plan-then-one-push stands. **1009 tests green.** Ledger unchanged
+by this entry: **20 of 34 rows, 6 of 14 buckets.** Wave 2 open rows: **P2.4,
+P2.7, P2.8, P2.10**. P2.10 is awaiting a decision, not work.
+
+**Machine state a new session inherits:**
+- **No uvicorn running.**
+- **Dev box unpinned**: `moonshotai/kimi-k3`, local prompt cache ON, no pin
+  file. **Re-pin before anything that produces a number.**
+- **Ten replay directories, unchanged.**
+- **The dev DB holds one smoke-test chat** (id 19, admin, *"What does section 1
+  of the Scotland Act 1998 say?"*) from Session 10's live check of the status
+  line. It is harmless and was left in place.
+- **`.playwright-mcp/`** at the repo root holds page snapshots from that same
+  check. It is gitignored (`.gitignore:91`) and safe to delete.
+
+**Next action:**
+1. **Ask the user about P2.10**: close it as measured, or build the carry-forward.
+2. **P2.4, P2.7, P2.8** finish Wave 2, which unblocks **P3.1** and behind it
+   P3.2, P3.3, P3.4 and P4.3. When reading **P2.8**, weigh finding 3 above: it may
+   be the right home for the `NOT_FOUND` blind spot.
+3. **P4.1 depends on `P2.*`**, so it is blocked until Wave 2 closes. Findings 1 and
+   2 are its handover. Its acceptance needs a per-turn `research_mode` in
+   `replay.py`.
+4. **P5.2 still needs the user**: the LEX-team question is free and unasked, and
+   B12 cannot close without it.
