@@ -774,7 +774,7 @@ async def test_the_note_reaches_the_worker_and_survives_the_memo():
     # citation" beside the not-held note, and in research mode the Manager
     # passes the report through verbatim.
     "WORKER_SYSTEM_PROMPT", "WORKER_SYSTEM_PROMPT_CASE_LAW",
-    "WORKER_SYSTEM_PROMPT_HYBRID", "WORKER_SYSTEM_PROMPT_CONVERSATIONAL",
+    "WORKER_SYSTEM_PROMPT_HYBRID",
 ])
 def test_every_legislation_bot_prompt_carries_the_rule(prompt_name):
     """6373 is conversational; its Manager relayed the blame in 2 of 3 reps,
@@ -785,3 +785,21 @@ def test_every_legislation_bot_prompt_carries_the_rule(prompt_name):
     assert text.count("NOT HELD IS NOT A WRONG CITATION") == 1
     # The rule must not itself read as questioning a citation.
     assert not rr.NEG_BLAMED_USER.search(text.split("NOT HELD IS NOT A WRONG CITATION")[1][:400])
+
+
+def test_the_chat_worker_gets_the_rule_as_a_clause_not_a_block():
+    """**A/B on 6385, n=3 each** (`wave2_p24_ab` without the block, `wave2_p24`
+    with it). Appending the block to the quick-lookup Worker moved its reports
+    to bullets (0 of 9 -> 5 of 9) and case-law links reaching the answer fell
+    7 of 15 -> 2 of 13, because the chat-mode Manager rewrites bullets and drops
+    the links. So that Worker carries the rule inside its existing OUTPUT
+    bullet, where its blame phrasing ("try a fuller search in Research mode")
+    came from, and never the block."""
+    from src import prompts
+    text = prompts.WORKER_SYSTEM_PROMPT_CONVERSATIONAL
+    assert "NOT HELD IS NOT A WRONG CITATION" not in text
+    output = text.split("OUTPUT:")[1].split("CITATION FORMAT:")[0]
+    assert "say that this index does not hold it" in output
+    assert "never ask the user to check or verify it" in output
+    # Still exactly the four bullets it had: no format change beyond one clause.
+    assert len([ln for ln in output.splitlines() if ln.startswith("- ")]) == 4

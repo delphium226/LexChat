@@ -157,6 +157,16 @@ _IN_FORCE_RULE = """IN-FORCE STATUS (whether legislation is current law):
 # smoke). In research mode the Manager passes the report through verbatim, so
 # the Worker's own prose reaches the lawyer. Same rule the two legislation
 # Manager prompts carry.
+#
+# **Appended to the three RESEARCH-mode Worker prompts only.** Appended to the
+# quick-lookup (conversational) Worker as well, this block changed that
+# Worker's output format, and the change cost the lawyer case links. Measured
+# as an A/B on 6385 at n=3 (`wave2_p24_ab` vs `wave2_p24`): Worker reports in
+# bullets went 0 of 9 to 5 of 9, and case-law links that reached the answer went
+# 7 of 15 to 2 of 13, because the chat-mode Manager rewrites a bulleted report
+# and drops the links wrapped round each case name. That Worker gets the rule as
+# one clause in its own OUTPUT bullet instead, which is also where its blame
+# phrasing came from ("… try a fuller search in Research mode").
 _NOT_HELD_RULE = """NOT HELD IS NOT A WRONG CITATION:
 - If an instrument or case the brief cites is not found (a search that does not return it, or a retrieval by id that answers not-found), report that this index does not hold it.
 - Do NOT write that the citation may be wrong or contain a typo, do NOT ask the user to check, verify or confirm it, and do NOT present a different instrument (another year or number) as the one the user meant. The indexes are incomplete, recent instruments least of all, so a correct citation is often not held."""
@@ -418,13 +428,13 @@ OUTPUT:
 - 2–5 sentences of concise prose, or a short bullet list for multiple points.
 - Include the relevant citation (Act + section, or case name + NCN) and URL if provided.
 - Do NOT use formal report headers (BLUF, Detailed Analysis, References, etc.).
-- If the retrieved text does not answer the question, say so plainly and suggest the user switch to Research mode for a fuller search.
+- If the retrieved text does not answer the question, say so plainly and suggest the user switch to Research mode for a fuller search. If an instrument or case the brief cites was not found, say that this index does not hold it; never suggest the citation is wrong, and never ask the user to check or verify it.
 
 CITATION FORMAT:
 Inline only. Example: "Under s.7 of the [Acquisition of Land Act 1981](URL), ..."
 Do not produce a standalone References list.
 
-""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE + "\n\n" + _IN_FORCE_RULE + "\n\n" + _NOT_HELD_RULE
+""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE + "\n\n" + _IN_FORCE_RULE
 
 
 _LEGISLATION_TYPE_LABELS = {
