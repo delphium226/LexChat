@@ -1167,6 +1167,81 @@ def test_a_peer_consult_turn_is_exempt():
     assert _verdicts(doc)[2] is None
 
 
+def _ec(attempt, retried, sent=16724, turn=3):
+    return {"model": "google/gemini-3.1-pro-preview", "attempt": attempt,
+            "attempts_max": 3, "retried": retried, "sent_chars": sent,
+            "react_turn": turn}
+
+
+def test_three_failed_attempts_are_one_unrecovered_call():
+    """`wave2_p28/6409 rep 3 turn 11`, the real shape. The first `blanks` read
+    it as two recoveries and one failure."""
+    assert rr.empty_completion_calls(
+        [_ec(1, True), _ec(2, True), _ec(3, False)]) == [(3, False)]
+
+
+def test_a_call_whose_retry_succeeded_is_recovered():
+    """The retry that worked leaves no record, so the last record says
+    `retried: true`."""
+    assert rr.empty_completion_calls([_ec(1, True)]) == [(1, True)]
+    assert rr.empty_completion_calls([_ec(1, True), _ec(2, True)]) == [(2, True)]
+
+
+def test_separate_calls_are_not_merged():
+    probes = [_ec(1, True), _ec(1, True, sent=900, turn=1),
+              _ec(2, False, sent=900, turn=1), _ec(1, False)]
+    assert rr.empty_completion_calls(probes) == [(1, True), (2, False), (1, False)]
+    # The same request recurring later, after its first call recovered, is a
+    # new call, not a continuation.
+    assert rr.empty_completion_calls([_ec(1, True), _ec(1, True)]) == [(1, True), (1, True)]
+    assert rr.empty_completion_calls(None) == []
+    assert rr.empty_completion_calls([None, "x"]) == []
+
+
+def test_a_clean_v3_directory_is_not_reported_as_predating_the_field(tmp_path, capsys):
+    """P4.2 made `empty_completions` present-and-empty on a healthy turn so that
+    "nothing was lost" is distinguishable from "no field". `blanks` tested the
+    list's truthiness and called `wave2_p28_smoke` pre-v3."""
+    import argparse
+    turn = {"turn": 1, "answer": "A body.", "timing": {"total_cost_usd": 0.1},
+            "audit": {"schema_version": 3, "empty_completions": []}}
+    (tmp_path / "6409_rep1.json").write_text(json.dumps(
+        {"session_id": "6409", "rep": 1, "turns": [turn]}), encoding="utf-8")
+    assert rr.cmd_blanks(argparse.Namespace(dir=str(tmp_path))) == 0
+    out = capsys.readouterr().out
+    assert "predates audit schema v3" not in out
+    assert "empty completion attempts               0" in out
+
+    del turn["audit"]["empty_completions"]
+    (tmp_path / "6409_rep1.json").write_text(json.dumps(
+        {"session_id": "6409", "rep": 1, "turns": [turn]}), encoding="utf-8")
+    rr.cmd_blanks(argparse.Namespace(dir=str(tmp_path)))
+    assert "predates audit schema v3" in capsys.readouterr().out
+
+
+def test_the_invariant_one_check_reads_the_prose_not_the_footer(tmp_path, capsys):
+    """P2.8 appends a line to answers that had none, so a full-length
+    comparison grows by construction. The check must grade the model's prose,
+    and only the sessions `--only` names."""
+    before, after = tmp_path / "before", tmp_path / "after"
+    before.mkdir()
+    after.mkdir()
+    first = _ns_turn(1, "Found." + _P28_FRESH, ["search_legislation"])
+    (before / "6409_r1.json").write_text(json.dumps(
+        _ns(first, _ns_turn(2, _P28_NEG))), encoding="utf-8")
+    (after / "6409_r1.json").write_text(json.dumps(
+        _ns(first, _ns_turn(2, _P28_NEG + _P28_CARRIED))), encoding="utf-8")
+    other = {"session_id": "6341", "rep": 1,
+             "turns": [_ns_turn(1, "x" * 900, ["search_legislation"])]}
+    (after / "6341_r1.json").write_text(json.dumps(other), encoding="utf-8")
+
+    rr._invariant_one_prose(before, after, ["6409"])
+    out = capsys.readouterr().out
+    assert "sessions 6409" in out and "6341" not in out
+    assert "0 of 2 grew" in out
+    assert "turns asserting a negative / rep" in out
+
+
 def test_nosearch_missing_keys_do_not_raise():
     assert rr.nosearch_rows({}) == []
     assert rr.nosearch_rows({"turns": [{"answer": "x"}]})[0]["shape"] == "A"

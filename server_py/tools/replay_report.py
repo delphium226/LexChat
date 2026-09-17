@@ -2701,6 +2701,42 @@ def blank_verdict(turn: dict) -> tuple:
     return ("billed" if cost > 0 else "free"), cost, 0, len(answer)
 
 
+def empty_completion_calls(probes: list) -> list:
+    """Group `audit.empty_completions` records into provider CALLS.
+
+    Returns one `(attempts, recovered)` pair per call that came back empty at
+    least once.
+
+    **One record is one failed ATTEMPT, not one call.** A call that fails all
+    three attempts leaves three records, the first two marked `retried: true`.
+    The first version of `blanks` counted each `retried: true` record as a
+    recovery. On `wave2_p28` (6409 rep 3 turn 11), the first directory with
+    schema v3 records in it, that reported "recovered 2, NOT recovered 1" for a
+    single call that recovered from nothing. That error flatters the provider.
+
+    A call is recovered when its LAST record says `retried: true`, because the
+    retry then succeeded and left no record. Records are grouped by what
+    identifies the request (model, payload size, ReAct round) and split
+    wherever the attempt number does not continue.
+    """
+    calls: list = []
+    open_calls: dict = {}
+    for pr in probes or []:
+        if not isinstance(pr, dict):
+            continue
+        key = (pr.get("model"), pr.get("sent_chars"), pr.get("react_turn"))
+        attempt = pr.get("attempt") or 1
+        call = open_calls.get(key)
+        if call is None or not call["last_retried"] or attempt <= call["last_attempt"]:
+            call = {"attempts": 0}
+            calls.append(call)
+            open_calls[key] = call
+        call["attempts"] += 1
+        call["last_attempt"] = attempt
+        call["last_retried"] = bool(pr.get("retried"))
+    return [(c["attempts"], c["last_retried"]) for c in calls]
+
+
 def cmd_blanks(args) -> int:
     """P4.2 acceptance (deterministic): a non-empty body whenever cost > 0.
 
@@ -2723,17 +2759,24 @@ def cmd_blanks(args) -> int:
     print(f"P4.2 acceptance over {args.dir}")
     print()
     rows = []
-    turns = free = recovered = unrecovered = 0
+    turns = free = recovered = unrecovered = attempts = 0
     probes_seen = False
     for doc in sorted(docs, key=lambda d: (d["session_id"], d.get("rep", 1))):
         for t in doc.get("turns", []):
             turns += 1
             kind, cost, body_chars, answer_chars = blank_verdict(t)
-            probes = ((t.get("audit") or {}).get("empty_completions")) or []
-            if probes:
+            audit = t.get("audit") or {}
+            probes = audit.get("empty_completions") or []
+            # The KEY, not its truthiness. A healthy v3 turn carries `[]`, and
+            # testing `if probes:` reported a clean v3 directory
+            # (`wave2_p28_smoke`) as predating the field.
+            if "empty_completions" in audit:
                 probes_seen = True
-                for pr in probes:
-                    if pr.get("retried"):
+                # ~~one record = one recovery if `retried`~~: one record is one
+                # failed attempt. See `empty_completion_calls`.
+                for n_attempts, ok in empty_completion_calls(probes):
+                    attempts += n_attempts
+                    if ok:
                         recovered += 1
                     else:
                         unrecovered += 1
@@ -2766,8 +2809,12 @@ def cmd_blanks(args) -> int:
     print(f"blank AND billed (VIOLATION) {len(bad)}")
     print(f"blank but free (excluded)    {free}")
     if probes_seen:
-        print(f"empty completions, recovered by retry   {recovered}")
-        print(f"empty completions, NOT recovered        {unrecovered}")
+        print(f"empty completion attempts               {attempts}")
+        print(f"  calls affected, recovered by retry    {recovered}")
+        print(f"  calls affected, NOT recovered         {unrecovered}")
+        if unrecovered:
+            print("  (a call NOT recovered with a body still shown came from a "
+                  "worker or was covered by P4.2's fallback; read the turn)")
     else:
         print("empty-completion probes: none recorded "
               "(directory predates audit schema v3)")
@@ -2891,8 +2938,16 @@ def cmd_scoperecord(args) -> int:
     # The identity is what identifies the memo as the SOLE cause. If it ever
     # fails, something other than a memo hit is eating the record and this row's
     # one-line fix is not the whole answer.
-    print(f"identity  (issued - recorded) == memo hits : "
-          f"{issued - recorded == memo}")
+    # Only meaningful while something is missing. After P2.9 a memo hit IS
+    # recorded, so on a complete record `issued - recorded` is 0 and the memo
+    # count is not. Printing `False` there read as a fault on the first
+    # post-P2.9 directory (`wave2_p28`), when it is the fix working.
+    if issued - recorded:
+        print(f"identity  (issued - recorded) == memo hits : "
+              f"{issued - recorded == memo}")
+    else:
+        print("identity  (issued - recorded) == memo hits : n/a, nothing is "
+              "missing (memo hits are recorded)")
     print(f"runs where the loss is NOT the memo count  : {len(mismatch)}"
           + (f"  {mismatch[:5]}" if mismatch else ""))
     print()
@@ -3066,12 +3121,82 @@ def cmd_nosearch(args) -> int:
               f"line={row['line']} searched_now={row['searched_now']} "
               f"before={row['searched_before']}")
     print()
+    if args.before:
+        _invariant_one_prose(Path(args.before), Path(args.dir), args.only)
+        print()
     if not has_footers:
         print("[!] No answer in this directory carries a scope footer: it predates "
               "P2.2, so nothing could have been qualified. Not a pass, an absence. "
               "Exit 0.")
         return 0
     return 0 if not bad else 1
+
+
+def _invariant_one_prose(before: Path, after: Path, only: Optional[list]) -> None:
+    """Invariant 1 for P2.8: did the MODEL's answers shrink, or stop reporting
+    negatives, once the carried line existed?
+
+    **Graded on the prose with the footer removed, unlike `_invariant_one`.**
+    P2.8 appends a line to answers that had none, so full answers grow by
+    construction and a full-length comparison would pass whatever the model did.
+    Shared sessions only, and `--only` narrows further: 6409's before-column is
+    `wave2_p22_final` and 6341's is `wave2_p25`. That is two runs of this
+    command, not one run over a merged population.
+    """
+    def load(d: Path):
+        docs = [x for x in load_runs(d)
+                if not only or str(x.get("session_id")) in only]
+        return {str(x["session_id"]) for x in docs}, docs
+
+    b_ids, b_docs = load(before)
+    a_ids, a_docs = load(after)
+    shared = b_ids & a_ids
+    if not shared:
+        print(f"  --before: no session shared with {before.name}")
+        return
+
+    def measure(docs):
+        slots, per_run = {}, {}
+        for doc in docs:
+            sid = str(doc["session_id"])
+            if sid not in shared:
+                continue
+            run = per_run.setdefault((sid, doc.get("rep", 1)),
+                                     {"neg": 0, "nosearch": 0, "tools": 0, "turns": 0})
+            for row in nosearch_rows(doc):
+                slots.setdefault((sid, row["turn"]), []).append(row["chars"])
+                run["turns"] += 1
+                run["neg"] += row["neg"]
+                run["nosearch"] += not row["searched_now"]
+            run["tools"] += sum(_turn_tool_calls(t) for t in doc.get("turns", []))
+        return slots, per_run
+
+    (b_slots, b_runs), (a_slots, a_runs) = measure(b_docs), measure(a_docs)
+    print(f"  Invariant 1 (model prose, footer removed): {before.name} -> "
+          f"{after.name}, sessions {', '.join(sorted(shared))}")
+    for sid in sorted(shared):
+        def per_rep(runs, key):
+            vals = [v[key] for (s, _), v in runs.items() if s == sid]
+            return sum(vals) / max(len(vals), 1), len(vals)
+        for key, label in (("turns", "answered turns / rep"),
+                           ("neg", "turns asserting a negative / rep"),
+                           ("nosearch", "turns that searched nothing / rep"),
+                           ("tools", "worker tool calls / rep")):
+            (bv, bn), (av, an) = per_rep(b_runs, key), per_rep(a_runs, key)
+            print(f"    {sid} {label:<36} {bv:7.1f} (n={bn}) -> {av:7.1f} (n={an})")
+        common = sorted(k for k in set(b_slots) & set(a_slots) if k[0] == sid)
+        grew = 0
+        lines = []
+        for k in common:
+            bm = sum(b_slots[k]) / len(b_slots[k])
+            am = sum(a_slots[k]) / len(a_slots[k])
+            grew += am > bm
+            lines.append(f"      t{k[1]:<3} {bm:7.0f} -> {am:7.0f}  "
+                         f"{'grew' if am > bm else 'shrank'}")
+        print(f"    {sid} mean prose length per turn slot: {grew} of "
+              f"{len(common)} grew")
+        for ln in lines:
+            print(ln)
 
 
 def cmd_corpus(args) -> int:
@@ -3306,6 +3431,11 @@ def main(argv: Iterable[str] | None = None) -> int:
     ns.add_argument("--answers", action="store_true",
                     help="print the question and answer under each listed turn")
     ns.add_argument("--chars", type=int, default=600)
+    ns.add_argument("--before", metavar="DIR",
+                    help="Invariant 1 on the model's prose (footer removed), "
+                         "shared sessions only")
+    ns.add_argument("--only", nargs="+", metavar="SESSION",
+                    help="with --before, restrict both sides to these sessions")
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")

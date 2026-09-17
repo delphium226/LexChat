@@ -2170,3 +2170,163 @@ P2.7, P2.8, P2.10**. P2.10 is awaiting a decision, not work.
    `replay.py`.
 4. **P5.2 still needs the user**: the LEX-team question is free and unasked, and
    B12 cannot close without it.
+
+---
+
+## Session 13 — 2026-09-17 — P2.8 (B5, the negative carried forward), with P2.10 folded in
+
+**Done:**
+- **The fold was confirmed with the user first.** P2.10 is P2.8, and both are
+  ticked in the same commit.
+- **P2.8 built and accepted.** B5 now waits on **P3.7** only.
+  - A reply that ran no search now restates the earlier searches in a scope
+    line labelled as earlier (`carried_scope_footer`).
+  - Acceptance: n=3 on 6409 and 6341 (`wave2_p28`). UNQUALIFIED went 4 → 0,
+    MISATTRIBUTED 0, and `negatives` has no FAIL rows in either session.
+- **New tooling.**
+  - `replay_report nosearch`: Session 12's A/B script, promoted, with
+    `NEG_ASSERTED`. It reproduces the corrected figures exactly.
+  - `nosearch --before --only`: Invariant 1 graded on the prose with the footer
+    removed.
+- **Three instrument corrections**, in `blanks` (two) and `scoperecord` (one).
+  None moved a published number.
+- **New row P4.5**, measure-first: a worker whose final completion is lost.
+- **1050 tests** (1009 → 1050).
+- **Spend: $13.65.** Smoke $3.35 (24 min), acceptance $10.30 (82 min), against
+  an estimate of about $11 and 75 minutes.
+- **Ledger: 22 of 35 rows** (one row added), **6 of 14 buckets**.
+
+**The design, and the two places it departs from the row's wording.**
+- **The earlier scope comes out of the history, not the request config.** The
+  code-emitted footer is already in every earlier assistant message. The live
+  frontend sends saved `content` back unchanged, and nothing trims the history.
+  So no new request state and no frontend change were needed.
+- **The gate is structural and never reads the answer.** It fires when all four
+  hold: this turn recorded no search (either search tool); no delegation raised;
+  no peer was consulted; an earlier reply ends in a fresh footer. "Restate only
+  when the answer repeats a negative" would be a prose detector in the product,
+  which `search_scope.py` refuses.
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **P2.10's evidence is two defects, and P2.8 fixes only one.** 6341 runs under
+  `legislation_only`, and **no run of it has ever called a case-law tool**. Yet
+  its turn 2 tells the lawyer the agent *"conducted a comprehensive search
+  across both the legislation and case law databases"*. The carried line fixes
+  what P2.8 is about: a restated negative with no scope beside it. It qualifies
+  the legislation searches and, correctly, says nothing about case law.
+  `negatives` then PASSES the turn, because it cannot tell which corpus a
+  negative is about. **That PASS says nothing about the case-law claim**, which
+  is still false. It is recorded as item (5) on P4.1's row, next to Session 12's
+  finding 2, which is the same shape.
+
+- **The structural gate caught a negative the detector misses.** 6341 rep 1
+  turn 2 says the search *"returned no general case law interpretations"*.
+  `NEG_ASSERTED` does not enrol it, because "general" is not in its adjective
+  list. The line fired anyway. A product gated on that regex would have left the
+  turn bare. This is the first measured case for the module's refusal to gate on
+  prose.
+
+- **The before-column the handover named for 6409 is confounded.** Against
+  `wave2_p22_final`, 6409's negatives per rep fall 7.0 → 4.0 and tool calls
+  94 → 35. **That is P3.5, which landed in between**, not this fix. The
+  like-for-like before is `wave3_p35` (n=3, post-P3.5): negatives 4.0 → 4.0,
+  tool calls 35.7 → 34.7, 7 of 11 prose slots longer. Reported both ways in
+  `BASELINE.md`.
+
+- **The first directory to exercise two code paths broke two instruments, in
+  the flattering direction.** `wave2_p28` is the first schema-v3 directory with
+  an empty completion in it, and the first after P2.9.
+  - `blanks` read three failed attempts at one call as *"recovered by retry 2,
+    NOT recovered 1"*.
+  - `blanks` also called the clean v3 smoke directory "pre-v3", because it
+    tested the list's truthiness rather than the key's presence.
+  - `scoperecord` printed `identity … : False` on a complete record.
+
+  All three are fixed and tested, and no historical number moved. In every case
+  the code had never met real data of the shape it was written for. **The
+  lesson generalises: the first directory after a fix exercises instrument
+  branches that have never run, so read those branches' output before trusting
+  it.**
+
+- **P4.2 has a hole at the worker seam, and it is the reasoning-token
+  mechanism.** In 6409 rep 3 turn 11, one worker call came back empty three
+  times.
+  - One of those attempts spent **62,915 completion tokens** (29,350 reasoning
+    characters) and returned no content. That is the first stored instance of
+    the mechanism P4.2 could not rule out. It made a $0.86 turn.
+  - P4.2's fallbacks sit at the Manager and Deep Research seams only. So the
+    worker handed back a report consisting of its scope block alone: a search
+    record with no findings, which reads as "searched, found nothing".
+  - The Manager re-delegated here, and the answer was sound. B13's invariant
+    held, so **B13 stays closed**. The mechanism is new row **P4.5**,
+    measure-first, per the re-planning protocol.
+
+- **The unit tests fail without the fix, split as P2.9's were.**
+  - With the wiring removed, 1 of 29 fails: the end-to-end positive. The other
+    four end-to-end tests guard against over-reach (a first turn, a searched
+    turn, a failed delegation, a peer consult) and pass either way.
+  - With the function stubbed to return `""`, 8 of 29 fail. The other 21 are
+    silence or over-reach guards.
+
+**Decisions taken this session:**
+- **P2.10 folded into P2.8**: the user's decision, confirmed before any work.
+- **Hazard 1 (`wave1/6341 r1 t8`) is acceptable noise, not a false attribution.**
+  The line opens *"no search of the legislation index was run for this reply"*,
+  labels every term as earlier, claims no dependency, and scopes its not-found
+  clause to *"those searches"*. Live, on the stub question (smoke 6341 turn 8),
+  it tells the lawyer that nothing was looked up for that answer. That is true,
+  and it is the disclosure a training-knowledge answer lacked.
+- **Silent when the turn's searches are unknown.** That covers a failed
+  delegation (its search record went with it) and a peer consult (the peer's
+  searches are not in our record). "No search was run" could be false in either.
+- **Silent after a within-instrument search.** Either search tool counts as
+  searching. A `search_legislation_sections`-only turn gets no fresh footer, and
+  "no search was run" would be false there. This is a recorded residual.
+- **Manager path only.** The Deep Research synthesis sees the step findings and
+  never the conversation, so it cannot restate an earlier turn's negative.
+- **A carried line is never read back as a source of searches.** That is what
+  stops chaining. Terms are listed newest first. An exact count is given only
+  where one is knowable; across several replies an unlisted query may repeat a
+  listed one, so the line says "further queries" without a number.
+- **A retrieval-only turn keeps its own P2.3/P3.5/P2.5 clauses on the carried
+  line.** They are gated on that turn's own records, so they are true by
+  construction. Such a turn previously showed no footer at all.
+- **The clutter is accepted and flagged.** The line fired on 15 of 57 answered
+  turns, 2 of them negatives. Historically 4 of 27 (95% CI 6–33%). That is
+  P2.2's trade, extended to follow-ups, and it is the decision most open to
+  being overruled.
+- **Code committed before the paid sweep** (`2545184`), so the run files name
+  the exact product code they measured. The tooling commits followed the sweep.
+
+**State of the branch:** `fix/prepilot-defects`, no upstream, **NOTHING
+PUSHED**. Whole-plan-then-one-push stands. **1050 tests green.** Ledger:
+**22 of 35 rows, 6 of 14 buckets**, primary bucket closed for 18 of 41
+sessions. Wave 2's open rows: **P2.4, P2.7**.
+
+**Machine state a new session inherits:**
+- **No uvicorn running.** It was started for the sweeps and stopped afterwards.
+- **Dev box restored**: `moonshotai/kimi-k3`, local prompt cache ON, no pin
+  file.
+- **Twelve replay directories.** New this session: `wave2_p28_smoke` (2 runs)
+  and `wave2_p28` (6 runs). `wave2_p28` is the first directory produced after
+  P2.9, P4.2 and P2.8.
+- **New commands:**
+  - `replay_report --dir <dir> nosearch [--all] [--answers]`
+  - `nosearch --before DIR --only SESSION…`
+
+  `nosearch` joins the subcommands that **exit 1 on findings**: `halts`,
+  `negatives`, `derivations`, `blanks` and `scoperecord`.
+
+**Next action:**
+1. **P2.4 or P2.7** finishes Wave 2, which unblocks **P3.1** and, behind it,
+   P3.2, P3.3, P3.4 and P4.3. P2.4 is still the cheaper. Note that 6341's false
+   case-law claim (P4.1 item 5) sits right next to P2.4's disclosure.
+2. **P4.5** is measure-first. `blanks` now reports unrecovered calls correctly;
+   count them over the next directories before building.
+3. **The clutter decision is the user's to overrule.** If it is overruled, the
+   narrowest structural cut is to drop the line on replies with no delegation
+   that are shorter than some length. Say so before building, because that is
+   a heuristic, and a short restated negative is exactly the case the row exists
+   for (6409 r1 t11 is 463 characters of prose).
+4. **P5.2 still needs the user.**

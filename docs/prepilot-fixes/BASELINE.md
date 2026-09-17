@@ -1990,3 +1990,187 @@ them shows the anchoring P4.1 describes.
 What (B) does show is the **wording** of the refusal. *"The available database
 does not contain information on this specific issue"* is a claim about the
 corpus, when the true statement is about the tool set.
+
+The split above is now a command, and it reproduces these figures exactly
+(608 / 210 / A 5 / B 14 of which 12):
+
+    python -m tools.replay_report --dir evidence/replay/<dir> nosearch
+
+---
+
+## B5 — the negative carried forward (P2.8, with P2.10 folded in)
+
+P2.2's scope footer is emitted per turn, from that turn's searches. A follow-up
+answered from the history runs no search, so it got no footer, even when it
+restated an earlier negative.
+
+### Before
+
+`nosearch` grades a turn **UNQUALIFIED** when four things hold: it ran no
+legislation search, an earlier answered turn did, its prose asserts a negative
+(`NEG_ASSERTED`, footer removed), and it carries no scope statement.
+
+| dir | session | UNQUALIFIED | `negatives` FAIL with `queries = 0` |
+|---|---|---|---|
+| `wave2_p22_final` | 6409 | 2 (r1 t11, r3 t4) | 2 |
+| `wave2_p25` | 6341 | 2 (r2 t2, r3 t2) | 2 |
+
+These are the only `queries = 0` FAIL rows in any post-P2.2 directory. `baseline`
+and `wave1` list UNQUALIFIED turns too, but carry no footer at all, so the
+command reports them and exits 0 (an absence, not a pass).
+
+### The fix
+
+`carried_scope_footer` (`utils/search_scope.py`) reads the code-emitted fresh
+footers back out of the conversation history, and restates their search terms
+as earlier searches:
+
+> *Search scope: no search of the legislation index was run for this reply.
+> Earlier in this conversation it was searched for "SSI 2025/377", "…" (further
+> queries not listed); no jurisdiction, type or date filter narrowed it. Each
+> was a ranked search of an index that is known to be incomplete, so a result
+> reported as not found in those searches was not found in this index, which is
+> not the same as being absent from the law.*
+
+It fires when all four of these hold:
+- this turn recorded no search (either search tool);
+- no delegation raised;
+- no peer was consulted;
+- an earlier assistant message ends in a fresh footer.
+
+**It never reads the answer.** The line keeps the footer's single-line shape, so
+`_without_footer` strips it before the model's prose is graded, and
+`_ECHOED_FOOTER` strips it when the model copies it back. A carried line is never
+read as a source of searches, so turns neither stack nor chain. It is on the
+Manager path only: the Deep Research synthesis never sees the conversation.
+
+### After (`wave2_p28`, n=3 on both sessions)
+
+| | before | after |
+|---|---|---|
+| 6409 `negatives`: turns / FAIL | 21 / 2 (`wave2_p22_final`) | **12 / 0** |
+| 6341 `negatives`: turns / FAIL | 17 / 2 (`wave2_p25`) | **17 / 0** |
+| UNQUALIFIED | 4 | **0** |
+| MISATTRIBUTED (a scope statement for a search the turn did not run) | 0 | **0** |
+| no-search turns after a searched turn carrying the line | — | **15 of 15** |
+
+The defect's shape still occurs, in 1 of 3 reps of each session (6409 r1 t11,
+6341 r2 t2), and now reaches the lawyer qualified. **The `model` column is
+"no" on both**, so the pass is the code's, exactly as with P2.2: 1 of 29
+negatives is explained by the prose alone.
+
+6409 r1 t11, as the lawyer now sees it:
+
+> As I mentioned previously, the full text of The Social Security (Amendment)
+> (Scotland) Act 2025 (Commencement No. 2) Regulations 2025 (SSI 2025/377) is
+> not currently held in the legislation database. […]
+>
+> *Search scope: no search of the legislation index was run for this reply.
+> Earlier in this conversation it was searched for "Social Security (Amendment)
+> (Scotland) Act 2025 (Commencement No. 2) Regulations 2025", "SSI 2025/377" …*
+
+### Invariant 1, graded on the prose
+
+`_invariant_one` compares whole answers, and this fix lengthens answers by
+construction. So `nosearch --before DIR --only SESSION` compares the prose with
+the footer removed, over shared sessions only.
+
+| | before | after |
+|---|---|---|
+| **6341** vs `wave2_p25` (n=3 / n=3): negatives per rep | 5.7 | 5.7 |
+| no-search turns per rep | 1.7 | 1.7 |
+| worker tool calls per rep | 184.0 | 187.0 |
+| turn slots whose prose grew | — | 3 of 8 |
+| **6409** vs `wave3_p35` (n=3 / n=3): negatives per rep | 4.0 | 4.0 |
+| no-search turns per rep | 4.7 | 3.3 |
+| worker tool calls per rep | 35.7 | 34.7 |
+| turn slots whose prose grew | — | 7 of 11 |
+
+**6409's before-column is `wave3_p35`, not `wave2_p22_final`.** Against the
+directory the handover named, 6409's negatives per rep fall 7.0 → 4.0 and tool
+calls 94 → 35. That is **P3.5**, which landed in between and made 6409's
+commencement relation retrievable (0 of 8 → 24 of 24). It is not this fix.
+
+6341's largest drop in prose length is its Deep Research turn (12,839 → 9,570
+chars). That path is untouched by this row and its synthesis never sees the
+history, so about 25% is sweep-to-sweep noise, not an effect.
+
+### The cost, stated
+
+The gate cannot tell a restated negative from a clarifying question, so the
+line fires on both. Over the four post-P2.2 directories that have any such turns,
+**27 no-search turns follow a searched turn, and 4 carry a negative** (95% Wilson
+interval 6–33%). In this sweep the line fired on 15 of 57 answered turns, 2 of
+them negatives. The other 13 are clarifying questions and positive follow-ups,
+each now carrying ~500 characters of scope line under an answer that can be as
+short as 61 characters. That is P2.2's trade, extended to follow-ups. It is the
+decision most open to being overruled.
+
+### What the gate caught that a detector would not
+
+6341 rep 1 turn 2 restates *"The agent's search returned no general case law
+interpretations"*. `NEG_ASSERTED` does not enrol it, because "general" is not in
+its adjective list. It carries the line anyway. That is the measured case for
+gating on structure rather than on prose.
+
+### What it does not fix
+
+6341 runs under `legislation_only`. **No case-law tool is loaded, and none was
+called in any of its runs.** Its restated negative is about case law, and rep 2
+turn 2 says the agent *"conducted a comprehensive search across both the
+legislation and case law databases"*. That search never happened.
+
+The carried line qualifies the legislation searches and says nothing about case
+law, which is correct. `negatives` passes the turn on that legislation
+qualification alone, because it cannot tell which corpus a negative is about.
+The false case-law claim is P4.1's, handover item (5).
+
+### Free observations: the first directory after P2.9 and P4.2
+
+- **`scoperecord` exits 0.** 57 worker runs, 348 searches, 70 of them memo hits
+  (20%), and all 348 recorded. P2.9's after-column is now observed, not only
+  true by construction.
+- **`blanks` exits 0.** No billed blank in 57 turns.
+- **One provider call was not recovered.** `audit.empty_completions` holds three
+  attempts at one worker call, all empty (6409 r3 t11).
+  - Attempts 1 and 3: `finish_reason=error`, *"Upstream idle timeout
+    exceeded"*, 160 completion tokens.
+  - **Attempt 2: `finish_reason=stop`, 62,915 completion tokens, 29,350
+    reasoning characters, no content.** This is the first stored instance of the
+    reasoning-token mechanism P4.2 could not rule out.
+  - That turn cost $0.86, in a $1.44 run.
+  - The worker handed the Manager a report consisting only of its scope block.
+    The Manager re-delegated, so the lawyer's answer was sound, but the
+    mechanism is a false-negative trap. It is now row **P4.5**.
+
+### Three instrument corrections
+
+All three were found by the first directory to exercise the code paths
+concerned. **No published number moved**: `blanks` still counts 8 billed blanks
+across the historical directories, and `scoperecord`'s identity is still True on
+all six pre-fix directories.
+
+1. **`blanks` counted attempt records as calls.** A call that fails three times
+   leaves three records, the first two marked `retried: true`. `blanks`
+   reported *"recovered by retry 2, NOT recovered 1"* for one call that
+   recovered from nothing. That flatters the provider. The command now groups
+   records into calls (`empty_completion_calls`) and reports attempts
+   separately.
+2. **`blanks` called a clean v3 directory pre-v3.** It tested whether
+   `empty_completions` was non-empty. P4.2 made the field present-and-empty on a
+   healthy turn precisely so the two cases differ, so the command now tests
+   whether the key is present.
+3. **`scoperecord` printed `identity … : False` on a complete record.** After
+   P2.9, memo hits are recorded rather than lost, so `issued − recorded` is 0 and
+   is not equal to the memo count. The identity is now printed only when
+   something is missing.
+
+### Spend
+
+| | |
+|---|---|
+| smoke, n=1 | $3.35, 24 min |
+| acceptance, n=3 | **$10.30**, 82 min |
+| total | **$13.65** |
+
+Estimated beforehand at about $11 and 75 minutes for the n=3 sweep.
