@@ -2226,6 +2226,17 @@ P2.7, P2.8, P2.10**. P2.10 is awaiting a decision, not work.
   list. The line fired anyway. A product gated on that regex would have left the
   turn bare. This is the first measured case for the module's refusal to gate on
   prose.
+  - **It is one of two verified `NEG_ASSERTED` under-reads, and neither is
+    fixed.** The other is *"is not yet indexed in the legislation database"*
+    (`wave2_p22_final/6409 r2 t11`), which misses because the regex allows
+    `not (currently)? indexed in the`, but not "yet". Both were checked by
+    running the regex on the exact sentences. A third sentence, *"found no
+    records of case law"*, does match.
+  - **Consequence: every `negatives` denominator in `BASELINE.md` is a slight
+    under-read.** Widening the regex moves published before- and after-columns,
+    so it needs its own before/after, the same reasoning as P2.9. It is not yet
+    a row. Take it up only if a row's acceptance turns on a phrasing like
+    these.
 
 - **The before-column the handover named for 6409 is confounded.** Against
   `wave2_p22_final`, 6409's negatives per rep fall 7.0 → 4.0 and tool calls
@@ -2292,10 +2303,18 @@ P2.7, P2.8, P2.10**. P2.10 is awaiting a decision, not work.
 - **A retrieval-only turn keeps its own P2.3/P3.5/P2.5 clauses on the carried
   line.** They are gated on that turn's own records, so they are true by
   construction. Such a turn previously showed no footer at all.
-- **The clutter is accepted and flagged.** The line fired on 15 of 57 answered
-  turns, 2 of them negatives. Historically 4 of 27 (95% CI 6–33%). That is
-  P2.2's trade, extended to follow-ups, and it is the decision most open to
-  being overruled.
+- **The clutter is accepted, and the user confirmed it.** The line fired on 15
+  of 57 answered turns, 2 of them negatives. Historically it is 4 of 27 (95% CI
+  6–33%), in three directories. That is P2.2's trade, extended to follow-ups.
+  **The user decided at the end of this session to keep it as built.** Do not
+  reopen it without new evidence.
+- **Two residuals, recorded rather than built.**
+  - A turn that only searched *within* an instrument stays silent (see above).
+  - A turn that retrieved text or relations without searching, **with no
+    searched turn before it**, still shows no footer at all. Its P2.3/P3.5/P2.5
+    clauses therefore never reach the lawyer. This predates this row:
+    `answer_scope_footer` returns `""` without a search. The carried line only
+    covers such a turn when an earlier reply searched.
 - **Code committed before the paid sweep** (`2545184`), so the run files name
   the exact product code they measured. The tooling commits followed the sweep.
 
@@ -2315,7 +2334,8 @@ sessions. Wave 2's open rows: **P2.4, P2.7**.
   - `replay_report --dir <dir> nosearch [--all] [--answers]`
   - `nosearch --before DIR --only SESSION…`
 
-  `nosearch` joins the subcommands that **exit 1 on findings**: `halts`,
+  `nosearch` also prints the carried line's measured cost: the "no-search turns
+  after a searched turn … of which negative" line. It joins the subcommands that **exit 1 on findings**: `halts`,
   `negatives`, `derivations`, `blanks` and `scoperecord`.
 
 **Next action:**
@@ -2324,9 +2344,14 @@ sessions. Wave 2's open rows: **P2.4, P2.7**.
    case-law claim (P4.1 item 5) sits right next to P2.4's disclosure.
 2. **P4.5** is measure-first. `blanks` now reports unrecovered calls correctly;
    count them over the next directories before building.
-3. **The clutter decision is the user's to overrule.** If it is overruled, the
-   narrowest structural cut is to drop the line on replies with no delegation
-   that are shorter than some length. Say so before building, because that is
-   a heuristic, and a short restated negative is exactly the case the row exists
-   for (6409 r1 t11 is 463 characters of prose).
-4. **P5.2 still needs the user.**
+3. ~~The clutter decision is the user's to overrule.~~ **Decided: kept as
+   built** (user, end of Session 13). Nothing to do.
+4. **Still with the user, and not blocking:**
+   - **P5.2**: the LEX-team question in `WAVE5_QUESTIONS.md` is free and still
+     unasked. B12 cannot close without it; P2.4 can be built without it.
+   - **An alternative Scottish case-law supplier** has not been researched.
+     BAILII's terms restrict automated access, so that is the organisation's
+     question before anyone designs against it.
+5. **Proposed next row: P2.4**, the cheaper of the two left in Wave 2, with
+   P2.7 as the alternative. The user has not chosen between them. Ask at the
+   start of the next session if the choice matters.

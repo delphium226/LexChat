@@ -1242,6 +1242,24 @@ def test_the_invariant_one_check_reads_the_prose_not_the_footer(tmp_path, capsys
     assert "turns asserting a negative / rep" in out
 
 
+def test_nosearch_prints_the_cost_and_exits_on_a_finding(tmp_path, capsys):
+    """The published cost (firings, and how many had a negative to qualify) is
+    printed by the command, and a finding exits 1."""
+    import argparse
+    doc = _ns(_ns_turn(1, "Found." + _P28_FRESH, ["search_legislation"]),
+              _ns_turn(2, _P28_NEG + _P28_CARRIED),
+              _ns_turn(3, "Which one?" + _P28_CARRIED),
+              _ns_turn(4, _P28_NEG))
+    (tmp_path / "6409_rep1.json").write_text(json.dumps(doc), encoding="utf-8")
+    args = argparse.Namespace(dir=str(tmp_path), all=False, answers=False,
+                              chars=100, before=None, only=None)
+    assert rr.cmd_nosearch(args) == 1
+    out = capsys.readouterr().out
+    assert ("no-search turns after a searched turn        3   of which negative 2"
+            "   carrying the carried line 2") in out
+    assert "UNQUALIFIED   restated negative, no scope statement   1" in out
+
+
 def test_nosearch_missing_keys_do_not_raise():
     assert rr.nosearch_rows({}) == []
     assert rr.nosearch_rows({"turns": [{"answer": "x"}]})[0]["shape"] == "A"

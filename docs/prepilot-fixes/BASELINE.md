@@ -2098,13 +2098,28 @@ history, so about 25% is sweep-to-sweep noise, not an effect.
 ### The cost, stated
 
 The gate cannot tell a restated negative from a clarifying question, so the
-line fires on both. Over the four post-P2.2 directories that have any such turns,
-**27 no-search turns follow a searched turn, and 4 carry a negative** (95% Wilson
-interval 6–33%). In this sweep the line fired on 15 of 57 answered turns, 2 of
-them negatives. The other 13 are clarifying questions and positive follow-ups,
-each now carrying ~500 characters of scope line under an answer that can be as
-short as 61 characters. That is P2.2's trade, extended to follow-ups. It is the
-decision most open to being overruled.
+line fires on both. Over the three footered directories that have any such
+turns, **27 no-search turns follow a searched turn, and 4 carry a negative**
+(95% Wilson interval 6–33%):
+
+| dir | no-search turns after a searched turn | of which negative |
+|---|---|---|
+| `wave2_p22_final` | 4 | 2 |
+| `wave3_p35` | 14 | 0 |
+| `wave2_p25` | 9 | 2 |
+| **`wave2_p28` (after)** | **15** | **2** |
+
+Printed by `nosearch` on its "no-search turns after a searched turn" line.
+~~Over the four post-P2.2 directories~~ was a miscount in the first draft of
+this section: `wave2_p23`, `wave2_p25b` and `wave2_p25_smoke` have none.
+
+In this sweep the line fired on 15 of 57 answered turns. The 13 without a
+negative are clarifying questions and positive follow-ups, each now carrying
+~500 characters of scope line under an answer that can be as short as 61
+characters. That is P2.2's trade, extended to follow-ups. **Kept as built by
+the user's decision (2026-09-17).** The only structural narrowing available, a
+reply-length cut, would miss short restated negatives: 6409 r1 t11 is 463
+characters of prose.
 
 ### What the gate caught that a detector would not
 

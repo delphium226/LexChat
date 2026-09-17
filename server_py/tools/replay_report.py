@@ -3067,7 +3067,9 @@ def cmd_nosearch(args) -> int:
                       for d in docs for t in d.get("turns", []))
     answered = negs = 0
     counts = {s: [0, 0] for s in "ABC"}          # [turns, of which neg]
-    after_search = carried = 0
+    # `after_neg` is the fraction of the carried line's firings that had a
+    # negative to qualify. It is P2.8's measured cost, published in BASELINE.md.
+    after_search = after_neg = carried = 0
     listed = []
     bad = []
     for doc in sorted(docs, key=lambda d: (d["session_id"], d.get("rep", 1))):
@@ -3083,6 +3085,7 @@ def cmd_nosearch(args) -> int:
             counts[row["shape"]][1] += row["neg"]
             if row["searched_before"]:
                 after_search += 1
+                after_neg += row["neg"]
                 carried += row["line"] == "carried"
             if args.all or row["neg"] or verdict:
                 listed.append((doc, row, verdict))
@@ -3110,7 +3113,7 @@ def cmd_nosearch(args) -> int:
                      ("C", "delegated, no legislation search")):
         print(f"  ({s}) {label:<36} {counts[s][0]:>4}   of which negative {counts[s][1]}")
     print(f"no-search turns after a searched turn        {after_search}"
-          f"   carrying the carried line {carried}")
+          f"   of which negative {after_neg}   carrying the carried line {carried}")
     print()
     unq = [b for b in bad if b[2] == "UNQUALIFIED"]
     mis = [b for b in bad if b[2] == "MISATTRIBUTED"]
