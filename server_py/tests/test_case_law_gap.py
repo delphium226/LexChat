@@ -763,10 +763,17 @@ async def test_the_note_reaches_the_worker_and_survives_the_memo():
         assert [e["tool"] for e in log] == ["not_held"]
 
 
-@pytest.mark.parametrize("prompt_name", ["MANAGER_SYSTEM_PROMPT",
-                                         "MANAGER_SYSTEM_PROMPT_CONVERSATIONAL"])
-def test_both_legislation_managers_carry_the_rule(prompt_name):
-    """6373 is conversational; its Manager relayed the blame in 2 of 3 reps."""
+@pytest.mark.parametrize("prompt_name", [
+    "MANAGER_SYSTEM_PROMPT", "MANAGER_SYSTEM_PROMPT_CONVERSATIONAL",
+    # The smoke run: the Worker still wrote "there may be a typo in the
+    # citation" beside the not-held note, and in research mode the Manager
+    # passes the report through verbatim.
+    "WORKER_SYSTEM_PROMPT", "WORKER_SYSTEM_PROMPT_CASE_LAW",
+    "WORKER_SYSTEM_PROMPT_HYBRID", "WORKER_SYSTEM_PROMPT_CONVERSATIONAL",
+])
+def test_every_legislation_bot_prompt_carries_the_rule(prompt_name):
+    """6373 is conversational; its Manager relayed the blame in 2 of 3 reps,
+    and every Worker report wrote it."""
     from src import prompts
     text = getattr(prompts, prompt_name)
     assert "NOT HELD IS NOT A WRONG CITATION" in text

@@ -151,6 +151,17 @@ _IN_FORCE_RULE = """IN-FORCE STATUS (whether legislation is current law):
 - If none of (a)-(d) was retrieved, say so: "in-force status was not verified — the legislation index does not report it, and no commencement or repeal record was retrieved for this instrument." Then say what would establish it. An honest "not verified" is the right answer here and is what these users have praised; a confident "in force" is the defect this rule exists to stop.
 - The defect is the UNSOURCED assertion, not the truth of it. "The Scotland Act 1998 is in force" happens to be true and you still may not assert it, because the same habit produced "all provisions cited are in force" about sections that had been repealed. State what the sources establish and let the lawyer draw the rest."""
 
+# P2.4 (6373). Measured before and after the code note: the Worker wrote
+# "there may be a typo in the citation … please verify" straight after reading a
+# not-found note that told it not to, in every run (3 of 3 before, 1 of 1 in the
+# smoke). In research mode the Manager passes the report through verbatim, so
+# the Worker's own prose reaches the lawyer. Same rule the two legislation
+# Manager prompts carry.
+_NOT_HELD_RULE = """NOT HELD IS NOT A WRONG CITATION:
+- If an instrument or case the brief cites is not found (a search that does not return it, or a retrieval by id that answers not-found), report that this index does not hold it.
+- Do NOT write that the citation may be wrong or contain a typo, do NOT ask the user to check, verify or confirm it, and do NOT present a different instrument (another year or number) as the one the user meant. The indexes are incomplete, recent instruments least of all, so a correct citation is often not held."""
+
+
 WORKER_SYSTEM_PROMPT = """You are a specialized Legal Research Support Agent for UK Law.
 Your output will be reviewed by government lawyers who require absolute precision.
 
@@ -221,7 +232,7 @@ CITATION PROTOCOL:
 
 Review your answer before responding: Does every claim have a corresponding source from the API? If yes, proceed.
 
-""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE + "\n\n" + _IN_FORCE_RULE
+""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE + "\n\n" + _IN_FORCE_RULE + "\n\n" + _NOT_HELD_RULE
 
 WORKER_SYSTEM_PROMPT_CASE_LAW = """You are a specialized Legal Research Support Agent for UK Case Law.
 Your output will be reviewed by government lawyers who require absolute precision.
@@ -269,7 +280,9 @@ OUTPUT STRUCTURE (Use Markdown):
 2. **Key Cases:** For each relevant case, state name, NCN, court, date, and its relevance to the question.
 3. **Analysis:** How the cases apply to the question asked.
 4. **Jurisdiction & Currency:** Geographic scope; note whether recent decisions may have modified earlier positions.
-5. **References:** Complete list of all cases cited with NCN and URL."""
+5. **References:** Complete list of all cases cited with NCN and URL.
+
+""" + _NOT_HELD_RULE
 
 WORKER_SYSTEM_PROMPT_HYBRID = """You are a specialized Legal Research Support Agent for UK Law, covering both legislation and case law.
 Your output will be reviewed by government lawyers who require absolute precision.
@@ -329,7 +342,7 @@ OUTPUT STRUCTURE (Use Markdown):
 4. **Jurisdiction & Status:** Geographic scope from the metadata; whether cases remain good law. For whether legislation is in force, see the IN-FORCE STATUS rule below — state only what a retrieved source establishes, and say plainly when nothing does. Do NOT omit this section.
 5. **References:** Complete list of all sources used. This section is MANDATORY — a report without it is incomplete.
 
-""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE + "\n\n" + _IN_FORCE_RULE
+""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE + "\n\n" + _IN_FORCE_RULE + "\n\n" + _NOT_HELD_RULE
 
 
 _MANAGER_CONV_BODY = """You are a legal assistant for a UK government legal department.
@@ -411,7 +424,7 @@ CITATION FORMAT:
 Inline only. Example: "Under s.7 of the [Acquisition of Land Act 1981](URL), ..."
 Do not produce a standalone References list.
 
-""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE + "\n\n" + _IN_FORCE_RULE
+""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE + "\n\n" + _IN_FORCE_RULE + "\n\n" + _NOT_HELD_RULE
 
 
 _LEGISLATION_TYPE_LABELS = {
