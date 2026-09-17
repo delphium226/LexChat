@@ -21,6 +21,7 @@ from ..prompts import (
 )
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import enforce_provision_links
+from ..utils.discovery_budget import new_search_budget
 from ..utils.empty_completion import (
     LOST_ANSWER_NOTICE,
     fallback_from_reports,
@@ -217,14 +218,14 @@ async def run_worker_agent(
 
     worker_tools = get_worker_tools(research_mode)
     source_accumulator: list = []
-    # Limit parliamentary searches so the model proceeds to Phase 2 instead of looping.
-    # Covers the SP search tools on the Holyrood bot and search_hansard on the
-    # Westminster bot (see _PARLIAMENT_SEARCH_TOOLS in agent_shared).
-    search_budget = (
-        {"remaining": 3}
-        if research_mode in ("parliamentary_records", "westminster_records")
-        else None
-    )
+    # Limit discovery searches so the model proceeds to Phase 2 instead of looping.
+    # Parliamentary modes: three calls to the SP search tools / search_hansard (see
+    # _PARLIAMENT_SEARCH_TOOLS in agent_shared), unchanged. P2.7: legislation modes
+    # get a budget of ROUNDS in which search_legislation may be called; without
+    # one, a looping worker ran into the 20-round step cap and lost every finding
+    # (see utils/discovery_budget.py). Fresh per run, so each delegation and each
+    # Deep Research step gets its own.
+    search_budget = new_search_budget(research_mode)
     # Bound on the SUM of tool output in this worker's context. The per-result
     # summarisation threshold scales with the model's context window and so caps
     # each result but not their total; without this, several individually-legal

@@ -1559,6 +1559,14 @@ def test_the_next_turn_neither_stacks_nor_chains():
     # this parse anchors on. As a second line it would switch P2.8 off silently.
     (_p28_search("q") + [{"tool": "search_case_law", "query": "privilege",
                           "shown": 50, "ok": True}], {"_jurisdiction": "scotland"}),
+    # P2.7: the discovery-budget clause, from two steps, with the case-law
+    # clause after it. Same line, after the anchor.
+    (_p28_search("q", "r", "s")
+     + [{"tool": "discovery_budget", "blocked_tool": "search_legislation",
+         "query": f"late {i}", "limit": 8, "run": run}
+        for i, run in enumerate(("a1", "a1", "b2"))]
+     + [{"tool": "search_case_law", "query": "privilege", "shown": 50, "ok": True}],
+     {"_jurisdiction": "scotland"}),
 ])
 def test_every_fresh_footer_shape_is_read_back_exactly(log, cfg):
     """`_FRESH_FOOTER` is coupled to `answer_scope_footer`'s f-string. If the

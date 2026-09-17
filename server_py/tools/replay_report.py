@@ -39,6 +39,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
+# --- Tool records ------------------------------------------------------------
+
+def _ran(tl: dict) -> bool:
+    """False for a call a discovery budget refused (P2.7).
+
+    A refused call is a tool record, but no search ran, so every count of
+    searches that ran must skip it. The legislation stop message deliberately
+    carries no `results`, which would otherwise read as a zero-result search.
+    No directory before P2.7 holds a refused legislation call, so this moves no
+    published number.
+    """
+    return not tl.get("budget_blocked")
+
+
 # --- Detectors ---------------------------------------------------------------
 
 # `chat_loop` returns this as the worker's assistant content when it runs out of
@@ -746,7 +760,7 @@ def analyse_run(doc: dict) -> RunSignals:
                 turn_halted = True
             for tl in dg.get("tools", []):
                 sig.tool_calls[tl["name"]] += 1
-                if tl["name"] != "search_legislation":
+                if tl["name"] != "search_legislation" or not _ran(tl):
                     continue
                 sig.searches += 1
                 out = _json_or_none(tl.get("final_result"))
@@ -1166,7 +1180,7 @@ def _turn_queries(turn: dict) -> list:
         for tl in dg.get("tools", []):
             if tl.get("name") not in ("search_legislation",
                                       "search_legislation_sections",
-                                      "search_case_law"):
+                                      "search_case_law") or not _ran(tl):
                 continue
             q = str((tl.get("args") or {}).get("query") or "").strip()
             if q and q not in out:
@@ -1251,7 +1265,7 @@ def cmd_negatives(args) -> int:
         for t in doc.get("turns", []):
             for dg in (t.get("audit") or {}).get("delegations", []):
                 for tl in dg.get("tools", []):
-                    if tl.get("name") != "search_legislation":
+                    if tl.get("name") != "search_legislation" or not _ran(tl):
                         continue
                     shape["searches"] += 1
                     out = _json_or_none(tl.get("final_result"))
@@ -2851,7 +2865,7 @@ def scope_record_gap(delegation: dict) -> Optional[tuple]:
     honest reading: nothing was recorded.
     """
     tools = [t for t in (delegation.get("tools") or [])
-             if t.get("name") == "search_legislation"]
+             if t.get("name") == "search_legislation" and _ran(t)]
     if not tools:
         return None
     report = delegation.get("report") or ""
@@ -2893,7 +2907,7 @@ def cmd_scoperecord(args) -> int:
         for t in doc.get("turns", []):
             for dg in ((t.get("audit") or {}).get("delegations") or []):
                 if not [x for x in (dg.get("tools") or [])
-                        if x.get("name") == "search_legislation"]:
+                        if x.get("name") == "search_legislation" and _ran(x)]:
                     continue
                 got = scope_record_gap(dg)
                 if got is None:
@@ -2995,7 +3009,7 @@ def nosearch_rows(doc: dict) -> list:
         audit = t.get("audit") or {}
         dgs = audit.get("delegations") or []
         tools = [x for dg in dgs for x in (dg.get("tools") or [])]
-        searched_now = any(x.get("name") in _LEG_SEARCH_TOOLS for x in tools)
+        searched_now = any(x.get("name") in _LEG_SEARCH_TOOLS and _ran(x) for x in tools)
         if answer.strip():
             bare = _without_footer(answer)
             if CARRIED_SCOPE in answer:
@@ -3527,8 +3541,10 @@ def _caselaw_invariant_one(before: Path, after: Path, only: Optional[list]) -> N
 #
 # **Memo hits are excluded from the "issued" count**, because the parliamentary
 # budget's design never charges a memo hit (`run_worker_tool` returns before
-# the budget check), and the same would presumably hold for legislation.
-# They are printed separately.
+# the budget check). ~~and the same would presumably hold for legislation~~
+# **It does not: P2.7 (Session 15) charges them**, because 57 of the 81 memo
+# hits on post-P3.5 halted runs repeat the same step's own search. They are
+# printed separately, and they count in "search rounds", which is P2.7's unit.
 #
 # A measurement, not a check: always exits 0.
 
@@ -3536,6 +3552,31 @@ _DISCOVERY_TOOLS = ("search_legislation", "search_case_law")
 _RETRIEVAL_TOOLS = ("search_legislation_sections", "get_legislation_text",
                     "get_case_law_text", "get_legislation_changes")
 _BUDGETS = (3, 4, 5, 6, 8, 10, 12, 15, 20)
+_ROUND_BUDGETS = (4, 5, 6, 7, 8, 10, 12)
+
+# **P2.7 built its budget on ROUNDS, so this command counts them too.** A round
+# is not recorded on a tool record; it is rebuilt from `started_at`. The calls
+# of one round are created together and start within milliseconds, and rounds
+# are separated by an LLM call that takes seconds. Checked on the 13 post-P3.5
+# halted runs: the rebuilt count is 20 on every one, which is the cap. The
+# command prints that agreement on every directory it reads, so a drift in the
+# method shows up where it is used.
+_ROUND_GAP_S = 1.0
+
+
+def _rounds(tools: list) -> list:
+    """The worker run's tool records, grouped into ReAct rounds by start time."""
+    rounds, cur, last = [], [], None
+    for tl in sorted(tools, key=lambda x: float(x.get("started_at") or 0)):
+        s = float(tl.get("started_at") or 0)
+        if cur and last is not None and s - last > _ROUND_GAP_S:
+            rounds.append(cur)
+            cur = []
+        cur.append(tl)
+        last = s
+    if cur:
+        rounds.append(cur)
+    return rounds
 
 
 def discovery_runs(doc: dict) -> list:
@@ -3546,12 +3587,16 @@ def discovery_runs(doc: dict) -> list:
             tools = dg.get("tools") or []
             issued = Counter()
             memo = Counter()
+            refused = Counter()     # P2.7: stopped by a discovery budget, never ran
             keys = Counter()        # (tool, resource): production's redundancy key
             exact = Counter()       # (tool, resource, query): a literal repeat
             queries = set()
             for tl in tools:
                 nm = tl.get("name") or "?"
                 a = tl.get("args") or {}
+                if not _ran(tl):
+                    refused[nm] += 1
+                    continue
                 if tl.get("memo_hit"):
                     memo[nm] += 1
                 else:
@@ -3570,6 +3615,7 @@ def discovery_runs(doc: dict) -> list:
             # reformat retry could rewrite that marker away (6340), so on a v1
             # directory the halted count is a floor.
             marker = bool(HALT_LITERAL.search(dg.get("report") or ""))
+            rounds = _rounds(tools)
             rows.append({
                 "session": str(doc.get("session_id")),
                 "rep": doc.get("rep", 1),
@@ -3580,6 +3626,16 @@ def discovery_runs(doc: dict) -> list:
                 "halt_source": "meta" if halted else ("marker" if marker else ""),
                 "schema": (t.get("audit") or {}).get("schema_version"),
                 "rounds": (halted or {}).get("steps"),
+                # Rebuilt from start times (see `_rounds`): rounds with any tool
+                # call, and rounds in which a legislation search RAN (memo
+                # hits count, refused calls do not), which is what the P2.7
+                # budget charges.
+                "rounds_rebuilt": len(rounds),
+                "search_rounds": sum(
+                    1 for r in rounds
+                    if any(x.get("name") == "search_legislation" and _ran(x) for x in r)
+                ),
+                "leg_refused": refused["search_legislation"],
                 "tools": len(tools),
                 "leg": issued["search_legislation"],
                 "leg_memo": memo["search_legislation"],
@@ -3624,15 +3680,26 @@ def cmd_discovery(args) -> int:
     print(f"P2.7 discovery distribution over {', '.join(d.name for d in dirs)}")
     print(f"  worker runs {len(rows)}  (halted {len(halted)}, completed {len(done)})")
     print(f"  sessions: {', '.join(sorted({r['session'] for r in rows}))}")
-    print("  issued = calls that reached the API (memo hits excluded; they never spend budget)")
+    print("  issued = calls that reached the API (memo hits excluded; P2.7 charges them by round)")
     v1 = sum(1 for r in rows if (r["schema"] or 1) < 2)
     if v1:
         print(f"  [!] {v1} run(s) predate audit schema v2, so their halts are read from the")
         print("      report marker, which the pre-P2.6 reformat retry could erase: a floor.")
         print(f"      halted by marker: {sum(1 for r in halted if r['halt_source'] == 'marker')}")
     print()
+    refused = sum(r["leg_refused"] for r in rows)
+    print(f"  search_legislation calls REFUSED by the P2.7 budget: {refused}, "
+          f"in {sum(1 for r in rows if r['leg_refused'])} run(s)  "
+          "(excluded from every count below)")
+    metas = [r for r in halted if r["halt_source"] == "meta" and r["rounds"]]
+    if metas:
+        agree = sum(1 for r in metas if r["rounds_rebuilt"] == r["rounds"])
+        print(f"  round rebuild agrees with the halt metadata on {agree} of "
+              f"{len(metas)} halted run(s)")
+    print()
     print(f"{'per worker run':<44} {'n':>4} {'med':>5} {'p75':>5} {'p90':>5} {'max':>5}")
     for label, key in (("search_legislation issued", "leg"),
+                       ("search_legislation SEARCH ROUNDS", "search_rounds"),
                        ("search_legislation memo hits", "leg_memo"),
                        ("search_legislation distinct queries (memo incl.)", "leg_distinct"),
                        ("search_case_law issued", "cl"),
@@ -3670,21 +3737,142 @@ def cmd_discovery(args) -> int:
               f"{sum(max(0, both(r) - n) for r in rows):>9} | "
               f"{hit(halted, memo):>4} of {len(halted):<3} {hit(done, memo):>5} of {len(done):<4} "
               f"{sum(max(0, memo(r) - n) for r in rows):>7}")
+    print()
+    print("P2.7 counts ROUNDS in which search_legislation ran (memo hits included).")
+    print("Runs with more than K search rounds, i.e. runs a budget of K would stop.")
+    print("On a directory taken WITH the budget, no run should exceed its K.")
+    print(f"{'K':>4} | {'halted':>10} {'completed':>11}")
+    for k in _ROUND_BUDGETS:
+        print(f"{'K' + str(k):>4} | "
+              f"{sum(1 for r in halted if r['search_rounds'] > k):>4} of {len(halted):<3} "
+              f"{sum(1 for r in done if r['search_rounds'] > k):>5} of {len(done):<4}")
     if args.runs or args.all:
         print()
         print(f"{'dir':<16} {'sess':>5} {'rep':>3} {'turn':>4} {'kind':<18} {'stp':>3} "
-              f"{'halt':>4} {'tools':>5} {'leg':>4} {'memo':>4} {'dist':>4} {'cl':>4} "
+              f"{'halt':>4} {'rnd':>4} {'srnd':>4} {'tools':>5} {'leg':>4} {'memo':>4} "
+              f"{'ref':>4} {'dist':>4} {'cl':>4} "
               f"{'sect':>4} {'text':>4} {'judg':>4} {'chg':>4} {'same':>4} {'rpt':>4}")
         for r in sorted(rows, key=lambda r: (r["dir"], r["session"], r["rep"], r["turn"] or 0, r["step"] or 0)):
             if not args.all and not r["halted"]:
                 continue
             print(f"{r['dir']:<16} {r['session']:>5} {r['rep']:>3} {r['turn']:>4} "
                   f"{r['kind'][:18]:<18} {str(r['step'] or '-'):>3} "
-                  f"{('yes' if r['halted'] else '-'):>4} {r['tools']:>5} {r['leg']:>4} "
-                  f"{r['leg_memo']:>4} {r['leg_distinct']:>4} {r['cl']:>4} {r['sections']:>4} "
+                  f"{('yes' if r['halted'] else '-'):>4} {r['rounds_rebuilt']:>4} "
+                  f"{r['search_rounds']:>4} {r['tools']:>5} {r['leg']:>4} "
+                  f"{r['leg_memo']:>4} {r['leg_refused']:>4} {r['leg_distinct']:>4} "
+                  f"{r['cl']:>4} {r['sections']:>4} "
                   f"{r['text']:>4} {r['judgments']:>4} {r['changes']:>4} {r['same_resource']:>4} "
                   f"{r['repeat_retrievals']:>4}")
+    if args.before:
+        print()
+        _discovery_invariant_one(Path(args.before), dirs[0], args.only)
     return 0
+
+
+def discovery_turns(doc: dict) -> list:
+    """One row per ANSWERED turn: what P2.7's pass bar compares.
+
+    `sources_kept` is `request_timings.sources_kept`, the sources the lawyer's
+    rail shows. The row's bar is that it must not fall while halts do, because
+    a budget that buys fewer halts with thinner answers breaks Invariant 1.
+    """
+    rows = []
+    for t in doc.get("turns", []):
+        answer = t.get("answer") or ""
+        if not answer.strip():
+            continue
+        timing = t.get("timing") or {}
+        runs = discovery_runs({"session_id": doc.get("session_id"),
+                               "rep": doc.get("rep", 1), "turns": [t]})
+        rows.append({
+            "turn": t.get("turn"),
+            "sources_kept": int(timing.get("sources_kept") or 0),
+            "at_cap": bool(timing.get("max_turns_halted")),
+            "runs": len(runs),
+            "halted_runs": sum(1 for r in runs if r["halted"]),
+            "leg": sum(r["leg"] for r in runs),
+            "search_rounds": sum(r["search_rounds"] for r in runs),
+            "refused": sum(r["leg_refused"] for r in runs),
+            "retrievals": sum(r["sections"] + r["text"] + r["judgments"] + r["changes"]
+                              for r in runs),
+            "chars": len(_without_footer(answer)),
+        })
+    return rows
+
+
+def _discovery_invariant_one(before: Path, after: Path, only: Optional[list]) -> None:
+    """P2.7's pass bar: halts fall, and `sources_kept` per turn slot does not.
+
+    Shared sessions only. Per session, per-rep means; then, per turn slot, the
+    mean `sources_kept` and prose length (footer removed) before and after.
+    A slot "fell" when its mean is lower after. At n=3 a slot's mean moves with
+    the model, so read the count of slots that fell, not any one slot.
+    """
+    def load(d: Path):
+        return [x for x in load_runs(d)
+                if not only or str(x.get("session_id")) in only]
+
+    b_docs, a_docs = load(before), load(after)
+    shared = ({str(x["session_id"]) for x in b_docs}
+              & {str(x["session_id"]) for x in a_docs})
+    if not shared:
+        print(f"  --before: no session shared with {before.name}")
+        return
+
+    def measure(docs):
+        slots, runs = {}, {}
+        for doc in docs:
+            sid = str(doc["session_id"])
+            if sid not in shared:
+                continue
+            run = runs.setdefault((sid, doc.get("rep", 1)), Counter())
+            for row in discovery_turns(doc):
+                slot = slots.setdefault((sid, row["turn"]), {"kept": [], "chars": []})
+                slot["kept"].append(row["sources_kept"])
+                slot["chars"].append(row["chars"])
+                run["turns"] += 1
+                for k in ("sources_kept", "runs", "halted_runs", "leg",
+                          "search_rounds", "refused", "retrievals"):
+                    run[k] += row[k]
+                run["at_cap"] += row["at_cap"]
+                run["halted_turns"] += bool(row["halted_runs"])
+        return slots, runs
+
+    (b_slots, b_runs), (a_slots, a_runs) = measure(b_docs), measure(a_docs)
+    print(f"  P2.7 pass bar (prose with the footer removed): {before.name} -> "
+          f"{after.name}, sessions {', '.join(sorted(shared))}")
+    for sid in sorted(shared):
+        for key, label in (("turns", "answered turns / rep"),
+                           ("runs", "worker runs / rep"),
+                           ("halted_runs", "HALTED worker runs / rep"),
+                           ("halted_turns", "turns with a halted run / rep"),
+                           ("at_cap", "turns at the step cap (timing) / rep"),
+                           ("leg", "search_legislation issued / rep"),
+                           ("search_rounds", "search rounds / rep"),
+                           ("refused", "searches refused by the budget / rep"),
+                           ("retrievals", "retrieval calls / rep"),
+                           ("sources_kept", "SOURCES KEPT / rep")):
+            bv = [v[key] for (s, _), v in b_runs.items() if s == sid]
+            av = [v[key] for (s, _), v in a_runs.items() if s == sid]
+            print(f"    {sid} {label:<38} {sum(bv) / max(len(bv), 1):7.1f} "
+                  f"(n={len(bv)}) -> {sum(av) / max(len(av), 1):7.1f} (n={len(av)})")
+        common = sorted(k for k in set(b_slots) & set(a_slots) if k[0] == sid)
+        fell = shrank = 0
+        lines = []
+        for k in common:
+            bk = sum(b_slots[k]["kept"]) / len(b_slots[k]["kept"])
+            ak = sum(a_slots[k]["kept"]) / len(a_slots[k]["kept"])
+            bc = sum(b_slots[k]["chars"]) / len(b_slots[k]["chars"])
+            ac = sum(a_slots[k]["chars"]) / len(a_slots[k]["chars"])
+            fell += ak < bk
+            shrank += ac < bc
+            lines.append(f"      t{k[1]:<3} sources {bk:6.1f} -> {ak:6.1f} "
+                         f"{'FELL' if ak < bk else 'held'}   "
+                         f"prose {bc:7.0f} -> {ac:7.0f} {'shrank' if ac < bc else 'grew'}")
+        print(f"    {sid} per turn slot: sources_kept fell in {fell} of {len(common)}, "
+              f"prose shrank in {shrank} of {len(common)}")
+        for ln in lines:
+            print(ln)
 
 
 def cmd_corpus(args) -> int:
@@ -3736,6 +3924,8 @@ def cmd_corpus(args) -> int:
                 runs += 1
                 recorded, memoed = set(), set()
                 for tl in dg.get("tools", []):
+                    if not _ran(tl):
+                        continue
                     nm = tl.get("name") or "?"
                     tools[nm] += 1
                     raw = tl.get("raw_result")
@@ -3948,6 +4138,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     dc.add_argument("--only", nargs="+", metavar="SESSION")
     dc.add_argument("--runs", action="store_true", help="list every halted worker run")
     dc.add_argument("--all", action="store_true", help="list every worker run")
+    dc.add_argument("--before", metavar="DIR",
+                    help="P2.7 acceptance: compare halts and sources_kept per turn "
+                         "slot against DIR, shared sessions only (use --only)")
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")

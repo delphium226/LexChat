@@ -12,6 +12,7 @@ from ..utils.empty_completion import (
     is_empty_completion,
     report_empty_completion,
 )
+from ..utils.discovery_budget import set_react_round
 from ..utils.research_halt import halt_marker_text
 from . import agent_core
 from .summarisation import call_chunk, summarise_prompt
@@ -316,6 +317,10 @@ async def chat_loop(
                 )
             return func_name, result
 
+        # P2.7: each task copies this context at creation, so every call in
+        # this round sees the round it belongs to (the legislation discovery
+        # budget counts rounds, not calls).
+        set_react_round(_turn)
         tool_tasks = [asyncio.create_task(_run_tool(tc)) for tc in tool_calls]
         try:
             tool_results = await asyncio.gather(*tool_tasks)

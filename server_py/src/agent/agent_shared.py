@@ -13,12 +13,14 @@ from typing import Callable, Optional
 
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import harvest_legislation_urls, provision_url_block
+from ..utils.discovery_budget import legislation_budget_blocks, legislation_stop_message
 from ..utils.search_scope import (
     amendment_search_note,
     currency_note,
     enabling_power_note,
     legislation_search_note,
     not_held_note,
+    record_budget_stop,
     record_case_law_search,
     record_currency,
     record_enabling_power,
@@ -517,6 +519,30 @@ async def run_worker_tool(
     if _audit_tool is not None:
         parent_on_chunk = _audit.sniff_on_chunk(_audit_tool, parent_on_chunk)
 
+    # P2.7: the legislation discovery budget, checked BEFORE the memo lookup
+    # (the parliamentary one below is checked after it, and is unchanged). A
+    # step repeating its own search is the loop this budget exists for, so a
+    # memo-served search is refused too once the step's search rounds are
+    # spent (see utils/discovery_budget.py). A blocked call is not a search:
+    # it is kept out of `record_search` and the phase counts, and recorded
+    # instead as a stop, which the worker's block and the lawyer's footer
+    # both state as a limit.
+    if search_budget is not None and legislation_budget_blocks(search_budget, name):
+        if timing_collector:
+            timing_collector.record_search_budget_blocked()
+        record_budget_stop(search_log, name, args, search_budget)
+        stop_msg = legislation_stop_message(search_budget)
+        logger.info(f"[Worker] Discovery budget spent — '{name}' not run")
+        if parent_on_chunk:
+            await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
+            await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Search limit reached"})
+        if _audit:
+            _audit.end_tool(
+                _audit_tool, raw_result=stop_msg, final_result=stop_msg,
+                budget_blocked=True,
+            )
+        return stop_msg
+
     # Tool-result memo: exact-arg repeats within one request are served from
     # the per-request memo. In Deep Research, counted only as memo_hits — NOT
     # as a worker tool call / phase call / redundant call (it's a saving, not
@@ -604,7 +630,10 @@ async def run_worker_tool(
         "search_scottish_parliament", "search_scottish_committee_transcripts", "search_scottish_plenary",
         "search_hansard",  # Westminster discovery tool — same budget, same stop semantics
     }
-    if search_budget is not None and name in _PARLIAMENT_SEARCH_TOOLS:
+    # `"remaining" in` since P2.7: a legislation budget is also a dict now, and
+    # a parliamentary tool name hallucinated in a legislation mode must reach
+    # the executor's unknown-tool path, not a KeyError here.
+    if search_budget is not None and "remaining" in search_budget and name in _PARLIAMENT_SEARCH_TOOLS:
         if search_budget["remaining"] <= 0:
             # The parliament bot's defining constraint: a budget-blocked search
             # means the model looped on discovery instead of retrieving. Count it

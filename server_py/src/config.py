@@ -169,6 +169,15 @@ EFFICIENCY_PROFILES = {
             "halt": (0.001, 0.02),
             "fallback": (0.1, 0.25),
             "reformat": (0.05, 0.15),
+            # P2.7: legislation workers have a discovery budget (8 search
+            # rounds). UNMEASURED placeholder, copied from the parliament
+            # profile; re-tune once real traffic accumulates. Indicator only,
+            # deliberately no `max_budget_blocked` breach rule, for the
+            # reformat band's reason: a budget stop is the designed outcome of
+            # a broad question, and alerting on each one would flood the
+            # activity feed before the base rate is known. Having the band
+            # also makes blocked requests lead Worst Offenders on this bot.
+            "budget_blocked": (0.05, 0.15),
         },
     },
     "parliamentary_records": {

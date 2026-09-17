@@ -155,9 +155,11 @@ async def test_efficiency_empty(client, admin_token):
         "avgDistinctRetrieved", "avgSummCalls", "avgTruncations", "avgFanout", "summCompression",
         "avgBudgetBlocked", "reformatRate", "totalReformats",
     }
-    # indicators are static (6 bands on the legislation profile) even with no data;
-    # thresholds is the selected profile dict
-    assert len(body["indicators"]) == 6
+    # indicators are static even with no data: 6 bands on the legislation
+    # profile, plus search-budget exhaustion since P2.7 gave legislation workers
+    # a discovery budget. thresholds is the selected profile dict
+    assert len(body["indicators"]) == 7
+    assert body["indicators"][-1]["key"] == "budget_exhaustion"
     assert set(body["indicators"][0]) == {"key", "label", "value", "unit", "target", "status"}
     assert isinstance(body["thresholds"], dict)
     assert body["researchMode"] == "legislation"

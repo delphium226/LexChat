@@ -1426,6 +1426,105 @@ def record_search(log: Optional[list], name: str, args: dict, data: Any) -> None
         pass
 
 
+# ---------------------------------------------------------------------------
+# P2.7 — a search the discovery budget refused is a limit, not a finding
+# ---------------------------------------------------------------------------
+#
+# The parliamentary budget's stop tells the model to write that "no relevant
+# records were found". Copied to legislation, that manufactures the bare
+# negative P2.2 exists to stop. A refused search did not run, so it is kept out
+# of `record_search` (the footer must not list a search that never happened)
+# and recorded here instead, as the limit it is. The worker's block tells the
+# agent writing the answer; the footer tells the lawyer. Both are gated on the
+# structural fact that a search was refused this turn, never on the prose.
+
+_BUDGET_TOOL = "discovery_budget"
+
+
+def record_budget_stop(log: Optional[list], name: str, args: dict, budget: Optional[dict]) -> None:
+    """Record one search the discovery budget refused. Never raises."""
+    if log is None:
+        return
+    try:
+        budget = budget or {}
+        log.append({
+            "tool": _BUDGET_TOOL,
+            "blocked_tool": name,
+            "query": str((args or {}).get("query") or "")[:200],
+            "limit": budget.get("limit"),
+            "run": budget.get("id"),
+        })
+    except Exception:
+        pass
+
+
+def _budget_rows(log: Optional[list]) -> list:
+    return [e for e in (log or []) if isinstance(e, dict) and e.get("tool") == _BUDGET_TOOL]
+
+
+def _budget_limb(log: Optional[list]) -> str:
+    """The worker-block line saying discovery was cut short. "" if it was not.
+
+    Worded around "searching was cut short" so it cannot be read by
+    `scope_record_gap` as a count of searches that ran (that regex keys on
+    "Searched the legislation index").
+    """
+    try:
+        rows = _budget_rows(log)
+        if not rows:
+            return ""
+        limit = next((e.get("limit") for e in rows if e.get("limit")), None)
+        terms = []
+        for e in rows:
+            q = (e.get("query") or "").strip()
+            if q and q not in terms:
+                terms.append(q)
+        n = len(rows)
+        listed = "; ".join(f'"{q}"' for q in terms[:3])
+        return (
+            "Searching was cut short: this step used its limit of "
+            + (f"{limit} rounds of " if limit else "")
+            + f"legislation-index searches, and {n} further "
+            + ("search it asked for was" if n == 1 else "searches it asked for were")
+            + " not run"
+            + (f" (for: {listed})" if listed else "")
+            + ". Material this step did not reach may still be in the index. If "
+            "the answer you write reports anything as not found, it MUST also say "
+            "that searching was stopped by a limit on how much one research step "
+            "may search, before it finished. Calling delegate_research again with "
+            "the same brief will meet the same limit."
+        )
+    except Exception:
+        return ""
+
+
+def _budget_footer_clause(entries: Optional[list]) -> str:
+    """The lawyer-facing half of P2.7, as one clause on the existing footer.
+
+    Worded clear of `NEG_ASSERTED`, `HALT_PARAPHRASE` and `HALT_AS_TIMEOUT`: no
+    "not found", no "internal limit", no "halted", no "timed out". A budget stop
+    is not a halt (the step still wrote a report), and a halt detector that read
+    this line would grade halts as disclosed on turns that did not halt. Pinned
+    by `test_discovery_budget.py`.
+    """
+    try:
+        rows = _budget_rows(entries)
+        if not rows:
+            return ""
+        steps = len({e.get("run") for e in rows})
+        n = len(rows)
+        who = ("one research step" if steps == 1 else f"{steps} research steps")
+        return (
+            f" Searching was also limited: {who} reached the cap on how much "
+            f"searching a step may do, and {n} further "
+            + ("search it asked for was" if n == 1 else "searches it asked for were")
+            + " not run, so the answer above may not reflect everything a longer "
+            "search would have found."
+        )
+    except Exception:
+        return ""
+
+
 def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     """The scope record appended, in code, to a Worker's report.
 
@@ -1481,6 +1580,11 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
             f"specific provisions: {', '.join(ids[:8]) or 'n/a'}"
             + (" (ranked extracts, not the full contents of any of them)")
         )
+    # P2.7. Next to the searches it qualifies: the list above is not everything
+    # this step would have searched for.
+    _budget = _budget_limb(log)
+    if _budget:
+        lines.append(_budget)
     filters = _filters_phrase(cfg, {})
     lines.append(f"Filters in force for the whole step: {filters}.")
     # P2.3 (B3b). Same reason as everything else in this block: the Worker saw
@@ -1935,6 +2039,9 @@ def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) ->
     # P2.4 (B12): the case-law clause goes LAST, inside this one line. First
     # would break `_FRESH_FOOTER`'s anchored parse; a second line would be
     # skipped by `_earlier_footers`, which reads only the last one.
+    # P2.7: the budget clause comes straight after the sentence it qualifies
+    # (what the searches can and cannot establish), and after the parse's
+    # anchor, so `_FRESH_FOOTER` reads the line exactly as before.
     return (
         f"\n\n*Search scope: the legislation index was searched for {listed}; "
         f"{filters_phrase}. This is a ranked search of an index that is known to be "
@@ -1942,7 +2049,8 @@ def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) ->
         "instruments made in 2026 are held (sampled Sep 2026) — so anything "
         "reported above "
         "as not found was not found in this index, which is not the same as being "
-        f"absent from the law.{_enabling_footer_clause(all_entries)}"
+        f"absent from the law.{_budget_footer_clause(all_entries)}"
+        f"{_enabling_footer_clause(all_entries)}"
         f"{_relations_footer_clause(all_entries)}"
         f"{_currency_footer_clause(all_entries)}"
         f"{case_law_scope_clause(all_entries)}*"

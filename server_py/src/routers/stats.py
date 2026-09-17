@@ -767,7 +767,9 @@ async def get_efficiency_stats(
         },
     ]
 
-    # Parliament bot only: how often the model exhausts the search budget.
+    # How often the model exhausts the search budget. Every profile with a
+    # `budget_blocked` band: the parliament bots, and since P2.7 the
+    # legislation bot (8 search rounds per worker run).
     if "budget_blocked" in bands:
         indicators.append({
             "key": "budget_exhaustion",
