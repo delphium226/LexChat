@@ -2377,3 +2377,227 @@ sessions. Wave 2's open rows: **P2.4, P2.7**.
    before-column, SSI 2026/170 still absent, and four design hazards. The most
    dangerous hazard is that P2.8's carried-line parse reads only the **last**
    footer line. **P2.7 follows**, with its evidence moved to 6341.
+
+---
+
+## Session 14 — 2026-09-17 — P2.4 (B12, the case-law corpus gap), both halves
+
+**Done:**
+- **The gate was stated to the user at the start, with no objection:** the
+  disclosure fires on any turn that called `search_case_law`. That is the
+  row's recommendation (i).
+- **P2.4 built and accepted.** Any turn that searched case law now carries, in
+  code, what the corpus holds for Scotland. **B12 stays open**: it also needs
+  **P5.2**, which is with the user.
+  - Acceptance: n=3 on 6375, 6373 and 6385 (`wave2_p24_final`, head
+    `051472d`). **15 of 15 turns that searched case law carry the
+    disclosure**, including all three of 6375's Deep Research turns (before:
+    1 of 5 at HEAD, 0 of 3 on the Deep Research turn). **6373: 0 of 6 turn
+    slots question the citation** (before: 2 of 6). Every exit-1 subcommand
+    passes.
+- **The 6373 half was measured before any of it was built**
+  (`wave2_p24_pre`, n=3 at HEAD `4890573`). It was still live: 2 of 6 turn
+  slots questioned a correct citation.
+- **New tooling.** `replay_report caselaw` grades with a code/model split and
+  with a stricter detector than `SCOTS_CASELAW_GAP`. `--drops` and
+  `--all --answers` do the both-directions audit. `--before DIR --only S`
+  checks Invariant 1.
+- **One A/B**, which took back part of the fix (see Surprises).
+- **1125 tests** (1051 → 1125, 74 new). They were proven to fail without the
+  fix, on the final code: 19 of the 74 with the wiring removed, 26 with the
+  functions stubbed. The rest guard silence and over-reach, or test the
+  instrument.
+- **Spend: $16.63** across five directories, against the row's estimate of
+  about $5.30. See the table in `BASELINE.md`. The extra went on the HEAD
+  pre-measurement ($3.87), on adding 6385, on the A/B ($0.49), and on
+  re-running the whole acceptance after the fix ($5.20).
+- **Ledger (`plan_status`): 23 of 35 rows; 6 of 14 buckets closed, 2 partial
+  (B5 on P3.7, B12 on P5.2).** The primary bucket is closed for 18 of 41
+  sessions and partial for 5.
+
+**The design.**
+- **One line, always.** The case-law statement is a clause inside the
+  legislation line, whether that line is fresh (P2.2) or carried (P2.8). It
+  stands alone only when neither exists, which covers every `case_law_only`
+  turn. Both the Manager and the Deep Research seams fall back to it. This
+  makes the handover's hazards 3 and 4 impossible rather than merely
+  handled: P2.8's last-line parse still sees its own line, and `corpus` never
+  counts two.
+- **The wording** is the verified fact: *"It holds Scottish appeals decided by
+  the UK Supreme Court, but not the decisions of the Court of Session (Inner
+  or Outer House), the Sheriff Appeal Court, the Sheriff Courts or the High
+  Court of Justiciary, so judgments it returns for a Scottish question may
+  come from courts outside Scotland."*
+  - It does not say "Privy Council", "comprehensively" or "no Scottish case
+    law".
+  - It avoids "does not index" and "no judgments", both of which trip
+    `NEG_ASSERTED`.
+- **The record** is `record_case_law_search`. It is self-gated and runs on the
+  memo path too. It marks an errored search as not `ok`, so the line says
+  "attempted … returned an error" rather than "searched".
+- **The record stays out of `worker_scope_block`.** A case-law-only step would
+  otherwise get a block demanding "the search terms above" with none above,
+  which is P2.9's defect again.
+- **The prompt-side statements now agree with the code.** They are the
+  case-law Worker, the hybrid Worker, the Scotland filter note, the tool
+  description and the zero-result note. None says "comprehensively", and none
+  claims the Privy Council as a Scottish route.
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **6373's half was live, and it was the WORKER's, triggered by a structural
+  event.**
+  - At HEAD, all three Worker reports blamed FrankieH's correct citation:
+    *"It is possible the citation contains an error"*, *"please verify the
+    year and SSI number"* and *"It appears there may be a confusion with …
+    SSI 2021/170"*.
+  - Each report was written straight after `get_legislation_text` returned
+    `Legislation not found: ssi/2026/170`. The model reads a direct not-found
+    as proof the id is wrong. The twelve pre-P2.4 directories hold 36 such
+    results, 31 of them in the two sessions where a citation was questioned
+    (6409 and 6373).
+  - The Manager relayed the blame in 2 of 3 reps. One of those was a
+    substitution (*"It is possible you are referring to the 2021
+    Regulations"*) that `NEG_BLAMED_USER` misses. It is the only such miss in
+    the corpus.
+  - So the fix was built at three seams, in code where it could be:
+    `not_held_note` on the not-found result, `_not_held_limb` in the worker
+    block, and a one-line rule in both legislation Manager prompts.
+
+- **The code note did not change the Worker, and in the acceptance it never
+  fired.**
+  - In the smoke run the Worker read the note and still wrote *"there may be
+    a typo in the citation … please verify"*. The Manager filtered it, so the
+    lawyer saw nothing wrong.
+  - In neither n=3 sweep did any 6373 run call `get_legislation_text`. The
+    pass therefore comes from the prompt rules. The note is a tested seam
+    whose effect on the model is unmeasured.
+
+- **A prompt fix cost the lawyer case links, and only an A/B showed it.**
+  - The same rule, as a block appended to the four Worker prompts, gave a
+    clean 6373 (0 of 6 slots blamed at either level).
+  - But in 6385 the chat-mode Worker switched to bullet lists: 0 of 9 reports
+    before, 5 of 9 after. The chat-mode Manager rewrites bullets and drops
+    the link wrapped round each case name. Case-law links reaching the answer
+    went **7 of 15 → 2 of 13**.
+  - Measured as an A/B at n=3 (`wave2_p24_ab` at `6806fa0`, without the block;
+    `wave2_p24` at `8006db9`, with it). The only runtime difference between
+    the two commits is that block.
+  - Fixed by giving the chat-mode Worker the rule as one clause inside its
+    existing OUTPUT bullet. That bullet is also where its blame phrasing came
+    from (*"try a fuller search in Research mode"*). The three research-mode
+    Workers keep the block, and 6375's research path linked more cases with
+    it, not fewer.
+  - **The acceptance was re-run in full on the final code**
+    (`wave2_p24_final`), because 6373 and 6375's turn 1 use that prompt.
+    `wave2_p24` is kept as the A/B's "with" side and must not be read as the
+    acceptance.
+  - Worker-level blame on the final code is 1 of 6 slots (*"… or check the
+    citation"*, filtered by the Manager). With the block it was 0 of 6, and at
+    HEAD it was 3 of 6. n=6 cannot separate the first two.
+  - **The Manager dropping links from a rewritten report is pre-existing.** In
+    the A/B's "without" side, 1 of 3 turn-1 answers lost both links from a
+    prose report. It is a candidate for P4.3 (B8, sources) and has not been
+    built.
+
+- **P4.5 closed its trap on a lawyer for the first time, in the
+  pre-measurement.**
+  - In `wave2_p24_pre/6375 r3 t2`, Deep Research step 1 ran three
+    `search_case_law` calls that returned 4, 43 and 31 judgments, including
+    *Berezovsky v Hine*.
+  - Its final completion then came back empty three times, so its report is
+    `""`.
+  - The synthesis told the lawyer *"Step 1 found no results"*.
+  - Four more followed in this session's sweeps. The running count, from
+    `blanks`, is **6 unrecovered provider calls in 166 answered turns**
+    across the seven schema-v3 directories (95% Wilson interval 1.7–7.7%).
+    Five were in workers. One was a Manager call, covered by P4.2's labelled
+    fallback, and the case-law line still reached that answer. Four of the six
+    ended in *"Upstream idle timeout exceeded"*. Recorded on P4.5's row.
+
+- **`SCOTS_CASELAW_GAP` over-reads, and my replacement's first version did
+  too.**
+  - The old detector fires on a court's bare name. Over the twelve pre-P2.4
+    directories it hits 26 turns, 22 of which searched no case law; only one
+    of those 22 (`wave1/6408 r1 t3`) states the gap.
+  - My detector at first counted *"the Rules of the Court of Session 1994 …
+    do not contain an explicit provision"* (`baseline/6372 r3 t2`).
+    `--answers` over case-law turns could not see that turn, because it
+    searched no case law. `--all --answers` found it. A court's name inside an
+    instrument title is now masked.
+  - Also corrected before publishing: a claim in the FIX_PLAN row that none of
+    the 22 was a real statement.
+  - **And a census, a third time.** The code comment and both drafts said
+    the corpus held "40 not-found results, 32 of them in 6409 and 6373".
+    That count silently included `wave2_p24_pre`, and even then the split
+    was 35. Over the twelve pre-P2.4 directories it is **36, 31 of them**.
+    The comment was fixed after the acceptance (comment only; the run files
+    still name `051472d` truthfully).
+  - **So the instrument was wrong three times this session, and every time
+    in the direction of a cleaner story.** Each was caught by re-running a
+    command over every directory instead of the ones in view. That is
+    Session 13's lesson again: read the output of a branch that has never
+    met real data.
+  - One known over-read is left in place. 6341 and 6348 say *"the available
+    database does not contain information on Scottish case law"* on 6 turns
+    with no case-law search. That can only move the all-turns column, never
+    the acceptance.
+
+- **The pre-measurement paid for itself twice.** It showed 6373's half was
+  live and located its trigger. It also gave 6375 a like-for-like
+  before-column; the handover had only `baseline` and `wave1`, both of which
+  predate P2.2. It cost $3.87.
+
+- **Costs ran over the row's estimate.** 6375 ran at $0.70–1.49 and 6.7–9.3
+  minutes per rep, against $0.94 and 6–7 minutes.
+
+**Decisions taken this session:**
+- **The gate:** any turn that called `search_case_law` (row recommendation
+  (i); the user was told and did not object). A retrieval by URL alone does
+  not count, and there is a test for that.
+- **The case-law line is not suppressed by `scope_unknown`.** It claims only
+  the case-law searches this turn recorded, and those ran.
+- **No carried case-law line.** A no-search follow-up in a case-law session
+  gets nothing. The pass bar is "every turn that searched case law". This is a
+  recorded residual.
+- **Not a lawyer-facing "not held" clause.** "Is this instrument held" is
+  P3.7's, and a footer cannot stop the prose questioning a citation.
+- **The research-mode Worker prompts keep the rule as a block, and the
+  chat-mode Worker gets it as a clause**, per the A/B.
+- **`SCOTS_CASELAW_GAP` and `NEG_BLAMED_USER` are left unchanged.** Both
+  publish numbers. **From P2.4 on, `compare`'s `scots_gap_disclosures` counts
+  the code's line.**
+- **Product code was committed before each paid sweep**, so every run file
+  names its code: `6806fa0` (smoke and A/B), `8006db9` (`wave2_p24`) and
+  `051472d` (`wave2_p24_final`).
+
+**State of the branch:** `fix/prepilot-defects`, no upstream, **NOTHING
+PUSHED**. Whole-plan-then-one-push stands. **1125 tests green.** Ledger:
+**23 of 35 rows, 6 of 14 buckets closed, 2 partial**. B12 waits on P5.2
+alone. Wave 2's only open row is **P2.7**.
+
+**Machine state a new session inherits:**
+- **No uvicorn running.** The dev box is **restored** (`moonshotai/kimi-k3`,
+  local prompt cache ON, no pin file).
+- **Five new replay directories**, seventeen in all:
+  - `wave2_p24_pre`: HEAD `4890573`, 6375 ×3 and 6373 ×3. The like-for-like
+    before-column.
+  - `wave2_p24_smoke`: `6806fa0`, n=1 on 6375, 6373 and 6385.
+  - `wave2_p24`: `8006db9`, n=3 on all three. The A/B's "with" side, **not**
+    the acceptance.
+  - `wave2_p24_ab`: `6806fa0`, 6385 ×3. The A/B's "without" side.
+  - `wave2_p24_final`: `051472d`, n=3 on all three. **The acceptance.**
+- **New command:** `replay_report --dir <dir> caselaw [--all] [--answers]
+  [--drops] [--before DIR --only S…]`. It joins the exit-1 set: `halts`,
+  `negatives`, `derivations`, `blanks`, `scoperecord`, `nosearch`,
+  `caselaw`.
+
+**Next action:**
+1. **P2.7** is Wave 2's last open row, and it is the critical path to
+   **P3.1**. Its evidence is 6341 (see its row).
+2. **P4.5** now has a measured false negative that reached a lawyer, plus a
+   rate (6 in 166, 1.7–7.7%). The candidate fix must cover the Deep Research synthesis
+   as well as the Manager.
+3. **Still with the user:** **P5.2** (the LEX question in
+   `WAVE5_QUESTIONS.md`) is what B12 now waits on. An alternative Scottish
+   case-law supplier is also still unresearched.

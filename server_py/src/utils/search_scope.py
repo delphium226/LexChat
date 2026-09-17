@@ -1819,8 +1819,8 @@ def case_law_scope_footer(entries: Optional[list]) -> str:
 # `get_legislation_text` on `ssi/2026/170` and was handed
 # `Error executing tool: {"detail":"Legislation not found: ssi/2026/170"}`. The
 # model reads "not found" on a direct retrieval by id as proof the id is wrong.
-# The replay corpus holds 40 such results, 32 of them in the two sessions where a
-# lawyer's citation was questioned (6409 and 6373). The reporting rule on every
+# The twelve pre-P2.4 replay directories hold 36 such results, 31 of them in the
+# two sessions where a lawyer's citation was questioned (6409 and 6373). The reporting rule on every
 # search note already says "never to the user's citation", and did not reach
 # this, because this is not a search result.
 #
