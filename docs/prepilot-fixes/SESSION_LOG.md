@@ -2623,7 +2623,8 @@ did these went with the session.
   For P2.7, budget 6341 from `wave2_p28`: $2.1–2.8 and 14–21 min per rep.
 
 **State of the branch:** `fix/prepilot-defects`, no upstream, **NOTHING
-PUSHED**. Whole-plan-then-one-push stands. **1125 tests green.** Ledger:
+PUSHED**. Whole-plan-then-one-push stands. **1125 tests green** (1130 after the
+handover's `discovery` tests). Ledger:
 **23 of 35 rows, 6 of 14 buckets closed, 2 partial**. B12 waits on P5.2
 alone. Wave 2's only open row is **P2.7**.
 
@@ -2642,6 +2643,26 @@ alone. Wave 2's only open row is **P2.7**.
   [--drops] [--before DIR --only S…]`. It joins the exit-1 set: `halts`,
   `negatives`, `derivations`, `blanks`, `scoperecord`, `nosearch`,
   `caselaw`.
+
+**Added at the handover: P2.7's pre-flight.** It was done at the user's
+request so that the P2.7 session re-derives nothing.
+- **New command: `replay_report discovery`.** It prints discovery calls per
+  worker run, halted and completed, and what a budget of N would have
+  blocked. It is a measurement, so it always exits 0. It has 5 tests, taking
+  the suite to 1130.
+- **Its first real data corrected it twice before anything was published:**
+  - `wave1` showed 0 halted runs, because audit schema v1 has no `halted`
+    field. It now falls back to the report marker, as `halts` does, and labels
+    that count a floor.
+  - Its repeat count keyed on tool + resource + query, which hid 6335's shape.
+    It now also prints production's tool + resource key.
+- **A Session 13 claim corrected.** 6341 halts in **5 of 6** reps (2 of 3 in
+  `wave2_p25`, 3 of 3 in `wave2_p28`), not in every rep. It is struck through
+  in `BASELINE.md` and in P2.7's row.
+- **The facts themselves** (code seams, the stop-message hazard, the
+  distribution, evidence and costs, open design questions) are in P2.7's
+  FIX_PLAN row, under *"PRE-FLIGHT FACTS … verified at `adc8929`"*. They are
+  not repeated here.
 
 **Next action:**
 1. **P2.7** is Wave 2's last open row, and it is the critical path to

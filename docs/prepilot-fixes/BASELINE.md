@@ -2165,7 +2165,9 @@ The false case-law claim is P4.1's, handover item (5).
   halted turns since P2.1, and it is recorded on P2.1's row. This check was run
   after the fact: it was left out of the first pass over this directory.
 - **6409 has stopped halting; 6341 has not.** 6409 has 0 halted turns in the 6
-  reps since P3.5, and 6341 halts in every rep of `wave2_p25` and `wave2_p28`.
+  reps since P3.5, and 6341 halts in ~~every rep of `wave2_p25` and `wave2_p28`~~
+  **5 of 6 reps: 2 of 3 in `wave2_p25`, 3 of 3 in `wave2_p28`** (corrected at the
+  end of Session 14 with `halts`; `wave2_p25` rep 2 has no halted turn).
   That moves P2.7's evidence, which is recorded on its row.
 
 ### Three instrument corrections

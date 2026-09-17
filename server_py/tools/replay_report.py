@@ -3513,6 +3513,180 @@ def _caselaw_invariant_one(before: Path, after: Path, only: Optional[list]) -> N
             print(ln)
 
 
+# --- P2.7 pre-flight: the discovery distribution a budget must come from ------
+#
+# P2.7's row: "the right number must come from the distribution, not a guess".
+# This prints it, per WORKER RUN (one audit delegation: a Manager
+# `delegate_research` or one Deep Research step), because a search budget is
+# created per `run_worker_agent` call. Written at the end of Session 14 so the
+# P2.7 session starts from a command, not from a throwaway script.
+#
+# **Calls, not rounds.** The step cap counts ReAct rounds and the model batches
+# calls within a round: `wave2_p28/6341 r1 t7` step 2 halted at 20 rounds with
+# 41 tool calls. A per-call budget and a per-round cap are different units.
+#
+# **Memo hits are excluded from the "issued" count**, because the parliamentary
+# budget's design never charges a memo hit (`run_worker_tool` returns before
+# the budget check), and the same would presumably hold for legislation.
+# They are printed separately.
+#
+# A measurement, not a check: always exits 0.
+
+_DISCOVERY_TOOLS = ("search_legislation", "search_case_law")
+_RETRIEVAL_TOOLS = ("search_legislation_sections", "get_legislation_text",
+                    "get_case_law_text", "get_legislation_changes")
+_BUDGETS = (3, 4, 5, 6, 8, 10, 12, 15, 20)
+
+
+def discovery_runs(doc: dict) -> list:
+    """One row per worker run in a replay run file."""
+    rows = []
+    for t in doc.get("turns", []):
+        for dg in (t.get("audit") or {}).get("delegations") or []:
+            tools = dg.get("tools") or []
+            issued = Counter()
+            memo = Counter()
+            keys = Counter()        # (tool, resource): production's redundancy key
+            exact = Counter()       # (tool, resource, query): a literal repeat
+            queries = set()
+            for tl in tools:
+                nm = tl.get("name") or "?"
+                a = tl.get("args") or {}
+                if tl.get("memo_hit"):
+                    memo[nm] += 1
+                else:
+                    issued[nm] += 1
+                if nm == "search_legislation":
+                    queries.add(re.sub(r"\s+", " ", str(a.get("query") or "")).strip().lower())
+                if nm in _RETRIEVAL_TOOLS:
+                    key = a.get("legislation_id") or a.get("url") or ""
+                    if a.get("direction"):
+                        key = f"{key}:{a['direction']}"
+                    keys[(nm, key)] += 1
+                    exact[(nm, key, str(a.get("query") or ""))] += 1
+            halted = dg.get("halted") or None
+            # Audit schema v1 (before P2.1) has no `halted` field. Fall back to
+            # the marker in the report, as `halts` does. Before P2.6 the A4
+            # reformat retry could rewrite that marker away (6340), so on a v1
+            # directory the halted count is a floor.
+            marker = bool(HALT_LITERAL.search(dg.get("report") or ""))
+            rows.append({
+                "session": str(doc.get("session_id")),
+                "rep": doc.get("rep", 1),
+                "turn": t.get("turn"),
+                "kind": dg.get("kind") or "",
+                "step": dg.get("step"),
+                "halted": bool(halted) or marker,
+                "halt_source": "meta" if halted else ("marker" if marker else ""),
+                "schema": (t.get("audit") or {}).get("schema_version"),
+                "rounds": (halted or {}).get("steps"),
+                "tools": len(tools),
+                "leg": issued["search_legislation"],
+                "leg_memo": memo["search_legislation"],
+                "leg_distinct": len(queries - {""}),
+                "cl": issued["search_case_law"],
+                "cl_memo": memo["search_case_law"],
+                "sections": issued["search_legislation_sections"] + memo["search_legislation_sections"],
+                "text": issued["get_legislation_text"] + memo["get_legislation_text"],
+                "judgments": issued["get_case_law_text"] + memo["get_case_law_text"],
+                "changes": issued["get_legislation_changes"] + memo["get_legislation_changes"],
+                # `same_resource` mirrors `TimingCollector.record_worker_tool`'s
+                # key (tool + resource), but per worker run, not per request.
+                "same_resource": sum(n - 1 for n in keys.values() if n > 1),
+                "repeat_retrievals": sum(n - 1 for n in exact.values() if n > 1),
+                "budget_blocked": sum(1 for tl in tools if tl.get("budget_blocked")),
+            })
+    return rows
+
+
+def _pct(values: list, q: float):
+    if not values:
+        return "-"
+    v = sorted(values)
+    return v[min(len(v) - 1, int(round(q * (len(v) - 1))))]
+
+
+def cmd_discovery(args) -> int:
+    """P2.7 pre-flight: discovery calls per worker run, halted vs completed."""
+    dirs = [Path(args.dir)] + [Path(d) for d in (args.also or [])]
+    rows = []
+    for d in dirs:
+        for doc in load_runs(d):
+            if args.only and str(doc.get("session_id")) not in args.only:
+                continue
+            for r in discovery_runs(doc):
+                rows.append({**r, "dir": d.name})
+    if not rows:
+        print(f"No worker runs in {', '.join(str(d) for d in dirs)}")
+        return 0
+    halted = [r for r in rows if r["halted"]]
+    done = [r for r in rows if not r["halted"]]
+    print(f"P2.7 discovery distribution over {', '.join(d.name for d in dirs)}")
+    print(f"  worker runs {len(rows)}  (halted {len(halted)}, completed {len(done)})")
+    print(f"  sessions: {', '.join(sorted({r['session'] for r in rows}))}")
+    print("  issued = calls that reached the API (memo hits excluded; they never spend budget)")
+    v1 = sum(1 for r in rows if (r["schema"] or 1) < 2)
+    if v1:
+        print(f"  [!] {v1} run(s) predate audit schema v2, so their halts are read from the")
+        print("      report marker, which the pre-P2.6 reformat retry could erase: a floor.")
+        print(f"      halted by marker: {sum(1 for r in halted if r['halt_source'] == 'marker')}")
+    print()
+    print(f"{'per worker run':<44} {'n':>4} {'med':>5} {'p75':>5} {'p90':>5} {'max':>5}")
+    for label, key in (("search_legislation issued", "leg"),
+                       ("search_legislation memo hits", "leg_memo"),
+                       ("search_legislation distinct queries (memo incl.)", "leg_distinct"),
+                       ("search_case_law issued", "cl"),
+                       ("discovery issued (both)", None),
+                       ("retrieval calls (4 tools, memo incl.)", "retr"),
+                       ("same-resource retrievals (prod. key)", "same_resource"),
+                       ("exact repeat retrievals (+query)", "repeat_retrievals"),
+                       ("tool calls, all", "tools")):
+        for group, grp in (("halted", halted), ("completed", done)):
+            if key is None:
+                vals = [r["leg"] + r["cl"] for r in grp]
+            elif key == "retr":
+                vals = [r["sections"] + r["text"] + r["judgments"] + r["changes"] for r in grp]
+            else:
+                vals = [r[key] for r in grp]
+            print(f"  {label + ' — ' + group:<42} {len(vals):>4} {_pct(vals, .5):>5} "
+                  f"{_pct(vals, .75):>5} {_pct(vals, .9):>5} {max(vals) if vals else '-':>5}")
+    print()
+    print("If a per-run budget of N issued calls existed, runs that would have been")
+    print("stopped (a call beyond N), and the calls it would have blocked:")
+    print(f"{'N':>4} | {'search_legislation only':^34} | {'search_legislation + search_case_law':^38} | "
+          f"{'search_legislation incl. memo hits':^34}")
+    print(f"{'':>4} | {'halted':>10} {'completed':>11} {'blocked':>9} | "
+          f"{'halted':>10} {'completed':>11} {'blocked':>13} | "
+          f"{'halted':>10} {'completed':>11} {'blocked':>9}")
+    for n in _BUDGETS:
+        def hit(grp, f):
+            return sum(1 for r in grp if f(r) > n)
+        leg = lambda r: r["leg"]                      # noqa: E731
+        both = lambda r: r["leg"] + r["cl"]           # noqa: E731
+        memo = lambda r: r["leg"] + r["leg_memo"]     # noqa: E731
+        print(f"{n:>4} | {hit(halted, leg):>4} of {len(halted):<3} {hit(done, leg):>5} of {len(done):<4} "
+              f"{sum(max(0, leg(r) - n) for r in rows):>7} | "
+              f"{hit(halted, both):>4} of {len(halted):<3} {hit(done, both):>5} of {len(done):<4} "
+              f"{sum(max(0, both(r) - n) for r in rows):>9} | "
+              f"{hit(halted, memo):>4} of {len(halted):<3} {hit(done, memo):>5} of {len(done):<4} "
+              f"{sum(max(0, memo(r) - n) for r in rows):>7}")
+    if args.runs or args.all:
+        print()
+        print(f"{'dir':<16} {'sess':>5} {'rep':>3} {'turn':>4} {'kind':<18} {'stp':>3} "
+              f"{'halt':>4} {'tools':>5} {'leg':>4} {'memo':>4} {'dist':>4} {'cl':>4} "
+              f"{'sect':>4} {'text':>4} {'judg':>4} {'chg':>4} {'same':>4} {'rpt':>4}")
+        for r in sorted(rows, key=lambda r: (r["dir"], r["session"], r["rep"], r["turn"] or 0, r["step"] or 0)):
+            if not args.all and not r["halted"]:
+                continue
+            print(f"{r['dir']:<16} {r['session']:>5} {r['rep']:>3} {r['turn']:>4} "
+                  f"{r['kind'][:18]:<18} {str(r['step'] or '-'):>3} "
+                  f"{('yes' if r['halted'] else '-'):>4} {r['tools']:>5} {r['leg']:>4} "
+                  f"{r['leg_memo']:>4} {r['leg_distinct']:>4} {r['cl']:>4} {r['sections']:>4} "
+                  f"{r['text']:>4} {r['judgments']:>4} {r['changes']:>4} {r['same_resource']:>4} "
+                  f"{r['repeat_retrievals']:>4}")
+    return 0
+
+
 def cmd_corpus(args) -> int:
     """The retrieval shape of a replay directory — every number P2.3 published.
 
@@ -3766,6 +3940,14 @@ def main(argv: Iterable[str] | None = None) -> int:
                          "shared sessions only")
     cl.add_argument("--only", nargs="+", metavar="SESSION",
                     help="with --before, restrict both sides to these sessions")
+    dc = sub.add_parser("discovery",
+                        help="P2.7 pre-flight: discovery calls per worker run, "
+                             "halted vs completed, and what a budget of N would block")
+    dc.add_argument("--also", nargs="+", metavar="DIR",
+                    help="further replay dirs to pool with --dir (say which in any write-up)")
+    dc.add_argument("--only", nargs="+", metavar="SESSION")
+    dc.add_argument("--runs", action="store_true", help="list every halted worker run")
+    dc.add_argument("--all", action="store_true", help="list every worker run")
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")
@@ -3786,6 +3968,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "scoperecord": cmd_scoperecord,
         "nosearch": cmd_nosearch,
         "caselaw": cmd_caselaw,
+        "discovery": cmd_discovery,
         "blanks": cmd_blanks,
         "corpus": cmd_corpus,
     }[args.cmd](args)
