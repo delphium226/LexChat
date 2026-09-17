@@ -2273,6 +2273,25 @@ P2.7, P2.8, P2.10**. P2.10 is awaiting a decision, not work.
     held, so **B13 stays closed**. The mechanism is new row **P4.5**,
     measure-first, per the re-planning protocol.
 
+- **I did not run `halts` on the acceptance directory, and it exits 1.** This
+  was found afterwards, while comparing P2.4 and P2.7 for the user.
+  - **The failure.** `wave2_p28/6341 r1 t7` is a Deep Research synthesis whose
+    four steps all halted. Its prose says *"the research steps timed out due to
+    internal limits"*, directly beneath P2.1's code notice saying it is not a
+    timeout. It is the first such failure in 24 post-P2.1 halted turns, on a
+    path P2.8 does not touch. It is recorded on P2.1's row as a residual to
+    recount, not a new row.
+  - **The process fix.** On any new sweep, run every exit-1 subcommand:
+    `halts`, `negatives`, `derivations`, `blanks`, `scoperecord` and
+    `nosearch`, not only the row's own.
+
+- **P2.7's evidence has moved.** 6409 has not halted in the 6 reps since P3.5,
+  because the relation it flailed for is now retrievable. 6341's broad "every
+  definition of shop" question halts in every rep of `wave2_p25` and
+  `wave2_p28`, including all four Deep Research steps of r1 t7. P2.7's row now
+  says to derive its budget from the post-P3.5 directories, and to replay 6341
+  rather than 6409.
+
 - **The unit tests fail without the fix, split as P2.9's were.**
   - With the wiring removed, 1 of 29 fails: the end-to-end positive. The other
     four end-to-end tests guard against over-reach (a first turn, a searched

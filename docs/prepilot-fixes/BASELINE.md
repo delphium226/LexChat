@@ -2158,6 +2158,16 @@ The false case-law claim is P4.1's, handover item (5).
     The Manager re-delegated, so the lawyer's answer was sound, but the
     mechanism is a false-negative trap. It is now row **P4.5**.
 
+- **`halts` exits 1: 5 halted turns, 1 failing, all in 6341.** Rep 1 turn 7
+  is a Deep Research synthesis whose four steps all halted. Its prose says
+  *"the research steps timed out due to internal limits"*, beneath the code
+  notice saying the halt is not a timeout. It is the first such failure in 24
+  halted turns since P2.1, and it is recorded on P2.1's row. This check was run
+  after the fact: it was left out of the first pass over this directory.
+- **6409 has stopped halting; 6341 has not.** 6409 has 0 halted turns in the 6
+  reps since P3.5, and 6341 halts in every rep of `wave2_p25` and `wave2_p28`.
+  That moves P2.7's evidence, which is recorded on its row.
+
 ### Three instrument corrections
 
 All three were found by the first directory to exercise the code paths
