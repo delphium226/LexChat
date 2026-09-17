@@ -1400,3 +1400,391 @@ async def test_a_run_with_no_memo_is_unchanged():
     ):
         await _p29_call(None, log)
     assert len([e for e in log if e["tool"] == "search_legislation"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# P2.8 (B5), with P2.10 folded in: a negative carried forward from an earlier turn
+# ---------------------------------------------------------------------------
+#
+# `answer_scope_footer` is per TURN. A follow-up the Manager answers from the
+# history runs no search, so it got no footer, even when it restated an earlier
+# turn's negative. Measured with `NEG_ASSERTED` over the ten replay
+# directories: four turns (`wave2_p22_final/6409 r1 t11`, `r3 t4`;
+# `wave2_p25/6341 r2 t2`, `r3 t2`). They are the only `queries = 0` FAIL rows
+# that `replay_report negatives` prints.
+
+from src.utils.search_scope import (  # noqa: E402
+    _earlier_footers,
+    _lawyer_filters_phrase,
+    carried_scope_footer,
+    strip_answer_footer,
+)
+
+_P28_LOG = [
+    {"tool": "search_legislation", "query": "SSI 2025/377", "legislation_id": "",
+     "shown": 5, "matched": 141},
+    {"tool": "search_legislation", "legislation_id": "", "shown": 5, "matched": 141,
+     "query": "Social Security (Amendment) (Scotland) Act 2025 (Commencement No. 2) "
+              "Regulations 2025"},
+    {"tool": "search_legislation", "query": "commencement regulations",
+     "legislation_id": "", "shown": 5, "matched": 141},
+]
+_P28_NEGATIVE = "SSI 2025/377 is not currently available in the legislation database."
+
+
+def _p28_search(*queries):
+    return [{"tool": "search_legislation", "query": q, "legislation_id": "",
+             "shown": 5, "matched": 141} for q in queries]
+
+
+def _p28_history(*footers, answer=_P28_NEGATIVE):
+    """A conversation whose assistant turns end in the given footers, followed
+    by the user's next question."""
+    msgs = []
+    for i, footer in enumerate(footers):
+        msgs.append({"role": "user", "content": f"question {i}"})
+        msgs.append({"role": "assistant", "content": answer + footer})
+    msgs.append({"role": "user", "content": "follow-up"})
+    return msgs
+
+
+def _p28_rr():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import tools.replay_report as rr
+    return rr
+
+
+def test_a_reply_that_searched_nothing_restates_the_earlier_scope():
+    """The row's acceptance, deterministically. 6341 rep 2 turn 2 wrote *"the
+    initial search already checked the available database and found no case
+    law results"* and got nothing beside it."""
+    fresh = answer_scope_footer(_P28_LOG, {"_jurisdiction": "scotland"})
+    line = carried_scope_footer(_p28_history(fresh), [])
+    assert line.startswith("\n\n*Search scope: ")
+    assert line.endswith("*")
+    assert "\n" not in line.strip()
+    assert "no search of the legislation index was run for this reply" in line
+    assert "Earlier in this conversation it was searched for" in line
+    assert '"SSI 2025/377"' in line
+    assert "(1 further query not listed)" in line
+    assert "filters in force: jurisdiction = scotland" in line
+    assert "ranked search" in line
+    assert "not the same as being absent from the law" in line
+
+
+def test_the_carried_line_never_describes_a_search_this_reply_ran():
+    """The row's hard constraint: no turn may carry a scope statement describing
+    a search it did not run. So the line says first that this reply searched
+    nothing, labels every term as earlier, and claims no dependency.
+
+    **Hazard 1, `wave1/6341 r1 t8`.** That turn answered "what is a stub" from
+    training knowledge. The gate is structural, so this line fires there too.
+    It is not a false attribution, because the line does not say the reply drew
+    on those searches. It tells the lawyer that nothing was looked up for this
+    answer, which is true and worth knowing. The not-found clause is scoped to
+    "those searches", so a negative the model produced from memory gains no
+    index authority from it."""
+    line = carried_scope_footer(
+        _p28_history(answer_scope_footer(_P28_LOG, {})), [])
+    before_terms = line.split('"')[0]
+    assert "no search of the legislation index was run for this reply" in before_terms
+    assert "Earlier in this conversation" in before_terms
+    for claim in ("based on", "rests on", "relies on", "drawn from",
+                  "was searched for this reply", "this reply searched"):
+        assert claim not in line
+    assert "a result reported as not found in those searches" in line
+
+
+@pytest.mark.parametrize("messages", [
+    None,
+    [],
+    [{"role": "user", "content": "q"}],
+    [{"role": "user", "content": "q"},
+     {"role": "assistant", "content": "A plain answer with no footer."},
+     {"role": "user", "content": "q2"}],
+])
+def test_no_searched_turn_in_the_history_means_no_carried_line(messages):
+    assert carried_scope_footer(messages, []) == ""
+
+
+def test_a_footer_outside_an_assistant_reply_is_not_read_as_a_search():
+    """A lawyer pasting an old answer into their own message has not run a
+    search in this conversation."""
+    fresh = answer_scope_footer(_P28_LOG, {})
+    for role in ("user", "system", "tool"):
+        messages = [{"role": role, "content": "You said: x" + fresh},
+                    {"role": "user", "content": "and?"}]
+        assert carried_scope_footer(messages, []) == ""
+
+
+@pytest.mark.parametrize("tool", ["search_legislation", "search_legislation_sections"])
+def test_a_turn_that_searched_gets_no_carried_line(tool):
+    """A turn that ran a search is P2.2's, and the fresh footer is unchanged.
+    **Both** search tools count. A turn that searched only within an instrument
+    gets no fresh footer, but "no search was run for this reply" would be false
+    there, so it stays silent."""
+    fresh = answer_scope_footer(_P28_LOG, {})
+    searched = [{"tool": tool, "query": "q", "legislation_id": "asp/2025/2"}]
+    assert carried_scope_footer(_p28_history(fresh), searched) == ""
+
+
+def test_the_next_turn_neither_stacks_nor_chains():
+    """Turn 1 searched, turns 2 and 3 did not. Turn 3's history holds turn 1's
+    fresh footer AND turn 2's carried line. A carried line is never read as a
+    search, so turn 3 restates turn 1 exactly once and nothing compounds."""
+    fresh = answer_scope_footer(_P28_LOG, {})
+    turn2 = carried_scope_footer(_p28_history(fresh), [])
+    turn3 = carried_scope_footer(_p28_history(fresh, turn2), [])
+    assert turn2
+    assert turn3 == turn2
+    assert turn3.count("*Search scope:") == 1
+    # The model copying turn 2's line back is removed before turn 3's goes on.
+    echoed = "As noted earlier, it was not found." + turn2
+    assert strip_answer_footer(echoed) == "As noted earlier, it was not found."
+    assert (strip_answer_footer(echoed) + turn3).count("*Search scope:") == 1
+    # A carried line with no fresh footer behind it is not a source of searches.
+    assert carried_scope_footer(_p28_history(turn2), []) == ""
+
+
+@pytest.mark.parametrize("log,cfg", [
+    (_p28_search("q"), {}),
+    (_P28_LOG, {"_jurisdiction": "scotland", "_legislation_type": "ssi",
+                "_year_from": 2020}),
+    (_p28_search(*[f"q{i}" for i in range(9)]), {"_year_to": 2010}),
+    (_p28_search('"Education (Scotland) Act 1962" 117'), {}),
+    (_log_with(("ssi/2018/273", False)), {}),
+])
+def test_every_fresh_footer_shape_is_read_back_exactly(log, cfg):
+    """`_FRESH_FOOTER` is coupled to `answer_scope_footer`'s f-string. If the
+    wording changes and this fails, fix the parse. In production a parse miss
+    fails silent (no carried line), so this test is the only place a miss
+    shows up."""
+    fresh = answer_scope_footer(log, cfg)
+    parsed = _earlier_footers(_p28_history(fresh))
+    assert len(parsed) == 1
+    got = parsed[0]
+    head = fresh[: fresh.index("; ")]
+    assert got["terms"] == re.findall(r'"([^"]*)"', head)
+    assert got["terms"]
+    m = re.search(r"\((\d+) further quer", head)
+    assert got["rest"] == (int(m.group(1)) if m else 0)
+    assert got["filters"] == _lawyer_filters_phrase(cfg)
+
+
+def test_several_earlier_searches_are_combined_newest_first():
+    older = answer_scope_footer(_p28_search("older search"), {"_jurisdiction": "scotland"})
+    newer = answer_scope_footer(_p28_search("newer search", "Older Search"), {})
+    line = carried_scope_footer(_p28_history(older, newer), [])
+    assert line.index('"newer search"') < line.index('"Older Search"')
+    assert line.count('"') == 4                  # deduped across turns
+    assert "further quer" not in line
+    # Different filters on different replies are not merged into one claim.
+    assert "the filters differed between those replies" in line
+
+    # Same filters on every reply: stated inline. Every query is listed, so the
+    # count is exact.
+    third = answer_scope_footer(_p28_search("a third search"), {})
+    line = carried_scope_footer(_p28_history(newer, third), [])
+    assert "no jurisdiction, type or date filter narrowed it" in line
+    assert "(1 further query not listed)" in line
+
+    # An unlisted query on one reply may repeat a listed one on another, so no
+    # number is invented.
+    many = answer_scope_footer(_p28_search(*[f"q{i}" for i in range(4)]), {})
+    line = carried_scope_footer(_p28_history(older, many), [])
+    assert "(further queries not listed)" in line
+    assert not re.search(r"\(\d+ further", line)
+
+
+def test_the_carried_line_trips_no_detector_on_the_models_prose():
+    """**Hazard 2, which is P2.2's Session 6 trap.** The line says "not found",
+    so any shape `_without_footer` does not strip would enrol a purely positive
+    turn as a negative and corrupt the number grading this row. It keeps the
+    footer's shape, and this test asserts that the strip removes it whole."""
+    rr = _p28_rr()
+    from tools.replay_report import derivation_claims
+
+    line = carried_scope_footer(
+        _p28_history(answer_scope_footer(_P28_LOG, {})), [])
+    positive = "Yes. SSI 2025/119 brought sections 2 and 9 into force."
+    answer = positive + line
+    assert rr._without_footer(answer) == positive
+    assert not rr.NEG_ASSERTED.search(rr._without_footer(answer))
+    assert derivation_claims(line)[0] == []
+    assert not rr.IN_FORCE_CLAIM.search(line)
+    assert not rr.HALT_PARAPHRASE.search(line)
+    assert not rr.HALT_AS_TIMEOUT.search(line)
+    assert not rr.NEG_BLAMED_USER.search(line)
+    assert answer.count("*Search scope:") == 1
+
+
+def test_a_restated_negative_is_qualified_by_construction():
+    """What `replay_report negatives` grades, on 6341 rep 2 turn 2's own
+    sentence. The turn is still enrolled, because enrolment reads the model's
+    words. It now passes on the whole answer. It is not made to look like a
+    positive: under Invariant 1 the negative stays."""
+    rr = _p28_rr()
+    fresh = answer_scope_footer(_p28_search("sale of goods case law"), {})
+    restated = ("The initial search already checked the available database "
+                "and found no case law results.")
+    answer = restated + carried_scope_footer(_p28_history(fresh), [])
+    bare = rr._without_footer(answer)
+    assert bare == restated
+    assert rr.NEG_ASSERTED.search(bare)
+    assert rr._names_search_terms(answer)
+    assert rr.NEG_BLAMED_INDEX.search(answer)
+    assert rr.NEG_LIMITS.search(answer)
+    assert not rr.NEG_BLAMED_USER.search(answer)
+
+
+def test_a_retrieval_only_turn_keeps_its_own_clauses():
+    """A turn that retrieved an instrument's text without searching gets no
+    fresh footer, so P2.3's derivation clause never reached the lawyer. The
+    carried line appends this turn's own clauses. They are gated on this turn's
+    records, so they are true by construction."""
+    fresh = answer_scope_footer(_P28_LOG, {})
+    entries = [e for e in _log_with(("ssi/2018/273", False))
+               if e["tool"] != "search_legislation"]
+    line = carried_scope_footer(_p28_history(fresh), entries)
+    assert "no search of the legislation index was run for this reply" in line
+    assert "derivation given above is unverified" in line
+    assert line.endswith("*")
+    assert "\n" not in line.strip()
+
+
+@pytest.mark.parametrize("messages,searches", [
+    ([{"role": "assistant", "content": None}], []),
+    ([{"role": "assistant", "content": [{"type": "text", "text": "x"}]}], []),
+    (["not a dict", 3, None], []),
+    (_p28_history(answer_scope_footer(_P28_LOG, {})), [None]),
+    # The model-written variant P2.2's final sweep actually stored
+    # (`wave2_p22_final/6409 r1 t2`), from before P3.5 stripped echoes.
+    ([{"role": "assistant", "content": (
+        "Answer.\n\n*Search scope: the legislation index was searched for the "
+        "terms above with no jurisdiction or type filters applied (year range "
+        "up to 2026).*")}], []),
+])
+def test_unreadable_history_is_silent_and_never_raises(messages, searches):
+    assert carried_scope_footer(messages, searches) == ""
+
+
+# --- P2.8 through the Manager seam ------------------------------------------
+
+async def _p28_turn(monkeypatch, messages, manager, worker=None):
+    from src.agent import agent_shared
+    from src.agent.agent_core import process_user_request
+
+    set_request_provider_config({
+        "_provider": "openrouter", "_research_mode": "legislation_only",
+        "model": "test-model", "_tool_memo_enabled": False,
+    })
+
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None):
+        return json.dumps(_search_result())
+
+    async def worker_chat_loop(messages, model, cancel_event, num_ctx, tools,
+                               executor, on_chunk=None, emit_tool_details=False,
+                               timing_collector=None):
+        await executor("search_legislation", {"query": "this turn's own search"})
+        return {"role": "assistant", "content": (
+            "1. **Summary Answer (BLUF):** Found.\n"
+            "2. **References:** None.")}
+
+    async def searching_worker(*a, **kw):
+        return await run_worker_agent(
+            worker_chat_loop, lambda *x, **y: None, "q", "test-model", None, 0,
+        )
+
+    monkeypatch.setattr(agent_shared, "execute_worker_tool", fake_exec)
+    try:
+        return await process_user_request(
+            manager, worker or searching_worker, messages,
+            "test-model", None, None, 0,
+        )
+    finally:
+        set_request_provider_config({})
+
+
+def _answers_from_history(text):
+    async def manager(messages, model, cancel_event, num_ctx, tools,
+                      tool_executor, on_chunk=None, **kw):
+        return {"role": "assistant", "content": text}
+    return manager
+
+
+@pytest.mark.asyncio
+async def test_a_follow_up_answered_from_history_reaches_the_lawyer_qualified(monkeypatch):
+    """6409 rep 1 turn 11, end to end: no delegation, an earlier negative
+    restated, and the qualification now sits beside it."""
+    restated = ("As noted in the previous search, SSI 2025/377 is not currently "
+                "available in the legislation database.")
+    history = _p28_history(answer_scope_footer(_P28_LOG, {}))
+    final = await _p28_turn(monkeypatch, history, _answers_from_history(restated))
+    assert final["content"].startswith(restated)
+    assert "no search of the legislation index was run for this reply" in final["content"]
+    assert '"SSI 2025/377"' in final["content"]
+    assert final["content"].count("*Search scope:") == 1
+    assert final["content"].rstrip().endswith("absent from the law.*")
+
+
+@pytest.mark.asyncio
+async def test_a_first_turn_that_searched_nothing_is_untouched(monkeypatch):
+    text = "Could you tell me which instrument you mean?"
+    final = await _p28_turn(
+        monkeypatch, [{"role": "user", "content": "q"}], _answers_from_history(text))
+    assert final["content"] == text
+
+
+@pytest.mark.asyncio
+async def test_a_turn_that_searched_gets_only_its_own_footer(monkeypatch):
+    """The earlier carried line is in the history and the model copies it back.
+    This turn searched, so the lawyer gets this turn's fresh footer, exactly
+    once, and nothing carried."""
+    fresh = answer_scope_footer(_P28_LOG, {})
+    carried = carried_scope_footer(_p28_history(fresh), [])
+    history = _p28_history(fresh, carried)
+
+    async def manager(messages, model, cancel_event, num_ctx, tools,
+                      tool_executor, on_chunk=None, **kw):
+        await tool_executor("delegate_research", {"query": "q"})
+        return {"role": "assistant", "content": "It has been made." + carried}
+
+    final = await _p28_turn(monkeypatch, history, manager)
+    assert final["content"].count("*Search scope:") == 1
+    assert '"this turn\'s own search"' not in final["content"]    # quotes are stripped
+    assert '"this turn s own search"' in final["content"]
+    assert "no search of the legislation index was run" not in final["content"]
+
+
+@pytest.mark.asyncio
+async def test_a_failed_delegation_carries_nothing(monkeypatch):
+    """The worker raised, so its search record went with it. "No search was run
+    for this reply" might be false, and the line stays silent."""
+    async def failing_worker(*a, **kw):
+        raise RuntimeError("provider stalled")
+
+    async def manager(messages, model, cancel_event, num_ctx, tools,
+                      tool_executor, on_chunk=None, **kw):
+        await tool_executor("delegate_research", {"query": "q"})
+        return {"role": "assistant", "content": "The research could not be completed."}
+
+    history = _p28_history(answer_scope_footer(_P28_LOG, {}))
+    final = await _p28_turn(monkeypatch, history, manager, worker=failing_worker)
+    assert final["content"] == "The research could not be completed."
+
+
+@pytest.mark.asyncio
+async def test_a_peer_consult_carries_nothing(monkeypatch):
+    """A consulted peer searches with its own tools, which this turn's record
+    does not see."""
+    async def manager(messages, model, cancel_event, num_ctx, tools,
+                      tool_executor, on_chunk=None, **kw):
+        await tool_executor("consult_peer", {"peer_id": "parliament_bot",
+                                             "question": "q"})
+        return {"role": "assistant", "content": "The Parliament Bot found no records."}
+
+    history = _p28_history(answer_scope_footer(_P28_LOG, {}))
+    final = await _p28_turn(monkeypatch, history, manager)
+    assert final["content"] == "The Parliament Bot found no records."

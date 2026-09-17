@@ -1046,3 +1046,127 @@ def test_a_run_that_issued_no_search_is_not_in_the_denominator():
 
 def test_missing_keys_do_not_raise():
     assert rr.scope_record_gap({}) is None
+
+
+# ---------------------------------------------------------------------------
+# nosearch_rows / nosearch_verdict — P2.8's acceptance (P2.10 folded in)
+# ---------------------------------------------------------------------------
+#
+# Promoted from SESSION_LOG Session 12's ad-hoc script, which graded "asserts a
+# negative" with `NOT_FOUND` (the P0.3 baseline regex) instead of
+# `NEG_ASSERTED` (P2.2's). It found 1 turn of shape (A) where there are 5, and a
+# row was nearly closed on it. Validated over all ten replay directories: 608
+# answered, 210 negative, (A) 5 negative, (B) 14 turns with 12 negative, which
+# are Session 12's corrected figures exactly.
+
+_P28_FRESH = (
+    '\n\n*Search scope: the legislation index was searched for "SSI 2025/377"; '
+    "no jurisdiction, type or date filter narrowed it. This is a ranked search "
+    "of an index that is known to be incomplete, so anything reported above as "
+    "not found was not found in this index, which is not the same as being "
+    "absent from the law.*"
+)
+_P28_CARRIED = (
+    "\n\n*Search scope: no search of the legislation index was run for this "
+    'reply. Earlier in this conversation it was searched for "SSI 2025/377"; '
+    "no jurisdiction, type or date filter narrowed it. Each was a ranked search "
+    "of an index that is known to be incomplete, so a result reported as not "
+    "found in those searches was not found in this index, which is not the same "
+    "as being absent from the law.*"
+)
+_P28_NEG = ("As noted in the previous search, SSI 2025/377 is not currently "
+            "available in the legislation database.")
+
+
+def _ns_turn(n, answer, tools=None, delegated=None, peer=False):
+    """A stored turn. `tools=None` with `delegated=False` is shape A."""
+    if delegated is None:
+        delegated = tools is not None
+    audit = {"delegations": ([{"tools": [{"name": x} for x in (tools or [])]}]
+                             if delegated else [])}
+    if peer:
+        audit["peer_consults"] = [{"peer_id": "parliament_bot"}]
+    return {"turn": n, "answer": answer, "audit": audit}
+
+
+def _ns(*turns):
+    return {"session_id": "6409", "rep": 1, "turns": list(turns)}
+
+
+def _verdicts(doc):
+    return {r["turn"]: rr.nosearch_verdict(r) for r in rr.nosearch_rows(doc)}
+
+
+def test_a_restated_negative_with_no_scope_line_is_the_defect():
+    """6409 rep 1 turn 11's shape, before and after the fix."""
+    before = _ns(_ns_turn(1, "Found." + _P28_FRESH, ["search_legislation"]),
+                 _ns_turn(2, _P28_NEG))
+    assert _verdicts(before) == {1: None, 2: "UNQUALIFIED"}
+    after = _ns(_ns_turn(1, "Found." + _P28_FRESH, ["search_legislation"]),
+                _ns_turn(2, _P28_NEG + _P28_CARRIED))
+    assert _verdicts(after) == {1: None, 2: None}
+
+
+def test_a_negative_with_no_earlier_search_is_not_this_rows_defect():
+    """6347 turn 1's shape: nothing was searched earlier, so there is nothing to
+    carry. That turn is P4.1's and P2.7's, and this command must not count it."""
+    doc = _ns(_ns_turn(1, _P28_NEG, [], delegated=True))
+    rows = rr.nosearch_rows(doc)
+    assert rows[0]["shape"] == "B" and rows[0]["neg"] and not rows[0]["searched_before"]
+    assert rr.nosearch_verdict(rows[0]) is None
+
+
+def test_a_scope_statement_for_a_search_not_run_is_caught_every_way():
+    fresh_on_nothing = _ns(_ns_turn(1, "Found." + _P28_FRESH, ["search_legislation"]),
+                           _ns_turn(2, "Yes." + _P28_FRESH))
+    carried_on_a_search = _ns(_ns_turn(1, "Found." + _P28_FRESH, ["search_legislation"]),
+                              _ns_turn(2, "Yes." + _P28_CARRIED, ["search_legislation"]))
+    carried_from_nothing = _ns(_ns_turn(1, "Yes." + _P28_CARRIED))
+    assert _verdicts(fresh_on_nothing)[2] == "MISATTRIBUTED"
+    assert _verdicts(carried_on_a_search)[2] == "MISATTRIBUTED"
+    assert _verdicts(carried_from_nothing)[1] == "MISATTRIBUTED"
+
+
+def test_selection_is_neg_asserted_on_the_prose_not_not_found():
+    """The Session 12 error, pinned in both directions. `NOT_FOUND` misses the
+    corpus-shaped refusal, and the carried line's own "not found" must not enrol
+    a positive turn."""
+    refusal = "The available database does not contain information on this specific issue."
+    assert not rr.NOT_FOUND.search(refusal)
+    doc = _ns(_ns_turn(1, "Found." + _P28_FRESH, ["search_legislation"]),
+              _ns_turn(2, refusal, [], delegated=True),
+              _ns_turn(3, "Yes, it was made." + _P28_CARRIED))
+    rows = {r["turn"]: r for r in rr.nosearch_rows(doc)}
+    assert rows[2]["neg"] is True
+    assert rows[3]["neg"] is False
+    assert rows[3]["line"] == "carried"
+
+
+def test_shapes_and_the_history_rule():
+    """A blank turn joins no history (`replay.py`), so a search it ran does not
+    make the next turn "after a search"."""
+    doc = _ns(_ns_turn(1, "", ["search_legislation"]),
+              _ns_turn(2, _P28_NEG),
+              _ns_turn(3, "Text.", ["get_legislation_text"]),
+              _ns_turn(4, "Refs.", ["search_legislation_sections"]),
+              _ns_turn(5, _P28_NEG, [], delegated=True))
+    rows = {r["turn"]: r for r in rr.nosearch_rows(doc)}
+    assert 1 not in rows
+    assert rows[2]["shape"] == "A" and not rows[2]["searched_before"]
+    assert rows[3]["shape"] == "C" and not rows[3]["searched_now"]
+    assert rows[4]["searched_now"]            # a section search IS a search
+    assert rows[5]["shape"] == "B" and rows[5]["searched_before"]
+    assert rr.nosearch_verdict(rows[5]) == "UNQUALIFIED"
+
+
+def test_a_peer_consult_turn_is_exempt():
+    """The product stays silent there on purpose: the peer's searches are not in
+    this turn's record."""
+    doc = _ns(_ns_turn(1, "Found." + _P28_FRESH, ["search_legislation"]),
+              _ns_turn(2, _P28_NEG, delegated=False, peer=True))
+    assert _verdicts(doc)[2] is None
+
+
+def test_nosearch_missing_keys_do_not_raise():
+    assert rr.nosearch_rows({}) == []
+    assert rr.nosearch_rows({"turns": [{"answer": "x"}]})[0]["shape"] == "A"

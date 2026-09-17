@@ -2904,6 +2904,176 @@ def cmd_scoperecord(args) -> int:
     return 0 if issued == recorded else 1
 
 
+# P2.8's carried scope line (`search_scope.carried_scope_footer`), identified by
+# its fixed opening clause. A fresh footer says the opposite, in these words.
+CARRIED_SCOPE = "no search of the legislation index was run for this reply"
+FRESH_SCOPE = "*Search scope: the legislation index was searched for"
+_LEG_SEARCH_TOOLS = ("search_legislation", "search_legislation_sections")
+
+
+def nosearch_rows(doc: dict) -> list:
+    """Every answered turn in one run that ran no legislation search.
+
+    **Promoted from the ad-hoc script in SESSION_LOG Session 12**, which used
+    the wrong regex. Asserting a negative is graded with `NEG_ASSERTED` (P2.2's
+    acceptance detector) on the model's prose with the footer removed, exactly
+    as `cmd_negatives` selects its denominator. It is **not** graded with
+    `NOT_FOUND`, the P0.3 baseline regex. That regex found 1 turn of shape (A)
+    where there are 5, and led to a recommendation to close a real defect.
+
+    Shapes, by what the audit trace shows ran:
+      "A" — no delegation at all. The Manager answered from the history.
+      "B" — delegated, and the Worker made zero tool calls (Session 12's (B)).
+      "C" — delegated, tools ran, none of them a legislation search.
+
+    `searched_before` is true when an EARLIER answered turn in this run searched
+    the legislation index. Only answered turns count, because only they join the
+    history the next turn is sent (`replay.py`). It is the audit-side mirror of
+    the product's gate, which reads the fresh footer out of that history.
+
+    `line` is "carried", "fresh" or "none": the scope statement the lawyer saw.
+    """
+    rows = []
+    searched_before = False
+    for t in doc.get("turns", []):
+        answer = t.get("answer") or ""
+        audit = t.get("audit") or {}
+        dgs = audit.get("delegations") or []
+        tools = [x for dg in dgs for x in (dg.get("tools") or [])]
+        searched_now = any(x.get("name") in _LEG_SEARCH_TOOLS for x in tools)
+        if answer.strip():
+            bare = _without_footer(answer)
+            if CARRIED_SCOPE in answer:
+                line = "carried"
+            elif FRESH_SCOPE in answer:
+                line = "fresh"
+            else:
+                line = "none"
+            rows.append({
+                "turn": t.get("turn"),
+                "searched_now": searched_now,
+                "shape": ("A" if not dgs else "B" if not tools else "C"),
+                "neg": bool(NEG_ASSERTED.search(bare)),
+                "searched_before": searched_before,
+                "line": line,
+                "peer": bool(audit.get("peer_consults")),
+                "chars": len(bare),
+            })
+            if searched_now:
+                searched_before = True
+    return rows
+
+
+def nosearch_verdict(row: dict) -> Optional[str]:
+    """P2.8's acceptance for one answered turn. None means nothing wrong.
+
+    "UNQUALIFIED" — the defect. The turn searched nothing, an earlier turn did,
+                    the model asserts a negative, and the lawyer saw no scope
+                    statement beside it.
+    "MISATTRIBUTED" — the row's other half. A scope statement describes a search
+                    this turn did not run: a fresh footer on a turn that searched
+                    nothing, a carried line on a turn that searched, or a carried
+                    line with no earlier search behind it.
+
+    A peer-consult turn is exempt from UNQUALIFIED. The product stays silent
+    there on purpose, because the peer's searches are not in this turn's record.
+    """
+    if row["searched_now"]:
+        return "MISATTRIBUTED" if row["line"] == "carried" else None
+    if row["line"] == "fresh":
+        return "MISATTRIBUTED"
+    if row["line"] == "carried" and not row["searched_before"]:
+        return "MISATTRIBUTED"
+    if (row["neg"] and row["searched_before"] and row["line"] == "none"
+            and not row["peer"]):
+        return "UNQUALIFIED"
+    return None
+
+
+def cmd_nosearch(args) -> int:
+    """P2.8 acceptance (with P2.10 folded in): replies that searched nothing.
+
+    **Exits 1 on a finding**, like `negatives` and `scoperecord`. A directory
+    with no scope footer anywhere predates P2.2. It is reported and exits 0,
+    because nothing there could have carried a scope statement.
+    """
+    docs = load_runs(Path(args.dir))
+    if not docs:
+        print(f"No run files in {args.dir}")
+        return 1
+    print(f"P2.8 acceptance over {args.dir}")
+    print("  shape A = no delegation;  B = delegated, zero tool calls;")
+    print("          C = delegated, tools ran, no legislation search")
+    print("  neg     = NEG_ASSERTED on the model's prose (footer removed)")
+    print("  before  = an earlier answered turn searched the legislation index")
+    print("  line    = the scope statement the lawyer saw")
+    print()
+    has_footers = any("*Search scope:" in (t.get("answer") or "")
+                      for d in docs for t in d.get("turns", []))
+    answered = negs = 0
+    counts = {s: [0, 0] for s in "ABC"}          # [turns, of which neg]
+    after_search = carried = 0
+    listed = []
+    bad = []
+    for doc in sorted(docs, key=lambda d: (d["session_id"], d.get("rep", 1))):
+        for row in nosearch_rows(doc):
+            answered += 1
+            negs += row["neg"]
+            verdict = nosearch_verdict(row)
+            if verdict:
+                bad.append((doc, row, verdict))
+            if row["searched_now"]:
+                continue
+            counts[row["shape"]][0] += 1
+            counts[row["shape"]][1] += row["neg"]
+            if row["searched_before"]:
+                after_search += 1
+                carried += row["line"] == "carried"
+            if args.all or row["neg"] or verdict:
+                listed.append((doc, row, verdict))
+
+    if listed:
+        print(f"{'session':>8} {'rep':>3} {'turn':>4} {'shape':>5} {'neg':>4} "
+              f"{'before':>6} {'line':>8} {'peer':>4} {'chars':>6}  verdict")
+        print("-" * 72)
+        for doc, row, verdict in listed:
+            print(f"{doc['session_id']:>8} {doc.get('rep', 1):>3} {row['turn']:>4} "
+                  f"{row['shape']:>5} {('yes' if row['neg'] else '-'):>4} "
+                  f"{('yes' if row['searched_before'] else '-'):>6} "
+                  f"{row['line']:>8} {('yes' if row['peer'] else '-'):>4} "
+                  f"{row['chars']:>6}  {verdict or 'ok'}")
+            if args.answers:
+                turn = next(t for t in doc["turns"] if t.get("turn") == row["turn"])
+                print(f"{'':>10}Q: {str(turn.get('question') or '')[:args.chars]}")
+                print(f"{'':>10}A: {(turn.get('answer') or '')[:args.chars]}")
+        print()
+
+    print(f"answered turns                               {answered}")
+    print(f"  asserting a negative (NEG_ASSERTED)        {negs}")
+    for s, label in (("A", "no delegation"),
+                     ("B", "delegated, zero tool calls"),
+                     ("C", "delegated, no legislation search")):
+        print(f"  ({s}) {label:<36} {counts[s][0]:>4}   of which negative {counts[s][1]}")
+    print(f"no-search turns after a searched turn        {after_search}"
+          f"   carrying the carried line {carried}")
+    print()
+    unq = [b for b in bad if b[2] == "UNQUALIFIED"]
+    mis = [b for b in bad if b[2] == "MISATTRIBUTED"]
+    print(f"UNQUALIFIED   restated negative, no scope statement   {len(unq)}")
+    print(f"MISATTRIBUTED scope statement for a search not run    {len(mis)}")
+    for doc, row, verdict in mis:
+        print(f"    {doc['session_id']} r{doc.get('rep', 1)} t{row['turn']}: "
+              f"line={row['line']} searched_now={row['searched_now']} "
+              f"before={row['searched_before']}")
+    print()
+    if not has_footers:
+        print("[!] No answer in this directory carries a scope footer: it predates "
+              "P2.2, so nothing could have been qualified. Not a pass, an absence. "
+              "Exit 0.")
+        return 0
+    return 0 if not bad else 1
+
+
 def cmd_corpus(args) -> int:
     """The retrieval shape of a replay directory — every number P2.3 published.
 
@@ -3128,6 +3298,14 @@ def main(argv: Iterable[str] | None = None) -> int:
     sub.add_parser("scoperecord",
                    help="P2.9 acceptance: every search a worker run issued, "
                         "against what its own scope block recorded")
+    ns = sub.add_parser("nosearch",
+                        help="P2.8 acceptance: replies that ran no legislation "
+                             "search, and the scope statement beside them")
+    ns.add_argument("--all", action="store_true",
+                    help="list every no-search turn, not only negatives and findings")
+    ns.add_argument("--answers", action="store_true",
+                    help="print the question and answer under each listed turn")
+    ns.add_argument("--chars", type=int, default=600)
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")
@@ -3146,6 +3324,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "commencements": cmd_commencements,
         "currency": cmd_currency,
         "scoperecord": cmd_scoperecord,
+        "nosearch": cmd_nosearch,
         "blanks": cmd_blanks,
         "corpus": cmd_corpus,
     }[args.cmd](args)

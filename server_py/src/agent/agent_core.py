@@ -29,6 +29,7 @@ from ..utils.empty_completion import (
 from ..utils.research_halt import apply_halt_disclosure, halt_worker_report
 from ..utils.search_scope import (
     answer_scope_footer,
+    carried_scope_footer,
     strip_answer_footer,
     incomplete_steps_note,
     strip_scope_blocks,
@@ -632,6 +633,12 @@ async def process_user_request(
     # P2.2 (B5): every legislation search this turn ran, across ALL delegations.
     # The footer describes the turn the lawyer asked, not one delegation of it.
     all_searches: list = []
+    # P2.8 (B5): set when this turn's searches cannot be known from
+    # `all_searches`. A delegation that raised took its search record with it,
+    # and a consulted peer searches with its own tools. In either case "no
+    # search was run for this reply" might be false, so the carried scope line
+    # stays silent.
+    scope_unknown: list = []
 
     # Per-request tool-result memo (D8 Phase 4) — same mechanism as Deep
     # Research (see run_deep_research): exact (tool_name, canonical args)
@@ -692,6 +699,7 @@ async def process_user_request(
                     f"[Manager] Delegated research failed: {type(e).__name__}: {e}",
                     exc_info=True,
                 )
+                scope_unknown.append("delegation_failed")
                 if on_chunk:
                     await call_chunk(on_chunk, {
                         "type": "tool_end", "tool": "Research Agent",
@@ -725,6 +733,7 @@ async def process_user_request(
             return f"[Research Agent Result]\n{result['content']}"
 
         if name == "consult_peer":
+            scope_unknown.append("peer_consulted")
             if timing_collector:
                 timing_collector.record_peer_consult()
             peer_id = args.get("peer_id", "")
@@ -856,9 +865,17 @@ async def process_user_request(
     # next turn's history, the model copies it back verbatim, and the code then
     # appends its own — the lawyer reads the same disclosure twice. Strip any
     # echo before appending the one computed from THIS turn's searches.
-    final["content"] = strip_answer_footer(
-        final.get("content") or ""
-    ) + answer_scope_footer(all_searches, _cfg)
+    _footer = answer_scope_footer(all_searches, _cfg)
+    # P2.8 (B5): a reply that searched nothing gets no footer above, even when
+    # it restates an earlier turn's negative. That is the case of a follow-up
+    # answered from history. The earlier searches are restated here, labelled
+    # as earlier, whenever an earlier reply in the history carries a fresh
+    # footer. The gate is structural and never reads the answer. Manager path
+    # only: the Deep Research synthesis sees the step findings and not the
+    # conversation, so it cannot restate an earlier turn's negative.
+    if not _footer and not scope_unknown:
+        _footer = carried_scope_footer(messages, all_searches)
+    final["content"] = strip_answer_footer(final.get("content") or "") + _footer
 
     return final
 

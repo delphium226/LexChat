@@ -86,6 +86,7 @@ __all__ = [
     "worker_scope_block",
     "strip_scope_blocks",
     "answer_scope_footer",
+    "carried_scope_footer",
     "strip_answer_footer",
     "incomplete_steps_note",
 ]
@@ -1683,6 +1684,147 @@ def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) ->
         f"{_relations_footer_clause(all_entries)}"
         f"{_currency_footer_clause(all_entries)}*"
     )
+
+
+# P2.8 (B5): the footer `answer_scope_footer` writes, read back out of the
+# conversation history. Only the fresh form is read, never the carried one: a
+# carried line restates searches already recorded in an earlier fresh footer,
+# so reading it would add nothing and would let one carried line feed the next.
+# Coupled to the f-string above by `test_search_scope.py`, which round-trips
+# every shape that function can emit. If the wording changes and the parse
+# stops matching, the carried line goes silent (today's behaviour). It does not
+# go wrong.
+_FRESH_FOOTER = re.compile(
+    r'\*Search scope: the legislation index was searched for '
+    r'(?P<terms>"[^"\n]*"(?:, "[^"\n]*")*)'
+    r'(?: \((?P<rest>\d+) further quer(?:y|ies) not listed\))?; '
+    r'(?P<filters>[^\n]*?)\. This is a ranked search\b'
+)
+# Both search tools, not just the one the fresh footer lists. A turn that only
+# searched WITHIN an instrument has run a search, so "no search of the index
+# was run for this reply" would be false there. That turn stays silent.
+_SEARCH_TOOLS = ("search_legislation", "search_legislation_sections")
+_MAX_CARRIED_TERMS = 2
+
+
+def _earlier_footers(messages: Optional[list]) -> list:
+    """Every fresh scope footer at the end of an earlier assistant message.
+
+    Reads only the LAST line of each message's trailing footer block, which is
+    the one code appended: `strip_answer_footer` removes any copy the model
+    wrote before the real one goes on. Only assistant messages are read, so a
+    lawyer pasting an old answer into their own message contributes nothing.
+    """
+    out = []
+    for m in messages or []:
+        if not isinstance(m, dict) or m.get("role") != "assistant":
+            continue
+        content = m.get("content")
+        if not isinstance(content, str) or "*Search scope:" not in content:
+            continue
+        tail = _ECHOED_FOOTER.search(content)
+        if not tail:
+            continue
+        last = tail.group(0).strip().splitlines()[-1].strip()
+        found = _FRESH_FOOTER.match(last)
+        if not found:
+            continue
+        out.append({
+            "terms": re.findall(r'"([^"\n]*)"', found.group("terms")),
+            "rest": int(found.group("rest") or 0),
+            "filters": found.group("filters").strip(),
+        })
+    return out
+
+
+def carried_scope_footer(
+    messages: Optional[list], searches: Optional[list] = None,
+) -> str:
+    """The scope line for a reply that searched nothing, after replies that did.
+
+    **P2.8 (B5).** `answer_scope_footer` is per TURN, and a conversation is not.
+    A follow-up the Manager answers from history runs no search, so it got no
+    footer, even when it restates an earlier negative. The lawyer then read an
+    unqualified "not found" two turns after seeing the qualified one. Measured
+    over the ten replay directories: four turns in two sessions, each session
+    repeating it in 2 of 3 reps (6409, 6341).
+
+    **Gated on structure, not on the answer.** It fires when this turn recorded
+    no search and an earlier assistant message carries a code-emitted fresh
+    footer. It does not fire because the answer "repeats a negative"; that
+    would be a prose detector in the product, which this module refuses (see
+    `answer_scope_footer`). It therefore also fires on clarifying questions and
+    positive follow-ups. That is the same trade P2.2 made for researched turns.
+
+    **Worded so that it cannot describe a search it did not run.** It says
+    first that no search was run for this reply, and labels every term as
+    searched *earlier in this conversation*. It does not say the reply relied
+    on those searches. So on a reply drawn from training knowledge alone
+    (`wave1/6341 r1 t8`, "what is a stub"), it states a true fact that the
+    lawyer needs: nothing was looked up for this answer. The not-found clause
+    is scoped to results "in those searches", so it lends no index authority
+    to a negative the model produced from memory.
+
+    Kept in the `*Search scope: …*` single-line shape on purpose. That is the
+    shape `_ECHOED_FOOTER` strips when the model copies it back, and the shape
+    `replay_report._without_footer` removes before grading the model's prose.
+    In any other shape, its "not found" words would trip `NEG_ASSERTED` and
+    enrol purely positive turns as negatives. That was P2.2's own error.
+
+    The caller must NOT call this when a delegation failed or a peer was
+    consulted. In either case this turn's searches are unknown, and "no search
+    was run" might be false. Never raises.
+    """
+    try:
+        entries = list(searches or [])
+        if any(e.get("tool") in _SEARCH_TOOLS for e in entries):
+            return ""
+        earlier = _earlier_footers(messages)
+        if not earlier:
+            return ""
+        # Newest first: the restated negative is most often the latest one.
+        terms, seen = [], set()
+        for f in reversed(earlier):
+            for t in f["terms"]:
+                if t and t.lower() not in seen:
+                    seen.add(t.lower())
+                    terms.append(t)
+        if not terms:
+            return ""
+        shown = terms[:_MAX_CARRIED_TERMS]
+        # An exact count only where one is knowable. Across several replies an
+        # unlisted query may repeat a listed one, so summing their counts
+        # could overstate the number of searches. Say "further" instead.
+        if len(earlier) == 1:
+            rest = earlier[0]["rest"] + len(terms) - len(shown)
+        elif all(f["rest"] == 0 for f in earlier):
+            rest = len(terms) - len(shown)
+        else:
+            rest = None
+        if rest is None:
+            more = " (further queries not listed)"
+        elif rest > 0:
+            more = f" ({rest} further quer{'y' if rest == 1 else 'ies'} not listed)"
+        else:
+            more = ""
+        filters = {f["filters"] for f in earlier}
+        filters_phrase = (
+            filters.pop() if len(filters) == 1 else
+            "the filters differed between those replies and are stated beneath each"
+        )
+        quoted = ", ".join(f'"{t}"' for t in shown)
+        return (
+            "\n\n*Search scope: no search of the legislation index was run for "
+            f"this reply. Earlier in this conversation it was searched for "
+            f"{quoted}{more}; {filters_phrase}. Each was a ranked search of an "
+            "index that is known to be incomplete, so a result reported as not "
+            "found in those searches was not found in this index, which is not "
+            f"the same as being absent from the law.{_enabling_footer_clause(entries)}"
+            f"{_relations_footer_clause(entries)}"
+            f"{_currency_footer_clause(entries)}*"
+        )
+    except Exception:
+        return ""
 
 
 def strip_scope_blocks(text: str) -> tuple:
