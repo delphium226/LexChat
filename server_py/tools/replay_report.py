@@ -3210,9 +3210,10 @@ def _invariant_one_prose(before: Path, after: Path, only: Optional[list]) -> Non
 #     *"Rule 35.8 of the Rules of the Court of Session 1994"*, *"the Clerk of the
 #     Sheriff Appeal Court"* and *"sheriff court jurisdiction"* all count as a
 #     disclosure. Over the twelve pre-P2.4 directories it fires on 26 answered
-#     turns. 22 of them never searched case law, and not one of those 22
-#     discloses anything. It is left as it is, because `summary` and `compare`
-#     publish its count; `caselaw` uses `caselaw_gap_statements` instead.
+#     turns. 22 of them never searched case law, and only one of those 22
+#     (`wave1/6408 r1 t3`) actually states the gap. It is left as it is,
+#     because `summary` and `compare` publish its count; `caselaw` uses
+#     `caselaw_gap_statements` instead.
 # (2) After P2.4 it is satisfied by construction. The code line names the Court
 #     of Session on every turn that searched case law, so a full-answer read
 #     cannot tell the code's disclosure from the model's. Hence the split, as in
@@ -3258,13 +3259,25 @@ _SCOTTISH_TITLE = re.compile(
 )
 
 
+# A court's name inside an instrument's title is not the court. Found by the
+# all-turns audit, not the case-law-turn one: `baseline/6372 r3 t2`, *"the Rules
+# of the Court of Session 1994 … do not contain an explicit provision"*, has a
+# court, a corpus-ish verb and a negation, and says nothing about case law.
+_COURT_IN_TITLE = re.compile(
+    r"rules of the (?:court of session|sheriff (?:appeal )?court)\b"
+    r"|(?:court of session|sheriff (?:appeal )?courts?) (?:rules|fees|act)\b"
+    r"|act of sederunt|courts reform \(scotland\)",
+    re.I,
+)
+
+
 def caselaw_gap_statements(text: str) -> list:
     """Every sentence that states the case-law corpus gap. [] for none."""
     out = []
     for sentence in _sentences(text or ""):
         s = sentence.replace(_DOT, ".")
-        if (_SCOTS_COURT.search(s) and _GAP_CORPUS.search(s)
-                and _GAP_LIMIT.search(s)):
+        if (_SCOTS_COURT.search(_COURT_IN_TITLE.sub(" ", s))
+                and _GAP_CORPUS.search(s) and _GAP_LIMIT.search(s)):
             out.append(s.strip())
     return out
 

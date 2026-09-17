@@ -609,6 +609,11 @@ def _t(turn, answer, cl_calls=0, results=None):
     ("The [Courts Reform (Scotland) Act 2014](http://x) does contain specific "
      "definitions relating to interdicts for the purposes of sheriff court "
      "jurisdiction:", False, True),
+    # A court's name inside an instrument title (`baseline/6372 r3 t2`). Found by
+    # the all-turns audit after the first version of this detector counted it.
+    ("The statutory rules for civil litigation in Scotland, such as the [Rules of "
+     "the Court of Session 1994](http://x), do not contain an explicit provision "
+     "dealing with the inadvertent disclosure of privileged documents.", False, True),
     ("If you need a comprehensive review of Scottish case law on this topic, I "
      "suggest switching to Research mode.", False, False),
     # 6341 (legislation_only): about the LEGISLATION database lacking case law.
