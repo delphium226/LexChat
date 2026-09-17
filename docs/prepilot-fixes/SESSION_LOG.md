@@ -2371,6 +2371,9 @@ sessions. Wave 2's open rows: **P2.4, P2.7**.
    - **An alternative Scottish case-law supplier** has not been researched.
      BAILII's terms restrict automated access, so that is the organisation's
      question before anyone designs against it.
-5. **Proposed next row: P2.4**, the cheaper of the two left in Wave 2, with
-   P2.7 as the alternative. The user has not chosen between them. Ask at the
-   start of the next session if the choice matters.
+5. ~~Proposed next row: P2.4 … the user has not chosen~~ **The user chose
+   P2.4 next** (end of Session 13). P2.4's row carries pre-flight facts
+   verified at `6d9b129`: where the existing gap wording lives, the
+   before-column, SSI 2026/170 still absent, and four design hazards. The most
+   dangerous hazard is that P2.8's carried-line parse reads only the **last**
+   footer line. **P2.7 follows**, with its evidence moved to 6341.
