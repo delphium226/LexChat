@@ -1938,46 +1938,55 @@ first.
 
 ---
 
-## B5 / B7 — negatives from turns that searched nothing (P2.10, measured, not built)
+## B5 / B7 — negatives from turns that searched nothing (P2.10 → folded into P2.8)
 
-Run over all ten replay directories: **608 answered turns**. The script and its
-expected output are in `SESSION_LOG.md` Session 12.
+Measured over all ten replay directories: **608 answered turns, 210 of them
+asserting a negative**, graded with `NEG_ASSERTED`, the detector behind
+`replay_report negatives`.
 
 | shape | turns | owner |
 |---|---|---|
-| **(A)** no delegation, and the answer asserts a negative | **1** (`wave2_p25/6341 r2 t2`) | **P2.10** |
-| **(B)** a Worker delegated to, **zero** tool calls | **14**, in 6343, 6346, 6347 and 6350 | **P4.1** (B7) |
-| of (B), the final answer is graded a negative by `NOT_FOUND` | 3, all from 6350 | see below |
+| **(A)** no delegation, answer asserts a negative | **5** | 4 are **P2.8**, 1 is **P2.7** |
+| **(B)** Worker delegated to, **zero** tool calls | **14** (6343, 6346, 6347, 6350) | **P4.1** (B7) |
+| of (B), answer asserts a negative | **12** | — |
 
-~~First instance in 209 answered turns across five directories.~~ Over all ten
-directories it is still **exactly one, in 608 answered turns**. Shape (A) is not
-a rate, and P2.10 has not been built. Whether to close the row is pending the
-user's decision.
+**(A), the four that are P2.8's defect.** In each, an earlier turn's negative is
+restated, no search runs on this turn, and so no footer fires:
+`wave2_p22_final/6409 r1 t11` and `r3 t4`, and `wave2_p25/6341 r2 t2` and `r3 t2`.
+The defect recurs across reps in both sessions (2 of 3 in each), so it is a rate
+and not noise. P2.10 described 6341 and P2.8 described 6409. They are one defect.
+
+**(A), the fifth.** `wave1/6341 r1 t8` answers *"what do you mean by a stub"* from
+training knowledge. It relies on no earlier search, so it belongs to P2.7's
+speculation family, not P2.8. A carry-forward fix must not attach an earlier scope
+to a turn like this one.
+
+### ~~n=1 in 608~~: the first count used the wrong detector
+
+`replay_report` holds **two** regexes for "asserts a negative":
+
+- `NOT_FOUND` is the **P0.3 baseline** detector. It feeds `summary`, `baseline`
+  and `compare`.
+- `NEG_ASSERTED` is **P2.2's acceptance** detector. It feeds `negatives`.
+
+Session 9's P2.10 check used `NOT_FOUND`, and Session 12 copied it. That produced
+1 instance where the correct count is 5, and 3 of 14 where it is 12. A
+consequence claimed at the time, that *"P2.2's published numbers were blind to
+'The available database does not contain information…'"*, was **false**:
+`NEG_ASSERTED` matches that sentence. Only the P0.3/P1.5 `compare`
+bare-negative counts under-read it, and `negatives` has since replaced them.
+**For any question about asserted negatives, use `NEG_ASSERTED`.**
 
 ### Why (B) cannot measure P4.1's anchoring bug
 
-All 14 are case-law questions asked under `legislation_only`. The Worker has no
-case-law tool, searches nothing, and opens its report with *"The available
-database does not contain information on this specific issue."*
+All 14 (B) turns are case-law questions asked under `legislation_only`. The
+transcript export records **no research mode** for these sessions: `Filter:
+Research mode` and `Session mode` are blank on every row. `replay_set.py` reads
+the mode once per session and falls back to `legislation_only`. So in the replay
+the mode never changed, even on turns where the lawyer says *"I have changed the
+mode, please proceed"*. Those refusals are correct about the tool set, and none of
+them shows the anchoring P4.1 describes.
 
-**The transcript export records no research mode for these sessions.**
-`Filter: Research mode` and `Session mode` are blank on every row.
-`replay_set.py` reads the mode once per session and falls back to
-`legislation_only`. So the replay kept that mode on every turn, including *"I have
-changed the mode, please proceed"*.
-
-The mode therefore never changed in the replay. A refusal on those turns is
-correct about the tool set, and it is not the anchoring P4.1 describes. What (B)
-does show is how the refusal is worded. The sentence makes a claim about the
-**corpus**, when the true statement is about the **tool set**.
-
-### The detector does not count that sentence
-
-    NOT_FOUND.search("The available database does not contain information on this specific issue.")  ->  False
-    NOT_FOUND.search("The research agent returned no results for case law.")                            ->  True
-
-The first sentence is the one the Worker writes. The second is how 6350's Manager
-rephrased it, and it is the only reason 3 of the 14 were counted. This blind spot
-makes the negatives numbers look better than they are. **It has not been fixed.**
-Widening `NOT_FOUND` would change P2.2's published before-column and
-after-column, so it needs its own before/after measurement.
+What (B) does show is the **wording** of the refusal. *"The available database
+does not contain information on this specific issue"* is a claim about the
+corpus, when the true statement is about the tool set.

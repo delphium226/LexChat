@@ -1973,9 +1973,62 @@ and B12 cannot close without it.
 
 ## Session 12 — 2026-09-17 — P2.10 measured, NOT built, decision pending; three findings for P4.1 and P2.2
 
+> **CORRECTED LATER IN THIS SESSION: THREE CLAIMS BELOW ARE WRONG. Read this block first.**
+>
+> **The measurement used the wrong detector.** `replay_report` has **two** regexes
+> for "asserts a negative":
+> - `NOT_FOUND` (line ~88) is the **P0.3 baseline** detector. It feeds only
+>   `analyse_run` → `summary` / `baseline` / `compare`.
+> - `NEG_ASSERTED` (line ~151) is **P2.2's acceptance detector**, behind
+>   `replay_report negatives`.
+>
+> Session 9's P2.10 script used `NOT_FOUND`, and I copied it. **For any question
+> about asserted negatives, use `NEG_ASSERTED`.** Re-run with it over all ten
+> directories:
+>
+> | | with `NOT_FOUND` (wrong) | with `NEG_ASSERTED` (right) |
+> |---|---|---|
+> | answered turns asserting a negative | — | **210 of 608** |
+> | **(A)** no delegation, asserts a negative | 1 | **5** |
+> | **(B)** Worker delegated, zero tools, asserts a negative | 3 of 14 | **12 of 14** |
+>
+> **The five (A) turns are two defects, not one**:
+> - **Four are P2.8's defect**: a no-delegation turn restates an earlier turn's
+>   negative, so no footer fires. They are `wave2_p22_final/6409 r1 t11` and
+>   `r3 t4` (P2.8's own cited turns), plus `wave2_p25/6341 r2 t2` and `r3 t2`.
+>   **6341 did it in 2 of 3 reps**; Session 9's "reps 1 and 3 answered normally"
+>   came from the narrower detector.
+> - **One is P2.7's speculation family**: `wave1/6341 r1 t8`, the *"what is a
+>   stub"* meta-question answered from training knowledge.
+>
+> **Corrections to the entry below:**
+> 1. ~~P2.10 is n=1 and should be closed without building~~ → **P2.10 is P2.8.**
+>    Same mechanism (no search this turn, so no footer), same fix candidate
+>    (carry the earlier scope forward), 4 instances over 2 sessions. The
+>    recommendation is now: **fold P2.10 into P2.8 and build P2.8.** The user has
+>    been told. The next session confirms the fold before ticking P2.10.
+> 2. ~~Finding 3: P2.2's detector is blind to "The available database does not
+>    contain information…", so P2.2's published numbers never saw it~~ →
+>    **false.** `NEG_ASSERTED` matches that sentence, so P2.2's acceptance
+>    numbers were never blind to it. Only `NOT_FOUND` misses it, which means the
+>    P0.3/P1.5 `summary`/`compare` bare-negative counts under-read that phrasing.
+>    Those counts were superseded by `negatives`. Nothing to fix.
+> 3. ~~(B): 3 of 14 assert a negative~~ → **12 of 14.**
+>
+> **Findings 1 and 4 stand.** Finding 1: the replay cannot test P4.1's anchoring,
+> because the export has no research mode. Finding 4: the (B) turns differ between
+> sweeps.
+>
+> **One further fact P2.8 needs, verified at HEAD.** The previous turn's footer
+> is **already in the conversation history**. `replay.py:496` appends `tr.answer`,
+> footer included. The live frontend saves the full result content and sends it
+> back. `strip_answer_footer`'s `_ECHOED_FOOTER`
+> (`utils/search_scope.py:1602`) already recognises a trailing
+> `*Search scope: …*` line, because P3.5 found the model echoing it.
+
 **Done:**
-- **P2.10's measurement, over all ten replay directories.** Its own defect is
-  **n=1 in 608 answered turns**. Session 9 counted it over five directories and
+- **P2.10's measurement, over all ten replay directories.** ~~Its own defect is
+  **n=1 in 608 answered turns**.~~ **WRONG DETECTOR: it is 4 (see the correction above).** Session 9 counted it over five directories and
   209 turns; the count did not grow.
 - **P2.10 is NOT ticked.** My recommendation is to close it as measured and not
   built (reasoning below). **That is the user's decision and it has not been
@@ -2023,7 +2076,7 @@ exactly the kind of rule an ad-hoc script gets wrong:
 
 (Run from `server_py/`. Expected: 608 answered, A = 1, B = 14.)
 
-**Why I recommend closing P2.10 without building.** At 1 in 608 (0.16%) it is not
+~~**Why I recommend closing P2.10 without building.**~~ **(Superseded: fold P2.10 into P2.8. See the correction above.)** At 1 in 608 (0.16%) it is not
 a rate. It is also stochastic: the same turn answered normally in reps 1 and 3.
 The row allows two fixes. The first is to carry the previous turn's scope forward,
 which means new cross-turn state. The second is to fire the footer on a turn that
@@ -2061,7 +2114,7 @@ lawyer with no disclosure. That trade is the user's to make.
   about. 6350's Manager then told the lawyer to switch to *"Legislation & Case Law"
   mode*, which is P4.1(b)'s wrong control name.
 
-- **3. P2.2's `NOT_FOUND` detector is blind to that sentence.**
+- ~~**3. P2.2's `NOT_FOUND` detector is blind to that sentence.**~~ **(FALSE. `NOT_FOUND` is not P2.2's detector; `NEG_ASSERTED` is, and it matches. See the correction above.)**
   `NOT_FOUND.search("The available database does not contain information on this
   specific issue.")` is **False**. So is the tool-set variant (*"…do not contain
   case law"*). *"The research agent returned no results"* is **True**, and that
