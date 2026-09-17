@@ -2191,7 +2191,7 @@ P2.7, P2.8, P2.10**. P2.10 is awaiting a decision, not work.
 - **Three instrument corrections**, in `blanks` (two) and `scoperecord` (one).
   None moved a published number.
 - **New row P4.5**, measure-first: a worker whose final completion is lost.
-- **1050 tests** (1009 → 1050).
+- **1051 tests** (1009 → 1051).
 - **Spend: $13.65.** Smoke $3.35 (24 min), acceptance $10.30 (82 min), against
   an estimate of about $11 and 75 minutes.
 - **Ledger: 22 of 35 rows** (one row added), **6 of 14 buckets**.
@@ -2319,7 +2319,7 @@ P2.7, P2.8, P2.10**. P2.10 is awaiting a decision, not work.
   the exact product code they measured. The tooling commits followed the sweep.
 
 **State of the branch:** `fix/prepilot-defects`, no upstream, **NOTHING
-PUSHED**. Whole-plan-then-one-push stands. **1050 tests green.** Ledger:
+PUSHED**. Whole-plan-then-one-push stands. **1051 tests green.** Ledger:
 **22 of 35 rows, 6 of 14 buckets**, primary bucket closed for 18 of 41
 sessions. Wave 2's open rows: **P2.4, P2.7**.
 
