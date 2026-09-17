@@ -18,8 +18,11 @@ from ..utils.search_scope import (
     currency_note,
     enabling_power_note,
     legislation_search_note,
+    not_held_note,
+    record_case_law_search,
     record_currency,
     record_enabling_power,
+    record_not_held,
     record_relations,
     record_search,
     section_search_note,
@@ -574,6 +577,13 @@ async def run_worker_tool(
             # report block forbidding a currency statement the step's own
             # retrieval supports.
             record_currency(search_log, name, args, hit["raw"])
+            # P2.4 (B12): and a case-law search, for the lawyer-facing corpus
+            # disclosure. A memo-served search is still a search this step ran;
+            # P2.9 is the measured cost of forgetting that on this path.
+            # Self-gated on the tool name.
+            record_case_law_search(search_log, name, args, hit["raw"])
+            # P2.4 (6373): a memoised not-found is still this step's not-found.
+            record_not_held(search_log, name, args, hit["raw"])
             if parent_on_chunk:
                 await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
                 await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done (cached)"})
@@ -673,14 +683,24 @@ async def run_worker_tool(
     # For search_case_law: inject a Phase 2 nudge to call get_case_law_text for
     # the most relevant results, or a stop note on zero results.
     case_law_note = ""
+    # P2.4 (B12): recorded before the parse below, so an errored search (which
+    # is not always JSON) is still recorded, as not ok. It feeds the code-emitted
+    # corpus disclosure on the answer, which fires on any turn that searched
+    # case law, not only on the empty result this note handles.
+    record_case_law_search(search_log, name, args, result)
     if name == "search_case_law":
         try:
             raw_data = json.loads(result)
             n = raw_data.get("total", 0)
             if n == 0 and not raw_data.get("error"):
+                # P2.4 (B12): "does not comprehensively index" was false; the
+                # gap is total (TNA rejects `court=csoh` with a 400). The UKSC
+                # half matters as much: Scottish appeals ARE indexed.
                 case_law_note = (
                     "\n\n[This search returned 0 results. The National Archives Find Case Law database "
-                    "does not comprehensively index Scottish Court of Session cases. "
+                    "holds no decisions of the Court of Session, the Sheriff Appeal Court, the Sheriff "
+                    "Courts or the High Court of Justiciary; Scottish appeals decided by the UK Supreme "
+                    "Court are included. "
                     "If you have already tried 2–3 different queries without results, stop searching "
                     "and compose your answer noting that no directly relevant case law was found in this database.]"
                 )
@@ -929,6 +949,14 @@ async def run_worker_tool(
     if name in ("get_legislation_changes", "get_legislation_text"):
         record_currency(search_log, name, args, raw_result)
 
+    # P2.4 (6373): a retrieval by id that the index answered with not-found.
+    # The Worker read that as proof the lawyer's citation was wrong in all three
+    # reps of the pre-measurement. Stated at the result, and carried to the
+    # Manager in the worker's block. Keyed on the API's own not-found detail,
+    # never on the model's prose.
+    not_held = not_held_note(args, raw_result)
+    record_not_held(search_log, name, args, raw_result)
+
     from .provider_factory import get_summarise_threshold
     # Two independent triggers: this result is large on its own, OR the run has
     # accumulated enough context that even a modest addition is no longer free.
@@ -1092,6 +1120,7 @@ async def run_worker_tool(
     # ("call search_legislation_sections with these ids") stays the last thing
     # the model reads on a productive search.
     result += scope_note
+    result += not_held
     result += enabling_note
     result += relations_note
     result += phase2_note

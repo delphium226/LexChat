@@ -1,4 +1,9 @@
-"""What a retrieval can and cannot establish — FIX_PLAN P2.2 (B5) and P2.3 (B3b).
+"""What a retrieval can and cannot establish — FIX_PLAN P2.2 (B5), P2.3 (B3b)
+and P2.4 (B12).
+
+P2.4 is further down, in its own section: the case-law corpus gap, disclosed in
+code on every turn that searched case law, and the not-held note that stops a
+404 being read as a wrong citation.
 
 Two rows, one module, because they are the same fix at the same four seams: the
 tool result, the worker's report, the lawyer-facing footer, and the
@@ -89,6 +94,12 @@ __all__ = [
     "carried_scope_footer",
     "strip_answer_footer",
     "incomplete_steps_note",
+    "CASE_LAW_COVERAGE_SENTENCE",
+    "record_case_law_search",
+    "case_law_scope_clause",
+    "case_law_scope_footer",
+    "not_held_note",
+    "record_not_held",
 ]
 
 # Measured with `python -m tools.lex_probe --coverage`, which also runs the
@@ -1426,7 +1437,12 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     query list lives in the audit trace, and 6409 turn 7 ran 25 searches, so
     printing them all would bury the report it is attached to.
     """
-    if not log:
+    # P2.4 (B12): a case-law search is recorded in the same log, for the
+    # lawyer-facing footer only. It must not wake this block: a case-law-only
+    # step would get a block demanding "the search terms above" with none above,
+    # which is P2.9's defect in a new place. So a log holding nothing else is
+    # treated as empty, exactly as it was before case law was recorded.
+    if not log or all(e.get("tool") == CASE_LAW_TOOL for e in log):
         return ""
     searches = [e for e in log if e.get("tool") == "search_legislation"]
     sections = [e for e in log if e.get("tool") == "search_legislation_sections"]
@@ -1486,6 +1502,11 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     _currency = _currency_limb(log)
     if _currency:
         lines.append(_currency)
+    # P2.4 (6373). The Manager relayed "could you check the citation" from a
+    # report whose tool result it never saw; the fact travels with the report.
+    _not_held = _not_held_limb(log)
+    if _not_held:
+        lines.append(_not_held)
     lines.append(
         "NONE of this can establish that something does not exist. If any part "
         "of the answer you write reports something as not found, it MUST quote "
@@ -1620,6 +1641,262 @@ def strip_answer_footer(text: str) -> str:
         return text
 
 
+def _listed_terms(queries) -> tuple:
+    """(terms, rendered) for a footer: the first two queries, quoted once.
+
+    The model routinely quotes its own query ('"Water Industry Commission"'),
+    which wrapped again renders as `""…""`. Strip the model's quoting and dedupe
+    case-insensitively before re-quoting once.
+
+    **Every quote character, not just the outer ones**, and P2.3's acceptance
+    sweep is what showed why. `.strip('"')` on `"Education (Scotland) Act
+    1962" 117` removes the leading quote and leaves the internal one, so the
+    lawyer read `"Education (Scotland) Act 1962" 117"`, which is unbalanced and
+    reads as two searches where there was one. Phrase-search quoting is
+    deliberately lost here: the line is provenance prose, and the exact queries
+    are in the audit trace.
+    """
+    terms, seen = [], set()
+    for q in queries:
+        q = re.sub(r"[\"'“”]+", " ", q or "")
+        q = re.sub(r"\s+", " ", q).strip()
+        if q and q.lower() not in seen:
+            seen.add(q.lower())
+            terms.append(q)
+    quoted = ", ".join(f'"{t}"' for t in terms[:2])
+    rest = len(terms) - 2
+    more = f" ({rest} further quer{'y' if rest == 1 else 'ies'} not listed)" if rest > 0 else ""
+    return terms, quoted + more
+
+
+# ---------------------------------------------------------------------------
+# B12 — the case-law corpus gap, disclosed in code (FIX_PLAN P2.4)
+# ---------------------------------------------------------------------------
+#
+# **The gap is total, and the obvious wording of it is false.** The National
+# Archives' Find Case Law offers 42 court codes and none is Scottish;
+# `court=csoh` is rejected with a 400 (P5.2, Session 5). But Scottish appeals
+# that reached the UK Supreme Court ARE indexed (*Daly v HM Advocate*, *ABC v
+# Principal Reporter*, *X v Lord Advocate*). So "no Scottish case law" or
+# "Scottish courts are not indexed" would understate what is there and teach a
+# lawyer to distrust a sound UKSC result, which is the Invariant 1 regression.
+# What is missing is four named courts. "Does not comprehensively index", the
+# wording the prompts used to carry, is false in the other direction: the gap
+# is not partial.
+#
+# **An empty result is a disclosure; a full one is the trap.** A Scots-law
+# query returns 50 English judgments that mention Scotland, not nothing. So the
+# one note the code already emitted (on ZERO results, `agent_shared.py`) never
+# fires where it matters. In 6375 turn 2, a Deep Research run with 18-30
+# `search_case_law` calls, the lawyer was told nothing and was given English
+# common-interest privilege as Scots law. That doctrine error is P3.3's; this is
+# the disclosure that should have sat beside it. Before-column: 0 of 65 turns
+# that searched case law in the replay corpus carry this disclosure from the
+# code, and 4 carry it from the model (`replay_report caselaw`).
+#
+# **Gated on the structural fact that this turn called `search_case_law`.** Not
+# on a jurisdiction filter: 6375 ran with none. Not on reading the question or
+# the answer for "Scots law": that is a prose detector in the product, which
+# this module refuses (see `answer_scope_footer`). The statement is true for
+# every user, and this deployment is the Scottish Government's.
+#
+# **One line, never two.** The clause joins the legislation line when there is
+# one (fresh or carried), and stands alone only when there is not, which is
+# every `case_law_only` turn (6385). Three things read that line and each
+# breaks on a second one: `_earlier_footers` parses only the LAST line of the
+# trailing footer block, so a case-law line after the legislation one would
+# switch P2.8's carried line off without an error; `replay_report corpus`
+# counts two `*Search scope:` openers in one answer as a duplicate footer; and
+# the lawyer reads one disclosure more readily than two.
+#
+# **"Privy Council" is deliberately absent.** The prompts used to say Scottish
+# matters appear via the UK Supreme Court "or Privy Council". Only the UKSC
+# route is verified; three `court=ukpc` probes (2026-09-17) found no Scottish
+# case, which proves nothing either way.
+
+CASE_LAW_TOOL = "search_case_law"
+_CASE_LAW_DATABASE = "the case-law database (the National Archives' Find Case Law)"
+
+# Worded to stay clear of `NEG_ASSERTED`, `NOT_FOUND` and every other detector
+# that reads these answers (pinned by `test_case_law_gap.py`). "It holds … but
+# not the decisions of" rather than "does not index" or "no judgments": both of
+# those trip `NEG_ASSERTED`, which would enrol a positive turn as a negative the
+# moment any instrument read the whole answer instead of the prose.
+CASE_LAW_COVERAGE_SENTENCE = (
+    "It holds Scottish appeals decided by the UK Supreme Court, but not the "
+    "decisions of the Court of Session (Inner or Outer House), the Sheriff "
+    "Appeal Court, the Sheriff Courts or the High Court of Justiciary, so "
+    "judgments it returns for a Scottish question may come from courts outside "
+    "Scotland."
+)
+
+
+def record_case_law_search(log: Optional[list], name: str, args: dict, data: Any) -> None:
+    """Record one case-law search for the lawyer-facing footer. Never raises.
+
+    Self-gated on the tool name, so a caller may pass every tool through it.
+    `ok` is False when the search came back as an error (the executor's
+    `Error executing tool: …` string, or JSON carrying `error`, which is what a
+    rejected court code returns), so the footer never says a search ran when it
+    failed.
+    """
+    if log is None or name != CASE_LAW_TOOL:
+        return
+    try:
+        d = _as_dict(data)
+        results = d.get("results")
+        log.append({
+            "tool": CASE_LAW_TOOL,
+            "query": str((args or {}).get("query") or "")[:200],
+            "shown": len(results) if isinstance(results, list) else None,
+            "ok": bool(d) and not d.get("error"),
+        })
+    except Exception:
+        pass
+
+
+def _case_law_body(entries: Optional[list]) -> str:
+    """The case-law statement, without its opening words or markup. "" if none."""
+    rows = [e for e in (entries or [])
+            if isinstance(e, dict) and e.get("tool") == CASE_LAW_TOOL]
+    if not rows:
+        return ""
+    done = [e for e in rows if e.get("ok", True)]
+    terms, listed = _listed_terms(e.get("query") for e in (done or rows))
+    if done:
+        head = f"{_CASE_LAW_DATABASE} was searched" + (f" for {listed}" if terms else "")
+    else:
+        head = (f"a search of {_CASE_LAW_DATABASE} was attempted"
+                + (f" for {listed}" if terms else "")
+                + " and returned an error")
+    return f"{head}. {CASE_LAW_COVERAGE_SENTENCE}"
+
+
+def case_law_scope_clause(entries: Optional[list]) -> str:
+    """P2.4 (B12): the case-law statement as a clause on an existing scope line.
+
+    Appended inside the legislation line, fresh or carried, so a turn that
+    searched both corpora still shows the lawyer one line. "" when this turn ran
+    no case-law search. Never raises.
+    """
+    try:
+        body = _case_law_body(entries)
+        return f" For this reply {body}" if body else ""
+    except Exception:
+        return ""
+
+
+def case_law_scope_footer(entries: Optional[list]) -> str:
+    """P2.4 (B12): the case-law statement as a scope line of its own.
+
+    For a turn with no legislation line to join, which is every `case_law_only`
+    turn and a hybrid turn that searched only case law with nothing carried.
+    The caller tries the legislation lines first and uses this only when both
+    are empty, so exactly one line reaches the lawyer. Same single-line
+    `*Search scope: …*` shape, which `_ECHOED_FOOTER` and
+    `replay_report._without_footer` both strip. Never raises.
+    """
+    try:
+        body = _case_law_body(entries)
+        return f"\n\n*Search scope: for this reply {body}*" if body else ""
+    except Exception:
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# P2.4, second half: a record the index does not hold is not a wrong citation
+# ---------------------------------------------------------------------------
+#
+# **Measured before building, at HEAD `4890573`** (`wave2_p24_pre`, 6373 n=3).
+# FrankieH cited SSI 2026/170, correctly; LEX 404s it. All three Worker reports
+# attributed the miss to her: *"It is possible the citation contains an error"*,
+# *"please verify the year and SSI number"*, *"It appears there may be a
+# confusion with … SSI 2021/170"*. The Manager passed that on in two of the
+# three (one as "Could you check the citation", one as "It is possible you are
+# referring to the 2021 Regulations"), and filtered it in the third.
+#
+# **Where the inference forms is structural.** Every one of those runs called
+# `get_legislation_text` on `ssi/2026/170` and was handed
+# `Error executing tool: {"detail":"Legislation not found: ssi/2026/170"}`. The
+# model reads "not found" on a direct retrieval by id as proof the id is wrong.
+# The replay corpus holds 40 such results, 32 of them in the two sessions where a
+# lawyer's citation was questioned (6409 and 6373). The reporting rule on every
+# search note already says "never to the user's citation", and did not reach
+# this, because this is not a search result.
+#
+# So the fact is stated at that result, in code, and carried to the Manager in
+# the worker's block, the same two seams P2.2 needed. Not a lawyer-facing
+# clause: "is this instrument held" is P3.7's (`/legislation/lookup`), and a
+# footer cannot stop the prose questioning the citation, which is what
+# `negatives` grades.
+
+_NOT_HELD = re.compile(r"Legislation not found:\s*([A-Za-z0-9/_.-]+)")
+
+
+def _not_held_id(args: dict, data: Any) -> str:
+    """The id a retrieval reported as not held, or "" if it did not."""
+    if not isinstance(data, str) or not data.startswith("Error executing tool"):
+        return ""
+    found = _NOT_HELD.search(data)
+    if not found:
+        return ""
+    return str((args or {}).get("legislation_id") or found.group(1)).strip()[:60]
+
+
+def not_held_note(args: dict, data: Any) -> str:
+    """The note appended to a retrieval the index answered with not-found.
+
+    In `[SEARCH SCOPE — …]` form, with no brackets inside, so the strip that
+    already removes tool blocks from an answer covers it unchanged. Never
+    raises.
+    """
+    try:
+        lid = _not_held_id(args, data)
+        if not lid:
+            return ""
+        return (
+            f"\n\n[SEARCH SCOPE — not held: this index has no record under the id "
+            f"{lid}. That is a fact about the index, not about the law and not "
+            f"about the user's citation. {LEX_COVERAGE_SENTENCE} A correct, "
+            "current citation is therefore often not held, and recent instruments "
+            "least of all. Do NOT write that the citation may be wrong or "
+            "contain an error, do NOT ask the user to check, verify or confirm "
+            "it, and do NOT present a different instrument (another year or "
+            "number) as the one the user meant. Say plainly that this index does "
+            "not hold it and that its contents could not be checked here. If "
+            "you built this id yourself, the id format may be at fault, not the "
+            "user.]"
+        )
+    except Exception:
+        return ""
+
+
+def record_not_held(log: Optional[list], name: str, args: dict, data: Any) -> None:
+    """Record a not-found retrieval for the worker's block. Never raises."""
+    if log is None:
+        return
+    try:
+        lid = _not_held_id(args, data)
+        if lid:
+            log.append({"tool": "not_held", "legislation_id": lid, "via": name})
+    except Exception:
+        pass
+
+
+def _not_held_limb(log: Optional[list]) -> str:
+    """The worker-block line naming what the index did not hold. "" if nothing."""
+    ids = [e.get("legislation_id") for e in (log or []) if e.get("tool") == "not_held"]
+    ids = [x for x in dict.fromkeys(ids) if x]
+    if not ids:
+        return ""
+    return (
+        f"Not held in this index (a direct retrieval by id found no record): "
+        f"{', '.join(ids[:8])}. That is the index's gap, not an error in the "
+        "user's citation: do not ask the user to check, verify or confirm it, "
+        "and do not suggest they meant a different year or number."
+    )
+
+
 def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) -> str:
     """The lawyer-facing scope line, emitted by code on every researched answer.
 
@@ -1649,32 +1926,17 @@ def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) ->
     searches = [s for s in all_entries if s.get("tool") == "search_legislation"]
     if not searches:
         return ""
-    # The model routinely quotes its own query ('"Water Industry Commission"'),
-    # which wrapped again renders as `""…""`. Strip the model's quoting and
-    # dedupe case-insensitively before re-quoting once.
-    #
-    # **Every quote character, not just the outer ones**, and P2.3's acceptance
-    # sweep is what showed why. `.strip('"')` on `"Education (Scotland) Act
-    # 1962" 117` removes the leading quote and leaves the internal one, so the
-    # lawyer read `"Education (Scotland) Act 1962" 117"` — unbalanced, and it
-    # reads as two searches where there was one. Phrase-search quoting is
-    # deliberately lost here: this line is provenance prose, and the exact
-    # queries are in the audit trace.
-    terms, seen = [], set()
-    for s in searches:
-        q = re.sub(r"[\"'“”]+", " ", s.get("query") or "")
-        q = re.sub(r"\s+", " ", q).strip()
-        if q and q.lower() not in seen:
-            seen.add(q.lower())
-            terms.append(q)
+    # Quote handling and the two-term cut are shared with the case-law clause;
+    # see `_listed_terms`.
+    terms, listed = _listed_terms(s.get("query") for s in searches)
     if not terms:
         return ""
-    quoted = ", ".join(f'"{t}"' for t in terms[:2])
-    rest = len(terms) - 2
-    more = f" ({rest} further quer{'y' if rest == 1 else 'ies'} not listed)" if rest > 0 else ""
     filters_phrase = _lawyer_filters_phrase(cfg)
+    # P2.4 (B12): the case-law clause goes LAST, inside this one line. First
+    # would break `_FRESH_FOOTER`'s anchored parse; a second line would be
+    # skipped by `_earlier_footers`, which reads only the last one.
     return (
-        f"\n\n*Search scope: the legislation index was searched for {quoted}{more}; "
+        f"\n\n*Search scope: the legislation index was searched for {listed}; "
         f"{filters_phrase}. This is a ranked search of an index that is known to be "
         "incomplete — roughly 85% of 2025 Scottish SIs and under 10% of "
         "instruments made in 2026 are held (sampled Sep 2026) — so anything "
@@ -1682,7 +1944,8 @@ def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) ->
         "as not found was not found in this index, which is not the same as being "
         f"absent from the law.{_enabling_footer_clause(all_entries)}"
         f"{_relations_footer_clause(all_entries)}"
-        f"{_currency_footer_clause(all_entries)}*"
+        f"{_currency_footer_clause(all_entries)}"
+        f"{case_law_scope_clause(all_entries)}*"
     )
 
 
@@ -1821,7 +2084,10 @@ def carried_scope_footer(
             "found in those searches was not found in this index, which is not "
             f"the same as being absent from the law.{_enabling_footer_clause(entries)}"
             f"{_relations_footer_clause(entries)}"
-            f"{_currency_footer_clause(entries)}*"
+            f"{_currency_footer_clause(entries)}"
+            # P2.4 (B12): a hybrid follow-up that searched only case law. This
+            # clause is about THIS reply's own search, so it is true here too.
+            f"{case_law_scope_clause(entries)}*"
         )
     except Exception:
         return ""

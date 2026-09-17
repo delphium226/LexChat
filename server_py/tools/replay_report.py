@@ -3202,6 +3202,304 @@ def _invariant_one_prose(before: Path, after: Path, only: Optional[list]) -> Non
             print(ln)
 
 
+# --- P2.4 (B12) acceptance: the case-law corpus gap --------------------------
+#
+# **Why `SCOTS_CASELAW_GAP` cannot grade this row, in both directions.**
+#
+# (1) It over-reads. It fires on the mere mention of a Scottish court, so
+#     *"Rule 35.8 of the Rules of the Court of Session 1994"*, *"the Clerk of the
+#     Sheriff Appeal Court"* and *"sheriff court jurisdiction"* all count as a
+#     disclosure. Over the twelve pre-P2.4 directories it fires on 26 answered
+#     turns. 22 of them never searched case law, and not one of those 22
+#     discloses anything. It is left as it is, because `summary` and `compare`
+#     publish its count; `caselaw` uses `caselaw_gap_statements` instead.
+# (2) After P2.4 it is satisfied by construction. The code line names the Court
+#     of Session on every turn that searched case law, so a full-answer read
+#     cannot tell the code's disclosure from the model's. Hence the split, as in
+#     `negatives`: "disclosed" on the full answer, "model" on the prose with the
+#     footer removed.
+#
+# `caselaw_gap_statements` asks for three things in ONE sentence: a Scottish
+# court (or Scottish case law) is named, the corpus is named ("index",
+# "database", "covers", "includes", …), and a limit is stated ("not", "only",
+# "except", …). Validated over all twelve pre-P2.4 directories with `--drops`
+# (every sentence naming a Scottish court that was NOT counted) and `--answers`
+# (every one that was).
+
+# The code's own sentence, by its fixed opening. `search_scope.
+# CASE_LAW_COVERAGE_SENTENCE` starts with it; `test_case_law_gap.py` pins that.
+CASE_LAW_CODE = ("It holds Scottish appeals decided by the UK Supreme Court, "
+                 "but not the decisions of the Court of Session")
+_SCOTS_COURT = re.compile(
+    r"court of session|\bcs(?:oh|ih)\b|sheriff (?:appeal )?courts?\b"
+    r"|high court of justiciary|scottish (?:domestic )?(?:courts?|case ?law|cases|"
+    r"judgments?|decisions|jurisprudence)\b|courts? (?:of|in) scotland",
+    re.I,
+)
+_GAP_CORPUS = re.compile(
+    r"\b(?:index\w*|database|corpus|collection|cover\w*|includ\w*|holds?|"
+    r"contain\w*|available|represented|hosts?|national archives|find case law)\b",
+    re.I,
+)
+_GAP_LIMIT = re.compile(
+    r"\b(?:not|no|only|except|unless|outside|exclud\w*|absent|missing|lacks?|"
+    r"neither|nor|without)\b|n't\b",
+    re.I,
+)
+_UKSC = re.compile(r"supreme court|\buksc\b", re.I)
+_CASELAW_URL = re.compile(r"\]\((https?://caselaw\.nationalarchives\.gov\.uk/([a-z]+)/[^)\s]+)\)", re.I)
+# How the National Archives titles a Scottish appeal. A proxy, and a
+# conservative one: it can miss a Scottish appeal whose title names none of
+# these, never the reverse in practice.
+_SCOTTISH_TITLE = re.compile(
+    r"\(scotland\)|lord advocate|\b(?:hm|his majesty's|her majesty's) advocate\b"
+    r"|scottish ministers|advocate general for scotland|principal reporter",
+    re.I,
+)
+
+
+def caselaw_gap_statements(text: str) -> list:
+    """Every sentence that states the case-law corpus gap. [] for none."""
+    out = []
+    for sentence in _sentences(text or ""):
+        s = sentence.replace(_DOT, ".")
+        if (_SCOTS_COURT.search(s) and _GAP_CORPUS.search(s)
+                and _GAP_LIMIT.search(s)):
+            out.append(s.strip())
+    return out
+
+
+def _caselaw_titles(turn: dict) -> dict:
+    """url -> title, from every `search_case_law` result this turn retrieved."""
+    titles = {}
+    for dg in (turn.get("audit") or {}).get("delegations") or []:
+        for tl in dg.get("tools") or []:
+            if tl.get("name") != "search_case_law":
+                continue
+            o = _json_or_none(tl.get("raw_result"))
+            for r in (o.get("results") or []) if isinstance(o, dict) else []:
+                if isinstance(r, dict) and r.get("url"):
+                    titles[str(r["url"]).rstrip("/")] = str(r.get("title") or "")
+    return titles
+
+
+def caselaw_rows(doc: dict) -> list:
+    """One row per answered turn: what it searched, and what the lawyer was told."""
+    rows = []
+    for t in doc.get("turns", []):
+        answer = t.get("answer") or ""
+        if not answer.strip():
+            continue
+        tools = [x for dg in (t.get("audit") or {}).get("delegations") or []
+                 for x in dg.get("tools") or []]
+        prose = _without_footer(answer)
+        model = caselaw_gap_statements(prose)
+        titles = _caselaw_titles(t)
+        uksc = {u.rstrip("/") for u, court in _CASELAW_URL.findall(prose)
+                if court.lower() == "uksc"}
+        rows.append({
+            "turn": t.get("turn"),
+            "mode": t.get("chat_mode") or "",
+            "cl_calls": sum(1 for x in tools if x.get("name") == "search_case_law"),
+            "disclosed": bool(caselaw_gap_statements(answer)),
+            "code": CASE_LAW_CODE in answer,
+            "model": model,
+            "model_names_uksc": any(_UKSC.search(s) for s in model),
+            "lines": answer.count("*Search scope:"),
+            "chars": len(prose),
+            "caselaw_links": len({u for u, _ in _CASELAW_URL.findall(prose)}),
+            "uksc_cited": len(uksc),
+            "uksc_scottish_cited": sum(
+                1 for u in uksc if _SCOTTISH_TITLE.search(titles.get(u, ""))),
+        })
+    return rows
+
+
+def caselaw_verdict(row: dict) -> Optional[str]:
+    """P2.4's acceptance for one answered turn. None means nothing wrong.
+
+    "UNDISCLOSED"   — the turn searched case law and the lawyer was not told
+                      what the corpus lacks. The defect.
+    "MISATTRIBUTED" — the code's line on a turn that searched no case law.
+    "TWO_LINES"     — more than one `*Search scope:` line. The clause must join
+                      the legislation line, never follow it: P2.8's parse reads
+                      only the last line, and `corpus` counts two as a duplicate.
+    """
+    if row["cl_calls"] and not row["disclosed"]:
+        return "UNDISCLOSED"
+    if row["code"] and not row["cl_calls"]:
+        return "MISATTRIBUTED"
+    if row["lines"] > 1:
+        return "TWO_LINES"
+    return None
+
+
+def cmd_caselaw(args) -> int:
+    """P2.4 acceptance: every turn that searched case law, and its disclosure.
+
+    **Exits 1 on a finding**, like `negatives`, `nosearch` and `halts`. A
+    directory that predates P2.4 exits 1 too, and says so: its UNDISCLOSED rows
+    ARE the before-column. It is deliberately not excused the way `nosearch`
+    excuses a pre-P2.2 directory, because "no code line anywhere" is also what a
+    post-P2.4 directory looks like if the wiring silently failed.
+    """
+    docs = load_runs(Path(args.dir))
+    if not docs:
+        print(f"No run files in {args.dir}")
+        return 1
+    print(f"P2.4 acceptance over {args.dir}")
+    print("  cl        = search_case_law calls this turn (audit trace)")
+    print("  disclosed = the gap is stated anywhere in the answer the lawyer saw")
+    print("  code      = the code-emitted line is present")
+    print("  model     = the gap is stated in the model's prose (footer removed)")
+    print("  uksc/scot = UK Supreme Court judgments linked in the prose, and how")
+    print("              many of those are Scottish appeals (by their TNA title)")
+    print()
+    bad = []
+    per = {}
+    listed = []
+    for doc in sorted(docs, key=lambda d: (d["session_id"], d.get("rep", 1))):
+        sid = str(doc["session_id"])
+        agg = per.setdefault(sid, dict(runs=0, turns=0, disclosed_all=0, cl=0,
+                                       disclosed=0, code=0, model=0))
+        agg["runs"] += 1
+        for row in caselaw_rows(doc):
+            agg["turns"] += 1
+            agg["disclosed_all"] += row["disclosed"]
+            verdict = caselaw_verdict(row)
+            if verdict:
+                bad.append((doc, row, verdict))
+            if row["cl_calls"]:
+                agg["cl"] += 1
+                agg["disclosed"] += row["disclosed"]
+                agg["code"] += row["code"]
+                agg["model"] += bool(row["model"])
+            if args.all or row["cl_calls"] or verdict:
+                listed.append((doc, row, verdict))
+
+    if listed:
+        print(f"{'session':>8} {'rep':>3} {'turn':>4} {'mode':>13} {'cl':>3} "
+              f"{'disclosed':>9} {'code':>4} {'model':>5} {'uksc':>4} {'scot':>4} "
+              f"{'chars':>6}  verdict")
+        print("-" * 84)
+        for doc, row, verdict in listed:
+            yn = lambda v: "yes" if v else "-"   # noqa: E731
+            print(f"{doc['session_id']:>8} {doc.get('rep', 1):>3} {row['turn']:>4} "
+                  f"{row['mode'][:13]:>13} {row['cl_calls']:>3} "
+                  f"{yn(row['disclosed']):>9} {yn(row['code']):>4} "
+                  f"{yn(row['model']):>5} {row['uksc_cited']:>4} "
+                  f"{row['uksc_scottish_cited']:>4} {row['chars']:>6}  "
+                  f"{verdict or 'ok'}")
+            if args.answers:
+                for s in row["model"]:
+                    print(f"{'':>10}model: {s[:args.chars]}")
+        print()
+
+    print(f"{'session':>8} {'runs':>4} {'turns':>5} {'disclosing':>10} | "
+          f"{'searched case law':>17} {'disclosed':>9} {'code':>4} {'model':>5}")
+    for sid, a in sorted(per.items()):
+        print(f"{sid:>8} {a['runs']:>4} {a['turns']:>5} {a['disclosed_all']:>10} | "
+              f"{a['cl']:>17} {a['disclosed']:>9} {a['code']:>4} {a['model']:>5}")
+    tot = {k: sum(a[k] for a in per.values()) for k in
+           ("turns", "disclosed_all", "cl", "disclosed", "code", "model")}
+    print(f"{'total':>8} {'':>4} {tot['turns']:>5} {tot['disclosed_all']:>10} | "
+          f"{tot['cl']:>17} {tot['disclosed']:>9} {tot['code']:>4} {tot['model']:>5}")
+    stated = [(r, s) for _, r, _ in listed for s in r["model"]]
+    if stated:
+        with_uksc = sum(1 for r, s in stated if _UKSC.search(s))
+        print(f"model statements of the gap: {len(stated)}, of which name the UK "
+              f"Supreme Court route: {with_uksc}")
+    print()
+    counts = Counter(v for _, _, v in bad)
+    for v in ("UNDISCLOSED", "MISATTRIBUTED", "TWO_LINES"):
+        print(f"{v:<14}{counts[v]}")
+    if args.drops:
+        print()
+        print("Sentences naming a Scottish court that were NOT graded as a "
+              "statement of the gap (both-directions audit):")
+        for doc in docs:
+            for t in doc.get("turns", []):
+                for s in _sentences(_without_footer(t.get("answer") or "")):
+                    s = s.replace(_DOT, ".")
+                    if _SCOTS_COURT.search(s) and not caselaw_gap_statements(s):
+                        print(f"  {doc['session_id']} r{doc.get('rep', 1)} "
+                              f"t{t.get('turn')}: {s.strip()[:args.chars]}")
+    if args.before:
+        print()
+        _caselaw_invariant_one(Path(args.before), Path(args.dir), args.only)
+    if not tot["code"] and tot["cl"]:
+        print()
+        print("[!] No turn carries the code line: this directory predates P2.4, "
+              "or the wiring failed. Its UNDISCLOSED rows are a before-column.")
+    return 0 if not bad else 1
+
+
+def _caselaw_invariant_one(before: Path, after: Path, only: Optional[list]) -> None:
+    """Invariant 1 for P2.4, on the prose with the footer removed.
+
+    The line must make answers more precise about the corpus without making the
+    model less willing to cite a sound Scottish appeal to the UK Supreme Court.
+    So per session, per rep: answered turns, case-law calls, prose length per
+    turn slot, case-law links cited, UKSC links cited, and how many of those
+    are Scottish appeals.
+    """
+    def load(d: Path):
+        return [x for x in load_runs(d)
+                if not only or str(x.get("session_id")) in only]
+
+    b_docs, a_docs = load(before), load(after)
+    shared = ({str(x["session_id"]) for x in b_docs}
+              & {str(x["session_id"]) for x in a_docs})
+    if not shared:
+        print(f"  --before: no session shared with {before.name}")
+        return
+
+    def measure(docs):
+        slots, runs = {}, {}
+        for doc in docs:
+            sid = str(doc["session_id"])
+            if sid not in shared:
+                continue
+            run = runs.setdefault((sid, doc.get("rep", 1)), Counter())
+            for row in caselaw_rows(doc):
+                slots.setdefault((sid, row["turn"]), []).append(row["chars"])
+                run["turns"] += 1
+                run["cl"] += row["cl_calls"]
+                run["links"] += row["caselaw_links"]
+                run["uksc"] += row["uksc_cited"]
+                run["scot"] += row["uksc_scottish_cited"]
+                run["model"] += bool(row["model"])
+        return slots, runs
+
+    (b_slots, b_runs), (a_slots, a_runs) = measure(b_docs), measure(a_docs)
+    print(f"  Invariant 1 (model prose, footer removed): {before.name} -> "
+          f"{after.name}, sessions {', '.join(sorted(shared))}")
+    for sid in sorted(shared):
+        for key, label in (("turns", "answered turns / rep"),
+                           ("cl", "search_case_law calls / rep"),
+                           ("links", "case-law judgments linked / rep"),
+                           ("uksc", "UKSC judgments linked / rep"),
+                           ("scot", "... of which Scottish appeals / rep"),
+                           ("model", "turns stating the gap in prose / rep")):
+            bv = [v[key] for (s, _), v in b_runs.items() if s == sid]
+            av = [v[key] for (s, _), v in a_runs.items() if s == sid]
+            print(f"    {sid} {label:<38} {sum(bv) / max(len(bv), 1):7.1f} "
+                  f"(n={len(bv)}) -> {sum(av) / max(len(av), 1):7.1f} (n={len(av)})")
+        common = sorted(k for k in set(b_slots) & set(a_slots) if k[0] == sid)
+        grew = 0
+        lines = []
+        for k in common:
+            bm = sum(b_slots[k]) / len(b_slots[k])
+            am = sum(a_slots[k]) / len(a_slots[k])
+            grew += am > bm
+            lines.append(f"      t{k[1]:<3} {bm:7.0f} -> {am:7.0f}  "
+                         f"{'grew' if am > bm else 'shrank'}")
+        print(f"    {sid} mean prose length per turn slot: {grew} of "
+              f"{len(common)} grew")
+        for ln in lines:
+            print(ln)
+
+
 def cmd_corpus(args) -> int:
     """The retrieval shape of a replay directory — every number P2.3 published.
 
@@ -3439,6 +3737,22 @@ def main(argv: Iterable[str] | None = None) -> int:
                          "shared sessions only")
     ns.add_argument("--only", nargs="+", metavar="SESSION",
                     help="with --before, restrict both sides to these sessions")
+    cl = sub.add_parser("caselaw",
+                        help="P2.4 acceptance: turns that searched case law, and "
+                             "whether the corpus gap was disclosed (code vs model)")
+    cl.add_argument("--all", action="store_true",
+                    help="list every answered turn, not only case-law turns and findings")
+    cl.add_argument("--answers", action="store_true",
+                    help="print each model sentence graded as stating the gap")
+    cl.add_argument("--drops", action="store_true",
+                    help="print every sentence naming a Scottish court that was "
+                         "NOT graded as stating the gap")
+    cl.add_argument("--chars", type=int, default=400)
+    cl.add_argument("--before", metavar="DIR",
+                    help="Invariant 1 on the model's prose (footer removed), "
+                         "shared sessions only")
+    cl.add_argument("--only", nargs="+", metavar="SESSION",
+                    help="with --before, restrict both sides to these sessions")
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")
@@ -3458,6 +3772,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "currency": cmd_currency,
         "scoperecord": cmd_scoperecord,
         "nosearch": cmd_nosearch,
+        "caselaw": cmd_caselaw,
         "blanks": cmd_blanks,
         "corpus": cmd_corpus,
     }[args.cmd](args)

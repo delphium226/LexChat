@@ -206,9 +206,10 @@ CASE_LAW_TOOLS = [
                 "Search for UK case law judgments from the National Archives Find Case Law database. "
                 "Returns judgment titles, neutral citation numbers (NCNs), courts, dates, and URLs. "
                 "Use this to find leading cases, precedents, and judicial decisions on a legal topic. "
-                "DATABASE COVERAGE: Primarily covers England & Wales courts and UK-wide courts. "
-                "The Scottish Court of Session (CSOH/CSIH) and Sheriff Courts are NOT indexed. "
-                "For Scottish matters, this database contains only UK Supreme Court and Privy Council decisions."
+                "DATABASE COVERAGE: courts of England & Wales and UK-wide courts and tribunals. "
+                "It holds NO decisions of the Court of Session (CSOH/CSIH), the Sheriff Appeal Court, "
+                "the Sheriff Courts or the High Court of Justiciary. "
+                "Scottish appeals decided by the UK Supreme Court ARE included."
             ),
             "parameters": {
                 "type": "object",

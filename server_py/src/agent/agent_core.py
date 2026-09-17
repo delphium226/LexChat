@@ -30,6 +30,7 @@ from ..utils.research_halt import apply_halt_disclosure, halt_worker_report
 from ..utils.search_scope import (
     answer_scope_footer,
     carried_scope_footer,
+    case_law_scope_footer,
     strip_answer_footer,
     incomplete_steps_note,
     strip_scope_blocks,
@@ -630,8 +631,9 @@ async def process_user_request(
     manager_tools = get_manager_tools(peer_descriptions)
 
     accumulated_sources: list = []
-    # P2.2 (B5): every legislation search this turn ran, across ALL delegations.
-    # The footer describes the turn the lawyer asked, not one delegation of it.
+    # P2.2 (B5): every legislation search this turn ran, across ALL delegations,
+    # and (P2.4) every case-law search. The footer describes the turn the lawyer
+    # asked, not one delegation of it.
     all_searches: list = []
     # P2.8 (B5): set when this turn's searches cannot be known from
     # `all_searches`. A delegation that raised took its search record with it,
@@ -875,6 +877,13 @@ async def process_user_request(
     # conversation, so it cannot restate an earlier turn's negative.
     if not _footer and not scope_unknown:
         _footer = carried_scope_footer(messages, all_searches)
+    # P2.4 (B12): the case-law corpus disclosure. Both lines above already carry
+    # it as a clause when this turn searched case law; this is the turn with no
+    # legislation line to join it to, which is every `case_law_only` turn. Not
+    # suppressed by `scope_unknown`: it describes only the case-law searches
+    # this turn recorded, and those did run.
+    if not _footer:
+        _footer = case_law_scope_footer(all_searches)
     final["content"] = strip_answer_footer(final.get("content") or "") + _footer
 
     return final
@@ -958,7 +967,8 @@ async def run_deep_research(
     # and approved title — only this loop knows them, and "step 4 is incomplete"
     # is far more use to a lawyer than "some research was incomplete".
     halts: list = []
-    # P2.2 (B5): every legislation search the plan ran, across all steps.
+    # P2.2 (B5): every legislation search the plan ran, across all steps, and
+    # (P2.4) every case-law search.
     all_searches: list = []
 
     for i, step in enumerate(steps, 1):
@@ -1117,8 +1127,12 @@ async def run_deep_research(
     # P2.2 (B5): same code-emitted scope line as the Manager path. A Deep
     # Research report is composed from step findings and is the furthest any
     # answer travels from the searches that produced it.
+    # P2.4 (B12): the case-law disclosure rides the same `searches` record
+    # across steps, and joins the legislation line when there is one. 6375's
+    # failing turn is this path: 18-30 case-law searches and no disclosure.
     final["content"] = strip_answer_footer(
         final.get("content") or ""
-    ) + answer_scope_footer(all_searches, _get_cfg())
+    ) + (answer_scope_footer(all_searches, _get_cfg())
+         or case_law_scope_footer(all_searches))
 
     return final

@@ -1555,6 +1555,10 @@ def test_the_next_turn_neither_stacks_nor_chains():
     (_p28_search(*[f"q{i}" for i in range(9)]), {"_year_to": 2010}),
     (_p28_search('"Education (Scotland) Act 1962" 117'), {}),
     (_log_with(("ssi/2018/273", False)), {}),
+    # P2.4 (B12): the case-law clause rides inside the same line, after the part
+    # this parse anchors on. As a second line it would switch P2.8 off silently.
+    (_p28_search("q") + [{"tool": "search_case_law", "query": "privilege",
+                          "shown": 50, "ok": True}], {"_jurisdiction": "scotland"}),
 ])
 def test_every_fresh_footer_shape_is_read_back_exactly(log, cfg):
     """`_FRESH_FOOTER` is coupled to `answer_scope_footer`'s f-string. If the
