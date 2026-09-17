@@ -2567,9 +2567,60 @@ sessions. Wave 2's open rows: **P2.4, P2.7**.
 - **`SCOTS_CASELAW_GAP` and `NEG_BLAMED_USER` are left unchanged.** Both
   publish numbers. **From P2.4 on, `compare`'s `scots_gap_disclosures` counts
   the code's line.**
+- **The line fires on English-law case-law questions too.** It adds ~420
+  characters to each 6385 answer (XL Bully cases), and a 6375 Deep Research
+  line runs to ~1,800 characters with every clause present. This extends
+  P2.2's and P2.8's clutter trade, and the only structural alternative (a
+  jurisdiction filter) misses 6375, which ran with none. The user was told
+  the gate but was not asked about this cost separately, so **it is the
+  decision from this row most open to being overruled.**
 - **Product code was committed before each paid sweep**, so every run file
   names its code: `6806fa0` (smoke and A/B), `8006db9` (`wave2_p24`) and
   `051472d` (`wave2_p24_final`).
+
+**How this session worked, for whoever repeats it.** The scratch scripts that
+did these went with the session.
+- **Run every exit-1 check on a directory**, from `server_py/`:
+  ```
+  for c in halts negatives derivations blanks scoperecord nosearch caselaw; do
+    python -m tools.replay_report --dir ../docs/prepilot-fixes/evidence/replay/DIR $c > /dev/null
+    echo "$c $?"
+  done
+  ```
+  Exit 1 means findings. A directory from before P2.4 exits 1 on `caselaw` by
+  design, because its UNDISCLOSED rows are the before-column.
+- **Measure the before-column at HEAD.** Pin, start a server on HEAD, replay
+  into `<row>_pre`, then build. Source edits made while that server runs do
+  not reach it, because modules load at startup. Commit before starting the
+  post-fix server.
+- **To A/B an earlier commit without touching the working tree:**
+  1. `git worktree add --detach C:/Temp/<name> <sha>`.
+  2. Copy `server_py/.env` in. It is gitignored, and the server needs it.
+  3. From the worktree's `server_py/`, run `tools.replay pin`, then uvicorn,
+     then `tools.replay run --out-dir <absolute path into the main tree's
+     evidence/replay/>`, then `tools.replay restore`.
+  4. Delete the copied `.env`, then `git worktree remove --force`.
+
+  The run files name `<sha>`, because `replay.py` reads `git_head` from its own
+  checkout.
+- **To prove the tests fail without the fix:** copy `server_py/` to a scratch
+  directory, and apply string substitutions there. One run removes the wiring;
+  the other stubs the functions to return `""`. Then run the row's test files
+  in that copy, so the working tree is never touched.
+- **To stop a server started with `&`:** the task tool cannot see it. Get the
+  PID from `netstat -ano | grep ":8000 " | grep LISTEN`, then run
+  `taskkill //PID <pid> //F`.
+- **The heredoc backslash trap bit again.** A `python - <<'EOF'` edit whose
+  string literal held `"\\n\\n"` did not match `src/prompts.py`, which is
+  CRLF on disk (`read_text`/`write_text` preserve CRLF on Windows). The Edit
+  tool made the same change cleanly.
+- **Replay timings, measured this session:**
+  - 6375: $0.70–1.78 and 7–11 min per rep.
+  - 6373: $0.14–0.29 and 1–8 min.
+  - 6385: $0.14–0.24 and 1.5–15 min; one rep stalled on upstream idle
+    timeouts.
+
+  For P2.7, budget 6341 from `wave2_p28`: $2.1–2.8 and 14–21 min per rep.
 
 **State of the branch:** `fix/prepilot-defects`, no upstream, **NOTHING
 PUSHED**. Whole-plan-then-one-push stands. **1125 tests green.** Ledger:
@@ -2594,7 +2645,11 @@ alone. Wave 2's only open row is **P2.7**.
 
 **Next action:**
 1. **P2.7** is Wave 2's last open row, and it is the critical path to
-   **P3.1**. Its evidence is 6341 (see its row).
+   **P3.1**. Its evidence is 6341 (see its row). **Read the Session 14 note at the
+   end of its row first:** prompt rules move the discovery count (P2.4 cut
+   6373's turn-2/3 tool calls from 35 to 14), so derive the budget from
+   directories produced at `051472d` or later, or say which prompt the
+   distribution was measured under.
 2. **P4.5** now has a measured false negative that reached a lawyer, plus a
    rate (6 in 166, 1.7–7.7%). The candidate fix must cover the Deep Research synthesis
    as well as the Manager.
