@@ -2996,3 +2996,157 @@ PUSHED**. 1196 tests green. No server running; the dev box is restored.
 **Next action:** settle the two open questions, then **P3.1** (the keystone).
 Of the new rows, **P3.9** is the cheapest (deterministic, the fix is known) and
 blocks nothing.
+
+---
+
+## Session 16 — 2026-09-18 — the Wave 2 re-baseline, and P3.1 (B10, right Act wrong depth)
+
+**Done:**
+- **Both open questions decided by the user at the start.** (1) Re-baseline:
+  yes, at HEAD `2d9ae11`, before any P3.1 code. (2) D16: only the
+  one-call-per-Act rule is taken, folded into P3.1; the year window,
+  over-fetching and the title check stay parked in `docs/TODO.md` D16 (whose
+  claim that the year window "sits in row P2.2" was false and is struck).
+- **`wave2`, the Wave 2 re-baseline**: n=1 over all 41 sessions, $29.55, 4.0 h,
+  0 mismatches, 0 errored turns. Written up in `BASELINE.md`, *The Wave 2
+  re-baseline*. It is the Wave 3 baseline.
+- **P3.1 built and accepted, with two residuals booked by the user.** 6396 0/3
+  -> 3/3, 6365 0/3 -> 3/3, 6348 turn 1 0/3 -> 1/3 (`wave3_p31`, n=3 at
+  `779bfb2`, $3.34). New row **P3.11** for 6348's residual.
+- **New instrument, `replay_report depth`**, committed before any sweep
+  (`fd5213c`), with three later fixes (`03a4c66` the head column, `00a0c8a`
+  the strict readout, `19504eb` the `rail_sources` rename).
+- **Tests 1196 -> 1334** (138 new, 97 of them P3.1's product tests). Proven to
+  fail without the fix on a scratch copy of `server_py/`: 33 fail with the
+  wiring removed, 37 with the functions stubbed; of those, 6 and 9 fail only
+  incidentally (a removed dict key; a stubbed `""` that is not JSON; a stub
+  that does not warn). The rest of the 97 pass in both, by design: P1.6/B14
+  safety for pinpoint labels, the ranked-array decision pins, the
+  no-prompt-names-a-graded-provision guard, silence, over-reach and
+  fail-soft.
+- **Ledger (`plan_status`): 25 of 41 rows; 6 of 14 buckets closed, 3 partial**
+  (B10 now partial, waiting on P3.11). Primary bucket closed for 18 of 41
+  sessions, partial for 11.
+
+**What the measurement said before anything was built.**
+- **Retrieval was complete in 9 of 9 HEAD runs.** Every provision the three
+  lawyers wanted arrived with all its subsections, in one section search for
+  6348 and 6396. Depth was lost after retrieval, at three seams: the Worker's
+  write-up, the Deep Research synthesis, and the chat Manager's rewrite.
+- **A prompt taught the defect, the fourth time** (P2.5, P2.4, P4.6 before it):
+  every legislation Worker's citation example was a whole-section label, and
+  the quick-lookup Worker was told to cite "Act + section".
+- **The ranked sections array would have steered Phase 2 the wrong way.** It
+  ranks against the title search the prompt prescribes: it omits FOISA s.36
+  and SSI 2007/174 Sch 1. The row called it "the cheapest precision win
+  available"; for these sessions it was neither.
+
+**Decisions taken (all put to the user, all recommendations taken except the
+last):**
+- Ranked array: not used; docstring says why.
+- Depth: prompts at all three seams, code only if the smoke run showed a seam
+  still flattening. It did (the synthesis), and the user chose the
+  **pinpoint block** over a repair call.
+- One-call rule: **relaxed to three and capped in code** (3 ReAct rounds per
+  instrument per worker run), the user's choice over my recommendation to
+  leave it.
+- n=3 kept for the acceptance after the user asked why (Invariant 4's
+  promotion clause: 6365 flipped DELIVERED/SHALLOW across baseline reps with no
+  code change).
+- Booking: DONE, with 6348's turn 1 as **P3.11** and the wrong-pinpoint rate as
+  a watch item.
+- Taken without asking, and stated here: the quick-lookup Worker keeps its
+  one-call phrasing (the code cap applies to it anyway); the research Manager
+  prompt is unchanged (6348's depth was lost in the Worker's report, not the
+  pass-through).
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **The row's premise was the wrong layer.** P3.1 was written as a Phase 2
+  change (use the ranked array, relax the one-call rule). Measured, Phase 2 was
+  already complete in every acceptance run; the loss was in composition. Only
+  the pre-measurement showed this, and it is the fourth row whose defect a
+  prompt instructed.
+
+- **The first grader was lenient, and HEAD is what showed it.** "At subsection
+  depth at least once" was met on two of 6365's anchors by amendment notes
+  (*"substituted Section 57(7)(a)"*) while every timeline claim linked the bare
+  section. A strict readout (N of M references at depth) now prints beside the
+  verdict and separates the runs cleanly: delivered 50-95%, the lawyer's
+  complaint 0%, HEAD 0-17%.
+
+- **My own first prompt examples would have contaminated the acceptance.** They
+  used "Sch 1 para 1(2)" (6396's exact answer) and "s.21(2)" (a 6365 anchor): a
+  model copying the example's FORMAT could land on the graded provision by
+  accident. Caught on review before any spend; a test now pins it.
+
+- **The first smoke run earned its keep twice.** 6365's synthesis rewrote every
+  link label to the bare section despite the new prompt sentence (which met the
+  user's condition for code), and 6348's rule was gated on "the answer turns on
+  one section" when 6348's first answer cites six provisions in two Acts, so it
+  never fired. Both fixed before the paid n=3.
+
+- **A new failure mode the fix exposes: a wrong pinpoint.** 6365 rep 2 cites
+  s.57(1) for the interim-report period (s.57(3)(a)), three times, from a step
+  Worker's report. A whole-section citation was coarse but right; a wrong
+  subsection reads as verified, and P1.6 cannot catch it because the URL is
+  right. 3 of 34 timeline pinpoints after, 0 of 20 before. Watch item.
+
+- **Three instrument errors of my own, all caught before publishing.** (1) A
+  scratch prose count of -62% across Wave 2 was mine: I joined each session's
+  answers before stripping the end-anchored footer, which then ate every later
+  turn; recomputed per answer it is +22%. (2) The depth panel's source column
+  was named `sources_kept` but counted the rail's list, not
+  `timing.sources_kept` (6365: 3.3 -> 2.7 against 8.3 -> 8.0); renamed
+  `rail_sources` before either number was written up. (3) The wrong-pinpoint
+  checker flagged `s.57(3a)` and a correct `s.21(1)`; both read by hand.
+
+- **Two re-baseline numbers are not what `compare` prints.** In-force claims
+  "30 -> 61" is the old detector reading P2.5's own footer (P2.5's `currency`
+  grader: 43 -> 3); `nosearch`'s one UNQUALIFIED (6363 t5) is P2.5's required
+  disclaimer on a turn that does carry P2.4's case-law line.
+
+- **The heredoc backslash trap bit twice more**, once as a literal backspace
+  byte in a regex (`\b` became 0x08) and once as a carriage return in a Windows
+  path. Both caught by checking bytes rather than trusting a passing test.
+
+**How this session worked, for whoever repeats it.**
+- **Seed rep 1 from a full sweep.** Copy the three sessions' `wave2` files into
+  the pre-measurement directory; `replay run` skips files that exist, so
+  `--reps 3` then runs reps 2-3 only. The acceptance seeded 6348's rep 1 from
+  the second smoke run the same way (same commit, same configuration).
+- **Find the seam before designing.** For each run: grade the worker reports
+  (joined) and the answer separately with `depth_verdict`, and check the raw
+  API responses for the target provisions with their subsections. That split
+  (retrieved / in the report / in the answer) is what located every loss.
+- **Grade each run as it lands.** A monitor on `-> <sid>_repN.json` lines lets
+  a broken change be stopped after one run instead of nine; it replaced a
+  separate smoke run for the synthesis change.
+- **When the user says pause, stop the server too.** Stopping the replay client
+  does not stop a request the server is already running.
+- **Replay timings, measured this session:** 6348 $0.54-0.58 and ~4 min per
+  rep (4 turns); 6365 $0.61-0.79 and ~4-5 min (Deep Research); 6396
+  $0.06-0.08 and ~1 min.
+
+**State of the branch:** `fix/prepilot-defects`, no upstream, **NOTHING
+PUSHED**. Whole-plan-then-one-push stands. **1334 tests green.** Ledger: **25
+of 41 rows, 6 of 14 buckets closed, 3 partial.**
+
+**Machine state a new session inherits:**
+- **No uvicorn running**, and the dev box is **restored** (`moonshotai/kimi-k3`,
+  local prompt cache ON, no pin file).
+- **Five new replay directories**, twenty-five in all: `wave2` (the full
+  re-baseline, `2d9ae11`), `wave3_p31_pre` (the before-column),
+  `wave3_p31_smoke` (`d2f9b48`), `wave3_p31_smoke2` (`779bfb2`, 6348 only;
+  stopped by the user) and `wave3_p31` (the acceptance). `wave2` is a full
+  sweep and may be fed to `compare`; the others may not.
+
+**Next action:**
+1. **P3.8** is the natural next: P3.1 already installed a per-instrument cap on
+   section searches, so it is a measurement against `wave2` on the sessions that
+   looped (6335, 6338, 6382, 6374 turn 4), plus the halted worker's lost
+   findings.
+2. **P3.2, P3.3, P3.4 and P4.3** are unblocked by P3.1.
+3. **P3.11** (6348's residual) is small and measured: a code-side subsection
+   outline, n=3 on 6348 alone (~$1.70).
+4. **Still with the user:** P5.2 (B12).

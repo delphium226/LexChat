@@ -2617,3 +2617,178 @@ Two exit 1, and neither is this row's:
 
 Against the row's estimate of about $25. 6341 ran at $2.25-2.96 and 13-21
 minutes per rep; 6374 at $1.43-2.67 and 8-17 minutes.
+
+## The Wave 2 re-baseline (`wave2`, before Wave 3)
+
+Invariant 3 says to re-baseline before Wave 3, and no ledger row held one. The
+user decided at the start of Session 16 to take it **at HEAD `2d9ae11`, before
+any P3.1 product code**: n=1 over all 41 sessions, like-for-like with `wave1`
+(P1.5). This is the baseline for the rest of Wave 3.
+
+**41 runs, 155 turns, $29.55, 4.0 hours, 0 model mismatches, 0 errored turns**
+(one turn asked for clarification: 6347 turn 2). Against `wave1`'s $27.22 and
+3.7 hours: x1.09 on cost.
+
+### Wave 1 to Wave 2, rep 1 like-for-like
+
+`replay_report compare --before wave1 --after wave2`, with two lines replaced
+by the grader that owns them (see below).
+
+| | `wave1` | `wave2` | row |
+|---|---|---|---|
+| `search_legislation` calls | 790 | 613 | |
+| searches the filters emptied | 3 | 3 | P1.1 |
+| provision URLs cited | 136 | 676 | |
+| ... reconstructed after summarisation | 26 | **0** | P1.6 |
+| ... manufactured (never retrieved) | 0 | 0 | P1.4 |
+| ... wrong granularity (Act link, provision label) | 32 | 12 | P1.4 |
+| runs with a halted worker | 10 | **2** | P2.1, P2.7 |
+| halted turns that never said so | 5 | **0** | P2.1 |
+| unsupported in-force claims (`currency`) | 43 | **3** | P2.5 |
+| ... citing a text version as the evidence | 48 | **0** | P2.5 |
+| sources cited in the answer | 201 | 257 | |
+| empty answers | 2 | 0 | P4.2 |
+| model prose, footer stripped per answer | 316,661 | 387,085 chars | |
+
+Model prose grew 22% and fell in 39 of 155 turn slots, so nothing on this page
+was bought by shortening answers (Invariant 1).
+
+### Three numbers not to quote as printed
+
+- **`compare`'s "unsupported in-force claims 30 -> 61" is circular.** It runs
+  the old `IN_FORCE_CLAIM` over the whole answer, and P2.5's own lawyer-facing
+  disclaimer trips it. P2.5's grader, `currency`, reads the model's prose:
+  UNSUPPORTED 43 -> 3, assertion sentences 66 -> 4, the old detector on the
+  prose alone 30 -> 6 turns. The same shape as the `HALT_PARAPHRASE` hazard
+  recorded at P2.7.
+- **"sources kept 612 -> 443" is mostly one session's rail noise.** 6363 went
+  135 -> 33, and 104 of its 135 were never cited. Sources the answers actually
+  cite rose 201 -> 257. `sources_kept` fell in 19 sessions and rose in 15.
+- **A first scratch figure of -62% prose was my script, not the product.** It
+  joined each session's answers before stripping the footer, and the footer
+  pattern is end-anchored, so from the first footer on it ate every later turn.
+  That bites only post-P2.2 runs, which is why it looked like a regression.
+  Recomputed per answer: +22%.
+
+### Every exit-1 subcommand
+
+`halts`, `derivations`, `blanks`, `scoperecord` and `caselaw` pass. Two exit 1,
+and neither is a Wave 2 regression:
+
+- **`negatives`: 7 FAILs, all 6346 (5) and 6347 (2).** These are B7's mode
+  dead-end sessions (P4.1): delegations that made zero tool calls, whose
+  negative is about the research mode, not the statute book. `wave1` has 6 in
+  the same two sessions.
+- **`nosearch`: 1 UNQUALIFIED, 6363 turn 5, and it is an over-read.** The
+  "negative" is P2.5's required disclaimer (*"in-force status ... was not
+  verified, as no commencement, repeal, or revocation records were
+  retrieved"*), and the turn does carry P2.4's case-law scope line; `nosearch`
+  recognises only the legislation footer. Recorded, not fixed here.
+
+## B10 — the provision at the depth asked for (P3.1)
+
+### The instrument, built and validated before any sweep
+
+`replay_report depth` grades each turn against a ground truth checked against
+the live LEX text on 2026-09-18, with each bar taken from the lawyer's own
+feedback: 6396 needs SSI 2007/174 Sch 1 para 1(2) (36 hours / 20 days); 6365
+needs Water Industry (Scotland) Act 2002 ss.45 and 57 and Public Finance and
+Accountability (Scotland) Act 2000 ss.21 and 22 each cited at subsection depth;
+6348 needs FOISA s.36(2) with its substance before the lawyer asked for it (turn
+1). Verdicts DELIVERED / PARTIAL / SHALLOW / MISSED, on the answer with the scope
+footer stripped (the footer quotes search terms and would otherwise satisfy
+6348 by construction).
+
+Validated both ways: the **original pre-pilot answers** grade MISSED / SHALLOW /
+SHALLOW, exactly as the three lawyers described them, and `--drops` over
+`baseline` and `wave1` shows no under-read. HEAD then showed the verdict's
+"at least once" bar is lenient (two of 6365's anchors were met only by amendment
+notes), so a strict per-requirement readout ("N of M references at depth") is
+printed beside it.
+
+### Before: measured at HEAD, and where the depth goes
+
+`wave3_p31_pre`, n=3 at `2d9ae11` (rep 1 from `wave2`): **0 of 9 runs deliver.**
+
+| | HEAD | the target provision, retrieved? | where the depth was lost |
+|---|---|---|---|
+| 6396 | SHALLOW 3/3 | Sch 1 in full, one section search | Worker cites "Schedule 1"; chat Manager drops the provision (2 of 3) |
+| 6365 | PARTIAL 2, SHALLOW 1; 0-17% at depth | all four sections, every subsection | the synthesis flattens (rep 2: s.57 4/20 in the steps, 0/10 in the report) |
+| 6348 t1 | SHALLOW 3/3 | s.36, both subsections, one section search | the Worker describes s.36(1) only |
+
+**Retrieval was complete in 9 of 9 runs**, and the summaries keep subsection
+numbers. So B10 in this acceptance set is a composition failure, not a Phase 2
+one, and a prompt taught it: every legislation Worker's citation example was a
+whole-section label, and the quick-lookup Worker was told to cite "Act +
+section".
+
+### The ranked sections array: real, measured, not used
+
+Every `search_legislation` result carries `sections: [{number, provision_type,
+score}]`. It ranks provisions against the search query, which the Worker prompt
+makes the Act's title:
+
+- FOISA's title search ranks ss.70, 76, 3 and Sch 4, and **omits s.36**;
+- SSI 2007/174's topical search ranks reg 1, Sch 5, Sch 3 and reg 2, and **omits
+  Sch 1**, which holds the answer;
+- over stored runs it held the provision the answer later cited 219 of 331 times
+  (66%) for topical queries and 130 of 232 (56%) for title-only ones.
+
+An empty `number` is any non-integer id: inserted sections (131A, 99B), dotted
+court rules (3.45.13), Parts, and one malformed LEX uri. Not used (user
+decision); `_slim_search_results`' docstring now says why.
+
+### After (`wave3_p31`, head `779bfb2`, n=3, $3.34)
+
+| | HEAD (`wave3_p31_pre`) | after (`wave3_p31`) |
+|---|---|---|
+| 6396 | 0/3 | **3/3** |
+| 6365 | 0/3 | **3/3** |
+| 6365 references at subsection depth, per anchor | 0-17% | 60-95% |
+| 6348, turn 1 | 0/3 | **1/3** |
+| 6348, by turn 2 | 2/3 | 3/3 |
+
+6348's rep 1 is the second smoke run's, on the same commit and configuration.
+The synthesis fix (the pinpoint block) is what moved 6365: in its three runs the
+report kept the steps' pinpoints (`s.57(3)`, `s.21(2)`, `s.45(1)(c)`), where
+the first smoke run, on the prompt change alone, flattened every link label.
+
+### Invariant 1, and every exit-1 subcommand
+
+- `discovery --before`: `sources_kept` per rep 6348 4.3 -> 5.0, 6365 8.3 ->
+  8.0, 6396 1.0 -> 1.0; fell in **2 of 6** turn slots, inside the 3-of-8 noise
+  floor.
+- `depth --before`: prose and links each fell in 1 of 6 slots (6348 turn 2);
+  links per rep rose (6365 35.0 -> 42.7, 6396 0.3 -> 2.0). Its source column is
+  `rail_sources` (the rail's list), a different count from `sources_kept`.
+- `halts`, `negatives`, `derivations`, `blanks`, `scoperecord`, `nosearch` and
+  `caselaw` all pass, before and after.
+- The section budget never fired (these sessions do not loop); P2.7's fired
+  twice in 6365 rep 3, and its clause reached the footer. No fail-open warning.
+
+### The residuals
+
+- **6348 turn 1 at 1 of 3** becomes **P3.11** (user decision). In both misses
+  the Worker cited s.36(1) and never mentioned s.36(2), which it had retrieved.
+- **A new failure mode the fix exposes: a wrong pinpoint.** 6365 rep 2 cites
+  s.57(1) for the interim-report period, which is s.57(3)(a), three times, from
+  a step Worker's report. On the four timeline claims (6 months, 9 months, 30
+  September, true and fair view) the pinpoints are right 31 times and wrong 3 in
+  `wave3_p31`, against 20 right and 0 wrong in `baseline` and `wave1`. A wrong
+  pinpoint reads as verified, and P1.6 cannot catch it because the URL is right.
+  Two apparent wrong pinpoints were the checker's own error (`s.57(3a)` is
+  s.57(3)(a); `s.21(1)` was cited for the audit requirement, correctly).
+
+### Spend
+
+| | | |
+|---|---|---|
+| `wave2` (the full re-baseline, head `2d9ae11`) | 41 runs | $29.55 |
+| `wave3_p31_pre` (reps 2-3 at HEAD) | 6 runs | $2.52 |
+| `wave3_p31_smoke` (head `d2f9b48`) | 3 runs | $1.30 |
+| `wave3_p31_smoke2` (head `779bfb2`, stopped by the user after 6348) | 1 run | $0.58 |
+| **`wave3_p31`** (acceptance, head `779bfb2`) | 8 runs | **$3.34** |
+| **total** | | **$37.29** |
+
+Plus at most $0.76 unrecorded: the interrupted 6365 run in `wave3_p31_smoke2`.
+P3.1 alone cost $7.74, against the handover's $12-15.
