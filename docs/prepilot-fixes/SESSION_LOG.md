@@ -3124,6 +3124,35 @@ last):**
   separate smoke run for the synthesis change.
 - **When the user says pause, stop the server too.** Stopping the replay client
   does not stop a request the server is already running.
+- **The fail-without-fix recipe, with this row's exact substitutions** (the
+  script went with the session; this is what it did). Copy `src`, `tests`,
+  `tools`, `pytest.ini` and `.env` from `server_py/` to two scratch copies, then:
+  - *wiring removed*: `elif section_budget_blocks(...)` -> `elif False:` in
+    `agent_shared.py`; the `_section_budget_limb` call and the
+    `_section_budget_footer_clause` line out of `search_scope.py`; the
+    `pinpoint_block` line out of `agent_core.py`; the `_PINPOINT_BLOCK` strip
+    out of `strip_scope_blocks`; `"size": 10` -> `"limit": 10`; the section keys
+    out of `new_search_budget`; and `src/prompts.py` replaced by
+    `git show 2d9ae11:server_py/src/prompts.py`;
+  - *functions stubbed*: `section_budget_blocks` -> `False`,
+    `section_stop_message` / `instrument_key` / `_section_budget_limb` /
+    `_section_budget_footer_clause` / `pinpoint_block` -> `""`,
+    `record_section_budget_stop` -> `None`.
+
+  Run the row's test files in each copy and diff the PASSED/FAILED sets: a test
+  that passes in BOTH copies is a guard by design, and the report must say which.
+- **Facts established live this session** (2026-09-18), recorded here and in the
+  `external-apis` skill (which is gitignored, so this is the durable copy):
+  `/legislation/search` reads `limit`, `/legislation/section/search` reads
+  `size` and ignores `limit`; `/legislation/section/lookup` returns every
+  provision of an instrument with its text (FOISA 83 items / 177 KB, WI(S)A 98 /
+  283 KB, SSI 2007/174 24 / 55 KB, 0.1-0.2 s each), which is the route to a
+  provision BY NUMBER; `number` is `None` for any non-integer provision id
+  (inserted sections, dotted rules, Parts, one malformed uri), while the `uri`
+  keeps the real id; a regulation's `provision_type` is `section`, and a
+  schedule paragraph's text is rendered `Section 1)`. The acceptance ground
+  truth (FOISA s.36, WI(S)A ss.45 and 57, PFA(S)A ss.21 and 22, SSI 2007/174
+  Sch 1 para 1) was read from the live text and is encoded in `DEPTH_TRUTH`.
 - **Replay timings, measured this session:** 6348 $0.54-0.58 and ~4 min per
   rep (4 turns); 6365 $0.61-0.79 and ~4-5 min (Deep Research); 6396
   $0.06-0.08 and ~1 min.
@@ -3149,4 +3178,6 @@ of 41 rows, 6 of 14 buckets closed, 3 partial.**
 2. **P3.2, P3.3, P3.4 and P4.3** are unblocked by P3.1.
 3. **P3.11** (6348's residual) is small and measured: a code-side subsection
    outline, n=3 on 6348 alone (~$1.70).
-4. **Still with the user:** P5.2 (B12).
+4. **Still with the user:** P5.2 (B12); and, carried from Session 15 and not
+   yet decided, whether Thomas's review document (and his two companion notes)
+   should be committed to the repo.
