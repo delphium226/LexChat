@@ -269,8 +269,11 @@
         <code>TODO B6</code> is in <code>docs/TODO.md</code>, outside the plan.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.</p>
-      <p>Not listed: measurement and tooling rows (P0.1–P0.4, P1.5), questions already answered by
-        the LEX team (P5.1, P5.3), and P2.10, which was folded into P2.8.</p>
+      <p>Not listed: measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
+        questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
+        and three items from <code>docs/TODO.md</code> D16 (the impossible year window, always
+        over-fetching search results, checking a returned title against the Act named), which were
+        parked rather than planned on 18 September.</p>
     </div>
   </section>
 
@@ -281,7 +284,7 @@
   // ---- Update here at the end of a session, when the user asks. ----
   // status: "Fixed" | "In progress" | "Verified" | "To be verified"
   // src:    "T" | "R" | "T & R"
-  const UPDATED = "18 September 2026 (Session 15)";
+  const UPDATED = "18 September 2026 (Session 16)";
   const ROWS = [
     { src: "T & R", fix: "Make the jurisdiction filter work", status: "Fixed", ref: "P1.1", t: "5" },
     { src: "R", fix: "Stop the “current only” filter implying in-force status", status: "Fixed", ref: "P1.2", t: "" },
@@ -297,7 +300,8 @@
     { src: "R", fix: "Cap how long a step may keep searching", status: "Fixed", ref: "P2.7", t: "" },
     { src: "R", fix: "Re-qualify a “not found” repeated from an earlier turn", status: "Fixed", ref: "P2.8", t: "" },
     { src: "R", fix: "Record memo-served searches in the search scope", status: "Fixed", ref: "P2.9", t: "" },
-    { src: "R", fix: "Retrieve the right provision at the right depth", status: "Verified", ref: "P3.1", t: "" },
+    { src: "R", fix: "Cite the provision at the subsection asked for, not the whole section", status: "Fixed", ref: "P3.1", t: "" },
+    { src: "R", fix: "Allow up to three section searches per Act, capped in code", status: "Fixed", ref: "P3.1", t: "" },
     { src: "R", fix: "Stop reversing a correct answer under pushback", status: "Verified", ref: "P3.2", t: "" },
     { src: "T & R", fix: "Separate retrieval from interpretation", status: "Verified", ref: "P3.3", t: "NH1" },
     { src: "T & R", fix: "Default to Scottish jurisdiction; flag UK-wide divergence", status: "Verified", ref: "P3.4", t: "NH1" },
@@ -308,6 +312,7 @@
     { src: "T & R", fix: "Stop a step looping on instruments it already has; write up findings at the cap", status: "Verified", ref: "P3.8", t: "3" },
     { src: "T", fix: "Make the case-law date filter work", status: "Verified", ref: "P3.9", t: "6" },
     { src: "T", fix: "Keep dependent Deep Research steps in one step", status: "Verified", ref: "P3.10", t: "3" },
+    { src: "R", fix: "Say what a cited subsection's sibling subsections provide", status: "Verified", ref: "P3.11", t: "" },
     { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", status: "Verified", ref: "P4.1", t: "9" },
     { src: "R", fix: "Never show a blank or lost reply", status: "Fixed", ref: "P4.2", t: "" },
     { src: "T & R", fix: "Make the sources list and inline links match the answer", status: "Verified", ref: "P4.3", t: "7" },
