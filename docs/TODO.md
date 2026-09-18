@@ -314,6 +314,24 @@ Files: `client/src/App.jsx`, `client/src/components/ResearchFiltersModal.jsx`,
 `client/src/index.css`. `client/dist/` rebuilt. **Uncommitted** — commit with
 force-added `client/dist/` and push when ready to deploy.
 
+### B6. The Deep Research planner reports every provider error as a generic 502 (bug; added 2026-09-18)
+*From Thomas's external review of 10 September 2026, action 8. Verified against the code on
+`fix/prepilot-defects` on 2026-09-18.*
+
+`routers/research.py::draft_plan` catches `ConnectionError` (503, which is right) and then
+any other exception as `502 "The planner failed. Please try again."`. So a provider HTTP 402
+(credit exhausted) or 429 (rate limited) reaches the lawyer as a generic failure with advice
+to retry, and support staff go looking for a LexChat fault. The chat path already renders
+provider errors through `agent_shared.describe_agent_error`.
+
+**Fix:** catch `httpx.HTTPStatusError` before the generic handler and reuse
+`describe_agent_error`; distinguish payment or credit failures (do not advise a retry) from
+rate limits and outages (retry later); never forward the provider's raw response body. Keep
+`ConnectionError` → 503 as it is. **Test:** simulate a provider 402 and 429 at the planner
+boundary; a connection failure must still read as a connectivity failure.
+
+Outside the pre-pilot fix plan (not a pre-pilot defect), so it can go straight to `main`.
+
 ### B5. Add a 'Data coverage' tab to the parliament bot (feature; added 2026-07-24, unscoped)
 Add a **Data coverage** tab (Admin Portal, parliament bot only) surfacing what the
 crawler has actually ingested — e.g. session/date-range coverage for
@@ -1184,9 +1202,9 @@ be attributed to either side. Before quoting accuracy numbers: get a lawyer thro
 
 ---
 
-### D17. Deep Research synthesis prompt is mode-blind — parked with D16
-**Status: PARKED by user decision, 2026-08-19**, to be taken up with D16 as one piece of
-work once the further feedback lands. Raised by an external colleague reviewing the Deep
+### D17. Deep Research synthesis prompt is mode-blind — MOVED to the pre-pilot fix plan as P4.7
+**MOVED 2026-09-18 to `docs/prepilot-fixes/FIX_PLAN.md` row P4.7**, together with the same point from Thomas's external review (action 2). It had not been carried into that plan when D16 was. Track it there; the analysis below is kept for reference. ~~**Status: PARKED by user decision, 2026-08-19**, to be taken up with D16 as one piece of
+work once the further feedback lands.~~ Raised by an external colleague reviewing the Deep
 Research ReAct loop; verified against the code the same day (their line numbers were off —
 corrected below).
 

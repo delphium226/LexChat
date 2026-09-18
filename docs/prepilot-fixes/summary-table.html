@@ -1,0 +1,418 @@
+<title>Pre-pilot Fix Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* AILA's own tokens (client/src/index.css), so the tracker reads as part of the product. */
+  :root {
+    --ground: #f6f7fa;
+    --paper: #ffffff;
+    --ink: #111a2e;
+    --ink-soft: #465277;
+    --ink-faint: #6b7699;
+    --rule: #e2e6ef;
+    --rule-strong: #c3cbdd;
+    --brand: oklch(0.32 0.13 240);
+    --brand-soft: oklch(0.96 0.03 240);
+    --gold: #9a7d2e;
+    --gold-soft: #f5efdf;
+    --fixed: oklch(0.42 0.10 155);
+    --fixed-soft: oklch(0.95 0.04 155);
+    --wip: oklch(0.46 0.11 65);
+    --wip-soft: oklch(0.96 0.05 65);
+    --verified: oklch(0.34 0.09 255);
+    --verified-soft: oklch(0.94 0.03 240);
+    --tbv: #465277;
+    --focus: oklch(0.50 0.10 240);
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-serif: 'Source Serif 4', Georgia, serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0f1830;
+      --paper: #131d38;
+      --ink: #e4e8f2;
+      --ink-soft: #a8b0c8;
+      --ink-faint: #8891ae;
+      --rule: #243151;
+      --rule-strong: #313f5c;
+      --brand: oklch(0.72 0.12 240);
+      --brand-soft: oklch(0.24 0.06 240);
+      --gold: #d4b86a;
+      --gold-soft: #2b2718;
+      --fixed: oklch(0.80 0.12 155);
+      --fixed-soft: oklch(0.27 0.05 155);
+      --wip: oklch(0.82 0.12 70);
+      --wip-soft: oklch(0.29 0.06 65);
+      --verified: oklch(0.82 0.08 250);
+      --verified-soft: oklch(0.26 0.06 240);
+      --tbv: #a8b0c8;
+      --focus: oklch(0.70 0.12 240);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0f1830;
+    --paper: #131d38;
+    --ink: #e4e8f2;
+    --ink-soft: #a8b0c8;
+    --ink-faint: #8891ae;
+    --rule: #243151;
+    --rule-strong: #313f5c;
+    --brand: oklch(0.72 0.12 240);
+    --brand-soft: oklch(0.24 0.06 240);
+    --gold: #d4b86a;
+    --gold-soft: #2b2718;
+    --fixed: oklch(0.80 0.12 155);
+    --fixed-soft: oklch(0.27 0.05 155);
+    --wip: oklch(0.82 0.12 70);
+    --wip-soft: oklch(0.29 0.06 65);
+    --verified: oklch(0.82 0.08 250);
+    --verified-soft: oklch(0.26 0.06 240);
+    --tbv: #a8b0c8;
+    --focus: oklch(0.70 0.12 240);
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding-inline: 16px;
+    padding-block: 32px 48px;
+    display: grid;
+    gap: 24px;
+  }
+  header { display: grid; gap: 6px; }
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  h1 {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-weight: 600;
+    font-size: clamp(26px, 4vw, 34px);
+    line-height: 1.15;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  .lede { margin: 0; color: var(--ink-soft); max-width: 68ch; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  /* Summary: one count per status, doubling as the status filter. */
+  .controls { display: grid; gap: 12px; }
+  .filter-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .filter-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    min-width: 56px;
+  }
+  .chip-btn {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--rule-strong);
+    background: var(--paper);
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .chip-btn .n {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+  .chip-btn[aria-pressed="true"] {
+    border-color: var(--brand);
+    background: var(--brand-soft);
+    color: var(--ink);
+  }
+  .chip-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .table-box {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    overflow-x: auto;
+  }
+  table { width: 100%; border-collapse: collapse; min-width: 720px; }
+  thead th {
+    position: sticky;
+    top: 0;
+    background: var(--paper);
+    text-align: left;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--rule-strong);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr.group-start td { border-top: 1px solid var(--rule-strong); }
+  td.fix { color: var(--ink); max-width: 46ch; }
+  td.ref, td.tref {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+  td.src { white-space: nowrap; font-family: var(--font-mono); font-size: 12.5px; font-weight: 500; }
+  .src-t { color: var(--gold); }
+  .src-r { color: var(--brand); }
+  .src-amp { color: var(--ink-faint); padding-inline: 3px; }
+
+  .status {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .st-fixed { background: var(--fixed-soft); color: var(--fixed); }
+  .st-wip { background: var(--wip-soft); color: var(--wip); }
+  .st-verified { background: var(--verified-soft); color: var(--verified); }
+  .st-tbv { background: transparent; color: var(--tbv); border: 1px dashed var(--rule-strong); }
+
+  .empty { padding: 24px 14px; color: var(--ink-faint); }
+
+  .notes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 24px;
+  }
+  .notes h2 {
+    margin: 0 0 8px;
+    font-family: var(--font-serif);
+    font-weight: 600;
+    font-size: 17px;
+  }
+  .notes dl { margin: 0; display: grid; gap: 8px; }
+  .notes dt { font-weight: 600; }
+  .notes dd { margin: 0; color: var(--ink-soft); }
+  .notes p { margin: 0 0 8px; color: var(--ink-soft); }
+  .notes code, .lede code { font-family: var(--font-mono); font-size: 12.5px; }
+  footer { color: var(--ink-faint); font-size: 12.5px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">AILA · pre-pilot defect fixes</span>
+    <h1>Pre-pilot Fix Tracker</h1>
+    <p class="lede">Every proposed fix, ours (<strong>R</strong>) and Thomas's (<strong>T</strong>), with its status,
+      its row in the fix plan and its action number in Thomas's review of 10 September 2026.
+      <strong>“Fixed” means built and accepted on the fix branch: nothing reaches the server
+      until the whole plan is merged.</strong></p>
+  </header>
+
+  <div class="controls" aria-label="Filters">
+    <div class="filter-row" id="status-filters">
+      <span class="filter-label">Status</span>
+    </div>
+    <div class="filter-row" id="source-filters">
+      <span class="filter-label">Source</span>
+    </div>
+  </div>
+
+  <div class="table-box">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Source</th>
+          <th scope="col">Fix</th>
+          <th scope="col">Status</th>
+          <th scope="col">Plan ref</th>
+          <th scope="col">Thomas ref</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden>No fix matches these filters.</div>
+  </div>
+
+  <section class="notes">
+    <div>
+      <h2>Status</h2>
+      <dl>
+        <dt>Fixed</dt><dd>Built and accepted on the fix branch, not yet deployed.</dd>
+        <dt>In progress</dt><dd>Under way. P5.2 is waiting on an external decision.</dd>
+        <dt>Verified</dt><dd>The problem is confirmed in our replays, the code or a live test, but no fix is built yet.</dd>
+        <dt>To be verified</dt><dd>Proposed, not yet confirmed or agreed.</dd>
+      </dl>
+    </div>
+    <div>
+      <h2>References</h2>
+      <p><strong>Plan ref</strong> is the row in <code>docs/prepilot-fixes/FIX_PLAN.md</code>.
+        <code>TODO B6</code> is in <code>docs/TODO.md</code>, outside the plan.</p>
+      <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
+        first and second points of his closing section, “What is deliberately not here”.</p>
+      <p>Not listed: measurement and tooling rows (P0.1–P0.4, P1.5), questions already answered by
+        the LEX team (P5.1, P5.3), and P2.10, which was folded into P2.8.</p>
+    </div>
+  </section>
+
+  <footer id="stamp"></footer>
+</div>
+
+<script>
+  // ---- Update here at the end of a session, when the user asks. ----
+  // status: "Fixed" | "In progress" | "Verified" | "To be verified"
+  // src:    "T" | "R" | "T & R"
+  const UPDATED = "18 September 2026 (Session 15)";
+  const ROWS = [
+    { src: "T & R", fix: "Make the jurisdiction filter work", status: "Fixed", ref: "P1.1", t: "5" },
+    { src: "R", fix: "Stop the “current only” filter implying in-force status", status: "Fixed", ref: "P1.2", t: "" },
+    { src: "T & R", fix: "Report the search's true match count", status: "Fixed", ref: "P1.3", t: "4" },
+    { src: "R", fix: "Link citations to the provision, not the Act", status: "Fixed", ref: "P1.4", t: "" },
+    { src: "R", fix: "Enforce provision links in code", status: "Fixed", ref: "P1.6", t: "" },
+    { src: "T & R", fix: "Disclose a research halt as a limit, not a finding", status: "Fixed", ref: "P2.1", t: "3" },
+    { src: "T & R", fix: "Explain every “not found”: what was searched, and its limits", status: "Fixed", ref: "P2.2", t: "4" },
+    { src: "T & R", fix: "Verify the enabling power", status: "Fixed", ref: "P2.3", t: "1" },
+    { src: "R", fix: "Disclose the Scottish case-law corpus gap", status: "Fixed", ref: "P2.4", t: "" },
+    { src: "R", fix: "Stop asserting in-force status", status: "Fixed", ref: "P2.5", t: "" },
+    { src: "T & R", fix: "Don't reformat a halted step into an empty report", status: "Fixed", ref: "P2.6", t: "3" },
+    { src: "R", fix: "Cap how long a step may keep searching", status: "Fixed", ref: "P2.7", t: "" },
+    { src: "R", fix: "Re-qualify a “not found” repeated from an earlier turn", status: "Fixed", ref: "P2.8", t: "" },
+    { src: "R", fix: "Record memo-served searches in the search scope", status: "Fixed", ref: "P2.9", t: "" },
+    { src: "R", fix: "Retrieve the right provision at the right depth", status: "Verified", ref: "P3.1", t: "" },
+    { src: "R", fix: "Stop reversing a correct answer under pushback", status: "Verified", ref: "P3.2", t: "" },
+    { src: "T & R", fix: "Separate retrieval from interpretation", status: "Verified", ref: "P3.3", t: "NH1" },
+    { src: "T & R", fix: "Default to Scottish jurisdiction; flag UK-wide divergence", status: "Verified", ref: "P3.4", t: "NH1" },
+    { src: "T", fix: "Correct the jurisdiction filter note in the prompt", status: "Verified", ref: "P3.4", t: "5" },
+    { src: "R", fix: "Retrieve amendment and commencement relations", status: "Fixed", ref: "P3.5", t: "" },
+    { src: "R", fix: "Keep the description field, which carries relationships", status: "Verified", ref: "P3.6", t: "" },
+    { src: "R", fix: "Test whether an instrument is held, by its number", status: "Verified", ref: "P3.7", t: "" },
+    { src: "T & R", fix: "Stop a step looping on instruments it already has; write up findings at the cap", status: "Verified", ref: "P3.8", t: "3" },
+    { src: "T", fix: "Make the case-law date filter work", status: "Verified", ref: "P3.9", t: "6" },
+    { src: "T", fix: "Keep dependent Deep Research steps in one step", status: "Verified", ref: "P3.10", t: "3" },
+    { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", status: "Verified", ref: "P4.1", t: "9" },
+    { src: "R", fix: "Never show a blank or lost reply", status: "Fixed", ref: "P4.2", t: "" },
+    { src: "T & R", fix: "Make the sources list and inline links match the answer", status: "Verified", ref: "P4.3", t: "7" },
+    { src: "R", fix: "Remove the unused case-law court filter", status: "Fixed", ref: "P4.4", t: "" },
+    { src: "T & R", fix: "Report a lost research step as lost, not “no results”", status: "Verified", ref: "P4.5", t: "3" },
+    { src: "T", fix: "Label incomplete Deep Research steps as incomplete in progress messages", status: "Verified", ref: "P4.5", t: "3" },
+    { src: "T", fix: "Remove prompt wording that says the whole database lacks something", status: "Verified", ref: "P4.6", t: "4" },
+    { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", status: "Verified", ref: "P4.7", t: "2" },
+    { src: "R", fix: "Source Scottish case law (Court of Session, Sheriff Courts)", status: "In progress", ref: "P5.2", t: "" },
+    { src: "T", fix: "Show provider errors (credit, rate limit) clearly when planning", status: "Verified", ref: "TODO B6", t: "8" },
+    { src: "T", fix: "Order case-law results by relevance", status: "To be verified", ref: "", t: "6" },
+    { src: "T", fix: "Reconcile summary counts with the answer's own list", status: "To be verified", ref: "", t: "NH2" },
+    { src: "T", fix: "Scan whole instruments for a literal “£”", status: "To be verified", ref: "", t: "4" },
+    { src: "T", fix: "Add an enabling-power rule to the synthesis prompt", status: "To be verified", ref: "P2.3", t: "1" },
+  ];
+  // ---- End of data. ----
+
+  const STATUSES = ["Fixed", "In progress", "Verified", "To be verified"];
+  const STATUS_CLASS = { "Fixed": "st-fixed", "In progress": "st-wip", "Verified": "st-verified", "To be verified": "st-tbv" };
+  const SOURCES = [["all", "All"], ["T", "Thomas"], ["R", "Us"], ["T & R", "Both"]];
+  let statusFilter = "all";
+  let sourceFilter = "all";
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function sourceCell(src) {
+    const td = el("td", "src");
+    if (src === "T & R") {
+      td.append(el("span", "src-t", "T"), el("span", "src-amp", "&"), el("span", "src-r", "R"));
+    } else {
+      td.append(el("span", src === "T" ? "src-t" : "src-r", src));
+    }
+    return td;
+  }
+
+  function matchesSource(row) {
+    if (sourceFilter === "all") return true;
+    if (sourceFilter === "T & R") return row.src === "T & R";
+    return row.src === sourceFilter || row.src === "T & R";
+  }
+
+  function render() {
+    const body = document.getElementById("rows");
+    body.textContent = "";
+    let shown = 0;
+    let lastGroup = null;
+    for (const row of ROWS) {
+      if (statusFilter !== "all" && row.status !== statusFilter) continue;
+      if (!matchesSource(row)) continue;
+      const tr = el("tr");
+      const group = (row.ref.match(/^P(\d)/) || [null, row.ref ? "x" : "none"])[1];
+      if (lastGroup !== null && group !== lastGroup) tr.className = "group-start";
+      lastGroup = group;
+      tr.append(sourceCell(row.src));
+      tr.append(el("td", "fix", row.fix));
+      const st = el("td");
+      st.append(el("span", "status " + STATUS_CLASS[row.status], row.status));
+      tr.append(st);
+      tr.append(el("td", "ref", row.ref || "—"));
+      tr.append(el("td", "tref", row.t || "—"));
+      body.append(tr);
+      shown++;
+    }
+    document.getElementById("empty").hidden = shown > 0;
+  }
+
+  function buildFilters() {
+    const sf = document.getElementById("status-filters");
+    const counts = Object.fromEntries(STATUSES.map(s => [s, ROWS.filter(r => r.status === s).length]));
+    const statusButtons = [["all", "All", ROWS.length], ...STATUSES.map(s => [s, s, counts[s]])];
+    for (const [value, label, n] of statusButtons) {
+      const b = el("button", "chip-btn");
+      b.type = "button";
+      b.id = "status-" + value.replace(/\s+/g, "-").toLowerCase();
+      b.setAttribute("aria-pressed", String(value === statusFilter));
+      b.append(el("span", "", label), el("span", "n", String(n)));
+      b.addEventListener("click", () => {
+        statusFilter = value;
+        sf.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+        render();
+      });
+      sf.append(b);
+    }
+    const src = document.getElementById("source-filters");
+    for (const [value, label] of SOURCES) {
+      const b = el("button", "chip-btn", label);
+      b.type = "button";
+      b.id = "source-" + (value === "T & R" ? "both" : value.toLowerCase());
+      b.setAttribute("aria-pressed", String(value === sourceFilter));
+      b.addEventListener("click", () => {
+        sourceFilter = value;
+        src.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+        render();
+      });
+      src.append(b);
+    }
+  }
+
+  buildFilters();
+  render();
+  document.getElementById("stamp").textContent =
+    "Last updated " + UPDATED + ". Source: docs/prepilot-fixes/summary-table.html on the fix branch.";
+</script>
