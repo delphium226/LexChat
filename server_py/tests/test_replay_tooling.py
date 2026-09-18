@@ -1498,5 +1498,5 @@ def test_the_depth_command_reads_a_directory_and_the_before_panel(tmp_path, caps
     assert "6365  t1  DELIVERED 1/1" in out
     assert "(1 graded run file(s))" in out
     assert "-> asp/2000/1" in out
-    assert "sources_kept 3.0 -> 3.0" in out
+    assert "rail_sources 3.0 -> 3.0" in out
     assert "fell in: prose 0/1" in out

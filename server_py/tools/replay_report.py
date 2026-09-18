@@ -4308,7 +4308,15 @@ def depth_profile(answer: str) -> tuple:
 
 
 def _depth_slots(doc: dict) -> dict:
-    """Per turn: prose (footer removed), links, provision links, sources kept."""
+    """Per turn: prose (footer removed), links, provision links, rail sources.
+
+    **`rail_sources` is NOT `sources_kept`.** It is `len(audit["sources"])`,
+    the filtered list the rail shows. P2.7's pass bar, `discovery --before`,
+    reads `timing.sources_kept`, a different count; on P3.1's acceptance the
+    two read 6365 as 3.3 -> 2.7 and 8.3 -> 8.0. Quote `discovery` for the pass
+    bar. This column was named `sources_kept` for one sweep and was renamed
+    before its numbers were written up.
+    """
     out = {}
     for t in doc.get("turns", []):
         ans = t.get("answer") or ""
@@ -4317,7 +4325,7 @@ def _depth_slots(doc: dict) -> dict:
             "prose": len(_without_footer(ans)),
             "links": len(links),
             "provision_links": sum(1 for _, u in links if _PROVISION_URL.search(u)),
-            "sources_kept": len((t.get("audit") or {}).get("sources") or []),
+            "rail_sources": len((t.get("audit") or {}).get("sources") or []),
         }
     return out
 
@@ -4345,7 +4353,7 @@ def _depth_invariant_one(before: Path, after: Path) -> None:
           f"shared graded sessions: {', '.join(shared) or 'none'})")
     if not shared:
         return
-    keys = ("prose", "links", "provision_links", "sources_kept")
+    keys = ("prose", "links", "provision_links", "rail_sources")
     fell = Counter()
     slots = 0
 
@@ -4370,7 +4378,8 @@ def _depth_invariant_one(before: Path, after: Path) -> None:
             print(f"    {sid} t{turn}  (reps {len(b[sid])} -> {len(a[sid])})  "
                   + "  ".join(row))
     print("    fell in: " + ", ".join(f"{k} {fell[k]}/{slots}" for k in keys)
-          + "   (P2.7's measured noise floor for sources_kept: 3 of 8 slots)")
+          + "   (rail_sources is the rail's list; for P2.7's sources_kept pass bar"
+          "   run `discovery --before`, noise floor 3 of 8 slots)")
 
 
 def cmd_depth(args) -> int:
