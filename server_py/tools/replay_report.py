@@ -4005,6 +4005,473 @@ def cmd_corpus(args) -> int:
     return 0
 
 
+# --- P3.1 (B10) acceptance ----------------------------------------------------
+#
+# **Graded against an external ground truth, like P3.5's**, because "the
+# provision at the granularity asked for" is a fact about the statute book and
+# not about how the answer hedges. Every entry below was checked against the
+# live LEX text on 2026-09-18 (`POST /legislation/section/search`), and every
+# bar is the lawyer's own complaint (Invariant 6), not a reading of the score:
+#
+#   * **6396** — "It found the correct enactment but not the correct
+#     provisions". The rule is SSI 2007/174 Sch 1 para 1(2): a dairy animal's
+#     first tag within 36 hours of birth and its second within 20 days, 20 days
+#     for other cattle. LEX renders a schedule paragraph as "Section 1)", so the
+#     model writes "Schedule 1, Section 1(2)"; that is paragraph-level and it
+#     counts. Stating the two limits WITHOUT citing the paragraph is not
+#     delivery: `baseline` rep 1 did exactly that from memory while saying the
+#     Regulations "could not be retrieved".
+#   * **6365** — "it only ever cited full sections and did not cite relevant
+#     subsections". The timeline's four anchors are Water Industry (Scotland)
+#     Act 2002 ss.45 and 57 and Public Finance and Accountability (Scotland) Act
+#     2000 ss.21 and 22, and each must be cited at subsection depth at least
+#     once. The other half of that complaint (the 2000 Act missed "until
+#     prompted") happened in the CONVERSATIONAL part of the session, which is
+#     not replayed, and the replayed question names the Act, so finding it is
+#     not graded; citing it at depth is.
+#   * **6348** — "did not initially elaborate on the full provision, only
+#     referring to s36(1) and not s36(2)". FOISA s.36(2), named WITH its
+#     substance (information obtained from another person; an actionable breach
+#     of confidence), before the lawyer had to ask for it at turn 3. "Initially"
+#     is turn 1, which is the headline; turn 2 is graded too.
+#
+# **The footer is stripped first, and that is load-bearing.** P2.2's scope line
+# quotes the search terms, and a worker that searched for "section 36(2)
+# actionable breach of confidence" would otherwise satisfy 6348 by construction.
+
+# "s.57", "s 57", "s57", "ss.21", "section 57", "sections 21". The apostrophe
+# guard keeps "Scotland's 20 days" from reading as section 20.
+_SEC_PREFIX = r"(?:(?<!['’])\bss?\.?\s?(?=\d)|\bsections?\s+)"
+# One level of subdivision: "(3)", "(3a)", "(1A)", "(b)", "(iv)".
+_SUBSEC = r"\s?\((?:\d+[A-Za-z]{0,2}|[a-z]{1,4})\)"
+# A section number followed by nothing that makes it a different provision:
+# not "57A", not "57/", not "570".
+_SEC_END = r"(?![\dA-Za-z/])"
+
+
+def _section_patterns(num: str) -> tuple:
+    """(deep, coarse) for one section number: cited with a subsection, or without.
+
+    Deep: ``s.57(3)``, ``section 57(3)(a)``, ``Section 57(3a)``, and the long
+    form ``subsection (3) of section 57``. Coarse: ``section 57`` with no
+    subsection, including as a later member of a list (``sections 21 and 22``),
+    which is how a whole-section citation is most often written.
+    """
+    n = re.escape(num)
+    deep = re.compile(
+        _SEC_PREFIX + n + _SEC_END + _SUBSEC
+        + r"|\bsub-?sections?\s*\(\w+\)[^.\n]{0,40}?\bof\s+" + _SEC_PREFIX + n
+        + _SEC_END,
+        re.I)
+    coarse = re.compile(
+        _SEC_PREFIX + n + _SEC_END + r"(?!\s?\()"
+        + r"|\bsections\s+\d+[A-Z]?(?:\s*(?:,|and|or|to|&)\s*\d+[A-Z]?)*"
+          r"\s*(?:,|and|or|to|&)\s*" + n + _SEC_END + r"(?!\s?\()",
+        re.I)
+    return deep, coarse
+
+
+@dataclass(frozen=True)
+class DepthReq:
+    """One provision a turn must deliver, at the depth the lawyer asked for.
+
+    `deep` is the provision at the required depth and `coarse` the same
+    provision cited more coarsely. `facts` are operative facts that must also be
+    stated, anywhere in the answer or, with `near`, in the sentence that cites
+    the provision or the one after it. A match counts only where
+    `_attribute_instrument` assigns it to `act`.
+    """
+    label: str
+    act: str
+    deep: Any
+    coarse: Any
+    facts: tuple = ()
+    near: bool = False
+
+
+_S36_SUBSTANCE = re.compile(
+    r"\bactionable\b"
+    r"|\bobtained\b[^.\n]{0,80}?\b(?:from|by)\b[^.\n]{0,30}?"
+    r"\b(?:another|a third|third|other)\b"
+    r"|\bthird[- ]part(?:y|ies)\b",
+    re.I)
+
+DEPTH_TRUTH = {
+    "6396": {
+        "turns": (1,),
+        "acts": {
+            "ssi/2007/174": re.compile(
+                r"Cattle Identification \(Scotland\) Regulations 2007"
+                r"|\b(?:ssi/)?2007/174\b",
+                re.I),
+        },
+        "reqs": (
+            DepthReq(
+                label="Sch 1 para 1(2): 36 hours / 20 days",
+                act="ssi/2007/174",
+                deep=re.compile(
+                    r"\bsch(?:edule|\.)?\s*1\b[^.\n]{0,30}?"
+                    r"(?:para(?:graph)?s?\.?|sections?|s\.)\s*1\b(?![\d/])"
+                    r"|\b(?:para(?:graph)?\.?|section)\s*1(?:\s?\(\d\))*"
+                    r"[^.\n]{0,30}?\bof\s+sch(?:edule|\.)?\s*1\b",
+                    re.I),
+                coarse=re.compile(
+                    r"\bsch(?:edule|\.)?\s*1\b(?!\d)|\bregulation\s*5\b", re.I),
+                facts=(re.compile(r"\b36\s*hours?\b", re.I),
+                       re.compile(r"\b20\s*days?\b", re.I)),
+            ),
+        ),
+    },
+    "6365": {
+        "turns": (1,),
+        "acts": {
+            "asp/2002/3": re.compile(
+                r"Water Industry \(Scotland\) Act|\b2002 Act\b|\basp/2002/3\b"
+                r"|\bWI\(?S\)?A\b",
+                re.I),
+            "asp/2000/1": re.compile(
+                r"Public Finances? and Accountability|\b2000 Act\b|\basp/2000/1\b"
+                r"|\bPFA\(?S\)?A\b",
+                re.I),
+        },
+        "reqs": tuple(
+            DepthReq(label=f"{short} s.{num}", act=act,
+                     deep=_section_patterns(num)[0],
+                     coarse=_section_patterns(num)[1])
+            for act, short, num in (
+                ("asp/2002/3", "WI(S)A 2002", "45"),
+                ("asp/2002/3", "WI(S)A 2002", "57"),
+                ("asp/2000/1", "PFA(S)A 2000", "21"),
+                ("asp/2000/1", "PFA(S)A 2000", "22"),
+            )
+        ),
+    },
+    "6348": {
+        "turns": (1, 2),
+        "acts": {
+            "asp/2002/13": re.compile(
+                r"Freedom of Information \(Scotland\) Act|\bFOI\(?S\)?A\b"
+                r"|\basp/2002/13\b",
+                re.I),
+        },
+        "reqs": (
+            DepthReq(
+                label="FOISA s.36(2), with its substance",
+                act="asp/2002/13",
+                # Any reference to s.36 that is not specifically s.36(1): a
+                # sentence saying "section 36 also covers information obtained
+                # from another person" elaborates s.36(2) without its number.
+                deep=re.compile(
+                    _SEC_PREFIX + r"36" + _SEC_END + r"(?!\s?\(1\))"
+                    r"|\bsub-?section\s*\(2\)[^.\n]{0,40}?\bof\s+" + _SEC_PREFIX
+                    + r"36" + _SEC_END,
+                    re.I),
+                coarse=re.compile(_SEC_PREFIX + r"36" + _SEC_END, re.I),
+                facts=(_S36_SUBSTANCE,),
+                near=True,
+            ),
+        ),
+    },
+}
+
+
+def _attribute_instrument(text: str, pos: int, acts: dict) -> Optional[str]:
+    """Which of the session's instruments a provision reference at `pos` is to.
+
+    The nearest instrument mention on the same line, on either side, so that a
+    markdown link's label (``[… Act 2000 - s.21(2)](…/asp/2000/1/section/21)``)
+    and a bold ``**Water Industry (Scotland) Act 2002, Section 57(3a)**`` both
+    resolve; failing that, the last mention before it anywhere in the answer.
+    Needed only where one answer cites two instruments (6365), and printed by
+    `--answers` so it can be audited.
+    """
+    line_start = text.rfind("\n", 0, pos) + 1
+    line_end = text.find("\n", pos)
+    if line_end < 0:
+        line_end = len(text)
+    best = None
+    for key, rx in acts.items():
+        for m in rx.finditer(text, line_start, line_end):
+            dist = pos - m.end() if m.end() <= pos else max(0, m.start() - pos)
+            if best is None or dist < best[0]:
+                best = (dist, key)
+    if best is not None:
+        return best[1]
+    last = None
+    for key, rx in acts.items():
+        for m in rx.finditer(text, 0, pos):
+            if last is None or m.start() > last[0]:
+                last = (m.start(), key)
+    return last[1] if last else None
+
+
+def _sentence_window(text: str, pos: int) -> str:
+    """The sentence (or list line) holding `pos`, plus the one after it."""
+    masked = _ABBREV.sub(lambda m: m.group(0).replace(".", _DOT), text)
+    bounds = [0] + [m.end() for m in re.finditer(r"(?<=[.!?])\s+|\n+", masked)]
+    bounds.append(len(text))
+    for i in range(len(bounds) - 1):
+        if bounds[i] <= pos < bounds[i + 1]:
+            return text[bounds[i]:bounds[min(i + 2, len(bounds) - 1)]]
+    return text[max(0, pos - 200):pos + 200]
+
+
+def _grade_depth_req(text: str, req: DepthReq, acts: dict) -> tuple:
+    """(status, match, window) for one requirement: deep, coarse or missed.
+
+    ``coarse`` covers every way of being short of the required depth: the
+    provision cited only as a whole section, the facts stated without the
+    provision, or the provision cited without its facts.
+    """
+    def owned(rx):
+        return [m for m in rx.finditer(text)
+                if _attribute_instrument(text, m.start(), acts) == req.act]
+
+    deep = owned(req.deep)
+    for m in deep:
+        if req.near:
+            window = _sentence_window(text, m.start())
+            if all(f.search(window) for f in req.facts):
+                return "deep", m, window
+        elif all(f.search(text) for f in req.facts):
+            return "deep", m, None
+    coarse = owned(req.coarse)
+    facts_seen = (not req.near) and any(f.search(text) for f in req.facts)
+    if deep or coarse or facts_seen:
+        first = (deep or coarse or [None])[0]
+        return "coarse", first, None
+    return "missed", None, None
+
+
+def depth_verdict(session_id: str, answer: str) -> tuple:
+    """(verdict, [(req, status, match, window)]) for one graded turn.
+
+    ``DELIVERED`` every requirement at depth; ``PARTIAL`` some; ``SHALLOW``
+    none at depth but the provision is there at a coarser level, which is B10
+    itself (right Act, wrong depth); ``MISSED`` none of it. Graded on the
+    answer with the scope footer removed.
+    """
+    truth = DEPTH_TRUTH.get(str(session_id))
+    if not truth:
+        return "n/a", []
+    body = _without_footer(answer)
+    graded = []
+    for req in truth["reqs"]:
+        status, m, window = _grade_depth_req(body, req, truth["acts"])
+        graded.append((req, status, m, window))
+    statuses = [g[1] for g in graded]
+    if all(s == "deep" for s in statuses):
+        return "DELIVERED", graded
+    if any(s == "deep" for s in statuses):
+        return "PARTIAL", graded
+    if any(s == "coarse" for s in statuses):
+        return "SHALLOW", graded
+    return "MISSED", graded
+
+
+# Any provision reference, for the whole-directory profile: how often a cited
+# section, regulation, article or paragraph carries a subdivision at all.
+_ANY_PROVISION_REF = re.compile(
+    r"(?:" + _SEC_PREFIX
+    + r"|\b(?:reg(?:ulation)?s?|art(?:icle)?s?|para(?:graph)?s?)\.?\s?)"
+    r"(\d+[A-Z]{0,2})" + _SEC_END + r"((?:" + _SUBSEC + r")?)",
+    re.I)
+
+
+def depth_profile(answer: str) -> tuple:
+    """(provision references, how many carry a subdivision) in one answer."""
+    body = _without_footer(answer)
+    refs = _ANY_PROVISION_REF.findall(body)
+    return len(refs), sum(1 for _, sub in refs if sub)
+
+
+def _depth_slots(doc: dict) -> dict:
+    """Per turn: prose (footer removed), links, provision links, sources kept."""
+    out = {}
+    for t in doc.get("turns", []):
+        ans = t.get("answer") or ""
+        links = MD_LINK.findall(ans)
+        out[t.get("turn")] = {
+            "prose": len(_without_footer(ans)),
+            "links": len(links),
+            "provision_links": sum(1 for _, u in links if _PROVISION_URL.search(u)),
+            "sources_kept": len((t.get("audit") or {}).get("sources") or []),
+        }
+    return out
+
+
+def _depth_invariant_one(before: Path, after: Path) -> None:
+    """P3.1's Invariant 1 panel: did prose, links or sources fall to buy depth?
+
+    Per session and turn slot, means over reps, graded sessions only. P2.4's
+    A/B is why links are here: a Phase 2 or prompt change took case-law links
+    reaching the answer from 7 of 15 to 2 of 13 without touching anything the
+    acceptance measured.
+    """
+    def load(d):
+        per = {}
+        for doc in load_runs(d):
+            sid = str(doc.get("session_id"))
+            if sid in DEPTH_TRUTH:
+                per.setdefault(sid, []).append(doc)
+        return per
+
+    b, a = load(before), load(after)
+    shared = sorted(set(b) & set(a))
+    print()
+    print(f"  --before {before.name}  (Invariant 1: means per turn slot, "
+          f"shared graded sessions: {', '.join(shared) or 'none'})")
+    if not shared:
+        return
+    keys = ("prose", "links", "provision_links", "sources_kept")
+    fell = Counter()
+    slots = 0
+
+    def means(docs):
+        acc = {}
+        for doc in docs:
+            for turn, m in _depth_slots(doc).items():
+                acc.setdefault(turn, []).append(m)
+        return {turn: {k: sum(x[k] for x in ms) / len(ms) for k in keys}
+                for turn, ms in acc.items()}
+
+    for sid in shared:
+        mb, ma = means(b[sid]), means(a[sid])
+        for turn in sorted(set(mb) & set(ma), key=lambda x: (x is None, x)):
+            slots += 1
+            row = []
+            for k in keys:
+                x, y = mb[turn][k], ma[turn][k]
+                if y < x:
+                    fell[k] += 1
+                row.append(f"{k} {x:,.1f} -> {y:,.1f}")
+            print(f"    {sid} t{turn}  (reps {len(b[sid])} -> {len(a[sid])})  "
+                  + "  ".join(row))
+    print("    fell in: " + ", ".join(f"{k} {fell[k]}/{slots}" for k in keys)
+          + "   (P2.7's measured noise floor for sources_kept: 3 of 8 slots)")
+
+
+def cmd_depth(args) -> int:
+    """P3.1's acceptance: the provision at the granularity asked for, per turn.
+
+    Grades only the sessions in `DEPTH_TRUTH`. Always exits 0: it is a
+    measurement over stochastic sessions, and the pass bar (n=3, all clean on
+    the headline turn) is read off its output, not off an exit code.
+
+    `--answers` prints the evidence behind every requirement, with the
+    instrument each match was attributed to; `--drops` prints every sentence in
+    the requirement's vocabulary that was NOT counted as delivering it. Read
+    both, in both directions, before quoting a number.
+    """
+    docs = [d for d in load_runs(Path(args.dir))
+            if str(d.get("session_id")) in DEPTH_TRUTH]
+    print(f"P3.1 (B10) - provision depth over {args.dir}  "
+          f"({len(docs)} graded run file(s))")
+    if not docs:
+        print("  no graded session (expected any of %s)"
+              % ", ".join(sorted(DEPTH_TRUTH)))
+    rows, drops = [], []
+    headline = {}
+    for doc in sorted(docs, key=lambda d: (str(d.get("session_id")),
+                                           d.get("rep", 1))):
+        sid = str(doc.get("session_id"))
+        truth = DEPTH_TRUTH[sid]
+        by_turn = {t.get("turn"): t for t in doc.get("turns", [])}
+        verdicts = []
+        for turn in truth["turns"]:
+            t = by_turn.get(turn)
+            ans = (t or {}).get("answer") or ""
+            if not ans.strip():
+                verdicts.append((turn, "NO ANSWER", []))
+                continue
+            verdict, graded = depth_verdict(sid, ans)
+            verdicts.append((turn, verdict, graded))
+            if args.drops:
+                # Only requirements this turn did NOT deliver: for those, every
+                # sentence in the requirement's vocabulary is a candidate
+                # under-read. A delivered requirement's evidence is --answers'.
+                body = _without_footer(ans)
+                for req, status, _, _ in graded:
+                    if status == "deep":
+                        continue
+                    for sent in _sentences(body):
+                        if (req.coarse.search(sent) or req.deep.search(sent)
+                                or any(f.search(sent) for f in req.facts)):
+                            drops.append((sid, doc.get("rep", 1), turn,
+                                          f"[{req.label}] {sent}"))
+        rows.append((sid, doc.get("rep", 1), doc.get("git_head"), verdicts,
+                     by_turn))
+        first = verdicts[0][1] if verdicts else "NO ANSWER"
+        before_asked = any(v == "DELIVERED" for _, v, _ in verdicts)
+        h = headline.setdefault(sid, Counter())
+        h["reps"] += 1
+        h[first] += 1
+        h["by_last_graded"] += int(before_asked)
+
+    print()
+    print("  headline turn (the first graded turn), per session:")
+    for sid in sorted(headline):
+        h = headline[sid]
+        turns = DEPTH_TRUTH[sid]["turns"]
+        tail = ""
+        if len(turns) > 1:
+            tail = (f"   delivered by turn {turns[-1]}: "
+                    f"{h['by_last_graded']}/{h['reps']}")
+        print(f"    {sid}  t{turns[0]}  DELIVERED {h['DELIVERED']}/{h['reps']}"
+              f"  PARTIAL {h['PARTIAL']}  SHALLOW {h['SHALLOW']}"
+              f"  MISSED {h['MISSED']}  NO ANSWER {h['NO ANSWER']}{tail}")
+    print()
+    for sid, rep, head, verdicts, by_turn in rows:
+        line = "  ".join(f"t{turn} {verdict}" for turn, verdict, _ in verdicts)
+        print(f"  {sid} rep{rep}  {line}   [{head or '?'}]")
+        for turn, verdict, graded in verdicts:
+            for req, status, m, window in graded:
+                print(f"        t{turn} {status:7} {req.label}")
+                if args.answers and m is not None:
+                    body = _without_footer(by_turn[turn].get("answer") or "")
+                    who = _attribute_instrument(body, m.start(),
+                                                DEPTH_TRUTH[sid]["acts"])
+                    ctx = body[max(0, m.start() - 60):m.end() + 60]
+                    print(f"            match {m.group(0)!r} -> {who}")
+                    print(f"            ...{ctx!r}...")
+                    if window:
+                        print(f"            window: {window[:300]!r}")
+        if args.answers:
+            for turn, _, _ in verdicts:
+                q = (by_turn.get(turn) or {}).get("question") or ""
+                print(f"        t{turn} question: {q[:120]}")
+    if args.drops:
+        print()
+        print(f"  --drops: {len(drops)} sentence(s) in a requirement's vocabulary "
+              f"NOT counted as delivering it")
+        for sid, rep, turn, sent in drops:
+            print(f"    {sid} rep{rep} t{turn}: {sent[:220]}")
+    if args.all:
+        print()
+        print("  depth profile over every answered turn (section/regulation/"
+              "article/paragraph references carrying a subdivision):")
+        per = {}
+        for doc in load_runs(Path(args.dir)):
+            sid = str(doc.get("session_id"))
+            for t in doc.get("turns", []):
+                if (t.get("answer") or "").strip():
+                    n, sub = depth_profile(t["answer"])
+                    acc = per.setdefault(sid, [0, 0, 0])
+                    acc[0] += 1
+                    acc[1] += n
+                    acc[2] += sub
+        tot = [sum(v[i] for v in per.values()) for i in range(3)]
+        for sid in sorted(per):
+            turns, n, sub = per[sid]
+            print(f"    {sid}  turns {turns:3}  refs {n:4}  with subdivision "
+                  f"{sub:4}  ({100 * sub / max(n, 1):3.0f}%)")
+        print(f"    ALL   turns {tot[0]:3}  refs {tot[1]:4}  with subdivision "
+              f"{tot[2]:4}  ({100 * tot[2] / max(tot[1], 1):3.0f}%)")
+    if args.before:
+        _depth_invariant_one(Path(args.before), Path(args.dir))
+    return 0
+
+
 # P1.6's demotion marker, counted by `corpus` as the measured cost of P3.5's
 # decision to emit provision LABELS rather than provision URLs.
 PROVISION_MARKER = "\u2020"
@@ -4141,6 +4608,19 @@ def main(argv: Iterable[str] | None = None) -> int:
     dc.add_argument("--before", metavar="DIR",
                     help="P2.7 acceptance: compare halts and sources_kept per turn "
                          "slot against DIR, shared sessions only (use --only)")
+    dp = sub.add_parser("depth",
+                        help="P3.1 acceptance: the provision at the granularity "
+                             "asked for, graded per turn against a verified truth")
+    dp.add_argument("--answers", action="store_true",
+                    help="print the evidence and attribution behind every requirement")
+    dp.add_argument("--drops", action="store_true",
+                    help="print every sentence in a requirement's vocabulary "
+                         "NOT counted as delivering it")
+    dp.add_argument("--all", action="store_true",
+                    help="also profile subdivision depth over every answered turn")
+    dp.add_argument("--before", metavar="DIR",
+                    help="Invariant 1: prose, links and sources per turn slot "
+                         "against DIR, graded sessions only")
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")
@@ -4162,6 +4642,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "nosearch": cmd_nosearch,
         "caselaw": cmd_caselaw,
         "discovery": cmd_discovery,
+        "depth": cmd_depth,
         "blanks": cmd_blanks,
         "corpus": cmd_corpus,
     }[args.cmd](args)

@@ -1263,3 +1263,226 @@ def test_nosearch_prints_the_cost_and_exits_on_a_finding(tmp_path, capsys):
 def test_nosearch_missing_keys_do_not_raise():
     assert rr.nosearch_rows({}) == []
     assert rr.nosearch_rows({"turns": [{"answer": "x"}]})[0]["shape"] == "A"
+
+
+# --- P3.1 (B10): the depth grader -------------------------------------------
+#
+# Every fixture is a shape a replay actually produced (`baseline`/`wave1`), not
+# a synthetic label: P1.4's `test_bad_link_*` stayed green for three sessions
+# because its fixtures were shapes no real answer has.
+
+_WISA = "Water Industry (Scotland) Act 2002"
+_PFA = "Public Finance and Accountability (Scotland) Act 2000"
+
+
+def _link(act, label, act_id, sec):
+    return (f"[{act} - {label}](http://www.legislation.gov.uk/{act_id}/"
+            f"section/{sec})")
+
+
+@pytest.mark.parametrize("text,num", [
+    ("s.57(3)(a)", "57"), ("Section 57(3a) and (4)", "57"), ("s. 21(2)", "21"),
+    ("section 45(2) of the 2002 Act", "45"), ("s.22(5)(a)", "22"),
+    ("ss.21(3)-(5)", "21"),
+])
+def test_a_subsection_citation_is_deep(text, num):
+    deep, coarse = rr._section_patterns(num)
+    assert deep.search(text)
+    assert not coarse.search(text)
+
+
+def test_the_long_form_subsection_is_deep_although_its_tail_reads_coarse():
+    """"subsection (3) of section 57" ends in a bare "section 57", so both
+    patterns match; the grader tests deep first, so the verdict is deep."""
+    deep, _ = rr._section_patterns("57")
+    assert deep.search("subsection (3) of section 57")
+    ans = _6365([(_WISA, "asp/2002/3", "s.45(1)"), (_WISA, "asp/2002/3", "s.57"),
+                 (_PFA, "asp/2000/1", "s.21(2)"), (_PFA, "asp/2000/1", "s.22(5)")])
+    ans += f"\nUnder the {_WISA}, subsection (3) of section 57 sets the periods."
+    assert rr.depth_verdict("6365", ans)[0] == "DELIVERED"
+
+
+@pytest.mark.parametrize("text,num", [
+    ("Section 57", "57"), ("s. 21", "21"), ("s.45.", "45"),
+    ("sections 21 and 22 of the 2000 Act", "22"),
+    ("sections 26, 28, 50 and 51", "28"),
+])
+def test_a_whole_section_citation_is_coarse(text, num):
+    deep, coarse = rr._section_patterns(num)
+    assert coarse.search(text)
+    assert not deep.search(text)
+
+
+@pytest.mark.parametrize("text,num", [
+    ("section 57A(1)", "57"), ("section 570", "57"),
+    ("Scotland’s 20 days", "20"), ("Scotland's 20 days", "20"),
+    ("http://www.legislation.gov.uk/asp/2000/1/section/21", "21"),
+    ("SSI 2007/174", "2007"),
+])
+def test_a_different_provision_is_neither(text, num):
+    deep, coarse = rr._section_patterns(num)
+    assert not deep.search(text) and not coarse.search(text)
+
+
+def test_attribution_takes_the_nearest_instrument_on_the_line():
+    acts = rr.DEPTH_TRUTH["6365"]["acts"]
+    text = (f"Ministers direct the deadline (**{_WISA}, Section 45**), but the "
+            f"2000 Act caps it ({_link(_PFA, 's.21(2)', 'asp/2000/1', 21)}).")
+    assert rr._attribute_instrument(text, text.index("Section 45"), acts) == "asp/2002/3"
+    assert rr._attribute_instrument(text, text.index("s.21(2)"), acts) == "asp/2000/1"
+
+
+def test_attribution_falls_back_to_the_last_instrument_named():
+    acts = rr.DEPTH_TRUTH["6365"]["acts"]
+    text = f"Under the {_PFA}:\n* the account goes to the Auditor General (s.21(2))."
+    assert rr._attribute_instrument(text, text.index("s.21(2)"), acts) == "asp/2000/1"
+    assert rr._attribute_instrument("s.21(2) alone", 0, acts) is None
+
+
+def _6365(labels):
+    return "\n".join(
+        f"* step ({_link(act, lab, aid, lab.split('.')[1].split('(')[0])})."
+        for act, aid, lab in labels)
+
+
+def test_6365_all_whole_sections_is_shallow():
+    """`baseline` rep 2 and the original: the lawyer's complaint exactly."""
+    ans = _6365([(_WISA, "asp/2002/3", "s.45"), (_WISA, "asp/2002/3", "s.57"),
+                 (_PFA, "asp/2000/1", "s.21"), (_PFA, "asp/2000/1", "s.22")])
+    verdict, graded = rr.depth_verdict("6365", ans)
+    assert verdict == "SHALLOW"
+    assert [g[1] for g in graded] == ["coarse"] * 4
+
+
+def test_6365_every_anchor_at_subsection_depth_is_delivered():
+    ans = _6365([(_WISA, "asp/2002/3", "s.45(1)(c)"),
+                 (_WISA, "asp/2002/3", "s.57(3)(a)"),
+                 (_PFA, "asp/2000/1", "s.21(2)"), (_PFA, "asp/2000/1", "s.22(5)")])
+    assert rr.depth_verdict("6365", ans)[0] == "DELIVERED"
+
+
+def test_6365_a_subsection_attributed_to_the_other_act_does_not_count():
+    """PFA(S)A s.21(2) cited under the 2002 Act's name is not PFA(S)A s.21."""
+    ans = _6365([(_WISA, "asp/2002/3", "s.45(1)"), (_WISA, "asp/2002/3", "s.57(3)"),
+                 (_WISA, "asp/2002/3", "s.21(2)"), (_PFA, "asp/2000/1", "s.22(5)")])
+    verdict, graded = rr.depth_verdict("6365", ans)
+    assert verdict == "PARTIAL"
+    assert dict((g[0].label, g[1]) for g in graded)["PFA(S)A 2000 s.21"] == "missed"
+
+
+_6396_DELIVERED = (
+    "Under Schedule 1, Section 1(2) of [The Cattle Identification (Scotland) "
+    "Regulations 2007](http://www.legislation.gov.uk/id/ssi/2007/174), the time "
+    "limits are:\n\n*   **Dairy animals:** First ear tag within 36 hours of "
+    "birth; second ear tag within 20 days of birth.\n*   **All other bovine "
+    "animals:** Within 20 days of birth.")
+
+
+@pytest.mark.parametrize("cite", [
+    "Schedule 1, Section 1(2)", "Schedule 1, paragraph 1(2)(a)",
+    "paragraph 1(2) of Schedule 1 to", "Sch. 1, para. 1(2)",
+])
+def test_6396_the_paragraph_with_both_limits_is_delivered(cite):
+    ans = _6396_DELIVERED.replace("Schedule 1, Section 1(2)", cite)
+    assert rr.depth_verdict("6396", ans)[0] == "DELIVERED"
+
+
+def test_6396_the_limits_without_the_paragraph_are_shallow():
+    """`baseline` rep 1: the right numbers, from memory, while saying the
+    Regulations "could not be retrieved". Stating them is not citing them."""
+    ans = ("The Cattle Identification (Scotland) Regulations 2007 could not be "
+           "retrieved in this quick search. The 2007 Regulations generally set "
+           "specific deadlines (e.g., 20 days for the second tag, or 36 hours "
+           "for the first tag in dairy herds).")
+    assert rr.depth_verdict("6396", ans)[0] == "SHALLOW"
+
+
+def test_6396_one_limit_only_is_shallow_and_could_not_locate_is_missed():
+    one = ("Under the Cattle Identification (Scotland) Regulations 2007 (SSI "
+           "2007/174), a bovine animal must be identified within **20 days**.")
+    assert rr.depth_verdict("6396", one)[0] == "SHALLOW"
+    none = ("I was unable to locate the specific timeframe. The relevant "
+            "provisions are likely within the Cattle Identification (Scotland) "
+            "Regulations 2007.")
+    assert rr.depth_verdict("6396", none)[0] == "MISSED"
+
+
+_FOISA = "Freedom of Information (Scotland) Act 2002"
+
+
+@pytest.mark.parametrize("sentence", [
+    "*(Note: This is distinct from Section 36(2), which deals with information "
+    "obtained from a third party where disclosure would constitute an "
+    "actionable breach of confidence).*",
+    "While an actionable breach of confidence under **Section 36(2)** is listed "
+    "as an absolute exemption under **Section 2(2)(c)**, section 36(1) is not.",
+    "Section 36 also exempts information obtained from another person where "
+    "disclosure would be actionable.",
+    "**Section 36(2):**\nInformation obtained from another person whose "
+    "disclosure would be an actionable breach of confidence.",
+])
+def test_6348_s36_2_with_its_substance_is_delivered(sentence):
+    ans = f"Under the {_FOISA}, section 36(1) covers privilege.\n\n{sentence}"
+    assert rr.depth_verdict("6348", ans)[0] == "DELIVERED"
+
+
+@pytest.mark.parametrize("ans", [
+    # The original t1 and t2: s.36(1) only.
+    f"Under section 36(1) of the [{_FOISA}](http://www.legislation.gov.uk/id/"
+    "asp/2002/13), information is exempt if a claim to confidentiality of "
+    "communications could be maintained in legal proceedings.",
+    # Named, with no substance.
+    f"Under the {_FOISA}, s.36(1) is qualified; s.36(2) is absolute under s.2(2)(c).",
+    # Substance about a DIFFERENT provision is not s.36(2).
+    f"Under the {_FOISA}, section 36(1) applies. Under the Data Protection Act "
+    "2018, Schedule 2 paragraph 19 covers an actionable breach of confidence.",
+])
+def test_6348_s36_1_alone_or_s36_2_named_bare_is_shallow(ans):
+    assert rr.depth_verdict("6348", ans)[0] == "SHALLOW"
+
+
+def test_the_scope_footer_cannot_satisfy_the_grader():
+    """P2.2's footer quotes the search terms. A worker that searched for
+    "section 36(2) actionable breach of confidence" must not deliver 6348."""
+    ans = (f"Under the {_FOISA}, section 36(1) applies.\n\n*Search scope: "
+           'searched the legislation index for "section 36(2) actionable breach '
+           'of confidence", no filters.*')
+    assert rr.depth_verdict("6348", ans)[0] == "SHALLOW"
+
+
+def test_depth_profile_counts_subdivisions():
+    n, sub = rr.depth_profile("See s.57(3)(a), section 45, reg. 5(1) and "
+                              "paragraph 19. *Search scope: s.99(1).*")
+    assert (n, sub) == (4, 2)
+
+
+def test_an_ungraded_session_is_not_applicable():
+    assert rr.depth_verdict("6341", "anything") == ("n/a", [])
+
+
+def test_the_depth_command_reads_a_directory_and_the_before_panel(tmp_path, capsys):
+    import argparse
+    before, after = tmp_path / "before", tmp_path / "after"
+    before.mkdir()
+    after.mkdir()
+    shallow = _6365([(_WISA, "asp/2002/3", "s.45"), (_WISA, "asp/2002/3", "s.57"),
+                     (_PFA, "asp/2000/1", "s.21"), (_PFA, "asp/2000/1", "s.22")])
+    deep = _6365([(_WISA, "asp/2002/3", "s.45(1)"), (_WISA, "asp/2002/3", "s.57(3)"),
+                  (_PFA, "asp/2000/1", "s.21(2)"), (_PFA, "asp/2000/1", "s.22(5)")])
+    for d, ans in ((before, shallow), (after, deep)):
+        turn = {"turn": 1, "answer": ans,
+                "audit": {"sources": [{"url": "u"}] * 3}}
+        (d / "6365_rep1.json").write_text(json.dumps(
+            {"session_id": "6365", "rep": 1, "turns": [turn]}), encoding="utf-8")
+    (after / "6341_rep1.json").write_text(json.dumps(
+        {"session_id": "6341", "rep": 1, "turns": [{"turn": 1, "answer": "x"}]}),
+        encoding="utf-8")
+    args = argparse.Namespace(dir=str(after), answers=True, drops=True,
+                              all=True, before=str(before))
+    assert rr.cmd_depth(args) == 0
+    out = capsys.readouterr().out
+    assert "6365  t1  DELIVERED 1/1" in out
+    assert "(1 graded run file(s))" in out
+    assert "-> asp/2000/1" in out
+    assert "sources_kept 3.0 -> 3.0" in out
+    assert "fell in: prose 0/1" in out
