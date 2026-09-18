@@ -2887,3 +2887,112 @@ re-baseline.** The last full sweep is `wave1`, taken before every Wave 2 row.
 P3.1's own acceptance is per-session and depends only on P1.5, so it can
 proceed without one. Whether it should is the user's call, and it should be
 made before P3.1 is built, not during it.
+
+---
+
+## Session 15, continued — 2026-09-18 — Thomas's external review folded in; the Fix Tracker
+
+**Done:**
+- **Thomas's review mapped and folded in.** He sent nine proposed actions
+  (`2026-09-10-lexchat-developer-actions.md`, reviewed against `main`). Every
+  action now has a place: four new rows (**P3.9**, **P3.10**, **P4.6**,
+  **P4.7**), notes on P3.4, P3.8, P4.1, P4.3 and P4.5, `docs/TODO.md` **B6**
+  (action 8, outside the plan), and four items held as *to be verified* in the
+  plan's new **External review** section, which also maps all nine.
+- **The Fix Tracker**: a one-line-per-fix table shared with Thomas, published as
+  a private page, <https://claude.ai/artifact/JtrwLwRZnRihfe8kHj3EaJ>. Source:
+  `docs/prepilot-fixes/summary-table.html` (a `ROWS` array at the top of its
+  script). **Update it only when the user asks**, normally at the end of a
+  session (FIX_PLAN "How to use this file", step 7).
+- **Ledger: 24 of 40 rows** (4 added). B5 now also waits on P4.6 and P4.7. No new
+  row is in Wave 2, so P3.1 stays unblocked.
+- No product code changed. No replay spend.
+
+**How each new number was measured — the scripts were throwaway, so the method
+is recorded here in full.** Directories are under
+`docs/prepilot-fixes/evidence/replay/`.
+- **P3.9, the case-law date filter (live, read-only, 2026-09-18).** `GET
+  https://caselaw.nationalarchives.gov.uk/atom.xml` with `query=Evans`,
+  `court=ewca/crim`, reading each `<entry><published>`. With no dates, with
+  `date_from=2025-01-01&date_to=2025-12-31` (what `executor.py` sends), and with
+  `from_date`/`to_date`: the same 50 entries, 2024-2026, first 2026-07-17. With
+  `from_date_0=1&from_date_1=1&from_date_2=2025&to_date_0=31&to_date_1=12&to_date_2=2025`:
+  19 entries, all 2025. Scale: `search_case_law` tool records whose `args` carry
+  `date_from` or `date_to`, over every directory: 19 of 569 (all 6385); no run
+  file's `filters` sets a date.
+- **P3.10, dependent plan steps.** For every turn with a `plan`, steps 2..n
+  whose `title + " " + detail` matches (case-insensitive)
+  `\b(identified (in|by|above|earlier)|(from|in) (step|the previous|the earlier|step \d)|previous(ly)? (step|identified)|those (instruments|regulations|orders|acts)|these (instruments|regulations|orders|acts)|the (instruments|regulations|orders|SSIs|Acts) (identified|found|located)|identified SSIs|identified (instruments|regulations|orders))\b`.
+  A step's halt is its delegation's `halted`, or `[Research halted` in its
+  report (schema v1), joined on the step number. Over every directory: 136
+  plans, **34** with a dependent step; dependent steps 42, halted 12 (29%);
+  other steps 452, halted 53 (12%).
+- **P4.6, the scripted negative.** `available database does not contain
+  information`, case-insensitive, on `replay_report._without_footer(answer)`:
+  22 answered turns in each of `baseline` (of 190 legislation_only) and `wave1`
+  (of 122), none of them calling `search_case_law`. Over every other directory,
+  `(available )?database does not contain information`: 34 of 482 answered
+  turns (6340, 6341). The case-law Worker's own scripted line is `prompts.py:253`.
+- **P4.5, 6363.** In `baseline/6363` rep 1 turn 5, Deep Research step 1's tools
+  include a `raw_result` containing *Wheat* and its `report` is empty (0 chars);
+  step 2 is empty too; `wave1/6363` rep 1 turn 5 step 1 is empty as well.
+- **P3.4, the filter note.** `prompts._JURISDICTION_EXTENT_NOTES["scotland"]`
+  begins *"Prioritise legislation where extent includes S or E+W+S+NI"*.
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **The same issue had been raised before and lost.** Thomas's action 2 is
+  `docs/TODO.md` **D17**, from an external review in August, with a better fix
+  (a per-mode synthesis prompt, which also stops Holyrood Deep Research reports
+  being told to write an in-force section). Memory recorded D16 and D17 as
+  "folded into the fix plan" when the freeze lifted. **D17 never was**, and
+  neither were **four of D16's items** (see the open question on the
+  recommended-order line). D17 is now P4.7. **Lesson: a "folded in" claim is
+  checked by grepping the plan for the item, not by remembering it.**
+
+- **A prompt instructs a defect our plan had read as model behaviour, a third
+  time.** `prompts.py:180` scripts *"The available database does not contain
+  information on this specific issue"*, and the model says it verbatim in 22
+  turns per full sweep. P4.1's handover item (1) met the sentence and treated it
+  as behaviour. P2.5 recorded this pattern as a lesson; it still took an
+  outside reader to apply it here.
+
+- **Our classification missed three things Thomas found.** 6365 and 6405 (graded
+  PASS) carry a "no case law found" in legislation-only answers, and 6363's
+  "no foundational authority" is P4.5's empty-report trap, which we had filed
+  under corpus recency (B12). **A frozen classification is evidence, not
+  ground truth.**
+
+- **An instrument error at the handover, in the unflattering direction.** P3.10
+  was first published as "14 of 136 plans"; the regex behind that count missed
+  "the identified SSIs", while the halt rates beside it used a broader one.
+  Re-run with one regex, it is **34 of 136**. Caught by re-running every number
+  before writing the method down. Corrected with a strikethrough on the row.
+
+- **A filter that silently does nothing, found by a live probe, not by
+  transcripts.** P3.9 is B2's shape again (the jurisdiction filter), and like B2
+  no pre-pilot session revealed it; a three-request probe did. Session 5's
+  method lesson — probe the live API before reading transcripts — applies to the
+  case-law API as much as to LEX.
+
+**Decisions taken this session (the user's):**
+- The table's columns: Source (T / R / T & R), Fix, Status, Plan ref, Thomas ref.
+- Status values: Fixed / In progress / Verified / To be verified. **No "Not
+  recommended"**: proposals we would argue against are "To be verified".
+- The table is an artifact, **updated when the user asks**, normally at the end
+  of a session.
+- Thomas's suggestions go into the plan where applicable (done).
+
+**Open with the user:**
+1. Re-baseline before Wave 3 (Invariant 3), or not.
+2. Whether D16's four unplanned items become rows.
+3. Whether Thomas's document (and his two companion notes) should be committed
+   to the repo. It paraphrases lawyers' questions at about the level of detail
+   this plan already carries.
+
+**State of the branch:** `fix/prepilot-defects`, no upstream, **NOTHING
+PUSHED**. 1196 tests green. No server running; the dev box is restored.
+
+**Next action:** settle the two open questions, then **P3.1** (the keystone).
+Of the new rows, **P3.9** is the cheapest (deterministic, the fix is known) and
+blocks nothing.
