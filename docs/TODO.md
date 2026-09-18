@@ -1095,11 +1095,19 @@ Fixes to the measurement instrument, ordered by what they cost the analysis:
 ## Retrieval & report-prompt accuracy (UNPARKED 2026-09-14 — now in build)
 
 > **The freeze is lifted.** D16 and D17 below are unparked and folded into
-> `docs/prepilot-fixes/FIX_PLAN.md`: D16 defect 1 (impossible year window) and defect 3
-> (missing zero-result nudge) sit in row **P2.2**; D16 defect 2 (discarded result count) is
+> `docs/prepilot-fixes/FIX_PLAN.md`: ~~D16 defect 1 (impossible year window) and~~ defect 3
+> (missing zero-result nudge) ~~sit~~ sits in row **P2.2**; D16 defect 2 (discarded result count) is
 > **P1.3**; D16 item 7 (the unverified ranked-sections array) is **P3.1**, which still requires
-> confirming the live response shape first. D17 remains as recorded below and is not yet
-> allocated a row — the mode-blind synthesis prompt is real but no pre-pilot session evidences
+> confirming the live response shape first.
+> **Corrected 2026-09-18 (Session 16): defect 1 never reached P2.2** — P2.2's row does not
+> mention the year window, and `executor.py` still has no `year_from <= year_to` check after
+> the intersection. Four D16 items had not reached the plan: defect 1, enhancement 5
+> (always over-fetch), enhancement 6 (returned title vs named Act) and the structural
+> one-call-per-Act rule. **User decision, 2026-09-18: the one-call rule is folded into
+> P3.1 (its third part); defect 1 and enhancements 5 and 6 stay PARKED here and are NOT
+> plan rows.** Defect 1 and item 5 were re-verified live in code the same day.
+> ~~D17 remains as recorded below and is not yet
+> allocated a row~~ (D17 is now plan row **P4.7**, 2026-09-18; see its entry below) — the mode-blind synthesis prompt is real but no pre-pilot session evidences
 > it, so it is scheduled after Wave 3 rather than inside it.
 
 Both items below are parked for the same reason and are to be **unparked and reviewed as a
