@@ -4243,6 +4243,28 @@ def _grade_depth_req(text: str, req: DepthReq, acts: dict) -> tuple:
     return "missed", None, None
 
 
+def depth_counts(text: str, req: DepthReq, acts: dict) -> tuple:
+    """(references at depth, all references) to one requirement's provision.
+
+    **The stricter readout, printed beside the verdict and never replacing it.**
+    The verdict asks for the provision at depth AT LEAST ONCE, and the first
+    HEAD run of 6365 (`wave2`) showed how lenient that is: two of its four
+    anchors were met by amendment notes ("substituted Section 57(7)(a)") while
+    every timeline claim linked the bare section. This ratio says how the
+    provision is cited across the whole answer. Coarse matches inside a deep
+    one (the tail of "subsection (3) of section 57") are not double-counted.
+    """
+    def owned(rx):
+        return [m for m in rx.finditer(text)
+                if _attribute_instrument(text, m.start(), acts) == req.act]
+
+    deep = owned(req.deep)
+    spans = [(m.start(), m.end()) for m in deep]
+    coarse = [m for m in owned(req.coarse)
+              if not any(s <= m.start() < e for s, e in spans)]
+    return len(deep), len(deep) + len(coarse)
+
+
 def depth_verdict(session_id: str, answer: str) -> tuple:
     """(verdict, [(req, status, match, window)]) for one graded turn.
 
@@ -4425,8 +4447,11 @@ def cmd_depth(args) -> int:
         line = "  ".join(f"t{turn} {verdict}" for turn, verdict, _ in verdicts)
         print(f"  {sid} rep{rep}  {line}   [{head or '?'}]")
         for turn, verdict, graded in verdicts:
+            body_t = _without_footer((by_turn.get(turn) or {}).get("answer") or "")
             for req, status, m, window in graded:
-                print(f"        t{turn} {status:7} {req.label}")
+                n_deep, n_all = depth_counts(body_t, req, DEPTH_TRUTH[sid]["acts"])
+                print(f"        t{turn} {status:7} {req.label}"
+                      f"   ({n_deep} of {n_all} reference(s) at depth)")
                 if args.answers and m is not None:
                     body = _without_footer(by_turn[turn].get("answer") or "")
                     who = _attribute_instrument(body, m.start(),

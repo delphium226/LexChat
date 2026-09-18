@@ -1450,6 +1450,20 @@ def test_the_scope_footer_cannot_satisfy_the_grader():
     assert rr.depth_verdict("6348", ans)[0] == "SHALLOW"
 
 
+def test_depth_counts_is_the_stricter_readout_beside_the_verdict():
+    """The first HEAD run of 6365 met s.57 through an amendment note while
+    every timeline claim linked the bare section: DELIVERED on the lenient bar,
+    1 of 3 on this one. The long form is not double-counted."""
+    req = [r for r in rr.DEPTH_TRUTH["6365"]["reqs"] if r.label.endswith("s.57")][0]
+    acts = rr.DEPTH_TRUTH["6365"]["acts"]
+    ans = (f"{_link(_WISA, 's.57', 'asp/2002/3', 57)} and "
+           f"{_link(_WISA, 's.57', 'asp/2002/3', 57)}; the 2005 Act substituted "
+           f"Section 57(7)(a) of the {_WISA}.")
+    assert rr.depth_counts(ans, req, acts) == (1, 3)
+    assert rr.depth_counts(f"Under the {_WISA}, subsection (3) of section 57.",
+                           req, acts) == (1, 1)
+
+
 def test_depth_profile_counts_subdivisions():
     n, sub = rr.depth_profile("See s.57(3)(a), section 45, reg. 5(1) and "
                               "paragraph 19. *Search scope: s.99(1).*")
