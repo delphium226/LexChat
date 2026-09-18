@@ -90,8 +90,17 @@ def test_no_prompt_example_names_a_provision_the_acceptance_grades(prompt):
 
 @pytest.mark.parametrize("name", ["research", "hybrid"])
 def test_the_research_workers_ask_for_the_whole_provision(name):
-    """6348: the Worker had s.36(2) in hand and described s.36(1) only."""
-    assert "what each of its subsections provides" in _LEG_WORKERS[name]
+    """6348: the Worker had s.36(2) in hand and described s.36(1) only.
+
+    ~~"Where the answer turns on one section"~~ was the first wording, and the
+    smoke run (`wave3_p31_smoke`) showed the gate was wrong: 6348's first
+    answer cites six provisions across two Acts, so it never fired. The
+    lawyer's complaint is about ONE subsection cited without its siblings, so
+    the rule now fires on exactly that."""
+    p = _LEG_WORKERS[name]
+    assert ("When you cite one subsection of a section, say in a line what that "
+            "section's other subsections provide") in p
+    assert "Where the answer turns on one section" not in p
 
 
 def test_the_quick_lookup_worker_asks_for_the_subsection_in_place():
@@ -178,6 +187,115 @@ def test_a_pinpoint_label_is_not_a_wrong_granularity_link(label, url):
     doc = {"session_id": "6365", "rep": 1,
            "turns": [{"turn": 1, "answer": f"See [{label}]({url}).", "audit": {}}]}
     assert rr.analyse_run(doc).bad_links == []
+
+
+# ---------------------------------------------------------------------------
+# Seam 2 in code: the synthesis gets the steps' pinpoints (user decision)
+# ---------------------------------------------------------------------------
+
+S45 = "http://www.legislation.gov.uk/asp/2002/3/section/45"
+S21 = "http://www.legislation.gov.uk/asp/2000/1/section/21"
+SCH1 = "http://www.legislation.gov.uk/id/ssi/2007/174/schedule/1"
+
+# The shape of `wave3_p31_smoke`'s step 2 report, which the synthesis flattened.
+_STEP_WITH_PINS = (
+    f"* Interim report to 30 September ([WI(S)A 2002 - s.57(3)(a) & (4)]({S57})).\n"
+    f"* Accounts to the Auditor General ([WI(S)A 2002 - s.45(1)(c)]({S45})).\n"
+    f"* Six months ([PFA(S)A 2000 - s.21(2)]({S21})), and see [s.21(3)]({S21}).\n"
+    f"* Directions ([WI(S)A 2002 - s.45(2)]({S45})); tags ([Sch 2 para 3(1)]({SCH1})).\n"
+)
+_STEP_BARE = f"* Accounts ([WI(S)A 2002 - s.45]({S45})); reports ([s.57]({S57})).\n"
+
+
+def test_the_block_lists_each_urls_pinpoints_from_the_findings():
+    from src.utils.citation_links import pinpoint_block
+    block = pinpoint_block([_STEP_WITH_PINS, _STEP_BARE])
+    assert block.startswith("\n\n[PINPOINTS TO KEEP")
+    assert block.rstrip().endswith("[/PINPOINTS TO KEEP]")
+    assert f"- {S57}: s.57(3)(a)" in block
+    assert f"- {S45}: s.45(1)(c); s.45(2)" in block
+    assert f"- {S21}: s.21(2); s.21(3)" in block
+    assert f"- {SCH1}: Sch 2 para 3(1)" in block
+    # One line per URL, however many steps cited it.
+    assert block.count(S45) == 1
+
+
+@pytest.mark.parametrize("texts", [
+    [_STEP_BARE],                                         # nothing pinpointed
+    ["See [the case](https://caselaw.nationalarchives.gov.uk/uksc/2016/51) at (2)."],
+    [f"Under [the Act (2)]({ACT})."],                     # an Act URL, not a provision
+    [], None, [None, 3],
+])
+def test_no_pinpointed_provision_link_no_block(texts):
+    from src.utils.citation_links import pinpoint_block
+    assert pinpoint_block(texts) == ""
+
+
+def test_an_echoed_block_never_reaches_a_lawyer():
+    from src.utils.citation_links import pinpoint_block
+    from src.utils.search_scope import strip_scope_blocks
+    block = pinpoint_block([_STEP_WITH_PINS])
+    out, n = strip_scope_blocks("The report." + block)
+    assert (out, n) == ("The report.", 1)
+    # A stray header on its own goes too.
+    out, _ = strip_scope_blocks("The report.\n[PINPOINTS TO KEEP - stray]\nMore.")
+    assert "PINPOINTS" not in out
+
+
+@pytest.mark.asyncio
+async def test_the_synthesis_is_handed_the_steps_pinpoints_and_the_block_is_stripped():
+    from src.agent.agent_core import run_deep_research
+    from src.agent.provider_factory import set_request_provider_config
+    set_request_provider_config({"_provider": "openrouter",
+                                 "_research_mode": "legislation_only", "model": "m"})
+    plan = {"scope_note": "", "steps": [
+        {"id": 1, "title": "Accounts", "detail": "d"},
+        {"id": 2, "title": "Reports", "detail": "d"}]}
+    contents = iter([_STEP_WITH_PINS, _STEP_BARE])
+
+    async def worker(query, model, cancel_event, num_ctx, parent_on_chunk=None,
+                     emit_tool_details=False, timing_collector=None, tool_memo=None,
+                     retrieved_urls=None):
+        return {"content": next(contents), "sources": [], "searches": []}
+
+    seen = {}
+
+    async def synthesis(messages, model, cancel_event, num_ctx, tools, tool_executor,
+                        on_chunk=None, emit_tool_details=False, timing_collector=None):
+        seen["user"] = messages[-1]["content"]
+        # A model that echoes its input block must not show it to the lawyer.
+        return {"role": "assistant",
+                "content": "Integrated report." + seen["user"][seen["user"].index("\n\n[PINPOINTS"):]}
+
+    try:
+        result = await run_deep_research(synthesis, worker, plan,
+                                         [{"role": "user", "content": "q"}], "m",
+                                         None, None, 0)
+    finally:
+        set_request_provider_config({})
+    assert seen["user"].index("STEP FINDINGS") < seen["user"].index("[PINPOINTS TO KEEP")
+    assert f"- {S45}: s.45(1)(c); s.45(2)" in seen["user"]
+    assert "PINPOINTS" not in result["content"]
+    assert result["content"].startswith("Integrated report.")
+
+
+@pytest.mark.asyncio
+async def test_steps_with_no_pinpoint_hand_the_synthesis_no_block():
+    from src.agent.agent_core import run_deep_research
+    plan = {"scope_note": "", "steps": [{"id": 1, "title": "t", "detail": "d"}]}
+
+    async def worker(*a, **k):
+        return {"content": _STEP_BARE, "sources": [], "searches": []}
+
+    seen = {}
+
+    async def synthesis(messages, *a, **k):
+        seen["user"] = messages[-1]["content"]
+        return {"role": "assistant", "content": "Report."}
+
+    await run_deep_research(synthesis, worker, plan, [{"role": "user", "content": "q"}],
+                            "m", None, None, 0)
+    assert "PINPOINTS" not in seen["user"]
 
 
 # ---------------------------------------------------------------------------

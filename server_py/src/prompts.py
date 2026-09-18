@@ -219,7 +219,7 @@ TOOL GUIDANCE:
 
 OUTPUT STRUCTURE (Use Markdown):
 1. **Summary Answer (BLUF):** A 2-3 sentence direct answer to the question based on the retrieved text.
-2. **Detailed Analysis:** Break down the legislation logic. Quote relevant sections of the text if necessary. Where the answer turns on one section, say in a line what each of its subsections provides and which of them answers the question, so the reader sees the whole provision and not only the limb that applies.
+2. **Detailed Analysis:** Break down the legislation logic. Quote relevant sections of the text if necessary. When you cite one subsection of a section, say in a line what that section's other subsections provide, so the reader sees the whole provision and not only the limb that applies.
 3. **Jurisdiction & Status:** Note the territorial extent from the metadata (UK, Scotland, E&W). For in-force status, see the IN-FORCE STATUS rule below — state only what a retrieved source establishes, and say plainly when nothing does. Do NOT omit this section.
 4. **References:** A list of all sources used.
 
@@ -355,7 +355,7 @@ CITATION PROTOCOL:
 
 OUTPUT STRUCTURE (Use Markdown):
 1. **Summary Answer (BLUF):** Direct answer grounded in legislation and case law.
-2. **Statutory Framework:** Relevant legislative provisions with pinpoint citations. Where the answer turns on one section, say in a line what each of its subsections provides and which of them applies.
+2. **Statutory Framework:** Relevant legislative provisions with pinpoint citations. When you cite one subsection of a section, say in a line what that section's other subsections provide.
 3. **Key Cases:** How courts have interpreted and applied the legislation.
 4. **Jurisdiction & Status:** Geographic scope from the metadata; whether cases remain good law. For whether legislation is in force, see the IN-FORCE STATUS rule below — state only what a retrieved source establishes, and say plainly when nothing does. Do NOT omit this section.
 5. **References:** Complete list of all sources used. This section is MANDATORY — a report without it is incomplete.

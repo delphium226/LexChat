@@ -237,6 +237,71 @@ def provision_url_block(raw_result, max_entries: int = 12) -> str:
     )
 
 
+# A citation label that names a subdivision: "s.57(3)(a)", "section 21(2)",
+# "Sch 2 para 3(1)", "reg. 4(3)". The bare "s.57" does not match: that is what
+# the block below exists to keep from replacing it.
+_PINPOINT = re.compile(
+    r"\b(?:ss?\.|sections?|reg(?:ulation)?s?\.?|art(?:icle)?s?\.?|"
+    r"para(?:graph)?s?\.?|sch(?:edule)?\.?)\s*\d+[A-Za-z]*"
+    r"(?:\s*,?\s*para(?:graph)?\.?\s*\d+[A-Za-z]*)?"
+    r"(?:\s?\((?:\d+[A-Za-z]{0,2}|[a-z]{1,4})\))+",
+    re.I,
+)
+
+PINPOINT_BLOCK_OPEN = "[PINPOINTS TO KEEP"
+PINPOINT_BLOCK_CLOSE = "[/PINPOINTS TO KEEP]"
+
+
+def pinpoint_block(texts, max_urls: int = 12, max_each: int = 6) -> str:
+    """The pinpoints the Deep Research step findings used, for the synthesis.
+
+    **FIX_PLAN P3.1 (B10), the synthesis seam.** Measured on 6365: the steps
+    cite at subsection depth (`[... - s.57(3)(a)](.../section/57)`) and the
+    synthesis rewrote every label to the bare section (`[... - s.57](...)`) -
+    HEAD's baseline rep 2 went from 4 of 20 references at depth to 0 of 10, and
+    the smoke run on the prompt fix alone did the same. The link target stops at
+    the section, so a model that writes its label from the URL loses the
+    pinpoint. This hands the synthesis, per section URL, the pinpoints the
+    findings attached to it - P1.6's pattern of putting the data where the
+    model writes, keyed on the URL rather than on prose (user decision,
+    Session 16, over a repair call).
+
+    Only links count: a link is the one citation whose provision the URL makes
+    unambiguous. Returns "" when no finding carries a pinpointed link, so the
+    caller may append unconditionally. Fail-soft.
+    """
+    try:
+        by_url: dict = {}
+        for text in list(texts or []):
+            for label, url in _MD_LINK.findall(str(text or "")):
+                if not is_provision_url(url):
+                    continue
+                pins = [re.sub(r"\s+", " ", m.group(0)).strip()
+                        for m in _PINPOINT.finditer(label)]
+                if not pins:
+                    continue
+                key = normalise_leg_url(url)
+                shown, have = by_url.setdefault(
+                    key, (url.strip().rstrip(_URL_TRAILING), []))
+                for p in pins:
+                    if p.lower() not in {h.lower() for h in have}:
+                        have.append(p)
+        if not by_url:
+            return ""
+        lines = [f"- {shown}: " + "; ".join(pins[:max_each])
+                 for shown, pins in list(by_url.values())[:max_urls]]
+        return (
+            "\n\n" + PINPOINT_BLOCK_OPEN + " - the step findings cite these "
+            "sections at subsection level. When your report cites one of these "
+            "URLs, its label must name the subsection that states the point, as "
+            "the findings do (s.12(3), not s.12). Never shorten a pinpoint to the "
+            "bare section.]\n" + "\n".join(lines) + "\n" + PINPOINT_BLOCK_CLOSE
+        )
+    except Exception:  # pragma: no cover - defensive
+        logger.debug("[Citations] pinpoint block skipped", exc_info=True)
+        return ""
+
+
 def enforce_provision_links(
     text: str,
     retrieved: Optional[Iterable[str]],

@@ -1394,8 +1394,16 @@ _WORKER_BLOCK_CLOSE = "[/SEARCH SCOPE]"
 _WORKER_BLOCK = re.compile(
     r"\[SEARCH SCOPE[^\]]*research step[^\]]*\][\s\S]*?\[/SEARCH SCOPE\]", re.I
 )
+# P3.1: the synthesis input's pinpoint list (`citation_links.pinpoint_block`).
+# Addressed to the model, so it must never render if the report echoes it:
+# the whole block first, then any stray header via `_TOOL_BLOCK`.
+_PINPOINT_BLOCK = re.compile(
+    r"\[PINPOINTS TO KEEP[^\]]*\][\s\S]*?\[/PINPOINTS TO KEEP\]", re.I
+)
 _TOOL_BLOCK = re.compile(
-    r"\[/?(?:SEARCH SCOPE|ENABLING POWER|CHANGE RECORD|CURRENCY)[^\[\]]*\]", re.I
+    r"\[/?(?:SEARCH SCOPE|ENABLING POWER|CHANGE RECORD|CURRENCY|PINPOINTS TO KEEP)"
+    r"[^\[\]]*\]",
+    re.I,
 )
 
 
@@ -2330,8 +2338,9 @@ def strip_scope_blocks(text: str) -> tuple:
     if not text:
         return text, 0
     out, n = _WORKER_BLOCK.subn("", text)
+    out, n1 = _PINPOINT_BLOCK.subn("", out)
     out, n2 = _TOOL_BLOCK.subn("", out)
-    n += n2
+    n += n1 + n2
     if n:
         out = re.sub(r"\n{3,}", "\n\n", out).strip()
     return out, n

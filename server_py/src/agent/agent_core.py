@@ -20,7 +20,7 @@ from ..prompts import (
     get_worker_system_prompt,
 )
 from ..utils.audit_trace import get_audit_collector
-from ..utils.citation_links import enforce_provision_links
+from ..utils.citation_links import enforce_provision_links, pinpoint_block
 from ..utils.discovery_budget import new_search_budget
 from ..utils.empty_completion import (
     LOST_ANSWER_NOTICE,
@@ -1032,6 +1032,10 @@ async def run_deep_research(
         f"APPROVED RESEARCH PLAN SCOPE:\n{scope_note}\n\n"
         f"STEP FINDINGS:\n\n" + "\n\n---\n\n".join(findings_blocks)
     )
+    # P3.1 (B10): the synthesis flattened the steps' subsection citations to
+    # bare sections (6365), so hand it the pinpoints each section URL carried.
+    # Stripped from the report by `strip_scope_blocks` if echoed.
+    synthesis_user += pinpoint_block([f["content"] for f in step_findings])
     # P2.2 (B5), the half P2.1 narrows but cannot close: a negative reached under
     # a halted step is a negative reached under a limit. 6382 rep 2 of P2.1's
     # acceptance sweep still opened "no SSIs ... were found" — from the two steps
