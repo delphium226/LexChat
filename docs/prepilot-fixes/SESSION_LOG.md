@@ -2859,3 +2859,31 @@ PUSHED**. Whole-plan-then-one-push stands. **1196 tests green.** Ledger:
 3. **P4.5** has a rate (7 in 250, 1.4-5.7%) and a measured false negative that
    reached a lawyer; its fix must cover the Deep Research synthesis.
 4. **Still with the user:** **P5.2**, which is what B12 waits on.
+
+**Added at the handover (2026-09-18).** Before the next session, what this
+session knew was checked against what had been written down. Five gaps, all
+closed in `FIX_PLAN.md` except the last:
+- **P2.1's halt residual, recounted over every post-P2.1 directory: 1 FAIL in
+  42 halted turns.** Its row said "1 in 24", counted over six directories;
+  `wave2_p22` and `wave2_p28_smoke` add 4 halted turns it never included, and
+  P2.7's three directories add 14, all passing.
+- **P4.5's own row now carries the new count** (7 in 250, 1.4-5.7%) and the new
+  instance (`wave2_p27_pre/6374 r3 t4`). It had been written only on P2.7's row
+  and in `BASELINE.md`, where a P4.5 session would not look.
+- **"Booked to the footer family" was not yet true.** The model-written footer
+  (TWO_LINES, 1 in 513) had been recorded only on P2.7's row. It is now on
+  P2.8's row as well.
+- **P2.3's row notes that its 6374 residual recurs** at the same 2 claims in
+  both P2.7 directories, so a future `derivations` exit 1 on 6374 is read as
+  that residual.
+- **The `repo-map` skill gained `discovery_budget.py` and `search_scope.py`.**
+  The second had been missing since P2.2, although every Wave 2 row wrote into
+  it. Note that `.claude/` is gitignored, so the skill lives on this machine
+  only.
+
+**One question nobody has decided, now on the recommended-order line:
+Invariant 3 says "re-baseline before Wave 3", and no row holds that
+re-baseline.** The last full sweep is `wave1`, taken before every Wave 2 row.
+P3.1's own acceptance is per-session and depends only on P1.5, so it can
+proceed without one. Whether it should is the user's call, and it should be
+made before P3.1 is built, not during it.
