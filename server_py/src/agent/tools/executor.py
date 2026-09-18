@@ -278,7 +278,12 @@ async def execute_worker_tool(
                 payload = {
                     "query": args["query"],
                     "legislation_id": args["legislation_id"],
-                    "limit": 10,
+                    # P3.1: this endpoint's page-size parameter is `size`, not
+                    # `limit` (`/openapi.json`, verified live 2026-09-18:
+                    # `limit=3` returns 10 rows, `size=3` returns 3). `limit`
+                    # was silently ignored and only happened to match the
+                    # default of 10. Any change to the number must use `size`.
+                    "size": 10,
                 }
 
                 await _emit(on_chunk, {

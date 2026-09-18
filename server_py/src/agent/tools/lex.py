@@ -10,9 +10,25 @@ def _slim_search_results(resp_json: dict) -> dict:
     """Strip the search_legislation response down to only the fields the model needs.
 
     The raw API response includes provenance metadata, timestamps, descriptions,
-    and a ranked sections array that the model never uses. Stripping these keeps
-    a typical 5-result payload well under the summarisation threshold (~1-2k chars)
-    and gives the model a clean, readable result.
+    and a ranked sections array. Stripping these keeps a typical 5-result
+    payload well under the summarisation threshold (~1-2k chars) and gives the
+    model a clean, readable result.
+
+    **The ranked sections array is dropped on purpose, and that was measured
+    (FIX_PLAN P3.1, 2026-09-18).** Every result carries `sections: [{number,
+    provision_type, score}]`, the API's ranking of which provisions matched the
+    query. It is real, but it ranks against the SEARCH query, and the Worker
+    prompts make that query the Act's title, so it answers "which sections
+    match the words of the title", not "which sections answer the question".
+    For FOISA the title search ranks ss.70, 76 and 3 and omits s.36; for SSI
+    2007/174 it omits Schedule 1, which holds the answer. Over the stored runs
+    it held the provision the answer went on to cite 56% (title queries) to 66%
+    (topical) of the time, while every provision the P3.1 acceptance sessions
+    needed was retrieved by `search_legislation_sections` in one call. Numbers
+    are section-level only, and 1,196 entries carry an empty `number` (any
+    non-integer id: inserted sections such as 6B, dotted court rules, Parts).
+    So it would steer Phase 2 at least as often as it helped. Decided with the
+    user at Session 16: not used.
 
     description is intentionally excluded — it is verbose and redundant once Phase 2
     retrieves actual section text via search_legislation_sections.

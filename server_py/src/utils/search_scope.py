@@ -1529,6 +1529,107 @@ def _budget_footer_clause(entries: Optional[list]) -> str:
         return ""
 
 
+# ---------------------------------------------------------------------------
+# P3.1 — a section search the per-instrument budget refused is a limit too
+# ---------------------------------------------------------------------------
+#
+# Same shape as P2.7's, one level down: the Worker may search within one
+# instrument in at most 3 rounds (`discovery_budget.section_budget_blocks`). A
+# refused call did not run, so it is kept out of `record_search` and the
+# "Searched within N instrument(s)" line, and recorded here as the limit it is.
+# Without it, a report that says an Act "does not contain" a provision would
+# read as a finding when searching within that Act had been stopped.
+
+_SECTION_BUDGET_TOOL = "section_budget"
+
+
+def record_section_budget_stop(log: Optional[list], name: str, args: dict,
+                               budget: Optional[dict]) -> None:
+    """Record one section search the per-instrument budget refused. Never raises."""
+    if log is None:
+        return
+    try:
+        args = args or {}
+        budget = budget or {}
+        log.append({
+            "tool": _SECTION_BUDGET_TOOL,
+            "blocked_tool": name,
+            "legislation_id": str(args.get("legislation_id") or "")[:60],
+            "query": str(args.get("query") or "")[:200],
+            "limit": budget.get("section_limit"),
+            "run": budget.get("id"),
+        })
+    except Exception:
+        pass
+
+
+def _section_budget_rows(log: Optional[list]) -> list:
+    return [e for e in (log or [])
+            if isinstance(e, dict) and e.get("tool") == _SECTION_BUDGET_TOOL]
+
+
+def _section_budget_limb(log: Optional[list]) -> str:
+    """The worker-block line saying searching within an instrument was cut short.
+
+    Worded clear of "Searched the legislation index" (`scope_record_gap`'s
+    count) and of "Searched within", which would read as the instruments this
+    step searched. "" when nothing was refused.
+    """
+    try:
+        rows = _section_budget_rows(log)
+        if not rows:
+            return ""
+        limit = next((e.get("limit") for e in rows if e.get("limit")), None)
+        ids = []
+        for e in rows:
+            lid = str(e.get("legislation_id") or "").strip()
+            if lid and lid not in ids:
+                ids.append(lid)
+        n = len(rows)
+        which = ", ".join(ids[:4]) or "an instrument"
+        return (
+            f"Searching within {which} was cut short: this step used its limit of "
+            + (f"{limit} rounds of " if limit else "")
+            + "section searches on "
+            + ("that instrument" if len(ids) <= 1 else "each of those instruments")
+            + f", and {n} further "
+            + ("section search it asked for was" if n == 1 else "section searches it asked for were")
+            + " not run. Provisions this step did not retrieve may still be in "
+            + ("it" if len(ids) <= 1 else "them")
+            + ". If the answer you write reports a provision of "
+            + ("it" if len(ids) <= 1 else "them")
+            + " as absent or not found, it MUST also say that searching within "
+            "the instrument was stopped by a limit before it finished."
+        )
+    except Exception:
+        return ""
+
+
+def _section_budget_footer_clause(entries: Optional[list]) -> str:
+    """The lawyer-facing half, as one clause on the existing footer line.
+
+    Worded clear of `NEG_ASSERTED`, `HALT_PARAPHRASE` and `HALT_AS_TIMEOUT`, as
+    P2.7's is, and pinned the same way by `test_section_budget.py`.
+    """
+    try:
+        rows = _section_budget_rows(entries)
+        if not rows:
+            return ""
+        steps = len({e.get("run") for e in rows})
+        n = len(rows)
+        who = ("one research step" if steps == 1 else f"{steps} research steps")
+        return (
+            f" Searching within an instrument was also limited: {who} reached the "
+            f"cap on how many times a step may search inside one instrument, and "
+            f"{n} further "
+            + ("search of it was" if n == 1 else "searches of it were")
+            + " not run, so the answer above may not cover every provision of "
+            "that instrument."
+        )
+    except Exception:
+        return ""
+
+
 def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     """The scope record appended, in code, to a Worker's report.
 
@@ -1589,6 +1690,10 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     _budget = _budget_limb(log)
     if _budget:
         lines.append(_budget)
+    # P3.1, the same limit one level down: searching WITHIN an instrument.
+    _section_budget = _section_budget_limb(log)
+    if _section_budget:
+        lines.append(_section_budget)
     filters = _filters_phrase(cfg, {})
     lines.append(f"Filters in force for the whole step: {filters}.")
     # P2.3 (B3b). Same reason as everything else in this block: the Worker saw
@@ -2054,6 +2159,7 @@ def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) ->
         "reported above "
         "as not found was not found in this index, which is not the same as being "
         f"absent from the law.{_budget_footer_clause(all_entries)}"
+        f"{_section_budget_footer_clause(all_entries)}"
         f"{_enabling_footer_clause(all_entries)}"
         f"{_relations_footer_clause(all_entries)}"
         f"{_currency_footer_clause(all_entries)}"

@@ -13,7 +13,12 @@ from typing import Callable, Optional
 
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import harvest_legislation_urls, provision_url_block
-from ..utils.discovery_budget import legislation_budget_blocks, legislation_stop_message
+from ..utils.discovery_budget import (
+    legislation_budget_blocks,
+    legislation_stop_message,
+    section_budget_blocks,
+    section_stop_message,
+)
 from ..utils.search_scope import (
     amendment_search_note,
     currency_note,
@@ -21,6 +26,7 @@ from ..utils.search_scope import (
     legislation_search_note,
     not_held_note,
     record_budget_stop,
+    record_section_budget_stop,
     record_case_law_search,
     record_currency,
     record_enabling_power,
@@ -527,15 +533,31 @@ async def run_worker_tool(
     # it is kept out of `record_search` and the phase counts, and recorded
     # instead as a stop, which the worker's block and the lawyer's footer
     # both state as a limit.
-    if search_budget is not None and legislation_budget_blocks(search_budget, name):
+    #
+    # P3.1: the per-instrument section budget, the same way one level down: at
+    # most 3 rounds of `search_legislation_sections` on one legislation_id per
+    # worker run, also checked before the memo. Its refusals share this path,
+    # the audit's `budget_blocked` flag and the `search_budget_blocked`
+    # counter; the audit record's tool name tells the two apart.
+    refusal = None
+    if search_budget is not None:
+        if legislation_budget_blocks(search_budget, name):
+            record_budget_stop(search_log, name, args, search_budget)
+            refusal = (legislation_stop_message(search_budget),
+                       "Discovery budget spent", "Search limit reached")
+        elif section_budget_blocks(search_budget, name, args):
+            record_section_budget_stop(search_log, name, args, search_budget)
+            refusal = (section_stop_message(search_budget, args),
+                       "Section budget spent for this instrument",
+                       "Section-search limit reached")
+    if refusal is not None:
+        stop_msg, log_label, ui_label = refusal
         if timing_collector:
             timing_collector.record_search_budget_blocked()
-        record_budget_stop(search_log, name, args, search_budget)
-        stop_msg = legislation_stop_message(search_budget)
-        logger.info(f"[Worker] Discovery budget spent — '{name}' not run")
+        logger.info(f"[Worker] {log_label} — '{name}' not run")
         if parent_on_chunk:
             await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
-            await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Search limit reached"})
+            await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": ui_label})
         if _audit:
             _audit.end_tool(
                 _audit_tool, raw_result=stop_msg, final_result=stop_msg,
