@@ -4399,8 +4399,8 @@ def cmd_depth(args) -> int:
                                 or any(f.search(sent) for f in req.facts)):
                             drops.append((sid, doc.get("rep", 1), turn,
                                           f"[{req.label}] {sent}"))
-        rows.append((sid, doc.get("rep", 1), doc.get("git_head"), verdicts,
-                     by_turn))
+        head = (doc.get("runtime_state") or {}).get("git_head") or doc.get("git_head")
+        rows.append((sid, doc.get("rep", 1), head, verdicts, by_turn))
         first = verdicts[0][1] if verdicts else "NO ANSWER"
         before_asked = any(v == "DELIVERED" for _, v, _ in verdicts)
         h = headline.setdefault(sid, Counter())
