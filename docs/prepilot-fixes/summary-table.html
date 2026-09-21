@@ -284,7 +284,7 @@
   // ---- Update here at the end of a session, when the user asks. ----
   // status: "Fixed" | "In progress" | "Verified" | "To be verified"
   // src:    "T" | "R" | "T & R"
-  const UPDATED = "21 September 2026 (Session 17 — checked, no fix status changed)";
+  const UPDATED = "21 September 2026 (Session 18 — P3.8 Fixed; P3.12 and P4.8 added)";
   const ROWS = [
     { src: "T & R", fix: "Make the jurisdiction filter work", status: "Fixed", ref: "P1.1", t: "5" },
     { src: "R", fix: "Stop the “current only” filter implying in-force status", status: "Fixed", ref: "P1.2", t: "" },
@@ -309,10 +309,11 @@
     { src: "R", fix: "Retrieve amendment and commencement relations", status: "Fixed", ref: "P3.5", t: "" },
     { src: "R", fix: "Keep the description field, which carries relationships", status: "Verified", ref: "P3.6", t: "" },
     { src: "R", fix: "Test whether an instrument is held, by its number", status: "Verified", ref: "P3.7", t: "" },
-    { src: "T & R", fix: "Stop a step looping on instruments it already has; write up findings at the cap", status: "Verified", ref: "P3.8", t: "3" },
+    { src: "T & R", fix: "Stop a step looping on instruments it already has; write up findings at the cap", status: "Fixed", ref: "P3.8", t: "3" },
     { src: "T", fix: "Make the case-law date filter work", status: "Verified", ref: "P3.9", t: "6" },
     { src: "T", fix: "Keep dependent Deep Research steps in one step", status: "Verified", ref: "P3.10", t: "3" },
     { src: "R", fix: "Say what a cited subsection's sibling subsections provide", status: "Verified", ref: "P3.11", t: "" },
+    { src: "R", fix: "Reach a Schedule paragraph asked for by number (LEX holds the Schedule as one provision)", status: "Verified", ref: "P3.12", t: "" },
     { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", status: "Verified", ref: "P4.1", t: "9" },
     { src: "R", fix: "Never show a blank or lost reply", status: "Fixed", ref: "P4.2", t: "" },
     { src: "T & R", fix: "Make the sources list and inline links match the answer", status: "Verified", ref: "P4.3", t: "7" },
@@ -321,6 +322,7 @@
     { src: "T", fix: "Label incomplete Deep Research steps as incomplete in progress messages", status: "Verified", ref: "P4.5", t: "3" },
     { src: "T", fix: "Remove prompt wording that says the whole database lacks something", status: "Verified", ref: "P4.6", t: "4" },
     { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", status: "Verified", ref: "P4.7", t: "2" },
+    { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", status: "Verified", ref: "P4.8", t: "" },
     { src: "R", fix: "Source Scottish case law (Court of Session, Sheriff Courts)", status: "In progress", ref: "P5.2", t: "" },
     { src: "T", fix: "Show provider errors (credit, rate limit) clearly when planning", status: "Verified", ref: "TODO B6", t: "8" },
     { src: "T", fix: "Order case-law results by relevance", status: "To be verified", ref: "", t: "6" },

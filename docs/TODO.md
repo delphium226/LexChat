@@ -1253,3 +1253,30 @@ which needs moving to or importing into `prompts.py`). **No signature change nee
 
 **Why parked rather than shipped:** it is a prompt change to report output, so it moves what
 the pilot lawyers read even though it does not touch retrieval. Same freeze rationale as D16.
+
+### D18. The worker's four "trip limits" as startup settings (deferred 2026-09-21, after P3.8)
+
+Four limits govern how much work one worker run may do, and all four are constants in
+code: the **20-round step cap** (`chat_loop(max_turns=20)`, both providers — nothing passes it),
+P2.7's **8 search rounds** and P3.1's **3 section-search rounds per instrument**
+(`utils/discovery_budget.py`), and the parliament bot's **3 search calls**. The user asked
+(Session 18) whether the step cap should become a tunable setting. Answer given: yes, as a
+**startup value in `config.py`/`.env`, not an Admin Portal toggle**, and not now.
+
+- **Why not a portal toggle:** P2.1 decided the cap on evidence (the runs that hit it were
+  looping, not starved; more rounds buy more of the same and mask the failure the notice
+  exposes). A live toggle invites the reflexive raise that decision warned against — the same
+  reasoning that kept the drafting bot's cache override out of the portal.
+- **Precondition:** every measurement must record the value. `halted.limit` already travels
+  in the audit trace (and the lawyer's notice reads it), but only on halted runs; the replay
+  run files' `runtime_state` and `replay check` must stamp it, or two sweeps at different caps
+  can be compared by accident. A per-bot DB setting would make the per-bot efficiency
+  dashboards incomparable.
+- **Do all four together** in the same place, or the next person finds the cap in `.env` and
+  the budgets in source and assumes the budgets are not tunable. Separate knobs for the
+  Manager loop and the worker loop are probably right; decide when building.
+- **Size:** small — one setting per limit, two call sites for the cap, the run-file stamp,
+  and a test that the trace and the notice carry whatever value is set.
+
+Not a fix-plan row; do it after the plan concludes, or sooner only if a model change makes a
+limit live.

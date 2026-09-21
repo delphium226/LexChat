@@ -3478,4 +3478,29 @@ PUSHED**. Whole-plan-then-one-push stands. **1376 tests green.** Ledger:
    should be committed to the repo; and whether the Fix Tracker should be
    updated for P3.8 (it is updated only when asked).
 
+**Added at the handover (2026-09-21, same day).** What this session knew was checked
+against what had been written down before the next session starts. Closed:
+- **P4.5's own row now carries the refreshed count** (8 in 329, 1.2-4.7%) and both
+  P4.2 events from the acceptance sweep, where a P4.5 session will look for them
+  (Session 15's lesson: a count written only on another row's line is lost).
+- **P2.1's row carries the recount** (1 FAIL in 43 halted turns) and says what P3.8
+  changed in a halted report and what it did not (the disclosure).
+- **P2.3's row records that its 6374 residual did not recur** in `wave3_p38`, so a
+  `derivations` exit 1 on 6374 is read as a possibility, not expected as a rule.
+- **The Verification protocol's seam section says that a halted fixture IS the
+  write-up round** on the Worker seam.
+- **The `external-apis` skill records the Schedule-as-one-provision fact** (674
+  provisions for `ukpga/1986/45`, Schedule B1 one row, no paragraph rows) next to
+  the `section/lookup` entry. The skill is gitignored, so P3.12's row is the
+  durable copy.
+- **`docs/TODO.md` D18** records the user's question about making the step cap a
+  tunable setting and the answer given: yes, as a startup `.env` value with the
+  other three trip limits moved in the same change, never an Admin Portal toggle,
+  and only after the replay run files stamp the value; deferred until the plan
+  concludes.
+- **The Fix Tracker is updated** (user request): P3.8 Fixed; P3.12 and P4.8 added
+  as Verified (open rows with confirmed evidence), republished to the same URL.
+Not in the repo, by design: the six seam draws and the two grading scripts live in
+the session scratchpad; the run files (`wave3_p38_pre`, `wave3_p38`) are the evidence.
+
 ---
