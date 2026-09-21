@@ -1593,6 +1593,9 @@ def test_subsections_mentioned_reads_both_ways_a_summary_writes_them():
     assert rr._subsections_mentioned(summary, "36") == ["1", "2", "2A"]
     assert rr._subsections_mentioned(summary, "50") == ["5"]
     assert rr._subsections_mentioned("### Section 136\n(1) x", "36") == []
+    # The third form, a numbered list under the heading (`wave3_p311/6348 r2`).
+    assert rr._subsections_mentioned(
+        "**Section 36: Confidentiality**\n1. Privilege.\n2. Other.", "36") == ["1", "2"]
 
 
 def test_summary_text_strips_every_appended_block_and_nothing_else():

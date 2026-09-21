@@ -4365,14 +4365,17 @@ def _summary_text(final_result: str, strip_blocks) -> str:
 # "**Section 36: Confidentiality**"), as opposed to one that cites it.
 _SECTION_HEADING = re.compile(r"^\s*(?:#+\s*)?\**\s*section\s+(\d+[A-Za-z]*)\b", re.I)
 # A bare "(2)" at the start of a line, the other way a summary lists subsections.
-_BARE_SUBSECTION = re.compile(r"^\s*(?:[-*]\s*)?\**\((\d+[A-Za-z]?)\)")
+# ... or as a numbered list ("1. Information ...") - the third form seen in
+# `wave3_p311/6348 r2`. Only under a section heading, so a list of anything
+# else is not mistaken for subsections.
+_BARE_SUBSECTION = re.compile(r"^\s*(?:[-*]\s*)?\**(?:\((\d+[A-Za-z]?)\)|(\d+[A-Za-z]?)\.\s)")
 
 
 def _subsections_mentioned(summary: str, num: str) -> list:
     """The subsections of s.<num> a summary mentions, in the two ways the
     summariser writes them: "36(2)" / "s.36(2)" / "section 36 (2)" anywhere,
-    and a bare "(2)" at the start of a line under a heading for section <num>
-    (until the next section heading). The first form alone under-read two
+    and a bare "(2)" or a numbered-list "2. " at the start of a line under a
+    heading for section <num> (until the next section heading). The first form alone under-read two
     of 6348's eleven stored summaries as mentioning nothing."""
     found = set(re.findall(_SUBSECTION_MENTION % re.escape(num), summary))
     in_scope = False
@@ -4384,7 +4387,7 @@ def _subsections_mentioned(summary: str, num: str) -> list:
         if in_scope:
             m = _BARE_SUBSECTION.match(line)
             if m:
-                found.add(m.group(1))
+                found.add(m.group(1) or m.group(2))
     return sorted(found, key=lambda s: (len(s), s))
 
 
