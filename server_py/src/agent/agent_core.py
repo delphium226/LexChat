@@ -925,6 +925,46 @@ def _build_step_brief(step: dict, approved_plan: dict, user_query: str) -> str:
     return "\n\n".join(parts)
 
 
+def build_synthesis_messages(
+    user_query: str,
+    approved_plan: dict,
+    step_findings: list,
+    halts: Optional[list] = None,
+    steps_count: Optional[int] = None,
+) -> list:
+    """The Deep Research synthesis call's messages, from the steps' findings.
+
+    **Extracted so it has one definition.** `tools/seam_replay.py` rebuilds this
+    seam from a stored replay run file and makes the single synthesis call, for
+    a few cents instead of a whole Deep Research turn; if it built the payload
+    itself, it would be testing a copy and would drift away from what the
+    product sends. Every element here is a fix that has to travel WITH the
+    findings rather than sit in the system prompt: P3.1's pinpoint block (the
+    subsection citations each step attached to a provision URL, because the
+    synthesis otherwise rewrites them to the bare section) and P2.2/P2.1's
+    incomplete-steps note (a negative reached under a halted step is a negative
+    reached under a limit).
+    """
+    findings_blocks = [
+        f"### Step {i}: {f['title']}\n{f['detail']}\n\nFINDINGS:\n{f['content']}"
+        for i, f in enumerate(step_findings, 1)
+    ]
+    scope_note = (approved_plan or {}).get("scope_note") or ""
+    synthesis_user = (
+        f"USER'S ORIGINAL QUESTION:\n{user_query}\n\n"
+        f"APPROVED RESEARCH PLAN SCOPE:\n{scope_note}\n\n"
+        f"STEP FINDINGS:\n\n" + "\n\n---\n\n".join(findings_blocks)
+    )
+    synthesis_user += pinpoint_block([f["content"] for f in step_findings])
+    synthesis_user += incomplete_steps_note(
+        halts or [], steps_count if steps_count is not None else len(step_findings)
+    )
+    return [
+        {"role": "system", "content": DEEP_RESEARCH_SYNTHESIS_PROMPT},
+        {"role": "user", "content": synthesis_user},
+    ]
+
+
 async def run_deep_research(
     chat_loop_fn: Callable,
     run_worker_agent_fn: Callable,
@@ -1022,31 +1062,9 @@ async def run_deep_research(
         raise asyncio.CancelledError("Aborted")
 
     # Synthesis: one tool-free call composing the integrated report.
-    findings_blocks = [
-        f"### Step {i}: {f['title']}\n{f['detail']}\n\nFINDINGS:\n{f['content']}"
-        for i, f in enumerate(step_findings, 1)
-    ]
-    scope_note = approved_plan.get("scope_note") or ""
-    synthesis_user = (
-        f"USER'S ORIGINAL QUESTION:\n{user_query}\n\n"
-        f"APPROVED RESEARCH PLAN SCOPE:\n{scope_note}\n\n"
-        f"STEP FINDINGS:\n\n" + "\n\n---\n\n".join(findings_blocks)
+    synthesis_messages = build_synthesis_messages(
+        user_query, approved_plan, step_findings, halts, len(steps)
     )
-    # P3.1 (B10): the synthesis flattened the steps' subsection citations to
-    # bare sections (6365), so hand it the pinpoints each section URL carried.
-    # Stripped from the report by `strip_scope_blocks` if echoed.
-    synthesis_user += pinpoint_block([f["content"] for f in step_findings])
-    # P2.2 (B5), the half P2.1 narrows but cannot close: a negative reached under
-    # a halted step is a negative reached under a limit. 6382 rep 2 of P2.1's
-    # acceptance sweep still opened "no SSIs ... were found" — from the two steps
-    # that halted. Named here, in the payload, rather than in the synthesis
-    # system prompt, for the reason halt_worker_report is a tool result: an
-    # instruction about THESE steps travels with them.
-    synthesis_user += incomplete_steps_note(halts, len(steps))
-    synthesis_messages = [
-        {"role": "system", "content": DEEP_RESEARCH_SYNTHESIS_PROMPT},
-        {"role": "user", "content": synthesis_user},
-    ]
 
     async def _no_tools_executor(name: str, args: dict) -> str:
         return f"Error: Unknown tool {name}"
