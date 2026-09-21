@@ -3262,3 +3262,220 @@ restored afterwards.
 **Next action:** **P3.8** (measure with `discovery --all` against `wave2`,
 then its acceptance), or **P3.11**, whose before-column is already measured
 and whose iterate loop is now $0.03 a draw.
+
+## Session 18 — 2026-09-21 — P3.8 (the same-resource loop, and the halted worker's lost findings)
+
+**Done:**
+- **The user chose P3.8 before P3.11** (put to them with the costs at the
+  start; P3.11 stays next, its before-column already measured on the seam).
+- **Measured first, at HEAD, before building** (`wave3_p38_pre`, head
+  `b7f9f96`, 6335 n=3, $2.52, 19 min): **P3.1's cap already removes 6335's
+  halt** — turn 7 halted in 1 of 1 at `wave2` and in **0 of 3** now, with 3
+  section searches per rep where `wave2` made 18 (17 on one resource, 10
+  exact repeats); the section budget refused a fourth in reps 2 and 3 and
+  the worker wrote its report. The turn's prose went 627 -> 2,933 chars per
+  rep, from *"could you narrow this down?"* to an answer.
+- **The write-up round built** (Thomas's action 3): at the step cap
+  `chat_loop` in both providers makes ONE more call with no tools and
+  `halt_writeup_instruction` appended (`utils/research_halt.run_halt_writeup`),
+  bounded by `_final_round` and fail-soft to the pre-P3.8 halt. The halt keeps
+  its status (`halted.written_up`, audit schema **v4**) and P2.1 keeps its
+  disclosure: the worker's agent-addressed header now says the findings are
+  PARTIAL and sits above them, the lawyer's notice is unchanged, and
+  `incomplete_steps_note` tells the synthesis the findings are partial rather
+  than missing.
+- **Acceptance:** **PASSED** (`wave3_p38`, head `1243cdd`, n=3 on 6374 and 6383, **$9.60**, 77 min). **One worker run halted in the six runs — 6374 rep 1, turn 2, Deep Research step 3 — and it wrote up:** `written_up: true`, 20 rounds, 27 tool calls, a 5,490-char partial report with 10 provision links, **10 of 10 tool-returned and 10 of 10 reaching the answer** beneath P2.1's notice; the synthesis's own BLUF says that part of the research *"did not complete due to an internal limit on tool-call rounds"*, every negative in the write-up names the limit as the reason, and no agent-facing header text leaked. `halts` 1 halted turn, 0 failing; every exit-1 subcommand exits 0. Sources per rep: 6374 42.0 (45.0 at `wave2`, n=1; 35.7 at `wave2_p27`), 6383 14.0 (12.0); `sources_kept` fell in 1 of 4 slots for 6374 and 0 of 4 for 6383, inside the 3-of-8 floor. **Coverage stated honestly, as P2.1's 6384 was:** 6383 halted in 0 of 3, so its live condition is vacuous; the round is evidenced live by one run and on the seam by four draws.
+- **Instruments.** `replay_report halts` prints `wrote` (written-up / halted
+  runs per turn) and a total; `discovery` prints the section-search rounds on
+  one instrument (max per run) and the count of runs above P3.1's cap of 3;
+  `seam_replay worker` on a HALTED fixture closes with the product's own
+  instruction, so a draw there IS the write-up round.
+- **Tests 1348 -> 1376** (28 new, in `tests/test_halt_writeup.py`; the
+  chat-loop ones run the REAL loops on a mocked transport). Proven to fail
+  without the fix on a scratch copy of `server_py/`: **13 with the wiring
+  removed, 16 with the functions stubbed**; 10 pass in both by design
+  (silence, fail-soft, P2.1's text unchanged, the instrument). Two P2.1
+  assertions now expect `written_up: False` on a halt that arrives without
+  the key.
+- **Two new rows, both measure-first:** **P4.8** (the `[Research Agent
+  Result]` label leaking into an answer: 2 of 21 turns in the before-column
+  against 0 of 930 since `wave1`) and **P3.12** (a paragraph of a Schedule
+  asked for by number where LEX holds the Schedule as one provision — why
+  6335 looped; see Surprises).
+- **Spend: $12.58** ($2.52 before-column, $0.21 + $0.25 seam draws,
+  $9.60 acceptance).
+- **Ledger (`plan_status`): 26 of 43 rows; 6 of 14 buckets closed, 3 partial (P3.8 maps to no bucket, so no bucket moved).**
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **The row's first half was already done, and it was only ever a fifth of
+  the problem.** Counted with one method over every replay directory (1,542
+  worker runs, 100 halted; `replay_report discovery`, the new section-rounds
+  line): an instrument section-searched in more than 3 rounds — the shape
+  P3.1's cap stops — is in **19 of the 100 halted runs** (and 23 of 1,442
+  completed). The other 81 are the discovery flail P2.7 removed, or
+  retrieval-bound runs neither budget touches: `wave2_p27/6374 r1 t4 step 3`
+  at 2 section rounds on one instrument, 6365 step 3 at 1. That is why the
+  write-up round is not optional even with both budgets in place — a halt
+  still happens, just rarely, and until now it threw away everything.
+
+- **Why 6335 looped, found by probing, not by reading the model.** It
+  searched the Insolvency Act 1986 eighteen times for *"Schedule B1 paragraph
+  43"* and got Part A1 sections every time. `/legislation/section/lookup`
+  returns **674 provisions for the Act and Schedule B1 is ONE of them** — no
+  paragraph rows exist, and the paragraph query never ranks the Schedule
+  into the top 10 (a topical query at `size` 20 does). The model was asking
+  for a granularity the index does not have. The cap now stops it; the lawyer
+  still does not get paragraphs 42-44, and that residual is **P3.12**, not a
+  widening of this row.
+
+- **A `sources_kept` fall that is B7, not this row.** The pass bar reads
+  "fell in 3 of 7 turn slots" for 6335 (noise floor 3 of 8), and all three
+  are turns 4-6, where the lawyer repeats one case-law question in
+  legislation-only mode. At `wave2` the Manager delegated every repeat and
+  a Worker searched statute for case law; at HEAD it answers two of the
+  three repeats without re-delegating ("as previously noted ... switch to
+  Legislation & Case Law mode"). Worker runs per rep 7 -> 5 is that. Checking
+  per-turn delegation counts is what separated it from an effect, as it did
+  for 6374 turn 2 at P2.7.
+
+- **The tool-result label leaks.** 6335 rep 3's turns 3 and 5 open with the
+  literal `[Research Agent Result]`. Counted over 1,088 turns: 7, five of
+  them in `baseline`/`wave1`, then 0 in 930 until these 2. Cosmetic, the
+  same class as the raw halt marker P2.1 strips, and now **P4.8**.
+
+- **Two seam draws for $0.21 settled the design before a line was written.**
+  Fed 6335's halted retrievals to a tool-free composition call: both drew a
+  structured partial report whose every link a tool had returned, and both
+  said the Schedule B1 paragraphs were not retrieved rather than inventing
+  them. The seam tool then took the product's instruction for halted
+  fixtures, so the four acceptance draws (6335 t7, 6374 r2 t4 step 3; $0.25)
+  are the round the product makes: 49 links, 49 tool-returned, every
+  negative of the *"not retrieved because the limit was reached"* shape, no
+  timeout language.
+
+- **The instruction's first draft would have tripped a detector if echoed.**
+  "Do not describe this stop as a timeout" contains the word `HALT_AS_TIMEOUT`
+  matches outside a negation. Reworded to "not a time limit, not an error"
+  before any spend, and a test now runs both detectors over the instruction
+  and the header.
+
+- **P1.6 rewrote my own test fixture.** Three tests failed because the
+  fixture's provision links were ones no tool had returned, and the product
+  unlinked them — the B14 fix doing its job on a fake. The fixture is now
+  link-free and says why.
+
+- **A halt without `written_up` is normalised to `False`, and two P2.1
+  assertions moved.** Every halt now states whether the write-up produced
+  anything, so a stubbed or pre-v4 halt gains the key. The alternative — only
+  adding it when present — would have left the trace ambiguous exactly where
+  a harness needs it least.
+
+- **Seam-tool halted delegations: the `--delegation` index is the list
+  position, not the step number.** They coincide in 6374 r2 t4 (step 3 is
+  the third delegation); check before drawing on a fixture where they may
+  not.
+
+- **The halt the acceptance caught is the shape neither budget touches, and
+  the round salvaged it.** 6374 rep 1's halt was on turn 2, step 3 (not turn
+  4, where `wave2_p27` halted it): 8 search rounds (P2.7 refused one), 10
+  section searches over several instruments with no instrument above 3
+  rounds (P3.1's cap never fired), 6 change lookups — retrieval-bound. Its
+  write-up carried 10 tool-returned links into the answer, and the synthesis
+  wrote the limit into its own BLUF unprompted. 6374 halted 1 of 3 here
+  against 2 of 3 at `wave2_p27` and 0 of 1 at `wave2`: halting is
+  stochastic on this session and the count is not a trend.
+
+- **6383 did not halt in 3 of 3, so its live condition is vacuous** — the
+  same honesty P2.1 recorded for 6384. It is still the right session to have
+  run: it is the row's evidence session that halted most recently
+  (`wave3_p35`), and it now costs $0.68-0.95 per normal rep.
+
+- **A $1.62 conversational turn, and it is P4.2's mechanism, not this
+  row's.** 6383 rep 1 turn 3 took 768 s: two completions of ~58,000
+  reasoning characters each that emitted no content (`finish_reason=stop`),
+  retried and recovered on the third attempt for a 1,429-char answer. The
+  bounded retry worked; the cost of a thinking model thinking to nothing is
+  what it is. Recorded on P4.2/P4.5's family, with 6374 rep 1 turn 1 (three
+  empty completions with `finish_reason=error`, covered by P4.2's
+  report-fallback): **P4.5's running count is now 8 unrecovered provider
+  calls in 329 answered turns (95% Wilson 1.2-4.7%)** over the 16 schema-v3
+  directories (the earlier 7-in-250 was the ten P2.4/P2.7/P2.8 directories;
+  P3.1's four add 46 turns with 0, this row's two add 33 with 1).
+
+- **`derivations` exits 0 on a 6374 sweep for the first time.** Every earlier
+  6374 directory carried P2.3's residual (2 UNVERIFIED claims); `wave3_p38`
+  carries 0 in three reps. Not claimed as a fix — nothing here touched it
+  and the residual was itself stochastic — but the handover's "exits 1 on
+  any 6374 sweep" is no longer a rule.
+
+- **The write-up round's cost, measured live:** about 20 s between the cap
+  and the written-up log line, on a 27-tool context; the run's total was
+  $1.90 against $1.71-2.08 for the two reps that did not halt.
+
+**Decisions taken this session:**
+- Put to the user: P3.8 before P3.11 (taken).
+- Taken without asking, and stated here: the Manager's own loop gets the
+  write-up round too (it is the same `chat_loop`, and 6383 turn 1's raw
+  marker as the entire answer is the case it improves); the lawyer's notice
+  is not reworded (it was validated at P2.1 and "treat the coverage below as
+  partial" is true of a write-up); the A4 reformat stays skipped on a halt
+  (the write-up carries the Worker's OUTPUT STRUCTURE rule and the header is
+  prepended by code); the audit schema version is bumped to 4 for a key added
+  inside an existing object, because the spec says any shape change bumps it;
+  6374 and 6383 are the acceptance sessions because they are the two P3.8
+  evidence sessions that still halted after P2.7 (6335 no longer does).
+
+**How this session worked, for whoever repeats it.**
+- **Start the paid before-column, then build while it runs** (Session 15's
+  pattern). The server loads modules at startup, so edits do not reach a
+  running sweep; the commit before the acceptance sweep is what stamps the
+  head. Stop the old server before starting the acceptance one.
+- **Prototype the round on the seam first.** `python -m tools.seam_replay
+  worker --run evidence/replay/wave2/6335_rep1.json --turn 7 --reps 2` is
+  the write-up round for 6335's halted delegation; `--run
+  .../wave2_p27/6374_rep2.json --turn 4 --delegation 3` is 6374's.
+- **Test a control-flow change in the loop against the real loop.**
+  `test_stream_retry.py`'s MockTransport harness, with the request payloads
+  recorded, is enough to assert "one more request, no `tools` key, the
+  instruction last, the tool results still in front of it" — and to drive the
+  model-calls-a-tool-anyway, empty-completion, HTTP-500 and cancel paths.
+- **The fail-without-fix recipe, this row's substitutions** (script went
+  with the session): *wiring removed* — `writeup = "" if _final_round else`
+  -> `if True else` in both clients, `writeup=_writeup,` -> `writeup="",` in
+  `agent_core.py`, the `written_up` branch of `incomplete_steps_note` and
+  the halted branch of `seam_replay.worker_messages` -> `if False:`;
+  *functions stubbed* — `halt_writeup_instruction` and `run_halt_writeup`
+  return `""`, `halt_worker_report` discards `writeup`, the same two
+  `if False:`. Run `tests/test_halt_writeup.py` in each and diff the sets.
+- **Numbers behind commands:** the section-rounds count is `replay_report
+  --dir baseline discovery --also <every other directory>`; the pass bar is
+  `discovery --before wave2 --only 6335`; the write-up count is `halts`.
+- **Replay timings, measured this session:** 6335 $0.69-0.94 and 5-8 min per
+  rep (7 turns); 6374 $1.71-2.08 and 11-20 min per rep; 6383 $0.68-2.29 and 5-18 min, where the $2.29 rep is the one whose turn 3 spent two ~5-minute attempts producing nothing (see Surprises).
+
+**State of the branch:** `fix/prepilot-defects`, no upstream, **NOTHING
+PUSHED**. Whole-plan-then-one-push stands. **1376 tests green.** Ledger:
+**26 of 43 rows; 6 of 14 buckets closed, 3 partial (P3.8 maps to no bucket, so no bucket moved).**
+
+**Machine state a new session inherits:**
+- **No uvicorn running**, and the dev box is **restored** (`moonshotai/kimi-k3`,
+  local prompt cache ON, no pin file). Re-pin before any measurement.
+- **Twenty-seven gitignored replay directories.** The two new ones:
+  `wave3_p38_pre` (head `b7f9f96`, 6335 x3, the before-column) and
+  `wave3_p38` (head `1243cdd`, 6374 x3 and 6383 x3, the acceptance).
+- Seam draws for this row are in the session's scratchpad only (not
+  evidence; the run files are).
+
+**Next action:**
+1. **P3.11** (6348's residual): before-column already measured on the seam
+   (SHALLOW 4 of 4); iterate the subsection outline at $0.03 a draw, then n=3
+   on 6348 (~$1.70).
+2. **P3.12** (schedule paragraphs) and **P4.8** (the label leak) are
+   measure-first rows opened here; neither blocks anything.
+3. **P3.2, P3.3, P3.4 and P4.3** remain unblocked by P3.1.
+4. **Still with the user:** P5.2 (B12); whether Thomas's review document
+   should be committed to the repo; and whether the Fix Tracker should be
+   updated for P3.8 (it is updated only when asked).
+
+---

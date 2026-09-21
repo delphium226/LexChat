@@ -2792,3 +2792,163 @@ the first smoke run, on the prompt change alone, flattened every link label.
 
 Plus at most $0.76 unrecorded: the interrupted 6365 run in `wave3_p31_smoke2`.
 P3.1 alone cost $7.74, against the handover's $12-15.
+
+## P3.8 — the same-resource loop, and the halted worker's lost findings
+
+The row had two halves. The first — a worker that keeps section-searching the
+instruments it already has until the 20-round cap stops it — was bounded by
+P3.1's cap of 3 section-search rounds per instrument, installed after `wave2`.
+The second is independent of any budget: a halted worker wrote **no findings at
+all** (`halt_worker_report` replaced its content), so every retrieval it had
+paid for was lost to the answer while its sources still reached the rail.
+
+### The first half, measured at HEAD before anything was built
+
+`wave3_p38_pre`, head `b7f9f96`, 6335 n=3, **$2.52, 19 min**. 6335 turn 7 is the
+row's canonical shape and the only halt among the row's evidence sessions in
+`wave2` (`replay_report --dir wave2 discovery --runs`).
+
+| 6335 turn 7 | `wave2` (before P3.1, n=1) | HEAD (n=3) |
+|---|---|---|
+| halted | **1 of 1** | **0 of 3** |
+| ReAct rounds | 20 | finished |
+| section searches that ran | 18 (17 on one resource, 10 exact repeats) | 3, 3, 3 |
+| section searches the P3.1 cap refused | — | 0, 1, 1 |
+| prose, footer stripped | 627 chars (*"could you narrow this down?"*) | 2,933 per rep |
+
+(`replay_report --dir wave3_p38_pre discovery --before wave2 --only 6335`;
+halts 0, `halts` 0 failing.)
+
+**`sources_kept` fell in 3 of 7 turn slots against a noise floor of 3 of 8,
+and none of the three is a researched turn.** They are turns 4-6, where the
+lawyer repeats one case-law question in legislation-only mode: at `wave2` the
+Manager delegated every repeat (a Worker searched statute for case law and
+reported the database holds none), at HEAD it answers two of the three repeats
+without re-delegating and tells the lawyer to switch mode. Worker runs per rep
+7 -> 5 is the same fact. That is B7's shape (P4.1), not this row's.
+
+### How much of the halt problem the first half ever was
+
+Counted with one method over **every replay directory** (25 directories,
+1,542 worker runs, 100 halted): the rounds in which each instrument was
+section-searched, per run, rebuilt from `started_at` as `discovery` does
+(memo hits count — the cap is checked before the memo; refused calls do not).
+
+| max section-search rounds on ONE instrument, per run | halted (100) | completed (1,442) |
+|---|---|---|
+| median / p90 / max | 1 / 6 / 18 | 1 / 2 / 7 |
+| **more than 3 (P3.1's cap fires)** | **19** | 23 |
+
+`replay_report --dir baseline discovery --also <every other directory>`. So the
+same-resource shape was **a fifth of historical halts**. The other 81 are the
+discovery flail P2.7 removed and retrieval-bound runs that neither budget
+touches — `wave2_p27/6374 r1 t4 step 3` halted at 2 section rounds on one
+instrument, 6365 step 3 (`wave2`, `wave3_p31_pre`) at 1 — which is why the
+second half is built even with both budgets in place.
+
+### Why 6335 looped (probed live, 2026-09-21)
+
+The worker asked eighteen times for *"Schedule B1 paragraph 43"* and the
+section search returned Part A1 sections (A16, A20, A21, 233B) every time.
+`POST /legislation/section/lookup` for `ukpga/1986/45` returns **674
+provisions, of which Schedule B1 is ONE** (`.../schedule/B1`): the index has no
+paragraph rows to return, and the paragraph query never ranks the Schedule into
+the top 10 (a topical query at `size` 20 does). The model was asking for a
+granularity the index does not have. The cap now stops it; the lawyer still
+does not get paragraphs 42-44 (all three HEAD reps reach paragraph 44 only as a
+cross-reference inside the Part A1 sections). New row **P3.12**.
+
+### The second half: prototyped on the seam, then built
+
+Before any code, two tool-free draws from `wave2/6335 t7`'s recorded
+retrievals ($0.21): both a structured partial report, every link one a tool had
+returned, both stating the Schedule B1 paragraphs were not retrieved. Then
+built: at the cap `chat_loop` makes ONE more call with no tools and
+`halt_writeup_instruction` appended; `halted.written_up` (audit v4) says whether
+it produced anything; the worker keeps the findings under P2.1's header, which
+now says PARTIAL; the lawyer's notice is unchanged.
+
+**Seam acceptance** (the product's instruction, via `seam_replay worker` on a
+halted fixture):
+
+| fixture | draws | chars | links | links tool-returned | negatives | timeout / marker |
+|---|---|---|---|---|---|---|
+| `wave2/6335 r1 t7` | 2 | 3,973 / 4,769 | 4 / 12 | **16 of 16** | all *"not retrieved because the limit was reached"* | none |
+| `wave2_p27/6374 r2 t4 step 3` | 2 | 4,737 / 4,729 | 17 / 16 | **33 of 33** | same shape | none |
+
+$0.25 for the four. Every negative sentence in the four draws names the limit
+as the reason; none asserts absence.
+
+### Replay acceptance (`wave3_p38`, head `1243cdd`, n=3 on 6374 and 6383)
+
+| | `wave2` (n=1) | `wave2_p27` (n=3) | **`wave3_p38`** (n=3) |
+|---|---|---|---|
+| 6374 halted worker runs / rep | 0.0 | 0.7 | **0.3** (rep 1, turn 2, step 3) |
+| 6374 halted runs written up | — | — (the design did not exist) | **1 of 1** |
+| 6374 sources kept / rep | 45.0 | 35.7 | 42.0 |
+| 6374 `sources_kept` fell, per turn slot | | | 1 of 4 vs `wave2`, 1 of 4 vs `wave2_p27` (floor 3 of 8) |
+| 6383 halted worker runs / rep | 0.0 | (not in that sweep) | **0.0** — condition vacuous |
+| 6383 sources kept / rep | 12.0 | | 14.0 (fell in 0 of 4 slots) |
+| `halts` | | | 1 halted turn, **0 failing**; `wrote` 1/1 |
+
+**The one live halt, read in full** (`6374_rep1.json`, turn 2, step 3 *Identify
+specified non-ministerial offices*): 20 rounds, 27 tool calls (7 searches in 8
+rounds, 10 section searches with no instrument above 3 rounds, 6 change
+lookups, 1 text retrieval), so neither P2.7's nor P3.1's budget fired — the
+retrieval-bound shape. `written_up: true`; the write-up is 5,490 chars with 10
+provision links, **10 of 10 returned by that delegation's tools and 10 of 10
+present in the answer**. The answer opens with P2.1's notice naming the step,
+and its BLUF adds, unprompted: *"research into secondary legislation
+specifying additional non-ministerial offices did not complete due to an
+internal limit on tool-call rounds; therefore, the list of additional offices
+provided below is partial"*. Every negative sentence in the write-up names the
+limit as the reason (*"the specific contents of this Schedule were not retrieved
+because a fixed limit on how much work one research step may do was reached"*).
+No header text (`PARTIAL FINDINGS`, `REQUIRED:`) reached the answer. Compare
+`wave2_p27/6374 r2 t4 step 3`: the same session's halted step contributed
+nothing, and the report's coverage of it was the notice alone.
+
+(`replay_report --dir wave3_p38 halts`; `discovery --before wave2 --only 6374`
+and `--only 6383`; `discovery --before wave2_p27 --only 6374`.)
+
+### Every exit-1 subcommand
+
+`halts` 1 halted turn, 0 failing; `negatives` 18 turns asserting a negative,
+**0 failing**; `derivations` **0 UNVERIFIED** (the first 6374 sweep without
+P2.3's residual — not claimed as a fix); `blanks` invariant holds (1 call not
+recovered, 6374 rep 1 turn 1, covered by P4.2's fallback); `scoperecord`
+complete; `nosearch` 0/0; `caselaw` 0 TWO_LINES. On the before-column
+(`wave3_p38_pre`) all seven exit 0 as well.
+
+### Free observations
+
+- **The `[Research Agent Result]` label reached two answers** (6335 rep 3,
+  turns 3 and 5): 7 turns in 1,088 across every directory, 5 of them in
+  `baseline`/`wave1`, then 0 in 930 until these. **P4.8.**
+- One seam draw wrote "limit of 20 tool calls" where the limit is rounds — the
+  model's paraphrase; the lawyer-facing notice says rounds and is code-emitted.
+- **Two P4.2 events in six runs, both handled by the existing retry.** 6374
+  rep 1 turn 1: three empty completions with `finish_reason=error`, answered
+  by the report fallback (an unrecovered call, P4.5's eighth). 6383 rep 1
+  turn 3: two completions of ~58K reasoning characters and no content,
+  recovered on the third attempt — 768 s and $1.62 for a 1,429-char
+  conversational answer. **P4.5's running count: 8 unrecovered provider
+  calls in 329 answered turns (95% Wilson 1.2-4.7%)** over the 16 schema-v3
+  directories.
+- **No fail-open and no write-up failure in live traffic:** the server log
+  carries one `Max turns` line, one `partial findings written up` line 21 s
+  later, and no `Write-up at the step cap failed` or `no ReAct round` line
+  across both sweeps.
+- **The section budget fired 2 times in 3 reps of 6335** (reps 2 and 3, a
+  fourth search of the Insolvency Act) and its footer clause reached the
+  lawyer both times; in `wave3_p38` no run had an instrument above 3
+  section rounds (0 of 53), so it never fired there.
+
+### Spend
+
+| | | |
+|---|---|---|
+| `wave3_p38_pre` (before-column, head `b7f9f96`) | 6335 x3 | $2.52 |
+| seam draws (design prototype + seam acceptance) | 6 calls | $0.46 |
+| **`wave3_p38`** (acceptance, head `1243cdd`) | 6374 x3, 6383 x3 | **$9.60** |
+| **total** | | **$12.58** |
