@@ -4346,6 +4346,103 @@ def depth_profile(answer: str) -> tuple:
     return len(refs), sum(1 for _, sub in refs if sub)
 
 
+# P3.11: the blocks a summarised section search carries after its summary,
+# removed so `--seams` grades the summariser's own text. `strip_scope_blocks`
+# takes the scope note and the outline; the URL block is P1.6's and is not a
+# scope block.
+_URL_BLOCK = re.compile(r"\n*\[CITATION URLS[^\]]*\](?:\n- [^\n]*)*")
+# "36(1)", "s.36(2)", "section 36 (2)" - but not "136(1)" or "/36(1)".
+_SUBSECTION_MENTION = r"(?<![\d/])%s\s?\((\d+[A-Za-z]{0,2})\)"
+
+
+def _summary_text(final_result: str, strip_blocks) -> str:
+    """The summariser's own text out of a recorded `final_result`."""
+    text, _ = strip_blocks(final_result or "")
+    return _URL_BLOCK.sub("", text)
+
+
+def _section_number(req) -> str:
+    """The section a requirement is about, read off its label ("" if none)."""
+    m = re.search(r"\bs\.(\d+[A-Z]*)", req.label)
+    return m.group(1) if m else ""
+
+
+def _depth_seams(rows: list) -> None:
+    """P3.11: the same requirement graded at each seam the depth passes through.
+
+    Session 16 located every B10 loss by grading the retrieval, the report and
+    the answer separately, by hand. This prints that split: the summarised
+    section-search text the Worker was shown (its appended blocks removed, so it
+    is the summariser's own words), the worker report(s), and the answer; and,
+    for a requirement on s.N, which subsections of s.N the summaries mention at
+    all (the grader needs a `s.`/`section` prefix that summaries often omit).
+    Measured with it over every stored 6348 run: the summaries mention s.36(2)
+    in 1 of 11, which is why P3.11 is a block built from the raw result. Also
+    prints the size of the outline P3.11 builds from each raw result.
+    """
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from src.utils.search_scope import strip_scope_blocks
+        from src.utils.section_outline import subsection_outline
+    except Exception as exc:  # pragma: no cover
+        print(f"  --seams needs the product's builders (run from server_py/): {exc}")
+        return
+    print()
+    print("  --seams (P3.11): each requirement graded at the summarised section-search"
+          " text the Worker was shown (appended blocks removed), the worker"
+          " report(s), and the answer; and which subsections of s.N the summaries"
+          " mention")
+    sizes: list = []
+    summarised_n = outlined_n = 0
+    for sid, rep, _head, verdicts, by_turn in rows:
+        acts = DEPTH_TRUTH[sid]["acts"]
+        for turn, _verdict, graded in verdicts:
+            t = by_turn.get(turn) or {}
+            summaries, reports = [], []
+            for dg in (t.get("audit") or {}).get("delegations", []):
+                reports.append(dg.get("report") or "")
+                for tl in dg.get("tools", []):
+                    if (tl.get("name") != "search_legislation_sections"
+                            or tl.get("budget_blocked")):
+                        continue
+                    outline = subsection_outline(tl.get("raw_result") or "")
+                    sizes.append(len(outline))
+                    if tl.get("summarised"):
+                        summarised_n += 1
+                        outlined_n += int(bool(outline))
+                        summaries.append(_summary_text(
+                            tl.get("final_result") or "", strip_scope_blocks))
+            summary = "\n\n".join(summaries)
+            report = "\n\n".join(reports)
+            for req, status, _m, _w in graded:
+                cells = []
+                for label, text in (("summary", summary), ("report", report)):
+                    if not text.strip():
+                        cells.append(f"{label} -")
+                    else:
+                        st, _, _ = _grade_depth_req(text, req, acts)
+                        cells.append(f"{label} {st}")
+                mention = ""
+                num = _section_number(req)
+                if num and summary.strip():
+                    subs = sorted(set(re.findall(_SUBSECTION_MENTION % re.escape(num),
+                                                 summary)), key=lambda s: (len(s), s))
+                    mention = (f"   s.{num} subsections in the summaries: "
+                               + ("{" + ", ".join(subs) + "}" if subs else "none"))
+                print(f"    {sid} rep{rep} t{turn}  {req.label}:  " + "  ".join(cells)
+                      + f"  answer {status}{mention}")
+    if sizes:
+        s = sorted(sizes)
+
+        def q(p):
+            return s[min(len(s) - 1, int(p * len(s)))]
+
+        print(f"  outline P3.11 builds from the raw result, over {len(sizes)} section "
+              f"search(es) in the graded runs: empty {sum(1 for x in s if not x)}, "
+              f"median {q(.5):,} chars, p90 {q(.9):,}, max {s[-1]:,}; summarised "
+              f"searches {summarised_n}, outline non-empty for {outlined_n}")
+
+
 def _depth_slots(doc: dict) -> dict:
     """Per turn: prose (footer removed), links, provision links, rail sources.
 
@@ -4519,6 +4616,8 @@ def cmd_depth(args) -> int:
               f"NOT counted as delivering it")
         for sid, rep, turn, sent in drops:
             print(f"    {sid} rep{rep} t{turn}: {sent[:220]}")
+    if getattr(args, "seams", False):
+        _depth_seams(rows)
     if args.all:
         print()
         print("  depth profile over every answered turn (section/regulation/"
@@ -4694,6 +4793,10 @@ def main(argv: Iterable[str] | None = None) -> int:
     dp.add_argument("--before", metavar="DIR",
                     help="Invariant 1: prose, links and sources per turn slot "
                          "against DIR, graded sessions only")
+    dp.add_argument("--seams", action="store_true",
+                    help="P3.11: grade each requirement at the summarised text "
+                         "the Worker was shown, the worker report and the answer, "
+                         "and say which subsections the summaries mention")
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")

@@ -1500,3 +1500,91 @@ def test_the_depth_command_reads_a_directory_and_the_before_panel(tmp_path, caps
     assert "-> asp/2000/1" in out
     assert "rail_sources 3.0 -> 3.0" in out
     assert "fell in: prose 0/1" in out
+
+
+# ---------------------------------------------------------------------------
+# P3.11: `depth --seams` - the requirement graded at each seam it passes through
+# ---------------------------------------------------------------------------
+
+_S36_URL = "http://www.legislation.gov.uk/id/asp/2002/13/section/36"
+_S36_RAW = json.dumps({"results": [{
+    "legislation_id": "asp/2002/13", "number": 36, "provision_type": "section",
+    "title": "Confidentiality", "url": _S36_URL,
+    "text": ("Section 36) **Confidentiality**\n\n"
+             "1) Information in respect of which a claim to confidentiality of "
+             "communications could be maintained in legal proceedings is exempt "
+             "information. \n"
+             "2) Information is exempt information if— \n"
+             "\ta) it was obtained by a Scottish public authority from another "
+             "person; and \n\tb) its disclosure would be a breach of confidence. "),
+}], "returned": 1})
+
+
+def _6348_run(summary, report, answer):
+    return {"session_id": "6348", "rep": 1, "turns": [{
+        "turn": 1, "answer": answer, "question": "q",
+        "audit": {"sources": [], "delegations": [{
+            "report": report,
+            "tools": [{"name": "search_legislation_sections",
+                       "args": {"legislation_id": "asp/2002/13", "query": "x"},
+                       "raw_result": _S36_RAW, "summarised": True,
+                       "final_result": summary
+                       + "\n\n[CITATION URLS - these are the URLs this retrieval returned.]"
+                       f"\n- section 36: {_S36_URL}"
+                       "\n\n[SECTION OUTLINE — the numbered subsections]\n- s.36 "
+                       "Confidentiality\n  (2) Information is exempt information if "
+                       "obtained from another person\n[/SECTION OUTLINE]"
+                       "\n\n[SEARCH SCOPE — 1 provision(s) of asp/2002/13.]"}],
+        }]},
+    }]}
+
+
+def test_depth_seams_grades_the_summary_the_report_and_the_answer(tmp_path, capsys):
+    """The measurement behind P3.11: the summariser kept s.36(2) in 1 of 11
+    stored summaries. The readout must grade the summariser's OWN text - with
+    the URL block, the outline and the scope note removed, or the outline
+    would make every summary deep by construction."""
+    import argparse
+    d = tmp_path / "d"
+    d.mkdir()
+    summary = ("Freedom of Information (Scotland) Act 2002.\n### Section 36: "
+               "Confidentiality\n* **36(1):** privileged communications are exempt.")
+    (d / "6348_rep1.json").write_text(json.dumps(_6348_run(
+        summary,
+        "Under section 36(1) of the Freedom of Information (Scotland) Act 2002 the "
+        "information is exempt.",
+        "Section 36(1) of the Freedom of Information (Scotland) Act 2002 applies.",
+    )), encoding="utf-8")
+    args = argparse.Namespace(dir=str(d), answers=False, drops=False, all=False,
+                              before=None, seams=True)
+    assert rr.cmd_depth(args) == 0
+    out = capsys.readouterr().out
+    assert ("6348 rep1 t1  FOISA s.36(2), with its substance:  summary coarse  "
+            "report coarse  answer coarse   s.36 subsections in the summaries: {1}") in out
+    assert "summarised searches 1, outline non-empty for 1" in out
+
+
+def test_depth_seams_reads_a_summary_that_kept_the_sibling(tmp_path, capsys):
+    import argparse
+    d = tmp_path / "d"
+    d.mkdir()
+    summary = ("Freedom of Information (Scotland) Act 2002. Section 36(2) exempts "
+               "information obtained from another person; 36(1) covers privilege.")
+    (d / "6348_rep1.json").write_text(json.dumps(_6348_run(
+        summary,
+        "Section 36(1) of the Freedom of Information (Scotland) Act 2002 only.",
+        "Section 36(1) of the Freedom of Information (Scotland) Act 2002 only.",
+    )), encoding="utf-8")
+    args = argparse.Namespace(dir=str(d), answers=False, drops=False, all=False,
+                              before=None, seams=True)
+    assert rr.cmd_depth(args) == 0
+    out = capsys.readouterr().out
+    assert "summary deep  report coarse  answer coarse   s.36 subsections in the summaries: {1, 2}" in out
+
+
+def test_summary_text_strips_every_appended_block_and_nothing_else():
+    from src.utils.search_scope import strip_scope_blocks
+    final = _6348_run("The summary.", "", "")["turns"][0]["audit"]["delegations"][0]["tools"][0]["final_result"]
+    assert rr._summary_text(final, strip_scope_blocks) == "The summary."
+    assert rr._section_number(rr.DEPTH_TRUTH["6348"]["reqs"][0]) == "36"
+    assert rr._section_number(rr.DEPTH_TRUTH["6396"]["reqs"][0]) == ""
