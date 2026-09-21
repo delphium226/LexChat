@@ -1582,6 +1582,19 @@ def test_depth_seams_reads_a_summary_that_kept_the_sibling(tmp_path, capsys):
     assert "summary deep  report coarse  answer coarse   s.36 subsections in the summaries: {1, 2}" in out
 
 
+def test_subsections_mentioned_reads_both_ways_a_summary_writes_them():
+    """Two of 6348's eleven stored summaries list a bare "(1)" under a
+    "**Section 36: Confidentiality**" heading and never write "36(1)"; the
+    first version of this readout printed them as mentioning nothing."""
+    summary = ("Freedom of Information (Scotland) Act 2002.\n"
+               "**Section 36: Confidentiality**\n(1) Privilege.\n(2) Obtained from another.\n\n"
+               "**Section 50: Information notices**\n(5) Not obliged.\n"
+               "Elsewhere s.36(2A) is cited.")
+    assert rr._subsections_mentioned(summary, "36") == ["1", "2", "2A"]
+    assert rr._subsections_mentioned(summary, "50") == ["5"]
+    assert rr._subsections_mentioned("### Section 136\n(1) x", "36") == []
+
+
 def test_summary_text_strips_every_appended_block_and_nothing_else():
     from src.utils.search_scope import strip_scope_blocks
     final = _6348_run("The summary.", "", "")["turns"][0]["audit"]["delegations"][0]["tools"][0]["final_result"]

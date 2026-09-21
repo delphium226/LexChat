@@ -4361,6 +4361,33 @@ def _summary_text(final_result: str, strip_blocks) -> str:
     return _URL_BLOCK.sub("", text)
 
 
+# A summary line that IS a heading for section N ("### **Section 36: ...**",
+# "**Section 36: Confidentiality**"), as opposed to one that cites it.
+_SECTION_HEADING = re.compile(r"^\s*(?:#+\s*)?\**\s*section\s+(\d+[A-Za-z]*)\b", re.I)
+# A bare "(2)" at the start of a line, the other way a summary lists subsections.
+_BARE_SUBSECTION = re.compile(r"^\s*(?:[-*]\s*)?\**\((\d+[A-Za-z]?)\)")
+
+
+def _subsections_mentioned(summary: str, num: str) -> list:
+    """The subsections of s.<num> a summary mentions, in the two ways the
+    summariser writes them: "36(2)" / "s.36(2)" / "section 36 (2)" anywhere,
+    and a bare "(2)" at the start of a line under a heading for section <num>
+    (until the next section heading). The first form alone under-read two
+    of 6348's eleven stored summaries as mentioning nothing."""
+    found = set(re.findall(_SUBSECTION_MENTION % re.escape(num), summary))
+    in_scope = False
+    for line in summary.split("\n"):
+        h = _SECTION_HEADING.match(line)
+        if h:
+            in_scope = h.group(1).upper() == num.upper()
+            continue
+        if in_scope:
+            m = _BARE_SUBSECTION.match(line)
+            if m:
+                found.add(m.group(1))
+    return sorted(found, key=lambda s: (len(s), s))
+
+
 def _section_number(req) -> str:
     """The section a requirement is about, read off its label ("" if none)."""
     m = re.search(r"\bs\.(\d+[A-Z]*)", req.label)
@@ -4425,8 +4452,7 @@ def _depth_seams(rows: list) -> None:
                 mention = ""
                 num = _section_number(req)
                 if num and summary.strip():
-                    subs = sorted(set(re.findall(_SUBSECTION_MENTION % re.escape(num),
-                                                 summary)), key=lambda s: (len(s), s))
+                    subs = _subsections_mentioned(summary, num)
                     mention = (f"   s.{num} subsections in the summaries: "
                                + ("{" + ", ".join(subs) + "}" if subs else "none"))
                 print(f"    {sid} rep{rep} t{turn}  {req.label}:  " + "  ".join(cells)
