@@ -4363,7 +4363,9 @@ def _summary_text(final_result: str, strip_blocks) -> str:
 
 # A summary line that IS a heading for section N ("### **Section 36: ...**",
 # "**Section 36: Confidentiality**"), as opposed to one that cites it.
-_SECTION_HEADING = re.compile(r"^\s*(?:#+\s*)?\**\s*section\s+(\d+[A-Za-z]*)\b", re.I)
+# (a leading bullet or hash, then optional bold: "*   **Section 36 (Confidentiality)**"
+# is the fourth form, `wave3_p311/6348 r3`).
+_SECTION_HEADING = re.compile(r"^\s*(?:[-*#]+\s*)?\**\s*section\s+(\d+[A-Za-z]*)\b", re.I)
 # A bare "(2)" at the start of a line, the other way a summary lists subsections.
 # ... or as a numbered list ("1. Information ...") - the third form seen in
 # `wave3_p311/6348 r2`. Only under a section heading, so a list of anything
