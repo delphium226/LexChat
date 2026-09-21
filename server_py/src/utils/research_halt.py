@@ -38,17 +38,39 @@ So `apply_halt_disclosure` always speaks when a halt happened. There is no
 detector deciding whether the model already disclosed it well enough — on this
 work the detectors have been wrong more often than the product, and a
 false negative here is a lawyer relying on a partial answer.
+
+**P3.8 — the halted worker's lost findings.** A halt discarded every retrieval
+the worker had paid for: `halt_worker_report` replaced the content outright,
+so 16 sources reached the rail behind 6340's empty halted turn and 6335's
+worker, with five provisions of the Insolvency Act 1986 in its context, told
+the lawyer only "could you narrow this down?". `run_halt_writeup` is the fix:
+at the cap, `chat_loop` makes ONE more call with NO tools and an instruction
+to write up what is already in the conversation, and the halt keeps its
+status (`halted.written_up` says whether that round produced anything). The
+disclosure is untouched — the header above the partial findings is still
+addressed to the agent, and the lawyer's notice is still prepended by code —
+because a partial report that reads as complete is the failure P2.1 exists to
+prevent. Prototyped on the seam before it was built: two tool-free draws from
+6335's recorded retrievals both produced a structured partial report whose
+every link the tools had returned, and both said the Schedule B1 paragraphs
+had not been retrieved rather than inventing them (SESSION_LOG Session 18).
 """
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import re
-from typing import Iterable, Optional
+from typing import Callable, Iterable, Optional
+
+logger = logging.getLogger("app")
 
 __all__ = [
     "HALT_MARKER",
     "halt_marker_text",
     "strip_halt_markers",
+    "halt_writeup_instruction",
+    "run_halt_writeup",
     "halt_worker_report",
     "halt_notice",
     "apply_halt_disclosure",
@@ -78,7 +100,100 @@ def strip_halt_markers(text: str) -> tuple:
     return out, n
 
 
-def halt_worker_report(halt: dict, sources_retrieved: int = 0) -> str:
+def halt_writeup_instruction(limit: int) -> str:
+    """The message appended at the step cap: write up what you have, tool-free.
+
+    Addressed to the agent whose loop just hit the cap, in the conversation
+    that holds its retrievals. Three things it must do, each learned on this
+    work: say plainly that no tool will run again (the model otherwise spends
+    its last turn calling one); say what to do with a provision it needed and
+    did not reach (state it was not retrieved because the limit was reached —
+    never that it does not exist, the bare negative P2.2 exists to stop, and
+    the shape P2.7's and P3.1's stop messages already use); and name the stop
+    correctly (a fixed limit, not a timeout — 6340's falsehood).
+    """
+    return (
+        "[STEP LIMIT REACHED — WRITE UP NOW]\n"
+        f"You have used all {limit} tool-call rounds this research step is "
+        "allowed. No further tool call will be executed: this is your final "
+        "turn and it has no tools.\n"
+        "Write your report NOW, in the required output structure, from the "
+        "results already in this conversation.\n"
+        "- Use only what those results contain. Cite only provisions, cases "
+        "and URLs that appear in them.\n"
+        "- Where something you needed was not retrieved before the limit, say "
+        "that it was not retrieved because this step's limit was reached. Do "
+        "NOT say it does not exist, was not made, or could not be found, and do "
+        "NOT speculate about why it was not retrieved.\n"
+        "- Name the stop correctly if you mention it: a fixed limit on how much "
+        "work one research step may do — not a time limit, not an error.\n"
+        "- Do not call any tool. Do not ask for more time."
+    )
+
+
+# What a tool call made in the write-up round gets back. It should never run:
+# the round is made with no tool schemas. If a model calls one anyway, the
+# nested loop is capped at that very round, so the call gets this and the
+# write-up is abandoned for the plain halt.
+_NO_TOOLS_AT_CAP = (
+    "No tool is available in this final round. Write your report from the "
+    "results already in this conversation."
+)
+
+
+async def run_halt_writeup(
+    chat_loop_fn: Callable,
+    messages: list,
+    model: str,
+    cancel_event: Optional[asyncio.Event],
+    num_ctx: int,
+    on_chunk: Optional[Callable],
+    emit_tool_details: bool,
+    timing_collector,
+    turn: int,
+    limit: int,
+    log_prefix: str = "[ChatLoop]",
+) -> str:
+    """One bounded, tool-free call at the step cap. Returns the write-up or "".
+
+    Shared by both providers' `chat_loop`, which pass themselves in: the
+    nested call is that same loop, given no tools, with `max_turns` set to the
+    very next round and `_final_round=True`, so it can make at most one model
+    call and, if the model calls a tool regardless, one more round that ends in
+    the plain halt. Fail-soft on any error — the caller then returns exactly
+    what it returned before this existed. A cancel is a `BaseException` and
+    still propagates.
+    """
+    async def _no_tools(name: str, args: dict) -> str:
+        return _NO_TOOLS_AT_CAP
+
+    try:
+        out = await chat_loop_fn(
+            [*messages, {"role": "user", "content": halt_writeup_instruction(limit)}],
+            model, cancel_event, num_ctx, [], _no_tools, on_chunk,
+            emit_tool_details=emit_tool_details,
+            timing_collector=timing_collector,
+            _turn=turn,
+            max_turns=turn + 1,
+            _final_round=True,
+        )
+    except Exception as e:  # noqa: BLE001 — fail-soft by design; see docstring
+        logger.warning(
+            "%s Write-up at the step cap failed — keeping the plain halt: %s",
+            log_prefix, e,
+        )
+        return ""
+    if not isinstance(out, dict) or out.get("halted") or out.get("tool_calls"):
+        logger.warning(
+            "%s Write-up round called a tool or halted — keeping the plain halt",
+            log_prefix,
+        )
+        return ""
+    text, _ = strip_halt_markers(out.get("content") or "")
+    return text.strip()
+
+
+def halt_worker_report(halt: dict, sources_retrieved: int = 0, writeup: str = "") -> str:
     """What a halted worker hands back in place of a report.
 
     Addressed to the *agent* that will read it — a Manager holding it as a
@@ -91,8 +206,37 @@ def halt_worker_report(halt: dict, sources_retrieved: int = 0) -> str:
     `agent_core.manager_tool_executor`, which is proven house style for exactly
     this job: an instruction carried per-occurrence in the tool result beats a
     rule in a system prompt that has to survive the whole conversation.
+
+    P3.8: with a `writeup` (the final tool-free round's output), the report is
+    the same header, saying the findings are partial, above those findings.
+    Without one the text is byte-for-byte what P2.1 shipped.
     """
     limit = halt.get("limit", 20)
+    if writeup:
+        retrieved = (
+            f"{sources_retrieved} source(s) had been retrieved when it stopped"
+            if sources_retrieved
+            else "Some material may have been retrieved when it stopped"
+        )
+        return (
+            "[Research Incomplete — step limit reached; PARTIAL findings below]\n"
+            f"This research step was stopped by a fixed limit of {limit} tool-call rounds "
+            "before it finished. "
+            f"{retrieved}, and the findings below were written from those "
+            "retrievals alone, in one final round with no tools. They are PARTIAL: "
+            "anything the step had not yet retrieved is absent from them.\n\n"
+            "The cause is the limit itself. It is NOT a timeout, NOT an API failure, and "
+            "NOT evidence that the material does not exist or could not be found.\n\n"
+            "REQUIRED: use the findings below, and tell the user plainly that this part "
+            "of the research did not complete, and that the reason was an internal "
+            "limit on how much work one research step may do. Suggest narrowing the "
+            "question so the remaining work fits. Do NOT present the stop as a legal "
+            "finding or as a negative result. Do NOT state or speculate about why "
+            "material was not retrieved — you do not know. Do NOT call delegate_research "
+            "again for this same question; the same limit will be reached again.\n\n"
+            "--- PARTIAL FINDINGS (written after the limit was reached) ---\n"
+            f"{writeup}"
+        )
     retrieved = (
         f"{sources_retrieved} source(s) had been retrieved when it stopped, but no "
         "findings were written from them."

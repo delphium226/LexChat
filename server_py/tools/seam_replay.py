@@ -50,6 +50,7 @@ from src.agent import agent_core  # noqa: E402
 from src.agent.openrouter_client import chat_loop  # noqa: E402
 from src.agent.provider_factory import set_request_provider_config  # noqa: E402
 from src.prompts import get_worker_system_prompt  # noqa: E402
+from src.utils.research_halt import halt_writeup_instruction  # noqa: E402
 from src.utils.search_scope import strip_scope_blocks  # noqa: E402
 from src.utils.stopwatch import TimingCollector  # noqa: E402
 
@@ -161,6 +162,14 @@ def worker_messages(doc: dict, turn: dict, delegation: int = 1,
     into the history as one round and the call is made with no tools, so the
     model must compose. What it tests is "given exactly these retrievals, what
     does the Worker write" — which is where 6348's s.36(2) was lost.
+
+    **A HALTED delegation is the P3.8 seam.** When the recorded run stopped at
+    the step cap, the closing message is the product's own write-up
+    instruction (`halt_writeup_instruction`, the one `chat_loop` now appends
+    at the cap), not the generic "compose" line — so a draw here is the
+    write-up round the product would make from those retrievals, for the
+    price of one call. `--without-fix` keeps the generic line, which is the
+    only way to A/B the instruction itself.
     """
     dgs = (turn.get("audit") or {}).get("delegations", [])
     if not dgs:
@@ -169,6 +178,10 @@ def worker_messages(doc: dict, turn: dict, delegation: int = 1,
     tools = [t for t in (dg.get("tools") or []) if not t.get("budget_blocked")]
     if not tools:
         raise SystemExit("that delegation ran no tools")
+    halted = dg.get("halted") or None
+    closing = "Compose your report now from the results above."
+    if halted and not without_fix:
+        closing = halt_writeup_instruction(int(halted.get("limit") or 20))
 
     cfg = _cfg_for(doc, turn)
     system = get_worker_system_prompt(cfg.get("_research_mode") or "legislation_only", cfg)
@@ -189,7 +202,7 @@ def worker_messages(doc: dict, turn: dict, delegation: int = 1,
         {"role": "user", "content": dg.get("brief") or turn.get("question") or ""},
         {"role": "assistant", "content": "", "tool_calls": calls},
         *results,
-        {"role": "user", "content": "Compose your report now from the results above."},
+        {"role": "user", "content": closing},
     ]
 
 

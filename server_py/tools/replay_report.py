@@ -1127,10 +1127,16 @@ def cmd_halts(args) -> int:
     print(f"P2.1 acceptance over {args.dir}")
     print()
     print(f"{'session':>8} {'rep':>3} {'turn':>4} {'halted':>6} "
-          f"{'discl':>5} {'raw':>4} {'timeout':>7} {'meta':>4}  verdict")
-    print("-" * 78)
+          f"{'discl':>5} {'raw':>4} {'timeout':>7} {'meta':>4} {'wrote':>7}  verdict")
+    print("-" * 86)
     bad = 0
     halted_turns = 0
+    # P3.8: halted worker runs, and how many of them wrote up partial findings
+    # in the final tool-free round (`halted.written_up`, audit schema v4).
+    # Pre-v4 files have no such key and count as not written up, so the number
+    # is a floor on an old directory and exact on a new one.
+    halted_runs = 0
+    written_up = 0
     for doc in sorted(docs, key=lambda d: (d["session_id"], d.get("rep", 1))):
         for t in doc.get("turns", []):
             audit = t.get("audit") or {}
@@ -1150,12 +1156,19 @@ def cmd_halts(args) -> int:
             meta_ok = meta or not dgs
             ok = disclosed and not raw and not timeout and meta_ok
             bad += 0 if ok else 1
+            h_runs = [dg for dg in dgs if dg.get("halted")]
+            h_wrote = [dg for dg in h_runs if (dg.get("halted") or {}).get("written_up")]
+            halted_runs += len(h_runs)
+            written_up += len(h_wrote)
+            wrote = f"{len(h_wrote)}/{len(h_runs)}" if h_runs else "-"
             print(f"{doc['session_id']:>8} {doc.get('rep',1):>3} {t['turn']:>4} "
                   f"{'yes':>6} {('yes' if disclosed else 'NO'):>5} "
                   f"{('YES' if raw else '-'):>4} {('YES' if timeout else '-'):>7} "
-                  f"{('yes' if meta_ok else 'NO'):>4}  {'PASS' if ok else 'FAIL'}")
+                  f"{('yes' if meta_ok else 'NO'):>4} {wrote:>7}  {'PASS' if ok else 'FAIL'}")
     print()
     print(f"{halted_turns} halted turn(s); {bad} failing.")
+    print(f"{halted_runs} halted worker run(s); {written_up} wrote up partial findings "
+          f"at the cap (P3.8; 'wrote' is per turn, written-up/halted runs).")
     if args.answers:
         for doc in sorted(docs, key=lambda d: (d["session_id"], d.get("rep", 1))):
             for t in doc.get("turns", []):
@@ -3616,6 +3629,17 @@ def discovery_runs(doc: dict) -> list:
             # directory the halted count is a floor.
             marker = bool(HALT_LITERAL.search(dg.get("report") or ""))
             rounds = _rounds(tools)
+            # P3.8 / P3.1: the rounds in which each instrument was section-
+            # searched (memo hits count — the section budget is checked before
+            # the memo; refused calls do not). The per-run maximum is the
+            # number P3.1's cap of 3 rounds per instrument acts on.
+            per_instrument: dict = {}
+            for i, rnd in enumerate(rounds):
+                for x in rnd:
+                    if x.get("name") == "search_legislation_sections" and _ran(x):
+                        lid = str((x.get("args") or {}).get("legislation_id") or "").strip().lower().rstrip("/")
+                        if lid:
+                            per_instrument.setdefault(lid, set()).add(i)
             rows.append({
                 "session": str(doc.get("session_id")),
                 "rep": doc.get("rep", 1),
@@ -3651,8 +3675,14 @@ def discovery_runs(doc: dict) -> list:
                 "same_resource": sum(n - 1 for n in keys.values() if n > 1),
                 "repeat_retrievals": sum(n - 1 for n in exact.values() if n > 1),
                 "budget_blocked": sum(1 for tl in tools if tl.get("budget_blocked")),
+                "section_rounds_max": max((len(v) for v in per_instrument.values()), default=0),
             })
     return rows
+
+
+# P3.1's cap: at most this many ReAct rounds of search_legislation_sections per
+# instrument per worker run (`discovery_budget.SECTION_SEARCH_ROUNDS`).
+_SECTION_ROUNDS_CAP = 3
 
 
 def _pct(values: list, q: float):
@@ -3707,6 +3737,7 @@ def cmd_discovery(args) -> int:
                        ("retrieval calls (4 tools, memo incl.)", "retr"),
                        ("same-resource retrievals (prod. key)", "same_resource"),
                        ("exact repeat retrievals (+query)", "repeat_retrievals"),
+                       ("section-search ROUNDS on ONE instrument (max)", "section_rounds_max"),
                        ("tool calls, all", "tools")):
         for group, grp in (("halted", halted), ("completed", done)):
             if key is None:
@@ -3746,6 +3777,14 @@ def cmd_discovery(args) -> int:
         print(f"{'K' + str(k):>4} | "
               f"{sum(1 for r in halted if r['search_rounds'] > k):>4} of {len(halted):<3} "
               f"{sum(1 for r in done if r['search_rounds'] > k):>5} of {len(done):<4}")
+    print()
+    print(f"P3.1 caps search_legislation_sections at {_SECTION_ROUNDS_CAP} rounds per instrument "
+          "per worker run (P3.8's same-resource shape).")
+    print(f"Runs with an instrument section-searched in MORE than {_SECTION_ROUNDS_CAP} rounds, "
+          "i.e. runs that cap stops (memo hits count; a refused search does not):")
+    print(f"  halted {sum(1 for r in halted if r['section_rounds_max'] > _SECTION_ROUNDS_CAP)} of "
+          f"{len(halted)}, completed "
+          f"{sum(1 for r in done if r['section_rounds_max'] > _SECTION_ROUNDS_CAP)} of {len(done)}")
     if args.runs or args.all:
         print()
         print(f"{'dir':<16} {'sess':>5} {'rep':>3} {'turn':>4} {'kind':<18} {'stp':>3} "

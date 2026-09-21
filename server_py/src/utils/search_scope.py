@@ -1334,12 +1334,25 @@ def incomplete_steps_note(halts: list, steps_total: int = 0) -> str:
         plural = False
     scale = f" ({len(labels)} of {steps_total} steps)" if steps_total else ""
     those = "those steps" if plural else "that step"
+    # P3.8: a halted step may now carry PARTIAL findings, written in one final
+    # tool-free round from what it had retrieved. Saying they are "missing"
+    # would be false, and would invite the synthesis to ignore them.
+    if any(h.get("written_up") for h in steps):
+        state = (
+            f"The findings below for {those} are PARTIAL — written from what had "
+            "been retrieved when the work stopped — so anything not in them is "
+            "missing because the work stopped, NOT because the material was "
+            "searched for and not found."
+        )
+    else:
+        state = (
+            f"The findings below for {those} are missing because the work "
+            "stopped, NOT because the material was searched for and not found."
+        )
     return (
         "\n\nINCOMPLETE STEPS — READ BEFORE WRITING THE BLUF:\n"
         f"{named} did not finish: {'they were' if plural else 'it was'} stopped "
-        f"by an internal limit on tool-call rounds{scale}. The findings below for "
-        f"{those} are missing because the work stopped, NOT because the material "
-        "was searched for and not found.\n"
+        f"by an internal limit on tool-call rounds{scale}. {state}\n"
         f"You MUST NOT write, in the BLUF or anywhere else, that anything covered "
         f"by {those} does not exist, was not made, or could not be found. State "
         "instead that the point was not established because that part of the "

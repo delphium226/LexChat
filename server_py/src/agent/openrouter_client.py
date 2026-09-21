@@ -15,7 +15,7 @@ from ..utils.empty_completion import (
     report_empty_completion,
 )
 from ..utils.discovery_budget import set_react_round
-from ..utils.research_halt import halt_marker_text
+from ..utils.research_halt import halt_marker_text, run_halt_writeup
 from . import agent_core
 from .summarisation import call_chunk, summarise_prompt
 
@@ -156,6 +156,7 @@ async def chat_loop(
     timing_collector=None,
     _turn: int = 0,
     max_turns: int = 20,
+    _final_round: bool = False,
 ) -> dict:
     """Core ReAct loop using OpenRouter's OpenAI-compatible streaming API."""
     if cancel_event and cancel_event.is_set():
@@ -173,10 +174,23 @@ async def chat_loop(
         # is `halted` that callers act on — a string in an assistant message
         # is indistinguishable from findings, which is how a step cap came to
         # be rendered to a lawyer as a legal conclusion about the statute book.
+        halted = {"reason": "step_cap", "limit": max_turns, "steps": _turn}
+        # P3.8: one bounded, tool-free write-up round. Everything the loop
+        # retrieved is in `messages`; before this, all of it was discarded with
+        # the halt. `_final_round` is set on the nested call so it cannot
+        # write up its own halt — at most one model call is added here.
+        writeup = "" if _final_round else await run_halt_writeup(
+            chat_loop, messages, model, cancel_event, num_ctx, on_chunk,
+            emit_tool_details, timing_collector, _turn, max_turns,
+            log_prefix="[OpenRouter]",
+        )
+        if writeup:
+            logger.info("[OpenRouter] Step cap: partial findings written up (%d chars)", len(writeup))
+            return {"role": "assistant", "content": writeup, "halted": {**halted, "written_up": True}}
         return {
             "role": "assistant",
             "content": halt_marker_text(max_turns),
-            "halted": {"reason": "step_cap", "limit": max_turns, "steps": _turn},
+            "halted": {**halted, "written_up": False},
         }
 
     openai_messages = _apply_anthropic_cache_control(
@@ -495,6 +509,7 @@ async def chat_loop(
             timing_collector=timing_collector,
             _turn=_turn + 1,
             max_turns=max_turns,
+            _final_round=_final_round,
         )
 
     return assistant_message

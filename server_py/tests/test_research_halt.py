@@ -170,7 +170,9 @@ async def test_a_halted_worker_returns_structure_not_prose(_cfg):
     result = await run_worker_agent(
         _halting_chat_loop(), lambda *a, **k: None, "q", "test-model", None, 0,
     )
-    assert result["halted"] == HALT
+    # P3.8 (schema v4): every halt now says whether the final write-up round
+    # produced anything; a halt that arrives without the key means it did not.
+    assert result["halted"] == {**HALT, "written_up": False}
     assert "[Research halted" not in result["content"]
     assert "step limit reached" in result["content"].lower()
 
@@ -338,7 +340,7 @@ async def test_the_trace_carries_the_halt_as_a_field_not_a_string(_cfg):
         set_audit_collector(None)
 
     dg = audit.delegations[0]
-    assert dg["halted"] == HALT
+    assert dg["halted"] == {**HALT, "written_up": False}   # v4 adds written_up (P3.8)
     assert "[Research halted" not in dg["report"]
 
 

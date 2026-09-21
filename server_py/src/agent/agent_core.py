@@ -27,7 +27,7 @@ from ..utils.empty_completion import (
     fallback_from_reports,
     is_empty_completion,
 )
-from ..utils.research_halt import apply_halt_disclosure, halt_worker_report
+from ..utils.research_halt import apply_halt_disclosure, halt_worker_report, strip_halt_markers
 from ..utils.search_scope import (
     answer_scope_footer,
     carried_scope_footer,
@@ -308,14 +308,29 @@ async def run_worker_agent(
     # reformat retry so this text is the last word — the retry currently still
     # fires on a halt and dresses it up as a finished report, which is P2.6's
     # (separate) cost problem, not a correctness one once this overwrite lands.
+    #
+    # P3.8: `chat_loop` now makes one tool-free write-up round at the cap, and
+    # `halted.written_up` says whether it produced anything. When it did, the
+    # content IS findings — partial ones, written from the retrievals the step
+    # had made — and it is kept under the same agent-addressed header, which
+    # now says so. The A4 reformat retry stays skipped either way: the write-up
+    # round carries the Worker's own OUTPUT STRUCTURE rule, and the header is
+    # prepended by code after it, so nothing can launder the stop.
     if result.get("halted"):
+        _writeup = ""
+        if result["halted"].get("written_up"):
+            _writeup, _ = strip_halt_markers(result.get("content") or "")
+            _writeup = _writeup.strip()
+        result["halted"]["written_up"] = bool(_writeup)
         logger.warning(
-            "[Worker] Halted at the step cap (%s rounds) — %d source(s) retrieved, "
-            "no findings produced",
+            "[Worker] Halted at the step cap (%s rounds) — %d source(s) retrieved, %s",
             result["halted"].get("limit"), len(source_accumulator),
+            f"partial findings written up ({len(_writeup)} chars)" if _writeup
+            else "no findings produced",
         )
         result["content"] = halt_worker_report(
-            result["halted"], sources_retrieved=len(source_accumulator)
+            result["halted"], sources_retrieved=len(source_accumulator),
+            writeup=_writeup,
         )
 
     # P1.6 (B14): a provision URL no tool returned still resolves, so it reads

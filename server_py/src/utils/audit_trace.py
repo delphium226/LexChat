@@ -58,7 +58,11 @@ _audit_ctx: ContextVar[Optional["AuditCollector"]] = ContextVar("audit_collector
 # per provider completion that carried no content and no tool calls, whether or
 # not the retry then recovered. Additive, and **empty on a healthy request**, so
 # a v1/v2 consumer sees one unknown key that is almost always `[]`.
-AUDIT_SCHEMA_VERSION = 3
+# v4 (2026-09-21, FIX_PLAN P3.8): `delegations[].halted.written_up` — whether
+# the one tool-free write-up round `chat_loop` now makes at the step cap
+# produced the partial findings that `report` then carries under P2.1's
+# header. Additive (a key inside an object that was already optional).
+AUDIT_SCHEMA_VERSION = 4
 
 
 def set_audit_collector(collector: Optional["AuditCollector"]) -> None:

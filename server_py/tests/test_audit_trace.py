@@ -498,7 +498,7 @@ def test_audit_event_shape():
     # asserting the literal here just makes the bump noisy without checking
     # that the event carries the version the module declares.
     assert event["schema_version"] == AUDIT_SCHEMA_VERSION
-    assert AUDIT_SCHEMA_VERSION == 3  # v3: empty_completions[] (P4.2)
+    assert AUDIT_SCHEMA_VERSION == 4  # v4: halted.written_up (P3.8); v3: empty_completions[] (P4.2)
     # Present and empty on a healthy request, which is the whole point: a
     # consumer can tell "no completion was lost" from "this trace predates the
     # field" without inspecting schema_version.
