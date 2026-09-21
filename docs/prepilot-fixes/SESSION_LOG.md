@@ -3181,3 +3181,75 @@ of 41 rows, 6 of 14 buckets closed, 3 partial.**
 4. **Still with the user:** P5.2 (B12); and, carried from Session 15 and not
    yet decided, whether Thomas's review document (and his two companion notes)
    should be committed to the repo.
+
+---
+
+## Session 17 — 2026-09-21 — `seam_replay`: iterate on a seam, not a session
+
+**Done:** the user asked whether testing could cost less on OpenRouter, so
+before starting P3.8 this session built `tools/seam_replay.py` and validated it
+for **$0.35**. No product behaviour changed; `agent_core.build_synthesis_messages`
+was extracted so the product and the harness share one definition of the Deep
+Research synthesis payload. 14 new tests (1334 -> 1348).
+
+**Where the money goes, measured over `wave2`** ($29.55, 41 sessions, 155
+turns): Deep Research turns are **20 turns and 48% of spend** ($0.71 each);
+conversational 87 turns / 30% ($0.10); research 48 turns / 22% ($0.14). **14
+turns carry 45%** of a sweep and **8 sessions carry 53%**; the cheapest 77
+turns cost $4.16 between them. That shape is why the answer is "stop replaying
+whole sessions to test a prompt", not "use a cheaper model".
+
+**What the tool does.** It rebuilds ONE seam's input from a stored run file —
+the synthesis (plan, step findings, halts) or the Worker's composition (the
+brief plus that delegation's recorded tool results) — and makes the single
+model call, with no server. Measured: **Worker $0.03 a draw against $0.55 for
+a 6348 replay; synthesis $0.11 against $0.61-0.79 for the turn.** Everything
+upstream is frozen, so it cannot test retrieval and cannot produce an
+acceptance. `--without-fix` rebuilds the seam at an older revision (prompt
+constant read out of git, pinpoint block stripped), `--dry-run` builds the
+payload and calls nothing.
+
+**Surprises:**
+
+- **The validation found a property of P3.1's own fix.** `pinpoint_block` reads
+  only markdown **link labels**, so it fires solely because the Worker prompt
+  change made the steps write pinpoints inside links. Links whose label carries
+  a subsection, per 6365 run: **0, 0, 1 before the fix and in the smoke run;
+  15, 31, 50 in the three acceptance runs**, where the block fired with 4-5
+  URLs. The two halves of P3.1 are coupled — the block cannot help a Worker
+  that cites in bold. A future row that changes how Workers cite must re-check
+  this, and a cheap improvement is to harvest pinpoints from prose next to a
+  link to the same section.
+- **The A/B I expected to run could not be run on the fixture I expected.** The
+  flattening happened in the smoke run, whose findings carry no pinpointed
+  links at all — so with or without the block that payload is identical. On
+  the acceptance fixture (where the block fires) both sides DELIVERED at n=1:
+  with rich pinpointed findings the old prompt keeps them too. Read together
+  with the run files, that says the Worker prompt change did most of the work
+  and the block is insurance. Not re-litigated: P3.1 is accepted and the
+  acceptance stands on the full replays.
+- **The Worker seam reproduced 6348's failure immediately:** SHALLOW in 4 of 4
+  draws (2 current, 2 pre-P3.1), which agrees with the acceptance's 1-in-3 and
+  is now P3.11's before-column, measured for $0.12 instead of $1.65.
+- **My "a few cents, 20-50x cheaper" estimate was optimistic for the synthesis
+  seam**: its payload is ~40K chars, so a call is $0.11 and the saving is
+  5-8x, not 20x. The Worker seam is the 18x one. Quote the measured numbers.
+
+**Other levers, recorded not built** (in FIX_PLAN's *Verification protocol*):
+replay only up to the graded turn; exclude Deep Research sessions from a row
+that cannot touch them; reuse run files when `git diff <rev> HEAD --
+server_py/src` is empty; a cheap model for plumbing smokes only. **Not** a
+cheaper model for graded runs (it is the model the pre-pilot ran on), **not**
+the local prompt cache inside a sweep (reps stop being independent), **not**
+n below the invariant.
+
+**State of the branch:** `fix/prepilot-defects`, no upstream, **NOTHING
+PUSHED**. 1348 tests green. Ledger unchanged: **25 of 41 rows**.
+
+**Machine state:** no server running; dev box restored (`moonshotai/kimi-k3`,
+cache ON). `tools.replay pin` was used for the four validation calls and
+restored afterwards.
+
+**Next action:** **P3.8** (measure with `discovery --all` against `wave2`,
+then its acceptance), or **P3.11**, whose before-column is already measured
+and whose iterate loop is now $0.03 a draw.
