@@ -25,11 +25,17 @@ Usage (from `server_py/`, with the pinned model — `tools.replay pin`):
     python -m tools.seam_replay synthesis --run <run.json> --turn 1
     python -m tools.seam_replay synthesis --run <run.json> --turn 1 --without-fix
     python -m tools.seam_replay worker --run <run.json> --turn 1 [--delegation 1]
+    python -m tools.seam_replay worker --run <run.json> --turn 1 --from-raw
 
 `--without-fix` rebuilds the seam as it was at a given commit (default the
 commit before P3.1's product code): the synthesis prompt from that revision,
 and no pinpoint block. That is how this tool was validated — see
 `tests/test_seam_replay.py` and SESSION_LOG Session 17.
+
+`--from-raw` (Worker seam, P3.11) rebuilds the blocks the product appends after
+a SUMMARISED result from each tool's recorded `raw_result`, through the
+product's own builder — so a block built since the run was recorded reaches
+the seam. The recorded payload is the before-column; `--from-raw` the after.
 """
 
 from __future__ import annotations
@@ -46,10 +52,11 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import tools.replay_report as rr  # noqa: E402
-from src.agent import agent_core  # noqa: E402
+from src.agent import agent_core, agent_shared  # noqa: E402
 from src.agent.openrouter_client import chat_loop  # noqa: E402
 from src.agent.provider_factory import set_request_provider_config  # noqa: E402
 from src.prompts import get_worker_system_prompt  # noqa: E402
+from src.utils.citation_links import provision_url_block  # noqa: E402
 from src.utils.research_halt import halt_writeup_instruction  # noqa: E402
 from src.utils.search_scope import strip_scope_blocks  # noqa: E402
 from src.utils.stopwatch import TimingCollector  # noqa: E402
@@ -153,8 +160,42 @@ def synthesis_messages(doc: dict, turn: dict, without_fix: bool = False,
     return messages
 
 
+def rebuilt_result(tool: dict) -> str:
+    """The recorded `final_result` with the blocks the product appends after a
+    SUMMARISED result rebuilt from the recorded `raw_result`.
+
+    **Why.** The seam replays `final_result`, which is what the Worker was
+    shown at the time. A block built in `run_worker_tool` from the raw result
+    (P1.6's URLs, P3.11's outline) is therefore in a fixture only if it
+    existed when the run was recorded, and a row whose fix IS such a block
+    cannot be prototyped here without this. The summary itself is kept as
+    recorded (re-summarising would cost the call this tool exists to avoid)
+    and so are the per-tool notes after it; only the summarised-path blocks
+    are rebuilt, through `agent_shared.summarised_result_blocks`, the
+    product's own builder.
+
+    The rebuilt blocks replace the recorded URL block where it is found (that
+    is where the product puts them); on a fixture recorded before P1.6 they
+    go in front of the scope note, else at the end. An unsummarised result,
+    or one with no raw result, is returned as recorded.
+    """
+    final = tool.get("final_result") or ""
+    raw = tool.get("raw_result")
+    if not tool.get("summarised") or not raw:
+        return final
+    old = provision_url_block(raw)
+    new = agent_shared.summarised_result_blocks(tool.get("name") or "", raw)
+    if not new or new == old:
+        return final
+    if old and old in final:
+        return final.replace(old, new, 1)
+    cut = final.find("\n\n[SEARCH SCOPE")
+    return final[:cut] + new + final[cut:] if cut >= 0 else final + new
+
+
 def worker_messages(doc: dict, turn: dict, delegation: int = 1,
-                    without_fix: bool = False, rev: str = PRE_P31_REV) -> list:
+                    without_fix: bool = False, rev: str = PRE_P31_REV,
+                    from_raw: bool = False) -> list:
     """The Worker's composition seam: its own prompt, brief and tool results.
 
     **An approximation, and it says so.** The product's Worker reaches this
@@ -170,6 +211,11 @@ def worker_messages(doc: dict, turn: dict, delegation: int = 1,
     write-up round the product would make from those retrievals, for the
     price of one call. `--without-fix` keeps the generic line, which is the
     only way to A/B the instruction itself.
+
+    **`from_raw` rebuilds each summarised result's appended blocks from its
+    recorded raw result** (`rebuilt_result`), so a block the product has
+    grown since the run was recorded reaches the seam. The recorded payload
+    is the before-column; `--from-raw` is the after.
     """
     dgs = (turn.get("audit") or {}).get("delegations", [])
     if not dgs:
@@ -194,9 +240,12 @@ def worker_messages(doc: dict, turn: dict, delegation: int = 1,
         cid = f"call_{i:02d}"
         calls.append({"id": cid, "type": "function", "function": {
             "name": t.get("name") or "", "arguments": json.dumps(t.get("args") or {})}})
+        content = t.get("final_result") or ""
+        if from_raw:
+            content = rebuilt_result(t)
         results.append({"role": "tool", "tool_call_id": cid,
                         "name": t.get("name") or "",
-                        "content": t.get("final_result") or ""})
+                        "content": content})
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": dg.get("brief") or turn.get("question") or ""},
@@ -284,6 +333,10 @@ def main(argv: Optional[list] = None) -> int:
     p.add_argument("--without-fix", action="store_true",
                    help=f"rebuild the seam as at {PRE_P31_REV} (the A/B side)")
     p.add_argument("--rev", default=PRE_P31_REV)
+    p.add_argument("--from-raw", action="store_true",
+                   help="worker seam only: rebuild each summarised result's "
+                        "appended blocks from its recorded raw_result through "
+                        "the product's builder (P3.11's outline reaches the seam)")
     p.add_argument("--print", action="store_true", help="print the answer")
     p.add_argument("--dry-run", action="store_true",
                    help="build the payload and print its shape; no model call")
@@ -297,6 +350,7 @@ def main(argv: Optional[list] = None) -> int:
     kwargs = {"without_fix": args.without_fix, "rev": args.rev}
     if args.seam == "worker":
         kwargs["delegation"] = args.delegation
+        kwargs["from_raw"] = args.from_raw
     messages = build(doc, turn, **kwargs)
 
     chars = sum(len(m.get("content") or "") for m in messages)
@@ -306,6 +360,11 @@ def main(argv: Optional[list] = None) -> int:
     if args.seam == "synthesis":
         print(f"  pinpoint block: "
               f"{'present' if 'PINPOINTS TO KEEP' in messages[1]['content'] else 'absent'}")
+    else:
+        tool_msgs = [m for m in messages if m.get("role") == "tool"]
+        with_outline = sum(1 for m in tool_msgs if "[SECTION OUTLINE" in (m.get("content") or ""))
+        print(f"  results: {len(tool_msgs)}, with a subsection outline: {with_outline}"
+              f"{'  (rebuilt from raw)' if args.from_raw else '  (as recorded)'}")
     if args.dry_run:
         return 0
 

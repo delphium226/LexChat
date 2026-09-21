@@ -1413,8 +1413,18 @@ _WORKER_BLOCK = re.compile(
 _PINPOINT_BLOCK = re.compile(
     r"\[PINPOINTS TO KEEP[^\]]*\][\s\S]*?\[/PINPOINTS TO KEEP\]", re.I
 )
+# P3.11: the subsection outline a summarised section search carries
+# (`section_outline.subsection_outline`). Its body is retrieved text, so a
+# Worker that quotes a line of it into the report is doing its job; a Worker
+# that echoes the block whole, markers and all, is not, and that is what
+# this removes. Same shape as the pinpoint block: whole block first, then
+# any stray header via `_TOOL_BLOCK`.
+_OUTLINE_BLOCK = re.compile(
+    r"\[SECTION OUTLINE[^\]]*\][\s\S]*?\[/SECTION OUTLINE\]", re.I
+)
 _TOOL_BLOCK = re.compile(
-    r"\[/?(?:SEARCH SCOPE|ENABLING POWER|CHANGE RECORD|CURRENCY|PINPOINTS TO KEEP)"
+    r"\[/?(?:SEARCH SCOPE|ENABLING POWER|CHANGE RECORD|CURRENCY|PINPOINTS TO KEEP"
+    r"|SECTION OUTLINE)"
     r"[^\[\]]*\]",
     re.I,
 )
@@ -2352,8 +2362,9 @@ def strip_scope_blocks(text: str) -> tuple:
         return text, 0
     out, n = _WORKER_BLOCK.subn("", text)
     out, n1 = _PINPOINT_BLOCK.subn("", out)
+    out, n3 = _OUTLINE_BLOCK.subn("", out)
     out, n2 = _TOOL_BLOCK.subn("", out)
-    n += n1 + n2
+    n += n1 + n2 + n3
     if n:
         out = re.sub(r"\n{3,}", "\n\n", out).strip()
     return out, n

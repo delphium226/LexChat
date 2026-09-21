@@ -13,6 +13,7 @@ from typing import Callable, Optional
 
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import harvest_legislation_urls, provision_url_block
+from ..utils.section_outline import subsection_outline
 from ..utils.discovery_budget import (
     legislation_budget_blocks,
     legislation_stop_message,
@@ -431,6 +432,23 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
             if video:
                 src["video"] = video
             accumulator.append(src)
+
+
+def summarised_result_blocks(name: str, raw_result) -> str:
+    """What a SUMMARISED tool result gets back, built from the RAW result.
+
+    Two blocks, both restoring what the summariser dropped: P1.6's provision
+    URLs (`provision_url_block`, any tool) and P3.11's subsection outline
+    (`subsection_outline`, section searches only - a whole-Act retrieval has
+    no `results` rows and a change record no provision text). One definition,
+    shared with `tools/seam_replay.py --from-raw`, so the seam rebuilds
+    exactly the blocks the product appends rather than a copy that drifts.
+    Returns "" when there is nothing to hand back.
+    """
+    blocks = provision_url_block(raw_result)
+    if name == "search_legislation_sections":
+        blocks += subsection_outline(raw_result)
+    return blocks
 
 
 def _worker_tool_key_arg(args: dict) -> Optional[str]:
@@ -1162,8 +1180,15 @@ async def run_worker_tool(
     # same reason the nudges are: the summariser cannot discard what it never
     # saw. Only on the summarised path; an unsummarised result already carries
     # its own `url` per row, and restating them would be noise.
+    #
+    # P3.11 (B10 residual): and the subsection outline, for the same reason
+    # and on the same path. Measured over every stored 6348 run: the section
+    # search returns s.36 with both subsections, and the summariser keeps the
+    # second in 1 of 11 summaries - the Worker then describes the first alone.
+    # Both blocks are appended OUTSIDE the local-cache summary, so a cache hit
+    # gets them too. `summarised_result_blocks` is the one definition.
     if _audit_summarised:
-        result += provision_url_block(raw_result)
+        result += summarised_result_blocks(name, raw_result)
 
     # Append phase nudges after summarisation so they are not discarded
     # by the summariser and remain visible in the message the model receives.

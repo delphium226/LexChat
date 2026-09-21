@@ -3953,7 +3953,7 @@ def cmd_corpus(args) -> int:
                 # `[ENABLING POWER …]` with the strip un-widened.
                 if any(m in _ans for m in
                        ("[SEARCH SCOPE", "[ENABLING POWER", "[CHANGE RECORD",
-                        "[CURRENCY")):
+                        "[CURRENCY", "[SECTION OUTLINE")):
                     leaked += 1
                 if _ans.count("*Search scope:") > 1:
                     dup_footer += 1

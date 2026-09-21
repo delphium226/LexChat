@@ -226,3 +226,113 @@ def test_the_grader_is_only_applied_where_there_is_a_ground_truth():
     assert sr._grade("6365", "Under s.57(3)(a) …").startswith(("DELIVERED", "PARTIAL",
                                                               "SHALLOW", "MISSED"))
     assert sr._grade("9999", "anything") == ""
+
+
+# --- 6. --from-raw: the summarised-path blocks rebuilt through the product ---
+#
+# P3.11. The seam replays `final_result`, so a block the product builds in
+# `run_worker_tool` from the RAW result (P1.6's URLs, P3.11's outline) is in a
+# fixture only if it existed when the run was recorded. `--from-raw` rebuilds
+# those blocks through `agent_shared.summarised_result_blocks`, the product's
+# own builder, and leaves the recorded summary and the per-tool notes alone.
+
+from src.agent.agent_shared import summarised_result_blocks  # noqa: E402
+from src.utils.citation_links import provision_url_block  # noqa: E402
+
+_S36 = "http://www.legislation.gov.uk/id/asp/2002/13/section/36"
+_RAW_S36 = json.dumps({"results": [{
+    "legislation_id": "asp/2002/13", "number": 36, "provision_type": "section",
+    "title": "Confidentiality", "url": _S36,
+    "text": ("Section 36) **Confidentiality**\n\n"
+             "1) Information in respect of which a claim to confidentiality of "
+             "communications could be maintained in legal proceedings is exempt "
+             "information. \n"
+             "2) Information is exempt information if— \n"
+             "\ta) it was obtained by a Scottish public authority from another "
+             "person; and \n\tb) its disclosure would be a breach of confidence. "),
+}], "returned": 1})
+_SCOPE = "\n\n[SEARCH SCOPE — 1 provision(s) of asp/2002/13, ranked by relevance to \"x\".]"
+
+
+def _summarised_tool(with_url_block=True, with_scope=True, summarised=True):
+    final = "Summary: s.36(1) only."
+    if with_url_block:
+        final += provision_url_block(_RAW_S36)
+    if with_scope:
+        final += _SCOPE
+    return {"name": "search_legislation_sections",
+            "args": {"legislation_id": "asp/2002/13", "query": "x"},
+            "raw_result": _RAW_S36, "final_result": final, "summarised": summarised}
+
+
+def _tool_contents(msgs):
+    return [m["content"] for m in msgs if m["role"] == "tool"]
+
+
+def test_from_raw_rebuilds_the_blocks_where_the_product_puts_them(run_file):
+    doc, turn = sr.load_turn(run_file, 1)
+    turn["audit"]["delegations"][0]["tools"][1] = _summarised_tool()
+    recorded = _tool_contents(sr.worker_messages(doc, turn, delegation=1))[1]
+    rebuilt = _tool_contents(sr.worker_messages(doc, turn, delegation=1, from_raw=True))[1]
+    assert "[SECTION OUTLINE" not in recorded                  # the before-column
+    assert rebuilt.startswith("Summary: s.36(1) only.")        # the summary is kept
+    assert rebuilt.endswith(_SCOPE)                            # and so is the note
+    assert rebuilt.index("[CITATION URLS") < rebuilt.index("[SECTION OUTLINE") < rebuilt.index("[SEARCH SCOPE")
+    assert rebuilt.count("[CITATION URLS") == 1
+    assert "(2) Information is exempt information if" in rebuilt
+    # Through the product's own builder, not a copy of it.
+    assert summarised_result_blocks("search_legislation_sections", _RAW_S36) in rebuilt
+
+
+def test_from_raw_leaves_an_unsummarised_result_alone(run_file):
+    """The product appends these blocks on the summarised path only."""
+    doc, turn = sr.load_turn(run_file, 1)
+    turn["audit"]["delegations"][0]["tools"][1] = _summarised_tool(
+        with_url_block=False, summarised=False)
+    before = _tool_contents(sr.worker_messages(doc, turn, delegation=1))
+    after = _tool_contents(sr.worker_messages(doc, turn, delegation=1, from_raw=True))
+    assert after == before
+
+
+def test_from_raw_on_a_fixture_recorded_before_the_url_block(run_file):
+    """No recorded block to replace: both blocks go in front of the scope note,
+    which is where the product puts them."""
+    doc, turn = sr.load_turn(run_file, 1)
+    turn["audit"]["delegations"][0]["tools"][1] = _summarised_tool(with_url_block=False)
+    rebuilt = _tool_contents(sr.worker_messages(doc, turn, delegation=1, from_raw=True))[1]
+    assert rebuilt.startswith("Summary: s.36(1) only.")
+    assert rebuilt.index("[CITATION URLS") < rebuilt.index("[SECTION OUTLINE") < rebuilt.index("[SEARCH SCOPE")
+    assert rebuilt.endswith(_SCOPE)
+
+
+def test_from_raw_with_no_scope_note_appends(run_file):
+    doc, turn = sr.load_turn(run_file, 1)
+    turn["audit"]["delegations"][0]["tools"][1] = _summarised_tool(
+        with_url_block=False, with_scope=False)
+    rebuilt = _tool_contents(sr.worker_messages(doc, turn, delegation=1, from_raw=True))[1]
+    assert rebuilt.startswith("Summary: s.36(1) only.")
+    assert rebuilt.rstrip().endswith("[/SECTION OUTLINE]")
+
+
+def test_from_raw_is_a_no_op_when_the_product_would_add_nothing(run_file):
+    """A raw result with nothing to hand back (no provision rows) is returned
+    exactly as recorded, so the option never invents a block."""
+    doc, turn = sr.load_turn(run_file, 1)
+    t = _summarised_tool()
+    t["raw_result"] = json.dumps({"results": []})
+    t["final_result"] = "Summary." + _SCOPE
+    turn["audit"]["delegations"][0]["tools"][1] = t
+    rebuilt = _tool_contents(sr.worker_messages(doc, turn, delegation=1, from_raw=True))[1]
+    assert rebuilt == "Summary." + _SCOPE
+
+
+def test_dry_run_reports_the_outline_count(run_file, monkeypatch, capsys):
+    doc = _run_doc()
+    doc["turns"][0]["audit"]["delegations"][0]["tools"][1] = _summarised_tool()
+    run_file.write_text(json.dumps(doc), encoding="utf-8")
+    monkeypatch.setattr(sr, "run_seam", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no call")))
+    assert sr.main(["worker", "--run", str(run_file), "--turn", "1", "--dry-run"]) == 0
+    assert "results: 2, with a subsection outline: 0  (as recorded)" in capsys.readouterr().out
+    assert sr.main(["worker", "--run", str(run_file), "--turn", "1", "--dry-run",
+                    "--from-raw"]) == 0
+    assert "results: 2, with a subsection outline: 1  (rebuilt from raw)" in capsys.readouterr().out
