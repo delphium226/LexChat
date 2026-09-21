@@ -3504,3 +3504,236 @@ Not in the repo, by design: the six seam draws and the two grading scripts live 
 the session scratchpad; the run files (`wave3_p38_pre`, `wave3_p38`) are the evidence.
 
 ---
+
+## Session 19 — 2026-09-21 — P3.11 (B10 residual: one subsection cited without its siblings)
+
+**Done:**
+- **P3.11 built and measured; the acceptance is NOT met and the row is not
+  ticked.** 6348 turn 1 delivers s.36(2) with its substance in **2 of 3**
+  (`wave3_p311`, head `84b8da5`, n=3, $1.40) against 0 of 3 before P3.1 and
+  1 of 3 at P3.1's acceptance; the bar is 3 of 3. The outline is kept — it
+  did the work in both delivering reps — and the miss is diagnosed (below).
+  **What to do with it is the user's decision**, set out on the row and the
+  recommended-order line. B10 stays partial.
+- **Measured before building, and the row's caveat was the wrong way round.**
+  The section search returns s.36 with both subsections in every stored run
+  (P3.1 measured that); **the summariser keeps s.36(2) in 1 of the 11
+  turn-1 summaries** (`baseline` only). "Summaries keep subsection numbers,
+  so the outline is salience" is true of the subsections a summary mentions
+  and false of the one it drops. So the fix is P1.6's pattern for P1.6's
+  reason: the summariser cannot discard what it never saw.
+- **The fix:** `utils/section_outline.py` — one line per numbered subsection
+  of each provision with two or more, opening words with paragraphs folded
+  in, labelled from the URL segment; appended in `run_worker_tool` on the
+  SUMMARISED path only, after P1.6's URL block and before P2.2's scope note,
+  outside the local-cache summary. Schedules skipped (P3.12), bounded at
+  300 / 12 / 6,000 chars, stripped from answers whole and as a stray header,
+  `[SECTION OUTLINE` on `scoperecord`'s leak list. No prompt change.
+- **Two instruments first.** `seam_replay --from-raw` rebuilds each
+  summarised result's appended blocks from its recorded `raw_result` through
+  `agent_shared.summarised_result_blocks`, the product's own builder — the
+  seam replays `final_result`, so without it this row's fix could not reach
+  the seam. `replay_report depth --seams` grades a requirement at the
+  summarised text the Worker was shown, the report and the answer, and says
+  which subsections the summaries mention; it is what puts the 1-of-11
+  behind a command.
+- **Seam A/B, $0.31:** `wave3_p31_pre/6348 r1 t1` recorded SHALLOW (Session
+  17's 4 of 4) → `--from-raw` DELIVERED; `wave3_p31/6348 r2 t1` recorded
+  SHALLOW → DELIVERED; and the live miss's own payload (`wave3_p311 r3 t1`,
+  outline present) → DELIVERED. Every link tool-returned; the block never
+  echoed.
+- **Tests 1376 -> 1419** (43 new). Proven to fail without the fix
+  on a scratch copy of `server_py/`: **9 with the wiring removed, 20 with
+  the functions stubbed**; 15 pass in both by design (silence, fail-soft,
+  the unsummarised path, the guards).
+- **Ledger (`plan_status`): unchanged at 26 of 43 rows; 6 of 14 buckets
+  closed, 3 partial.**
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **The summariser, not the Worker, drops the sibling.** The row and the
+  handover both said "the summary keeps the subsection numbers" and located
+  the loss in the Worker's write-up. Graded seam by seam, the summary
+  mentions s.36(2) in 1 of 11 runs; the Worker's write-up was faithful to a
+  summary that had already lost it. Session 16's split (retrieved / report /
+  answer) had no "summary" column; `depth --seams` now has one, and it is
+  the first thing to run on the next composition row.
+
+- **The one miss is the shape the outline cannot reach.** Rep 3's Worker was
+  shown s.36(2) twice — its summary kept it (the only `wave3_p311` summary
+  that did) and the outline listed it — and wrote *"Section 36(1)
+  (Confidentiality)"* alone in a 6,942-char, two-Act report. The same recorded
+  payload replayed on the seam DELIVERED. So after this row the residual is
+  the live loop's final write-up not obeying P3.1's rule with the sibling in
+  front of it: obedience, not information. Invariant 2's next step is a
+  code-emitted sibling line at the report seam; that puts code-written
+  statute text into the lawyer's report and was not built on my own
+  judgement (see Decisions).
+
+- **A seam pass is not a live pass.** Three of three payloads DELIVERED on the
+  seam (two fixtures and the miss itself); two of three reps did live. The
+  seam composes in one tool-free round from the recorded results; the live
+  Worker composes at the end of its own ReAct history. The tool's docstring
+  said "an approximation"; this is the measured size of it for one row.
+
+- **Temperature 0 makes a seam "rep" one sample.** The pinned provider config
+  runs at temperature 0, and the two `--from-raw` draws on each fixture came
+  back byte-identical. Session 17's four draws varied because they were two
+  payloads. Quote draws per payload, not draws.
+
+- **The seam tool could not test the row as built.** Session 17's tool
+  replays `final_result`; a block the product appends from the raw result
+  is invisible to it. `--from-raw` is the first seam option that changes the
+  payload rather than the prompt, and it uses the product's builder so the
+  two cannot drift.
+
+- **The outline is as large as the summary it follows.** On FOISA (long
+  sections) the 6,000-char cap is reached on nearly every summarised search
+  (`depth --seams`: median 6,097 over `wave3_p31_pre`'s 36 searches, 6,248
+  over `wave3_p311`'s 7). Charged to the context budget like every append;
+  not a measured problem; recorded as a watch item rather than trimmed
+  blind (rep 1's draw used s.29's outline, which a 4,000 cap would cut).
+
+- **Links per answer fell in 4 of 4 turn slots against both before-columns**
+  (5.3 -> 4.0, 5.3 -> 3.0, 6.0 -> 5.0, 5.3 -> 3.7). Two causes, neither
+  settled: rep 3's turn 2 is a Manager clarification with no delegation (0
+  links, 0 sources — also the `sources_kept` fall, 2 of 4 slots, floor 3 of
+  8), and rep 1 wrote four sibling notes in prose at turn 1 with 3 links
+  where P3.1's reps carried 4–7. A Worker holding the outline may write
+  siblings as notes in place of links. n=3; a watch item, not a finding.
+
+- **The readout learnt four ways a summary writes a subsection, three of
+  them from this row's own runs**: `36(1)`; a bare `(1)` under a `Section
+  36` heading; a numbered `1.` list (`wave3_p311 r2`); a bulleted bold
+  heading with bulleted bold subsections (`wave3_p311 r3`). Each time the
+  first version printed "none" for a summary that had listed (1). The
+  1-of-11 was checked both ways before it was written down; the sweep's
+  count (1 of 3, rep 3) came from the fourth fix.
+
+- **The block's first rendering copied LEX's paragraph markers (`a)`).**
+  Folded as `(a)`, the citation form, before any draw. A test pins it.
+
+- **My own stray-header test was wrong, not the strip.** It put a close
+  marker after the stray header, so the whole-block regex correctly ate the
+  span between them. The pinpoint block's precedent test has no close
+  marker; mirrored.
+
+- **`_attribute_instrument` needs the Act named.** A `--seams` test whose
+  synthetic report said "Section 36(1) only." graded MISSED, not coarse: the
+  grader attributes a provision to an instrument by the nearest mention, and
+  there was none. Worth knowing when reading a "missed" on a short summary.
+
+- **The prompt-reader test fails on any scratch copy.** `seam_replay`'s
+  `_prompt_constant_at("HEAD", …)` runs `git show` from the file's
+  grandparent, and a scratch copy is not a repository — so the
+  fail-without-fix diff shows one extra failure in both copies that is
+  incidental (10 and 21 raw; 9 and 20 attributable).
+
+- **The heredoc backslash trap, twice more**, both in byte-level regex edits
+  (`\s` reaching Python as a single backslash). Both scripts rewritten with
+  the Write tool; check the bytes of any regex edited through a heredoc.
+
+- **The outline did not raise the wrong-pinpoint rate in the one 6365 rep run**
+  ($0.92, optional): DELIVERED at the highest depth ratios recorded for the
+  session (s.57 19 of 19 references at depth against 60–95% at `wave3_p31`),
+  and the four watched timeline claims are pinned correctly (interim →
+  s.57(3), where `wave3_p31` rep 2 wrote s.57(1)). n=1; it says the rate did
+  not rise in this sample, nothing more.
+
+**Decisions taken this session:**
+- **Put to the user, not taken: what to do with 2 of 3.** (a) Iterate — a
+  code-emitted sibling line at the report seam (where the report pinpoints
+  s.N(k), the run's outline holds other subsections of s.N and the report
+  mentions none, append their opening words under the citation; P2.1/P2.5's
+  pattern, verbatim statute, Invariant 1 safe); design questions are
+  placement and how many notes a report may gain; one more acceptance ≈
+  $1.40 plus seam draws. (b) P3.1's precedent — DONE with the residual as a
+  new row. (c) Leave it open at 2 of 3. No further 6348 reps were run on my
+  own judgement: the bar is n=3 all clean, and running until it passes is
+  not measurement.
+- Taken without asking, and stated here: the outline is appended on the
+  summarised path only (P1.6's reasoning: the unsummarised result has the
+  text in full); Schedules are skipped rather than outlined by paragraph
+  (P3.12's territory, and a subsection outline of one would mislabel sibling
+  sub-paragraphs); the label comes from the URL segment (a copied `Section
+  4)` would make the Worker write s.4(1) for reg. 4(1) — the wrong-pinpoint
+  shape); no prompt change (the block's own header instructs, and the seam
+  delivered with the block alone); the 6,000-char cap kept; the outline is
+  kept in the product although the row is not ticked (it moved 1 of 3 to 2
+  of 3, every exit-1 subcommand passes, and the miss is not its doing).
+- Taken without asking, and stated here: the optional 6365 smoke was run
+  (n=1, $0.92) because the brief invited it and an outline that names
+  subsections with their opening words could plausibly move the
+  wrong-pinpoint rate either way.
+
+**How this session worked, for whoever repeats it.**
+- **Grade seam by seam before designing** — `replay_report --dir <d> depth
+  --seams` over every directory that holds the session. The column that
+  moved the design was the summaries', which no earlier session printed.
+- **Give the seam tool the block first, then draw.** `python -m
+  tools.seam_replay worker --run
+  ../docs/prepilot-fixes/evidence/replay/wave3_p31_pre/6348_rep1.json
+  --turn 1 --dry-run`, then the same with `--from-raw`: the payload line
+  says how many results carry an outline. Draw with `--reps 1` — at
+  temperature 0 a second draw of one payload is the first again.
+- **When a live rep misses, replay its own payload on the seam** (`--run
+  wave3_p311/6348_rep3.json --turn 1`, as recorded): if the seam delivers,
+  the miss is the loop's write-up, not the context.
+- **The fail-without-fix recipe, this row's substitutions** (script went with
+  the session): *wiring removed* — `result += summarised_result_blocks(name,
+  raw_result)` -> `result += provision_url_block(raw_result)` in
+  `agent_shared.py`; the `_OUTLINE_BLOCK.subn` line -> `n3 = 0` and
+  `|SECTION OUTLINE` out of `_TOOL_BLOCK` in `search_scope.py`; `if
+  from_raw:` -> `if False:` in `seam_replay.py`. *Functions stubbed* —
+  `subsection_outline` redefined to return `""` at the end of its module;
+  `_OUTLINE_BLOCK = re.compile(r"(?!x)x")`; `rebuilt_result` redefined to
+  return the recorded result. Run `tests/test_section_outline.py` and
+  `tests/test_seam_replay.py` in each and diff the sets.
+- **Numbers behind commands:** the 1-of-11 is `depth --seams` over the seven
+  6348 directories; the acceptance is `depth` on `wave3_p311`; the pass bar
+  is `depth --before wave3_p31` and `discovery --before wave3_p31 --only
+  6348`; the outline sizes are the last line of `depth --seams`.
+- **Replay timings, measured this session:** 6348 $0.38–0.53 and 3–4.5 min
+  per rep (4 turns); 6365 $0.92 and 7.4 min (one Deep Research turn).
+
+**State of the branch:** `fix/prepilot-defects`, no upstream, **NOTHING
+PUSHED**. Whole-plan-then-one-push stands. **1419 tests green.** Ledger:
+**26 of 43 rows; 6 of 14 buckets closed, 3 partial** (unchanged; P3.11 open).
+
+**Machine state a new session inherits:**
+- **No uvicorn running**, and the dev box is **restored** (`moonshotai/kimi-k3`,
+  local prompt cache ON, no pin file). Re-pin before any measurement.
+- **Twenty-eight gitignored replay directories.** The new one: `wave3_p311`
+  (head `84b8da5` for `src/`; 6348 ×3 and 6365 ×1).
+- Seam draws for this row are in the session's scratchpad only (not
+  evidence; the run files are).
+
+**Next action:**
+1. **The P3.11 decision** (above) is the first thing to put to the user; the
+   row and the recommended-order line carry the three options and the
+   candidate's design questions.
+2. **P3.12** (schedule paragraphs) and **P4.8** (the label leak) are
+   measure-first rows; neither blocks anything. **P3.2, P3.3, P3.4 and P4.3**
+   remain unblocked.
+3. **Still with the user:** P5.2 (B12); whether Thomas's review document
+   should be committed; whether the Fix Tracker should be updated (P3.11
+   would show as Built / not accepted; it is updated only when asked).
+
+
+**Added at the handover (2026-09-21, same day).** What this session knew was checked
+against what had been written down. Closed:
+- **P3.1's own row carries the watch-item re-read** (the 6365 smoke: 0 of 4 watched
+  claims wrong, n=1), where a session reading that row will look for it.
+- **P4.5's row carries the refreshed count** (`wave3_p311`: 13 answered turns, 0 empty
+  completions; 8 in 342).
+- **The Verification protocol's seam section says what `--from-raw` is for, that one
+  payload is one sample at temperature 0, and that a seam pass is not a live pass**
+  (this row's live miss delivered when its own payload was replayed there).
+- **The P3.11 decision is on the row and on the recommended-order line**, with the
+  candidate's design questions and its cost, so the next session does not have to
+  re-derive it from this log.
+Not in the repo, by design: the seven seam draws and the grading scripts live in the
+session scratchpad; the run files (`wave3_p311`) are the evidence. The Fix Tracker was
+not updated (it is updated only when asked; P3.11 would show as Built / not accepted).
+
+---

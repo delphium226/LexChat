@@ -2952,3 +2952,176 @@ complete; `nosearch` 0/0; `caselaw` 0 TWO_LINES. On the before-column
 | seam draws (design prototype + seam acceptance) | 6 calls | $0.46 |
 | **`wave3_p38`** (acceptance, head `1243cdd`) | 6374 x3, 6383 x3 | **$9.60** |
 | **total** | | **$12.58** |
+
+## B10 residual — one subsection cited without its siblings (P3.11)
+
+6348's lawyer: the answer *"did not initially elaborate on the full provision,
+only referring to s36(1) and not s36(2)"*. P3.1's prompt rule (*"When you cite
+one subsection of a section, say in a line what that section's other
+subsections provide"*) moved turn 1 from 0 of 3 to 1 of 3 (`wave3_p31`), and
+the row was opened on the premise that a rule is obeyed at a rate, so the
+lever is code: a subsection outline appended after each section retrieval.
+The row's caveat, written at P3.1, was that *"summaries already keep subsection
+numbers, so the outline's value is salience, not information"*.
+
+**Outcome: built, measured at 2 of 3 against a 3-of-3 bar, not booked.** The
+outline moves the number and is kept; the one miss is a run where the Worker
+was shown s.36(2) twice and wrote s.36(1) alone. What to do with that is the
+user's decision (see *The miss*, and the row).
+
+### Where the sibling goes, measured before anything was built
+
+`replay_report depth --seams` (built this session) grades the same requirement
+at each seam the depth passes through — the summarised section-search text the
+Worker was shown, with its appended blocks removed; the worker report; the
+answer — and prints which subsections of s.36 the summaries mention at all.
+Over every directory holding a 6348 run:
+
+| turn 1 of 6348, per run | summaries mention s.36 | report | answer |
+|---|---|---|---|
+| `baseline` (pre-pilot code) | {1, 2} | coarse | coarse |
+| `wave1` | {1} | coarse | coarse |
+| `wave2` | {1} | coarse | coarse |
+| `wave3_p31_pre` reps 1–3 | {1} {1} {1} | coarse ×3 | coarse ×3 |
+| `wave3_p31_smoke` | {1} | coarse | coarse |
+| `wave3_p31_smoke2` (= `wave3_p31` rep 1, seeded) | {1} | deep | deep |
+| `wave3_p31` reps 1–3 | {1} {1} {1} | deep coarse coarse | deep coarse coarse |
+
+**The summariser keeps s.36(2) in 1 of the 11 turn-1 summaries.** The section
+search returns s.36 with both subsections in every one of them (P3.1 measured
+that). So the row's caveat is true of the subsections a summary mentions and
+false of the one it drops: a Worker that was never shown s.36(2) cannot say
+what it provides, and the one `wave3_p31` run that did wrote it from a summary
+that listed s.36(1) alone — right, but from memory. This is P1.6's situation —
+the summariser cannot discard what it never saw — so the outline is
+information restored after summarisation, from the RAW result.
+
+(`python -m tools.replay_report --dir <d> depth --seams`, for each of the seven
+directories; the `s.36 subsections in the summaries` column. The readout learnt
+four ways a summary writes a subsection — `36(1)`, a bare `(1)` under a
+`Section 36` heading, a numbered `1.` list, and a bulleted bold heading — three
+of them from this row's own runs; the 1-of-11 was checked both ways.)
+
+### The fix, prototyped on the seam
+
+`seam_replay` replays each tool's recorded `final_result`, so a block built in
+`run_worker_tool` from the raw result is in a fixture only if it existed when
+the run was recorded — the seam could not prototype this row. `--from-raw`
+(built first) rebuilds each summarised result's appended blocks from its
+recorded `raw_result` through `agent_shared.summarised_result_blocks`, the
+product's own builder, and leaves the recorded summary and per-tool notes
+alone. The recorded payload is the before-column; `--from-raw` the after.
+
+| fixture, turn 1 | as recorded | `--from-raw` |
+|---|---|---|
+| `wave3_p31_pre/6348 r1` | SHALLOW, 4 of 4 draws (Session 17; 0 of 3 at depth) | **DELIVERED** (2 of 4 at depth) |
+| `wave3_p31/6348 r2` | SHALLOW (1 of 4 at depth) | **DELIVERED** (1 of 4 at depth) |
+
+$0.23 for five draws. **The pinned configuration runs at temperature 0, and
+the two `--from-raw` draws on each fixture are byte-identical**, so a payload
+gives one sample here: two fixtures, two samples. Every legislation link in
+the draws was tool-returned; the block was never echoed. Payload growth:
+27.2K → 33.4K chars with one outline, 38.5K → 50.8K with two.
+
+The draw's own sentence: *"(Note: The other subsection, section 36(2),
+provides a separate exemption for information obtained from another person
+where its disclosure would constitute an actionable breach of confidence)"* —
+and the same note for s.29 and s.50, whose subsections the outline listed.
+
+### The block, and what it costs
+
+One line per numbered subsection of each provision with two or more, opening
+words with paragraphs folded in, labelled from the URL segment (`s.36`,
+`reg. 4`, `art. 2`) and never from the word the text uses (LEX renders a
+regulation's text as `Section 4)`, and a label copied from it would make a
+wrong pinpoint). No URLs (P1.6's block has them). Left out: Schedules (one
+item whose `Section k)` lines are paragraphs — P3.12), provisions with fewer
+than two subsections, rows without a provision URL, and the unsummarised path.
+Bounded: 300 chars a subsection, 12 subsections a provision, 6,000 chars the
+block, provisions in the retrieval's rank order.
+
+Over the graded runs the cap is what bounds it: `wave3_p31_pre`, 36 section
+searches, outline median 6,097 chars, p90 6,367, non-empty for 33 of 33
+summarised searches; `wave3_p311`, 7 searches, median 6,248 (`depth --seams`,
+last line). A summarised section search on an Act with long sections therefore
+hands the Worker roughly as much outline as summary. Charged to the context
+budget like every other append; nothing measured here says it is too high.
+
+### The acceptance run (`wave3_p311`, head `84b8da5`, n=3, $1.40): 2 of 3
+
+| 6348 | `wave3_p31_pre` (HEAD before P3.1) | `wave3_p31` (P3.1) | **`wave3_p311`** |
+|---|---|---|---|
+| turn 1 delivers s.36(2) with its substance | 0/3 | 1/3 | **2/3** |
+| turn 1 references at depth, per rep | 0, 0, 0 | — | 2 of 5, 1 of 4, 0 of 3 |
+| turn 1 summaries mention s.36(2) | 0/3 | 0/3 | 1/3 (rep 3) |
+| by turn 2 | 2/3 | 3/3 | 2/3 |
+
+In reps 1 and 2 the summary lists s.36(1) alone, the outline lists both, and
+the report and answer carry s.36(2) with its substance — the outline did the
+work. Every legislation link in the twelve answers was tool-returned (47 of
+47); no block or label leaked into any answer; every exit-1 subcommand exits 0
+(`halts` 0, `negatives` 5 turns asserting a negative and 0 failing,
+`derivations` 0 UNVERIFIED, `blanks` holds, `scoperecord` 0 leaked,
+`nosearch` 0, `caselaw` 0). Reps cost $0.49, $0.53, $0.38 and took 248, 256
+and 175 s.
+
+### The miss
+
+**Rep 3, turn 1: the Worker was shown s.36(2) twice and wrote s.36(1) alone.**
+Its summary of the FOISA section search kept both subsections (the only
+`wave3_p311` summary that did) and the outline listed both beneath it; the
+report (6,942 chars, two Acts — that rep also section-searched the Data
+Protection Act 2018, an 81K-char raw result, summarised) cites *"Section 36(1)
+(Confidentiality)"* and nothing of (2), and the Manager passed it through. So
+the residual after this row is not information: it is the Worker not obeying
+P3.1's rule with the sibling in front of it. **The same recorded payload,
+replayed on the seam as one tool-free composition round, DELIVERED** (3 of 6
+references at depth, $0.08): the loss is in how the live ReAct loop's final
+write-up round reads its context, not in what the context holds.
+
+Rep 3's turn 2 is a different thing and not this row's: the Manager answered
+the lawyer's follow-up (*what is the test for exemption*) with a clarifying
+question and no delegation (685 chars, 0 sources), which the grader marks
+MISSED; when the lawyer named s.36(2) at turn 3 the run delivered it in full.
+That is why `by turn 2` reads 2 of 3 and why `sources_kept` fell in the t2 slot.
+
+**What would close it, not built (a user decision).** Invariant 2's next step
+is a code-emitted sibling line at the report seam: where the report pinpoints
+s.N(k), the run's outline holds other subsections of s.N, and the report
+mentions none of them, append their opening words under the citation — the
+P2.1/P2.5 pattern, code writing the disclosure, verbatim statute so Invariant 1
+is safe. Design questions for the user first: placement (under the citation or
+after the References), how many notes a report may gain (every pinpointed
+section with siblings the Worker did not mention — rep 1's draw wrote three
+such notes itself), and whether that is clutter. One more acceptance costs
+about $1.40 plus seam draws. The alternative is P3.1's precedent: book DONE
+with the residual as a new row.
+
+### Invariant 1
+
+- `discovery --before wave3_p31 --only 6348`: `sources_kept` per rep 5.0 →
+  4.3; fell in **2 of 4** turn slots (t1 2.0 → 1.7, t2 1.0 → 0.7; noise floor 3
+  of 8). Against `wave3_p31_pre`: 4.3 → 4.3, fell in 1 of 4 (t2). The t2 fall
+  is rep 3's clarification turn (no delegation, 0 sources) both times.
+- `depth --before wave3_p31`: prose fell in 2 of 4 slots, **links in 4 of 4**
+  (5.3 → 4.0, 5.3 → 3.0, 6.0 → 5.0, 5.3 → 3.7); against `wave3_p31_pre` prose
+  1 of 4, links 4 of 4. Per rep, rep 1 carried 3, 2, 3, 2 links across its four
+  turns with four sibling notes in prose at turn 1, where the P3.1 reps carried
+  3–8 a turn. **Watch item:** a Worker holding the outline may write a
+  subsection's siblings as prose notes in place of further links. n=3 and one
+  rep; not a finding.
+- Sibling notes (*"(Note: … other subsection …"*) in the answers: 0 in
+  `wave3_p31_pre` turn 1, 0 in `wave3_p31`, 4 / 0 / 0 in `wave3_p311`.
+
+### The wrong-pinpoint watch item (P3.1), 6365 smoke, n=1, optional
+
+6365 n=1, $0.92, 7.4 min, one Deep Research turn (run file stamped `7310030`; `git diff 84b8da5 HEAD -- server_py/src` is empty, so the product is the acceptance head's). **DELIVERED**, at the highest depth ratios recorded for the session: references at depth s.45 **7 of 7**, s.57 **19 of 19**, s.21 10 of 11, s.22 11 of 11 (60–95% per anchor at `wave3_p31`, 0–17% at HEAD before P3.1). The four timeline claims Session 16 read against the live text, read by hand here: interim report period → **s.57(3)** (right; `wave3_p31` rep 2 had s.57(1)), 6 months → **s.21(2)**, 9 months → **s.22(5)**, true and fair view → **s.45(1)** — all four correct. 47 pinpoints in the answer, 21 of them in sentences carrying a timeline term; the 17 outside the four watched claims read as plausible and were NOT verified against the text. s.57(1) appears in two step reports and reaches no timeline claim. **n=1 and optional, stated as such: the rate did not rise in this sample** (3 wrong of 34 at `wave3_p31`; 0 of 4 watched claims here). Sibling notes in the answer: the synthesis wrote none — the outline reaches step Workers, and the synthesis has the pinpoint block (P3.1), not the outline.
+
+### Spend
+
+| | | |
+|---|---|---|
+| seam draws (`--from-raw` A/B on two fixtures, and rep 3's payload) | 6 calls | $0.31 |
+| **`wave3_p311`** (acceptance, head `84b8da5`) | 6348 ×3 | **$1.40** |
+| `wave3_p311` 6365 smoke (head `84b8da5` for `src/`; file stamped `7310030`, tooling only) | 6365 ×1 | $0.92 |
+| **total** | | **$2.63** |
