@@ -3235,6 +3235,15 @@ payload and calls nothing.
   seam**: its payload is ~40K chars, so a call is $0.11 and the saving is
   5-8x, not 20x. The Worker seam is the 18x one. Quote the measured numbers.
 
+**One lever that cannot be audited from our data, checked this session.**
+`cached_prompt_tokens` is **0 on every run file**, and that is not evidence
+that provider prompt caching is failing: OpenRouter reports a cache discount
+only for Anthropic models, so any implicit Gemini saving is already inside the
+billed price and invisible to us. Whether the replay traffic is being
+discounted therefore cannot be read off a sweep; it would need a deliberate
+paid experiment (the same call twice, timed inside and outside the implicit
+cache window). Not run.
+
 **Other levers, recorded not built** (in FIX_PLAN's *Verification protocol*):
 replay only up to the graded turn; exclude Deep Research sessions from a row
 that cannot touch them; reuse run files when `git diff <rev> HEAD --
