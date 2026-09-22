@@ -446,6 +446,20 @@ async def replay_session(
 
         plan = None
         plan_clarification = None
+        # Built BEFORE the Deep Research branch, not after the chat call: a
+        # planner error or a clarification returns early, and a turn with no
+        # `prepilot` block reads downstream as "the lawyer got no reply", which
+        # is a claim about the pre-pilot the replay has no business making
+        # (P0.5; 6347 turn 2 in `wave0_conv` is the measured instance).
+        prepilot = {
+            "got_reply": t.got_reply,
+            "cost_usd": t.recorded_cost_usd,
+            "answer_chars": t.recorded_answer_chars,
+            # Which Worker wrote the pre-pilot answer (P0.5). This is the
+            # evidence behind `chat_mode_source`, carried into the run file so
+            # a directory can be graded against the original without the CSV.
+            "answer_shape": t.recorded_answer_shape,
+        }
         if mode == "deep_research":
             drafted = await client.draft_plan(messages, s)
             if "_http_error" in drafted:
@@ -453,6 +467,7 @@ async def replay_session(
                                 chat_mode_source=t.chat_mode_source,
                                 status="error",
                                 error=f"planner: {drafted['_http_error']}")
+                tr.prepilot = prepilot
                 turns.append(tr)
                 continue
             if drafted.get("needs_clarification"):
@@ -470,6 +485,7 @@ async def replay_session(
                     answer=drafted.get("question", ""),
                     plan_clarification=drafted,
                 )
+                tr.prepilot = prepilot
                 turns.append(tr)
                 messages.append(
                     {"role": "assistant", "content": drafted.get("question", "")}
@@ -481,6 +497,7 @@ async def replay_session(
                                 chat_mode_source=t.chat_mode_source,
                                 status="error",
                                 error=f"planner returned no plan: {str(drafted)[:300]}")
+                tr.prepilot = prepilot
                 turns.append(tr)
                 continue
 
@@ -490,15 +507,7 @@ async def replay_session(
         tr.chat_mode_source = t.chat_mode_source
         tr.plan = plan
         tr.plan_clarification = plan_clarification
-        tr.prepilot = {
-            "got_reply": t.got_reply,
-            "cost_usd": t.recorded_cost_usd,
-            "answer_chars": t.recorded_answer_chars,
-            # Which Worker wrote the pre-pilot answer (P0.5). This is the
-            # evidence behind `chat_mode_source`, carried into the run file so
-            # a directory can be graded against the original without the CSV.
-            "answer_shape": t.recorded_answer_shape,
-        }
+        tr.prepilot = prepilot
         turns.append(tr)
         # Only a real answer joins the history. A turn that produced nothing
         # saved no assistant message in the pre-pilot either — that is why the

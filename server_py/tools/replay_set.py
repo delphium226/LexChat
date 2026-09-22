@@ -181,12 +181,34 @@ DR_MARKER = re.compile(r"\*\*key\s*findings", re.IGNORECASE)
 
 # The Research-mode fingerprint (P0.5). The research Worker's OUTPUT STRUCTURE
 # headings, which reach the lawyer through the Manager and never appear in a
-# conversational answer — see the module docstring for the measurement. Keep
-# this regex byte-identical to the one the P0.5 counts were taken with, or the
-# published table stops reproducing.
+# conversational answer — see the module docstring for the measurement.
+#
+# **Anchored to a heading, and that is a correction to the regex the published
+# counts were first taken with.** The scratch version matched the bare phrases
+# anywhere in the text, and `Statutory Framework` duly fired on a Deep Research
+# planner asking "would you like to search for the statutory framework
+# discussed in this case" (`wave0_conv` 6347 turn 2) — prose, not a report.
+#
+# The heading markup is NOT one fixed form. Counted over the corpus, the Worker
+# emits at least five: `### 1. Summary Answer (BLUF)` (253), `2. **Detailed
+# Analysis:**` (76), `**References:**` (35), `### Jurisdiction & Status` (18)
+# and `### **1. Summary Answer (BLUF)**`. Enumerating them in order is how two
+# earlier attempts at this regex went wrong — the first missed the
+# number-before-bold form and the second the hash-bold-number form, and both
+# looked fine because `\bBLUF\b` was quietly carrying them. So: require the
+# line to OPEN with markup or a list number (the lookahead), consume a short
+# run of it, then the heading name.
+#
+# Both forms were run over all 181 assistant messages in the export and all
+# 1,175 turns in the 29 replay directories — **one disagreement, that one
+# planner question** — so every published P0.5 count is unchanged. `BLUF` is
+# kept as belt and braces (0 further disagreements): it is the one token that
+# survives a heading the A4 reformat retry has mangled.
 RESEARCH_REPORT_MARKER = re.compile(
-    r"Jurisdiction & Status|Summary Answer|\bBLUF\b|Detailed Analysis"
-    r"|Statutory Framework|^#+\s*\**References",
+    r"^[ \t>]*(?=[#*_\d])[#*_\d.)\t ]{1,12}"
+    r"(?:Summary Answer|Detailed Analysis|Jurisdiction & Status"
+    r"|Statutory Framework|References)"
+    r"|\bBLUF\b",
     re.IGNORECASE | re.MULTILINE,
 )
 

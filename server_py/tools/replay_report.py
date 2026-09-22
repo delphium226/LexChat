@@ -4704,9 +4704,17 @@ def mode_rows(doc: dict, shape) -> list:
         pre = t.get("prepilot") or {}
         pre_shape = pre.get("answer_shape")
         if pre_shape is None:
-            # Run files written before P0.5 do not carry it; say so rather
-            # than reporting the absence as "the lawyer got no reply".
-            pre_shape = "-" if pre.get("got_reply") else "no_reply"
+            # Two different absences, and collapsing them manufactures B13
+            # evidence out of an instrument gap. No `prepilot` block AT ALL
+            # means the replay never reached the chat call (a Deep Research
+            # planner error or clarification returned early — 6347 turn 2 in
+            # `wave0_conv`), so the run file says nothing about what the
+            # lawyer got. A block with no `answer_shape` is a run file written
+            # before P0.5; 28 directories are in that state.
+            if not pre:
+                pre_shape = "unrecorded"
+            else:
+                pre_shape = "-" if pre.get("got_reply") else "no_reply"
         out.append({
             "session": str(doc.get("session_id")),
             "rep": doc.get("rep", 1),

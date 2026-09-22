@@ -634,26 +634,37 @@ def test_bare_year_filters_are_read_as_years_not_dates():
 # and the twelve sessions could not be re-graded on it.
 
 
-def test_answer_shape_reads_each_research_report_heading():
-    """The headings are `agent_core._REPORT_SECTIONS`, reaching the lawyer
-    through the Manager. Any one of them is enough: the A4 reformat retry
-    exists precisely because models drop some of them."""
+def test_answer_shape_reads_every_heading_form_the_worker_actually_emits():
+    r"""The headings are `agent_core._REPORT_SECTIONS`, reaching the lawyer
+    through the Manager. The markup around them is NOT one fixed form — these
+    are counted from the corpus, and enumerating them in a fixed order is how
+    two earlier versions of this regex went wrong while `\bBLUF\b` quietly
+    carried them. Any one heading is enough: the A4 reformat retry exists
+    precisely because models drop some of them."""
     for heading in (
-        "## Summary Answer (BLUF)\nThe position is...",
-        "**Detailed Analysis**\nSection 12 provides...",
-        "### Jurisdiction & Status\nScotland, in force.",
-        "Statutory Framework\n- the 2002 Act",
-        "## References\n- [Act](https://lex/x)",
+        "### 1. Summary Answer (BLUF)\nThe position is...",     # 253 in corpus
+        "2. **Detailed Analysis:**\nSection 12 provides...",    # 76
+        "**References:**\n- [Act](https://lex/x)",              # 35
+        "### Jurisdiction & Status\nScotland, in force.",       # 18
+        "### **1. Summary Answer (BLUF)**\nIn Scotland...",     # the fifth form
+        "## Statutory Framework\n- the 2002 Act",
     ):
         assert rs.answer_shape(heading) == "research", heading
 
 
 def test_answer_shape_calls_an_ordinary_answer_conversational():
     assert rs.answer_shape("The Act does not define the term.") == "conversational"
-    # A bold "References" that is not a heading is deliberately NOT a match:
-    # the research Worker emits it as a Markdown section header, and a
-    # conversational answer listing its sources should not be misread as one.
-    assert rs.answer_shape("Sources:\n**References**\n- x") == "conversational"
+    # The marker requires the LINE TO OPEN with heading markup, so the same
+    # words in prose are not a match. `wave0_conv` 6347 turn 2 is the measured
+    # instance: a Deep Research planner asking "would you like to search for
+    # the statutory framework discussed in this case" is a question, not a
+    # research report, and the first version of this regex read it as one.
+    for prose in (
+        "Would you like the statutory framework discussed in this case?",
+        "That is the detailed analysis you asked for.",
+        "See the references below.",
+    ):
+        assert rs.answer_shape(prose) == "conversational", prose
 
 
 def test_deep_research_wins_over_the_report_shape():
@@ -850,6 +861,19 @@ def test_a_run_file_written_before_p0_5_does_not_claim_the_lawyer_got_nothing():
     ])
     rows = rr.mode_rows(doc, rs.answer_shape)
     assert [r["prepilot_shape"] for r in rows] == ["-", "no_reply"]
+
+
+def test_a_turn_the_replay_never_reached_is_not_reported_as_a_lost_turn():
+    """6347 turn 2 in `wave0_conv`, and the 19th instance of the instrument
+    being wrong before the product is. A Deep Research turn whose planner asked
+    for clarification returns before the `prepilot` block is built, so the run
+    file carries `{}` — which is silence about the pre-pilot, not evidence that
+    the lawyer got nothing. `replay.py` now writes the block on every path;
+    this keeps the directories written before that readable."""
+    doc = _mode_doc(turns=[{"turn": 2, "chat_mode": "deep_research",
+                            "chat_mode_source": "dr_marker",
+                            "answer": "Which jurisdiction?", "prepilot": {}}])
+    assert rr.mode_rows(doc, rs.answer_shape)[0]["prepilot_shape"] == "unrecorded"
 
 
 def test_a_guessed_mode_is_a_finding():
