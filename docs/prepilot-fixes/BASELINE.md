@@ -3150,6 +3150,68 @@ the Manager in Research mode and never appear in a conversational answer.
 
 The twelve in scope: 6333, 6334, 6335, 6338, 6340, 6343, 6345, 6346, 6348,
 6350 (blank mode), and the non-Deep-Research turns of 6341 and 6347. Which rows
-that touches, and what to do, is on P0.5. These counts were a scratch regex
+that touches, and what to do, is on P0.5. ~~These counts were a scratch regex
 over the export and the run files (recorded on the row); P0.5's first step puts
-them behind `replay_report modes`.
+them behind `replay_report modes`.~~
+
+**Done, Session 20 (2026-09-22). `python -m tools.replay_report modes --dir <D>`
+prints both halves of the table above**, and every figure in it was re-measured
+with the corrected marker over every directory. Two corrections to the table as
+first published, neither of which moves a zero:
+
+* **The 24 conversational-recorded sessions are 0 of 63, not 0 of 64.** One of
+  those turns is a blank reply with no text to read (B13/P4.2), so it carries no
+  shape. The 0 is unaffected; the denominator was.
+* **State the 0 over the non-Deep-Research answers.** The report headings appear
+  in **0 of the 152** non-DR pre-pilot answers and in **27 of 27** Deep Research
+  ones — `DEEP_RESEARCH_SYNTHESIS_PROMPT` asks for a report structure too. So
+  `dr_marker`'s precedence over the report marker is load-bearing, not
+  decoration, and "0 research-shaped answers" is a statement about the turns the
+  report marker is actually asked to decide.
+
+**The marker was also wrong once, in prose.** The published regex matched its
+phrases anywhere in the text, and `Statutory Framework` fired on a Deep Research
+planner asking *"would you like to search for the statutory framework discussed
+in this case"*. It is now anchored to a heading — and the heading markup is not
+one fixed form: the Worker emits at least five (`### 1. Summary Answer (BLUF)`
+253 times, `2. **Detailed Analysis:**` 76, `**References:**` 35,
+`### Jurisdiction & Status` 18, `### **1. Summary Answer (BLUF)**`), so the
+regex requires markup and then consumes a run of it rather than enumerating
+them. Both forms were run over all 181 assistant messages in the export and all
+1,175 turns in the 29 replay directories: **one disagreement, that one planner
+question.** Every count below therefore stands.
+
+### The Conversational-mode replay (`wave0_conv`, P0.5 step 2)
+
+`wave0_conv` is the missing before-column: the twelve sessions replayed in the
+mode their lawyers used. Head `223293e`, n=1, 50 turns (48 conversational, 2
+Deep Research), **$3.84** against a $6 estimate.
+
+| directory | mode the twelve ran in | research-shaped answers |
+|---|---|---|
+| `baseline` | Research (a default) | 39 of 48 |
+| `wave1` | Research (a default) | 41 of 48 |
+| `wave2` | Research (a default) | 42 of 48 |
+| `wave0_conv` | **Conversational (evidence)** | **0 of 48** |
+
+Every turn's mode now has a source that is evidence: `conversational_marker`
+40, `neighbour` 8 (unanswered turns, taking the nearest answered non-DR turn of
+their own session), `dr_marker` 2. `modes` exits 0; every other exit-1
+subcommand exits 0 except `caselaw`, which is the pre-P2.4 before-column shape
+by design.
+
+**What changed when the mode was right.** Three measurements, each recorded on
+its own row:
+
+| | Research mode (wrong) | Conversational (right) |
+|---|---|---|
+| halted worker runs, 6335 + 6338 + 6340 | 3 of 14 (`baseline`), 1 of 11 (`wave2`) | **0 of 7** |
+| 6346 turns deflecting ("switch mode") | 0 of 5 | **5 of 5** |
+| delegations with zero tool calls (`nosearch` B) | 7 FAILs, all 6346/6347 (`wave2`) | **0** |
+| P4.6's scripted negative, over the twelve | 20 of 50 (`wave2`) | **0 of 50** |
+| 6348 turn 1 delivers s.36(2) with substance | 2 of 3 (`wave3_p311`) | **1 of 3** (0 of 3 at `2d9ae11`) |
+
+The middle two rows are the same finding seen twice: **B5's false negative and
+B7's deflection are one defect in two modes**, and only the second reached a
+lawyer. `negatives` exits 0 on `wave0_conv`, where every full sweep has exited 1
+on 6346/6347.

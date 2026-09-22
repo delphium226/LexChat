@@ -3800,3 +3800,200 @@ directories; nothing pushed.
 P3.11's decision on the Conversational-mode numbers.
 
 ---
+## Session 20 — 2026-09-22 — P0.5 (the chat-mode default), and five rows re-checked
+
+**Done:**
+- **P0.5 is DONE, all three steps, $8.42.** The twelve sessions now have a
+  Conversational-mode replay, every turn of every run file carries a chat
+  mode that is evidence rather than a default, and the table the row rested
+  on is behind a command.
+- **(1) Instrument.** `replay_set.answer_shape` reads a turn's mode off its
+  recorded answer the way `dr_marker` already did: `deep_research` |
+  `research` | `conversational` | `None` (no text to read).
+  `_resolve_modes` resolves in that precedence — DR marker, then a recorded
+  `Filter: Chat mode` snapshot, then the answer marker, then, for a turn that
+  got no reply, **the nearest answered non-Deep-Research turn of its own
+  session** (`neighbour`), preferring the one before. Deep Research is
+  excluded as a neighbour: it is one-shot and the frontend reverts, so a DR
+  neighbour says nothing about the turn beside it, and copying one would
+  replay an unasked-for $0.71 turn. Sources over the 62 sessions: `snapshot`
+  108, `conversational_marker` 52, `dr_marker` 27, `neighbour` 9.
+  `DEFAULT_CHAT_MODE` is now `conversational` and is **unreachable here**.
+- **The snapshot still wins where the export recorded one**, so the 29
+  snapshot-carrying sessions read byte-identical to every sweep already
+  taken, and `mode_report` checks the marker against it: **0 disagreements,
+  both directions, 108 turns.** That is what earns the marker the right to
+  decide the turns where the field is blank.
+- **`replay_report modes`** prints per-turn mode and evidence, the
+  ran-as × answer-shape cross-tab that *is* P0.5's table, and the export's
+  own answers; it **exits 1** on a guessed mode or a conversational turn that
+  answered like the research Worker, so it joins the exit-1 set. Tests
+  **1419 → 1442**; 15 of the 22 new ones proven to fail on scratch copies of
+  `server_py/` with the derivation reverted (3), the resolver stubbed (7),
+  the marker stubbed (6) or `modes`' graders removed (6). The 7 that stay
+  green in all four are invariants that hold in both worlds by design.
+- **(2) Replay.** `wave0_conv`, head `223293e`, n=1, 50 turns, **$3.84**
+  against a $6 estimate. `modes` exits 0 and **0 of 48 conversational turns
+  produced a research-shaped answer**, against 42 of 48 in `wave2`. Every
+  exit-1 subcommand 0 except `caselaw` (the pre-P2.4 before-column shape, by
+  design). Re-measured with the corrected marker over every directory:
+  `baseline` 39 of 48, `wave1` 41 of 48, `wave2` 42 of 48, Conversational
+  0 of 87 in all three.
+- **(3) Three re-checks, each written on its own row.**
+  - **P2.1 / P3.8 halts on 6335, 6338, 6340: ZERO.** 7 worker runs, 0 halted,
+    against 3 of 14 at `baseline` and 1 of 11 at `wave2`. The quick-lookup
+    Worker issues a median of 1 discovery call and 2 retrievals, nowhere near
+    the 20-round cap. Neither ticked row is undermined — both rest on wider
+    evidence and the halt machinery is mode-blind — but those three sessions
+    cannot evidence a halt rate at all in the mode their lawyers used.
+  - **P4.1 / B7 reproduces, for the first time in any sweep, and displaces
+    the defect it was confused with.** See *Surprises*.
+  - **P3.1's 6348 half and P3.11: 1 of 3 at HEAD, 0 of 3 at `2d9ae11`**
+    (`wave0_conv_6348` $3.09, `wave0_conv_6348_pre` $1.49). The user asked
+    for the before-column the row did not require, and it is what makes this
+    readable: the outline moves 6348 by the same one step in both modes.
+- **Ledger 26 → 27 of 46** (two new rows: **P0.6**, the research-mode
+  default; **P3.13**, the Manager seam). 6 of 14 buckets closed, 3 partial.
+- **Dev box restored** (`replay restore`), A/B worktree removed.
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **B5's false negative and B7's deflection are one defect in two modes, and
+  only one of them ever reached a lawyer.** In Research mode 6346 and 6347
+  delegate to a Worker that makes zero tool calls and writes *"The available
+  database does not contain information on this specific issue"* under a
+  Summary Answer heading. In Conversational mode that shape is **gone** —
+  `nosearch` reports 0 delegations with zero tool calls and `negatives`
+  **exits 0** — and what appears instead is B7: 6346, the corpus's only 1/1
+  session, deflects on **5 of 5** turns against 0 of 5 in Research mode. So
+  the standing "known exit on 6346/6347, not a regression" note in P4.1 and
+  in Session 16's instrument note **was an artefact of the wrong mode**, and
+  the note is now wrong as written. Two defects had been booked where there
+  is one, seen through two prompts.
+- **P4.6's scripted sentence was never seen by a lawyer.** It appears in
+  **0 of 179** pre-pilot answers and 0 of 50 `wave0_conv` turns, against 20
+  of 50 in `wave2`. The line lives in `WORKER_SYSTEM_PROMPT` and not in
+  `WORKER_SYSTEM_PROMPT_CONVERSATIONAL`, and the Research flag was off on the
+  target throughout. The row stays valid — the line is live and fires the
+  moment Research mode is enabled, which is the point of a pilot — but it is
+  a forward-looking fix, not a reproduction, and its headline counts are
+  replay artefacts of the P0.5 default.
+- **P3.11's loss moved one seam down when the mode was right.** P3.11
+  diagnosed the summariser (1 of 11 Research-mode summaries kept s.36(2)).
+  In Conversational mode the summariser keeps it in 2 of 3 and **rep 3 loses
+  it at the MANAGER**: the Worker's report says *"A related exemption in
+  s.36(2) applies to information obtained from another person where
+  disclosure would constitute an actionable breach of confidence"* and the
+  answer keeps s.36(1) and s.50(5) and deletes that sentence. **This
+  mis-scopes P3.11's option (a)** — a code-emitted sibling line at the report
+  seam cannot help a Manager that deletes the sentence. Opened as **P3.13**,
+  measure-first. The outline is not the constraint: non-empty for 14 of 14
+  section searches, median 6,176 chars, so it reaches the quick-lookup
+  Worker; that Worker simply has no rule telling it to use it.
+- **The prompts make the marker structural, not lucky.**
+  `WORKER_SYSTEM_PROMPT_CONVERSATIONAL` says *"Do NOT use formal report
+  headers (BLUF, Detailed Analysis, References, etc.)"* while
+  `WORKER_SYSTEM_PROMPT`'s OUTPUT STRUCTURE demands them. The same comparison
+  confirms P3.11's caveat: P3.1's sibling rule is in the research Worker's
+  OUTPUT STRUCTURE item 2 and has **no counterpart** in the quick-lookup
+  prompt.
+- **The instrument was wrong twice, both times in code written this session,
+  and both were caught by a count that did not add up.** (a) `tr.prepilot`
+  was built *after* the chat call, so the three early returns in the Deep
+  Research branch wrote none, and `mode_rows` read the empty block as
+  *the lawyer got no reply* — manufacturing B13 evidence out of an instrument
+  gap (6347 turn 2). Found because the Deep Research count read 1 where the
+  set says 2. (b) The published marker matched its phrases **in prose**:
+  `Statutory Framework` fired on a planner asking *"would you like to search
+  for the statutory framework discussed in this case"*.
+- **Anchoring that regex took three attempts, and the first two passed for
+  the wrong reason.** The Worker emits at least five heading forms
+  (`### 1. Summary Answer (BLUF)` 253, `2. **Detailed Analysis:**` 76,
+  `**References:**` 35, `### Jurisdiction & Status` 18,
+  `### **1. Summary Answer (BLUF)**`). Two drafts enumerated them in a fixed
+  order, each missed one, and each still reproduced every published count —
+  because `\bBLUF\b` is unanchored and was quietly carrying them. The final
+  form requires the line to open with markup and then consumes a run of it,
+  and it reproduces the counts **without** BLUF. **A regex that agrees with
+  its predecessor on the corpus has not been validated; check the mechanism
+  it is supposed to be matching.**
+- **State the 0 precisely: the report headings are in 0 of the 152
+  non-Deep-Research pre-pilot answers and 27 of 27 Deep Research ones.**
+  `DEEP_RESEARCH_SYNTHESIS_PROMPT` asks for a report structure too, so
+  `dr_marker`'s precedence is load-bearing. The published "0 of 38 / 0 of 64"
+  was over non-DR answers all along, but nothing said so.
+- **`research_mode` is the same defect and does NOT yield to the same trick
+  (P0.6).** `Filter: Research mode` is blank for exactly the twelve. The
+  obvious signal — "the answer cites a neutral citation, so case law was in
+  the tool set" — is **wrong**: a deflection quotes the case name the lawyer
+  asked about, and all three of 6346's answers match it while refusing to
+  search. The real distinction is substantive content *from* the judgment,
+  which is a human read. Nearly written up as a derivation before being
+  checked.
+- **The transcripts hold P4.1 bug (a)'s contrast case, which no replay can
+  produce.** In 6347 and 6350 the lawyer changed the research filter
+  mid-session and it **worked** (6347 answers 2–4 discuss the holding in
+  *Graham Andrew Evans v R* [2025] EWCA Crim 1150); in 6346 the lawyer
+  changed it, said so, and was told three times it had not. Also: the
+  pre-pilot's own wording was *"switch to **Research mode** using the mode
+  selector"* (6343 answer 3) — the chat-mode control — where HEAD says
+  *"'Legislation & Case Law' mode"*. Both wrong, differently; fix against
+  what HEAD emits.
+- **The most expensive turn on this branch, and it is not a loop.**
+  `wave0_conv_6348/6348_rep2` turn 1: **$2.40 and 1,133 seconds**, against
+  $0.07 and 33s for rep 1 of the same turn. 2 delegations, 5 tool calls, no
+  halt — but **3 `empty_completions`**, two retried and one not. Booked on
+  P4.5, which does not currently say its failure mode is also a cost and
+  latency defect. It is also the one rep of three that delivered P3.11's
+  subsection; at n=1 that is coincidence and should not be read as signal.
+
+**How this session worked, for whoever repeats it.**
+- **A/B against an old commit with the NEW instrument.** Session 14's
+  worktree recipe, plus one step it does not mention: the worktree's
+  `tools/replay_set.py` is the OLD one, so a replay from it would have sent
+  6348 in Research mode again — the very bug. `replay.py`, `replay_set.py`
+  and `replay_report.py` were copied from HEAD into the worktree, leaving
+  `src/` at `2d9ae11`. The product is the before-column; the measuring
+  instrument must not be. `git_head` still reads `2d9ae11` from the
+  worktree's own checkout, which is the right label.
+- **Do not run `replay pin` from the worktree.** The DB is shared and already
+  pinned; a second `pin` would stash the pinned state as the "previous" one.
+  Run `check` to confirm, then `run`.
+- **Grade with one script over one directory:** `bash grade.sh <dir>` runs
+  `modes halts negatives derivations blanks scoperecord nosearch caselaw` and
+  prints each exit code.
+- **`depth --seams` is the first thing to run on a composition row**, and it
+  earned that again here: it is what showed rep 3's loss was at the Manager,
+  which no answer-level grade could have told apart from rep 1's.
+
+**State of the branch:** `fix/prepilot-defects`, no upstream, **NOTHING
+PUSHED**. Whole-plan-then-one-push stands. **1442 tests green.** Ledger:
+**27 of 46 rows, 6 of 14 buckets closed, 3 partial.**
+
+**Machine state a new session inherits:**
+- **No uvicorn running.** Dev box **restored**: `google/gemini-3.1-pro-preview`
+  and local prompt cache ON. **Note for the handover: the stashed model was
+  `google/gemini-3.1-pro-preview`, not the `moonshotai/kimi-k3` Session 19
+  recorded** — so either that restore did not take or something changed it
+  since. The user chose to restore as stashed.
+- **Three new replay directories, 31 in all:** `wave0_conv` (head `223293e`,
+  the twelve, n=1, Conversational — the missing before-column);
+  `wave0_conv_6348` (head `8bbcfb9`, 6348 ×3, Conversational, HEAD);
+  `wave0_conv_6348_pre` (head `2d9ae11`, 6348 ×3, Conversational, pre-P3.1).
+- **New command:** `replay_report modes`. Run it on any new sweep before
+  quoting a number from it.
+
+**Spend:** $8.42 this session ($3.84 `wave0_conv`, $3.09 `wave0_conv_6348`,
+$1.49 `wave0_conv_6348_pre`), plus about $0.004 of model probes.
+
+**Next action:** **P4.1** — B7 now reproduces and `wave0_conv` is its
+before-column; read P0.6 first, because bug (a)'s contrast case is in the
+transcripts and not in any replay. Then **P3.11's decision**, whose option (a)
+needs re-scoping onto **P3.13**'s seam, and **P4.6's re-baseline**.
+
+**Open with the user:** P3.11's decision (now unblocked, options changed);
+P5.2 (B12); whether Thomas's review document should be committed; and whether
+the Fix Tracker should be updated (P0.5 → Done, P3.11 → still In progress,
+plus P0.6 and P3.13 as new rows).
+
+---
