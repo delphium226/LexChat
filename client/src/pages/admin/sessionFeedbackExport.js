@@ -57,6 +57,10 @@ const FILTER_COLUMNS = [
   ['Jurisdiction', 'jurisdiction'],
   ['Date from', 'date_from'],
   ['Date to', 'date_to'],
+  // 'Court' and 'Current only' are RETIRED filters (P4.4 and P1.2). The columns
+  // stay because pre-pilot snapshots recorded real values in them and an export
+  // that silently dropped those would misrepresent what those sessions ran
+  // under. Nothing writes either any more, so they are blank on new rows.
   ['Court', 'court'],
   ['Legislation type', 'legislation_type'],
   ['Current only', 'current_only'],
@@ -148,6 +152,13 @@ export const TRANSCRIPT_COLUMNS = [
   // overall can still contain the one answer the lawyer marked down.
   { label: 'Message rating', value: r => r._msg?.rating },
   { label: 'Message rating comment', value: r => r._msg?.feedback_comment },
+  // Per TURN, not per thread. `Session mode` above is thread-level and reports
+  // `deep_research` for every turn of a thread that mixed the modes, so it
+  // cannot say which query actually ran a plan. Sourced from
+  // `messages.research_plan`, the same observed signal the thread-level field
+  // prefers — and unlike inferring it from the answer text, it still works for
+  // a Deep Research turn that produced no answer at all.
+  { label: 'Message deep research', value: r => (r._msg ? (r._msg.deep_research ? 'yes' : 'no') : undefined) },
   { label: 'Message content', value: r => r._msg?.content },
 ];
 

@@ -103,40 +103,10 @@ export const LEGISLATION_TYPE_OPTIONS = [
   { value: 'draft', label: 'Draft instruments' },
 ];
 
-export const COURT_GROUPS = [
-  {
-    group: 'UK-wide',
-    courts: [
-      { value: 'uksc', label: 'UK Supreme Court' },
-      { value: 'ukpc', label: 'Privy Council' },
-    ],
-  },
-  {
-    group: 'Court of Appeal',
-    courts: [
-      { value: 'ewca/civ', label: 'Civil Division' },
-      { value: 'ewca/crim', label: 'Criminal Division' },
-    ],
-  },
-  {
-    group: 'High Court',
-    courts: [
-      { value: 'ewhc/admin', label: 'Administrative Court' },
-      { value: 'ewhc/qb', label: "King's Bench" },
-      { value: 'ewhc/ch', label: 'Chancery' },
-      { value: 'ewhc/fam', label: 'Family' },
-      { value: 'ewhc/comm', label: 'Commercial' },
-      { value: 'ewhc/pat', label: 'Patents' },
-      { value: 'ewhc/tcc', label: 'Technology & Construction' },
-    ],
-  },
-  {
-    group: 'Tribunals',
-    courts: [
-      { value: 'ukut', label: 'Upper Tribunal' },
-      { value: 'ukut/iac', label: 'Immigration & Asylum' },
-      { value: 'ukut/lc', label: 'Lands Chamber' },
-      { value: 'eat', label: 'Employment Appeal' },
-    ],
-  },
-];
+// `COURT_GROUPS` was REMOVED with the court filter (P4.4, bucket B12): nobody
+// used it, every option was English/Welsh/UK-wide for a Scottish audience, and
+// the filter OVERRODE the model's own per-query court choice rather than
+// supplementing it. The court codes still exist where they belong — in
+// `search_case_law`'s tool schema, which is what the model reads. The
+// jurisdiction section's Scotland/NI note stays: it is the true statement that
+// this list was quietly contradicting.

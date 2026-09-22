@@ -131,6 +131,7 @@ async def test_draft_research_plan_clarification_path():
         "needs_clarification": True,
         "question": "Which Act do you mean?",
         "options": [],
+        "mode_change": None,  # P4.1: no stamped history, so no change seen
     }
 
 
@@ -207,7 +208,8 @@ def _make_worker_stub(results):
     briefs = []
 
     async def run_worker(query, model, cancel_event, num_ctx, parent_on_chunk=None,
-                         emit_tool_details=False, timing_collector=None, tool_memo=None):
+                         emit_tool_details=False, timing_collector=None, tool_memo=None,
+                         retrieved_urls=None):
         briefs.append(query)
         run_worker.memos.append(tool_memo)
         return results[len(briefs) - 1]
@@ -338,7 +340,8 @@ async def test_run_deep_research_respects_cancel_between_steps():
     cancel_event = asyncio.Event()
 
     async def run_worker(query, model, cancel, num_ctx, parent_on_chunk=None,
-                         emit_tool_details=False, timing_collector=None, tool_memo=None):
+                         emit_tool_details=False, timing_collector=None, tool_memo=None,
+                         retrieved_urls=None):
         cancel_event.set()  # client disconnects during step 1
         return {"content": "f1", "sources": []}
 

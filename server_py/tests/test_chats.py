@@ -103,6 +103,43 @@ async def test_rate_message(client: AsyncClient, seed_user: User, user_token: st
 
 
 @pytest.mark.asyncio
+async def test_message_modes_round_trip(client: AsyncClient, seed_user: User, user_token: str):
+    """P4.1 (B7): the modes an assistant message ran under are persisted and
+    come back on every read, so the next turn's history can carry them and
+    the backend can see a change. NULL where the client did not stamp them."""
+    headers = {"Authorization": f"Bearer {user_token}"}
+    chat_id = (await client.post("/api/chats/", json={"model": "m"}, headers=headers)).json()["id"]
+
+    stamped = await client.post(
+        f"/api/chats/{chat_id}/messages",
+        json={"role": "assistant", "content": "Covers legislation only.",
+              "research_mode": "legislation_only", "chat_mode": "conversational"},
+        headers=headers,
+    )
+    assert stamped.status_code == 200
+    assert stamped.json()["research_mode"] == "legislation_only"
+    assert stamped.json()["chat_mode"] == "conversational"
+    unstamped = await client.post(
+        f"/api/chats/{chat_id}/messages",
+        json={"role": "user", "content": "I have changed it"},
+        headers=headers,
+    )
+    assert unstamped.json()["research_mode"] is None
+
+    rows = (await client.get(f"/api/chats/{chat_id}/messages", headers=headers)).json()
+    assert [(r["research_mode"], r["chat_mode"]) for r in rows] == [
+        ("legislation_only", "conversational"), (None, None),
+    ]
+    # Rating a message returns the full row, stamps included.
+    rated = await client.put(
+        f"/api/chats/messages/{rows[0]['id']}/rating",
+        json={"rating": 4}, headers=headers,
+    )
+    assert rated.json()["research_mode"] == "legislation_only"
+    assert rated.json()["chat_mode"] == "conversational"
+
+
+@pytest.mark.asyncio
 async def test_rate_message_invalid_rating(client: AsyncClient, seed_user: User, user_token: str):
     headers = {"Authorization": f"Bearer {user_token}"}
 

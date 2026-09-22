@@ -4,7 +4,6 @@ import {
   HOUSE_OPTIONS,
   JURISDICTION_OPTIONS,
   LEGISLATION_TYPE_OPTIONS,
-  COURT_GROUPS,
   getLatestSession,
   getRecordTypeOptions,
   getSessionFilterLabel,
@@ -33,10 +32,8 @@ export default function ResearchFiltersModal({
     house,
     jurisdiction,
     legislationType,
-    currentOnly,
     dateFrom,
     dateTo,
-    caseLawCourt,
   } = draft;
 
   // Filter vocabulary is fixed by the bot's research mode (Holyrood vs Westminster).
@@ -62,9 +59,7 @@ export default function ResearchFiltersModal({
     jurisdiction ||
     dateFrom ||
     dateTo !== thisYear ||
-    caseLawCourt ||
     legislationType ||
-    currentOnly ||
     recordType ||
     house ||
     !sessionsAreDefault;
@@ -75,9 +70,7 @@ export default function ResearchFiltersModal({
       jurisdiction: null,
       dateFrom: '',
       dateTo: thisYear,
-      caseLawCourt: '',
       legislationType: null,
-      currentOnly: false,
       recordType: null,
       house: null,
       sessions: [latestSession],
@@ -298,100 +291,11 @@ export default function ResearchFiltersModal({
               </div>
             )}
 
-            {/* § Status */}
-            {researchMode !== 'case_law_only' && (
-              <div>
-                {secHead('Status')}
-                <div
-                  style={{
-                    padding: '4px 8px 8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => set('currentOnly', !currentOnly)}
-                >
-                  <div
-                    style={{
-                      width: 30,
-                      height: 17,
-                      borderRadius: 9,
-                      background: currentOnly ? 'var(--accent)' : 'var(--ink-200)',
-                      position: 'relative',
-                      flexShrink: 0,
-                      transition: 'background 120ms',
-                    }}
-                  >
-                    <span
-                      style={{
-                        position: 'absolute',
-                        top: 2,
-                        left: currentOnly ? 15 : 2,
-                        width: 13,
-                        height: 13,
-                        borderRadius: '50%',
-                        background: 'white',
-                        transition: 'left 120ms',
-                        display: 'block',
-                      }}
-                    />
-                  </div>
-                  <span
-                    style={{
-                      fontSize: 13,
-                      color: 'var(--ink-700)',
-                      fontFamily: 'var(--font-ui)',
-                      userSelect: 'none',
-                    }}
-                  >
-                    Current legislation only
-                  </span>
-                </div>
-              </div>
-            )}
-
             {/* § Date range */}
             <div>
               {secHead('Date range')}
               {inputRow('From', dateFrom, v => set('dateFrom', v), 'To', dateTo, v => set('dateTo', v))}
             </div>
-
-            {/* § Case law court */}
-            {researchMode !== 'legislation_only' && (
-              <div>
-                {secHead('Case law court')}
-                <div style={{ padding: '0 8px 6px' }}>
-                  <select
-                    value={caseLawCourt}
-                    onChange={e => set('caseLawCourt', e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '5px 7px',
-                      borderRadius: 6,
-                      border: '1px solid var(--ink-200)',
-                      fontSize: 12,
-                      fontFamily: 'var(--font-ui)',
-                      background: 'var(--paper)',
-                      color: 'var(--ink-700)',
-                      cursor: 'pointer',
-                      outline: 'none',
-                    }}
-                  >
-                    <option value="">All courts</option>
-                    {COURT_GROUPS.map(g => (
-                      <optgroup key={g.group} label={g.group}>
-                        {g.courts.map(c => (
-                          <option key={c.value} value={c.value}>
-                            {c.label}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>

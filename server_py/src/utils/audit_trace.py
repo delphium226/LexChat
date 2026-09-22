@@ -51,7 +51,24 @@ _audit_ctx: ContextVar[Optional["AuditCollector"]] = ContextVar("audit_collector
 
 # Trace schema version. Bump on any breaking change to the `audit` event shape
 # so consumers can assert against a known contract.
-AUDIT_SCHEMA_VERSION = 1
+# v2 (2026-09-15, FIX_PLAN P2.1): `delegations[].halted` — {reason, limit,
+# steps} when a worker stopped at the ReAct step cap, else None. Additive:
+# a v1 consumer sees an unknown key and is otherwise unaffected.
+# v3 (2026-09-16, FIX_PLAN P4.2): top-level `empty_completions[]` — one record
+# per provider completion that carried no content and no tool calls, whether or
+# not the retry then recovered. Additive, and **empty on a healthy request**, so
+# a v1/v2 consumer sees one unknown key that is almost always `[]`.
+# v4 (2026-09-21, FIX_PLAN P3.8): `delegations[].halted.written_up` — whether
+# the one tool-free write-up round `chat_loop` now makes at the step cap
+# produced the partial findings that `report` then carries under P2.1's
+# header. Additive (a key inside an object that was already optional).
+# v5 (2026-09-22, FIX_PLAN P4.1): top-level `mode_change` — `null` unless the
+# request's research type or chat mode differs from the one stamped on the
+# previous assistant message in the history, in which case
+# `{"research_mode": {from, to} | null, "chat_mode": {from, to} | null}` and
+# the mode-change marker was injected ahead of the user's message. Additive,
+# and `null` on every request whose history carries no stamped modes.
+AUDIT_SCHEMA_VERSION = 5
 
 
 def set_audit_collector(collector: Optional["AuditCollector"]) -> None:
@@ -82,6 +99,14 @@ class AuditCollector:
         self.max_field_chars = max_field_chars
         self.delegations: list[dict] = []
         self.peer_consults: list[dict] = []
+        # P4.2 (B13), schema v3. Empty on a healthy request. A blank reply was
+        # previously invisible in the trace — `status: ok`, `error: null`, a
+        # billed turn and nothing in `answer` — so a harness could not tell a
+        # lost answer from a short one.
+        self.empty_completions: list[dict] = []
+        # P4.1 (B7), schema v5. None unless a mode changed since the previous
+        # assistant turn in the history (see utils/mode_change.py).
+        self.mode_change: Optional[dict] = None
         self.answer: str = ""
         self.suggestions: list[str] = []
         self.sources: list[dict] = []
@@ -112,6 +137,12 @@ class AuditCollector:
                 "brief": _clip(brief, self.max_field_chars),
                 "report": "",
                 "reformatted": False,
+                # P2.1 (B1), schema v2: {"reason","limit","steps"} when this
+                # worker stopped at the step cap, else None. An eval harness
+                # previously had to string-match "[Research halted" in `report`
+                # to know — and the Manager's own loop can halt without any
+                # delegation report carrying it, so that was never reliable.
+                "halted": None,
                 "error": None,
                 "tools": [],
                 "started_at": round(time.time() - self._started, 3),
@@ -131,6 +162,7 @@ class AuditCollector:
         report: str = "",
         error: Optional[str] = None,
         reformatted: bool = False,
+        halted: Optional[dict] = None,
     ) -> None:
         if rec is None:
             return
@@ -138,6 +170,7 @@ class AuditCollector:
             rec["report"] = _clip(report or "", self.max_field_chars)
             rec["error"] = error
             rec["reformatted"] = reformatted
+            rec["halted"] = halted
             rec["duration_s"] = round(
                 time.time() - self._started - rec["started_at"], 3
             )
@@ -310,6 +343,21 @@ class AuditCollector:
         except Exception:
             logger.debug("[Audit] record_final failed", exc_info=True)
 
+    def record_mode_change(self, change: Optional[dict]) -> None:
+        """P4.1: the mode change (if any) the marker was injected for."""
+        try:
+            self.mode_change = dict(change) if change else None
+        except Exception:
+            logger.debug("[Audit] record_mode_change failed", exc_info=True)
+
+    def record_empty_completion(self, probe: dict) -> None:
+        """One provider completion that returned nothing. See
+        `utils/empty_completion.py` for what the fields distinguish."""
+        try:
+            self.empty_completions.append(dict(probe))
+        except Exception:
+            logger.debug("[Audit] record_empty_completion failed", exc_info=True)
+
     def record_error(self, message: str) -> None:
         try:
             self.error = message
@@ -336,9 +384,17 @@ class AuditCollector:
                     "year_to": config.get("_year_to"),
                     "date_from": config.get("_date_from"),
                     "date_to": config.get("_date_to"),
-                    "court": config.get("_court"),
                     "legislation_type": config.get("_legislation_type"),
-                    "current_only": config.get("_current_only"),
+                    # Both always null, and kept only so the trace shape does
+                    # not change under an external consumer:
+                    #   `court`        — P4.4 removed the filter (B12). The
+                    #                    model still chooses a court per query;
+                    #                    that choice is in the tool's `args`,
+                    #                    which is where a harness should read it.
+                    #   `current_only` — P1.2 removed the filter (B4); the value
+                    #                    would be a claim we cannot make.
+                    "court": None,
+                    "current_only": None,
                     "record_type": config.get("_pt_record_type") or config.get("_wm_record_type"),
                     "house": config.get("_wm_house"),
                     "sessions": config.get("_pt_sessions"),
@@ -348,6 +404,8 @@ class AuditCollector:
                 "sources": self.sources,
                 "delegations": self.delegations,
                 "peer_consults": self.peer_consults,
+                "empty_completions": self.empty_completions,
+                "mode_change": self.mode_change,
                 "timings": timings or {},
                 "error": self.error,
             }

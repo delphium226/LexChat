@@ -20,6 +20,24 @@ from ..prompts import (
     get_worker_system_prompt,
 )
 from ..utils.audit_trace import get_audit_collector
+from ..utils.citation_links import enforce_provision_links, pinpoint_block
+from ..utils.discovery_budget import new_search_budget
+from ..utils.mode_change import apply_mode_change_marker, mode_change_for
+from ..utils.empty_completion import (
+    LOST_ANSWER_NOTICE,
+    fallback_from_reports,
+    is_empty_completion,
+)
+from ..utils.research_halt import apply_halt_disclosure, halt_worker_report, strip_halt_markers
+from ..utils.search_scope import (
+    answer_scope_footer,
+    carried_scope_footer,
+    case_law_scope_footer,
+    strip_answer_footer,
+    incomplete_steps_note,
+    strip_scope_blocks,
+    worker_scope_block,
+)
 from ..utils.suggestions import diagnose_suggestions, extract_suggestions
 from .agent_shared import describe_agent_error, run_worker_tool
 from .federation_client import (
@@ -171,8 +189,17 @@ async def run_worker_agent(
     timing_collector=None,
     tool_memo: Optional[dict] = None,
     memo_count_redundant: bool = False,
+    retrieved_urls: Optional[set] = None,
 ) -> dict:
-    """Run the Worker agent with a fresh context for legal research."""
+    """Run the Worker agent with a fresh context for legal research.
+
+    `retrieved_urls` is the per-REQUEST set of legislation.gov.uk URLs any tool
+    has returned (P1.6/B14). It is passed in rather than created here because a
+    Manager delegating twice, or a Deep Research plan of six steps, is still one
+    answer: a provision retrieved in step 2 is legitimately cited in step 5. A
+    caller that passes nothing gets a run-local set, so a standalone worker is
+    still enforced against its own retrievals.
+    """
     logger.info(f"[Worker] Starting research on: {query}")
 
     cfg = _get_cfg()
@@ -192,20 +219,31 @@ async def run_worker_agent(
 
     worker_tools = get_worker_tools(research_mode)
     source_accumulator: list = []
-    # Limit parliamentary searches so the model proceeds to Phase 2 instead of looping.
-    # Covers the SP search tools on the Holyrood bot and search_hansard on the
-    # Westminster bot (see _PARLIAMENT_SEARCH_TOOLS in agent_shared).
-    search_budget = (
-        {"remaining": 3}
-        if research_mode in ("parliamentary_records", "westminster_records")
-        else None
-    )
+    # Limit discovery searches so the model proceeds to Phase 2 instead of looping.
+    # Parliamentary modes: three calls to the SP search tools / search_hansard (see
+    # _PARLIAMENT_SEARCH_TOOLS in agent_shared), unchanged. P2.7: legislation modes
+    # get a budget of ROUNDS in which search_legislation may be called; without
+    # one, a looping worker ran into the 20-round step cap and lost every finding
+    # (see utils/discovery_budget.py). Fresh per run, so each delegation and each
+    # Deep Research step gets its own.
+    search_budget = new_search_budget(research_mode)
     # Bound on the SUM of tool output in this worker's context. The per-result
     # summarisation threshold scales with the model's context window and so caps
     # each result but not their total; without this, several individually-legal
     # retrievals stack into a prefill that trips the stream read timeout.
     # Fresh per run_worker_agent call, so each Deep Research step gets its own.
     context_budget = {"used": 0, "limit": WORKER_CONTEXT_BUDGET_CHARS}
+
+    # See the docstring: request-scoped when the caller threads one, run-local
+    # otherwise, never None — the enforcement below must not silently no-op.
+    if retrieved_urls is None:
+        retrieved_urls = set()
+
+    # P2.2 (B5): what this step searched for, and under what limits. Run-scoped
+    # rather than request-scoped (unlike `retrieved_urls`), because "what this
+    # step searched for" is a statement about one step and is rendered onto that
+    # step's report.
+    search_log: list = []
 
     async def worker_tool_executor(name: str, args: dict) -> str:
         return await run_worker_tool(
@@ -219,6 +257,8 @@ async def run_worker_agent(
             memo_count_redundant=memo_count_redundant,
             context_budget=context_budget,
             audit_delegation=_audit_delegation,
+            retrieved_urls=retrieved_urls,
+            search_log=search_log,
         )
 
     try:
@@ -238,7 +278,19 @@ async def run_worker_agent(
     # A4: validate the report structure and, if malformed, issue ONE no-tools
     # reformat retry. Skipped in conversational chat mode (deliberately unstructured).
     # Runs before source filtering so the filter sees the reformatted content.
-    if cfg.get("_chat_mode") != "conversational":
+    #
+    # P2.6 (B1): and skipped for a HALTED worker. A halt has no findings to
+    # reformat, so the retry is pure cost — and worse, it is what laundered the
+    # failure: in 6340 it spent an LLM call turning the halt marker into a
+    # perfectly-structured empty report ("Jurisdiction & Status: Not applicable
+    # (no research generated). References: None found."), which is what let the
+    # halt read downstream as a finished piece of research. It also polluted the
+    # measurement — `report_reformat_retries` and the Efficiency tab's
+    # `reformat_rate` scored these as prompt-adherence failures when the model
+    # never had a report to format.
+    if result.get("halted"):
+        logger.info("[Worker] Halted — skipping the A4 reformat retry (nothing to format)")
+    elif cfg.get("_chat_mode") != "conversational":
         content = result.get("content", "") or ""
         if _report_needs_reformat(content, has_sources=bool(source_accumulator)):
             logger.info("[Worker] Report failed structure check — issuing one reformat retry")
@@ -250,6 +302,51 @@ async def run_worker_agent(
                 chat_loop_fn, content, research_mode, model,
                 cancel_event, num_ctx, timing_collector=timing_collector,
             )
+
+    # P2.1 (B1): a halted worker produced NO findings, so whatever is sitting in
+    # `content` is bookkeeping, not research. Replace it with a statement of what
+    # actually happened, addressed to the agent that will read it. Done AFTER the
+    # reformat retry so this text is the last word — the retry currently still
+    # fires on a halt and dresses it up as a finished report, which is P2.6's
+    # (separate) cost problem, not a correctness one once this overwrite lands.
+    #
+    # P3.8: `chat_loop` now makes one tool-free write-up round at the cap, and
+    # `halted.written_up` says whether it produced anything. When it did, the
+    # content IS findings — partial ones, written from the retrievals the step
+    # had made — and it is kept under the same agent-addressed header, which
+    # now says so. The A4 reformat retry stays skipped either way: the write-up
+    # round carries the Worker's own OUTPUT STRUCTURE rule, and the header is
+    # prepended by code after it, so nothing can launder the stop.
+    if result.get("halted"):
+        _writeup = ""
+        if result["halted"].get("written_up"):
+            _writeup, _ = strip_halt_markers(result.get("content") or "")
+            _writeup = _writeup.strip()
+        result["halted"]["written_up"] = bool(_writeup)
+        logger.warning(
+            "[Worker] Halted at the step cap (%s rounds) — %d source(s) retrieved, %s",
+            result["halted"].get("limit"), len(source_accumulator),
+            f"partial findings written up ({len(_writeup)} chars)" if _writeup
+            else "no findings produced",
+        )
+        result["content"] = halt_worker_report(
+            result["halted"], sources_retrieved=len(source_accumulator),
+            writeup=_writeup,
+        )
+
+    # P1.6 (B14): a provision URL no tool returned still resolves, so it reads
+    # to a lawyer as a verified citation. Enforced here, AFTER the reformat retry
+    # (which rewrites the report and could reintroduce one) and BEFORE source
+    # filtering, so `_source_is_used` matches against the text the user will see.
+    _content = result.get("content", "") or ""
+    if _content:
+        _content, _demoted, _unlinked = enforce_provision_links(_content, retrieved_urls)
+        if _demoted or _unlinked:
+            logger.info(
+                f"[Worker] Provision links not returned by any tool: "
+                f"{_demoted} demoted to the Act, {_unlinked} unlinked"
+            )
+            result["content"] = _content
 
     if source_accumulator:
         content = result.get("content", "") or ""
@@ -268,11 +365,36 @@ async def run_worker_agent(
             for i, src in enumerate(kept)
         ]
 
+    # P2.2 (B5): hand the search scope forward, in code, to the agent that will
+    # actually write the negative. The tool-result block instructs the WORKER;
+    # the Manager sees only this report, and the Deep Research synthesis sees
+    # only the step findings, so neither had ever seen a scope block. Measured in
+    # the first acceptance run: 6367 rep 1 carried the block in the Worker's
+    # context **27 times**, three of its four reports carried no scope language
+    # at all, and the answer still said a search "confirms" that no SSIs
+    # prescribe the detail. Same fix shape as `provision_url_block` — carry the
+    # fact across the lossy boundary rather than asking the model to.
+    #
+    # Appended LAST, after source filtering, and the order is load-bearing:
+    # `_source_is_used` matches a source on its bare `legislation_id`, and the
+    # record names the instruments that were section-searched. Appending before
+    # the filter would mark those sources as cited by our own footer and silently
+    # suppress P4.3's `turns_source_fallback` signal — a diagnostic corrupting
+    # the measurement of a different bucket.
+    _scope = worker_scope_block(search_log, cfg)
+    if _scope:
+        result["content"] = (result.get("content", "") or "") + _scope
+    # Carried out to the answer seam, where the lawyer-facing footer is written.
+    # One worker run is one delegation or one plan step; the caller accumulates
+    # across them, because the footer describes the whole turn.
+    result["searches"] = list(search_log)
+
     if _audit:
         _audit.end_delegation(
             _audit_delegation,
             report=result.get("content", "") or "",
             reformatted=bool(_audit_delegation and _audit_delegation.get("reformatted")),
+            halted=result.get("halted"),
         )
 
     return result
@@ -394,6 +516,15 @@ async def draft_research_plan(
         final_messages[0] = system_message
     else:
         final_messages = [system_message, *final_messages]
+    # P4.1 (B7): the planner reads the same history the Manager does, and a
+    # refusal in it anchors a plan the same way (6346 turn 4 asked for Deep
+    # Research and got the refusal back). Same marker, same seam.
+    final_messages, mode_change = apply_mode_change_marker(final_messages, cfg)
+    if mode_change:
+        logger.info("[Planner] Mode changed since the previous reply: %s", mode_change)
+    _audit = get_audit_collector()
+    if _audit:
+        _audit.record_mode_change(mode_change)
 
     captured: dict = {}
 
@@ -444,11 +575,14 @@ async def draft_research_plan(
 
     if "plan" in captured:
         logger.info(f"[Planner] Plan drafted with {len(captured['plan']['steps'])} steps")
-        return {"plan": captured["plan"]}
+        # `mode_change` (P4.1) rides the planner's JSON because /api/research/plan
+        # emits no audit event; a harness reads it here.
+        return {"plan": captured["plan"], "mode_change": mode_change}
     if "question" in captured:
         logger.info("[Planner] Clarification requested")
         return {
             "needs_clarification": True,
+            "mode_change": mode_change,
             "question": captured["question"],
             # Dropped when chips are off — the prompt tells the planner to fold
             # the alternatives into the question text instead.
@@ -515,6 +649,19 @@ async def process_user_request(
     else:
         final_messages = [system_message, *final_messages]
 
+    # P4.1 (B7): if the user changed the research type or the chat mode since
+    # the previous reply, say so IN THE HISTORY, on the user turn, next to the
+    # refusal it supersedes. The system prompt already carried the new mode on
+    # every turn of 6346 and the model anchored on its own earlier refusal
+    # anyway. Read off the modes the client stamps on assistant messages; a
+    # history without them yields no marker.
+    final_messages, mode_change = apply_mode_change_marker(final_messages, _cfg)
+    if mode_change:
+        logger.info("[Manager] Mode changed since the previous reply: %s", mode_change)
+    _audit = get_audit_collector()
+    if _audit:
+        _audit.record_mode_change(mode_change)
+
     # Load peer registry and build dynamic tool list
     peers = []
     if db_session:
@@ -526,6 +673,16 @@ async def process_user_request(
     manager_tools = get_manager_tools(peer_descriptions)
 
     accumulated_sources: list = []
+    # P2.2 (B5): every legislation search this turn ran, across ALL delegations,
+    # and (P2.4) every case-law search. The footer describes the turn the lawyer
+    # asked, not one delegation of it.
+    all_searches: list = []
+    # P2.8 (B5): set when this turn's searches cannot be known from
+    # `all_searches`. A delegation that raised took its search record with it,
+    # and a consulted peer searches with its own tools. In either case "no
+    # search was run for this reply" might be false, so the carried scope line
+    # stays silent.
+    scope_unknown: list = []
 
     # Per-request tool-result memo (D8 Phase 4) — same mechanism as Deep
     # Research (see run_deep_research): exact (tool_name, canonical args)
@@ -538,6 +695,21 @@ async def process_user_request(
     tool_memo: Optional[dict] = (
         {} if _cfg.get("_tool_memo_enabled", True) else None
     )
+
+    # P1.6 (B14): every legislation.gov.uk URL any tool returned this request.
+    # Request-scoped, not delegation-scoped — the Manager may delegate several
+    # times and the answer it composes draws on all of them.
+    retrieved_urls: set = set()
+
+    # P2.1 (B1): every worker that stopped at the step cap. Collected in code
+    # rather than read back off the answer, because the failure being fixed is
+    # precisely that the answer does not mention it.
+    halts: list = []
+
+    # P4.2 (B13): every completed worker report, kept so an empty Manager
+    # completion does not also discard the research the lawyer already paid for.
+    # Read only on that failure path; ordinary turns never touch it.
+    worker_reports: list = []
 
     async def manager_tool_executor(name: str, args: dict) -> str:
         if name == "delegate_research":
@@ -554,6 +726,7 @@ async def process_user_request(
                     timing_collector=timing_collector,
                     tool_memo=tool_memo,
                     memo_count_redundant=True,
+                    retrieved_urls=retrieved_urls,
                 )
             except ConnectionError:
                 # Provider unreachable: the Manager's own next call would fail too,
@@ -570,6 +743,7 @@ async def process_user_request(
                     f"[Manager] Delegated research failed: {type(e).__name__}: {e}",
                     exc_info=True,
                 )
+                scope_unknown.append("delegation_failed")
                 if on_chunk:
                     await call_chunk(on_chunk, {
                         "type": "tool_end", "tool": "Research Agent",
@@ -592,9 +766,18 @@ async def process_user_request(
             for src in result.get("sources", []):
                 if not _is_duplicate_source(src, accumulated_sources):
                     accumulated_sources.append(src)
+            if result.get("halted"):
+                halts.append({**result["halted"], "scope": "delegation"})
+            all_searches.extend(result.get("searches") or [])
+            if (result.get("content") or "").strip():
+                worker_reports.append({
+                    "title": f"Research step {len(worker_reports) + 1}",
+                    "content": result["content"],
+                })
             return f"[Research Agent Result]\n{result['content']}"
 
         if name == "consult_peer":
+            scope_unknown.append("peer_consulted")
             if timing_collector:
                 timing_collector.record_peer_consult()
             peer_id = args.get("peer_id", "")
@@ -626,6 +809,25 @@ async def process_user_request(
         timing_collector=timing_collector,
     )
 
+    # P4.2 (B13). Last line of defence, above every strip below - all of which
+    # are no-ops on an empty body, so without this the scope footer is appended
+    # to nothing and the lawyer is shown a footer with no answer above it. That
+    # is the exact shape of all nine blank turns measured across the replay
+    # directories. `chat_loop` has already retried three times by the time this
+    # runs, so reaching here means the provider returned nothing on every
+    # attempt; the choice is between the research already in hand, labelled, and
+    # a blank screen.
+    if is_empty_completion(final.get("content"), None):
+        logger.error(
+            "[Manager] Empty completion returned as the answer - "
+            "falling back to %d worker report(s)", len(worker_reports),
+        )
+        final["content"] = (
+            fallback_from_reports(worker_reports, kind="manager")
+            if worker_reports else LOST_ANSWER_NOTICE
+        )
+        final["answer_failed"] = True
+
     # Strip the model's <suggestions> block off the answer and attach it to the
     # result. This is the single manager return behind BOTH /api/chat and
     # /api/consult, so a consulted peer's block never reaches the calling bot's
@@ -637,7 +839,53 @@ async def process_user_request(
     # would render as raw markup in the answer.
     suggestions_enabled = _cfg.get("_suggested_questions_enabled", True)
     clean, suggestions = extract_suggestions(final.get("content") or "")
+    # P1.6 (B14) belt and braces. The Worker's report was already enforced, but
+    # the Manager is instructed to pass it through verbatim and is not compelled
+    # to — and in conversational mode it answers in its own words. Idempotent, so
+    # a report that came through untouched is not marked twice.
+    clean, _demoted, _unlinked = enforce_provision_links(clean, retrieved_urls)
+    if _demoted or _unlinked:
+        logger.info(
+            f"[Manager] Provision links not returned by any tool: "
+            f"{_demoted} demoted to the Act, {_unlinked} unlinked"
+        )
+
+    # P2.1 (B1). The Manager's OWN loop can hit the cap, in which case the raw
+    # marker is the entire answer and no delegation report carries it (6383
+    # turn 1) — so the Manager's result is checked here as well as the workers'.
+    if final.get("halted"):
+        halts.append({**final["halted"], "scope": "manager"})
+    # Emitted by code, unconditionally when a halt occurred: the model may
+    # disclose it well, badly ("timed out"), or not at all. Over the Wave 1
+    # sweep's 11 halted turns, 6 said nothing and only 2 disclosed it
+    # acceptably — and under Invariant 1 the silent halt is the worst of the
+    # three outcomes, because the lawyer gets a normal-looking report with no
+    # signal it is partial. The strip runs even with no halts, so a marker that
+    # arrives by some other route still never renders.
+    # P2.2 (B5): the scope block is an instruction to this agent, not prose for a
+    # lawyer, and in research mode the Manager is told to pass the Worker's
+    # report through verbatim — so without an unconditional strip the
+    # bookkeeping renders on screen. Same shape and same reasoning as the halt
+    # marker strip directly below.
+    clean, _stripped = strip_scope_blocks(clean)
+    if _stripped:
+        logger.info("[Manager] Stripped %d search-scope block(s) from the answer", _stripped)
+    clean, _disclosed = apply_halt_disclosure(clean, halts)
+    if halts:
+        logger.warning(
+            "[Manager] %d halted worker(s) — answer marked incomplete", len(halts)
+        )
+        final["research_incomplete"] = {
+            "reason": "step_cap",
+            "halts": halts,
+            "disclosed": _disclosed,
+        }
     final["content"] = clean
+    # P4.1 (B7): the modes this reply ran under, echoed so the client can stamp
+    # them on the saved assistant message and send them back with the next
+    # turn's history — which is where `apply_mode_change_marker` reads them.
+    final["research_mode"] = _cfg.get("_research_mode") or None
+    final["chat_mode"] = _cfg.get("_chat_mode") or None
     if suggestions and suggestions_enabled:
         final["suggestions"] = suggestions
 
@@ -656,6 +904,34 @@ async def process_user_request(
             {**{k: v for k, v in s.items() if k != "n"}, "n": i + 1}
             for i, s in enumerate(accumulated_sources)
         ]
+
+    # P2.2 (B5): the lawyer-facing scope line, emitted by code because carrying
+    # the facts to this agent and asking it to state them got 52% of negatives,
+    # not all of them. Appended last — after the source block is built, so a
+    # query string in it can never be read as a citation. Empty on a turn that
+    # ran no legislation search, so a purely conversational reply is untouched.
+    # P3.5 found a P2.2 defect here: the footer is prose, so it survives into the
+    # next turn's history, the model copies it back verbatim, and the code then
+    # appends its own — the lawyer reads the same disclosure twice. Strip any
+    # echo before appending the one computed from THIS turn's searches.
+    _footer = answer_scope_footer(all_searches, _cfg)
+    # P2.8 (B5): a reply that searched nothing gets no footer above, even when
+    # it restates an earlier turn's negative. That is the case of a follow-up
+    # answered from history. The earlier searches are restated here, labelled
+    # as earlier, whenever an earlier reply in the history carries a fresh
+    # footer. The gate is structural and never reads the answer. Manager path
+    # only: the Deep Research synthesis sees the step findings and not the
+    # conversation, so it cannot restate an earlier turn's negative.
+    if not _footer and not scope_unknown:
+        _footer = carried_scope_footer(messages, all_searches)
+    # P2.4 (B12): the case-law corpus disclosure. Both lines above already carry
+    # it as a clause when this turn searched case law; this is the turn with no
+    # legislation line to join it to, which is every `case_law_only` turn. Not
+    # suppressed by `scope_unknown`: it describes only the case-law searches
+    # this turn recorded, and those did run.
+    if not _footer:
+        _footer = case_law_scope_footer(all_searches)
+    final["content"] = strip_answer_footer(final.get("content") or "") + _footer
 
     return final
 
@@ -695,6 +971,46 @@ def _build_step_brief(step: dict, approved_plan: dict, user_query: str) -> str:
     return "\n\n".join(parts)
 
 
+def build_synthesis_messages(
+    user_query: str,
+    approved_plan: dict,
+    step_findings: list,
+    halts: Optional[list] = None,
+    steps_count: Optional[int] = None,
+) -> list:
+    """The Deep Research synthesis call's messages, from the steps' findings.
+
+    **Extracted so it has one definition.** `tools/seam_replay.py` rebuilds this
+    seam from a stored replay run file and makes the single synthesis call, for
+    a few cents instead of a whole Deep Research turn; if it built the payload
+    itself, it would be testing a copy and would drift away from what the
+    product sends. Every element here is a fix that has to travel WITH the
+    findings rather than sit in the system prompt: P3.1's pinpoint block (the
+    subsection citations each step attached to a provision URL, because the
+    synthesis otherwise rewrites them to the bare section) and P2.2/P2.1's
+    incomplete-steps note (a negative reached under a halted step is a negative
+    reached under a limit).
+    """
+    findings_blocks = [
+        f"### Step {i}: {f['title']}\n{f['detail']}\n\nFINDINGS:\n{f['content']}"
+        for i, f in enumerate(step_findings, 1)
+    ]
+    scope_note = (approved_plan or {}).get("scope_note") or ""
+    synthesis_user = (
+        f"USER'S ORIGINAL QUESTION:\n{user_query}\n\n"
+        f"APPROVED RESEARCH PLAN SCOPE:\n{scope_note}\n\n"
+        f"STEP FINDINGS:\n\n" + "\n\n---\n\n".join(findings_blocks)
+    )
+    synthesis_user += pinpoint_block([f["content"] for f in step_findings])
+    synthesis_user += incomplete_steps_note(
+        halts or [], steps_count if steps_count is not None else len(step_findings)
+    )
+    return [
+        {"role": "system", "content": DEEP_RESEARCH_SYNTHESIS_PROMPT},
+        {"role": "user", "content": synthesis_user},
+    ]
+
+
 async def run_deep_research(
     chat_loop_fn: Callable,
     run_worker_agent_fn: Callable,
@@ -717,6 +1033,14 @@ async def run_deep_research(
     """
     steps = list(approved_plan.get("steps") or [])
     user_query = _last_user_content(messages)
+    # P4.1 (B7): execution is code-orchestrated and no call in it reads the
+    # conversation history (each step is an isolated worker, the synthesis
+    # sees the findings), so there is nothing here for a marker to correct —
+    # the planner that drafted this plan already had it. The change is still
+    # recorded on the trace, so a harness sees the product saw it.
+    _dr_audit = get_audit_collector()
+    if _dr_audit:
+        _dr_audit.record_mode_change(mode_change_for(messages, _get_cfg()))
     logger.info(f"[DeepResearch] Executing approved plan: {len(steps)} steps")
 
     step_findings: list = []
@@ -730,6 +1054,17 @@ async def run_deep_research(
     tool_memo: Optional[dict] = (
         {} if _get_cfg().get("_tool_memo_enabled", True) else None
     )
+    # P1.6 (B14): shared across every step, deliberately. A provision retrieved
+    # in step 2 is legitimately cited by the synthesis, which sees all the steps
+    # at once; a per-step set would flag that as manufactured.
+    retrieved_urls: set = set()
+    # P2.1 (B1): plan steps that stopped at the step cap, with the step number
+    # and approved title — only this loop knows them, and "step 4 is incomplete"
+    # is far more use to a lawyer than "some research was incomplete".
+    halts: list = []
+    # P2.2 (B5): every legislation search the plan ran, across all steps, and
+    # (P2.4) every case-law search.
+    all_searches: list = []
 
     for i, step in enumerate(steps, 1):
         if cancel_event and cancel_event.is_set():
@@ -758,10 +1093,14 @@ async def run_deep_research(
             emit_tool_details=emit_tool_details,
             timing_collector=timing_collector,
             tool_memo=tool_memo,
+            retrieved_urls=retrieved_urls,
         )
 
         if on_chunk:
             await call_chunk(on_chunk, {"type": "tool_end", "tool": label, "id": step_id, "result": "Step complete"})
+
+        if result.get("halted"):
+            halts.append({**result["halted"], "scope": "step", "step": i, "title": title})
 
         step_findings.append({
             "title": title,
@@ -771,25 +1110,15 @@ async def run_deep_research(
         for src in result.get("sources", []):
             if not _is_duplicate_source(src, accumulated_sources):
                 accumulated_sources.append(src)
+        all_searches.extend(result.get("searches") or [])
 
     if cancel_event and cancel_event.is_set():
         raise asyncio.CancelledError("Aborted")
 
     # Synthesis: one tool-free call composing the integrated report.
-    findings_blocks = [
-        f"### Step {i}: {f['title']}\n{f['detail']}\n\nFINDINGS:\n{f['content']}"
-        for i, f in enumerate(step_findings, 1)
-    ]
-    scope_note = approved_plan.get("scope_note") or ""
-    synthesis_user = (
-        f"USER'S ORIGINAL QUESTION:\n{user_query}\n\n"
-        f"APPROVED RESEARCH PLAN SCOPE:\n{scope_note}\n\n"
-        f"STEP FINDINGS:\n\n" + "\n\n---\n\n".join(findings_blocks)
+    synthesis_messages = build_synthesis_messages(
+        user_query, approved_plan, step_findings, halts, len(steps)
     )
-    synthesis_messages = [
-        {"role": "system", "content": DEEP_RESEARCH_SYNTHESIS_PROMPT},
-        {"role": "user", "content": synthesis_user},
-    ]
 
     async def _no_tools_executor(name: str, args: dict) -> str:
         return f"Error: Unknown tool {name}"
@@ -802,15 +1131,90 @@ async def run_deep_research(
         timing_collector=timing_collector,
     )
 
+    # P4.2 (B13). `chat_loop` has already retried an empty completion up to three
+    # times; this is what the lawyer gets if all three came back empty. 6383 rep 1
+    # of P2.5's sweep is the measured case: 30 tool calls, 219 commencement
+    # relations, three intact step reports of 4,836 / 5,777 / 7,190 chars — and a
+    # report whose body was empty, footered and returned as though it were an
+    # answer. Nothing downstream checked, so the failure was invisible.
+    if is_empty_completion(final.get("content"), None):
+        logger.error(
+            "[DeepResearch] Synthesis returned no text after %d step(s) — "
+            "falling back to the step findings, labelled as such",
+            len(step_findings),
+        )
+        final["content"] = fallback_from_reports(
+            [
+                {"title": f"Step {i}: {f['title']}", "content": f["content"]}
+                for i, f in enumerate(step_findings, 1)
+            ],
+            kind="synthesis",
+        )
+        final["synthesis_failed"] = True
+
     # Belt and braces: Deep Research reports are out of scope for suggestions
     # (the synthesis prompt never asks for a block), but this guarantees a stray
     # tag can never reach a report. Normally a no-op.
     final["content"] = extract_suggestions(final.get("content") or "")[0]
+
+    # P1.6 (B14). The synthesis call composes its own prose from the step
+    # reports, so a provision link the steps never carried can appear here for
+    # the first time — this seam is not redundant with the per-worker one.
+    _content, _demoted, _unlinked = enforce_provision_links(
+        final.get("content") or "", retrieved_urls
+    )
+    if _demoted or _unlinked:
+        logger.info(
+            f"[DeepResearch] Provision links not returned by any tool: "
+            f"{_demoted} demoted to the Act, {_unlinked} unlinked"
+        )
+
+    # P2.1 (B1). Synthesis is handed the step findings and composes freely, so a
+    # halted step can vanish into a report that reads as complete — 6406 halted
+    # ALL FOUR steps and produced a $2.36 report. The disclosure is code-emitted
+    # and names the steps.
+    # P2.2 (B5). Synthesis composes its own prose and should not copy the block,
+    # but "should not" is not "cannot" — and a stray instruction block in a
+    # finished report is worse than the clutter it saves.
+    _content, _stripped = strip_scope_blocks(_content)
+    if _stripped:
+        logger.info(
+            "[DeepResearch] Stripped %d search-scope block(s) from the report", _stripped
+        )
+    _content, _disclosed = apply_halt_disclosure(_content, halts)
+    if halts:
+        logger.warning(
+            "[DeepResearch] %d of %d plan step(s) halted at the step cap — "
+            "report marked incomplete", len(halts), len(steps),
+        )
+        final["research_incomplete"] = {
+            "reason": "step_cap",
+            "halts": halts,
+            "steps_total": len(steps),
+            "disclosed": _disclosed,
+        }
+    final["content"] = _content
+    # P4.1 (B7): same echo as the Manager path, so the next turn's history
+    # carries the modes this report ran under.
+    _dr_cfg = _get_cfg()
+    final["research_mode"] = _dr_cfg.get("_research_mode") or None
+    final["chat_mode"] = _dr_cfg.get("_chat_mode") or None
 
     if accumulated_sources:
         final["sources"] = [
             {**{k: v for k, v in s.items() if k != "n"}, "n": i + 1}
             for i, s in enumerate(accumulated_sources)
         ]
+
+    # P2.2 (B5): same code-emitted scope line as the Manager path. A Deep
+    # Research report is composed from step findings and is the furthest any
+    # answer travels from the searches that produced it.
+    # P2.4 (B12): the case-law disclosure rides the same `searches` record
+    # across steps, and joins the legislation line when there is one. 6375's
+    # failing turn is this path: 18-30 case-law searches and no disclosure.
+    final["content"] = strip_answer_footer(
+        final.get("content") or ""
+    ) + (answer_scope_footer(all_searches, _get_cfg())
+         or case_law_scope_footer(all_searches))
 
     return final

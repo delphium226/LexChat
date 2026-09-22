@@ -334,12 +334,12 @@ FILTERS = {
     "jurisdiction": "scotland",
     "date_from": "1990",
     "date_to": "2026",
-    "court": "",
     "legislation_type": "ukpga",
     "current_only": True,
     "record_type": None,
     "sessions": [6, 7],
-    "house": None,
+    # blank vs null, both of which must be dropped rather than stored
+    "house": "",
 }
 
 
@@ -355,6 +355,9 @@ async def test_filters_are_stored_and_returned(client: AsyncClient, user_token: 
     assert row.filters["current_only"] is True
     # Nulls and blanks are absent, not stored as None/'' — "unset" is one state.
     assert "record_type" not in row.filters
+    assert "house" not in row.filters
+    # `court` is not stored at all since P4.4 retired the filter — even when a
+    # stale client sends a real value, not just a blank one.
     assert "court" not in row.filters
 
     rows = (await client.get(URL, headers={"Authorization": f"Bearer {admin_token}"})).json()
@@ -403,8 +406,12 @@ def test_clean_filters_enforces_the_shape():
     # bool subclasses int in Python, so [True] must not become a session number.
     assert _clean_filters({"sessions": [7, True, "6", None]}) == {"sessions": [7]}
     assert _clean_filters({"sessions": []}) is None
-    # Oversized strings are truncated rather than rejected.
-    assert len(_clean_filters({"court": "x" * 500})["court"]) == 100
+    # Oversized strings are truncated rather than rejected. Asserted on a LIVE
+    # key: `court` used to be the exemplar here and is no longer allowlisted
+    # (P4.4), which would have made this assertion vacuous.
+    assert len(_clean_filters({"jurisdiction": "x" * 500})["jurisdiction"]) == 100
+    # And the retired key is dropped outright rather than truncated.
+    assert _clean_filters({"court": "uksc"}) is None
 
 
 # --- Pre-pilot timeframe --------------------------------------------------
@@ -1051,3 +1058,55 @@ async def test_get_returns_rows_with_username_and_chat_title(
     assert rows[0]["chat_title"] == "Compulsory purchase"
     assert rows[0]["confidence"] == 5
     assert rows[0]["username"]
+
+
+@pytest.mark.asyncio
+async def test_transcripts_flag_deep_research_per_turn_not_per_thread(
+    client: AsyncClient, user_token: str, admin_token: str
+):
+    """P0.4. Thread-level `session_mode` reports `deep_research` for EVERY turn
+    of a thread that mixed the modes, so it cannot say which query ran a plan.
+
+    The alternative the replay set had to use was inferring it from the answer
+    text — which is structurally blind to a Deep Research turn that produced no
+    answer, and 15 turns across the pre-pilot corpus got no reply. That is
+    bucket B13, so the inference was blindest exactly where it mattered.
+
+    Note the trap this shares with the thread-level query: SQLAlchemy's JSON type
+    persists a Python None as the JSON literal `null`, not SQL NULL, so an
+    `IS NOT NULL` test marks every ordinary message as deep research.
+    """
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    chat = (await client.post(
+        "/api/chats/", json={"model": "mistral", "title": "Mixed"}, headers=user_headers
+    )).json()
+    await client.post(
+        f"/api/chats/{chat['id']}/messages",
+        json={"role": "user", "content": "A plain question"},
+        headers=user_headers,
+    )
+    await client.post(
+        f"/api/chats/{chat['id']}/messages",
+        json={"role": "assistant", "content": "A plain answer"},
+        headers=user_headers,
+    )
+    await client.post(
+        f"/api/chats/{chat['id']}/messages",
+        json={
+            "role": "assistant",
+            "content": "A deep research report",
+            "research_plan": {"scope_note": "n", "steps": [{"id": 1, "title": "t", "detail": "d"}]},
+        },
+        headers=user_headers,
+    )
+    await client.post(URL, json={"chat_id": chat["id"], "confidence": 4}, headers=user_headers)
+
+    body = (await client.get(
+        f"{URL}/transcripts", headers={"Authorization": f"Bearer {admin_token}"}
+    )).json()
+    flags = [(m["content"], m["deep_research"]) for m in body[0]["messages"]]
+    assert flags == [
+        ("A plain question", False),
+        ("A plain answer", False),
+        ("A deep research report", True),
+    ]

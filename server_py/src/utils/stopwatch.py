@@ -13,6 +13,23 @@ _PHASE2_RETRIEVAL_TOOLS = frozenset({
 })
 # get_member_info is intentionally unclassified — it is a metadata lookup (MSP /
 # MP details), neither a discovery search nor primary-source retrieval.
+#
+# get_legislation_changes (P3.5) is unclassified on the SAME ground, and the
+# decision is deliberate rather than an omission. It returns legislation.gov.uk's
+# change record for an instrument — which provisions were commenced, amended,
+# repealed or revoked, and by what — so it is neither a keyword discovery search
+# nor a retrieval of primary text. Classifying it Phase 2 would raise
+# `phase2_retrieval_calls` without raising `sources_kept`, which is the
+# legislation profile's fan-out denominator: a correct relationship lookup would
+# push requests toward the `fanout_ratio` breach and move every efficiency number
+# published in Waves 0-2, against which later rows are measured. It is still
+# counted in `worker_tool_calls` (so the work is visible) and still keyed for
+# redundancy (so a loop is still caught) — see `_worker_tool_key_arg`.
+#
+# For the same reason it is absent from _LEGISLATION_RETRIEVAL_TOOLS below: a
+# change record is not the instrument, and counting it as a "distinct primary
+# resource retrieved" would overstate retrieval on the parliamentary profile's
+# own denominator.
 
 # Primary-resource retrieval tools whose key_arg identifies a distinct resource,
 # used to count "distinct primary resources retrieved" (see _retrieved_lids /

@@ -245,6 +245,10 @@ export function useChatRuns() {
         deepResearchOwed: false,
         seen: true,
         startedAt: Date.now(),
+        // P4.2 (B13), the perceived-latency half. Research steps started this
+        // run — a count of work done, never a fraction of a total we do not
+        // know. See App.jsx for why there is no denominator.
+        steps: 0,
       };
       runsRef.current.set(key, run);
       pruneRuns();

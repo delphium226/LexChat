@@ -67,6 +67,9 @@ async def init_db() -> None:
             "ALTER TABLE messages ADD COLUMN IF NOT EXISTS model VARCHAR(255)",
             "ALTER TABLE messages ADD COLUMN IF NOT EXISTS provider VARCHAR(50)",
             "ALTER TABLE messages ADD COLUMN IF NOT EXISTS cost_usd FLOAT",
+            # P4.1 (B7): per-message mode record (see models.Message).
+            "ALTER TABLE messages ADD COLUMN IF NOT EXISTS research_mode VARCHAR(50)",
+            "ALTER TABLE messages ADD COLUMN IF NOT EXISTS chat_mode VARCHAR(50)",
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS total_cost_usd FLOAT NOT NULL DEFAULT 0.0",
             # Algorithmic-efficiency metrics (Manager→Worker loop behaviour)
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS manager_delegations INTEGER NOT NULL DEFAULT 0",

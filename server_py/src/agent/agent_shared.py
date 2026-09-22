@@ -12,6 +12,30 @@ import uuid
 from typing import Callable, Optional
 
 from ..utils.audit_trace import get_audit_collector
+from ..utils.citation_links import harvest_legislation_urls, provision_url_block
+from ..utils.section_outline import subsection_outline
+from ..utils.discovery_budget import (
+    legislation_budget_blocks,
+    legislation_stop_message,
+    section_budget_blocks,
+    section_stop_message,
+)
+from ..utils.search_scope import (
+    amendment_search_note,
+    currency_note,
+    enabling_power_note,
+    legislation_search_note,
+    not_held_note,
+    record_budget_stop,
+    record_section_budget_stop,
+    record_case_law_search,
+    record_currency,
+    record_enabling_power,
+    record_not_held,
+    record_relations,
+    record_search,
+    section_search_note,
+)
 from .provider_factory import get_request_provider_config
 from .summarisation import call_chunk, summarise_for_query
 from .tools import (
@@ -96,7 +120,10 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                 "kind": _legislation_kind(lid),
                 "title": item.get("title") or lid,
                 "url": item.get("url") or "",
-                "meta": item.get("status") or "",
+                # P2.5 renamed the slimmed key to `text_version` (see
+                # `_slim_search_results`); `status` is read as a fallback so a
+                # cached or replayed pre-P2.5 result still populates the rail.
+                "meta": item.get("text_version") or item.get("status") or "",
                 "year": item.get("year"),
                 "extent": item.get("extent") or [],
                 "cite": lid,
@@ -145,6 +172,36 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                 "excerpt": excerpt,
                 "cite": lid,
                 "url": data.get("url") or "",
+            })
+
+    elif name == "get_legislation_changes":
+        # P3.5 (B3). The instruments a change record names are the answer to a
+        # commencement question, so an answer citing SSI 2025/119 must be able
+        # to show it in the References rail.
+        #
+        # **Deliberately no excerpt, and the subtitle says what was established.**
+        # The change record proves that this instrument commenced or amended
+        # provisions of the subject; it does NOT mean its text was read.
+        # `_source_is_used` keeps a source unconditionally when it carries an
+        # excerpt, so giving one here would pin every related instrument into the
+        # rail whether or not the answer cited it — overstating what the research
+        # did and inflating `sources_kept`. Without one, only the instruments the
+        # answer actually names survive the filter.
+        for group in (data.get("related") or [])[:10]:
+            if not isinstance(group, dict) or group.get("self"):
+                continue
+            rel_lid = group.get("legislation_id") or ""
+            if not rel_lid or any(s.get("_lid") == rel_lid for s in accumulator):
+                continue
+            effect = group.get("type_of_effect") or "change"
+            subject = data.get("legislation_id") or args.get("legislation_id") or ""
+            accumulator.append({
+                "_lid": rel_lid,
+                "kind": "Statute",
+                "title": rel_lid,
+                "sub": f"recorded as {effect} for provisions of {subject}",
+                "cite": rel_lid,
+                "url": group.get("url") or "",
             })
 
     elif name == "search_case_law":
@@ -377,14 +434,42 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
             accumulator.append(src)
 
 
+def summarised_result_blocks(name: str, raw_result) -> str:
+    """What a SUMMARISED tool result gets back, built from the RAW result.
+
+    Two blocks, both restoring what the summariser dropped: P1.6's provision
+    URLs (`provision_url_block`, any tool) and P3.11's subsection outline
+    (`subsection_outline`, section searches only - a whole-Act retrieval has
+    no `results` rows and a change record no provision text). One definition,
+    shared with `tools/seam_replay.py --from-raw`, so the seam rebuilds
+    exactly the blocks the product appends rather than a copy that drifts.
+    Returns "" when there is nothing to hand back.
+    """
+    blocks = provision_url_block(raw_result)
+    if name == "search_legislation_sections":
+        blocks += subsection_outline(raw_result)
+    return blocks
+
+
 def _worker_tool_key_arg(args: dict) -> Optional[str]:
     """Identifying argument for redundancy detection (record_worker_tool).
 
     A transcript's identity is (meeting_id, iob_id) — two different agenda
     items of one meeting are legitimate distinct retrievals, not redundant.
     slug is derivable and must NOT be part of the key.
+
+    **P3.5 adds `direction` to the key for the same reason** (bucket B3).
+    `get_legislation_changes` is the first legislation tool that takes a second
+    identifying argument: the two directions over one `legislation_id` are
+    different questions — what commenced this Act, and what this Act commences —
+    and on `asp/2025/2` they return 36 and 143 relations respectively. Keyed on
+    the id alone, asking both would be scored a redundant re-fetch and, on the
+    legislation profile where `max_redundant_tool_calls` is 0, would write an
+    EFFICIENCY breach for correct behaviour.
     """
     key_arg = args.get("legislation_id") or args.get("url") or args.get("gid") or args.get("debate_ext_id")
+    if key_arg and args.get("direction"):
+        key_arg = f"{key_arg}:{args['direction']}"
     if not key_arg and args.get("meeting_id"):
         key_arg = f"{args['meeting_id']}:{args.get('iob_id', '')}"
     return key_arg
@@ -405,6 +490,8 @@ async def run_worker_tool(
     memo_count_redundant: bool = False,
     context_budget: Optional[dict] = None,
     audit_delegation: Optional[dict] = None,
+    retrieved_urls: Optional[set] = None,
+    search_log: Optional[list] = None,
 ) -> str:
     """Execute a single Worker tool call and return the (possibly summarised) result.
 
@@ -435,6 +522,17 @@ async def run_worker_tool(
             belongs to (evaluation harnesses only; None on /api/chat). Passed
             explicitly rather than read from a ContextVar so nesting stays
             correct if worker runs are ever parallelised.
+        retrieved_urls: Per-request set of every legislation.gov.uk URL any tool
+            returned, harvested from the RAW response (P1.6/B14). Feeds the
+            provision-link enforcement at the answer seam. None disables both the
+            harvest and, downstream, the enforcement — so a caller that does not
+            thread it keeps exactly the previous behaviour.
+        search_log: Per-WORKER-RUN list of the searches this run issued (P2.2/B5).
+            Rendered onto the worker's report by `run_worker_agent`, because the
+            agent that writes the negative — the Manager, or the Deep Research
+            synthesis — never sees a tool result. Run-scoped, not request-scoped,
+            unlike `retrieved_urls`: "what this step searched for" is a statement
+            about one step. None disables the record.
     """
     activity_id = uuid.uuid4().hex[:8]
 
@@ -444,6 +542,46 @@ async def run_worker_tool(
     _audit_tool = _audit.start_tool(audit_delegation, name, args) if _audit else None
     if _audit_tool is not None:
         parent_on_chunk = _audit.sniff_on_chunk(_audit_tool, parent_on_chunk)
+
+    # P2.7: the legislation discovery budget, checked BEFORE the memo lookup
+    # (the parliamentary one below is checked after it, and is unchanged). A
+    # step repeating its own search is the loop this budget exists for, so a
+    # memo-served search is refused too once the step's search rounds are
+    # spent (see utils/discovery_budget.py). A blocked call is not a search:
+    # it is kept out of `record_search` and the phase counts, and recorded
+    # instead as a stop, which the worker's block and the lawyer's footer
+    # both state as a limit.
+    #
+    # P3.1: the per-instrument section budget, the same way one level down: at
+    # most 3 rounds of `search_legislation_sections` on one legislation_id per
+    # worker run, also checked before the memo. Its refusals share this path,
+    # the audit's `budget_blocked` flag and the `search_budget_blocked`
+    # counter; the audit record's tool name tells the two apart.
+    refusal = None
+    if search_budget is not None:
+        if legislation_budget_blocks(search_budget, name):
+            record_budget_stop(search_log, name, args, search_budget)
+            refusal = (legislation_stop_message(search_budget),
+                       "Discovery budget spent", "Search limit reached")
+        elif section_budget_blocks(search_budget, name, args):
+            record_section_budget_stop(search_log, name, args, search_budget)
+            refusal = (section_stop_message(search_budget, args),
+                       "Section budget spent for this instrument",
+                       "Section-search limit reached")
+    if refusal is not None:
+        stop_msg, log_label, ui_label = refusal
+        if timing_collector:
+            timing_collector.record_search_budget_blocked()
+        logger.info(f"[Worker] {log_label} — '{name}' not run")
+        if parent_on_chunk:
+            await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
+            await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": ui_label})
+        if _audit:
+            _audit.end_tool(
+                _audit_tool, raw_result=stop_msg, final_result=stop_msg,
+                budget_blocked=True,
+            )
+        return stop_msg
 
     # Tool-result memo: exact-arg repeats within one request are served from
     # the per-request memo. In Deep Research, counted only as memo_hits — NOT
@@ -467,6 +605,51 @@ async def run_worker_tool(
             # extraction on the stored RAW result against this step's accumulator.
             if source_accumulator is not None:
                 _extract_sources_from_tool(name, args, hit["raw"], source_accumulator)
+            # Same for the retrieved-URL set: the memo saves the fetch, not the
+            # provenance. A step reusing a memoised retrieval has still retrieved
+            # those provisions and must be allowed to cite them.
+            if retrieved_urls is not None:
+                harvest_legislation_urls(hit["raw"], into=retrieved_urls)
+            # P2.9 (B5): the search itself, which P2.2 did not record on this
+            # path. `search_log` is per-WORKER-RUN while the memo is
+            # per-REQUEST, so a step served from an earlier step's search had
+            # that query missing from its own record — and the block still told
+            # the agent writing the negative that it "MUST quote the search
+            # terms above", with none above. Measured over the six replay
+            # directories that have a scope block (`replay_report scoperecord`):
+            # 277 of 1,189 searches (23%) absent, in 86 of 259 worker runs
+            # (33%), 11 of which recorded NO search at all; and `issued -
+            # recorded == memo hits` exactly, per run, with no exceptions across
+            # all six — which is what identifies the memo as the sole cause.
+            # Gated on the tool name here because `record_search` does not
+            # self-gate: the two call sites on the non-memo path do it, and this
+            # is the third.
+            if name in ("search_legislation", "search_legislation_sections"):
+                record_search(search_log, name, args, hit["raw"])
+            # P2.3 (B3b): a memo hit is still a retrieval for this step, and the
+            # enabling-power record drives a PERMISSION as well as a prohibition
+            # — omitting it here would forbid a claim the material supports.
+            record_enabling_power(search_log, name, args, hit["raw"])
+            # P3.5 (B3): and the change record, for the same reason — a step
+            # reusing a memoised retrieval has still consulted it, and the
+            # record drives a PERMISSION (state the relation) as well as a
+            # disclosure. Silent here, the worker's report would say the step
+            # never looked.
+            record_relations(search_log, name, args, hit["raw"])
+            # P2.5 (B4): and the currency evidence. Same argument a third time,
+            # and it bites hardest here: `_currency_limb` speaks on every step
+            # that touched legislation, so a memo hit that did not record its
+            # `valid_date` or its `coming into force` count would leave the
+            # report block forbidding a currency statement the step's own
+            # retrieval supports.
+            record_currency(search_log, name, args, hit["raw"])
+            # P2.4 (B12): and a case-law search, for the lawyer-facing corpus
+            # disclosure. A memo-served search is still a search this step ran;
+            # P2.9 is the measured cost of forgetting that on this path.
+            # Self-gated on the tool name.
+            record_case_law_search(search_log, name, args, hit["raw"])
+            # P2.4 (6373): a memoised not-found is still this step's not-found.
+            record_not_held(search_log, name, args, hit["raw"])
             if parent_on_chunk:
                 await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
                 await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done (cached)"})
@@ -487,7 +670,10 @@ async def run_worker_tool(
         "search_scottish_parliament", "search_scottish_committee_transcripts", "search_scottish_plenary",
         "search_hansard",  # Westminster discovery tool — same budget, same stop semantics
     }
-    if search_budget is not None and name in _PARLIAMENT_SEARCH_TOOLS:
+    # `"remaining" in` since P2.7: a legislation budget is also a dict now, and
+    # a parliamentary tool name hallucinated in a legislation mode must reach
+    # the executor's unknown-tool path, not a KeyError here.
+    if search_budget is not None and "remaining" in search_budget and name in _PARLIAMENT_SEARCH_TOOLS:
         if search_budget["remaining"] <= 0:
             # The parliament bot's defining constraint: a budget-blocked search
             # means the model looped on discovery instead of retrieving. Count it
@@ -555,17 +741,35 @@ async def run_worker_tool(
     if source_accumulator is not None:
         _extract_sources_from_tool(name, args, result, source_accumulator)
 
+    # P1.6 (B14): record every legislation.gov.uk URL this retrieval returned,
+    # from the RAW response. "Did the research retrieve this provision" and "was
+    # the model shown the string" are different questions, and they diverge on
+    # the ~70% of section searches that get summarised — the summary keeps the
+    # section numbers and drops every URL.
+    if retrieved_urls is not None:
+        harvest_legislation_urls(raw_result, into=retrieved_urls)
+
     # For search_case_law: inject a Phase 2 nudge to call get_case_law_text for
     # the most relevant results, or a stop note on zero results.
     case_law_note = ""
+    # P2.4 (B12): recorded before the parse below, so an errored search (which
+    # is not always JSON) is still recorded, as not ok. It feeds the code-emitted
+    # corpus disclosure on the answer, which fires on any turn that searched
+    # case law, not only on the empty result this note handles.
+    record_case_law_search(search_log, name, args, result)
     if name == "search_case_law":
         try:
             raw_data = json.loads(result)
             n = raw_data.get("total", 0)
             if n == 0 and not raw_data.get("error"):
+                # P2.4 (B12): "does not comprehensively index" was false; the
+                # gap is total (TNA rejects `court=csoh` with a 400). The UKSC
+                # half matters as much: Scottish appeals ARE indexed.
                 case_law_note = (
                     "\n\n[This search returned 0 results. The National Archives Find Case Law database "
-                    "does not comprehensively index Scottish Court of Session cases. "
+                    "holds no decisions of the Court of Session, the Sheriff Appeal Court, the Sheriff "
+                    "Courts or the High Court of Justiciary; Scottish appeals decided by the UK Supreme "
+                    "Court are included. "
                     "If you have already tried 2–3 different queries without results, stop searching "
                     "and compose your answer noting that no directly relevant case law was found in this database.]"
                 )
@@ -727,13 +931,30 @@ async def run_worker_tool(
     # For search_legislation: capture legislation_ids from the raw response before
     # any summarisation strips them, so we can inject a Phase 2 instruction into
     # the final result the model actually sees.
+    #
+    # P2.2 (B5) adds the scope block alongside. The row was written against the
+    # missing `else:` on `if id_pairs:` — the only search tool with no
+    # zero-result nudge — but that branch fires on 4 of 790 searches post-Wave-1,
+    # while **783 of 783** are windowed (5 rows of a median 141 matches) and all
+    # 17 measured bare negatives came from a NON-empty result. So the block is
+    # attached on both branches, and the non-empty one is the one that matters.
     phase2_note = ""
+    scope_note = ""
     if name == "search_legislation":
         try:
             raw_data = json.loads(result)
             id_pairs = extract_legislation_ids_from_search(raw_data)
             if timing_collector:
                 timing_collector.record_legislation_ids_seen(lid for lid, _ in id_pairs)
+            scope_note = legislation_search_note(
+                args, raw_data, get_request_provider_config()
+            )
+            record_search(search_log, name, args, raw_data)
+            # P2.5 (B4): the repeal/revocation marker legislation.gov.uk puts in
+            # the title itself — the only currency signal a search result
+            # carries, on 1.7% of rows, and the one a lawyer must not miss.
+            scope_note += currency_note(args, raw_data)
+            record_currency(search_log, name, args, raw_data)
             if id_pairs:
                 id_lines = "\n".join(
                     f'  - legislation_id: "{lid}"  ({title})'
@@ -749,6 +970,61 @@ async def run_worker_tool(
                 "\n\n[NEXT STEP: Call search_legislation_sections with the legislation_id "
                 "from this result to retrieve the actual legal text.]"
             )
+
+    # P2.2 (B5), second source of bare negatives: a provision absent from the
+    # ranked ten is not absent from the Act. 6335 turn 7 reported that a targeted
+    # search "returned no results" when it had returned results, and then
+    # invented a cause for it. This tool had no note of any kind before now.
+    if name == "search_legislation_sections":
+        try:
+            _sec_data = json.loads(result)
+            scope_note = section_search_note(args, _sec_data)
+            record_search(search_log, name, args, _sec_data)
+        except Exception:
+            scope_note = ""
+
+    # P2.3 (B3b): *made under* is the one B3 relation no endpoint returns, so the
+    # only evidence of it is an instrument's own preamble — which arrives in
+    # `legislation.description` on this response and nowhere else. Computed from
+    # the RAW result for the same reason `provision_url_block` is: a large
+    # instrument gets summarised and the summariser drops the preamble, so by
+    # the time the model reads the text the evidence has gone.
+    enabling_note = ""
+    if name == "get_legislation_text":
+        enabling_note = enabling_power_note(args, raw_result)
+    record_enabling_power(search_log, name, args, raw_result)
+
+    # P3.5 (B3): the other four relations of the bucket, which ARE retrievable.
+    # Computed from the RAW result for the same reason as everything else at
+    # this seam — a large change record is summarised, and a summary of a
+    # relation list keeps the prose and drops the counts the block is about.
+    relations_note = ""
+    if name == "get_legislation_changes":
+        relations_note = amendment_search_note(args, raw_result)
+    record_relations(search_log, name, args, raw_result)
+
+    # P2.5 (B4): the change record's currency-bearing counts, and `valid_date`
+    # off a `/legislation/text` response. From the RAW result for the reason
+    # every other recorder at this seam is — a summarised change record keeps
+    # the prose and drops the counts, and a summarised instrument drops the
+    # metadata block `valid_date` lives in.
+    #
+    # **Name-gated here rather than left to `record_currency`'s own dispatch.**
+    # `record_currency` also handles `search_legislation`, and that call is made
+    # further up next to `currency_note`, which needs the same parsed page. At
+    # this point `raw_result` is still the executor's own output — summarisation
+    # is below — so the two calls would see identical data and record the page
+    # twice. One seam per tool.
+    if name in ("get_legislation_changes", "get_legislation_text"):
+        record_currency(search_log, name, args, raw_result)
+
+    # P2.4 (6373): a retrieval by id that the index answered with not-found.
+    # The Worker read that as proof the lawyer's citation was wrong in all three
+    # reps of the pre-measurement. Stated at the result, and carried to the
+    # Manager in the worker's block. Keyed on the API's own not-found detail,
+    # never on the model's prose.
+    not_held = not_held_note(args, raw_result)
+    record_not_held(search_log, name, args, raw_result)
 
     from .provider_factory import get_summarise_threshold
     # Two independent triggers: this result is large on its own, OR the run has
@@ -897,8 +1173,32 @@ async def run_worker_tool(
                 "result": result,
             })
 
+    # P1.6 (B14): hand the provision URLs back after summarisation. A 32K
+    # section retrieval summarises to ~3.5K of prose that names the sections and
+    # carries no URLs at all, so the model — forbidden from inventing one and
+    # holding none — rebuilds it from the Act's base URI. Appended here for the
+    # same reason the nudges are: the summariser cannot discard what it never
+    # saw. Only on the summarised path; an unsummarised result already carries
+    # its own `url` per row, and restating them would be noise.
+    #
+    # P3.11 (B10 residual): and the subsection outline, for the same reason
+    # and on the same path. Measured over every stored 6348 run: the section
+    # search returns s.36 with both subsections, and the summariser keeps the
+    # second in 1 of 11 summaries - the Worker then describes the first alone.
+    # Both blocks are appended OUTSIDE the local-cache summary, so a cache hit
+    # gets them too. `summarised_result_blocks` is the one definition.
+    if _audit_summarised:
+        result += summarised_result_blocks(name, raw_result)
+
     # Append phase nudges after summarisation so they are not discarded
     # by the summariser and remain visible in the message the model receives.
+    # P2.2's scope block goes on before the Phase-2 nudge, so the imperative
+    # ("call search_legislation_sections with these ids") stays the last thing
+    # the model reads on a productive search.
+    result += scope_note
+    result += not_held
+    result += enabling_note
+    result += relations_note
     result += phase2_note
     result += sp_phase2_note
     result += sp_committee_phase2_note

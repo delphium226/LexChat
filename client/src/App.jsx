@@ -31,7 +31,6 @@ import {
   HOUSE_OPTIONS,
   JURISDICTION_OPTIONS,
   LEGISLATION_TYPE_OPTIONS,
-  COURT_GROUPS,
   getRecordTypeOptions,
   getSessionFilterLabel,
   getSessionOptions,
@@ -54,6 +53,16 @@ import { usePreferences } from './hooks/usePreferences';
 import { useModals } from './hooks/useModals';
 import { useMatters } from './hooks/useMatters';
 import { useChat } from './hooks/useChat';
+
+// P4.2 (B13). Elapsed wall-clock for the status line, in the coarsest form that
+// is still an anchor: seconds under a minute, minutes and seconds above. No
+// milliseconds — a figure that twitches reads as instrumentation, not as
+// reassurance, and the point is to make a long wait legible.
+function formatElapsed(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  if (total < 60) return `${total}s`;
+  return `${Math.floor(total / 60)}m ${String(total % 60).padStart(2, '0')}s`;
+}
 
 // ── Main app ───────────────────────────────────────────────────
 
@@ -193,7 +202,6 @@ function AppContent() {
       legislation_and_case_law: 'Legislation & case law',
     }[researchMode] || 'Legislation only';
 
-  const todayLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   // Has this thread already had end-of-session feedback? Nothing on the chat
   // row records it, so this is a render-time localStorage read — cheap, and
@@ -207,18 +215,14 @@ function AppContent() {
     jurisdiction,
     dateFrom,
     dateTo,
-    caseLawCourt,
     legislationType,
-    currentOnly,
     recordType,
     sessions,
     house,
     setJurisdictionPersist,
     setDateFromPersist,
     setDateToPersist,
-    setCourtPersist,
     setLegislationTypePersist,
-    setCurrentOnlyPersist,
     setRecordTypePersist,
     setSessionsPersist,
     setHousePersist,
@@ -242,6 +246,7 @@ function AppContent() {
     runLimitNotice,
     dismissRunLimitNotice,
     agentStatus,
+    agentProgress,
     activities,
     chatScrollRef,
     textareaRef,
@@ -259,7 +264,7 @@ function AppContent() {
     logoutWithExpiry,
     chatMode,
     researchMode,
-    filters: { jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, currentOnly, recordType, sessions, house },
+    filters: { jurisdiction, dateFrom, dateTo, legislationType, recordType, sessions, house },
     saveFiltersToChatStorage,
     restoreFiltersForChat,
     currentChatId,
@@ -278,6 +283,19 @@ function AppContent() {
       updatePreferences({ chat_mode: 'conversational' }).catch(() => {});
     },
   });
+
+  // P4.2 (B13). One interval for the whole app, running only while a run is
+  // streaming, so an idle tab ticks nothing. The elapsed figure is derived from
+  // run.startedAt rather than counted up here — a re-render, a chat switch or a
+  // backgrounded tab must not reset or skew the clock.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!streaming) return undefined;
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [streaming]);
+  const elapsedMs = agentProgress?.startedAt ? nowMs - agentProgress.startedAt : 0;
 
   // ── Bot identity (name/branding/favicon) — driven by `anyRunActive`, so the
   // favicon keeps animating while a backgrounded chat is still researching ──
@@ -338,10 +356,6 @@ function AppContent() {
   const jurisdictionLabel = jurisdiction
     ? JURISDICTION_OPTIONS.find(o => o.value === jurisdiction)?.label || 'All jurisdictions'
     : 'All jurisdictions';
-
-  const courtLabel = caseLawCourt
-    ? COURT_GROUPS.flatMap(g => g.courts).find(c => c.value === caseLawCourt)?.label || caseLawCourt
-    : '';
 
   const userInitials = getInitials(user?.username);
 
@@ -672,27 +686,20 @@ function AppContent() {
               });
             }
 
-            // 6. Court (legislation, when case law is in scope)
-            if (!isParliament && courtLabel && researchMode !== 'legislation_only') {
-              chips.push({ icon: <GavelIcon />, label: courtLabel });
-            }
-
             // 7. Date range
             if (dateFrom || dateTo !== thisYear) {
               const dr = dateFrom && dateTo ? `${dateFrom}–${dateTo}` : dateFrom ? `From ${dateFrom}` : `To ${dateTo}`;
               chips.push({ icon: <CalendarIcon />, label: `Date: ${dr}` });
             }
 
-            // 8. Status (legislation) — this is the "Current legislation only"
-            // filter, which drops repealed/spent/not-yet-in-force results. It was
-            // previously pushed unconditionally, so the pill claimed the in-force
-            // position even after the lawyer turned the filter off.
-            if (!isParliament) {
-              chips.push({
-                icon: <CalendarIcon />,
-                label: currentOnly ? `In force as at ${todayLabel}` : 'All statuses, incl. repealed',
-              });
-            }
+            // 8. Status — REMOVED (P1.2, bucket B4). This pill read "In force
+            // as at <today>", which was a claim nothing could support: the
+            // filter behind it tested the LEX `status` field for
+            // repealed/revoked/spent, and that field's vocabulary is `final`
+            // and `revised` only — it records which text version is held, not
+            // in-force status. The filter excluded nothing, so the pill told 42
+            // of 62 pre-pilot sessions their results were current when no such
+            // check had run. Do not reinstate without a real in-force source.
 
             const filtersLabel = 'Filters';
             return (
@@ -886,11 +893,32 @@ function AppContent() {
                         .map(([label, n]) => (n > 1 ? `${label} (${n})` : label))
                         .join(', ');
                     }
+                    // P4.2 (B13), the perceived-latency half. A 5.5-minute
+                    // turn was reported as "around 15 minutes". The status line
+                    // already changes wording, but nothing accumulates, so
+                    // there is no anchor for how long the wait has been or how
+                    // much has happened — and an unanchored wait is
+                    // systematically over-estimated.
+                    //
+                    // **No denominator, deliberately.** "Step 3 of 8" would be
+                    // a claim about how much is left, and outside Deep Research
+                    // nothing knows the total — the model decides how many
+                    // retrievals a question needs as it goes. A bare count is
+                    // the honest form of the same reassurance, and Invariant 1
+                    // applies to progress claims as much as to legal ones.
+                    const steps = agentProgress?.steps || 0;
                     return (
                       <div style={{ padding: '8px 0', fontSize: 13, color: 'var(--ink-500)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <div className="lex-thinking-dot" />
                           <span style={{ flex: 1 }}>{statusText}</span>
+                          <span
+                            className="font-ui"
+                            style={{ color: 'var(--ink-400)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
+                          >
+                            {steps > 0 && `${steps} ${steps === 1 ? 'step' : 'steps'} · `}
+                            {formatElapsed(elapsedMs)}
+                          </span>
                         </div>
                       </div>
                     );
@@ -926,10 +954,8 @@ function AppContent() {
                       house,
                       jurisdiction,
                       legislationType,
-                      currentOnly,
-                      dateFrom,
+                                        dateFrom,
                       dateTo,
-                      caseLawCourt,
                     }}
                     onApply={draft => {
                       if (!isParliament && draft.researchMode !== researchMode) {
@@ -941,10 +967,8 @@ function AppContent() {
                       setHousePersist(draft.house ?? null);
                       setJurisdictionPersist(draft.jurisdiction);
                       setLegislationTypePersist(draft.legislationType);
-                      setCurrentOnlyPersist(draft.currentOnly);
                       setDateFromPersist(draft.dateFrom);
                       setDateToPersist(draft.dateTo);
-                      setCourtPersist(draft.caseLawCourt);
                       // Each persist setter above rewrites the whole per-chat
                       // snapshot from *this* render's filter state plus its own
                       // override, so the last one to run wins and the other eight
@@ -954,9 +978,7 @@ function AppContent() {
                         jurisdiction: draft.jurisdiction,
                         dateFrom: draft.dateFrom,
                         dateTo: draft.dateTo,
-                        court: draft.caseLawCourt,
                         legislationType: draft.legislationType,
-                        currentOnly: draft.currentOnly,
                         recordType: draft.recordType,
                         sessions: draft.sessions,
                         house: draft.house ?? null,
@@ -1161,7 +1183,7 @@ function AppContent() {
           // The same filter object the composer sends with each query, so the
           // recorded snapshot is the state the research was actually run under
           // rather than a second reading of localStorage.
-          filters={{ jurisdiction, dateFrom, dateTo, caseLawCourt, legislationType, currentOnly, recordType, sessions, house }}
+          filters={{ jurisdiction, dateFrom, dateTo, legislationType, recordType, sessions, house }}
           researchMode={researchMode}
           chatMode={chatMode}
           onClose={() => modals.close('sessionFeedback')}

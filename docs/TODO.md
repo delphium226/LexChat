@@ -314,6 +314,24 @@ Files: `client/src/App.jsx`, `client/src/components/ResearchFiltersModal.jsx`,
 `client/src/index.css`. `client/dist/` rebuilt. **Uncommitted** — commit with
 force-added `client/dist/` and push when ready to deploy.
 
+### B6. The Deep Research planner reports every provider error as a generic 502 (bug; added 2026-09-18)
+*From Thomas's external review of 10 September 2026, action 8. Verified against the code on
+`fix/prepilot-defects` on 2026-09-18.*
+
+`routers/research.py::draft_plan` catches `ConnectionError` (503, which is right) and then
+any other exception as `502 "The planner failed. Please try again."`. So a provider HTTP 402
+(credit exhausted) or 429 (rate limited) reaches the lawyer as a generic failure with advice
+to retry, and support staff go looking for a LexChat fault. The chat path already renders
+provider errors through `agent_shared.describe_agent_error`.
+
+**Fix:** catch `httpx.HTTPStatusError` before the generic handler and reuse
+`describe_agent_error`; distinguish payment or credit failures (do not advise a retry) from
+rate limits and outages (retry later); never forward the provider's raw response body. Keep
+`ConnectionError` → 503 as it is. **Test:** simulate a provider 402 and 429 at the planner
+boundary; a connection failure must still read as a connectivity failure.
+
+Outside the pre-pilot fix plan (not a pre-pilot defect), so it can go straight to `main`.
+
 ### B5. Add a 'Data coverage' tab to the parliament bot (feature; added 2026-07-24, unscoped)
 Add a **Data coverage** tab (Admin Portal, parliament bot only) surfacing what the
 crawler has actually ingested — e.g. session/date-range coverage for
@@ -738,6 +756,14 @@ lawyer who researched under `jurisdiction=scotland` and then switched to England
 Wales before pressing "Finished session" is recorded at the second setting, and
 nothing marks that the filters changed mid-thread.
 
+*Partly done by FIX_PLAN P4.1 (2026-09-22):* `messages.research_mode` and
+`messages.chat_mode` now record, per assistant message, the two MODE controls the reply
+ran under (server-resolved, echoed on the `result` event, saved by the client). The other
+filters (jurisdiction, type, dates) are still a session snapshot; the `Message.filters`
+JSONB column below is the remaining half. The transcript export does not yet carry the two
+new columns — add them when P0.4's re-export is next touched, since they would have settled
+P0.5 and P0.6 without reading any answer.
+
 Filters are browser-only state (`client/src/hooks/useFilters.js`) — sent on every
 `/api/chat` request via `build_request_config`, used for the run, then discarded — so
 there is no route to a truer record without persisting them. The honest fix is a
@@ -824,6 +850,27 @@ Until this is answered the regime is not disaster recovery. Blocks nothing in D1
 
 ## Pre-pilot session-transcript analysis (2026-08-19)
 
+> **SUPERSEDED 2026-09-14 — the freeze is lifted and the fixes are in build.** All 62 pre-pilot
+> sessions (not the 41-session cut below) have been re-classified from the transcripts, with the
+> disputed law verified at source: **25 FAIL, 16 DEFECT, 21 PASS**, sorted into 14 failure
+> buckets. Work is tracked in **`docs/prepilot-fixes/FIX_PLAN.md`** on branch
+> `fix/prepilot-defects`; the per-session classification is frozen at
+> `docs/prepilot-fixes/evidence/classification.json`; the full analysis is at
+> <https://claude.ai/code/artifact/43d8e63d-1c9d-4460-907c-2d35c1fa3786>.
+>
+> **Three corrections to what follows.** (1) Three buckets turned out to be **code defects, not
+> model behaviour** — chief among them `_matches_jurisdiction`, which discards 100% of
+> legislation results whenever a jurisdiction filter is set (15 of 62 sessions), and
+> `current_only`, which excludes nothing because it reads a field that means text-revision
+> state, not in-force status (42 of 62 sessions). Neither is visible in a transcript. (2) P1's
+> confident false negatives are a **symptom**; the cause is that no tool exposes *made under* /
+> *commences* / *amends*, so relationship questions are answered from search adjacency (bucket
+> B3, the largest). (3) A bucket P1–P10 missed entirely: the model **capitulates under
+> challenge** and reverses its legal conclusion on pushback (bucket B6, session 6406).
+>
+> The P1–P10 analysis below is kept as written — it is the record of what was known during the
+> freeze, and the bucket list reconciles against it rather than replacing it.
+
 Source: `session-transcripts-prepilot-2026-08-19.csv` (Developer tab export) — **41 sessions,
 12 lawyers, 251 messages, 119 assistant turns, $20.22 total spend**, 2026-08-11 → 08-19.
 
@@ -905,6 +952,14 @@ history) is the confirming case.
 **Caveat on [SAFE].** (2) and (3) are defensible inside the freeze with no retrieval effect.
 (1) touches the manager's message history, so it wants A3 or at least a manual regression
 before shipping — user's call whether that clears the freeze.
+
+**Built as FIX_PLAN P4.1 (2026-09-22, `fix/prepilot-defects`).** (1) is `utils/mode_change.py`:
+the client stamps each saved assistant message with `research_mode`/`chat_mode` (new
+`messages` columns, echoed on the `result` event) and the backend prefixes a marker onto the
+user's turn when this request's modes differ from the previous reply's. (3) is one shared
+rule naming the control as the UI does — four prompt sites, not one, had scripted their own.
+(2), the in-thread mode-change chip, is NOT built; the stamped rows make it a display-only
+change now. Ledger and evidence: `docs/prepilot-fixes/FIX_PLAN.md` P4.1.
 
 ### P3. Deep Research leaks its own step budget into the report as a legal finding [FROZEN]
 **Evidence.** **6 of 15 long Deep Research reports (40%)** carry text like *"the research
@@ -1053,7 +1108,23 @@ Fixes to the measurement instrument, ordered by what they cost the analysis:
 
 ---
 
-## Retrieval & report-prompt accuracy (PARKED until after the pilot)
+## Retrieval & report-prompt accuracy (UNPARKED 2026-09-14 — now in build)
+
+> **The freeze is lifted.** D16 and D17 below are unparked and folded into
+> `docs/prepilot-fixes/FIX_PLAN.md`: ~~D16 defect 1 (impossible year window) and~~ defect 3
+> (missing zero-result nudge) ~~sit~~ sits in row **P2.2**; D16 defect 2 (discarded result count) is
+> **P1.3**; D16 item 7 (the unverified ranked-sections array) is **P3.1**, which still requires
+> confirming the live response shape first.
+> **Corrected 2026-09-18 (Session 16): defect 1 never reached P2.2** — P2.2's row does not
+> mention the year window, and `executor.py` still has no `year_from <= year_to` check after
+> the intersection. Four D16 items had not reached the plan: defect 1, enhancement 5
+> (always over-fetch), enhancement 6 (returned title vs named Act) and the structural
+> one-call-per-Act rule. **User decision, 2026-09-18: the one-call rule is folded into
+> P3.1 (its third part); defect 1 and enhancements 5 and 6 stay PARKED here and are NOT
+> plan rows.** Defect 1 and item 5 were re-verified live in code the same day.
+> ~~D17 remains as recorded below and is not yet
+> allocated a row~~ (D17 is now plan row **P4.7**, 2026-09-18; see its entry below) — the mode-blind synthesis prompt is real but no pre-pilot session evidences
+> it, so it is scheduled after Wave 3 rather than inside it.
 
 Both items below are parked for the same reason and are to be **unparked and reviewed as a
 single body of work**, not picked off individually. Further external feedback is expected
@@ -1155,9 +1226,9 @@ be attributed to either side. Before quoting accuracy numbers: get a lawyer thro
 
 ---
 
-### D17. Deep Research synthesis prompt is mode-blind — parked with D16
-**Status: PARKED by user decision, 2026-08-19**, to be taken up with D16 as one piece of
-work once the further feedback lands. Raised by an external colleague reviewing the Deep
+### D17. Deep Research synthesis prompt is mode-blind — MOVED to the pre-pilot fix plan as P4.7
+**MOVED 2026-09-18 to `docs/prepilot-fixes/FIX_PLAN.md` row P4.7**, together with the same point from Thomas's external review (action 2). It had not been carried into that plan when D16 was. Track it there; the analysis below is kept for reference. ~~**Status: PARKED by user decision, 2026-08-19**, to be taken up with D16 as one piece of
+work once the further feedback lands.~~ Raised by an external colleague reviewing the Deep
 Research ReAct loop; verified against the code the same day (their line numbers were off —
 corrected below).
 
@@ -1198,3 +1269,30 @@ which needs moving to or importing into `prompts.py`). **No signature change nee
 
 **Why parked rather than shipped:** it is a prompt change to report output, so it moves what
 the pilot lawyers read even though it does not touch retrieval. Same freeze rationale as D16.
+
+### D18. The worker's four "trip limits" as startup settings (deferred 2026-09-21, after P3.8)
+
+Four limits govern how much work one worker run may do, and all four are constants in
+code: the **20-round step cap** (`chat_loop(max_turns=20)`, both providers — nothing passes it),
+P2.7's **8 search rounds** and P3.1's **3 section-search rounds per instrument**
+(`utils/discovery_budget.py`), and the parliament bot's **3 search calls**. The user asked
+(Session 18) whether the step cap should become a tunable setting. Answer given: yes, as a
+**startup value in `config.py`/`.env`, not an Admin Portal toggle**, and not now.
+
+- **Why not a portal toggle:** P2.1 decided the cap on evidence (the runs that hit it were
+  looping, not starved; more rounds buy more of the same and mask the failure the notice
+  exposes). A live toggle invites the reflexive raise that decision warned against — the same
+  reasoning that kept the drafting bot's cache override out of the portal.
+- **Precondition:** every measurement must record the value. `halted.limit` already travels
+  in the audit trace (and the lawyer's notice reads it), but only on halted runs; the replay
+  run files' `runtime_state` and `replay check` must stamp it, or two sweeps at different caps
+  can be compared by accident. A per-bot DB setting would make the per-bot efficiency
+  dashboards incomparable.
+- **Do all four together** in the same place, or the next person finds the cap in `.env` and
+  the budgets in source and assumes the budgets are not tunable. Separate knobs for the
+  Manager loop and the worker loop are probably right; decide when building.
+- **Size:** small — one setting per limit, two call sites for the cap, the run-file stamp,
+  and a test that the trace and the notice carry whatever value is set.
+
+Not a fix-plan row; do it after the plan concludes, or sooner only if a model change makes a
+limit live.

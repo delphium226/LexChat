@@ -54,6 +54,11 @@ class MessageCreate(BaseModel):
     sources: Optional[List] = None
     # Deep Research audit: the approved plan (assistant result messages only)
     research_plan: Optional[dict] = None
+    # P4.1 (B7): the research type and chat mode this assistant message ran
+    # under, as echoed on the `result` event. Sent back with the next turn's
+    # history so the backend can see a mode change (utils/mode_change.py).
+    research_mode: Optional[str] = None
+    chat_mode: Optional[str] = None
 
 
 class RatingUpdate(BaseModel):
@@ -73,6 +78,8 @@ class MessageOut(BaseModel):
     cost_usd: Optional[float] = None
     sources: Optional[List] = None
     research_plan: Optional[dict] = None
+    research_mode: Optional[str] = None
+    chat_mode: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -187,7 +194,9 @@ async def get_messages(
             model=m.model, provider=m.provider,
             rating=m.rating, feedback_comment=m.feedback_comment,
             cost_usd=m.cost_usd, sources=m.sources,
-            research_plan=m.research_plan, created_at=m.created_at
+            research_plan=m.research_plan,
+            research_mode=m.research_mode, chat_mode=m.chat_mode,
+            created_at=m.created_at
         ) for m in msgs
     ]
 
@@ -209,6 +218,8 @@ async def add_message(
         cost_usd=body.cost_usd,
         sources=body.sources,
         research_plan=body.research_plan,
+        research_mode=body.research_mode,
+        chat_mode=body.chat_mode,
     )
     db.add(new_msg)
     await db.commit()
@@ -218,7 +229,9 @@ async def add_message(
         model=new_msg.model, provider=new_msg.provider,
         rating=new_msg.rating, feedback_comment=new_msg.feedback_comment,
         cost_usd=new_msg.cost_usd, sources=new_msg.sources,
-        research_plan=new_msg.research_plan, created_at=new_msg.created_at
+        research_plan=new_msg.research_plan,
+        research_mode=new_msg.research_mode, chat_mode=new_msg.chat_mode,
+        created_at=new_msg.created_at
     )
 
 
@@ -249,7 +262,11 @@ async def rate_message(
     logger.info(f"[Chats] Message id={message_id} rated {body.rating}/5 by user id={user['id']}")
     return MessageOut(
         id=msg.id, chat_id=msg.chat_id, role=msg.role, content=msg.content,
-        rating=msg.rating, feedback_comment=msg.feedback_comment, created_at=msg.created_at
+        model=msg.model, provider=msg.provider,
+        rating=msg.rating, feedback_comment=msg.feedback_comment,
+        cost_usd=msg.cost_usd, sources=msg.sources, research_plan=msg.research_plan,
+        research_mode=msg.research_mode, chat_mode=msg.chat_mode,
+        created_at=msg.created_at
     )
 
 

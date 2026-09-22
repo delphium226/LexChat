@@ -7,6 +7,13 @@ from typing import AsyncGenerator, Callable, Optional
 import httpx
 
 from ..config import MODEL_LIST, settings
+from ..utils.empty_completion import (
+    build_probe,
+    is_empty_completion,
+    report_empty_completion,
+)
+from ..utils.discovery_budget import set_react_round
+from ..utils.research_halt import halt_marker_text, run_halt_writeup
 from . import agent_core
 from .summarisation import call_chunk, summarise_prompt
 
@@ -56,6 +63,7 @@ async def chat_loop(
     timing_collector=None,
     _turn: int = 0,
     max_turns: int = 20,
+    _final_round: bool = False,
 ) -> dict:
     """Core ReAct loop: stream from Ollama, handle tool calls, recurse.
 
@@ -82,7 +90,28 @@ async def chat_loop(
         logger.warning(f"[ChatLoop] Max turns ({max_turns}) reached — halting tool calls")
         if timing_collector:
             timing_collector.record_max_turns_halt()
-        return {"role": "assistant", "content": f"[Research halted: exceeded {max_turns} tool-call steps]"}
+        # P2.1 (B1): the halt travels as STRUCTURE, not only as prose. The
+        # content marker is kept so nothing that reads content breaks, but it
+        # is `halted` that callers act on — a string in an assistant message
+        # is indistinguishable from findings, which is how a step cap came to
+        # be rendered to a lawyer as a legal conclusion about the statute book.
+        halted = {"reason": "step_cap", "limit": max_turns, "steps": _turn}
+        # P3.8: one bounded, tool-free write-up round (see openrouter_client
+        # and utils/research_halt.run_halt_writeup). `_final_round` on the
+        # nested call means at most one model call is added here.
+        writeup = "" if _final_round else await run_halt_writeup(
+            chat_loop, messages, model, cancel_event, num_ctx, on_chunk,
+            emit_tool_details, timing_collector, _turn, max_turns,
+            log_prefix="[ChatLoop]",
+        )
+        if writeup:
+            logger.info("[ChatLoop] Step cap: partial findings written up (%d chars)", len(writeup))
+            return {"role": "assistant", "content": writeup, "halted": {**halted, "written_up": True}}
+        return {
+            "role": "assistant",
+            "content": halt_marker_text(max_turns),
+            "halted": {**halted, "written_up": False},
+        }
 
     # Determine context size from model config
     configured = next((m for m in MODEL_LIST if m["name"] == model), None)
@@ -136,6 +165,12 @@ async def chat_loop(
         final_stats = {}
         t_send = time.perf_counter()
         first_content_time = None
+        # P4.2 (B13) diagnostic — see utils/empty_completion.py. Ollama names
+        # these `done_reason` and `thinking`; the record they feed is shared
+        # with the OpenRouter path so a trace reads the same either way.
+        finish_reason = None
+        stream_error = None
+        reasoning_chars = 0
 
         try:
             async with httpx.AsyncClient(timeout=stream_timeout, verify=False) as client:
@@ -159,8 +194,12 @@ async def chat_loop(
                         except json.JSONDecodeError:
                             continue
 
+                        if data.get("error"):
+                            stream_error = data["error"]
+
                         msg = data.get("message", {})
                         content = msg.get("content", "")
+                        reasoning_chars += len(msg.get("thinking") or "")
 
                         if content:
                             if first_content_time is None:
@@ -173,12 +212,36 @@ async def chat_loop(
                             tool_calls.extend(msg["tool_calls"])
 
                         if data.get("done"):
+                            finish_reason = data.get("done_reason") or finish_reason
                             final_stats = {
                                 "prompt_eval_count": data.get("prompt_eval_count", 0),
                                 "eval_count": data.get("eval_count", 0),
                                 "total_duration": data.get("total_duration", 0),
                                 "load_duration": data.get("load_duration", 0),
                             }
+
+            # P4.2 (B13). A clean stream that carried nothing is the blank-reply
+            # failure, not a finished answer — retry it like a stall.
+            if is_empty_completion(full_content, tool_calls):
+                retrying = attempt < _MAX_STREAM_ATTEMPTS - 1
+                report_empty_completion(
+                    build_probe(
+                        provider="Ollama",
+                        model=model,
+                        attempt=attempt,
+                        attempts_max=_MAX_STREAM_ATTEMPTS,
+                        finish_reason=finish_reason,
+                        reasoning_chars=reasoning_chars,
+                        stream_error=stream_error,
+                        usage=final_stats,
+                        sent_chars=total_chars,
+                        turn=_turn,
+                    ),
+                    retrying=retrying,
+                )
+                if retrying:
+                    await asyncio.sleep(_STREAM_RETRY_BASE_S * (2 ** attempt))
+                    continue
             break
 
         except httpx.TimeoutException as e:
@@ -267,6 +330,10 @@ async def chat_loop(
                 )
             return func_name, result
 
+        # P2.7: each task copies this context at creation, so every call in
+        # this round sees the round it belongs to (the legislation discovery
+        # budget counts rounds, not calls).
+        set_react_round(_turn)
         tool_tasks = [asyncio.create_task(_run_tool(tc)) for tc in tool_calls]
         try:
             tool_results = await asyncio.gather(*tool_tasks)
@@ -301,6 +368,7 @@ async def chat_loop(
             timing_collector=timing_collector,
             _turn=_turn + 1,
             max_turns=max_turns,
+            _final_round=_final_round,
         )
 
     return message
@@ -371,6 +439,7 @@ async def run_worker_agent(
     timing_collector=None,
     tool_memo: Optional[dict] = None,
     memo_count_redundant: bool = False,
+    retrieved_urls: Optional[set] = None,
 ) -> dict:
     return await agent_core.run_worker_agent(
         chat_loop, _summarise_chunk,
@@ -380,6 +449,7 @@ async def run_worker_agent(
         timing_collector=timing_collector,
         tool_memo=tool_memo,
         memo_count_redundant=memo_count_redundant,
+        retrieved_urls=retrieved_urls,
     )
 
 

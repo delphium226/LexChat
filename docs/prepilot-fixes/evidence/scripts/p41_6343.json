@@ -1,0 +1,11 @@
+{
+  "session_id": "p41_6343",
+  "base": "6343",
+  "verdict": "FAIL",
+  "primary": "B7",
+  "note": "P4.1 acceptance, second session: refusal under 'Legislation only', then the same question with the research type changed to 'Legislation & case law' (the change the lawyer asked how to make at turn 3 and never got). Turn text is taken from session 6343 by index and is never stored here.",
+  "turns": [
+    {"from_turn": 1, "research_mode": "legislation_only"},
+    {"from_turn": 4, "research_mode": "legislation_and_case_law"}
+  ]
+}

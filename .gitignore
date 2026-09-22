@@ -14,6 +14,13 @@ nul
 # Logs
 logs/
 *.log
+# The rotated server logs are named `<bot>_agent.log.2026-08-18` — the date is
+# the extension, so `*.log` does NOT match them. They were committed once by a
+# broad `git add` and carried 211 unredacted Worker delegation briefs naming
+# live casework topics (the Manager brief at agent_core.py is deliberately not
+# redacted; see CLAUDE.md "Log redaction"). Both patterns below are needed.
+*.log.*
+server_py/ServerLogs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -96,3 +103,13 @@ deployment/autostart_config.ps1
 
 # Loose deployment artifacts
 frontend_update.zip
+
+# Pre-pilot replay fixtures — contain lawyers' verbatim research questions.
+# Regenerate from the Developer-tab transcript export; see docs/prepilot-fixes/FIX_PLAN.md.
+docs/prepilot-fixes/evidence/replay_set.json
+docs/prepilot-fixes/evidence/replay/
+
+# Local state written by `python -m tools.replay pin` — records the dev box's
+# model and feature flags so `restore` can put them back. Per-machine, and it
+# must not be committed or a restore on one box would rewrite another's config.
+server_py/tools/.replay_pin_state.json

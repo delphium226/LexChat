@@ -16,7 +16,7 @@ function readSessions() {
   }
 }
 
-// Research filter state (jurisdiction, dates, court, legislation type,
+// Research filter state (jurisdiction, dates, legislation type,
 // current-only), moved from App.jsx. Filters persist in two layers:
 // - global defaults under localStorage `filter_*` keys
 // - per-chat snapshots under `filter_chat_<id>` (written on every change while
@@ -27,9 +27,7 @@ export function useFilters(currentChatId) {
   const [jurisdiction, setJurisdiction] = useState(() => localStorage.getItem('filter_jurisdiction') || null);
   const [dateFrom, setDateFrom] = useState(() => localStorage.getItem('filter_dateFrom') || '');
   const [dateTo, setDateTo] = useState(() => localStorage.getItem('filter_dateTo') || String(new Date().getFullYear()));
-  const [caseLawCourt, setCaseLawCourt] = useState(() => localStorage.getItem('filter_caseLawCourt') || '');
   const [legislationType, setLegislationType] = useState(() => localStorage.getItem('filter_legislationType') || null);
-  const [currentOnly, setCurrentOnly] = useState(() => localStorage.getItem('filter_currentOnly') !== 'false');
   // Parliamentary-mode filters (only surfaced on the parliament / Westminster bots).
   // recordType and sessions carry whichever vocabulary the bot's research mode
   // defines; `house` is Westminster-only (Holyrood is unicameral).
@@ -45,9 +43,7 @@ export function useFilters(currentChatId) {
       dateFrom,
       dateTo,
       jurisdiction,
-      court: caseLawCourt,
       legislationType,
-      currentOnly,
       recordType,
       sessions,
       house,
@@ -71,21 +67,11 @@ export function useFilters(currentChatId) {
     localStorage.setItem('filter_dateTo', v);
     if (currentChatId) saveFiltersToChatStorage(currentChatId, { dateTo: v });
   };
-  const setCourtPersist = v => {
-    setCaseLawCourt(v);
-    localStorage.setItem('filter_caseLawCourt', v);
-    if (currentChatId) saveFiltersToChatStorage(currentChatId, { court: v });
-  };
   const setLegislationTypePersist = v => {
     setLegislationType(v);
     if (v) localStorage.setItem('filter_legislationType', v);
     else localStorage.removeItem('filter_legislationType');
     if (currentChatId) saveFiltersToChatStorage(currentChatId, { legislationType: v });
-  };
-  const setCurrentOnlyPersist = v => {
-    setCurrentOnly(v);
-    localStorage.setItem('filter_currentOnly', String(v));
-    if (currentChatId) saveFiltersToChatStorage(currentChatId, { currentOnly: v });
   };
   const setRecordTypePersist = v => {
     setRecordType(v);
@@ -123,9 +109,7 @@ export function useFilters(currentChatId) {
     setJurisdictionPersist(null);
     setDateFromPersist('');
     setDateToPersist(thisYear);
-    setCourtPersist('');
     setLegislationTypePersist(null);
-    setCurrentOnlyPersist(false);
     setRecordTypePersist(null);
     setHousePersist(null);
     setSessionsPersist([getLatestSession(researchMode)]);
@@ -137,9 +121,7 @@ export function useFilters(currentChatId) {
     jurisdiction ||
     dateFrom ||
     dateTo !== thisYear ||
-    caseLawCourt ||
     legislationType ||
-    currentOnly ||
     recordType ||
     house ||
     !sessionsAreDefault;
@@ -172,18 +154,10 @@ export function useFilters(currentChatId) {
         if (f.jurisdiction) localStorage.setItem('filter_jurisdiction', f.jurisdiction);
         else localStorage.removeItem('filter_jurisdiction');
       }
-      if (f.court !== undefined) {
-        setCaseLawCourt(f.court);
-        localStorage.setItem('filter_caseLawCourt', f.court);
-      }
       if (f.legislationType !== undefined) {
         setLegislationType(f.legislationType);
         if (f.legislationType) localStorage.setItem('filter_legislationType', f.legislationType);
         else localStorage.removeItem('filter_legislationType');
-      }
-      if (f.currentOnly !== undefined) {
-        setCurrentOnly(f.currentOnly);
-        localStorage.setItem('filter_currentOnly', String(f.currentOnly));
       }
       if (f.recordType !== undefined) {
         setRecordType(f.recordType);
@@ -217,24 +191,18 @@ export function useFilters(currentChatId) {
     jurisdiction,
     dateFrom,
     dateTo,
-    caseLawCourt,
     legislationType,
-    currentOnly,
     recordType,
     sessions,
     house,
     setJurisdiction,
     setDateFrom,
     setDateTo,
-    setCaseLawCourt,
     setLegislationType,
-    setCurrentOnly,
     setJurisdictionPersist,
     setDateFromPersist,
     setDateToPersist,
-    setCourtPersist,
     setLegislationTypePersist,
-    setCurrentOnlyPersist,
     setRecordTypePersist,
     setSessionsPersist,
     setHousePersist,

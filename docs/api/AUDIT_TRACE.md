@@ -50,7 +50,11 @@ All three endpoints that drive the agent pipeline — `/api/chat`, `/api/system/
 
 ### Filters
 
-`jurisdiction`, `year_from`, `year_to`, `date_from`, `date_to`, `court`, `legislation_type`, `current_only`, and — in parliamentary modes — `record_type`, `sessions`, `house`.
+`jurisdiction`, `year_from`, `year_to`, `date_from`, `date_to`, `court`, `legislation_type`, and — in parliamentary modes — `record_type`, `sessions`, `house`.
+
+**`current_only` was removed in September 2026 and is no longer a filter.** The control it belonged to excluded nothing: it tested the LEX `status` field for `repealed`/`revoked`/`spent`, but that field's vocabulary is `final` and `revised` only — it records which text version is held, not in-force status. There is no in-force signal anywhere in the tool surface, so the filter could not be repaired by extending the word list, and the UI and system prompt were both asserting currency on the strength of a check that never ran.
+
+The request field is **accepted and ignored** rather than rejected: this model does not set `extra="forbid"`, so a client still sending `current_only` receives the same response it did before and the value goes nowhere. `filters.current_only` is still present in the audit event, **always `null`**, so the trace shape was unchanged and `schema_version` remained `1` at the time (it is `2` as of the v2 note below). Treat a `null` there as "this filter no longer exists", not as "the filter was off".
 
 ### Audit controls
 
@@ -102,7 +106,7 @@ One event per request, emitted immediately **before** `result`, so a consumer th
 ```jsonc
 {
   "type": "audit",
-  "schema_version": 1,
+  "schema_version": 5,
   "request_id": "a1b2c3d4",
 
   "chat_mode": "research",
@@ -113,12 +117,13 @@ One event per request, emitted immediately **before** `result`, so a consumer th
   "filters": {
     "jurisdiction": null, "year_from": null, "year_to": null,
     "date_from": null, "date_to": null, "court": "UKSC",
-    "legislation_type": null, "current_only": false,
+    "legislation_type": null, "current_only": null,   // removed Sept 2026; always null
     "record_type": null, "house": null, "sessions": null
   },
 
   "answer": "<final answer returned to the user>",
   "suggestions": ["<follow-up question chip>"],
+  "mode_change": null,            // v5; {research_mode: {from, to} | null, chat_mode: {from, to} | null} when a stamped mode changed
   "sources": [{ "n": 1, "title": "...", "url": "...", "cite": "..." }],
 
   "delegations": [
@@ -130,6 +135,7 @@ One event per request, emitted immediately **before** `result`, so a consumer th
       "brief": "<query the Manager sent the Worker>",
       "report": "<the Worker's research report>",
       "reformatted": false,           // structure-repair retry fired
+      "halted": null,                 // v2; {reason, limit, steps, written_up (v4)} at the step cap
       "error": null,
       "started_at": 0.512,            // seconds from request start
       "duration_s": 41.8,
@@ -167,6 +173,18 @@ One event per request, emitted immediately **before** `result`, so a consumer th
     { "peer_id": "parliament_bot", "peer_name": "...", "question": "...", "answer": "..." }
   ],
 
+  // v3. Empty on a healthy request. One record per provider completion that
+  // carried no content and no tool calls, whether or not the retry recovered.
+  "empty_completions": [
+    {
+      "provider": "OpenRouter", "model": "google/gemini-3.1-pro-preview",
+      "attempt": 1, "attempts_max": 3, "retried": true,
+      "finish_reason": "stop", "native_finish_reason": null,
+      "completion_tokens": 0, "reasoning_chars": 0, "stream_error": null,
+      "sent_chars": 21421, "react_turn": 4
+    }
+  ],
+
   "timings": { "total_ms": 64210, "llm_calls": 7, "total_cost_usd": 0.184 },
   "error": null
 }
@@ -174,12 +192,15 @@ One event per request, emitted immediately **before** `result`, so a consumer th
 
 ### Field semantics
 
-- **`raw_result` and `final_result`** hold the retrieval as returned by the external API and the text actually placed in the Worker's context respectively. They differ whenever `summarised` is true. Exposing both allows a defective summary to be distinguished from a defective retrieval — an attribution that post-summarisation text alone cannot support.
+- **`raw_result` and `final_result`** hold the retrieval as returned by the external API and the text actually placed in the Worker's context respectively. Exposing both allows a defective summary to be distinguished from a defective retrieval — an attribution that post-summarisation text alone cannot support. ~~They differ whenever `summarised` is true.~~ **They also differ whenever the server appends a bracketed instruction block, which is independent of summarisation** (corrected 2026-09-15, FIX_PLAN P2.2). `final_result` is the concatenation of the (possibly summarised) retrieval and any of: the Phase-2 nudge, the citation-URL block (P1.6, summarised results only) and the `[SEARCH SCOPE …]` block (P2.2, on **every** `search_legislation` and `search_legislation_sections` result). A consumer diffing `raw_result` against `final_result` to detect summarisation loss must therefore key on the `summarised` flag, not on the texts being unequal — those two tools' results now always differ. **Also appended since FIX_PLAN P2.4 (2026-09-17):** a `[SEARCH SCOPE — not held: …]` block on any retrieval the LEX API answered with `Legislation not found` (in practice `get_legislation_text` on an id the index does not hold). That `raw_result` is the executor's `Error executing tool: …` string, not JSON, so `raw_decode` raises on it: check for that prefix first. The case-law corpus disclosure P2.4 added is on the **answer**, not on any tool result. Parse `final_result` with a JSON `raw_decode`, which stops at the end of the leading object and ignores the appended tail; a plain parse raises "Extra data" on exactly the calls that succeeded.
 - **`api_calls` are nested within the tool that issued them.** Nesting derives from the server's call graph rather than from event ordering, so attribution remains correct if worker runs are parallelised in future.
 - **`summarised`** is true for both a summarisation call and a local prompt-cache hit; **`local_cache_hit`** distinguishes the two. **`memo_hit`** indicates an exact repeat within the same request served from the per-request tool memo, incurring neither an API call nor summarisation.
-- **`budget_blocked`** applies to parliamentary modes only, and indicates that the model exhausted its three-call discovery budget and the search was hard-stopped.
+- **`budget_blocked`** indicates that the search was hard-stopped by a discovery budget and **did not run**. ~~Applies to parliamentary modes only~~ — **since FIX_PLAN P2.7 (2026-09-17) it applies to two budgets, and they count different things.** *Parliamentary modes:* three calls to the discovery tools, checked after the memo, so a memo hit is never blocked. *Legislation modes* (`legislation_only`, `legislation_and_case_law`): `search_legislation` may be called in at most **8 ReAct rounds** per worker run (any number of calls within one round), checked **before** the memo, so a memo-servable repeat is blocked too and then carries `memo_hit: false`. `search_case_law` is not budgeted. A blocked legislation call's `raw_result` and `final_result` are both the stop message: JSON with `notice`, `instruction` and `"searched": false`, and deliberately **no** `results` or `total` key, so it must not be counted as a search that matched nothing. Exclude `budget_blocked` records from any count of searches that ran. The field is unchanged in shape, so `schema_version` is unchanged. **Since FIX_PLAN P3.1 (2026-09-18) there is a third, on the same flag:** in the legislation modes, `search_legislation_sections` may be called in at most **3 ReAct rounds per `legislation_id`** per worker run (the id normalised, so a URL and a short id are one instrument), checked **before** the memo. Its stop is JSON with `notice`, `instruction`, `legislation_id` and `"searched": false`, again with no `results`. Tell it apart from a discovery stop by the tool record's `name`; both increment `request_timings.search_budget_blocked`.
 - **`error`** is populated at whichever level failed. A failed run still emits the audit event, carrying whatever was captured before the failure; a failed run remains a valid evaluation data point.
-- **`schema_version`** is incremented on any breaking change to this shape and should be asserted on by consumers.
+- **`halted`** *(v2)* is `null` unless the Worker's ReAct loop stopped at the step cap, in which case it is `{"reason": "step_cap", "limit": 20, "steps": 20}`. Before v2 the only signal was the literal string `[Research halted: exceeded N tool-call steps]` appearing in `report` — which was never reliable and is no longer present. Two reasons it was not reliable: the Manager's **own** loop can halt, producing no delegation at all (so no `report` to match on), and a halted worker's `report` is now replaced with a structured incompleteness statement. A halt is a first-class outcome and should be read from this field; `request_timings.max_turns_halted` remains the request-level flag. **`written_up`** *(v4, FIX_PLAN P3.8)*: at the cap `chat_loop` now makes one bounded, tool-free write-up round, and this boolean says whether it produced findings. When `true`, `report` is P2.1's agent-addressed header (now saying the findings are **partial**) followed by those findings, written from the retrievals the worker had made — every provision it cites was returned by a tool in that delegation's `tools[]`, which is what a harness should check. When `false` the report is the header alone, as before v4. The halt's status is unchanged either way: `halted` is set, the lawyer-facing notice is prepended to the answer, and `research_incomplete` rides on the result.
+- **`empty_completions`** *(v3)* records provider completions that returned no content **and** no tool calls. It is `[]` on a healthy request, and a non-empty list does **not** imply the request failed — `chat_loop` retries such a completion up to three times, and `retried: true` marks an attempt the retry then recovered from. The fields exist to separate four mechanisms that were previously indistinguishable in the data: the provider returned nothing (`completion_tokens` ~0); the model spent the completion on thinking tokens (`reasoning_chars` > 0); a mid-stream failure arrived as a payload the parser used to ignore (`stream_error` set, and/or `finish_reason: "error"` with the provider's own code in `native_finish_reason`); or the model chose to say nothing. A harness watching for lost answers should treat a record with `retried: false` as one — the answer for that call was empty on every attempt, and the caller fell back to labelled research output or a notice.
+- **`mode_change`** *(v5, FIX_PLAN P4.1)* is `null` unless the request's research type or chat mode differs from the one stamped on the previous assistant message in the request's `messages`, in which case it is `{"research_mode": {"from", "to"} | null, "chat_mode": {"from", "to"} | null}` and the product prefixed a mode-change marker onto the user's turn before calling the model. The stamp is the `research_mode` / `chat_mode` key the app's client sets on each saved assistant message (the values the `result` event echoes); a harness that wants the product to see a mode change must stamp its own history the same way, and a history with no stamps always reads as "no change", never as one. A transition from `deep_research` to `conversational` is not reported: Deep Research is one-shot and the client reverts on completion.
+- **`schema_version`** is incremented on any change to this shape and should be asserted on by consumers. **v2** (Sept 2026) adds `delegations[].halted`; **v3** (Sept 2026) adds top-level `empty_completions[]`; **v4** (Sept 2026) adds `delegations[].halted.written_up`; **v5** (Sept 2026) adds top-level `mode_change`. All are additive, so an older consumer sees an unknown key and is otherwise unaffected — and in v3's and v5's case a key that is almost always `[]` or `null`.
 
 ### Implementation
 

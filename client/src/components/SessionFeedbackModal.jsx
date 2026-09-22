@@ -155,9 +155,9 @@ const filterSnapshot = (filters, researchMode, chatMode) => ({
   jurisdiction: filters?.jurisdiction ?? null,
   date_from: filters?.dateFrom ?? null,
   date_to: filters?.dateTo ?? null,
-  court: filters?.caseLawCourt ?? null,
   legislation_type: filters?.legislationType ?? null,
-  current_only: typeof filters?.currentOnly === 'boolean' ? filters.currentOnly : null,
+  // current_only: removed with the filter itself (P1.2). Historical
+  // session_feedback rows keep the value they were recorded with.
   record_type: filters?.recordType ?? null,
   sessions: Array.isArray(filters?.sessions) ? filters.sessions : null,
   house: filters?.house ?? null,

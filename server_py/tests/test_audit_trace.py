@@ -22,6 +22,7 @@ import pytest
 
 from src.agent.agent_core import run_deep_research, run_worker_agent
 from src.agent.provider_factory import set_request_provider_config
+from src.utils.search_scope import strip_scope_blocks
 from src.routers.agent_request import (
     ChatRequest,
     ResearchPlanRequest,
@@ -29,7 +30,11 @@ from src.routers.agent_request import (
     resolve_research_mode,
 )
 from src.routers.system import SystemChatRequest
-from src.utils.audit_trace import AuditCollector, set_audit_collector
+from src.utils.audit_trace import (
+    AUDIT_SCHEMA_VERSION,
+    AuditCollector,
+    set_audit_collector,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -197,7 +202,7 @@ async def test_audit_records_delegation_and_tools(monkeypatch):
     assert len(audit.delegations) == 1
     d = audit.delegations[0]
     assert d["brief"] == "the brief"
-    assert d["report"] == "THE REPORT"
+    assert strip_scope_blocks(d["report"])[0] == "THE REPORT"
     assert d["error"] is None
     assert [t["name"] for t in d["tools"]] == ["search_legislation"]
     assert d["tools"][0]["args"] == {"query": "housing"}
@@ -292,7 +297,9 @@ async def test_sniffer_passes_through_a_sync_on_chunk(monkeypatch):
     )
 
     # The run completes instead of dying on the await ...
-    assert result["content"] == "THE REPORT"
+    # P2.2 appends a code-emitted search-scope block to every worker report, so
+    # the assertion is that the MODEL's text is untouched, not that the report is.
+    assert strip_scope_blocks(result["content"])[0] == "THE REPORT"
     # ... the trace is still captured ...
     assert len(audit.delegations[0]["tools"][0]["api_calls"]) == 1
     # ... and the sync callback genuinely received what passed through.
@@ -409,7 +416,8 @@ async def test_audit_records_deep_research_step_metadata():
     set_audit_collector(audit)
 
     async def worker(query, model, cancel, num_ctx, parent_on_chunk=None,
-                     emit_tool_details=False, timing_collector=None, tool_memo=None):
+                     emit_tool_details=False, timing_collector=None, tool_memo=None,
+                         retrieved_urls=None):
         # The real run_worker_agent opens the delegation; emulate that here so
         # the test exercises the metadata hand-off rather than the whole worker.
         rec = audit.start_delegation(query)
@@ -471,7 +479,7 @@ async def test_no_collector_means_no_overhead_and_no_behaviour_change(monkeypatc
         _chat_loop_calling_tools([("search_legislation", {"query": "a"})]),
         _noop_summarise, "brief", "test-model", None, 0,
     )
-    assert result["content"] == "THE REPORT"
+    assert strip_scope_blocks(result["content"])[0] == "THE REPORT"
 
 
 def test_audit_event_shape():
@@ -480,16 +488,30 @@ def test_audit_event_shape():
     event = audit.to_event(
         config={
             "_chat_mode": "research", "_research_mode": "case_law_only",
-            "_provider": "openrouter", "model": "m", "_court": "UKSC",
+            "_provider": "openrouter", "model": "m", "_jurisdiction": "scotland",
         },
         timings={"total_ms": 1234},
     )
     assert event["type"] == "audit"
-    assert event["schema_version"] == 1
+    # Pinned to the constant, not to a literal: a bump must be a deliberate
+    # edit to `AUDIT_SCHEMA_VERSION` with a spec change alongside it, and
+    # asserting the literal here just makes the bump noisy without checking
+    # that the event carries the version the module declares.
+    assert event["schema_version"] == AUDIT_SCHEMA_VERSION
+    assert AUDIT_SCHEMA_VERSION == 5  # v5: mode_change (P4.1); v4: halted.written_up (P3.8); v3: empty_completions[] (P4.2)
+    assert "mode_change" in event and event["mode_change"] is None
+    # Present and empty on a healthy request, which is the whole point: a
+    # consumer can tell "no completion was lost" from "this trace predates the
+    # field" without inspecting schema_version.
+    assert event["empty_completions"] == []
     assert event["request_id"] == "req123"
     assert event["chat_mode"] == "research"
     assert event["research_mode"] == "case_law_only"
-    assert event["filters"]["court"] == "UKSC"
+    assert event["filters"]["jurisdiction"] == "scotland"
+    # Retired filters keep their key as a permanent null so the trace shape does
+    # not move under an external consumer: `court` (P4.4), `current_only` (P1.2).
+    assert event["filters"]["court"] is None
+    assert event["filters"]["current_only"] is None
     assert event["answer"] == "the answer"
     assert event["sources"] == [{"n": 1, "url": "u"}]
     assert event["timings"]["total_ms"] == 1234
@@ -542,7 +564,7 @@ async def test_system_chat_emits_audit_event_on_the_wire(client, auth_headers, m
             "model": "mistral",
             "chat_mode": "research",
             "research_mode": "case_law_only",
-            "court": "UKSC",
+            "jurisdiction": "scotland",
         },
         headers=auth_headers,
     )
@@ -560,13 +582,18 @@ async def test_system_chat_emits_audit_event_on_the_wire(client, auth_headers, m
     # The fields the old endpoint silently dropped.
     assert ev["research_mode"] == "case_law_only"
     assert ev["chat_mode"] == "research"
-    assert ev["filters"]["court"] == "UKSC"
+    assert ev["filters"]["jurisdiction"] == "scotland"
+    # `court` is no longer sent and no longer has a reader (P4.4), but its key
+    # stays in the trace as a permanent null so the shape is stable for the
+    # external harness. Compatibility with a client that still sends it is
+    # pinned in tests/test_court_filter_removed.py.
+    assert ev["filters"]["court"] is None
 
     assert ev["answer"] == "the answer"
     assert len(ev["delegations"]) == 1
     d = ev["delegations"][0]
     assert d["brief"] == "the brief"
-    assert d["report"] == "THE REPORT"
+    assert strip_scope_blocks(d["report"])[0] == "THE REPORT"
     assert [t["name"] for t in d["tools"]] == ["search_legislation"]
     assert d["tools"][0]["raw_result"] == "RAW"
     assert d["tools"][0]["final_result"] == "FINAL"

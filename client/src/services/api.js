@@ -38,9 +38,7 @@ export const sendMessage = (
           year_to: filters.dateTo ? parseInt(filters.dateTo, 10) : null,
           date_from: filters.dateFrom ? `${filters.dateFrom}-01-01` : null,
           date_to: filters.dateTo ? `${filters.dateTo}-12-31` : null,
-          court: filters.caseLawCourt || null,
           legislation_type: filters.legislationType || null,
-          current_only: filters.currentOnly || false,
           record_type: filters.recordType || null,
           sessions: filters.sessions || null,
           house: filters.house || null,
@@ -127,9 +125,7 @@ export const getResearchPlan = async (
       year_to: filters.dateTo ? parseInt(filters.dateTo, 10) : null,
       date_from: filters.dateFrom ? `${filters.dateFrom}-01-01` : null,
       date_to: filters.dateTo ? `${filters.dateTo}-12-31` : null,
-      court: filters.caseLawCourt || null,
       legislation_type: filters.legislationType || null,
-      current_only: filters.currentOnly || false,
       record_type: filters.recordType || null,
       sessions: filters.sessions || null,
       house: filters.house || null,
@@ -222,11 +218,19 @@ export const saveMessage = async (
   provider = null,
   cost_usd = null,
   sources = null,
-  research_plan = null
+  research_plan = null,
+  // P4.1 (B7): the modes the assistant reply ran under, echoed on the
+  // `result` event. Persisted so the next turn's history carries them and
+  // the backend can see a mode change (it was anchoring on its own earlier
+  // refusal because nothing in the history said the setting had changed).
+  research_mode = null,
+  chat_mode = null
 ) => {
   const response = await axios.post(`${API_URL}/chats/${chatId}/messages`, {
     role,
     content,
+    research_mode,
+    chat_mode,
     model,
     provider,
     cost_usd,

@@ -9,6 +9,13 @@ from typing import AsyncGenerator, Callable, Optional
 import httpx
 
 from ..config import OPENROUTER_MODEL_LIST, settings
+from ..utils.empty_completion import (
+    build_probe,
+    is_empty_completion,
+    report_empty_completion,
+)
+from ..utils.discovery_budget import set_react_round
+from ..utils.research_halt import halt_marker_text, run_halt_writeup
 from . import agent_core
 from .summarisation import call_chunk, summarise_prompt
 
@@ -123,6 +130,12 @@ def _apply_anthropic_cache_control(openai_messages: list, model: str) -> list:
 # tool result already gathered for it. Retried only while nothing has been emitted
 # yet — once tokens have reached the user or tool-call deltas have accumulated,
 # replaying the request would duplicate them, so the error is re-raised.
+#
+# P4.2 (B13): the same bounded retry also covers a *successful* 200 that carries
+# no content and no tool-call deltas. That raises no exception, so the guard
+# below could not see it, and the empty completion was returned as the answer
+# with `status: ok` and full billing. Replaying is safe for the same reason it is
+# safe on a timeout — nothing has been emitted, so nothing can be duplicated.
 _MAX_STREAM_ATTEMPTS = 3
 _STREAM_RETRY_BASE_S = 2.0
 
@@ -143,6 +156,7 @@ async def chat_loop(
     timing_collector=None,
     _turn: int = 0,
     max_turns: int = 20,
+    _final_round: bool = False,
 ) -> dict:
     """Core ReAct loop using OpenRouter's OpenAI-compatible streaming API."""
     if cancel_event and cancel_event.is_set():
@@ -155,7 +169,29 @@ async def chat_loop(
         logger.warning(f"[OpenRouter] Max turns ({max_turns}) reached — halting tool calls")
         if timing_collector:
             timing_collector.record_max_turns_halt()
-        return {"role": "assistant", "content": f"[Research halted: exceeded {max_turns} tool-call steps]"}
+        # P2.1 (B1): the halt travels as STRUCTURE, not only as prose. The
+        # content marker is kept so nothing that reads content breaks, but it
+        # is `halted` that callers act on — a string in an assistant message
+        # is indistinguishable from findings, which is how a step cap came to
+        # be rendered to a lawyer as a legal conclusion about the statute book.
+        halted = {"reason": "step_cap", "limit": max_turns, "steps": _turn}
+        # P3.8: one bounded, tool-free write-up round. Everything the loop
+        # retrieved is in `messages`; before this, all of it was discarded with
+        # the halt. `_final_round` is set on the nested call so it cannot
+        # write up its own halt — at most one model call is added here.
+        writeup = "" if _final_round else await run_halt_writeup(
+            chat_loop, messages, model, cancel_event, num_ctx, on_chunk,
+            emit_tool_details, timing_collector, _turn, max_turns,
+            log_prefix="[OpenRouter]",
+        )
+        if writeup:
+            logger.info("[OpenRouter] Step cap: partial findings written up (%d chars)", len(writeup))
+            return {"role": "assistant", "content": writeup, "halted": {**halted, "written_up": True}}
+        return {
+            "role": "assistant",
+            "content": halt_marker_text(max_turns),
+            "halted": {**halted, "written_up": False},
+        }
 
     openai_messages = _apply_anthropic_cache_control(
         _convert_messages_to_openai(messages), model
@@ -204,6 +240,13 @@ async def chat_loop(
         usage_stats = {}
         t_send = time.perf_counter()
         first_content_time = None
+        # P4.2 (B13) diagnostic. Nothing downstream reads these unless the
+        # completion comes back empty; see utils/empty_completion.py for what
+        # each one rules in or out.
+        finish_reason = None
+        native_finish_reason = None
+        reasoning_chars = 0
+        stream_error = None
 
         try:
             async with httpx.AsyncClient(timeout=stream_timeout, verify=False, proxy=_get_proxy()) as client:
@@ -235,11 +278,35 @@ async def chat_loop(
                         if data.get("usage"):
                             usage_stats = data["usage"]
 
+                        # P4.2 (B13). OpenRouter reports a mid-stream failure as
+                        # an `error` payload on the SSE stream; nothing here read
+                        # it, so such a stream ended as a normal empty completion.
+                        if data.get("error"):
+                            stream_error = data["error"]
+
                         choices = data.get("choices", [])
                         if not choices:
                             continue
 
+                        # P4.2 (B13). `finish_reason` distinguishes "the model
+                        # chose to stop" from "the stream failed" ("error", with
+                        # the provider's own code in native_finish_reason) and
+                        # from a normalised malformed tool call. Kept only for
+                        # the diagnostic — no control flow reads it.
+                        if choices[0].get("finish_reason"):
+                            finish_reason = choices[0]["finish_reason"]
+                        if choices[0].get("native_finish_reason"):
+                            native_finish_reason = choices[0]["native_finish_reason"]
+
                         delta = choices[0].get("delta", {})
+
+                        # P4.2 (B13). A reasoning model that spends its whole
+                        # completion on thinking tokens emits no content and is
+                        # billed for it — the same signature as a lost answer,
+                        # and only this counter tells them apart.
+                        reasoning_chars += len(
+                            delta.get("reasoning") or delta.get("reasoning_content") or ""
+                        )
 
                         # Accumulate content tokens
                         content = delta.get("content") or ""
@@ -267,6 +334,36 @@ async def chat_loop(
                                 entry["function"]["name"] += func["name"]
                             if func.get("arguments"):
                                 entry["function"]["arguments"] += func["arguments"]
+
+            # P4.2 (B13). The stream finished cleanly. If it carried nothing,
+            # this is the blank-reply failure — retry it like a stall.
+            if is_empty_completion(full_content, tool_calls_map):
+                retrying = attempt < _MAX_STREAM_ATTEMPTS - 1
+                report_empty_completion(
+                    build_probe(
+                        provider="OpenRouter",
+                        model=model,
+                        attempt=attempt,
+                        attempts_max=_MAX_STREAM_ATTEMPTS,
+                        finish_reason=finish_reason,
+                        native_finish_reason=native_finish_reason,
+                        reasoning_chars=reasoning_chars,
+                        stream_error=stream_error,
+                        usage=usage_stats,
+                        sent_chars=total_chars,
+                        turn=_turn,
+                    ),
+                    retrying=retrying,
+                )
+                if retrying:
+                    # The abandoned attempt was billed. Bank it before the reset
+                    # so the request's recorded cost stays honest — under-reporting
+                    # here would hide the very spend that makes this a defect.
+                    _discarded = (usage_stats.get("cost") or 0) if usage_stats else 0
+                    if _discarded and timing_collector:
+                        timing_collector.record_cost(float(_discarded))
+                    await asyncio.sleep(_STREAM_RETRY_BASE_S * (2 ** attempt))
+                    continue
             break
 
         except httpx.TimeoutException as e:
@@ -376,6 +473,10 @@ async def chat_loop(
                 )
             return tc["id"], func_name, result
 
+        # P2.7: each task copies this context at creation, so every call in
+        # this round sees the round it belongs to (the legislation discovery
+        # budget counts rounds, not calls).
+        set_react_round(_turn)
         tool_tasks = [asyncio.create_task(_run_tool(tc)) for tc in tool_calls]
         try:
             tool_results = await asyncio.gather(*tool_tasks)
@@ -408,6 +509,7 @@ async def chat_loop(
             timing_collector=timing_collector,
             _turn=_turn + 1,
             max_turns=max_turns,
+            _final_round=_final_round,
         )
 
     return assistant_message
@@ -479,6 +581,7 @@ async def run_worker_agent(
     timing_collector=None,
     tool_memo: Optional[dict] = None,
     memo_count_redundant: bool = False,
+    retrieved_urls: Optional[set] = None,
 ) -> dict:
     return await agent_core.run_worker_agent(
         chat_loop, _summarise_chunk,
@@ -488,6 +591,7 @@ async def run_worker_agent(
         timing_collector=timing_collector,
         tool_memo=tool_memo,
         memo_count_redundant=memo_count_redundant,
+        retrieved_urls=retrieved_urls,
     )
 
 

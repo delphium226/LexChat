@@ -19,11 +19,30 @@ from .lex import (
     LEX_API_URL,
     _TYPE_CODES,
     _matches_jurisdiction,
+    _slim_amendment_results,
     _slim_search_results,
+    _slim_section_results,
     extract_legislation_ids_from_search,
 )
 
 logger = logging.getLogger("agent")
+
+# How many legislation search results reach the model. Deliberate slimming, not
+# a filter: the API is asked for 20 and the top few carry the signal, while the
+# rest cost context. Named because the number matters to anyone measuring filter
+# loss — a search returning exactly this many is cap-bound and says nothing
+# about whether the filters removed anything (see `tools/replay_report.py`).
+_MAX_SEARCH_RESULTS = 5
+
+# P3.5: the two `size` values `get_legislation_changes` asks `/amendment/search`
+# for. `size` silently truncates and the response carries no count field, so the
+# only way to know a result is complete is to ask for more than it holds. The
+# first value covers 95% of the instruments the replay corpus touches; the
+# second completes every one of the remaining 13 (largest 5,185 rows) and the
+# pathological `ukpga/1988/1` (13,681) besides. A second bind is reported, not
+# chased — see the branch for the measurements.
+_AMENDMENT_FETCH_SIZE = 2000
+_AMENDMENT_ESCALATED_SIZE = 20000
 
 # -----------------------------------------------------------------------
 # Retry / backoff for the (rate-limited) LEX API
@@ -141,7 +160,6 @@ async def execute_worker_tool(
                 user_year_to = cfg.get("_year_to")
                 jurisdiction = cfg.get("_jurisdiction")
                 legislation_type = cfg.get("_legislation_type")
-                current_only = cfg.get("_current_only", False)
 
                 # Merge user filter with model-supplied year args (take intersection)
                 model_year_from = args.get("year_from")
@@ -155,7 +173,7 @@ async def execute_worker_tool(
                 else:
                     final_year_to = user_year_to or model_year_to
 
-                needs_post_filter = bool(jurisdiction or legislation_type or current_only)
+                needs_post_filter = bool(jurisdiction or legislation_type)
                 payload = {
                     "query": args["query"],
                     "year_from": final_year_from,
@@ -198,6 +216,10 @@ async def execute_worker_tool(
                 resp.raise_for_status()
                 slimmed = _slim_search_results(resp_json)
                 results = slimmed["results"]
+                # How many rows the API actually handed us, before any
+                # post-filter. `total` is the API's match count across the whole
+                # corpus and is usually much larger than this page.
+                api_returned = len(results)
 
                 # Post-filter: legislation type (by legislation_id prefix)
                 if legislation_type:
@@ -207,24 +229,48 @@ async def execute_worker_tool(
                         if r.get("legislation_id", "").split("/")[0] in type_codes
                     ]
 
-                # Post-filter: current legislation only (exclude known non-in-force)
-                if current_only:
-                    _INACTIVE = {"repealed", "revoked", "spent", "expired", "not in force"}
-                    results = [
-                        r for r in results
-                        if r.get("status", "").lower() not in _INACTIVE
-                    ]
-
-                # Post-filter: jurisdiction (by extent field)
+                # Post-filter: jurisdiction (by extent field, with the
+                # legislation id as a tie-break when extent is unknown — see
+                # `_matches_jurisdiction`, which is why the id is passed).
                 if jurisdiction:
                     results = [
                         r for r in results
-                        if _matches_jurisdiction(r.get("extent", []), jurisdiction)
+                        if _matches_jurisdiction(
+                            r.get("extent", []),
+                            jurisdiction,
+                            r.get("legislation_id", ""),
+                        )
                     ]
 
-                results = results[:5]
+                # P1.3 (bucket B5): report the three counts separately.
+                #
+                # This used to be `slimmed["total"] = len(results)`, which threw
+                # away the API's real match count and left the model unable to
+                # tell "5 instruments match your question" from "138 match and
+                # your filters removed all but 5". Measured over the P0.3
+                # baseline, 1,010 of 1,531 searches misreported `total` —
+                # including 438 with no filter set at all, because the [:5] cap
+                # alone was enough to destroy it.
+                #
+                # `total` is kept, still meaning the API's match count, so any
+                # consumer reading it gets a truer number than before rather
+                # than a differently-wrong one. The new keys are additive.
+                matched = slimmed.get("total")
+                after_filters = len(results)
+                results = results[:_MAX_SEARCH_RESULTS]
+
                 slimmed["results"] = results
-                slimmed["total"] = len(results)
+                slimmed["returned"] = len(results)
+                slimmed["total_matched"] = matched
+                slimmed["removed_by_filters"] = max(0, api_returned - after_filters)
+                slimmed["total"] = matched
+                if slimmed["removed_by_filters"]:
+                    slimmed["filters_applied"] = {
+                        k: v for k, v in (
+                            ("jurisdiction", jurisdiction),
+                            ("legislation_type", legislation_type),
+                        ) if v
+                    }
                 return json.dumps(slimmed)
 
             elif name == "search_legislation_sections":
@@ -232,7 +278,12 @@ async def execute_worker_tool(
                 payload = {
                     "query": args["query"],
                     "legislation_id": args["legislation_id"],
-                    "limit": 10,
+                    # P3.1: this endpoint's page-size parameter is `size`, not
+                    # `limit` (`/openapi.json`, verified live 2026-09-18:
+                    # `limit=3` returns 10 rows, `size=3` returns 3). `limit`
+                    # was silently ignored and only happened to match the
+                    # default of 10. Any change to the number must use `size`.
+                    "size": 10,
                 }
 
                 await _emit(on_chunk, {
@@ -265,7 +316,105 @@ async def execute_worker_tool(
                 })
 
                 resp.raise_for_status()
-                return json.dumps(resp_json)
+                # P1.4: slim to the fields the model needs, keeping the API's
+                # own provision-level URL so citations link to the provision
+                # rather than to the Act's contents page.
+                return json.dumps(_slim_section_results(resp_json))
+
+            elif name == "get_legislation_changes":
+                # P3.5 (bucket B3): the relation itself, instead of a
+                # prohibition on claiming it. See `_slim_amendment_results` for
+                # what the feed actually looks like and why it cannot be passed
+                # through raw.
+                url = f"{LEX_API_URL}/amendment/search"
+                direction = "by" if str(
+                    args.get("direction") or ""
+                ).strip().lower() == "by" else "to"
+                legislation_id = args["legislation_id"]
+
+                # **Fetch past the cap rather than misreport it (P1.3's lesson).**
+                # `size` silently truncates and the response carries NO count
+                # field of any kind, so a modest `size` under-reports the
+                # relations with nothing to signal it — which is exactly the
+                # windowing defect `search_legislation` had, where `total` was
+                # misreported on 1,010 of 1,531 searches.
+                #
+                # Measured over the distinct legislation_ids the replay
+                # corpus actually touched (272 at the last run): median 12
+                # relation rows, p90 870, and **13 (4.8%) exceed 2,000** —
+                # re-run with `python -m tools.lex_probe --commencement`, which
+                # reads the ids out of the run files, so the median drifts as
+                # the corpus grows while the 4.8% is what decided this value. Every one of those 13 completes at
+                # `_ESCALATED_SIZE` (largest 5,185 rows / 5.3 MB / 2.3 s), so one
+                # escalation on 5% of calls buys a true count on all of them.
+                # A large `size` costs nothing when the relations are few — the
+                # API returns what exists — so the only reason to start at 2,000
+                # at all is to keep the pathological instrument (`ukpga/1988/1`,
+                # 13,681 rows / 11.9 MB) off the common path.
+                rows = []
+                requested = _AMENDMENT_FETCH_SIZE
+                for attempt, requested in enumerate(
+                    (_AMENDMENT_FETCH_SIZE, _AMENDMENT_ESCALATED_SIZE)
+                ):
+                    # Two requests, two ids: the escalation is a second HTTP
+                    # call and a trace that showed one would be wrong about what
+                    # the run actually did.
+                    this_id = call_id if not attempt else f"{call_id}-escalated"
+                    payload = {
+                        "legislation_id": legislation_id,
+                        "search_amended": direction == "to",
+                        "size": requested,
+                    }
+
+                    await _emit(on_chunk, {
+                        "type": "api_call_start",
+                        "id": this_id,
+                        "url": url,
+                        "method": "POST",
+                        "payload": payload,
+                    })
+
+                    t0 = time.perf_counter()
+                    resp = await _request_with_retry(
+                        client, "POST", url, name=name, json=payload, timeout=120.0
+                    )
+                    elapsed_ms = (time.perf_counter() - t0) * 1000
+
+                    if timing_collector:
+                        timing_collector.record_lex_api_call(name, elapsed_ms)
+
+                    try:
+                        resp_json = resp.json()
+                    except ValueError:
+                        resp_json = {"text": resp.text}
+
+                    await _emit(on_chunk, {
+                        "type": "api_call_end",
+                        "id": this_id,
+                        "url": url,
+                        "status": resp.status_code,
+                        "response": resp_json,
+                        "elapsed_ms": round(elapsed_ms),
+                    })
+
+                    resp.raise_for_status()
+                    rows = resp_json
+                    # Exactly `size` rows can only mean the cap bound. Escalate
+                    # once; a second bind is reported rather than chased.
+                    if not (isinstance(rows, list) and len(rows) >= requested):
+                        break
+
+                slimmed = _slim_amendment_results(rows, legislation_id, direction)
+                # Stamped only on our own shape. An unexpected response passes
+                # through the slimmer untouched, and marking it "complete" would
+                # be a statement about a payload we did not understand.
+                if isinstance(slimmed, dict) and "relations" in slimmed:
+                    slimmed["window_complete"] = not (
+                        isinstance(rows, list) and len(rows) >= requested
+                    )
+                    if not slimmed["window_complete"]:
+                        slimmed["window_size"] = requested
+                return json.dumps(slimmed)
 
             elif name == "get_legislation_text":
                 url = f"{LEX_API_URL}/legislation/text"
@@ -313,10 +462,13 @@ async def execute_worker_tool(
                 if args.get("date_to"):
                     params["date_to"] = args["date_to"]
 
-                # Apply user's hard filter constraints (override model args)
+                # Apply user's hard filter constraints (override model args).
+                # `_court` is gone (P4.4): the UI filter used to clobber the
+                # model's own `court` argument here, so a court selected turns
+                # earlier beat the model's per-query judgement. The date
+                # filters below deliberately INTERSECT rather than override,
+                # which is what court should always have done.
                 cl_cfg = get_request_provider_config()
-                if cl_cfg.get("_court"):
-                    params["court"] = cl_cfg["_court"]
                 if cl_cfg.get("_date_from"):
                     model_df = args.get("date_from") or ""
                     params["date_from"] = max(model_df, cl_cfg["_date_from"]) if model_df else cl_cfg["_date_from"]

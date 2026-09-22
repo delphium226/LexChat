@@ -1,0 +1,11 @@
+{
+  "session_id": "p41_6346_dr",
+  "base": "6346",
+  "verdict": "FAIL",
+  "primary": "B7",
+  "note": "P4.1 acceptance in the mode 6346's lawyer actually used: Deep Research throughout (the export's blank 'Message model' on all three of her answers is the planner's signature). Turn 1: the planner under 'Legislation only' declines to plan case law. Turn 2: the lawyer's own 'I have changed the mode, please proceed' with the research type actually changed, still in Deep Research, so the planner must plan and the report must summarise the case. Turn text is taken from session 6346 by index and is never stored here.",
+  "turns": [
+    {"from_turn": 1, "research_mode": "legislation_only", "chat_mode": "deep_research"},
+    {"from_turn": 3, "research_mode": "legislation_and_case_law", "chat_mode": "deep_research"}
+  ]
+}

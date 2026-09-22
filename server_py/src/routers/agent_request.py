@@ -56,9 +56,43 @@ class AgentRequestBase(BaseModel):
     year_to: Optional[int] = None
     date_from: Optional[str] = None
     date_to: Optional[str] = None
-    court: Optional[str] = None
     legislation_type: Optional[str] = None
-    current_only: Optional[bool] = False
+    # `court` was REMOVED here by P4.4 (bucket B12). Three reasons, and the
+    # third is the one that made it a defect rather than dead weight:
+    #   1. NOBODY USED IT. Zero of the 41 replayed pre-pilot sessions set a
+    #      court, against `current_only` at 29 and `jurisdiction` at 13.
+    #   2. For a Scottish Government audience it was a trap. All 14 options are
+    #      English, Welsh or UK-wide, because the National Archives corpus has
+    #      no Scottish courts in it at all (`court=csoh` is rejected 400,
+    #      "not one of the available choices" — see P5.2). Selecting any of them
+    #      guaranteed a non-Scottish result set.
+    #   3. It OVERRODE the model. `executor.py` applied `_court` after the
+    #      model's own `court` argument and clobbered it, so a court chosen
+    #      three turns earlier silently beat the model's per-query judgement —
+    #      the same stale-filter failure as B2 and B4. Note the date filters
+    #      intersect (max/min); court did not.
+    #
+    # The model KEEPS its own `court` parameter on `search_case_law`, so the
+    # capability is unchanged — only the user-facing control is gone.
+    #
+    # `current_only` was REMOVED here by P1.2 (bucket B4). The filter behind it
+    # excluded nothing: it tested `status` for {repealed, revoked, spent,
+    # expired, not in force}, but the LEX API's `status` vocabulary is `final`
+    # and `revised` only — the field records which text version is held, not
+    # in-force status. Worse than inert: 42 of 62 pre-pilot sessions ran with it
+    # on while the UI claimed "In force as at <today>" and the system prompt
+    # told the model "In-force legislation only", which is why answers asserted
+    # a currency no tool could establish.
+    #
+    # Removing the field is safe for existing clients: this model does not set
+    # `extra="forbid"`, so pydantic ignores an unknown key rather than
+    # rejecting the request. A client still sending it gets the same 200 it got
+    # before, and the value goes nowhere.
+    #
+    # `audit["filters"]["current_only"]` is deliberately still emitted, always
+    # null, so the trace shape is unchanged for the external eval harness and
+    # AUDIT_SCHEMA_VERSION stays at 1. Do not reintroduce a consumer of this
+    # without a real in-force signal (see P2.5, and P5.3 for the corpus question).
     # Parliamentary-mode filters (parliament / Westminster bots only).
     # record_type and sessions are shared fields whose vocabulary depends on the
     # bot's research mode: Holyrood record types + Sessions 1-7, or Westminster
@@ -144,9 +178,14 @@ def build_request_config(
         "_year_to": body.year_to or None,
         "_date_from": body.date_from or None,
         "_date_to": body.date_to or None,
-        "_court": body.court or None,
         "_legislation_type": body.legislation_type or None,
-        "_current_only": body.current_only or False,
+        # `_court` is deliberately NOT set — see `court` above. Its only reader
+        # was the override in executor.py's search_case_law branch, now removed.
+        # Leaving the key would invite a new one.
+        # `_current_only` is deliberately NOT set — see `current_only` above.
+        # Every reader of it has been removed (the no-op post-filter in
+        # executor.py and the "In-force legislation only" line in the prompt's
+        # filter-constraint block). Leaving the key would invite a new reader.
         # record_type is routed to the enforcement key matching this bot's
         # mode — the two taxonomies are disjoint, so a Holyrood value must
         # never reach the Westminster filter (or vice versa).
@@ -175,4 +214,9 @@ def build_request_config(
         "_local_prompt_cache_enabled": local_cache_enabled,
         "_drafting_mode_enabled": features.get("drafting_mode_enabled", True),
         "_suggested_questions_enabled": features.get("suggested_questions_enabled", True),
+        # P4.1 (B7): whether the "Research" chat mode is offered in the sidebar's
+        # Mode menu at all. The conversational Manager may only point a user at
+        # it when it exists — it was OFF for the whole pre-pilot, and "switch to
+        # Research mode" was advice to use a control the lawyers did not have.
+        "_research_mode_enabled": features.get("research_mode_enabled", True),
     }

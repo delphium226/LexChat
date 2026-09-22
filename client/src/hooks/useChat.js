@@ -25,6 +25,10 @@ const toolLabel = tool =>
     'Worker: search_legislation': 'Querying legislation database…',
     'Worker: search_legislation_sections': 'Retrieving statutory sections…',
     'Worker: get_legislation_text': 'Reviewing statutory text…',
+    // P3.5: commencement / amendment / repeal relations. Labelled for what
+    // a lawyer asked, not for the endpoint — the measured questions are
+    // "is it in force" and "have commencement regulations been made".
+    'Worker: get_legislation_changes': 'Checking commencements and amendments…',
     'Worker: search_case_law': 'Searching case law database…',
     'Worker: get_case_law_text': 'Retrieving case law judgment…',
     // Scottish Parliament (Holyrood) bot
@@ -90,6 +94,11 @@ export function useChat({
   const [historyLoading, setHistoryLoading] = useState(false);
   const [agentStatus, setAgentStatus] = useState('');
   const [activities, setActivities] = useState(EMPTY_ACTIVITIES);
+  // P4.2 (B13), the perceived-latency half. A 5.5-minute turn was reported as
+  // "around 15 minutes": the status line changes wording but nothing
+  // accumulates, so there is no anchor for how long the wait has been or how
+  // much has happened. Mirror of run.steps/run.startedAt for the VISIBLE run.
+  const [agentProgress, setAgentProgress] = useState(null);
   // Deep Research: drafted plan awaiting review/approval for the VISIBLE chat
   // (mirror of run.pendingPlan, which is the source of truth)
   const [pendingPlan, setPendingPlan] = useState(null);
@@ -195,9 +204,11 @@ export function useChat({
             const label = toolLabel(status.tool);
             if (status.id) run.activities.set(status.id, label);
             run.agentStatus = label;
+            run.steps += 1;
             if (isVisible(run)) {
               setActivities(new Map(run.activities));
               setAgentStatus(label);
+              setAgentProgress({ steps: run.steps, startedAt: run.startedAt });
             }
           } else if (status.type === 'tool_end') {
             if (status.id) run.activities.delete(status.id);
@@ -236,9 +247,7 @@ export function useChat({
           jurisdiction: filters.jurisdiction,
           dateFrom: filters.dateFrom,
           dateTo: filters.dateTo,
-          caseLawCourt: filters.caseLawCourt,
           legislationType: filters.legislationType,
-          currentOnly: filters.currentOnly,
           recordType: filters.recordType,
           sessions: filters.sessions,
           house: filters.house,
@@ -273,7 +282,12 @@ export function useChat({
           response.provider,
           response.timing?.total_cost_usd ?? null,
           response.sources ?? null,
-          deepResearchPlan
+          deepResearchPlan,
+          // P4.1 (B7): stamp the reply with the modes it ran under (server-
+          // resolved, echoed on the result event) so the next request's
+          // history can show the backend a mode change.
+          response.research_mode ?? null,
+          response.chat_mode ?? null
         ).catch(err => {
           console.error('Failed to save assistant message:', err);
           return null;
@@ -359,6 +373,7 @@ export function useChat({
     run.agentStatus = chatMode === 'deep_research' ? 'Drafting research plan…' : 'Thinking…';
     setAgentStatus(run.agentStatus);
     setActivities(EMPTY_ACTIVITIES);
+    setAgentProgress({ steps: run.steps, startedAt: run.startedAt });
     bumpSummaries();
     let activeChatId = currentChatId;
 
@@ -393,10 +408,8 @@ export function useChat({
             jurisdiction: filters.jurisdiction,
             dateFrom: filters.dateFrom,
             dateTo: filters.dateTo,
-            caseLawCourt: filters.caseLawCourt,
             legislationType: filters.legislationType,
-            currentOnly: filters.currentOnly,
-            recordType: filters.recordType,
+              recordType: filters.recordType,
             sessions: filters.sessions,
             house: filters.house,
             chatId: activeChatId,
@@ -410,11 +423,19 @@ export function useChat({
           // stores the question text only, so the options are stashed against
           // the saved row to survive a chat switch.
           const options = draft.options || [];
+          // P4.1 (B7): a planner clarification is a reply too, and it ran under
+          // these modes (the plan endpoint is implicitly deep_research). Stamped
+          // like any other assistant message, so a later mode change is seen
+          // against it rather than reading as "unknown".
+          const modeStamp = { research_mode: researchMode, chat_mode: 'deep_research' };
           if (isVisible(run)) {
-            setMessages(prev => [...prev, { role: 'assistant', content: question, suggestions: options }]);
+            setMessages(prev => [...prev, { role: 'assistant', content: question, suggestions: options, ...modeStamp }]);
           }
           if (activeChatId) {
-            const saved = await saveMessage(activeChatId, 'assistant', question).catch(err => {
+            const saved = await saveMessage(
+              activeChatId, 'assistant', question, null, null, null, null, null,
+              modeStamp.research_mode, modeStamp.chat_mode
+            ).catch(err => {
               console.error('Failed to save clarification message:', err);
               return null;
             });
@@ -454,6 +475,7 @@ export function useChat({
     run.agentStatus = 'Executing research plan…';
     setAgentStatus(run.agentStatus);
     setActivities(EMPTY_ACTIVITIES);
+    setAgentProgress({ steps: run.steps, startedAt: run.startedAt });
 
     try {
       await runExchange([...messages], run, approvedPlan);
@@ -531,6 +553,9 @@ export function useChat({
       setActiveSourcesMsgId(run?.sourcesMsgId ?? null);
       setAgentStatus(isActive(run) ? run.agentStatus : '');
       setActivities(isActive(run) ? new Map(run.activities) : EMPTY_ACTIVITIES);
+      setAgentProgress(
+        isActive(run) ? { steps: run.steps, startedAt: run.startedAt } : null
+      );
       setPendingPlan(run?.pendingPlan ?? null);
       setVisibleRun(run);
 
@@ -594,6 +619,7 @@ export function useChat({
     runLimitNotice,
     dismissRunLimitNotice,
     agentStatus,
+    agentProgress,
     activities,
     chatScrollRef,
     textareaRef,
