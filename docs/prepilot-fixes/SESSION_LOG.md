@@ -3736,4 +3736,67 @@ Not in the repo, by design: the seven seam draws and the grading scripts live in
 session scratchpad; the run files (`wave3_p311`) are the evidence. The Fix Tracker was
 not updated (it is updated only when asked; P3.11 would show as Built / not accepted).
 
+## Session 19, continued — 2026-09-22 — the chat-mode default, and P0.5
+
+**Done:**
+- **Twelve replayed sessions have run in the wrong chat mode since the
+  baseline, and a new row (P0.5) holds the fix, to be done first, in a new
+  session (user decision).** Found while running the app for the user and
+  answering *"why would some turns be Research if the flag was off during
+  the pre-pilot?"*
+- **The mechanism.** `replay_set.py` takes a non-Deep-Research turn's mode
+  from the feedback snapshot's `Filter: Chat mode` and otherwise from
+  `DEFAULT_CHAT_MODE = "research"`. The export's mode field is blank for the
+  15 sessions run on 11–13 August (6332–6351), before the field existed, and
+  their snapshot is blank too. So all 48 "Research" turns in every sweep
+  carry `chat_mode_source: "default"` — a guess, set when the harness was
+  built (`bc8e7a4`) and documented only in a docstring.
+- **The evidence.** The research Worker's report headings appear in 0 of 38
+  recorded pre-pilot answers of those sessions and 0 of 64 of the 24 sessions
+  recorded as Conversational; in the replay's Research-mode answers they
+  appear in 39 of 48 (`baseline`) and 42 of 48 (`wave2`), and in its
+  Conversational-mode answers 0 of 87. 6348's four pre-pilot answers: none,
+  about 700 chars each; every replay of 6348: all four, 3,500+ chars.
+- **Recorded where a session will look:** the P0.5 row (the twelve sessions,
+  the rows they touch, the three steps and their cost); the
+  recommended-order line; a *Chat mode per turn* row in the Replay
+  configuration table; a mode caveat appended to P3.1, P3.8, P3.11, P4.1 and
+  P4.6; `BASELINE.md`, *The chat-mode default*; memory.
+- **The Fix Tracker updated (user request):** P3.11 to In progress (built,
+  2 of 3, pending the Conversational-mode re-run); P0.5 listed as the one
+  measurement row on the tracker, because it qualifies other rows.
+- The app was run for the user (uvicorn on 8000, login, frontend served) and
+  stopped; no paid turn was sent. Spend unchanged at $2.63.
+
+**Surprises:**
+
+- **A harness default is a claim about the data, and this one went unchecked
+  for nineteen sessions.** Session 12 recorded "a replay cannot test what the
+  export never recorded" for `research_mode`; the same export gap in
+  `chat_mode` was filled with a value instead of flagged, and it happened to
+  be the value that runs the more capable Worker. Every before/after on those
+  sessions is internally consistent and externally wrong.
+- **The shape of an answer is a mode detector.** The research Worker's
+  OUTPUT STRUCTURE headings pass through the Manager and never appear in a
+  conversational answer (0 of 151 recorded and replayed conversational
+  answers). That is the instrument P0.5 asks for, and it is the same trick
+  `dr_marker` already uses for Deep Research.
+- **The feature flag is a UI gate only.** `research_mode_enabled` is read by
+  the Developer tab's storage and by the frontend (Sidebar hides the option,
+  App.jsx bounces a stored preference); nothing in `agent_request.py`,
+  `system.py` or `ai.py` checks it, so any API caller runs Research with it
+  off. Not a row unless the user wants it to be a real switch (the seam would
+  be `build_request_config`).
+- **P3.11's numbers are of the wrong Worker.** The lawyer met the quick-lookup
+  Worker, which has no "say what the other subsections provide" rule; the
+  outline itself is appended in both modes. The row's decision is deferred
+  behind P0.5.
+
+**Machine state a new session inherits:** no uvicorn running; dev box
+restored (`moonshotai/kimi-k3`, local prompt cache ON, no pin file); 28 replay
+directories; nothing pushed.
+
+**Next action (the new session):** P0.5, steps (1) to (3) in order, then
+P3.11's decision on the Conversational-mode numbers.
+
 ---

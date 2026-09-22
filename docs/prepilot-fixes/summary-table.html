@@ -378,7 +378,12 @@
         <code>TODO B6</code> is in <code>docs/TODO.md</code>, outside the plan.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.</p>
-      <p>Not listed: measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
+      <p><strong>P0.5</strong> is a measurement row listed as an exception: twelve of the 41 replayed
+        sessions were replayed in Research mode where the lawyers had used Conversational, so the
+        fixes measured on them (P3.1, P3.8, P3.11, P4.1, P4.6, each marked on its plan row) are
+        being re-checked against a Conversational-mode replay. P3.11 is built and moved 6348
+        from 1 of 3 to 2 of 3 in Research mode; its acceptance waits for that re-run.</p>
+      <p>Not listed: the other measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
         and three items from <code>docs/TODO.md</code> D16 (the impossible year window, always
         over-fetching search results, checking a returned title against the Act named), which were
@@ -393,8 +398,9 @@
   // ---- Update here at the end of a session, when the user asks. ----
   // status: "Fixed" | "In progress" | "Verified" | "To be verified"
   // src:    "T" | "R" | "T & R"
-  const UPDATED = "21 September 2026 (Session 18 — P3.8 Fixed; P3.12 and P4.8 added)";
+  const UPDATED = "22 September 2026 (Session 19 — P3.11 built, not yet accepted; twelve sessions to be re-run in Conversational mode, P0.5)";
   const ROWS = [
+    { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", status: "In progress", ref: "P0.5", t: "" },
     { src: "T & R", fix: "Make the jurisdiction filter work", status: "Fixed", ref: "P1.1", t: "5" },
     { src: "R", fix: "Stop the “current only” filter implying in-force status", status: "Fixed", ref: "P1.2", t: "" },
     { src: "T & R", fix: "Report the search's true match count", status: "Fixed", ref: "P1.3", t: "4" },
@@ -421,7 +427,7 @@
     { src: "T & R", fix: "Stop a step looping on instruments it already has; write up findings at the cap", status: "Fixed", ref: "P3.8", t: "3" },
     { src: "T", fix: "Make the case-law date filter work", status: "Verified", ref: "P3.9", t: "6" },
     { src: "T", fix: "Keep dependent Deep Research steps in one step", status: "Verified", ref: "P3.10", t: "3" },
-    { src: "R", fix: "Say what a cited subsection's sibling subsections provide", status: "Verified", ref: "P3.11", t: "" },
+    { src: "R", fix: "Say what a cited subsection's sibling subsections provide", status: "In progress", ref: "P3.11", t: "" },
     { src: "R", fix: "Reach a Schedule paragraph asked for by number (LEX holds the Schedule as one provision)", status: "Verified", ref: "P3.12", t: "" },
     { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", status: "Verified", ref: "P4.1", t: "9" },
     { src: "R", fix: "Never show a blank or lost reply", status: "Fixed", ref: "P4.2", t: "" },

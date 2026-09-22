@@ -3125,3 +3125,31 @@ with the residual as a new row.
 | **`wave3_p311`** (acceptance, head `84b8da5`) | 6348 ×3 | **$1.40** |
 | `wave3_p311` 6365 smoke (head `84b8da5` for `src/`; file stamped `7310030`, tooling only) | 6365 ×1 | $0.92 |
 | **total** | | **$2.63** |
+
+## The chat-mode default (P0.5, found 2026-09-22)
+
+Twelve of the 41 replayed sessions were replayed in Research mode in every
+sweep from `baseline` on, because the export's `Session mode` is blank for the
+sessions run on 11–13 August (before the field existed), the feedback snapshot
+is blank for them too, and `replay_set.py` filled the gap with
+`DEFAULT_CHAT_MODE = "research"`. The lawyers ran them in Conversational mode
+with the Research flag off. The recorded answers show which Worker wrote them:
+the research Worker's report headings (Summary Answer, Detailed Analysis,
+Jurisdiction & Status, Statutory Framework, a References heading) pass through
+the Manager in Research mode and never appear in a conversational answer.
+
+| Answers | With the research-report headings |
+|---|---|
+| pre-pilot, the 15 blank-mode sessions | **0 of 38** |
+| pre-pilot, the 24 sessions recorded as Conversational | 0 of 64 |
+| replay in Research mode (`chat_mode_source: default`), `baseline` | 39 of 48 |
+| replay in Research mode, `wave2` | 42 of 48 |
+| replay in Conversational mode (`snapshot`), `wave2` | 0 of 87 |
+| 6348, pre-pilot, 4 answers | 0 (about 700 chars each) |
+| 6348, every replay directory, 4 answers each | 4 of 4 (3,500+ chars each) |
+
+The twelve in scope: 6333, 6334, 6335, 6338, 6340, 6343, 6345, 6346, 6348,
+6350 (blank mode), and the non-Deep-Research turns of 6341 and 6347. Which rows
+that touches, and what to do, is on P0.5. These counts were a scratch regex
+over the export and the run files (recorded on the row); P0.5's first step puts
+them behind `replay_report modes`.
