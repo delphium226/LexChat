@@ -34,6 +34,14 @@ Four things about this runner that are load-bearing, and non-obvious
    turns are Deep Research. `replay_set.py` derives this per turn and documents
    the evidence; replaying a whole session in one mode would measure a system
    nobody used and, on the Deep Research side, cost several times more.
+   **And Research vs Conversational is derived the same way (P0.5, 2026-09-22),
+   because the field the harness used to read is blank for the sessions run
+   before it existed and the fallback was `research`** — 48 turns of 12
+   sessions ran as Research from `baseline` to `wave3_p311` where the lawyer
+   was in Conversational mode with the feature flag off. `chat_mode_source` on
+   every turn of every run file says which evidence set that turn's mode;
+   `python -m tools.replay_report modes --dir <dir>` grades a directory and
+   exits 1 if a guess or a mode mismatch reached it.
 
 3. **Deep Research needs a plan first.** `/api/system/chat` returns HTTP 400 for
    `chat_mode="deep_research"` without `deep_research_plan`, by design, so a
@@ -442,6 +450,7 @@ async def replay_session(
             drafted = await client.draft_plan(messages, s)
             if "_http_error" in drafted:
                 tr = TurnResult(turn=i, question=question, chat_mode=mode,
+                                chat_mode_source=t.chat_mode_source,
                                 status="error",
                                 error=f"planner: {drafted['_http_error']}")
                 turns.append(tr)
@@ -456,6 +465,7 @@ async def replay_session(
                     turn=i,
                     question=question,
                     chat_mode=mode,
+                    chat_mode_source=t.chat_mode_source,
                     status="needs_clarification",
                     answer=drafted.get("question", ""),
                     plan_clarification=drafted,
@@ -468,6 +478,7 @@ async def replay_session(
             plan = drafted.get("plan")
             if not plan:
                 tr = TurnResult(turn=i, question=question, chat_mode=mode,
+                                chat_mode_source=t.chat_mode_source,
                                 status="error",
                                 error=f"planner returned no plan: {str(drafted)[:300]}")
                 turns.append(tr)
@@ -483,6 +494,10 @@ async def replay_session(
             "got_reply": t.got_reply,
             "cost_usd": t.recorded_cost_usd,
             "answer_chars": t.recorded_answer_chars,
+            # Which Worker wrote the pre-pilot answer (P0.5). This is the
+            # evidence behind `chat_mode_source`, carried into the run file so
+            # a directory can be graded against the original without the CSV.
+            "answer_shape": t.recorded_answer_shape,
         }
         turns.append(tr)
         # Only a real answer joins the history. A turn that produced nothing

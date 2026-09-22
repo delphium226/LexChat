@@ -4675,6 +4675,170 @@ def cmd_depth(args) -> int:
     return 0
 
 
+# --- P0.5: which chat mode each turn actually ran in, and on what evidence ----
+
+def _replay_set_module():
+    """`replay_set` lazily, so this module still imports without it.
+
+    It is a sibling script, not an installed package, and `replay_report` is
+    imported by `seam_replay` and by the tests as a bare module. A top-level
+    import would couple every one of those to the transcript export's path
+    machinery for the sake of one subcommand.
+    """
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import replay_set  # noqa: PLC0415
+
+        return replay_set
+    except Exception as e:  # pragma: no cover - import failure is reported, not raised
+        print(f"[!] replay_set unavailable: {e}", file=sys.stderr)
+        return None
+
+
+def mode_rows(doc: dict, shape) -> list:
+    """One row per replayed turn: the mode it ran in, where that mode came
+    from, the shape of the answer it produced and the shape the pre-pilot
+    recorded for the same turn."""
+    out = []
+    for t in doc.get("turns", []):
+        pre = t.get("prepilot") or {}
+        pre_shape = pre.get("answer_shape")
+        if pre_shape is None:
+            # Run files written before P0.5 do not carry it; say so rather
+            # than reporting the absence as "the lawyer got no reply".
+            pre_shape = "-" if pre.get("got_reply") else "no_reply"
+        out.append({
+            "session": str(doc.get("session_id")),
+            "rep": doc.get("rep", 1),
+            "turn": t.get("turn"),
+            "chat_mode": t.get("chat_mode") or "?",
+            "source": t.get("chat_mode_source") or "?",
+            "replay_shape": shape(t.get("answer") or "") or "no_answer",
+            "prepilot_shape": pre_shape,
+        })
+    return out
+
+
+def mode_findings(rows: list) -> list:
+    """The two things that make a directory unusable as evidence.
+
+    A `default` source means a guess reached the run — the P0.5 defect itself.
+    A conversational-mode turn that produced a research-shaped answer means
+    either the mode did not take effect or the marker is wrong; both are
+    findings, and both must stop a sweep being quoted.
+    """
+    out = []
+    for r in rows:
+        if r["source"] in ("default", "?"):
+            out.append(f"{r['session']} r{r['rep']} t{r['turn']}: "
+                       f"chat_mode_source={r['source']} - not evidence")
+        if r["chat_mode"] == "conversational" and r["replay_shape"] == "research":
+            out.append(f"{r['session']} r{r['rep']} t{r['turn']}: ran "
+                       f"conversational, answer is research-shaped")
+    return out
+
+
+def _count(rows: list, key: str) -> str:
+    c = Counter(r[key] for r in rows)
+    return ", ".join(f"{k} {v}" for k, v in sorted(c.items(), key=lambda kv: -kv[1]))
+
+
+def cmd_modes(args) -> int:
+    """P0.5: per-turn chat mode and its evidence, plus the export's own answers.
+
+    Exits 1 on a finding, so it joins `halts`, `negatives`, `derivations`,
+    `blanks`, `scoperecord`, `nosearch` and `caselaw` in the set a session runs
+    over a fresh directory before quoting anything from it.
+    """
+    rs = _replay_set_module()
+    shape = rs.answer_shape if rs else (lambda _t: None)
+    docs = load_runs(Path(args.dir))
+    rows = [r for doc in docs for r in mode_rows(doc, shape)]
+    print(f"P0.5 chat mode over {args.dir}  ({len(docs)} run file(s), "
+          f"{len(rows)} turn(s))")
+    if not rows:
+        print("  no turns")
+    else:
+        shown = rows if args.all_reps else [r for r in rows if r["rep"] == 1]
+        label = "all reps" if args.all_reps else "rep 1 only, --all-reps for the rest"
+        print(f"\n  per turn ({label}):")
+        print(f"    {'session':<8} {'t':>2}  {'ran as':<14} {'source':<22} "
+              f"{'replay answer':<14} {'pre-pilot answer':<14}")
+        for r in sorted(shown, key=lambda r: (r["session"], r["rep"], r["turn"] or 0)):
+            print(f"    {r['session']:<8} {r['turn']:>2}  {r['chat_mode']:<14} "
+                  f"{r['source']:<22} {r['replay_shape']:<14} "
+                  f"{r['prepilot_shape']:<14}")
+        print()
+        print(f"  ran as:            {_count(rows, 'chat_mode')}")
+        print(f"  mode evidence:     {_count(rows, 'source')}")
+        print(f"  replay answers:    {_count(rows, 'replay_shape')}")
+        print(f"  pre-pilot answers: {_count(rows, 'prepilot_shape')}")
+        research = sum(1 for r in rows if r["replay_shape"] == "research")
+        print(f"\n  research-shaped replay answers: {research} of {len(rows)}"
+              "   (the research Worker's report headings, read through the Manager)")
+        # The cross-tab IS P0.5's table. Quote it at rep 1 unless you say
+        # otherwise: `baseline` holds 24 targeted repetitions on top of its
+        # n=1 pass, so an all-reps denominator is not comparable with `wave2`'s.
+        print(f"\n  mode the turn RAN in x shape of the answer it produced"
+              f" ({'all reps' if args.all_reps else 'rep 1'}):")
+        ct = Counter((r["chat_mode"], r["replay_shape"]) for r in shown)
+        shapes = sorted({r["replay_shape"] for r in shown})
+        print(f"    {'ran as':<16}" + "".join(f"{s:>16}" for s in shapes)
+              + f"{'total':>8}")
+        for mode in sorted({r["chat_mode"] for r in shown}):
+            cells = [ct.get((mode, s), 0) for s in shapes]
+            print(f"    {mode:<16}" + "".join(f"{c:>16}" for c in cells)
+                  + f"{sum(cells):>8}")
+
+    findings = mode_findings(rows)
+    print()
+    if findings:
+        print(f"  FINDINGS ({len(findings)}):")
+        for f in findings:
+            print(f"    [!] {f}")
+    else:
+        print("  no findings: every turn's mode is evidence, and no "
+              "conversational turn produced a research-shaped answer.")
+
+    if rs is not None and not args.no_export:
+        print()
+        _print_export_modes(rs)
+    return 1 if findings else 0
+
+
+def _print_export_modes(rs) -> None:
+    """The other half of P0.5's table: the pre-pilot's own recorded answers.
+
+    This is the measurement the row rests on and it was a scratch regex; it is
+    printed beside the replay so the two are read together and neither can be
+    quoted without the other.
+    """
+    try:
+        sessions = rs.load_sessions()
+    except SystemExit as e:
+        print(f"  export not read: {e}")
+        return
+    rep = rs.mode_report(sessions)
+    print(f"  the export's own answers ({len(sessions)} sessions, "
+          f"{sum(len(s.turns) for s in sessions)} turns):")
+    print(f"    {'recorded mode fields':<52} {'sess':>4} {'research':>8} "
+          f"{'conv':>5} {'DR':>4} {'none':>5} {'blank':>5}")
+    for k, v in sorted(rep["by_recorded_mode"].items()):
+        print(f"    {k:<52} {v['sessions']:>4} {v['research']:>8} "
+              f"{v['conversational']:>5} {v['deep_research']:>4} "
+              f"{v['no_reply']:>5} {v['blank_reply']:>5}")
+    total_research = sum(v["research"] for v in rep["by_recorded_mode"].values())
+    print(f"    research-shaped pre-pilot answers: {total_research}")
+    print(f"    mode evidence: "
+          + ", ".join(f"{k} {v}" for k, v in sorted(rep["sources"].items())))
+    dis = rep["snapshot_disagreements"]
+    print(f"    snapshot vs marker: {len(dis)} disagreement(s)"
+          + ("" if not dis else ": " + "; ".join(dis)))
+    dft = rep["default_source_turns"]
+    print(f"    turns falling through to a default: {len(dft)}"
+          + ("" if not dft else ": " + ", ".join(dft)))
+
+
 # P1.6's demotion marker, counted by `corpus` as the measured cost of P3.5's
 # decision to emit provision LABELS rather than provision URLs.
 PROVISION_MARKER = "\u2020"
@@ -4828,6 +4992,14 @@ def main(argv: Iterable[str] | None = None) -> int:
                     help="P3.11: grade each requirement at the summarised text "
                          "the Worker was shown, the worker report and the answer, "
                          "and say which subsections the summaries mention")
+    md = sub.add_parser("modes",
+                        help="P0.5: the chat mode each turn ran in and the "
+                             "evidence for it, plus the export's own answers")
+    md.add_argument("--all-reps", action="store_true",
+                    help="list every rep's turns, not only rep 1 "
+                         "(findings are computed over all reps either way)")
+    md.add_argument("--no-export", action="store_true",
+                    help="skip the transcript-export half of the table")
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")
@@ -4850,6 +5022,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "caselaw": cmd_caselaw,
         "discovery": cmd_discovery,
         "depth": cmd_depth,
+        "modes": cmd_modes,
         "blanks": cmd_blanks,
         "corpus": cmd_corpus,
     }[args.cmd](args)

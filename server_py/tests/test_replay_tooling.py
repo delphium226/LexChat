@@ -622,6 +622,287 @@ def test_bare_year_filters_are_read_as_years_not_dates():
     assert s.date_to is None
 
 
+# --- P0.5: Research vs Conversational is read off the answer, never defaulted -
+#
+# The mirror of `test_deep_research_marker_agrees_with_the_exported_session_mode`
+# above, for the second marker. The first one was validated against a field the
+# export already carried; this one has no such field to check against for the
+# 15 sessions it exists to serve, so it is validated the other way round — it
+# must fire on NONE of the 196 recorded answers, because the Research feature
+# flag was off on the target for the whole pre-pilot. A marker that fired even
+# once there would be matching something a conversational answer can also say,
+# and the twelve sessions could not be re-graded on it.
+
+
+def test_answer_shape_reads_each_research_report_heading():
+    """The headings are `agent_core._REPORT_SECTIONS`, reaching the lawyer
+    through the Manager. Any one of them is enough: the A4 reformat retry
+    exists precisely because models drop some of them."""
+    for heading in (
+        "## Summary Answer (BLUF)\nThe position is...",
+        "**Detailed Analysis**\nSection 12 provides...",
+        "### Jurisdiction & Status\nScotland, in force.",
+        "Statutory Framework\n- the 2002 Act",
+        "## References\n- [Act](https://lex/x)",
+    ):
+        assert rs.answer_shape(heading) == "research", heading
+
+
+def test_answer_shape_calls_an_ordinary_answer_conversational():
+    assert rs.answer_shape("The Act does not define the term.") == "conversational"
+    # A bold "References" that is not a heading is deliberately NOT a match:
+    # the research Worker emits it as a Markdown section header, and a
+    # conversational answer listing its sources should not be misread as one.
+    assert rs.answer_shape("Sources:\n**References**\n- x") == "conversational"
+
+
+def test_deep_research_wins_over_the_report_shape():
+    """A Deep Research synthesis can carry report-ish headings of its own. The
+    DR marker is the older, exactly-validated one (P0.2), so it decides first."""
+    assert rs.answer_shape(
+        "## Summary Answer\n**Key findings**\n- a\n- b") == "deep_research"
+
+
+def test_an_unanswered_turn_has_no_shape():
+    assert rs.answer_shape("") is None
+    assert rs.answer_shape(None) is None
+
+
+def _turns(*shapes):
+    out = []
+    for i, sh in enumerate(shapes, 1):
+        out.append(rs.Turn(index=i, question="q", chat_mode="", chat_mode_source="",
+                           got_reply=sh is not None, recorded_answer_shape=sh))
+    return out
+
+
+def test_a_recorded_snapshot_beats_the_marker():
+    """29 of the 62 sessions carry `Filter: Chat mode`. Keeping it is what makes
+    P0.5 move exactly the 48 turns it says it moves and leave every other sweep
+    reading byte-identical."""
+    turns = _turns("conversational", "conversational")
+    rs._resolve_modes(turns, "conversational")
+    assert [t.chat_mode_source for t in turns] == ["snapshot", "snapshot"]
+    # ...except for Deep Research, which is per-turn and outranks the snapshot.
+    turns = _turns("conversational", "deep_research")
+    rs._resolve_modes(turns, "conversational")
+    assert [t.chat_mode for t in turns] == ["conversational", "deep_research"]
+    assert [t.chat_mode_source for t in turns] == ["snapshot", "dr_marker"]
+
+
+def test_with_no_snapshot_the_marker_decides():
+    turns = _turns("conversational", "research", "deep_research")
+    rs._resolve_modes(turns, None)
+    assert [t.chat_mode for t in turns] == [
+        "conversational", "research", "deep_research"]
+    assert [t.chat_mode_source for t in turns] == [
+        "conversational_marker", "research_marker", "dr_marker"]
+
+
+def test_an_unanswered_turn_takes_its_nearest_neighbour():
+    turns = _turns(None, "conversational", "research")
+    rs._resolve_modes(turns, None)
+    assert turns[0].chat_mode == "conversational"
+    assert turns[0].chat_mode_source == "neighbour"
+
+
+def test_the_neighbour_before_wins_a_tie():
+    """A tie is genuinely ambiguous; take the turn the lawyer had just seen."""
+    turns = _turns("research", None, "conversational")
+    rs._resolve_modes(turns, None)
+    assert turns[1].chat_mode == "research"
+
+
+def test_a_deep_research_turn_is_never_a_neighbour():
+    """Deep Research is one-shot — the frontend reverts on completion — so a DR
+    turn says nothing about the turn beside it, and copying one would also
+    replay an unasked-for $0.71 Deep Research turn."""
+    turns = _turns(None, "deep_research", "conversational")
+    rs._resolve_modes(turns, None)
+    assert turns[0].chat_mode == "conversational"
+    assert turns[0].chat_mode_source == "neighbour"
+
+
+def test_only_a_session_with_nothing_readable_reaches_the_default():
+    turns = _turns(None, None)
+    rs._resolve_modes(turns, None)
+    assert [t.chat_mode for t in turns] == ["conversational", "conversational"]
+    assert [t.chat_mode_source for t in turns] == ["default", "default"]
+    # And the default itself is no longer `research`: every answered non-Deep
+    # Research turn in the export is conversational-shaped, so `research` was
+    # not merely unrecorded, it was contradicted.
+    assert rs.DEFAULT_CHAT_MODE == "conversational"
+
+
+@requires_csv
+def test_the_research_marker_fires_on_no_recorded_prepilot_answer():
+    """P0.5's load-bearing measurement, and the validation of the marker itself.
+
+    The user is certain the Research feature flag was off on the target for the
+    whole pre-pilot. If that is true, no recorded answer can be research-shaped
+    — so a single hit here means the marker matches something a conversational
+    answer says too, and the re-grading rests on nothing.
+    """
+    rep = rs.mode_report(rs.load_sessions())
+    by = rep["by_recorded_mode"]
+    assert sum(v["research"] for v in by.values()) == 0
+    assert by["session_mode blank"] == {
+        "sessions": 15, "research": 0, "conversational": 38,
+        "deep_research": 0, "no_reply": 8, "blank_reply": 0}
+    # The 24 sessions the export DOES record as conversational are the control:
+    # the marker is silent on them too. (63, not the 64 first published — one of
+    # those turns is a blank reply with no text to read. B13/P4.2.)
+    assert by["session_mode=conversational, snapshot=conversational"] == {
+        "sessions": 24, "research": 0, "conversational": 63,
+        "deep_research": 0, "no_reply": 3, "blank_reply": 1}
+
+
+@requires_csv
+def test_the_marker_never_contradicts_a_recorded_snapshot():
+    """Where the export DOES record the mode, the inference agrees with it —
+    in both directions, on all 108 snapshot-sourced turns. That is what earns
+    the marker the right to decide the turns where the field is blank."""
+    assert rs.mode_report(rs.load_sessions())["snapshot_disagreements"] == []
+
+
+@requires_csv
+def test_no_turn_of_the_replay_set_falls_through_to_a_default():
+    """P0.5's acceptance: every turn's mode is evidence."""
+    rep = rs.mode_report(rs.load_sessions())
+    assert rep["default_source_turns"] == []
+    assert rep["sources"] == {
+        "snapshot": 108, "conversational_marker": 52, "dr_marker": 27,
+        "neighbour": 9}
+
+
+@requires_csv
+def test_the_twelve_sessions_the_harness_sent_as_research():
+    """The blast radius, recounted from the export rather than from the row.
+
+    ~~`DEFAULT_CHAT_MODE = "research"`~~ filled a blank `Filter: Chat mode` on
+    these twelve, and every sweep from `baseline` to `wave3_p311` replayed them
+    against the research Worker.
+    """
+    sessions = [s for s in rs.load_sessions() if s.verdict in ("FAIL", "DEFECT")]
+    affected = sorted(
+        s.session_id for s in sessions
+        if any(t.chat_mode_source in ("conversational_marker", "research_marker",
+                                      "neighbour")
+               for t in s.turns)
+    )
+    assert affected == ["6333", "6334", "6335", "6338", "6340", "6341",
+                        "6343", "6345", "6346", "6347", "6348", "6350"]
+    by_id = {s.session_id: s for s in sessions}
+    turns = [t for sid in affected for t in by_id[sid].turns]
+    assert len(turns) == 50
+    assert sum(1 for t in turns if t.chat_mode == "conversational") == 48
+    assert sum(1 for t in turns if t.chat_mode == "deep_research") == 2
+    # 6341 turn 7 and 6347 turn 2 keep their Deep Research mode: the marker that
+    # sets them is per-turn and outranks everything else.
+    assert by_id["6341"].deep_research_turns == [7]
+    assert by_id["6347"].deep_research_turns == [2]
+
+
+@requires_csv
+def test_the_unanswered_turns_of_those_sessions_resolve_to_a_neighbour():
+    """8 of the 48 got no reply, so no marker can read them. None reaches a
+    default: each takes a mode from an answered turn of its own session."""
+    sessions = [s for s in rs.load_sessions() if s.verdict in ("FAIL", "DEFECT")]
+    nb = [(s.session_id, t.index) for s in sessions for t in s.turns
+          if t.chat_mode_source == "neighbour"]
+    assert nb == [("6335", 4), ("6335", 5), ("6341", 1), ("6343", 5),
+                  ("6345", 1), ("6345", 2), ("6346", 4), ("6346", 5)]
+    assert all(t.chat_mode == "conversational" for s in sessions for t in s.turns
+               if t.chat_mode_source == "neighbour")
+
+
+# --- P0.5: `replay_report modes`, the directory side --------------------------
+
+
+def _mode_doc(session="6348", rep=1, turns=()):
+    return {"session_id": session, "rep": rep,
+            "turns": [dict(t) for t in turns]}
+
+
+def test_mode_rows_read_the_mode_the_source_and_both_answer_shapes():
+    doc = _mode_doc(turns=[{
+        "turn": 1, "chat_mode": "conversational",
+        "chat_mode_source": "conversational_marker",
+        "answer": "The Act does not define it.",
+        "prepilot": {"got_reply": True, "answer_shape": "conversational"},
+    }])
+    row = rr.mode_rows(doc, rs.answer_shape)[0]
+    assert row["chat_mode"] == "conversational"
+    assert row["source"] == "conversational_marker"
+    assert row["replay_shape"] == "conversational"
+    assert row["prepilot_shape"] == "conversational"
+
+
+def test_a_run_file_written_before_p0_5_does_not_claim_the_lawyer_got_nothing():
+    """28 directories predate the `prepilot.answer_shape` field. A missing shape
+    on an ANSWERED turn is unknown, not `no_reply` — reading it as the latter
+    would manufacture B13 evidence out of an instrument change."""
+    doc = _mode_doc(turns=[
+        {"turn": 1, "chat_mode": "research", "chat_mode_source": "default",
+         "answer": "x", "prepilot": {"got_reply": True, "answer_chars": 700}},
+        {"turn": 2, "chat_mode": "research", "chat_mode_source": "default",
+         "answer": "x", "prepilot": {"got_reply": False, "answer_chars": 0}},
+    ])
+    rows = rr.mode_rows(doc, rs.answer_shape)
+    assert [r["prepilot_shape"] for r in rows] == ["-", "no_reply"]
+
+
+def test_a_guessed_mode_is_a_finding():
+    """The P0.5 defect itself, in the one place a later sweep would meet it."""
+    rows = rr.mode_rows(_mode_doc(turns=[
+        {"turn": 1, "chat_mode": "research", "chat_mode_source": "default",
+         "answer": "## Summary Answer\n..."}]), rs.answer_shape)
+    assert len(rr.mode_findings(rows)) == 1
+    assert "not evidence" in rr.mode_findings(rows)[0]
+
+
+def test_an_empty_source_is_a_finding_too():
+    """`needs_clarification` and planner errors built a `TurnResult` without
+    one until P0.5; 6347 turn 2 in `wave2` is the measured instance."""
+    rows = rr.mode_rows(_mode_doc(turns=[
+        {"turn": 2, "chat_mode": "deep_research", "chat_mode_source": "",
+         "answer": "Which jurisdiction?"}]), rs.answer_shape)
+    assert len(rr.mode_findings(rows)) == 1
+
+
+def test_a_conversational_turn_that_answers_like_the_research_worker_is_a_finding():
+    """Either the mode did not take effect or the marker is wrong. Both stop
+    the directory being quoted."""
+    rows = rr.mode_rows(_mode_doc(turns=[
+        {"turn": 1, "chat_mode": "conversational",
+         "chat_mode_source": "conversational_marker",
+         "answer": "## Jurisdiction & Status\nScotland."}]), rs.answer_shape)
+    assert len(rr.mode_findings(rows)) == 1
+    assert "research-shaped" in rr.mode_findings(rows)[0]
+
+
+def test_a_research_turn_answering_conversationally_is_not_a_finding():
+    """Measured at 9 of 48 in `baseline` and 6 of 48 in `wave2`: the Manager
+    answers some Research-mode turns without delegating at all. Normal."""
+    rows = rr.mode_rows(_mode_doc(turns=[
+        {"turn": 1, "chat_mode": "research", "chat_mode_source": "snapshot",
+         "answer": "The 2002 Act applies."}]), rs.answer_shape)
+    assert rr.mode_findings(rows) == []
+
+
+def test_findings_are_computed_over_every_rep():
+    """`--all-reps` changes what is PRINTED, never what is graded: a mode
+    mismatch in rep 3 must not hide behind a clean rep 1."""
+    rows = []
+    for rep, mode in ((1, "conversational"), (2, "conversational")):
+        rows += rr.mode_rows(_mode_doc(rep=rep, turns=[{
+            "turn": 1, "chat_mode": mode,
+            "chat_mode_source": "conversational_marker",
+            "answer": "## BLUF\nx" if rep == 2 else "plain",
+        }]), rs.answer_shape)
+    assert len(rr.mode_findings(rows)) == 1
+    assert "r2" in rr.mode_findings(rows)[0]
+
 # --- P2.1: a halt is read from three places, because each has a hole ----------
 
 
