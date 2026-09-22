@@ -377,3 +377,50 @@ def test_a_completed_report_still_outranks_the_planner_read(tmp_path):
     ])
     s = rs.load_sessions(csv, cls)[0]
     assert (s.turns[0].chat_mode, s.turns[0].chat_mode_source) == ("deep_research", "dr_marker")
+
+
+@pytest.mark.asyncio
+async def test_a_deep_research_turn_takes_the_change_from_the_planner_json():
+    """The plan endpoint emits no audit event, so on a Deep Research turn the
+    harness reads `mode_change` off the planner's JSON — for a clarification
+    (no chat call at all) and for a drafted plan (whose execution call may
+    report it too)."""
+    script = {"session_id": "p41_dr", "base": "6346",
+              "turns": [{"from_turn": 1, "research_mode": "legislation_only", "chat_mode": "deep_research"},
+                        {"from_turn": 3, "research_mode": "legislation_and_case_law", "chat_mode": "deep_research"},
+                        {"from_turn": 1, "research_mode": "legislation_and_case_law", "chat_mode": "deep_research"}]}
+    s = rs.scripted_session(script, [_base()])
+    change = {"research_mode": {"from": "legislation_only", "to": "legislation_and_case_law"}, "chat_mode": None}
+    calls = []
+
+    class FakeClient:
+        def _filters(self, sess):
+            return {"research_mode": sess.research_mode}
+
+        async def draft_plan(self, messages, sess, research_mode=None):
+            calls.append(("plan", research_mode, [dict(m) for m in messages]))
+            if len(calls) == 1:
+                return {"needs_clarification": True, "question": "Which?", "mode_change": None}
+            if len(calls) == 2:
+                return {"needs_clarification": True, "question": "Still which?", "mode_change": change}
+            return {"plan": {"scope_note": "", "steps": [{"id": 1, "title": "t", "detail": ""}]},
+                    "mode_change": None}
+
+        async def chat(self, messages, sess, chat_mode, plan, research_mode=None):
+            calls.append(("chat", research_mode, [dict(m) for m in messages]))
+            tr = rp.TurnResult(turn=0, question=messages[-1]["content"], answer="Report.")
+            tr.audit = {"mode_change": None}
+            return tr
+
+    rec = await rp.replay_session(FakeClient(), s, 1, {"git_head": "test"})
+    turns = rec["turns"]
+    assert [t["status"] for t in turns] == ["needs_clarification", "needs_clarification", "ok"]
+    assert turns[0]["mode_change"] is None
+    assert turns[1]["mode_change"] == change          # from the planner's JSON
+    assert turns[2]["mode_change"] is None
+    # The clarification appended to the history is stamped like any reply.
+    hist = calls[1][2]
+    assert hist[1]["role"] == "assistant" and hist[1]["chat_mode"] == "deep_research"
+    assert hist[1]["research_mode"] == "legislation_only"
+    assert [c[1] for c in calls] == ["legislation_only", "legislation_and_case_law",
+                                     "legislation_and_case_law", "legislation_and_case_law"]

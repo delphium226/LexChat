@@ -3215,3 +3215,61 @@ The middle two rows are the same finding seen twice: **B5's false negative and
 B7's deflection are one defect in two modes**, and only the second reached a
 lawyer. `negatives` exits 0 on `wave0_conv`, where every full sweep has exited 1
 on 6346/6347.
+
+## B7 — the research-mode dead-end, scripted (P4.1, 2026-09-22)
+
+No stored session could show bug (a): the harness sent one research type per
+session, so a replayed "I have changed the mode, please proceed" always ran
+under the type it started with, and the refusal it drew was correct about the
+tool set. P4.1's step 1 made the type per turn and added `replay run --script`,
+which builds a sequence from an exported session's turns by index (no question
+text in the repo). Two sequences: 6346 — its turn 1 under 'Legislation only',
+then its own turn 3 and turn 1 again under 'Legislation & case law' — and 6343
+(turn 1, then turn 4 under the new type). Run in Conversational mode on both
+sessions and, for 6346, in Deep Research, the mode its lawyer actually used
+(all three of her answers are planner clarifications: blank `Message model`,
+the planner's signature — see *The chat-mode default* below).
+
+`python -m tools.replay_report --dir <D> deadend --all-reps --before <D>`,
+n=3, pinned model, `research_mode_enabled` pinned OFF as on the target:
+
+| | `wave4_p41_pre` (`0a5d813`, pre-fix) | `wave4_p41` (`9aa6d63` / `73ce944`) |
+|---|---|---|
+| turns from a research-type change onward, Conversational | 9 | 9 |
+| …of which answered from case law with no reference to the old scope | **8** | **9** |
+| …the exception | 6346 rep 2: P4.5 episode (3 empty completions, 456 s), fallback carrying the Worker's "switch to Research mode" | — |
+| mode-change markers the product injected | 0 (it could not see the change) | **6 of 6** |
+| turn-1 deflections naming a control the UI does not have | **6 of 6** | **0 of 6** |
+| turns from a change onward, Deep Research (6346) | 3 | 3 |
+| …answered with a report on the case | 3 | 3 |
+| markers recorded | 0 | 3 of 3 (planner JSON) |
+| links / `sources_kept` over the 9 post-change conversational turns | 7 / 12 | 8 / 17 |
+| spend | $2.68 | $2.54 (+ $0.98 `wave4_p41_dr_v1`, the first DR run, same product) |
+
+**The finding that matters is in the left column: the pre-fix product did not
+anchor.** With the type really changed, 11 of 12 post-change turns were
+answered from case law before any fix, the refusal still in the history and no
+marker present. The row's diagnosis of 6346 — the model anchoring on its own
+refusal over a system prompt that already carried the new type — was an
+inference, and the replay contradicts it. What the transcript's own words
+record is bug (b): the planner called the research type a "mode", the lawyer
+said she would "change the research mode", and her turn 4 says "It is in deep
+research mode" — the chat-mode control, which does not add case law. The
+marker is kept as defence in depth and is verified to fire; the wording fix is
+what the session needed.
+
+**The wording metric, same four sessions, Conversational, rep 1, 18 answered
+turns each side** (`deadend --dir wave4_p41_conv --session 6343 6346 6347 6350
+--before wave0_conv`):
+
+| | `wave2` (Research, wrong mode) | `wave0_conv` (`223293e`) | `wave4_p41_conv` (`9aa6d63`) |
+|---|---|---|---|
+| turns telling the lawyer to switch or restart | 5 | 14 | **0** |
+| turns naming a control the UI does not have | 5 | 15 | **0** |
+| turns describing the interface | 2 | 2 | **0** |
+| `negatives` exit | 1 | 0 | 0 |
+
+`wave4_p41_conv` cost $0.57 and every exit-1 subcommand exits 0 on it. Note it
+still replays 6346 in Conversational mode (the run started before the planner
+marker landed); the corrected replay set sends 6346 as Deep Research, where the
+scripted DR sequence above is the after-column.

@@ -22,7 +22,7 @@ from ..prompts import (
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import enforce_provision_links, pinpoint_block
 from ..utils.discovery_budget import new_search_budget
-from ..utils.mode_change import apply_mode_change_marker
+from ..utils.mode_change import apply_mode_change_marker, mode_change_for
 from ..utils.empty_completion import (
     LOST_ANSWER_NOTICE,
     fallback_from_reports,
@@ -575,11 +575,14 @@ async def draft_research_plan(
 
     if "plan" in captured:
         logger.info(f"[Planner] Plan drafted with {len(captured['plan']['steps'])} steps")
-        return {"plan": captured["plan"]}
+        # `mode_change` (P4.1) rides the planner's JSON because /api/research/plan
+        # emits no audit event; a harness reads it here.
+        return {"plan": captured["plan"], "mode_change": mode_change}
     if "question" in captured:
         logger.info("[Planner] Clarification requested")
         return {
             "needs_clarification": True,
+            "mode_change": mode_change,
             "question": captured["question"],
             # Dropped when chips are off — the prompt tells the planner to fold
             # the alternatives into the question text instead.
@@ -1030,6 +1033,14 @@ async def run_deep_research(
     """
     steps = list(approved_plan.get("steps") or [])
     user_query = _last_user_content(messages)
+    # P4.1 (B7): execution is code-orchestrated and no call in it reads the
+    # conversation history (each step is an isolated worker, the synthesis
+    # sees the findings), so there is nothing here for a marker to correct —
+    # the planner that drafted this plan already had it. The change is still
+    # recorded on the trace, so a harness sees the product saw it.
+    _dr_audit = get_audit_collector()
+    if _dr_audit:
+        _dr_audit.record_mode_change(mode_change_for(messages, _get_cfg()))
     logger.info(f"[DeepResearch] Executing approved plan: {len(steps)} steps")
 
     step_findings: list = []

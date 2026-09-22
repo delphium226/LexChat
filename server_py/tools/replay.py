@@ -509,6 +509,9 @@ async def replay_session(
                 )
                 tr.research_mode = t.research_mode
                 tr.research_mode_source = t.research_mode_source
+                # /api/research/plan emits no audit event; the planner puts
+                # the change it saw on its JSON instead (P4.1).
+                tr.mode_change = drafted.get("mode_change")
                 tr.prepilot = prepilot
                 turns.append(tr)
                 # Stamped like the client stamps a saved clarification (P4.1):
@@ -536,7 +539,12 @@ async def replay_session(
         tr.chat_mode_source = t.chat_mode_source
         tr.research_mode = t.research_mode
         tr.research_mode_source = t.research_mode_source
-        tr.mode_change = (tr.audit or {}).get("mode_change")
+        # The product's view of the change: the chat call's audit event, or on
+        # a Deep Research turn the planner's JSON (the execution records the
+        # same change on its audit, but the planner is the call that read it).
+        tr.mode_change = (tr.audit or {}).get("mode_change") or (
+            (drafted.get("mode_change") if mode == "deep_research" else None)
+        )
         tr.plan = plan
         tr.plan_clarification = plan_clarification
         tr.prepilot = prepilot

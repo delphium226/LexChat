@@ -4108,3 +4108,161 @@ research-mode filter, still a harness default on exactly these sessions, and
 the contrast case it needs is in the transcripts rather than in any replay.
 
 ---
+
+## Session 21 — 2026-09-22 — P4.1 (B7, the research-mode dead-end), and the mode 6346 actually ran in
+
+**Done:**
+- **P4.1 is DONE, all three bugs and Thomas's action 9, $6.77.** B7 closes;
+  ledger 28 → 29 of 48 (one new row, P4.9), 7 of 14 buckets closed.
+- **Step 1, the harness (the row's prerequisite B):** `research_mode` is now
+  per TURN (`replay_set.Turn.research_mode` / `research_mode_source`,
+  `replay.TurnResult` likewise, sent per request), the replayed history is
+  stamped with the modes each reply ran under — exactly as the client now
+  stamps a saved message — and `replay run --script` builds a sequence from an
+  exported session's turns **by index**, so no question text is committed
+  (`docs/prepilot-fixes/evidence/scripts/`, three scripts, pinned by a test).
+  `replay_report deadend` grades the row's three regexes verbatim plus every
+  turn from a research-type change onward, and `--before` puts an older
+  directory beside it. `research_mode_enabled` joins the pinned flags, OFF,
+  as it was on the target (P0.5); until this row no prompt read it.
+- **Bug (a), the marker (`utils/mode_change.py`).** Every saved assistant
+  message now carries `research_mode` / `chat_mode` (additive `messages`
+  columns, echoed on the `result` event, saved by `useChat.js`, returned by
+  every `MessageOut`), and `process_user_request` and the Deep Research
+  planner prefix a `[SYSTEM NOTICE …]` onto the user's turn when this
+  request's modes differ from the previous reply's. In-band on the user turn,
+  not a mid-history system message, so it survives every provider's role
+  rules. An unstamped history yields no marker — today's behaviour. Recorded
+  as `mode_change` on the audit event (**schema v5**) and on the planner's
+  JSON (the plan endpoint emits no audit event).
+- **Bug (b), one control name.** `CASE_LAW_OUT_OF_SCOPE_RULE` names the
+  research type as the UI does — the Filters button, Research filters >
+  Research type, 'Legislation only' / 'Legislation & case law' — and is
+  carried by the mode note in BOTH chat modes (the research-mode Manager used
+  to get "direct the user to switch mode" and no note at all). The
+  conversational Manager's pointer to Research mode is **substituted out**
+  when the mode is not offered (`_research_mode_enabled`, the chips pattern);
+  the quick-lookup Worker no longer sends anyone to a mode (still four OUTPUT
+  bullets, P2.4); the planner's legislation-only note says the same. Control
+  names live in `utils/mode_change.py`, taken from `Sidebar.jsx`, `App.jsx`
+  and `ResearchFiltersModal.jsx`; `test_mode_change.py` forbids every manager,
+  worker and planner prompt naming anything else.
+- **Bug (c):** the rule forbids describing the interface; tests forbid the
+  phrases the lawyers saw. **Action 9:** `extract_suggestions` drops any chip
+  that offers to change a mode or filter (`is_mode_switch_offer`); every
+  chips block says so.
+- **Acceptance — the scripted sequence, n=3, in both modes, before and
+  after.** `python -m tools.replay_report --dir <D> deadend --all-reps
+  [--before <D>]`:
+
+  | directory | product | sequence | turns from the change onward | clean | markers | wrong control | switch/restart |
+  |---|---|---|---|---|---|---|---|
+  | `wave4_p41_pre` | `0a5d813` (pre-fix) | 6346 ×3 + 6343 ×3, Conversational | 9 | **8** | 0 (cannot see it) | 6 of 6 turn-1 deflections | 7 |
+  | `wave4_p41_pre` | `0a5d813` | 6346 ×3, Deep Research | 3 | 3 | 0 | 0 | 0 |
+  | `wave4_p41` | `9aa6d63` / `73ce944` | 6346 ×3 + 6343 ×3, Conversational | 9 | **9** | 6 of 6 | **0** | **0** |
+  | `wave4_p41` | `73ce944` | 6346 ×3, Deep Research | 3 | 3 | 3 of 3 | 0 | 0 |
+
+  `deadend` exits **0** on `wave4_p41` and every other exit-1 subcommand
+  (`modes halts negatives derivations blanks scoperecord nosearch caselaw`)
+  exits 0 on it too. **Invariant 1 held:** over the nine post-change
+  conversational turns, links 7 → 8 and `sources_kept` 12 → 17, before →
+  after (re-derived by one script over both directories).
+- **The row's wording metric, on its own before-column.** The four evidence
+  sessions in Conversational mode, rep 1, 18 answered turns each side
+  (`deadend --dir wave4_p41_conv --session 6343 6346 6347 6350 --before
+  wave0_conv`): switch/restart **14 → 0**, wrong control **15 → 0**, invented
+  UI **2 → 0**; `wave4_p41_conv` head `9aa6d63`, n=1, $0.57, every exit-1
+  subcommand 0. The Session 16 instrument note is corrected on the row:
+  `negatives` exits 0 on `wave0_conv`, `wave4_p41_conv` and `wave4_p41`.
+- **P0.5 residual found and built: five blank-model answers are the Deep
+  Research planner's clarifications, and three of them are 6346's.** The
+  client saves a clarification with no model; every other assistant message
+  carries the backend's. `answer_shape` read all five as conversational (no
+  report headings), so `wave0_conv` replayed 6346 in Conversational mode when
+  its lawyer was in Deep Research throughout — her turn 4 says so. New source
+  `planner_marker` (`replay_set._resolve_modes`), which also serves as a
+  neighbour for the unanswered turns beside it (nothing completed, so the
+  client did not revert). Sources over the 62 sessions: snapshot 108,
+  conversational_marker **47** (was 52), dr_marker 27, planner_marker 5,
+  neighbour 9; no default; 0 snapshot disagreements. `reconciliation_report`
+  now counts only `dr_marker`, because the exporter's `Session mode` reads
+  `messages.research_plan`, which a clarification never writes.
+- **Tests 1448 → 1524**, all green (`pytest -q` redirected to a file, exit
+  code checked, not piped).
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **Bug (a) as the row diagnosed it does NOT reproduce, and the row's
+  "code-checked, not a hypothesis" was an inference.** With the research type
+  really changed between turns, the PRE-FIX product answered from case law in
+  **11 of 12** post-change turns across both modes (8 of 9 Conversational, 3
+  of 3 Deep Research), with no marker and the refusal still in the history.
+  The twelfth is a P4.5 episode: 456 s, 3 empty completions, the P4.2
+  fallback served — and its "please switch to Research mode for a fuller
+  search" is the quick-lookup Worker's own OUTPUT bullet (bug (b)'s fourth
+  site), not anchoring. So the marker is verified to **fire** (9 of 9 changes
+  seen, 3 of 3 on the planner) and is defence in depth; it is not what closed
+  those turns. **What 6346's transcript most likely records is bug (b) alone:**
+  the planner told her she was in "research mode 'Legislation Only'", she
+  said she would "change the research mode", was told to "confirm once you
+  have changed the research mode", and her turn 4 reads "It is in deep
+  research mode" — the CHAT-mode control, which she had already been using,
+  and which does not add case law. Invariant 6: her words say which control
+  she changed. The row's acceptance stands as written and passes; the
+  diagnosis on the row is corrected.
+- **6346 was never a Conversational session.** All three of its answers are
+  planner clarifications (blank model), so `wave0_conv`'s 5-of-5 deflection
+  count for this row was measured in the wrong mode. The corrected replay set
+  sends 6346 as Deep Research; the Deep Research script is the row's
+  acceptance in the mode she used, and its turn 1 — the planner declining
+  under 'Legislation only' — now names the Filters button in 3 of 3.
+- **The first Deep Research after-run could not show its own marker.**
+  `/api/research/plan` emits no audit event and `run_deep_research` never
+  reads the history, so `mode_change` was absent from every DR turn and
+  `deadend` reported "no marker" on a product that had injected one. Fixed on
+  the instrument's side of the seam: the planner returns `mode_change` on its
+  JSON, the execution records the change it saw on the audit, the harness
+  reads the planner's; re-run at `73ce944` ($1.40; the first run is kept as
+  `wave4_p41_dr_v1`, identical product code, $0.98). **Session 20's lesson a
+  third time: the instrument was wrong before the product was.**
+- **Two more P4.5 episodes**, both on this row's sessions: `wave4_p41_pre`
+  6346 rep 2 turn 2 (3 empty completions, 456 s, $0.15, fallback served) and
+  `wave4_p41` 6346_dr rep 2 turn 2 (1, retried, 233 s, $0.37). Booked on P4.5.
+- **Old-mode references in the after-column are the correct deflection.**
+  `deadend`'s `old_mode` regex fires on 'Legislation only' by design, so it
+  counts 9 in `wave4_p41` and 14 in `wave4_p41_conv` — every one on an
+  unchanged turn stating the current type. It is a finding only on a turn
+  from a change onward, where it is 0.
+
+**How this session worked, for whoever repeats it.**
+- Two servers, two ports: HEAD on 8000, the `0a5d813` worktree on 8001 with
+  `.env` and the three `tools/` files copied from HEAD (`--base-url` selects).
+  Sweeps still ran **serially**. Do not `pin` from the worktree.
+- `replay run --script <json>` for a sequence the pre-pilot never ran; the
+  script names the base session and turn indexes only.
+- After changing product code that the trace reports on, **restart the
+  server before the acceptance run** — the DR re-run exists because I did not.
+
+**State of the branch:** `fix/prepilot-defects`, **NOTHING PUSHED**, 1524
+tests green, ledger 29 of 48, 7 of 14 buckets closed (B7 joins), 3 partial.
+
+**Machine state a new session inherits:** no uvicorn running; dev box
+**restored** (`replay restore`: model `google/gemini-3.1-pro-preview`, local
+prompt cache ON, `research_mode_enabled` ON); worktree removed. **36 replay
+directories** (+`wave4_p41`, `wave4_p41_pre`, `wave4_p41_conv`,
+`wave4_p41_dr_v1`).
+
+**Spend:** $6.77 ($2.54 `wave4_p41`, $2.68 `wave4_p41_pre`, $0.57
+`wave4_p41_conv`, $0.98 `wave4_p41_dr_v1`) plus one model probe.
+
+**Next action:** **P3.13** (the conversational Manager seam, measured, 3 of
+21) or **P0.6** (now a small row: the per-turn field exists, it needs
+`unknown` and the human read). Then **P4.6**'s re-baseline.
+
+**Open with the user:** P5.2 (B12, external); whether Thomas's review
+document should be committed; whether the Fix Tracker should be updated
+(P4.1 → Done, B7 closed, P4.9 new); and whether the diagnosis correction
+above changes anything for the pilot's user guidance — the control lawyers
+need is the Filters button, and no answer had ever named it.
+
+---

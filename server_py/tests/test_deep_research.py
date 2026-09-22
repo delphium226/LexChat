@@ -131,6 +131,7 @@ async def test_draft_research_plan_clarification_path():
         "needs_clarification": True,
         "question": "Which Act do you mean?",
         "options": [],
+        "mode_change": None,  # P4.1: no stamped history, so no change seen
     }
 
 

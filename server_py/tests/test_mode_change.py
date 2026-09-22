@@ -439,3 +439,34 @@ def test_a_block_of_only_mode_switch_offers_yields_no_chips():
     clean, items = extract_suggestions("Answer.\n<suggestions>\nSwitch to Research mode\n</suggestions>")
     assert clean == "Answer."
     assert items == []
+
+
+@pytest.mark.asyncio
+async def test_the_planner_reports_the_change_on_its_json_on_both_paths():
+    """/api/research/plan emits no audit event, so the planner's own JSON
+    carries `mode_change` — a clarification and a drafted plan alike."""
+    from tests.test_deep_research import _make_chat_loop_calling
+
+    set_request_provider_config({"_provider": "openrouter", "model": "test-model",
+                                 "_research_mode": "legislation_and_case_law",
+                                 "_chat_mode": "deep_research"})
+    try:
+        # The previous reply was a planner clarification (stamped deep_research
+        # by the client), so only the research type changed.
+        clar = await draft_research_plan(
+            _make_chat_loop_calling("request_clarification", {"question": "Which court?"}),
+            _history(prev_cm="deep_research"), "test-model", None, 0)
+        plan = await draft_research_plan(
+            _make_chat_loop_calling("submit_research_plan", {
+                "scope_note": "x", "steps": [{"title": "Find the judgment", "detail": ""}]}),
+            _history(prev_cm="deep_research"), "test-model", None, 0)
+        unchanged = await draft_research_plan(
+            _make_chat_loop_calling("request_clarification", {"question": "Which court?"}),
+            _history(stamp=False), "test-model", None, 0)
+    finally:
+        set_request_provider_config({})
+    expected = {"research_mode": {"from": "legislation_only", "to": "legislation_and_case_law"},
+                "chat_mode": None}
+    assert clar["needs_clarification"] and clar["mode_change"] == expected
+    assert "plan" in plan and plan["mode_change"] == expected
+    assert unchanged["mode_change"] is None
