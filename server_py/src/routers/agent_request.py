@@ -214,4 +214,9 @@ def build_request_config(
         "_local_prompt_cache_enabled": local_cache_enabled,
         "_drafting_mode_enabled": features.get("drafting_mode_enabled", True),
         "_suggested_questions_enabled": features.get("suggested_questions_enabled", True),
+        # P4.1 (B7): whether the "Research" chat mode is offered in the sidebar's
+        # Mode menu at all. The conversational Manager may only point a user at
+        # it when it exists — it was OFF for the whole pre-pilot, and "switch to
+        # Research mode" was advice to use a control the lawyers did not have.
+        "_research_mode_enabled": features.get("research_mode_enabled", True),
     }

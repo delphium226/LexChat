@@ -62,7 +62,13 @@ _audit_ctx: ContextVar[Optional["AuditCollector"]] = ContextVar("audit_collector
 # the one tool-free write-up round `chat_loop` now makes at the step cap
 # produced the partial findings that `report` then carries under P2.1's
 # header. Additive (a key inside an object that was already optional).
-AUDIT_SCHEMA_VERSION = 4
+# v5 (2026-09-22, FIX_PLAN P4.1): top-level `mode_change` — `null` unless the
+# request's research type or chat mode differs from the one stamped on the
+# previous assistant message in the history, in which case
+# `{"research_mode": {from, to} | null, "chat_mode": {from, to} | null}` and
+# the mode-change marker was injected ahead of the user's message. Additive,
+# and `null` on every request whose history carries no stamped modes.
+AUDIT_SCHEMA_VERSION = 5
 
 
 def set_audit_collector(collector: Optional["AuditCollector"]) -> None:
@@ -98,6 +104,9 @@ class AuditCollector:
         # billed turn and nothing in `answer` — so a harness could not tell a
         # lost answer from a short one.
         self.empty_completions: list[dict] = []
+        # P4.1 (B7), schema v5. None unless a mode changed since the previous
+        # assistant turn in the history (see utils/mode_change.py).
+        self.mode_change: Optional[dict] = None
         self.answer: str = ""
         self.suggestions: list[str] = []
         self.sources: list[dict] = []
@@ -334,6 +343,13 @@ class AuditCollector:
         except Exception:
             logger.debug("[Audit] record_final failed", exc_info=True)
 
+    def record_mode_change(self, change: Optional[dict]) -> None:
+        """P4.1: the mode change (if any) the marker was injected for."""
+        try:
+            self.mode_change = dict(change) if change else None
+        except Exception:
+            logger.debug("[Audit] record_mode_change failed", exc_info=True)
+
     def record_empty_completion(self, probe: dict) -> None:
         """One provider completion that returned nothing. See
         `utils/empty_completion.py` for what the fields distinguish."""
@@ -389,6 +405,7 @@ class AuditCollector:
                 "delegations": self.delegations,
                 "peer_consults": self.peer_consults,
                 "empty_completions": self.empty_completions,
+                "mode_change": self.mode_change,
                 "timings": timings or {},
                 "error": self.error,
             }

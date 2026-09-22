@@ -251,6 +251,13 @@ class Turn:
     # PRE-PILOT answer looked like — the evidence behind `chat_mode_source`,
     # kept per turn so a run file can be read without the CSV.
     recorded_answer_shape: str | None = None
+    # P4.1 (B7): the research type is a property of the TURN too — 6346's
+    # lawyer changed it mid-session — so it is carried per turn and sent per
+    # request. From the export it is still the session's one snapshot value
+    # (`snapshot`) or the harness default (`default`; see P0.6, which is where
+    # `unknown` belongs); a scripted session sets it per turn (`script`).
+    research_mode: str = ""
+    research_mode_source: str = ""
 
 
 @dataclass
@@ -282,6 +289,9 @@ class Session:
     turns: list = field(default_factory=list)
     recorded_cost_usd: float = 0.0
     recorded_models: list = field(default_factory=list)
+    # P4.1: set on a scripted session (see `scripted_session`); None for one
+    # built from the export.
+    script: dict | None = None
 
     @property
     def user_turns(self) -> list:
@@ -504,6 +514,15 @@ def load_sessions(
 
         _resolve_modes(turns, snapshot_mode)
 
+        # P4.1: the export states one research type per session (or none —
+        # blank for the twelve P0.5 sessions, P0.6). Every turn gets that
+        # value, labelled with where it came from, so the run file records a
+        # per-turn fact and a scripted session can vary it.
+        stated_rm = _blank(head.get("Filter: Research mode"))
+        for t in turns:
+            t.research_mode = stated_rm or DEFAULT_RESEARCH_MODE
+            t.research_mode_source = "snapshot" if stated_rm else "default"
+
         out.append(
             Session(
                 session_id=sid,
@@ -559,6 +578,105 @@ def reconciliation_report(sessions: list[Session]) -> dict:
         elif s.session_mode == "deep_research":
             rep["session_mode_but_no_marker"].append(s.session_id)
     return rep
+
+
+# --- Scripted sessions (P4.1) ------------------------------------------------
+#
+# A row's acceptance can be a sequence the pre-pilot never ran: P4.1's is
+# "refusal, mode change, same question", which needs the research type to
+# CHANGE between turns. A script is a small committed JSON file that builds a
+# session out of an exported one's turns by index, so the lawyer's question
+# text stays in the export and never in the repo:
+#
+#   {"session_id": "p41_6346", "base": "6346", "verdict": "FAIL",
+#    "primary": "B7", "note": "...",
+#    "turns": [{"from_turn": 1, "research_mode": "legislation_only"},
+#              {"from_turn": 3, "research_mode": "legislation_and_case_law"},
+#              {"from_turn": 1, "research_mode": "legislation_and_case_law"}]}
+#
+# `chat_mode` on a scripted turn defaults to the base turn's resolved mode;
+# `question` may be given literally instead of `from_turn` for text that is
+# not a lawyer's (a harness prompt such as "Switch to Research mode"). Every
+# other filter is the base session's.
+
+SCRIPT_RESEARCH_MODES = (
+    "legislation_only", "case_law_only", "legislation_and_case_law",
+)
+
+
+def load_script(path: Path | str) -> dict:
+    p = Path(path)
+    script = json.loads(p.read_text(encoding="utf-8"))
+    for key in ("session_id", "base", "turns"):
+        if key not in script:
+            raise SystemExit(f"{p.name}: script needs `{key}`")
+    if not script["turns"]:
+        raise SystemExit(f"{p.name}: script has no turns")
+    for i, t in enumerate(script["turns"], 1):
+        if t.get("research_mode") not in SCRIPT_RESEARCH_MODES:
+            raise SystemExit(
+                f"{p.name}: turn {i} needs research_mode in {SCRIPT_RESEARCH_MODES}"
+            )
+        if "from_turn" not in t and not t.get("question"):
+            raise SystemExit(f"{p.name}: turn {i} needs `from_turn` or `question`")
+    return script
+
+
+def scripted_session(script: dict, sessions: list) -> Session:
+    """Build a Session from a script over one of the export's sessions."""
+    base = next((s for s in sessions if s.session_id == str(script["base"])), None)
+    if base is None:
+        raise SystemExit(f"script {script['session_id']}: base session "
+                         f"{script['base']} is not in the replay set")
+    by_index = {t.index: t for t in base.turns}
+    turns: list[Turn] = []
+    for i, st in enumerate(script["turns"], 1):
+        src = by_index.get(st.get("from_turn")) if "from_turn" in st else None
+        if "from_turn" in st and src is None:
+            raise SystemExit(f"script {script['session_id']}: base {base.session_id} "
+                             f"has no turn {st['from_turn']}")
+        question = st.get("question") or src.question
+        chat_mode = st.get("chat_mode") or (src.chat_mode if src else DEFAULT_CHAT_MODE)
+        turns.append(Turn(
+            index=i,
+            question=question,
+            chat_mode=chat_mode,
+            chat_mode_source="script",
+            got_reply=bool(src.got_reply) if src else False,
+            recorded_cost_usd=src.recorded_cost_usd if src else 0.0,
+            recorded_answer_chars=src.recorded_answer_chars if src else 0,
+            recorded_answer_shape=src.recorded_answer_shape if src else None,
+            research_mode=st["research_mode"],
+            research_mode_source="script",
+        ))
+    s = Session(
+        session_id=str(script["session_id"]),
+        user=base.user,
+        thread=base.thread,
+        verdict=script.get("verdict") or base.verdict,
+        primary=script.get("primary") or base.primary,
+        secondary=list(script.get("secondary") or base.secondary),
+        diag=script.get("note") or base.diag,
+        session_mode=base.session_mode,
+        filter_chat_mode=base.filter_chat_mode,
+        research_mode=turns[0].research_mode,
+        jurisdiction=base.jurisdiction,
+        year_from=base.year_from,
+        year_to=base.year_to,
+        date_from=base.date_from,
+        date_to=base.date_to,
+        court=base.court,
+        legislation_type=base.legislation_type,
+        current_only=base.current_only,
+        record_type=base.record_type,
+        sessions=base.sessions,
+        house=base.house,
+        turns=turns,
+        recorded_cost_usd=base.recorded_cost_usd,
+        recorded_models=list(base.recorded_models),
+        script=script,
+    )
+    return s
 
 
 def freeze(out_path: Path | None = None, **kw) -> Path:

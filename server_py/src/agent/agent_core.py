@@ -22,6 +22,7 @@ from ..prompts import (
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import enforce_provision_links, pinpoint_block
 from ..utils.discovery_budget import new_search_budget
+from ..utils.mode_change import apply_mode_change_marker
 from ..utils.empty_completion import (
     LOST_ANSWER_NOTICE,
     fallback_from_reports,
@@ -515,6 +516,15 @@ async def draft_research_plan(
         final_messages[0] = system_message
     else:
         final_messages = [system_message, *final_messages]
+    # P4.1 (B7): the planner reads the same history the Manager does, and a
+    # refusal in it anchors a plan the same way (6346 turn 4 asked for Deep
+    # Research and got the refusal back). Same marker, same seam.
+    final_messages, mode_change = apply_mode_change_marker(final_messages, cfg)
+    if mode_change:
+        logger.info("[Planner] Mode changed since the previous reply: %s", mode_change)
+    _audit = get_audit_collector()
+    if _audit:
+        _audit.record_mode_change(mode_change)
 
     captured: dict = {}
 
@@ -635,6 +645,19 @@ async def process_user_request(
         final_messages[0] = system_message
     else:
         final_messages = [system_message, *final_messages]
+
+    # P4.1 (B7): if the user changed the research type or the chat mode since
+    # the previous reply, say so IN THE HISTORY, on the user turn, next to the
+    # refusal it supersedes. The system prompt already carried the new mode on
+    # every turn of 6346 and the model anchored on its own earlier refusal
+    # anyway. Read off the modes the client stamps on assistant messages; a
+    # history without them yields no marker.
+    final_messages, mode_change = apply_mode_change_marker(final_messages, _cfg)
+    if mode_change:
+        logger.info("[Manager] Mode changed since the previous reply: %s", mode_change)
+    _audit = get_audit_collector()
+    if _audit:
+        _audit.record_mode_change(mode_change)
 
     # Load peer registry and build dynamic tool list
     peers = []
@@ -855,6 +878,11 @@ async def process_user_request(
             "disclosed": _disclosed,
         }
     final["content"] = clean
+    # P4.1 (B7): the modes this reply ran under, echoed so the client can stamp
+    # them on the saved assistant message and send them back with the next
+    # turn's history — which is where `apply_mode_change_marker` reads them.
+    final["research_mode"] = _cfg.get("_research_mode") or None
+    final["chat_mode"] = _cfg.get("_chat_mode") or None
     if suggestions and suggestions_enabled:
         final["suggestions"] = suggestions
 
@@ -1155,6 +1183,11 @@ async def run_deep_research(
             "disclosed": _disclosed,
         }
     final["content"] = _content
+    # P4.1 (B7): same echo as the Manager path, so the next turn's history
+    # carries the modes this report ran under.
+    _dr_cfg = _get_cfg()
+    final["research_mode"] = _dr_cfg.get("_research_mode") or None
+    final["chat_mode"] = _dr_cfg.get("_chat_mode") or None
 
     if accumulated_sources:
         final["sources"] = [

@@ -4,6 +4,70 @@ Split out of config.py so configuration (Settings, model lists) and prompt
 text live separately. No behaviour change.
 """
 
+from .utils.mode_change import CHAT_MODE_CONTROL, RESEARCH_TYPE_CONTROL
+
+# P4.1 (B7, the research-mode dead-end). ONE statement of how to decline a
+# case-law question when the research type is "Legislation only", shared by
+# every prompt that has to decline one. Before this, four prompt sites each
+# scripted their own deflection and named two different controls between them
+# — "switch to Research mode" (the chat mode, which does not add case law) and
+# "'Legislation & Case Law' mode via the mode selector" (a control that does
+# not exist) — and the model then invented where it was on screen ("typically
+# located at the top or side of your screen"). The control names come from
+# utils/mode_change.py, which takes them from the UI, so no prompt can drift
+# from the product again. The research type is a FILTER that takes effect on
+# the next message in the SAME conversation: the model has told users to start
+# a new chat, and 6346's lawyer did exactly that.
+CASE_LAW_OUT_OF_SCOPE_RULE = (
+    "If the user asks about court cases, judgments or case law, tell them that the "
+    "research type is currently set to 'Legislation only', so case law was not "
+    "searched, and that they can change it to 'Legislation & case law' using "
+    f"{RESEARCH_TYPE_CONTROL}; the change applies to their next message in this "
+    "same conversation. Say that and nothing more about the interface: do not call "
+    "the research type a 'mode', do not tell them to switch to Research mode (a "
+    "different control, which does not add case law), do not describe where any "
+    "control is on screen, and never tell them to start a new chat. If the user "
+    "says they have changed it, the current setting is the one stated in this "
+    "prompt, not what an earlier reply said. Do NOT answer case law questions from "
+    "your internal training data."
+)
+
+# The same shape for the mirror case, so "Case Law Only" is never called a mode either.
+LEGISLATION_OUT_OF_SCOPE_RULE = (
+    "If the user asks about legislation, tell them that the research type is "
+    "currently set to 'Case law only', so legislation was not searched, and that "
+    f"they can change it using {RESEARCH_TYPE_CONTROL}; the change applies to their "
+    "next message in this same conversation. Do not call the research type a 'mode', "
+    "do not describe where any control is on screen, and never tell them to start a "
+    "new chat."
+)
+
+# Chips only send text (`SuggestedQuestions.jsx`), so an offer to change a
+# setting is a button that cannot do what it says (6407: "I cannot change the
+# mode for you"). Stated in every chips block; enforced in code as well by
+# `utils.mode_change.is_mode_switch_offer`, which drops such a line.
+_NO_MODE_SWITCH_CHIP_RULE = (
+    " Never offer a change of mode, research type or filter as a suggestion: the "
+    "buttons only send your text back as the next question and cannot change a "
+    "setting."
+)
+
+# The conversational Manager's pointer to Research mode, and what replaces it
+# when that mode is not offered in the sidebar (`research_mode_enabled` off —
+# the pre-pilot's state throughout). Substituted, not overridden, in
+# `get_manager_system_prompt`, so the disabled prompt never mentions the mode.
+RESEARCH_MODE_HINT_ON = (
+    "- If the user's question clearly needs comprehensive research, you may say that "
+    f"Research mode is available from {CHAT_MODE_CONTROL}. That is a different control "
+    "from the research type: it changes how deeply a question is researched, not which "
+    "sources are searched, so never offer it as the way to reach case law."
+)
+RESEARCH_MODE_HINT_OFF = (
+    "- Research mode is not offered in this deployment: never suggest switching to it "
+    "or to any other mode. If the question needs more than a quick lookup, say so and "
+    "offer to take it in specific, narrower questions."
+)
+
 _MANAGER_BODY = """You are the Senior Legal Interface for a UK government legal department.
 Your users are qualified lawyers. Your demeanor must be professional, concise, and objective.
 
@@ -24,7 +88,7 @@ CRITICAL RULES:
 SCOPE:
 - You cover UK legislation and statutory instruments.
 - For questions about what was said in Parliament (debates, Hansard, committee scrutiny, parliamentary questions, bill progress), use `consult_peer` to query the Parliament Bot peer — do NOT tell the user to look elsewhere. If no parliament peer is registered, note that parliamentary debate research is not available in this session. If the Parliament Bot returns a response but found no relevant records, tell the user this explicitly (e.g. "The Parliament Bot found no records of debate on this topic") — do NOT say parliamentary research is "unavailable" when it was attempted but returned no results.
-- For general case law research, use `delegate_research` if in Legislation & Case Law mode; otherwise direct the user to switch mode.
+- Case law: `delegate_research` searches case law only when the research type includes it. The CURRENT RESEARCH TYPE note above says which sources this conversation searches and, where case law is not among them, exactly what to tell the user — follow it word for word and do not improvise a different instruction.
 
 RESEARCH BRIEF CONSTRUCTION:
 When calling `delegate_research`, the `query` parameter must be a self-contained research brief — the Worker Agent has no access to the conversation history. Include:
@@ -50,7 +114,7 @@ TONE:
 # constant below them: `MANAGER_SYSTEM_PROMPT` is what the rest of the codebase
 # and the tests import, and it must stay byte-identical to the unsplit original.
 _MANAGER_CHIPS = """FOLLOW-UP QUESTIONS:
-End every response with a <suggestions> block listing 2-3 next steps the user could take, one per line, each phrased as the question they would ask you next (first person, e.g. "What penalties apply under section 33?"). The block must be the very last thing in your response, with nothing after it. Do not repeat the suggestions as prose in the body.
+End every response with a <suggestions> block listing 2-3 next steps the user could take, one per line, each phrased as the question they would ask you next (first person, e.g. "What penalties apply under section 33?"). The block must be the very last thing in your response, with nothing after it. Do not repeat the suggestions as prose in the body.""" + _NO_MODE_SWITCH_CHIP_RULE + """
 
 <suggestions>
 What penalties apply under section 33?
@@ -387,11 +451,11 @@ WHEN USING delegate_research IN CHAT MODE:
 TONE:
 - Conversational but professional. Avoid flowery phrases ("I would be happy to help").
 - Do not produce structured reports with BLUF headers, numbered sections, or formal References lists unless the user explicitly asks for that format.
-- If the user's question clearly needs comprehensive research, suggest they switch to Research mode."""
+""" + RESEARCH_MODE_HINT_ON
 
 
 _MANAGER_CONV_CHIPS = """FOLLOW-UP QUESTIONS:
-End every response with a <suggestions> block listing 2-3 next steps the user could take, one per line, each phrased as the question they would ask you next (first person, e.g. "What penalties apply under section 33?"). The block must be the very last thing in your response, with nothing after it. Do not repeat the suggestions as prose in the body.
+End every response with a <suggestions> block listing 2-3 next steps the user could take, one per line, each phrased as the question they would ask you next (first person, e.g. "What penalties apply under section 33?"). The block must be the very last thing in your response, with nothing after it. Do not repeat the suggestions as prose in the body.""" + _NO_MODE_SWITCH_CHIP_RULE + """
 
 <suggestions>
 What penalties apply under section 33?
@@ -436,7 +500,7 @@ OUTPUT:
 - 2–5 sentences of concise prose, or a short bullet list for multiple points.
 - Include the relevant citation (Act + the subsection or paragraph that states the point, e.g. s.7(2) or Sch 2 para 3(1), or case name + NCN) and URL if provided. When you cite one subsection of a section, say in a short clause what that section's other subsections provide, so the reader sees the whole provision and not only the limb that applies; that clause does not count against the 2-5 sentences above.
 - Do NOT use formal report headers (BLUF, Detailed Analysis, References, etc.).
-- If the retrieved text does not answer the question, say so plainly and suggest the user switch to Research mode for a fuller search. If an instrument or case the brief cites was not found, say that this index does not hold it; never suggest the citation is wrong, and never ask the user to check or verify it.
+- If the retrieved text does not answer the question, say so plainly and say what was searched; do not suggest changing a mode, research type or setting (the assistant relaying your answer decides that). If an instrument or case the brief cites was not found, say that this index does not hold it; never suggest the citation is wrong, and never ask the user to check or verify it.
 
 CITATION FORMAT:
 Inline only. Example: "Under s.7(2) of the [Acquisition of Land Act 1981](URL), ..."
@@ -687,16 +751,27 @@ def get_worker_system_prompt(research_mode: str = "legislation_only", cfg: dict 
 
 
 def get_manager_mode_note(research_mode: str, cfg: dict = None) -> str:
+    # P4.1 (B7): the notes name the control as the UI does ("Research type",
+    # under Filters) and carry the one shared deflection rule, in BOTH chat
+    # modes. The legislation-only note used to exist only on the conversational
+    # branch; the research-mode Manager was left with a one-line "direct the
+    # user to switch mode" that named no control at all.
     if research_mode == "case_law_only":
         note = (
-            "CURRENT RESEARCH MODE: Case Law Only. "
+            "CURRENT RESEARCH TYPE: Case law only. "
             "The user is seeking case law research. Delegate questions about court judgments, "
             "precedents, and judicial decisions using `delegate_research`. "
-            "If the user asks about legislation, note that they are in Case Law Only mode."
+            + LEGISLATION_OUT_OF_SCOPE_RULE
+        )
+    elif research_mode == "legislation_only":
+        note = (
+            "CURRENT RESEARCH TYPE: Legislation only. "
+            "Use `delegate_research` for questions about UK Acts and Statutory Instruments. "
+            + CASE_LAW_OUT_OF_SCOPE_RULE
         )
     elif research_mode == "legislation_and_case_law":
         note = (
-            "CURRENT RESEARCH MODE: Legislation & Case Law. "
+            "CURRENT RESEARCH TYPE: Legislation & case law. "
             "The user wants comprehensive research covering BOTH legislation AND case law. "
             "Delegate all legal research queries using `delegate_research`. "
             "CRITICAL — research brief construction: your brief MUST explicitly include TWO separate instructions: "
@@ -771,15 +846,13 @@ def get_manager_system_prompt(research_mode: str = "legislation_only", cfg: dict
 
     if cfg and cfg.get("_chat_mode") == "conversational":
         mode_note = get_manager_mode_note(research_mode, cfg)
-        if not mode_note and research_mode == "legislation_only":
-            mode_note = (
-                "CURRENT RESEARCH MODE: Legislation Only. "
-                "Use `delegate_research` for questions about UK Acts and Statutory Instruments. "
-                "If the user asks about court cases, judgments, or case law, inform them this session "
-                "covers legislation only and suggest they switch to 'Legislation & Case Law' mode via the "
-                "mode selector. Do NOT answer case law questions from your internal training data."
-            )
-        conv = _manager_base(_MANAGER_CONV_BODY, _MANAGER_CONV_CHIPS, chips_enabled)
+        conv_body = _MANAGER_CONV_BODY
+        # P4.1 (B7): when the Research chat mode is not offered in the sidebar,
+        # the pointer to it is SUBSTITUTED OUT (the chips pattern), so the
+        # prompt never names a control the user does not have.
+        if not cfg.get("_research_mode_enabled", True):
+            conv_body = conv_body.replace(RESEARCH_MODE_HINT_ON, RESEARCH_MODE_HINT_OFF)
+        conv = _manager_base(conv_body, _MANAGER_CONV_CHIPS, chips_enabled)
         base = (mode_note + "\n\n" + conv) if mode_note else conv
         return date_line + "\n\n" + base + consulted_suffix
 
@@ -824,7 +897,7 @@ TONE:
 
 
 _PARLIAMENT_CHIPS = """FOLLOW-UP QUESTIONS:
-End every response with a <suggestions> block listing 2-3 next steps the user could take, one per line, each phrased as the question they would ask you next (first person, e.g. "What did the Minister say when the bill was debated at stage 1?"). The block must be the very last thing in your response, with nothing after it. Do not repeat the suggestions as prose in the body.
+End every response with a <suggestions> block listing 2-3 next steps the user could take, one per line, each phrased as the question they would ask you next (first person, e.g. "What did the Minister say when the bill was debated at stage 1?"). The block must be the very last thing in your response, with nothing after it. Do not repeat the suggestions as prose in the body.""" + _NO_MODE_SWITCH_CHIP_RULE + """
 
 <suggestions>
 What did the Minister say when the bill was debated at stage 1?
@@ -950,7 +1023,7 @@ TONE:
 
 
 _WESTMINSTER_CHIPS = """FOLLOW-UP QUESTIONS:
-End every response with a <suggestions> block listing 2-3 next steps the user could take, one per line, each phrased as the question they would ask you next (first person, e.g. "What did the Minister say at second reading?"). The block must be the very last thing in your response, with nothing after it. Do not repeat the suggestions as prose in the body.
+End every response with a <suggestions> block listing 2-3 next steps the user could take, one per line, each phrased as the question they would ask you next (first person, e.g. "What did the Minister say at second reading?"). The block must be the very last thing in your response, with nothing after it. Do not repeat the suggestions as prose in the body.""" + _NO_MODE_SWITCH_CHIP_RULE + """
 
 <suggestions>
 What did the Minister say at second reading?
@@ -1096,19 +1169,24 @@ _PLANNER_OPTIONS_RULE_NO_CHIPS = """- When the ambiguity is a genuine either/or 
 
 _PLANNER_MODE_NOTES = {
     "legislation_only": (
-        "CURRENT RESEARCH MODE: Legislation Only.\n"
+        "CURRENT RESEARCH TYPE: Legislation only.\n"
         "Plan steps around UK Acts and Statutory Instruments: identifying the governing legislation, "
         "retrieving specific provisions/definitions/duties, and checking commencement, amendment, and "
-        "extent. Do NOT include case-law steps — case law is out of scope in this mode."
+        "extent. Do NOT include case-law steps — case law is not searched under this research type. "
+        "If the question is about case law, use `request_clarification` to say that the research type "
+        "is currently 'Legislation only' and can be changed to 'Legislation & case law' using "
+        f"{RESEARCH_TYPE_CONTROL}, without calling it a mode, describing where any control is on "
+        "screen, or telling the user to start a new chat; if the user says they have changed it, the "
+        "current setting is the one stated here, not what an earlier reply said."
     ),
     "case_law_only": (
-        "CURRENT RESEARCH MODE: Case Law Only.\n"
+        "CURRENT RESEARCH TYPE: Case law only.\n"
         "Plan steps around legal issues and authorities: the questions of law raised, the leading "
         "authorities on each issue, and how the courts have interpreted the relevant tests. Do NOT "
         "include legislation-retrieval steps — legislation text is out of scope in this mode."
     ),
     "legislation_and_case_law": (
-        "CURRENT RESEARCH MODE: Legislation & Case Law.\n"
+        "CURRENT RESEARCH TYPE: Legislation & case law.\n"
         "Plan steps across both: identify the governing legislation and its key provisions, AND find "
         "case law interpreting them. Keep legislation steps and case-law steps distinct so each can be "
         "researched independently."

@@ -12,6 +12,8 @@ instruction produces exactly today's behaviour.
 
 import re
 
+from .mode_change import is_mode_switch_offer
+
 _BLOCK_RE = re.compile(r"<suggestions>(.*?)</suggestions>", re.IGNORECASE | re.DOTALL)
 # Unterminated block — the model opened the tag and stopped (or was truncated).
 _UNTERMINATED_RE = re.compile(r"<suggestions>.*$", re.IGNORECASE | re.DOTALL)
@@ -64,6 +66,10 @@ def extract_suggestions(content: str) -> tuple[str, list[str]]:
         for raw_line in inner.splitlines():
             line = _clean_line(raw_line)
             if not line or len(line) > MAX_SUGGESTION_CHARS:
+                continue
+            # P4.1 (B7): a chip can only send text, so an offer to change a
+            # mode or filter is a button that cannot do what it says (6407).
+            if is_mode_switch_offer(line):
                 continue
             key = line.lower()
             if key in seen:

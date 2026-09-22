@@ -282,7 +282,12 @@ export function useChat({
           response.provider,
           response.timing?.total_cost_usd ?? null,
           response.sources ?? null,
-          deepResearchPlan
+          deepResearchPlan,
+          // P4.1 (B7): stamp the reply with the modes it ran under (server-
+          // resolved, echoed on the result event) so the next request's
+          // history can show the backend a mode change.
+          response.research_mode ?? null,
+          response.chat_mode ?? null
         ).catch(err => {
           console.error('Failed to save assistant message:', err);
           return null;
@@ -418,11 +423,19 @@ export function useChat({
           // stores the question text only, so the options are stashed against
           // the saved row to survive a chat switch.
           const options = draft.options || [];
+          // P4.1 (B7): a planner clarification is a reply too, and it ran under
+          // these modes (the plan endpoint is implicitly deep_research). Stamped
+          // like any other assistant message, so a later mode change is seen
+          // against it rather than reading as "unknown".
+          const modeStamp = { research_mode: researchMode, chat_mode: 'deep_research' };
           if (isVisible(run)) {
-            setMessages(prev => [...prev, { role: 'assistant', content: question, suggestions: options }]);
+            setMessages(prev => [...prev, { role: 'assistant', content: question, suggestions: options, ...modeStamp }]);
           }
           if (activeChatId) {
-            const saved = await saveMessage(activeChatId, 'assistant', question).catch(err => {
+            const saved = await saveMessage(
+              activeChatId, 'assistant', question, null, null, null, null, null,
+              modeStamp.research_mode, modeStamp.chat_mode
+            ).catch(err => {
               console.error('Failed to save clarification message:', err);
               return null;
             });

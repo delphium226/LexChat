@@ -85,6 +85,13 @@ class Message(Base):
     # Deep Research audit: the approved plan this assistant message answered
     # ({"scope_note", "steps": [{"id","title","detail"}]}); NULL otherwise.
     research_plan: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # P4.1 (B7): the research type and chat mode an assistant message ran under
+    # (the resolved values echoed on the `result` event). The first per-message
+    # record of the mode controls — the feedback snapshot is per session and
+    # taken at form submit (see docs/TODO.md D13). NULL on rows saved before
+    # the columns existed and on user messages.
+    research_mode: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    chat_mode: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     chat: Mapped["Chat"] = relationship(back_populates="messages")

@@ -86,7 +86,7 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from replay_set import Session, load_sessions  # noqa: E402
+from replay_set import Session, load_script, load_sessions, scripted_session  # noqa: E402
 
 # --- Pinned configuration (FIX_PLAN "Replay configuration", 2026-09-14) --------
 
@@ -105,6 +105,12 @@ PINNED_FEATURES = {
     # n>1 repetitions must be independent draws; a cross-user summary cache
     # makes runs 2..n echoes of run 1.
     "local_prompt_cache_enabled": False,
+    # P4.1 (2026-09-22): the "Research" chat mode was OFF on the target for
+    # the whole pre-pilot (P0.5). Until P4.1 no prompt read this flag, so the
+    # sweeps before it measured the same system either way; from P4.1 the
+    # conversational Manager's pointer to Research mode is substituted out
+    # when the mode is not offered, and a replay must run as the lawyers did.
+    "research_mode_enabled": False,
 }
 
 DEFAULT_BASE_URL = os.environ.get("REPLAY_BASE_URL", "http://localhost:8000")
@@ -268,6 +274,12 @@ class TurnResult:
     question: str
     chat_mode: str = "research"
     chat_mode_source: str = ""
+    # P4.1: per turn, like chat_mode — see replay_set.Turn.
+    research_mode: str = ""
+    research_mode_source: str = ""
+    # P4.1: what the product saw change since the previous reply (from the
+    # audit event's `mode_change`, schema v5); None when nothing changed.
+    mode_change: dict | None = None
     status: str = "ok"  # ok | error | needs_clarification | http_error
     answer: str = ""
     error: str | None = None
@@ -347,9 +359,13 @@ class ReplayClient:
             "house": s.house,
         }
 
-    async def draft_plan(self, messages: list[dict], s: Session) -> dict:
+    async def draft_plan(
+        self, messages: list[dict], s: Session, research_mode: str | None = None
+    ) -> dict:
         assert self._client is not None
         body = {"messages": messages, "model": PINNED_MODEL, **self._filters(s)}
+        if research_mode:
+            body["research_mode"] = research_mode  # P4.1: the TURN's, not the session's
         r = await self._client.post(
             "/api/research/plan", json=body, timeout=PLAN_TIMEOUT_S
         )
@@ -358,7 +374,8 @@ class ReplayClient:
         return r.json()
 
     async def chat(
-        self, messages: list[dict], s: Session, chat_mode: str, plan: dict | None
+        self, messages: list[dict], s: Session, chat_mode: str, plan: dict | None,
+        research_mode: str | None = None,
     ) -> TurnResult:
         """One `/api/system/chat` request, consuming the SSE stream."""
         assert self._client is not None
@@ -372,6 +389,11 @@ class ReplayClient:
             "audit_max_field_chars": 0,
             **self._filters(s),
         }
+        if research_mode:
+            # P4.1: the research type is per TURN. `_filters(s)` records the
+            # session's snapshot; the turn's value is what the request runs
+            # under, which is how a scripted mode change is sent.
+            body["research_mode"] = research_mode
         if plan is not None:
             body["deep_research_plan"] = plan
 
@@ -461,7 +483,7 @@ async def replay_session(
             "answer_shape": t.recorded_answer_shape,
         }
         if mode == "deep_research":
-            drafted = await client.draft_plan(messages, s)
+            drafted = await client.draft_plan(messages, s, t.research_mode or None)
             if "_http_error" in drafted:
                 tr = TurnResult(turn=i, question=question, chat_mode=mode,
                                 chat_mode_source=t.chat_mode_source,
@@ -501,10 +523,13 @@ async def replay_session(
                 turns.append(tr)
                 continue
 
-        tr = await client.chat(messages, s, mode, plan)
+        tr = await client.chat(messages, s, mode, plan, t.research_mode or None)
         tr.turn = i
         tr.chat_mode = mode
         tr.chat_mode_source = t.chat_mode_source
+        tr.research_mode = t.research_mode
+        tr.research_mode_source = t.research_mode_source
+        tr.mode_change = (tr.audit or {}).get("mode_change")
         tr.plan = plan
         tr.plan_clarification = plan_clarification
         tr.prepilot = prepilot
@@ -516,8 +541,19 @@ async def replay_session(
         # is the input the next turn actually ran against. Appending an empty
         # assistant message would also hand the provider a content-less turn
         # on every subsequent request in the session.
+        #
+        # P4.1: the answer is stamped with the modes it ran under, exactly as
+        # the client stamps a saved assistant message (`messages.research_mode`
+        # / `chat_mode`, echoed on the `result` event). That is what lets the
+        # product see a mode change on the next turn; a harness that did not
+        # stamp would be measuring a history no real client sends.
         if tr.answer:
-            messages.append({"role": "assistant", "content": tr.answer})
+            messages.append({
+                "role": "assistant",
+                "content": tr.answer,
+                "research_mode": t.research_mode or None,
+                "chat_mode": mode,
+            })
 
         print(
             f"    turn {i}/{len(s.turns)} [{mode}]: {tr.status}"
@@ -548,6 +584,9 @@ async def replay_session(
         "filter_snapshot_chat_mode": s.filter_chat_mode,
         "deep_research_turns": s.deep_research_turns,
         "filters": client._filters(s),
+        # P4.1: a scripted session records the script it was built from; the
+        # per-turn `research_mode` fields say what each turn actually sent.
+        "script": s.script,
         "pinned_model": PINNED_MODEL,
         "model_mismatch": mismatch,
         "runtime_state": pinned_state,
@@ -558,6 +597,9 @@ async def replay_session(
                 "question": t.question,
                 "chat_mode": t.chat_mode,
                 "chat_mode_source": t.chat_mode_source,
+                "research_mode": t.research_mode,
+                "research_mode_source": t.research_mode_source,
+                "mode_change": t.mode_change,
                 "prepilot": t.prepilot,
                 "status": t.status,
                 "answer": t.answer,
@@ -584,7 +626,11 @@ def _reps_for(s: Session, override: int | None) -> int:
 
 async def cmd_run(args) -> int:
     sessions = load_sessions(csv_path=args.csv, classification=args.classification)
-    if args.session:
+    if getattr(args, "script", None):
+        # P4.1: a scripted sequence over an exported session's turns, with the
+        # research type set per turn (see replay_set.scripted_session).
+        sessions = [scripted_session(load_script(p), sessions) for p in args.script]
+    elif args.session:
         wanted = set(args.session)
         sessions = [s for s in sessions if s.session_id in wanted]
         missing = wanted - {s.session_id for s in sessions}
@@ -594,7 +640,8 @@ async def cmd_run(args) -> int:
     elif args.all:
         sessions = [s for s in sessions if s.verdict in ("FAIL", "DEFECT")]
     else:
-        print("Give --session ID [ID ...] or --all", file=sys.stderr)
+        print("Give --session ID [ID ...], --script PATH [PATH ...] or --all",
+              file=sys.stderr)
         return 2
 
     state = await read_state()
@@ -756,7 +803,13 @@ async def cmd_pin(args) -> int:
                     "model": before["model"],
                     "summarisation_model": before["summarisation_model"],
                     "features": {
-                        k: before["features"].get(k) for k in PINNED_FEATURES
+                        # A flag absent from the saved row IS its default
+                        # (True for every PINNED_FEATURES key): stash that,
+                        # or `restore` would skip the key and leave the pinned
+                        # False behind.
+                        k: (before["features"].get(k)
+                            if before["features"].get(k) is not None else True)
+                        for k in PINNED_FEATURES
                     },
                 },
                 indent=2,
@@ -819,6 +872,10 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     r = sub.add_parser("run", help="replay session(s)")
     r.add_argument("--session", nargs="+", help="session id(s) from the export")
+    r.add_argument("--script", nargs="+", metavar="PATH",
+                   help="P4.1: scripted session file(s) - a sequence built from "
+                        "an exported session's turns with the research type set "
+                        "per turn (docs/prepilot-fixes/evidence/scripts/)")
     r.add_argument("--all", action="store_true", help="every FAIL/DEFECT session")
     r.add_argument("--reps", type=int, default=None,
                    help="override; default 3 for FAIL, 1 for DEFECT")

@@ -1,0 +1,12 @@
+{
+  "session_id": "p41_6346",
+  "base": "6346",
+  "verdict": "FAIL",
+  "primary": "B7",
+  "note": "P4.1 acceptance: refusal under 'Legislation only', then the lawyer's own 'I have changed the mode, please proceed' with the research type actually changed, then the original question again under the new type. Turn text is taken from session 6346 by index and is never stored here.",
+  "turns": [
+    {"from_turn": 1, "research_mode": "legislation_only"},
+    {"from_turn": 3, "research_mode": "legislation_and_case_law"},
+    {"from_turn": 1, "research_mode": "legislation_and_case_law"}
+  ]
+}

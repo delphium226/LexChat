@@ -4748,6 +4748,173 @@ def cmd_depth(args) -> int:
 
 # --- P0.5: which chat mode each turn actually ran in, and on what evidence ----
 
+# --- P4.1 (B7): the research-mode dead-end ---------------------------------
+#
+# The three regexes are the row's, verbatim, so the counts stay comparable
+# with the ones it published over `wave0_conv` (rep 1 of 6343/6346/6347/6350:
+# switch/restart 5 -> 14, wrong control 5 -> 15, invented UI 2 -> 2, Research
+# vs Conversational mode). Case-insensitive, over the answer text.
+DEADEND_SWITCH = re.compile(
+    r"please switch|switch to|you (?:may |will )?need to|once you have switched"
+    r"|start a new (?:chat |)session|change the mode",
+    re.IGNORECASE,
+)
+DEADEND_WRONG_CONTROL = re.compile(
+    r"legislation\s*(?:&|and)\s*case\s*law.{0,40}?(?:mode|selector)|mode selector",
+    re.IGNORECASE,
+)
+DEADEND_INVENTED_UI = re.compile(
+    r"top or side|top-right|upper right|left-hand|side ?bar|toolbar"
+    r"|typically located|interface",
+    re.IGNORECASE,
+)
+# Bug (a), graded on a turn whose research type CHANGED from the previous
+# turn's: the answer still describes the old scope, or denies the change.
+DEADEND_OLD_MODE = re.compile(
+    r"legislation[- ]only|still (?:restricted|set|limited|covers?)"
+    r"|(?:has|have|had) not (?:been )?(?:changed|switched|updated|taken effect)"
+    r"|not (?:yet )?(?:been )?(?:changed|switched)|remains? (?:set|restricted)"
+    r"|(?:cannot|can't|unable to|do not have (?:the )?(?:tools|access)[^.]{0,30}?)"
+    r"(?: search| access| retrieve| summarise| summarize)[^.]{0,40}?case law",
+    re.IGNORECASE,
+)
+
+
+def deadend_rows(doc: dict) -> list:
+    """One row per replayed turn with the P4.1 flags."""
+    out = []
+    prev_rm = None
+    since_change = False
+    for t in doc.get("turns", []):
+        answer = t.get("answer") or ""
+        rm = t.get("research_mode") or (doc.get("filters") or {}).get("research_mode") or ""
+        changed = bool(prev_rm) and bool(rm) and rm != prev_rm
+        # Bug (a) is graded on every turn from the change onward: the refusal
+        # stays in the history, so the turn AFTER the change turn can anchor
+        # on it just as well (the script's "same question" turn).
+        since_change = since_change or changed
+        out.append({
+            "session": str(doc.get("session_id")),
+            "rep": doc.get("rep", 1),
+            "turn": t.get("turn"),
+            "chat_mode": t.get("chat_mode") or "?",
+            "research_mode": rm or "?",
+            "changed": changed,
+            "since_change": since_change,
+            "marker": bool(t.get("mode_change")),
+            "answered": bool(answer.strip()),
+            "switch": bool(DEADEND_SWITCH.search(answer)),
+            "wrong_control": bool(DEADEND_WRONG_CONTROL.search(answer)),
+            "invented_ui": bool(DEADEND_INVENTED_UI.search(answer)),
+            "old_mode": bool(DEADEND_OLD_MODE.search(answer)),
+            "delegations": len(((t.get("audit") or {}).get("delegations")) or []),
+        })
+        if t.get("answer"):
+            prev_rm = rm
+    return out
+
+
+def deadend_findings(rows: list) -> list:
+    """What fails the row.
+
+    A turn after a real research-type change that still deflects (bug (a));
+    any turn naming a control the UI does not have (bug (b)); any turn
+    describing where a control is on screen (bug (c)). A change that the
+    product did not see (no marker) is a finding too: the harness stamped the
+    history, so a missing marker is the product's seam, not the model's.
+    """
+    out = []
+    for r in rows:
+        tag = f"{r['session']} r{r['rep']} t{r['turn']}"
+        if r["changed"] and not r["marker"]:
+            out.append(f"{tag}: research type changed and no mode-change marker was injected")
+        if r["since_change"] and r["answered"] and (r["switch"] or r["old_mode"]):
+            out.append(f"{tag}: research type changed to {r['research_mode']} and the "
+                       "answer still deflects or describes the old scope (bug a)")
+        if r["wrong_control"]:
+            out.append(f"{tag}: names a control the UI does not have (bug b)")
+        if r["invented_ui"]:
+            out.append(f"{tag}: describes the interface (bug c)")
+    return out
+
+
+def _deadend_counts(rows: list) -> dict:
+    answered = [r for r in rows if r["answered"]]
+    return {
+        "answered": len(answered),
+        "switch": sum(1 for r in answered if r["switch"]),
+        "wrong_control": sum(1 for r in answered if r["wrong_control"]),
+        "invented_ui": sum(1 for r in answered if r["invented_ui"]),
+        "old_mode": sum(1 for r in answered if r["old_mode"]),
+        "changed": sum(1 for r in answered if r["since_change"]),
+        "changed_clean": sum(1 for r in answered if r["since_change"]
+                             and not (r["switch"] or r["old_mode"])),
+        "marker": sum(1 for r in rows if r["marker"]),
+    }
+
+
+def cmd_deadend(args) -> int:
+    """P4.1 acceptance: the three bug counts per directory, the scripted
+    mode-change turns graded, and `--before` for the same on an older run."""
+    docs = load_runs(Path(args.dir))
+    if args.session:
+        docs = [d for d in docs if str(d.get("session_id")) in set(args.session)]
+    rows = [r for doc in docs for r in deadend_rows(doc)]
+    print(f"P4.1 research-mode dead-end over {args.dir}  ({len(docs)} run file(s), "
+          f"{len(rows)} turn(s))")
+    if rows:
+        shown = rows if args.all_reps else [r for r in rows if r["rep"] == 1]
+        print(f"\n  per turn ({'all reps' if args.all_reps else 'rep 1 only, --all-reps for the rest'}):")
+        print(f"    {'session':<10} {'t':>2}  {'chat':<14} {'research type':<26} "
+              f"{'chg':>3} {'mkr':>3} {'deleg':>5}  {'switch':>6} {'wrongctl':>8} "
+              f"{'ui':>3} {'oldmode':>7}")
+        for r in sorted(shown, key=lambda r: (r["session"], r["rep"], r["turn"] or 0)):
+            print(f"    {r['session']:<10} {r['turn']:>2}  {r['chat_mode']:<14} "
+                  f"{r['research_mode']:<26} {'Y' if r['changed'] else '-':>3} "
+                  f"{'Y' if r['marker'] else '-':>3} {r['delegations']:>5}  "
+                  f"{'Y' if r['switch'] else '-':>6} {'Y' if r['wrong_control'] else '-':>8} "
+                  f"{'Y' if r['invented_ui'] else '-':>3} {'Y' if r['old_mode'] else '-':>7}")
+
+    def _print_counts(label: str, rs: list) -> None:
+        c = _deadend_counts(rs)
+        print(f"  {label}: {c['answered']} answered turn(s) — "
+              f"switch/restart {c['switch']}, wrong control {c['wrong_control']}, "
+              f"invented UI {c['invented_ui']}, old-mode reference {c['old_mode']}; "
+              f"turns from a research-type change onward {c['changed']}, of which clean "
+              f"{c['changed_clean']}; markers injected {c['marker']}")
+
+    print()
+    _print_counts("rep 1", [r for r in rows if r["rep"] == 1])
+    if any(r["rep"] != 1 for r in rows):
+        _print_counts("all reps", rows)
+
+    if args.before:
+        before_docs = load_runs(Path(args.before))
+        sessions = {str(d.get("session_id")) for d in docs}
+        before_docs = [d for d in before_docs if str(d.get("session_id")) in sessions]
+        before_rows = [r for doc in before_docs for r in deadend_rows(doc)]
+        if not before_rows:
+            print(f"\n  --before: no session shared with {Path(args.before).name}")
+        else:
+            print(f"\n  --before {Path(args.before).name} ({len(before_docs)} run file(s), "
+                  "same sessions):")
+            _print_counts("rep 1", [r for r in before_rows if r["rep"] == 1])
+            if any(r["rep"] != 1 for r in before_rows):
+                _print_counts("all reps", before_rows)
+
+    findings = deadend_findings(rows)
+    print()
+    if findings:
+        print(f"  FINDINGS ({len(findings)}):")
+        for f in findings:
+            print(f"    [!] {f}")
+    else:
+        print("  no findings: no turn after a research-type change deflects, no "
+              "turn names a control the UI does not have, and none describes "
+              "the interface.")
+    return 1 if findings else 0
+
+
 def _replay_set_module():
     """`replay_set` lazily, so this module still imports without it.
 
@@ -5084,6 +5251,16 @@ def main(argv: Iterable[str] | None = None) -> int:
                          "(findings are computed over all reps either way)")
     md.add_argument("--no-export", action="store_true",
                     help="skip the transcript-export half of the table")
+    de = sub.add_parser("deadend",
+                        help="P4.1 acceptance: the research-mode dead-end — "
+                             "switch/wrong-control/invented-UI counts, and every "
+                             "turn after a research-type change graded")
+    de.add_argument("--before", metavar="DIR", default=None,
+                    help="the same counts over an older directory, same sessions")
+    de.add_argument("--session", nargs="+", default=None,
+                    help="restrict to these session ids")
+    de.add_argument("--all-reps", action="store_true",
+                    help="list every rep's turns, not only rep 1")
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")
@@ -5107,6 +5284,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "discovery": cmd_discovery,
         "depth": cmd_depth,
         "modes": cmd_modes,
+        "deadend": cmd_deadend,
         "blanks": cmd_blanks,
         "corpus": cmd_corpus,
     }[args.cmd](args)
