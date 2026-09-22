@@ -653,11 +653,22 @@ def test_deep_research_is_a_minority_of_turns_and_not_always_the_first():
     sessions = [s for s in rs.load_sessions() if s.verdict in ("FAIL", "DEFECT")]
     dr_turns = sum(len(s.deep_research_turns) for s in sessions)
     all_turns = sum(len(s.turns) for s in sessions)
-    assert dr_turns == 20 and all_turns == 155
+    # 20 completed Deep Research reports (`dr_marker`), plus — since P4.1
+    # (Session 21) — the 5 planner clarifications the client saves with no
+    # model (`planner_marker`: 6346 turns 1-3, 6347 turn 1, 6343 turn 4) and
+    # the 3 unanswered turns beside them that take their mode (6346 turns 4-5,
+    # 6343 turn 5). 28 of 155 is still a minority.
+    assert dr_turns == 28 and all_turns == 155
     by_id = {s.session_id: s for s in sessions}
     assert by_id["6409"].deep_research_turns == [6]
     assert by_id["6406"].deep_research_turns == [2, 3]
     assert by_id["6341"].deep_research_turns == [7]
+    assert by_id["6346"].deep_research_turns == [1, 2, 3, 4, 5]
+    assert by_id["6347"].deep_research_turns == [1, 2]
+    assert by_id["6343"].deep_research_turns == [4, 5]
+    planner = [(s.session_id, t.index) for s in sessions for t in s.turns
+               if t.chat_mode_source == "planner_marker"]
+    assert planner == [("6343", 4), ("6346", 1), ("6346", 2), ("6346", 3), ("6347", 1)]
 
 
 @requires_csv
@@ -838,9 +849,11 @@ def test_no_turn_of_the_replay_set_falls_through_to_a_default():
     """P0.5's acceptance: every turn's mode is evidence."""
     rep = rs.mode_report(rs.load_sessions())
     assert rep["default_source_turns"] == []
+    # `planner_marker` (P4.1, Session 21) took five turns off
+    # `conversational_marker`: the blank-model planner clarifications.
     assert rep["sources"] == {
-        "snapshot": 108, "conversational_marker": 52, "dr_marker": 27,
-        "neighbour": 9}
+        "snapshot": 108, "conversational_marker": 47, "dr_marker": 27,
+        "planner_marker": 5, "neighbour": 9}
 
 
 @requires_csv
@@ -863,12 +876,17 @@ def test_the_twelve_sessions_the_harness_sent_as_research():
     by_id = {s.session_id: s for s in sessions}
     turns = [t for sid in affected for t in by_id[sid].turns]
     assert len(turns) == 50
-    assert sum(1 for t in turns if t.chat_mode == "conversational") == 48
-    assert sum(1 for t in turns if t.chat_mode == "deep_research") == 2
+    # 48 → 40 conversational with P4.1's `planner_marker` (Session 21): 6346
+    # turns 1-3, 6347 turn 1 and 6343 turn 4 are planner clarifications, and
+    # 6346 turns 4-5 and 6343 turn 5 take their mode from them. `wave0_conv`
+    # replayed those eight as Conversational; the lawyers were in Deep
+    # Research.
+    assert sum(1 for t in turns if t.chat_mode == "conversational") == 40
+    assert sum(1 for t in turns if t.chat_mode == "deep_research") == 10
     # 6341 turn 7 and 6347 turn 2 keep their Deep Research mode: the marker that
     # sets them is per-turn and outranks everything else.
     assert by_id["6341"].deep_research_turns == [7]
-    assert by_id["6347"].deep_research_turns == [2]
+    assert by_id["6347"].deep_research_turns == [1, 2]
 
 
 @requires_csv
@@ -880,8 +898,15 @@ def test_the_unanswered_turns_of_those_sessions_resolve_to_a_neighbour():
           if t.chat_mode_source == "neighbour"]
     assert nb == [("6335", 4), ("6335", 5), ("6341", 1), ("6343", 5),
                   ("6345", 1), ("6345", 2), ("6346", 4), ("6346", 5)]
-    assert all(t.chat_mode == "conversational" for s in sessions for t in s.turns
-               if t.chat_mode_source == "neighbour")
+    # A neighbour copies a conversational turn, or (P4.1) a planner
+    # clarification — after which the client has NOT reverted, so the next
+    # turn ran in Deep Research too (6346 turn 4 says so in the lawyer's words).
+    modes = {(s.session_id, t.index): t.chat_mode for s in sessions for t in s.turns
+             if t.chat_mode_source == "neighbour"}
+    assert {k for k, v in modes.items() if v == "deep_research"} == {
+        ("6343", 5), ("6346", 4), ("6346", 5)}
+    assert all(v == "conversational" for k, v in modes.items()
+               if k not in {("6343", 5), ("6346", 4), ("6346", 5)})
 
 
 # --- P0.5: `replay_report modes`, the directory side --------------------------

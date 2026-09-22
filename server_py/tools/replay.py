@@ -507,11 +507,18 @@ async def replay_session(
                     answer=drafted.get("question", ""),
                     plan_clarification=drafted,
                 )
+                tr.research_mode = t.research_mode
+                tr.research_mode_source = t.research_mode_source
                 tr.prepilot = prepilot
                 turns.append(tr)
-                messages.append(
-                    {"role": "assistant", "content": drafted.get("question", "")}
-                )
+                # Stamped like the client stamps a saved clarification (P4.1):
+                # the planner ran under these modes too.
+                messages.append({
+                    "role": "assistant",
+                    "content": drafted.get("question", ""),
+                    "research_mode": t.research_mode or None,
+                    "chat_mode": mode,
+                })
                 continue
             plan = drafted.get("plan")
             if not plan:

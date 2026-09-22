@@ -756,6 +756,14 @@ lawyer who researched under `jurisdiction=scotland` and then switched to England
 Wales before pressing "Finished session" is recorded at the second setting, and
 nothing marks that the filters changed mid-thread.
 
+*Partly done by FIX_PLAN P4.1 (2026-09-22):* `messages.research_mode` and
+`messages.chat_mode` now record, per assistant message, the two MODE controls the reply
+ran under (server-resolved, echoed on the `result` event, saved by the client). The other
+filters (jurisdiction, type, dates) are still a session snapshot; the `Message.filters`
+JSONB column below is the remaining half. The transcript export does not yet carry the two
+new columns — add them when P0.4's re-export is next touched, since they would have settled
+P0.5 and P0.6 without reading any answer.
+
 Filters are browser-only state (`client/src/hooks/useFilters.js`) — sent on every
 `/api/chat` request via `build_request_config`, used for the run, then discarded — so
 there is no route to a truer record without persisting them. The honest fix is a
@@ -944,6 +952,14 @@ history) is the confirming case.
 **Caveat on [SAFE].** (2) and (3) are defensible inside the freeze with no retrieval effect.
 (1) touches the manager's message history, so it wants A3 or at least a manual regression
 before shipping — user's call whether that clears the freeze.
+
+**Built as FIX_PLAN P4.1 (2026-09-22, `fix/prepilot-defects`).** (1) is `utils/mode_change.py`:
+the client stamps each saved assistant message with `research_mode`/`chat_mode` (new
+`messages` columns, echoed on the `result` event) and the backend prefixes a marker onto the
+user's turn when this request's modes differ from the previous reply's. (3) is one shared
+rule naming the control as the UI does — four prompt sites, not one, had scripted their own.
+(2), the in-thread mode-change chip, is NOT built; the stamped rows make it a display-only
+change now. Ledger and evidence: `docs/prepilot-fixes/FIX_PLAN.md` P4.1.
 
 ### P3. Deep Research leaks its own step budget into the report as a legal finding [FROZEN]
 **Evidence.** **6 of 15 long Deep Research reports (40%)** carry text like *"the research

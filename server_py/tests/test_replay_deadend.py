@@ -309,3 +309,71 @@ def test_deadend_exits_one_on_a_finding_and_zero_when_clean(tmp_path, capsys):
     assert rr.main(["--dir", str(d), "deadend", "--before", str(d)]) == 0
     out = capsys.readouterr().out
     assert "no findings" in out and "--before" in out
+
+
+# ---------------------------------------------------------------------------
+# the planner-clarification mode source (found while building this row)
+# ---------------------------------------------------------------------------
+
+def _export(tmp_path, rows):
+    import csv as _csv
+    csv = tmp_path / "export.csv"
+    cls = tmp_path / "classification.json"
+    head = ["Session ID", "Message #", "Message role", "Message content", "Message model",
+            "Filter: Chat mode", "Filter: Research mode", "Session mode"]
+    with csv.open("w", encoding="utf-8-sig", newline="") as fh:
+        w = _csv.writer(fh)
+        w.writerow(head)
+        w.writerows(rows)
+    ids = {r[0] for r in rows}
+    cls.write_text(json.dumps({i: {"verdict": "FAIL"} for i in ids}), encoding="utf-8")
+    return str(csv), str(cls)
+
+
+def test_a_blank_model_answer_is_a_planner_clarification_and_its_neighbours_stay_in_deep_research(tmp_path):
+    """6346's shape: three planner clarifications (no model, no report
+    headings), then two turns with no reply. The shape marker read the three
+    as conversational; the client saves a clarification with no model and
+    every other assistant message with one, so the blank IS the planner."""
+    csv, cls = _export(tmp_path, [
+        ["6346", "1", "user", "q1", "", "", "", ""],
+        ["6346", "2", "assistant", "The current research mode is set to 'Legislation Only'.", "", "", "", ""],
+        ["6346", "3", "user", "q2", "", "", "", ""],
+        ["6346", "4", "assistant", "Please confirm once you have changed it.", "", "", "", ""],
+        ["6346", "5", "user", "q3", "", "", "", ""],
+        ["6346", "6", "assistant", "The system still restricts my searches.", "", "", "", ""],
+        ["6346", "7", "user", "q4", "", "", "", ""],
+        ["6346", "8", "user", "q5", "", "", "", ""],
+    ])
+    s = rs.load_sessions(csv, cls)[0]
+    assert [(t.chat_mode, t.chat_mode_source) for t in s.turns] == [
+        ("deep_research", "planner_marker")] * 3 + [("deep_research", "neighbour")] * 2
+    assert s.deep_research_turns == [1, 2, 3, 4, 5]
+    # The exporter derives `Session mode` from `messages.research_plan`, which
+    # a clarification never writes — so a blank Session mode here is agreement,
+    # not a disagreement to report.
+    assert rs.reconciliation_report([s]) == {
+        "marker_but_not_session_mode": [], "session_mode_but_no_marker": [],
+        "session_mode_blank_with_marker": []}
+
+
+def test_an_answer_with_a_model_is_never_read_as_the_planner(tmp_path):
+    csv, cls = _export(tmp_path, [
+        ["1", "1", "user", "q1", "", "", "", ""],
+        ["1", "2", "assistant", "The Act provides...", "google/gemini-3.1-pro-preview", "", "", ""],
+        ["1", "3", "user", "q2", "", "", "", ""],
+    ])
+    s = rs.load_sessions(csv, cls)[0]
+    assert [(t.chat_mode, t.chat_mode_source) for t in s.turns] == [
+        ("conversational", "conversational_marker"), ("conversational", "neighbour")]
+
+
+def test_a_completed_report_still_outranks_the_planner_read(tmp_path):
+    """A Deep Research report row also has a model; the DR marker decides it
+    first either way."""
+    csv, cls = _export(tmp_path, [
+        ["1", "1", "user", "q1", "", "", "", "deep_research"],
+        ["1", "2", "assistant", "**Key findings**\n- x", "", "", "", "deep_research"],
+    ])
+    s = rs.load_sessions(csv, cls)[0]
+    assert (s.turns[0].chat_mode, s.turns[0].chat_mode_source) == ("deep_research", "dr_marker")

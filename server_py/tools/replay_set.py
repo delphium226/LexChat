@@ -251,6 +251,13 @@ class Turn:
     # PRE-PILOT answer looked like — the evidence behind `chat_mode_source`,
     # kept per turn so a run file can be read without the CSV.
     recorded_answer_shape: str | None = None
+    # P4.1 (Session 21): the export's `Message model` is blank on exactly the
+    # assistant messages the Deep Research PLANNER wrote — the client saves a
+    # clarification with no model (`useChat.js`), every other assistant
+    # message carries the backend's — and `answer_shape` reads those five as
+    # conversational, because a clarification has no report headings. 6346's
+    # three answers are three of the five.
+    recorded_model_blank: bool = False
     # P4.1 (B7): the research type is a property of the TURN too — 6346's
     # lawyer changed it mid-session — so it is carried per turn and sent per
     # request. From the export it is still the session's one snapshot value
@@ -333,6 +340,13 @@ def _resolve_modes(turns: list, snapshot_mode: str | None) -> None:
     for t in turns:
         if t.recorded_answer_shape == "deep_research":
             t.chat_mode, t.chat_mode_source = "deep_research", "dr_marker"
+        elif t.got_reply and t.recorded_answer_chars and t.recorded_model_blank:
+            # P4.1 (Session 21): a Deep Research PLANNER clarification — the
+            # one assistant message the client saves with no model. It has no
+            # report headings, so the shape marker read all five in the export
+            # as conversational; three of them are 6346, the row's evidence
+            # session, whose lawyer was therefore in Deep Research throughout.
+            t.chat_mode, t.chat_mode_source = "deep_research", "planner_marker"
         elif snapshot_mode:
             t.chat_mode, t.chat_mode_source = snapshot_mode, "snapshot"
         elif t.recorded_answer_shape in SHAPE_TO_MODE:
@@ -345,9 +359,14 @@ def _resolve_modes(turns: list, snapshot_mode: str | None) -> None:
     # session, preferring the one before. Deep Research is one-shot (the
     # frontend reverts on completion), so a DR neighbour says nothing about the
     # turn beside it — and copying one would replay an unasked-for $0.71 turn.
+    # A planner CLARIFICATION is the exception: nothing completed, so the
+    # client did not revert, and the mode the next turn ran in is the same
+    # Deep Research (6346 turn 4: "It is in deep research mode, please
+    # summarise").
     readable = [
         (i, t) for i, t in enumerate(turns)
-        if t.chat_mode and t.chat_mode != "deep_research"
+        if t.chat_mode and (t.chat_mode != "deep_research"
+                            or t.chat_mode_source == "planner_marker")
     ]
     for i, t in enumerate(turns):
         if t.chat_mode:
@@ -506,6 +525,7 @@ def load_sessions(
                 t.got_reply = True
                 t.recorded_answer_chars = len(content)
                 t.recorded_answer_shape = answer_shape(content)
+                t.recorded_model_blank = m is None
                 if r.get("Message cost (USD)"):
                     try:
                         t.recorded_cost_usd = round(float(r["Message cost (USD)"]), 6)
@@ -568,7 +588,11 @@ def reconciliation_report(sessions: list[Session]) -> dict:
         "session_mode_blank_with_marker": [],
     }
     for s in sessions:
-        has = bool(s.deep_research_turns)
+        # Only a COMPLETED Deep Research report counts on either side: the
+        # exporter derives `Session mode` from `messages.research_plan`, which
+        # a planner clarification never writes, so a `planner_marker` turn
+        # (P4.1) is Deep Research the exporter cannot see.
+        has = any(t.chat_mode_source == "dr_marker" for t in s.turns)
         if has and s.session_mode == "deep_research":
             continue
         if has and s.session_mode is None:
