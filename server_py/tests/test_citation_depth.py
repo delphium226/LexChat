@@ -88,6 +88,37 @@ def test_no_prompt_example_names_a_provision_the_acceptance_grades(prompt):
         assert p not in prompt
 
 
+def test_the_quick_lookup_worker_asks_for_the_whole_provision_too():
+    """P0.5 step 3 found the asymmetry P3.1 left behind, and P3.11's decision
+    closed it (Session 20, user decision).
+
+    P3.1 put its sibling rule in the research Workers only. 6348's lawyer was
+    in CONVERSATIONAL mode, so the Worker that answered them had no such rule
+    at all — which is the one step between 2 of 3 (Research, `wave3_p311`)
+    and 1 of 3 (Conversational, `wave0_conv_6348`). The wording is deliberately
+    the same as the research Workers' so the asymmetry cannot reopen, plus one
+    clause reconciling it with this prompt's own "2-5 sentences" cap, which it
+    would otherwise contradict.
+
+    **It rides INSIDE the existing citation bullet, and that is P2.4's rule,
+    not a style preference.** The first draft added a fifth OUTPUT bullet and
+    `test_the_chat_worker_gets_the_rule_as_a_clause_not_a_block` failed —
+    P2.4 measured that giving this prompt more structure moves the Worker to
+    bullets (0 of 9 -> 5 of 9) and drops case-law links reaching the answer
+    (7 of 15 -> 2 of 13), because the chat-mode Manager rewrites bullets."""
+    p = prompts.WORKER_SYSTEM_PROMPT_CONVERSATIONAL
+    assert ("When you cite one subsection of a section, say in a short clause "
+            "what that section's other subsections provide") in p
+    assert "does not count against the 2-5 sentences" in p
+    # The cap it has to live with, still stated.
+    assert "2–5 sentences of concise prose" in p
+    # ...and the rule is a clause of the citation bullet, never its own bullet.
+    output = p.split("OUTPUT:")[1].split("CITATION FORMAT:")[0]
+    bullets = [ln for ln in output.splitlines() if ln.startswith("- ")]
+    assert len(bullets) == 4
+    assert sum(1 for b in bullets if "other subsections provide" in b) == 1
+
+
 @pytest.mark.parametrize("name", ["research", "hybrid"])
 def test_the_research_workers_ask_for_the_whole_provision(name):
     """6348: the Worker had s.36(2) in hand and described s.36(1) only.

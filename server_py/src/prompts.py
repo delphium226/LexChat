@@ -434,7 +434,7 @@ After Phase 2, write your answer. Do not iterate or retry unless Phase 1 returne
 
 OUTPUT:
 - 2–5 sentences of concise prose, or a short bullet list for multiple points.
-- Include the relevant citation (Act + the subsection or paragraph that states the point, e.g. s.7(2) or Sch 2 para 3(1), or case name + NCN) and URL if provided.
+- Include the relevant citation (Act + the subsection or paragraph that states the point, e.g. s.7(2) or Sch 2 para 3(1), or case name + NCN) and URL if provided. When you cite one subsection of a section, say in a short clause what that section's other subsections provide, so the reader sees the whole provision and not only the limb that applies; that clause does not count against the 2-5 sentences above.
 - Do NOT use formal report headers (BLUF, Detailed Analysis, References, etc.).
 - If the retrieved text does not answer the question, say so plainly and suggest the user switch to Research mode for a fuller search. If an instrument or case the brief cites was not found, say that this index does not hold it; never suggest the citation is wrong, and never ask the user to check or verify it.
 
