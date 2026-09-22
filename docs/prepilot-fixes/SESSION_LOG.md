@@ -4062,6 +4062,27 @@ plus P0.6 and P3.13 as new rows).
   `empty_completions`, retry exhausted. Two in one session; both are on P4.5,
   which still frames its failure mode as correctness only.
 
+**Every published number was re-derived from scratch before the handover.**
+A throwaway script re-computed all 35 figures this session put into
+`FIX_PLAN.md`, `BASELINE.md` and the log — one method, over every relevant
+directory and over the export — and all 35 reproduced. One did NOT before that
+check: P4.1's bug counts were eyeballed at 4 -> 13 and 4 -> 14 and are 5 -> 14
+and 5 -> 15. The three regexes are now on the row so the next session needs no
+script. **Do this before a handover, not after a claim.**
+
+**Two findings made at the handover itself, both verified at `5b3fd1a`:**
+- **P4.1's bug (b) is four prompt sites, not one, and its line reference is
+  stale.** `prompts.py:649-650` now holds `_filter_constraint_block_for_mode`;
+  the real sites are `:27`, `:390`, `:439` and `:779`, and **two of them name a
+  different control from the other two while both are live in Conversational
+  mode**. That is why the pre-pilot said "switch to Research mode" and
+  `wave0_conv` says "'Legislation & Case Law' mode". Recorded on the row.
+- **The conversational Worker never receives the ACTIVE RESEARCH FILTERS
+  block** — `get_worker_system_prompt`'s conversational branch returns early,
+  before the append. Awareness gap, not enforcement (the filters are applied in
+  `executor.py` regardless), and it bit no measurement here because the twelve
+  sessions carry no filter. New row **P3.14**.
+
 **Spend:** $1.78 more ($1.63 acceptance, $0.15 seam) — **$10.20 for the
 session.**
 
