@@ -4070,9 +4070,20 @@ session.**
 directories** (+`wave3_p311_conv`). Branch `fix/prepilot-defects`, **nothing
 pushed**, 1448 tests green, ledger 27 of 46.
 
-**Next action:** P3.11's disposition is back with the user — (i) book DONE
-with the residual as P3.13, (ii) keep it open and take P3.13 first, or (iii)
-revert the rule on the link cost. Then **P4.1**, which is the strongest open
-row and now has a before-column that reproduces.
+**Disposition (user decision, at the end of the session): P3.11 is BOOKED
+DONE, and B10 stays open behind P3.13.** P3.1's precedent: the seam the row
+targeted is closed (the Worker states the sibling in 3 of 3), the residual is
+the Manager seam, and the 1-of-3 at the answer is carried as a named
+dependency rather than booked as a pass. The rule is kept — it costs nothing
+at runtime and closes the asymmetry P3.1 left behind — and its measured price,
+links down in 3 of 4 turn slots, is on P3.13's watch list. Ledger **27 → 28 of
+46**; B10 re-points from P3.11 to P3.13 and reads `partial ... waiting on
+P3.13`.
+
+**Next action:** **P4.1**, the strongest open row on the page — B7 reproduced
+for the first time, `wave0_conv` is its before-column, and two of its three
+bugs are visible verbatim. Read **P0.6** first: bug (a) turns on the
+research-mode filter, still a harness default on exactly these sessions, and
+the contrast case it needs is in the transcripts rather than in any replay.
 
 ---
