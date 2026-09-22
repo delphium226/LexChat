@@ -4425,6 +4425,7 @@ def _depth_seams(rows: list) -> None:
           " report(s), and the answer; and which subsections of s.N the summaries"
           " mention")
     sizes: list = []
+    seam_rows: list = []
     summarised_n = outlined_n = 0
     for sid, rep, _head, verdicts, by_turn in rows:
         acts = DEPTH_TRUTH[sid]["acts"]
@@ -4448,12 +4449,17 @@ def _depth_seams(rows: list) -> None:
             report = "\n\n".join(reports)
             for req, status, _m, _w in graded:
                 cells = []
+                states = {}
                 for label, text in (("summary", summary), ("report", report)):
                     if not text.strip():
                         cells.append(f"{label} -")
+                        states[label] = "-"
                     else:
                         st, _, _ = _grade_depth_req(text, req, acts)
                         cells.append(f"{label} {st}")
+                        states[label] = st
+                seam_rows.append((t.get("chat_mode"), states.get("summary"),
+                                  states.get("report"), status))
                 mention = ""
                 num = _section_number(req)
                 if num and summary.strip():
@@ -4472,6 +4478,62 @@ def _depth_seams(rows: list) -> None:
               f"search(es) in the graded runs: empty {sum(1 for x in s if not x)}, "
               f"median {q(.5):,} chars, p90 {q(.9):,}, max {s[-1]:,}; summarised "
               f"searches {summarised_n}, outline non-empty for {outlined_n}")
+    _seam_transitions(seam_rows)
+
+
+def _seam_transitions(rows: list) -> None:
+    """P3.13: WHERE the depth is lost, tallied per chat mode.
+
+    The per-turn lines above say it one requirement at a time; this is the rate
+    P3.13 asks for. A requirement is attributed to the LAST seam that still had
+    it, which is the only attribution a fix can act on:
+
+      * **manager** — the worker report carried it and the answer did not. The
+        report is composed into the answer by `process_user_request`, so this is
+        the Manager dropping a provision its own Worker cited.
+      * **worker** — the summarised text the Worker was shown carried it and its
+        report did not (P3.1 and P3.11's seam).
+      * **summariser** — neither did (P3.11's diagnosis; the retrieval holds it,
+        `depth --seams`' per-turn lines say which subsections survived).
+      * **carried** — it reached the answer.
+
+    Deliberately NOT a verdict on a row: a requirement can be re-delivered at a
+    later turn, and `depth`'s headline already grades that.
+    """
+    if not rows:
+        return
+    tally: dict = {}
+    for mode, summary_st, report_st, answer_st in rows:
+        if answer_st == "deep":
+            where = "carried"
+        elif report_st == "deep":
+            where = "manager"
+        elif summary_st == "deep":
+            where = "worker"
+        else:
+            where = "summariser"
+        t = tally.setdefault(mode or "?", Counter())
+        t[where] += 1
+    print()
+    print("  where the depth is lost (P3.13), by the mode the turn RAN in "
+          "— attributed to the last seam that still had it:")
+    print(f"    {'mode':<16}{'n':>5}{'carried':>9}{'manager':>9}{'worker':>8}"
+          f"{'summariser':>12}   manager share of the losses")
+    total = Counter()
+    for mode in sorted(tally):
+        c = tally[mode]
+        total.update(c)
+        _seam_row(mode, c)
+    if len(tally) > 1:
+        _seam_row("ALL", total)
+
+
+def _seam_row(label: str, c) -> None:
+    n = sum(c.values())
+    lost = n - c["carried"]
+    share = f"{c['manager']} of {lost}" if lost else "-"
+    print(f"    {label:<16}{n:>5}{c['carried']:>9}{c['manager']:>9}"
+          f"{c['worker']:>8}{c['summariser']:>12}   {share}")
 
 
 def _depth_slots(doc: dict) -> dict:
@@ -4561,8 +4623,17 @@ def cmd_depth(args) -> int:
     the requirement's vocabulary that was NOT counted as delivering it. Read
     both, in both directions, before quoting a number.
     """
-    docs = [d for d in load_runs(Path(args.dir))
+    dirs = [Path(args.dir)] + [Path(d) for d in (getattr(args, "also", None) or [])]
+    docs = [d for p in dirs for d in load_runs(p)
             if str(d.get("session_id")) in DEPTH_TRUTH]
+    if len(dirs) > 1:
+        # Pooling is for P3.13's rate only: the per-rep lines and the headline
+        # DELIVERED n/3 stop being a single directory's acceptance, and a
+        # before/after directory pair pooled together would report a meaningless
+        # average of the two. Say so rather than letting it read as one sweep.
+        print(f"POOLED over {len(dirs)} directories: "
+              f"{', '.join(p.name for p in dirs)}. The headline and per-rep lines "
+              "below mix them; only the seam tally at the end is a pooled rate.")
     print(f"P3.1 (B10) - provision depth over {args.dir}  "
           f"({len(docs)} graded run file(s))")
     if not docs:
@@ -4999,7 +5070,12 @@ def main(argv: Iterable[str] | None = None) -> int:
     dp.add_argument("--seams", action="store_true",
                     help="P3.11: grade each requirement at the summarised text "
                          "the Worker was shown, the worker report and the answer, "
-                         "and say which subsections the summaries mention")
+                         "and say which subsections the summaries mention; ends "
+                         "with P3.13's tally of WHERE the depth was lost, per mode")
+    dp.add_argument("--also", nargs="+", metavar="DIR",
+                    help="further replay dirs to pool with --dir for the seam "
+                         "tally (say which in any write-up; the headline and "
+                         "per-rep lines then mix directories)")
     md = sub.add_parser("modes",
                         help="P0.5: the chat mode each turn ran in and the "
                              "evidence for it, plus the export's own answers")

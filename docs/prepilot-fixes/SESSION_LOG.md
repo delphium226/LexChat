@@ -3997,3 +3997,82 @@ the Fix Tracker should be updated (P0.5 → Done, P3.11 → still In progress,
 plus P0.6 and P3.13 as new rows).
 
 ---
+
+## Session 20, continued — 2026-09-22 — P3.11's decision, and P3.13 measured
+
+**Done:**
+- **The user settled P3.11: option (d), and the acceptance bar moves to
+  CONVERSATIONAL mode** — the mode 6348's lawyer used — so the row is graded
+  against `wave0_conv_6348`'s 1 of 3, not the Research-mode 2 of 3.
+- **Option (d) built: the quick-lookup Worker now carries P3.1's sibling
+  rule.** P3.1 put it in the research Workers only;
+  `WORKER_SYSTEM_PROMPT_CONVERSATIONAL` never had it, which is the one step
+  between 2 of 3 (Research) and 1 of 3 (Conversational). Same wording, plus a
+  clause reconciling it with that prompt's own "2-5 sentences" cap. No code
+  change — P3.11's outline already reached this Worker (14 of 14 section
+  searches); it had no instruction to use it.
+- **Seam A/B, $0.15:** both recorded-SHALLOW payloads DELIVERED with the rule.
+- **Acceptance (`wave3_p311_conv`, head `8dbae59`, n=3, $1.63): 1 of 3,
+  unchanged — but the Worker seam closed.** The Worker report carries s.36(2)
+  in **3 of 3** (2 of 3 before) and the Manager drops it in **2 of those 3**.
+- **New instrument, and it is P3.13's metric:** `depth --seams` now ends with
+  a tally of WHERE each requirement was lost — attributed to the last seam
+  that still had it at depth, split by the mode the turn RAN in — and `depth
+  --also` pools directories for the rate. 5 tests. **Tests 1443 → 1448.**
+- **P3.13 measured the day it was opened, free, over run files already held.**
+  Pooled over 103 graded (requirement, turn) observations in 10 directories:
+  56 carried; of the 47 losses, **summariser 24, manager 12, worker 11**.
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **I asserted a conclusion from a turn-level slice and the measurement
+  refuted it.** After seeing 3 of 5 deep Worker reports flattened on 6348
+  turn 1, I told the user "P3.13 is no longer a speculative row; it is the
+  whole of what remains of B10". The pooled tally says otherwise: **the
+  summariser is the largest seam (24 of 47 losses)**, exactly as P3.11
+  originally diagnosed, and in **Research mode the Manager never drops it at
+  all (0 of 11)**. Even within 6348's own conversational set the split is
+  summariser 10, manager 3, worker 1 — so 3-of-5 does not generalise across
+  the session it came from, let alone the corpus. The free measurement was
+  available before the claim; I made the claim first.
+- **The Deep Research half is the bigger share of the Manager losses and is
+  not this row's.** All 48 `deep_research` observations are **one session,
+  6365**, so "9 of 15" is a single-session figure, not a rate; and that seam
+  is the DR synthesis, not the conversational Manager — P4.7/P3.10's
+  territory. P3.13 should be re-scoped to the conversational Manager alone
+  (3 of 21 losses), which is much smaller than P3.11's residual made it look.
+- **A test caught a prompt regression I would otherwise have shipped.** The
+  first draft of the rule added a fifth OUTPUT bullet;
+  `test_the_chat_worker_gets_the_rule_as_a_clause_not_a_block` failed, because
+  P2.4 had measured that more structure in this prompt moves the Worker to
+  bullets (0 of 9 → 5 of 9) and drops case-law links reaching the answer (7 of
+  15 → 2 of 13). Folded into the existing citation bullet instead — and the
+  clause form is also shorter (1,111 vs 1,349 chars on rep 1).
+- **Invariant 1 still took a hit.** Against `wave0_conv_6348`: prose fell in 3
+  of 4 turn slots and **links in 3 of 4** (turn 1 3.0 → 2.0). Session 19 saw
+  the same from the outline itself. The sibling instruction costs links; the
+  clause form reduced but did not remove it.
+- **Process error: I committed on a red suite.** I chained
+  `pytest -q | tail && git commit`, and `tail`'s exit code masked pytest's, so
+  the commit landed with `test_the_chat_worker_gets_the_rule...` failing. Found
+  immediately, fixed, amended. **Check `${PIPESTATUS[0]}`, or do not pipe the
+  test run.**
+- **A second empty-completion cost outlier, same shape as this morning's.**
+  `wave3_p311_conv/6348_rep3` turn 2: **$0.90 and 713 seconds**, 3
+  `empty_completions`, retry exhausted. Two in one session; both are on P4.5,
+  which still frames its failure mode as correctness only.
+
+**Spend:** $1.78 more ($1.63 acceptance, $0.15 seam) — **$10.20 for the
+session.**
+
+**Machine state:** no uvicorn running; dev box restored
+(`google/gemini-3.1-pro-preview`, local prompt cache ON). **32 replay
+directories** (+`wave3_p311_conv`). Branch `fix/prepilot-defects`, **nothing
+pushed**, 1448 tests green, ledger 27 of 46.
+
+**Next action:** P3.11's disposition is back with the user — (i) book DONE
+with the residual as P3.13, (ii) keep it open and take P3.13 first, or (iii)
+revert the rule on the link cost. Then **P4.1**, which is the strongest open
+row and now has a before-column that reproduces.
+
+---

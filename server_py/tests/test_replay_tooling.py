@@ -551,6 +551,63 @@ def test_short_tokens_do_not_count_as_citations():
     assert rr._source_cited(src, "the abc of it") is False
 
 
+# --- P3.13: where the depth was lost, attributed to the last seam that had it -
+
+
+def _tally(capsys, rows):
+    rr._seam_transitions(rows)
+    return capsys.readouterr().out
+
+
+def test_the_seam_tally_attributes_to_the_last_seam_that_still_had_it(capsys):
+    """The attribution IS the finding, so it is pinned rather than eyeballed.
+
+    (mode, summary, report, answer) -> where. A requirement the answer carries
+    is never a loss, whatever happened upstream; otherwise it is blamed on the
+    latest seam that still had it at depth, because that is the only seam a fix
+    can act on.
+    """
+    out = _tally(capsys, [
+        ("conversational", "coarse", "deep", "deep"),      # carried
+        ("conversational", "coarse", "deep", "coarse"),    # manager dropped it
+        ("conversational", "deep", "coarse", "coarse"),    # worker dropped it
+        ("conversational", "coarse", "coarse", "coarse"),  # summariser
+    ])
+    assert "conversational      4        1        1       1           1" in out
+
+
+def test_a_delivered_answer_is_never_counted_as_a_loss(capsys):
+    """Even where an upstream seam looks coarse: the summary can omit the
+    subsection number while the Worker still writes it from the outline, which
+    is P3.11's whole mechanism."""
+    out = _tally(capsys, [("conversational", "coarse", "coarse", "deep")])
+    assert "   1        1        0       0           0" in out
+
+
+def test_the_tally_splits_by_the_mode_the_turn_ran_in(capsys):
+    """P0.5's lesson applied to this metric: 6348's losses in Research mode and
+    in Conversational mode are of different Workers and different Managers, and
+    pooling them hides which seam a fix has to touch."""
+    out = _tally(capsys, [
+        ("research", "coarse", "coarse", "coarse"),
+        ("conversational", "coarse", "deep", "coarse"),
+        ("deep_research", "coarse", "deep", "coarse"),
+    ])
+    assert "research" in out and "conversational" in out and "deep_research" in out
+    assert "ALL" in out  # the pooled row only appears with more than one mode
+
+
+def test_one_mode_prints_no_pooled_row(capsys):
+    out = _tally(capsys, [("conversational", "coarse", "deep", "coarse")])
+    assert "ALL" not in out
+
+
+def test_an_empty_tally_prints_nothing(capsys):
+    """Fail-soft: a directory with no graded session must not print a header
+    over an empty table."""
+    assert _tally(capsys, []) == ""
+
+
 # --- The replay set (needs the uncommitted export) ---------------------------
 
 
