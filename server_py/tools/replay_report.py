@@ -5093,6 +5093,80 @@ _SECONDARY_SERIES = ("ssi", "uksi", "nisr", "wsi", "ssr", "uksro", "nisro",
                      "ukci", "ukmo")
 
 
+_SIB_PIN = re.compile(
+    r"\b(?:s\.|ss\.|section|sections|reg\.|regulation|art\.|article)\s?"
+    r"(\d+[A-Z]*)\s?\((\d+[A-Za-z]*)\)", re.I)
+_SIB_LINK = re.compile(r"\[([^\]]*)\]\((https?://[^)\s]+)\)")
+
+
+def _sib_pins(text: str) -> set:
+    return {(m.group(1).upper(), m.group(2).lower()) for m in _SIB_PIN.finditer(text or "")}
+
+
+def cmd_siblings(args) -> int:
+    """P3.13 (B10): does the Manager keep a sibling subsection its Worker wrote?
+
+    For every non-Deep-Research delegation, each subsection pinpoint in the
+    worker report (`s.N(k)`, scope block excluded) is a SIBLING when the
+    report also cites another subsection of s.N and the answer keeps one of
+    those. Counted per mode the turn ran in, split by whether the Worker wrote
+    the sibling as a link or as plain text: the measurement behind P3.13's
+    fix, which links the plain-text ones for the conversational Manager.
+    Section numbers only (not instrument-aware), so it is a rate, not a list
+    of defects; `--list` prints the dropped plain-text ones. Informational:
+    exits 0.
+    """
+    base = Path(args.dir)
+    dirs = ([d for d in sorted(base.parent.iterdir()) if d.is_dir()] if args.all_dirs
+            else [base] + [Path(d) for d in (args.also or [])])
+    dirs = [d for d in dirs if d.name not in set(args.exclude or [])]
+    tally: dict = {}
+    dropped = []
+    n_deleg = 0
+    for d in dirs:
+        for doc in load_runs(d):
+            for t in doc.get("turns") or []:
+                mode = t.get("chat_mode") or "?"
+                if mode == "deep_research" or not t.get("answer"):
+                    continue
+                ans = _sib_pins(t["answer"])
+                for dg in (t.get("audit") or {}).get("delegations") or []:
+                    if dg.get("step") is not None:
+                        continue
+                    n_deleg += 1
+                    body = (dg.get("report") or "").split("[SEARCH SCOPE")[0]
+                    linked = set()
+                    for m in _SIB_LINK.finditer(body):
+                        linked |= _sib_pins(m.group(1))
+                    allp = linked | _sib_pins(_SIB_LINK.sub(" ", body))
+                    for (n, k) in allp:
+                        others = {p for p in allp if p[0] == n and p[1] != k}
+                        if not any(o in ans for o in others):
+                            continue
+                        row = tally.setdefault(mode, [0, 0, 0, 0])
+                        kept = (n, k) in ans
+                        if (n, k) in linked:
+                            row[0] += kept
+                            row[1] += 1
+                        else:
+                            row[2] += kept
+                            row[3] += 1
+                            if not kept:
+                                dropped.append((d.name, doc.get("session_id"),
+                                                doc.get("rep"), t.get("turn"), f"s.{n}({k})"))
+    print(f"P3.13 (B10) - siblings the Manager kept, over {len(dirs)} director"
+          f"{'y' if len(dirs) == 1 else 'ies'}, {n_deleg} non-Deep-Research delegations")
+    print("  a sibling: a subsection the report cites while the answer keeps another "
+          "subsection of the same section")
+    print(f"  {'mode':16} {'handed as a link':>18} {'handed as plain text':>22}")
+    for mode, (lk, lt, uk, ut) in sorted(tally.items()):
+        print(f"  {mode:16} {f'{lk} of {lt} kept':>18} {f'{uk} of {ut} kept':>22}")
+    if args.list:
+        for row in dropped:
+            print("  dropped, plain text:", *row)
+    return 0
+
+
 def _utf8_stdout() -> None:
     """Make stdout survive being redirected on Windows.
 
@@ -5261,6 +5335,16 @@ def main(argv: Iterable[str] | None = None) -> int:
                     help="restrict to these session ids")
     de.add_argument("--all-reps", action="store_true",
                     help="list every rep's turns, not only rep 1")
+    sb = sub.add_parser("siblings",
+                        help="P3.13: how often the Manager keeps a sibling "
+                             "subsection the Worker wrote, as a link vs as plain text")
+    sb.add_argument("--also", nargs="+", metavar="DIR", help="pool these dirs with --dir")
+    sb.add_argument("--all-dirs", action="store_true",
+                    help="pool every directory beside --dir")
+    sb.add_argument("--exclude", nargs="+", metavar="NAME",
+                    help="leave these directory names out of the pool")
+    sb.add_argument("--list", action="store_true",
+                    help="print every plain-text sibling the answer dropped")
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")
@@ -5286,6 +5370,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "modes": cmd_modes,
         "deadend": cmd_deadend,
         "blanks": cmd_blanks,
+        "siblings": cmd_siblings,
         "corpus": cmd_corpus,
     }[args.cmd](args)
 

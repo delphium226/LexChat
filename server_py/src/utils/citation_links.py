@@ -56,6 +56,7 @@ __all__ = [
     "harvest_legislation_urls",
     "provision_url_block",
     "enforce_provision_links",
+    "link_sibling_pinpoints",
     "PROVISION_MARKER",
     "PROVISION_FOOTNOTE",
 ]
@@ -399,9 +400,20 @@ def link_sibling_pinpoints(text: str, retrieved: Optional[Iterable[str]] = None)
     Only links to a URL the report already carries, in the same paragraph, for
     the same section number and provision type; never builds a URL. Skipped,
     so the text is left alone, when that paragraph links two different URLs for
-    the section, when the pinpoint names an instrument of its own ("s.36(2) of
-    the ... Act"), when `retrieved` is given and does not hold the URL, and
-    anywhere in the search-scope block. Idempotent and fail-soft.
+    the section; when the pinpoint does not belong to the URL's instrument - the
+    instrument named straight after it ("s.36(2) of the Data Protection Act
+    2018"), else the nearest instrument reference before it, must be that
+    instrument, and a title in plain words counts as an unknown instrument
+    unless it directly follows the link it restates ("[s.36(1)](...) of the
+    Freedom of Information (Scotland) Act 2002"); when `retrieved` is given
+    and does not hold the URL; and anywhere in the search-scope block.
+
+    Checked over every recorded worker report before it shipped (Session 22):
+    it would have added 102 links to 63 of the 777 conversational reports in
+    the 35 replay directories, every one read in context, and the one a first
+    draft got wrong - a list of Use Classes Orders where the 1963 Order's
+    s.2(2) took the 1950 Order's s.2 URL - is what the instrument rule is for.
+    Idempotent and fail-soft.
     """
     if not text:
         return text, 0

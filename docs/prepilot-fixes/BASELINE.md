@@ -3273,3 +3273,120 @@ turns each side** (`deadend --dir wave4_p41_conv --session 6343 6346 6347 6350
 still replays 6346 in Conversational mode (the run started before the planner
 marker landed); the corrected replay set sends 6346 as Deep Research, where the
 scripted DR sequence above is the after-column.
+
+## The conversational Manager seam (P3.13, 2026-09-23)
+
+After P3.11 the quick-lookup Worker states s.36(2) on 6348 turn 1 in 3 of 3
+reports, and the conversational Manager deleted it from 2 of those 3 answers
+(`wave3_p311_conv`). P3.13 is scoped to that Manager seam alone (Session 20's
+tally: 3 of the 21 conversational losses; the Deep Research share belongs to
+P4.7 and P3.10).
+
+**Outcome: built, measured at 1 of 3 against a 3-of-3 bar, not ticked.** The
+fix is kept and costs no links. The Manager still flattens the sibling at a
+rate. What to do next is on the row.
+
+### What the Manager was dropping, measured over every run file first
+
+In each flattened answer, the sibling was the one provision in the report
+written without a link: both subsections share the section URL, so the Worker
+links s.36(1) and writes s.36(2) in plain words. The Manager's CITATION
+PRESERVATION rule protects each provision "with its link".
+`python -m tools.replay_report --dir <any> siblings --all-dirs --exclude wave3_p313`:
+
+| 36 directories, 1,060 non-Deep-Research delegations | sibling handed as a link | as plain text |
+|---|---|---|
+| conversational Manager | **58 of 60 kept** | **70 of 104 kept** |
+| research Manager | 94 of 94 | 347 of 347 |
+
+A sibling is a subsection the report cites while the answer keeps another
+subsection of the same section. The measure uses section numbers only and is
+not instrument-aware, so it is a rate, not a list of defects. `--list` prints
+the 34 plain-text drops; they span 6333, 6348, 6359, 6374, 6375, 6409 and
+6410, so the shape is not 6348's alone.
+
+### The fix
+
+* **Code:** `citation_links.link_sibling_pinpoints`, applied by
+  `agent_core.worker_result_for_manager` to the report the conversational
+  Manager is handed. It links an unlinked `s.N(k)` to the `…/section/N` URL
+  the same paragraph already carries, and never builds a URL. It requires the
+  pinpoint's nearest instrument reference to be that URL's instrument. A plain
+  title counts as unknown, unless it directly follows the link it restates.
+  **Dry-run over the corpus:** 102 links added to 63 of 777 conversational
+  reports. The first draft's 188 distinct edits (research reports included)
+  were read in context, and one was wrong: a list of Use Classes Orders where
+  the 1963 Order's s.2(2) took the 1950 Order's s.2 URL. It is what the
+  instrument rule is for, and a test pins it.
+* **Prompt:** one clause in the existing CITATION PRESERVATION bullet of
+  `_MANAGER_CONV_BODY`: *"and where the Worker says what a cited section's
+  other subsections provide, keep that line too"*. It is a clause and not a
+  block, because of P2.4's bullet and case-law-link cost.
+
+### The seam, and what it got wrong
+
+`seam_replay manager` rebuilds the Manager's composition from a run file:
+the history, each delegation as the `delegate_research` call and the result
+`worker_result_for_manager` returns, then one call. The pinned configuration
+runs at temperature 0, so the table counts payloads. Five 6348 turn-1
+payloads: the three recorded Manager losses and the two recorded carries.
+
+| variant | tool-free: losses recovered | controls held | links | with tools: losses recovered | controls held | links |
+|---|---|---|---|---|---|---|
+| before (HEAD `57cfae6`) | 0 of 3 | 2 of 2 | 12 | 0 of 3 | 1 of 2 | 11 |
+| link only | 1 of 3 | 2 of 2 | 13 | — | — | — |
+| clause only | 2 of 3 | 2 of 2 | 11 | — | — | — |
+| **link + clause** | **3 of 3** | 2 of 2 | 15 | **1 of 3** | 2 of 2 | 13 |
+
+Six other sessions' payloads where the conversational Manager dropped a
+sibling (6374, 6409, 6375, 6410, 6333, 6359):
+
+| | tool-free before → after | with tools before → after |
+|---|---|---|
+| sibling kept | 2 → 4 of 6 | 1 → 4 of 6 |
+| legislation links | 10 → 14 | 11 → 14 |
+| case-law links | 3 → 3 | 3 → 3 |
+
+**The tool-free column was the wrong approximation, and the replay found it.**
+The tool-free seam said 3 of 3 on 6348. Rep 1 of the acceptance then
+flattened s.36(2). That exact payload DELIVERED in 3 of 3 tool-free draws, and
+reproduced the miss in 3 of 3 once the Manager was offered its tools, as the
+live call is. The seam now offers them by default. Neither form is exact:
+over the six recorded 6348 turn-1 payloads, each matched the live outcome in
+5. Temperature 0 is not byte-deterministic on this model either (two draws of
+one payload: 1,466 and 1,488 chars).
+
+### The acceptance run (`wave3_p313`, head `778d30a`, n=3, $5.65): 1 of 3
+
+| 6348 turn 1 | summary | report | answer | where lost |
+|---|---|---|---|---|
+| rep 1 | {1, 2} | deep | coarse | **Manager**: the linker fired (s.36(2), s.45A(2)); the answer is a two-Act bullet list keeping s.36(1) and s.45A(1)(a) |
+| rep 2 | {1} | coarse | coarse | upstream: a P4.5 episode; the re-delegated report cites s.36(1) alone, in bold, with nothing to link |
+| rep 3 | {1, 2} | deep | deep | carried |
+
+`depth --seams`: carried 2, manager 2, worker 0, summariser 2, identical to
+`wave3_p311_conv`. Delivered by turn 2: 1 of 3.
+
+**Invariant 1, against `wave3_p311_conv`:**
+
+* `depth --before`: links fell in 1 of 4 slots (t1 2.0 → 4.0, t2 1.7 → 2.7,
+  t3 2.0 → 2.3, t4 1.3 → 0.3); prose fell in 1 of 4.
+* `discovery --before`: `sources_kept` 4.0 → 5.0 per rep, and fell in 1 of 4
+  slots (t2).
+
+**The exit-1 set:** all 0 except `modes` 1, from rep 2's t1, t3 and t4. Rep 2's
+first worker lost its final completion three times, each attempt about 62,912
+completion tokens with no content. The Manager was therefore handed a report
+with no body, only the search-scope block, which tells the research Worker
+what to write "in the Jurisdiction & Status section". It wrote a
+`**Jurisdiction & Status**` heading, and the next two turns repeated it. That
+heading appeared in 0 of 116 earlier conversational answers. The same
+payload on the seam wrote no heading in 4 of 4 draws, with and without the
+fix. It is booked on P4.5.
+
+### Spend
+
+| | |
+|---|---|
+| `wave3_p313` (acceptance, 3 reps; $4.89 of it two P4.5 turns) | $5.65 |
+| seam draws, 64 over the session (tool-free and with tools; not every draw's cost was captured, and the printed ones range $0.007–$0.030) | about $1 |

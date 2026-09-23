@@ -231,3 +231,59 @@ def test_the_conversational_manager_keeps_what_the_worker_says_of_the_siblings()
 
 def test_the_research_manager_is_unchanged():
     assert "other subsections provide" not in prompts._MANAGER_BODY
+
+
+# --- the instrument: `replay_report siblings` ---------------------------------
+
+
+def _write_run(d, turns):
+    import json
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "6348_rep1.json").write_text(json.dumps(
+        {"session_id": "6348", "rep": 1, "turns": turns}), encoding="utf-8")
+
+
+def _turn(mode, report, answer, step=None):
+    return {"turn": 1, "chat_mode": mode, "answer": answer,
+            "audit": {"delegations": [{"step": step, "report": report}]}}
+
+
+def test_siblings_counts_link_and_plain_text_separately_per_mode(tmp_path, capsys):
+    import tools.replay_report as rr
+    kept_answer = f"Under [s.36(1)]({S36}) and s.36(2)."
+    dropped_answer = f"Under [s.36(1)]({S36})."
+    _write_run(tmp_path / "a", [
+        _turn("conversational", PARENTHETICAL, dropped_answer),          # plain, dropped
+        _turn("conversational", f"[s.36(1)]({S36}); [s.36(2)]({S36}).", kept_answer),  # link, kept
+        _turn("research", PARENTHETICAL, kept_answer),                   # plain, kept
+        _turn("deep_research", PARENTHETICAL, dropped_answer, step=1),   # never counted
+    ])
+    assert rr.main(["--dir", str(tmp_path / "a"), "siblings", "--list"]) == 0
+    out = capsys.readouterr().out
+    conv = next(ln for ln in out.splitlines() if ln.strip().startswith("conversational"))
+    # The linked turn cites both subsections as links, so each is the other's
+    # sibling: 2 of 2. The plain-text one was dropped: 0 of 1.
+    assert "2 of 2 kept" in conv and "0 of 1 kept" in conv
+    res = next(ln for ln in out.splitlines() if ln.strip().startswith("research"))
+    assert "1 of 1 kept" in res
+    assert "deep_research" not in out
+    assert "dropped, plain text: a 6348 1 1 s.36(2)" in out
+
+
+def test_siblings_needs_the_answer_to_keep_another_subsection(tmp_path, capsys):
+    """An answer that drops the whole section has not dropped a sibling; that
+    is a different failure, and counting it here would blur the rate."""
+    import tools.replay_report as rr
+    _write_run(tmp_path / "a", [_turn("conversational", PARENTHETICAL, "Nothing on s.36.")])
+    rr.main(["--dir", str(tmp_path / "a"), "siblings"])
+    assert "conversational" not in capsys.readouterr().out.split("mode")[-1]
+
+
+def test_siblings_pools_and_excludes_directories(tmp_path, capsys):
+    import tools.replay_report as rr
+    _write_run(tmp_path / "a", [_turn("conversational", PARENTHETICAL, f"[s.36(1)]({S36})")])
+    _write_run(tmp_path / "b", [_turn("conversational", PARENTHETICAL, f"[s.36(1)]({S36})")])
+    rr.main(["--dir", str(tmp_path / "a"), "siblings", "--all-dirs"])
+    assert "0 of 2 kept" in capsys.readouterr().out
+    rr.main(["--dir", str(tmp_path / "a"), "siblings", "--all-dirs", "--exclude", "b"])
+    assert "0 of 1 kept" in capsys.readouterr().out

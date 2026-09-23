@@ -4286,3 +4286,101 @@ need is the Filters button, and no answer had ever named it.
 **Consequence for measurement:** a replay directory taken before 2026-09-22 measured a system the target had never run. After the target pulls, replays of HEAD measure the deployed system plus whatever the branch has gained since `2eaeff0`.
 
 ---
+
+## Session 22 — 2026-09-23 — P3.13 (B10, the conversational Manager seam)
+
+**Done:**
+- **P3.13 BUILT, acceptance NOT MET: 6348 turn 1 DELIVERED in 1 of 3**
+  (`wave3_p313`, head `778d30a`, n=3, $5.65), unchanged from
+  `wave3_p311_conv`. Not ticked. The next step is the user's decision; there
+  are three options on the row. B10 stays partial. Ledger unchanged at 29 of
+  48 rows, 7 of 14 buckets.
+- **The acceptance was stated on the row before the replay** (3 of 3; links
+  not lower in more than 1 of 4 slots; `sources_kept` inside the noise floor;
+  exit-1 set 0). It was committed with the product change in `778d30a`.
+- **Measured before building, free, and it named the mechanism.** New
+  `replay_report siblings`: over 1,060 non-Deep-Research delegations in 36
+  directories, where the answer keeps one subsection of a section, the
+  conversational Manager keeps a sibling written as a link 58 of 60 times and
+  one written as plain text 70 of 104. The research Manager keeps 441 of 441
+  either way. In every flattened 6348 answer, s.36(2) was the report's one
+  unlinked provision.
+- **Built (`778d30a`):** `citation_links.link_sibling_pinpoints` via
+  `agent_core.worker_result_for_manager`, for the conversational Manager
+  only, plus one clause in its existing CITATION PRESERVATION bullet.
+  **Instrument:** `seam_replay manager`. **Tests 1524 → 1559.** Each half was
+  proven to fail its own tests on scratch copies: wiring removed, linker
+  stubbed, clause removed.
+- **Dev box restored** (`replay restore`: model `google/gemini-3.1-pro-preview`,
+  local prompt cache ON, `research_mode_enabled` ON). Server stopped.
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **The tool-free Manager seam predicted a pass the product did not deliver,
+  and I built on it.** Tool-free, link plus clause recovered 3 of 3 recorded
+  Manager losses. Rep 1 of the acceptance then flattened s.36(2) with the fix
+  live (the linker fired on two siblings). Its payload DELIVERED in 3 of 3
+  tool-free draws and failed in 3 of 3 once the Manager was offered its
+  tools, as the live call is. Re-drawn with tools, the fix is 1 of 3 on the
+  losses, not 3 of 3. The seam now offers the tools by default. **This is the
+  second time a seam has passed what live failed** (P3.11's rep 3 was the
+  first, at the Worker seam). Neither form of the Manager seam is exact: each
+  matched the live outcome on 5 of 6 recorded payloads. Take the harsher one.
+- **Linking alone was not enough, because the Manager also edits the sibling
+  out as off-topic.** The question is about legal advice privilege, which is
+  s.36(1). On the tool-free seam the link recovered 1 of 3 and the clause 2 of
+  3. Both halves are kept because together they did better, and neither costs
+  links.
+- **The first draft of the linker made a wrong-instrument link, and reading
+  every edit is what found it.** A research-mode report listing Use Classes
+  Orders would have handed the 1963 Order's s.2(2) the 1950 Order's s.2 URL:
+  a real page for the wrong instrument, which is Invariant 1's worst case. All
+  188 distinct edits over the corpus were read before any wiring. The
+  instrument rule and a test came from that reading.
+- **Rep 2 was lost to P4.5, not to this row, and it broke the conversational
+  format.** The first worker lost its final completion three times, each
+  attempt about 62,912 completion tokens with no content ($2.48, 1,171 s).
+  The Manager was handed a bodiless report, only the scope block, whose
+  text addresses the research Worker's "Jurisdiction & Status section". It
+  wrote that heading, and turns 3 and 4 repeated it: `modes` exits 1, the
+  first such answers in 128 conversational turns. The same payload on the
+  seam wrote no heading in 4 of 4 draws, with or without the fix. Rep 3
+  turn 3 was a second episode ($2.40, 1,120 s). Booked on P4.5.
+- **`--max-spend` is checked between reps, not within one.** The run was
+  capped at $4 and recorded $5.65.
+
+**How this session worked, for whoever repeats it.**
+- `python -m tools.seam_replay manager --run <run.json> --turn N`
+  (`--without-fix --rev <sha>` for the before-column; `--no-tools` for the
+  tool-free draw).
+- `python -m tools.replay_report --dir <D> siblings --all-dirs [--exclude NAME] [--list]`.
+- Before wiring a code change that rewrites what a model is handed, dry-run
+  it over every stored report and read the edits.
+
+**Every published number was re-derived before the handover** by one command
+or one scratch script over the saved draws. The scratch script regrades every
+seam draw with `replay_report.depth_verdict`. `siblings` reproduces 58/60 and
+70/104. `depth --seams`, `depth --before` and `discovery --before` give the
+acceptance and Invariant 1 figures, and `plan_status` counts 48 rows.
+
+**State of the branch:** `fix/prepilot-defects`. `778d30a` (product) and the
+handover commit are pushed to the branch, and nothing went to `main`. 1559
+tests green.
+
+**Machine state:** no uvicorn running, the dev box is restored and there are
+no worktrees. **37 replay directories** (+`wave3_p313`).
+
+**Spend:** $5.65 for `wave3_p313`, $4.89 of it two P4.5 turns. About $1 for
+64 seam draws; not every draw's cost was captured, and the printed ones range
+$0.007–$0.030.
+
+**Next action:** the user's decision on P3.13. (i), a code-written sibling
+at the answer seam, is recommended, and its design questions are placement
+and clutter. Otherwise take **P0.6**, then **P4.6**. Consider raising
+**P4.5**.
+
+**Open with the user:** P3.13's decision; whether the target has pulled
+`d8fd73b` and restarted; whether a `pg_dump` was taken there first (no backup
+has ever run on the target); telling whoever runs the eval harness that the
+audit event is schema v5; P5.2 (B12, external); whether Thomas's review
+document should be committed; whether the Fix Tracker should be updated.

@@ -427,3 +427,27 @@ def test_manager_without_fix_hands_over_the_bare_report_and_the_old_body(monkeyp
 def test_the_manager_body_reader_finds_the_constant():
     text = sr._prompt_constant_at("HEAD", "_MANAGER_CONV_BODY")
     assert "CURRENT MODE: Chat" in text
+
+
+@pytest.mark.parametrize("flags,offered", [([], True), (["--no-tools"], False)])
+def test_the_manager_is_offered_its_tools_unless_told_not_to(tmp_path, monkeypatch,
+                                                            flags, offered):
+    """Tool-free, the seam delivered a payload the live Manager flattened
+    (`wave3_p313` rep 1 turn 1, 3 of 3 draws); offered the tools the live
+    call carries, it reproduced the miss in 3 of 3."""
+    p = tmp_path / "6348_rep1.json"
+    p.write_text(json.dumps(_conv_doc()), encoding="utf-8")
+    seen = {}
+
+    async def fake_cfg(extra):
+        return {"model": "m", **extra}
+
+    async def fake_seam(messages, cfg, tools=None):
+        seen["tools"] = tools
+        return "Answer.", 0.0, "m"
+
+    monkeypatch.setattr(sr, "_provider_cfg", fake_cfg)
+    monkeypatch.setattr(sr, "run_seam", fake_seam)
+    assert sr.main(["manager", "--run", str(p), "--turn", "1", *flags]) == 0
+    names = [t["function"]["name"] for t in (seen["tools"] or [])]
+    assert ("delegate_research" in names) is offered

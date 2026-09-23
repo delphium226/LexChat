@@ -26,7 +26,7 @@ Usage (from `server_py/`, with the pinned model — `tools.replay pin`):
     python -m tools.seam_replay synthesis --run <run.json> --turn 1 --without-fix
     python -m tools.seam_replay worker --run <run.json> --turn 1 [--delegation 1]
     python -m tools.seam_replay worker --run <run.json> --turn 1 --from-raw
-    python -m tools.seam_replay manager --run <run.json> --turn 1 [--without-fix]
+    python -m tools.seam_replay manager --run <run.json> --turn 1 [--without-fix] [--no-tools]
 
 `--without-fix` rebuilds the seam as it was at a given commit (default the
 commit before P3.1's product code): the synthesis prompt from that revision,
@@ -319,9 +319,13 @@ def manager_messages(doc: dict, turn: dict, without_fix: bool = False,
     result's `content` verbatim, scope block included. **Approximations:** the
     learning-examples injection (needs the feedback table) is left out, each
     delegation is one round of its own (the live Manager may have batched
-    them), and the call is made with no tools, so the Manager must compose
-    rather than delegate again. `--without-fix` swaps the conversational
-    Manager body for the one at `rev`.
+    them). **The Manager is offered its tools, as the live call is** (a call
+    it makes is refused, and it composes on the next round): tool-free, the
+    seam DELIVERED in 3 of 3 draws a payload the live Manager had flattened
+    (`wave3_p313` rep 1 turn 1), and with the tools offered it reproduced the
+    miss in 3 of 3. `--no-tools` is the tool-free draw. `--without-fix`
+    swaps the conversational Manager body for the one at `rev` and hands over
+    the bare report.
     """
     from src.prompts import get_manager_system_prompt
     from src.utils.mode_change import apply_mode_change_marker
@@ -403,11 +407,13 @@ async def _no_tools(name: str, args: dict) -> str:
     return f"Error: Unknown tool {name}"
 
 
-async def run_seam(messages: list, cfg: dict) -> tuple:
-    """One tool-free model call. Returns (content, cost, model)."""
+async def run_seam(messages: list, cfg: dict, tools: Optional[list] = None) -> tuple:
+    """One model call, tool-free unless `tools` is given (then a call the model
+    makes is refused and it composes on the next round). Returns (content,
+    cost, model)."""
     set_request_provider_config(cfg)
     tc = TimingCollector("seam")
-    out = await chat_loop(messages, cfg["model"], None, 0, [], _no_tools,
+    out = await chat_loop(messages, cfg["model"], None, 0, tools or [], _no_tools,
                           timing_collector=tc)
     content = (out or {}).get("content") or ""
     return content, tc.total_cost_usd, cfg["model"]
@@ -446,6 +452,11 @@ def main(argv: Optional[list] = None) -> int:
                         "appended blocks from its recorded raw_result through "
                         "the product's builder (P3.11's outline reaches the seam)")
     p.add_argument("--print", action="store_true", help="print the answer")
+    p.add_argument("--no-tools", action="store_true",
+                   help="manager seam only: make the call tool-free. By default "
+                        "the Manager is offered its tools, as the live call is "
+                        "(a call it makes is refused), because tool-free it "
+                        "delivered a payload the live Manager flattened (P3.13)")
     p.add_argument("--dry-run", action="store_true",
                    help="build the payload and print its shape; no model call")
     p.add_argument("--out", default=None, help="write each answer to this directory")
@@ -485,9 +496,13 @@ def main(argv: Optional[list] = None) -> int:
         return 0
 
     cfg = asyncio.run(_provider_cfg(_cfg_for(doc, turn)))
+    tools = None
+    if args.seam == "manager" and not args.no_tools:
+        from src.agent.tools import get_manager_tools
+        tools = get_manager_tools("")
     total = 0.0
     for rep in range(1, args.reps + 1):
-        content, cost, model = asyncio.run(run_seam(messages, cfg))
+        content, cost, model = asyncio.run(run_seam(messages, cfg, tools))
         total += cost
         clean, _ = strip_scope_blocks(content)
         if args.seam == "manager":
