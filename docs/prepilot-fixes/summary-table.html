@@ -517,11 +517,15 @@
     body.textContent = "";
     let shown = 0;
     let lastGroup = null;
-    for (const row of ROWS) {
+    // Status first (Fixed at the top), then severity (P1 first); ties keep plan order.
+    const ordered = ROWS.map((r, i) => [r, i]).sort((a, b) =>
+      STATUSES.indexOf(a[0].status) - STATUSES.indexOf(b[0].status) ||
+      a[0].sev.localeCompare(b[0].sev) || a[1] - b[1]).map(x => x[0]);
+    for (const row of ordered) {
       if (statusFilter !== "all" && row.status !== statusFilter) continue;
       if (!matchesSource(row)) continue;
       const tr = el("tr");
-      const group = (row.ref.match(/^P(\d)/) || [null, row.ref ? "x" : "none"])[1];
+      const group = row.status + "|" + row.sev;  // a rule between status/severity bands
       if (lastGroup !== null && group !== lastGroup) tr.className = "group-start";
       lastGroup = group;
       tr.append(el("td", "ref", row.ref || "—"));
