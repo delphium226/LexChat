@@ -4448,3 +4448,32 @@ of seam draws.
 - whether this branch should be cut to `main`;
 - the target's pull and backup, the eval-harness schema v5, P5.2, and
   Thomas's document (all unchanged).
+
+---
+
+## Session 22, continued further — 2026-09-23 — the second cut to `main`, and the tracker
+
+**Done (user decisions, both asked for):**
+- **The Fix Tracker was updated and republished to the same URL.** P3.13 is
+  now Fixed (25 Fixed rows), the release wording covers both cuts, and the
+  notes lead with P3.13 in plain terms, including the prompt instruction that
+  was tried and taken back out.
+- **The second cut went to `main`.** This commit records it and is the branch
+  head being merged (`--no-ff`). The pre-merge `main`, `d8fd73b` (the first
+  cut's merge commit), is tagged `pre-prepilot-fixes-2026-09-23` and pushed.
+- **Checked before merging:** the only product files that change against
+  `origin/main` are `server_py/src/agent/agent_core.py` and
+  `server_py/src/utils/citation_links.py`. `prompts.py` nets to no change.
+  There is no config, `.env`, dependency, `client/` (so `client/dist` is
+  current), schema or new-host change. `origin/main` held nothing the branch
+  lacks except the first cut's own merge commit, so the merge is clean.
+
+**NOT done — needs the target:**
+- pull, then `stop_native.cmd` / `start_native.cmd`, then `server_py\test_apis.ps1`
+  and one real question;
+- a `pg_dump` first (still no backup has ever run there);
+- confirmation that the first cut (`d8fd73b`) was ever pulled.
+
+**Rollback on the target:** `git checkout pre-prepilot-fixes-2026-09-23` and
+a restart returns it to the first cut; `pre-prepilot-fixes-2026-09-22`
+returns it to before both.
