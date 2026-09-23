@@ -572,11 +572,14 @@ def restore_dropped_siblings(answer: str, reports, max_notes: int = 3) -> tuple:
     report. Returns (answer, notes added).
 
     **FIX_PLAN P3.13 (B10), the answer seam.** Linking the sibling
-    (`link_sibling_pinpoints`) and a CITATION PRESERVATION clause still left
-    the conversational Manager flattening 6348's s.36(2) at a rate (rep 1 of
-    `wave3_p313`: a two-Act bullet list keeping s.36(1) only, with the fix
-    live). Invariant 2's last step is to make it so: where the answer cites a
-    section at subsection level (s.N(j), linked to the section's URL) and a
+    (`link_sibling_pinpoints`), with a CITATION PRESERVATION clause then in
+    the prompt, still left the conversational Manager flattening 6348's
+    s.36(2) at a rate (rep 1 of `wave3_p313`: a two-Act bullet list keeping
+    s.36(1) only). Invariant 2's last step is to make it so, and with this in
+    place the clause was taken out again (it moved the Manager's first
+    delegation brief, see the P3.13 row). Where the answer cites a section at
+    subsection level (s.N(j), linked to the section's URL, or in plain words
+    when every section link in the reports is to one instrument) and a
     report handed to the Manager cites another subsection of that section as
     a link, s.N(k), and the answer mentions s.N(k) nowhere, the report's own
     words about s.N(k) are placed after the answer paragraph that cites the
@@ -608,10 +611,36 @@ def restore_dropped_siblings(answer: str, reports, max_notes: int = 3) -> tuple:
                     if sub:
                         entry["subs"].add(sub.group(1).lower())
         cited = {k: v for k, v in cited.items() if v["subs"]}
+        masked_answer = _mask_links(answer)
+        # A Manager that drops every link still cites in plain words ("section
+        # 36(1) of the ... Act"; `wave3_p311_conv` rep 2 on the seam). Such a
+        # pinpoint cites the reports' section URL only when every section-level
+        # link in the reports is to ONE instrument, so a plain "s.36(1)" can
+        # never be matched to another Act's s.36.
+        by_num: dict = {}
+        instruments = set()
+        for report in list(reports):
+            for m in _MD_LINK.finditer((report or "").split(_SCOPE_OPEN, 1)[0]):
+                key = _section_key(m.group(2))
+                if key:
+                    instruments.add(act_base_url(m.group(2)))
+                    by_num.setdefault((key[1], key[2]), {})[key[0]] = m.group(2)
+        if len(instruments) == 1:
+            for p in _SIBLING_PIN.finditer(masked_answer):
+                kind = _SIBLING_SEGMENT[p.group("kind").lower()]
+                urls = by_num.get((kind, p.group("num").lower())) or {}
+                sub = _FIRST_SUB.match(p.group("sub"))
+                if len(urls) != 1 or not sub:
+                    continue
+                (url_key, url), = urls.items()
+                entry = cited.setdefault(url_key, {
+                    "key": _section_key(url), "subs": set(), "at": p.start(),
+                    "num": p.group("num")})
+                entry["subs"].add(sub.group(1).lower())
+                entry["at"] = min(entry["at"], p.start())
         if not cited:
             return answer, 0
         # Subsections the answer names in plain words count as kept.
-        masked_answer = _mask_links(answer)
         plain: dict = {}
         for p in _SIBLING_PIN.finditer(masked_answer):
             sub = _FIRST_SUB.match(p.group("sub"))
