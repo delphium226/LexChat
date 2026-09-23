@@ -116,3 +116,25 @@ def test_the_p46_scripts_run_the_research_worker_under_a_read_type():
                 assert read.get("value") == "legislation_only", (p.name, t["from_turn"])
         else:
             assert (script["base"], rm) == ("6385", "case_law_only")
+
+
+def test_seam_sweep_selects_delegations_whose_report_matches(tmp_path, monkeypatch):
+    """`tools.seam_sweep` draws only the stored delegations that showed the
+    defect, and says how many tools each ran (a zero-tool one is drawn at the
+    first round)."""
+    import json
+
+    import tools.seam_sweep as ss
+
+    d = tmp_path / "wave2"
+    d.mkdir()
+    doc = _doc(_t(1, "a", reports=["clean"]),
+               _t(3, "b", reports=[OLD_DB], tools=0),
+               _t(4, "c", reports=[OLD_DB], tools=2), sid="6335")
+    (d / "6335_rep1.json").write_text(json.dumps(doc), encoding="utf-8")
+    monkeypatch.setattr(ss, "REPLAY", tmp_path)
+    got = ss.select(["wave2"], ss._parse_turns(["6335:1,3"]), ss.REPORT_MATCHES["p46"])
+    assert [(g[1], g[2], g[3], g[4]) for g in got] == [("6335", 3, 1, 0)]
+    got = ss.select(["wave2", "absent"], ss._parse_turns(["6335:1,3,4"]),
+                    ss.REPORT_MATCHES["p46"])
+    assert [(g[2], g[4]) for g in got] == [(3, 0), (4, 2)]

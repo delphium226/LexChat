@@ -4807,3 +4807,104 @@ carry its sentence. Session 14's lesson applies: compare link and
   v5. This session did not change the schema.
 - P5.2 (B12, external).
 - Whether Thomas's review document should be committed.
+
+---
+
+## Session 24 — 2026-09-23 — P4.6 (the scripted negatives)
+
+**Done:**
+- **P4.6 is DONE.** Ledger 31 → **32 of 49 rows**; buckets unchanged at 8
+  of 14. **B5 stays partial, now waiting on P3.7 and P4.7.**
+- **The acceptance was re-chosen first and committed before any build**
+  (`d860675`): scripted Research-mode turns under the research type the export
+  or the reviewer's read gives. That was `legislation_only` for 6335 t1-4,
+  6343, 6346, 6347 t1 and 6350 t1-2, and `case_law_only` for 6385 as the
+  case-law line's smoke. It had four pass conditions and a contingency in case
+  the before-column came back empty.
+- **The fix** (`9ba8ee8`). Thomas's wording is in `WORKER_SYSTEM_PROMPT` (both
+  lines), and the legislation Worker is told its tools search legislation only,
+  so a question outside them is "not searched", never "not found". The
+  case-law Worker's MANDATE line gets the same treatment, and so do its PHASE 4
+  and STOP RULE, which restated the verdict. The hybrid and quick-lookup
+  Workers never carried the lines and are untouched. It is pinned by
+  `test_worker_scripted_negatives.py`.
+- **Results** (all on the row and in `BASELINE.md`, *The scripted
+  negatives*):
+  - The before-column at HEAD is empty (0 in 49 turns).
+  - The seam A/B over 37 stored payloads went from **32 of 32 reports to 0 of
+    31**.
+  - The replay after-column exits 0 on every grader. `negatives` went from 1
+    to 0.
+  - Links fell in 0 of 21 slots, and `sources_kept` in 1 (n=1, explained on
+    the row).
+- **Tests 1604 → 1641**, all green. On a scratch copy with `prompts.py` at
+  HEAD, 8 of the pin test's 24 fail; with the tools at HEAD, 10 fail (2 of them
+  the known git artefacts).
+- **Instruments:**
+  - `replay_report scripted [--before] [--reports]`.
+  - `seam_replay worker --first-round`: the Worker's first round with its real
+    tools offered, stopped at the first call. It is the only seam for a Worker
+    that writes without searching.
+  - `tools/seam_sweep.py`: the Worker seam over every stored delegation that
+    showed a defect, both sides from one command.
+  - `seam_replay worker --without-fix` now swaps the constant of the turn's own
+    research type, in place.
+
+**Surprises / deviations from FIX_PLAN:**
+- **The before-column was empty, and P4.1 is why.** In every stored sweep the
+  sentence came mostly from the Research-mode Manager delegating a case-law
+  question to the legislation Worker, which then wrote it, often without a
+  single tool call. Since P4.1 that Manager declines the question itself and
+  delegates nothing. In the scripts, 39 of 49 turns delegated nothing. So the
+  sentence can no longer reach a lawyer on the shape that produced most of it,
+  and the replay could not discriminate. The seam carried the A/B, as booked.
+- **The seam tool was wrong for this row in two ways, and one was mine to
+  find.**
+  - `--without-fix` always swapped `WORKER_SYSTEM_PROMPT` (the wrong Worker on
+    a case-law turn), as the handover said.
+  - It also replaced the WHOLE prompt with the bare literal, so the "without"
+    side had lost the date line, the rules and the filter block as well as the
+    change. The swap is now in place.
+- **A scratch draw overstated a behaviour change, and the committed command
+  corrected it.** My first scratch A/B had the fix making 6 no-search payloads
+  search first against 0 before. Re-run through `seam_sweep`, the before side
+  searched first on 5. It is draw noise at temperature 0 on this model
+  (Session 22's hazard), not the fix. The published figures are the command's.
+- **I miscounted once:** I wrote 15 zero-tool payloads, and the listing says
+  16. Corrected before commit.
+
+**Watch item (on the row, not a new row):** on a case-law brief, the
+legislation Worker searches legislation first in about 1 payload in 6, on both
+sides. What it then writes is not observable at the seam. At HEAD the Manager
+declines those questions before delegating.
+
+**State of the branch:** `fix/prepilot-defects`, pushed with this commit.
+`main` is untouched at `c77e779`. **P4.6 is product code** (`prompts.py`
+only). Unlike P0.6, it would need a cut to reach the target, and cuts go when
+the user asks.
+
+**Machine state:**
+- no uvicorn running, no pin file, no worktrees; `tools.replay restore` was
+  run;
+- the dev box is on its normal settings;
+- 41 replay directories (new: `wave4_p46_pre`, `wave4_p46`).
+
+**Spend: $8.33.**
+- Replays: $4.98 ($2.89 before, $2.09 after).
+- Committed seam A/B: $1.56.
+- Scratch seam A/B and probes: $1.79.
+
+**Next action:** **P4.7** (the Deep Research synthesis's gap sentence, this
+row's twin, which iterates on `seam_replay synthesis`), or **P3.7**.
+
+**Open with the user (unchanged):**
+- Deploy both cuts to the target: `pg_dump` first, then `git pull`,
+  `stop_native.cmd` / `start_native.cmd`, `test_apis.ps1` and one real
+  question. P0.7's query can go with it.
+- Tell the eval-harness owner the audit event is schema v5. This session did
+  not change it.
+- Raise P4.5. This session's 6385 t4 before-run took 435 s and $0.91 with no
+  empty completion recorded, so that was not a P4.5 episode.
+- P5.2.
+- Whether Thomas's review document should be committed.
+- Whether P4.6 should go in the next cut.

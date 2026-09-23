@@ -3527,3 +3527,67 @@ so 6348 is unchanged. `modes` names the unknown turns and exits 1 only on a
 **What would replace the read:** the target's `request_timings.research_mode`
 holds the resolved value of every pre-pilot chat request. It can be joined to
 the export on `created_at` and `total_cost_usd` (P0.7, needs the target).
+
+## The scripted negatives (P4.6, 2026-09-23)
+
+Three research-Worker prompt lines scripted a negative about the whole
+database. P0.6 showed the row's acceptance sessions ran under the hybrid
+Worker, which carries none of them, so the acceptance was re-chosen and
+booked on the row before any build (`d860675`): Research chat mode, the
+research type the export or the reviewer's read gives, scripted by turn index
+(`evidence/scripts/p46_*.json`).
+
+**The replay, before and after.** `python -m tools.replay_report --dir <D>
+scripted [--before <D>]` counts the lines in every Worker report and answer.
+
+| | `wave4_p46_pre` (`d860675`) | `wave4_p46` (`9ba8ee8`) |
+|---|---|---|
+| turns (FAIL n=3, DEFECT n=1, 6385 n=1) | 49 | 49 |
+| turns that delegated | 10 | 10 |
+| scripted sentences, reports / answers | 0 / 0 | 0 / 0 |
+| exit-1 subcommands exiting 1 | `negatives` (6385 t4) | none |
+| links, summed over 21 slots | 50.7 | 71.0 (fell in 0 slots) |
+| `sources_kept`, summed | 14 | 13 (fell in 1: 6385 t4, 4 → 3) |
+| spend | $2.89 | $2.09 |
+
+**Why the before-column is empty.** Every earlier count of this sentence
+(the handover's 6/6, 3/3 …) is from a sweep taken before P4.1. In those
+sweeps the Research-mode Manager delegated a case-law question to the
+legislation Worker, which has no case-law tool, and it often wrote the
+sentence without searching: over all turns of these five sessions in `wave2`,
+10 of 22 delegations made no tool call (`scripted --session 6335 6343 6346
+6347 6350` on `wave2`). Since P4.1 the Manager declines those questions itself,
+with `CASE_LAW_OUT_OF_SCOPE_RULE`'s answer, and delegates nothing. So the
+replay cannot discriminate, and the wording A/B moved to the seam, as the
+row had booked.
+
+**The seam.** Every stored rep-1 delegation of the same turns in `baseline`,
+`wave1` and `wave2` whose report carried the sentence: 37 payloads, 16 of
+them from a Worker that made no tool call, drawn at the Worker's first round
+with its real tools offered.
+
+```
+python -m tools.seam_sweep --dirs baseline wave1 wave2 \
+    --turns 6335:1,3,4 6346:1,2,3,5 6343:1,2,4,5 6347:1 6350:2 \
+    [--without-fix --rev d860675]
+```
+
+| | without the fix (`d860675`) | with it (`9ba8ee8`) |
+|---|---|---|
+| composed a report | 32 | 31 |
+| chose to search first (not observable further) | 5 | 6 |
+| reports carrying a scripted sentence | **32 of 32** | **0 of 31** |
+| reports with a "database does not contain"-style sentence | 32 | 2 (both true: the legislation index holds no judgments) |
+| reports saying what was not searched | 0 | 31 |
+| mean report length | 1,138 chars | 1,554 chars |
+| spend | $0.74 | $0.82 |
+
+**The first-round probe (Session 22's lesson).** On the 10 delegations in
+`wave4_p46_pre` that did search, the Worker's first round before and after
+the fix (`seam_replay worker --first-round`, $0.20) chose the same searches in
+8; in the other two the case-law Worker added one query variant or quoted a
+term.
+
+**Spend for the row: $8.33**, of which $0.74 + $0.85 + $0.20 was a scratch
+A/B and probe run before the command above existed; the published seam
+figures are the command's.
