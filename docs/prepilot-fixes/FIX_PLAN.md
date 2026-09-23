@@ -27,7 +27,7 @@ Full analysis, with the evidence for each bucket:
 7. **When the user asks** (normally at the end of a session), update the **summary table**
    — the one-line-per-fix tracker shared with Thomas, at <https://claude.ai/artifact/JtrwLwRZnRihfe8kHj3EaJ>. Edit the `ROWS`
    array in `docs/prepilot-fixes/summary-table.html`, then republish that file with the
-   Artifact tool, passing the URL above as `url` so the link stays the same.
+   Artifact tool, passing the URL above as `url` so the link stays the same. **Every row carries a `sev` (P1/P2/P3, defined on the page: P1 = the lawyer gets something wrong or misleading and cannot tell, or hits a dead end; P2 = correct but incomplete or harder to check; P3 = presentation, unseen wording or tooling).** It grades the defect, not the fix, so it does not change when a row is fixed. The table sorts itself by status then severity, so add rows anywhere in `ROWS`; plan order is the tie-break. (Added 2026-09-23 at the user's request.)
 
 ---
 
