@@ -4477,3 +4477,75 @@ of seam draws.
 **Rollback on the target:** `git checkout pre-prepilot-fixes-2026-09-23` and
 a restart returns it to the first cut; `pre-prepilot-fixes-2026-09-22`
 returns it to before both.
+
+---
+
+## Session 22 — handover for Session 23 (2026-09-23)
+
+Written at the user's request before a new session starts, so nothing learned
+here depends on this session's context. Everything below is also on the rows
+it concerns.
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. `main` is at `c77e779`, the second
+  cut (user decision). Rollback tags: `pre-prepilot-fixes-2026-09-23` (first
+  cut only) and `pre-prepilot-fixes-2026-09-22` (before both).
+- **1578 tests green.**
+- Ledger **30 of 48 rows, 8 of 14 buckets closed.** Partial: B5 (waiting on
+  P3.7, P4.6, P4.7) and B12 (waiting on P5.2).
+- Run `python -m tools.plan_status` rather than trusting these figures.
+
+**Next work:** **P0.6** (read its row IN FULL: the research-mode field is
+blank for the same twelve sessions and is NOT derivable from the answers; the
+fix is to record `unknown` plus a human read), then **P4.6**'s re-baseline.
+Consider raising **P4.5**:
+- two episodes cost $4.89 of `wave3_p313`'s $5.65;
+- each empty completion is about 62,912 reasoning tokens;
+- a bodiless worker report made the Manager write a research-report heading
+  into a conversational answer.
+
+**Machine state:**
+- no uvicorn running; no pin file; no worktrees;
+- dev box on its normal settings: model `google/gemini-3.1-pro-preview`,
+  summarisation `google/gemini-3-flash-preview`, local prompt cache ON,
+  `research_mode_enabled` ON;
+- **39 replay directories** (gitignored), this session's being `wave3_p313`
+  (link + clause, 1 of 3), `wave3_p313b` (+ restore, 2 of 3) and
+  `wave3_p313c` (the acceptance, 3 of 3).
+- Transcript export (never in the repo):
+  `C:/Temp/aila-prepilot/pre-pilot sessions/session-transcripts-all-time-2026-09-14.csv`.
+- Fix Tracker: <https://claude.ai/artifact/JtrwLwRZnRihfe8kHj3EaJ> (source
+  `docs/prepilot-fixes/summary-table.html`; update only when asked).
+
+**Instruments added this session:**
+- `python -m tools.seam_replay manager --run <run.json> --turn N [--without-fix --rev <sha>] [--no-tools]`:
+  the Manager's composition from a run file. It offers the Manager its tools
+  by default, because the tool-free form passed a payload the live Manager
+  failed.
+- `python -m tools.replay_report --dir <D> siblings [--also DIR… | --all-dirs] [--exclude NAME…] [--list] [--dry-run [--show]]`:
+  how often the Manager keeps a sibling written as a link against plain text,
+  plus a dry-run of P3.13's code over every stored run.
+
+**Hazards met this session (add to the ones already in the brief):**
+- **Python inside a bash heredoc still mangles backslashes**, three more times
+  here. Every such failure asserted before writing, so nothing was corrupted.
+  For any edit containing `\s`, `\(` or `\n`, use the Edit tool, or write
+  the script to a file with the Write tool and run it.
+- **`git merge -F -` is not supported**: the message must be in a file.
+- **Scratch-copy revert checks:** `test_the_prompt_reader_finds_a_real_constant`
+  and `test_the_manager_body_reader_finds_the_constant` fail in any copy that
+  is not a git checkout (they call `git show`). That is an artefact, not a
+  signal.
+- **Seam draws at temperature 0 are not byte-deterministic** on the pinned
+  model (1,466 vs 1,488 chars for one payload), so count payloads, and
+  expect a close outcome to flip between draws.
+
+**Open with the user (unchanged unless they say otherwise):**
+- On the target: the first cut (`d8fd73b`) has never been confirmed pulled,
+  and no `pg_dump` has ever been taken there. Deploy both cuts with a
+  `pg_dump`, `git pull`, `stop_native.cmd` / `start_native.cmd`,
+  `server_py\test_apis.ps1`, and one real question.
+- Tell whoever runs the eval harness that the audit event is schema v5. This
+  session did not change the schema.
+- P5.2 (B12, external).
+- Whether Thomas's review document should be committed.

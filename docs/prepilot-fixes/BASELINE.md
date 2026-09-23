@@ -3470,3 +3470,9 @@ cause a lost link. `wave3_p313b`: links fell in 0 of 4, `sources_kept` 0 of 4.
 
 **Spend for option (i):** $1.17 + $1.01 for the two sweeps, plus about 25 seam
 and probe draws at $0.007–0.04 each.
+
+**Behind a command (added at the handover):** the linker's 102 links on 63 of
+777 reports is
+`replay_report --dir <any> siblings --all-dirs --exclude wave3_p313 wave3_p313b wave3_p313c --dry-run`.
+The restore's 15 notes on 14 of 623 turns is the same with
+`--exclude wave3_p313b wave3_p313c`; add `--show` to print every note.

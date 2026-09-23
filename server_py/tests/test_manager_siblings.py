@@ -446,6 +446,21 @@ def test_siblings_needs_the_answer_to_keep_another_subsection(tmp_path, capsys):
     assert "conversational" not in capsys.readouterr().out.split("mode")[-1]
 
 
+def test_siblings_dry_run_counts_what_the_code_would_add(tmp_path, capsys):
+    """The published P3.13 counts (links added, notes added) come from this."""
+    import tools.replay_report as rr
+    turn = _turn("conversational", PARENTHETICAL, FLAT_ANSWER)
+    # The linker only propagates a URL some tool returned.
+    turn["audit"]["delegations"][0]["tools"] = [
+        {"raw_result": '{"results": [{"url": "%s"}]}' % S36}]
+    _write_run(tmp_path / "a", [turn, _turn("deep_research", PARENTHETICAL, FLAT_ANSWER, step=1)])
+    assert rr.main(["--dir", str(tmp_path / "a"), "siblings", "--dry-run", "--show"]) == 0
+    out = capsys.readouterr().out
+    assert "conversational  1 links added to 1 of 1 reports" in out
+    assert "1 notes on 1 of 1 answered turns" in out
+    assert "Also in s.36: [s.36(2)]" in out
+
+
 def test_siblings_pools_and_excludes_directories(tmp_path, capsys):
     import tools.replay_report as rr
     _write_run(tmp_path / "a", [_turn("conversational", PARENTHETICAL, f"[s.36(1)]({S36})")])

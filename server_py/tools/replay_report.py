@@ -5164,7 +5164,65 @@ def cmd_siblings(args) -> int:
     if args.list:
         for row in dropped:
             print("  dropped, plain text:", *row)
+    if args.dry_run:
+        _siblings_dry_run(dirs, args.show)
     return 0
+
+
+def _siblings_dry_run(dirs: list, show: bool) -> None:
+    """What P3.13's two pieces of code would do to every stored run: how many
+    links `link_sibling_pinpoints` adds to non-Deep-Research worker reports,
+    and how many notes `restore_dropped_siblings` adds to conversational
+    answers (reports linked first, footer stripped, as the product runs it).
+    Behind a command because both counts are published on the P3.13 row, and
+    because a change to either function must be dry-run over every stored
+    report and its output READ before it ships (Session 22)."""
+    from src.utils.citation_links import (harvest_legislation_urls,
+                                          link_sibling_pinpoints,
+                                          restore_dropped_siblings)
+    from src.utils.search_scope import strip_answer_footer
+
+    reports: dict = {}
+    turns = fired = notes = 0
+    shown = []
+    for d in dirs:
+        for doc in load_runs(d):
+            for t in doc.get("turns") or []:
+                mode = t.get("chat_mode") or "?"
+                if mode == "deep_research":
+                    continue
+                handed = []
+                for dg in (t.get("audit") or {}).get("delegations") or []:
+                    if dg.get("step") is not None:
+                        continue
+                    urls: set = set()
+                    for tool in dg.get("tools") or []:
+                        harvest_legislation_urls(tool.get("raw_result"), urls)
+                    linked, n = link_sibling_pinpoints(dg.get("report") or "", urls)
+                    handed.append(linked)
+                    row = reports.setdefault(mode, [0, 0, 0])
+                    row[0] += 1
+                    row[1] += bool(n)
+                    row[2] += n
+                if mode != "conversational" or not t.get("answer") or not handed:
+                    continue
+                turns += 1
+                out, n = restore_dropped_siblings(strip_answer_footer(t["answer"]), handed)
+                if n:
+                    fired += 1
+                    notes += n
+                    if show:
+                        shown.append((d.name, doc.get("session_id"), doc.get("rep"), t.get("turn"),
+                                      [p for p in out.split("\n\n") if p.startswith("Also in ")]))
+    print("  --dry-run (P3.13's code over every stored run):")
+    for mode, (n, edited, links) in sorted(reports.items()):
+        print(f"    link_sibling_pinpoints  {mode:15} {links} links added to {edited} of {n} reports")
+    print(f"    restore_dropped_siblings conversational  {notes} notes on {fired} of {turns} "
+          f"answered turns with a delegation")
+    for name, sid, rep, turn, paras in shown:
+        print(f"    {name}/{sid} r{rep} t{turn}")
+        for p in paras:
+            print(f"      {p}")
 
 
 def _utf8_stdout() -> None:
@@ -5345,6 +5403,11 @@ def main(argv: Iterable[str] | None = None) -> int:
                     help="leave these directory names out of the pool")
     sb.add_argument("--list", action="store_true",
                     help="print every plain-text sibling the answer dropped")
+    sb.add_argument("--dry-run", action="store_true",
+                    help="run P3.13's linker and restore over every stored run and "
+                         "count what they would add")
+    sb.add_argument("--show", action="store_true",
+                    help="with --dry-run: print every note the restore would add")
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")

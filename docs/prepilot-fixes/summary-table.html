@@ -429,6 +429,12 @@
         were re-run. <strong>P0.6</strong> (which research filter those sessions used),
         <strong>P3.14</strong> (the quick-lookup step is not told which filters are active) came
         from that work and remain open. <strong>P3.13</strong> came from it too, and is fixed.</p>
+      <p><strong>Next.</strong> <strong>P0.6</strong>: record which research filter the twelve
+        re-run sessions actually used, rather than assume it. The export does not say, and the
+        answers cannot settle it without a human read. After that, a fresh measurement across all
+        sessions (P4.6) to confirm where things stand before the remaining fixes.
+        <strong>P4.5</strong> (a research step whose answer is lost) is becoming more pressing: it
+        is now the main source of slow and costly replies in our replays.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
         and three items from <code>docs/TODO.md</code> D16 (the impossible year window, always
@@ -445,7 +451,7 @@
   // status: "Fixed" | "In progress" | "Verified" | "To be verified"
   // sev:    "P1" | "P2" | "P3"  (see the Severity notes; grades the defect, not the fix)
   // src:    "T" | "R" | "T & R"
-  const UPDATED = "23 September 2026 (Session 22 — P3.13 fixed: a chat reply no longer drops a subsection the research step described; second release merged to main for deployment)";
+  const UPDATED = "23 September 2026, end of Session 22 (P3.13 fixed: a chat reply no longer drops a subsection the research step described; second release merged to main for deployment; next: P0.6)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Verified", ref: "P0.6", t: "" },
