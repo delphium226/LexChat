@@ -4384,3 +4384,67 @@ and clutter. Otherwise take **P0.6**, then **P4.6**. Consider raising
 has ever run on the target); telling whoever runs the eval harness that the
 audit event is schema v5; P5.2 (B12, external); whether Thomas's review
 document should be committed; whether the Fix Tracker should be updated.
+
+---
+
+## Session 22, continued — 2026-09-23 — P3.13 option (i): the answer seam; P3.13 DONE, B10 closed
+
+**Done:**
+- **The user chose option (i):** keep the linking, keep the row open, and put
+  a dropped sibling back in code after the answer is written. The design
+  choices were stated and taken by this session: verbatim Worker clause, after
+  the citing paragraph, "Also in s.N:", at most 3 notes, conversational
+  Manager only.
+- **Built:** `citation_links.restore_dropped_siblings` (`66598f3`). Then the
+  prompt clause was taken out and plain-text citations accepted (`ebd3efa`).
+  `seam_replay manager` applies the restore. **Tests 1559 → 1577.** The
+  restore stubbed fails 5 tests; unwired, it fails 1 (the integration test).
+- **ACCEPTED:** `wave3_p313c` (head `ebd3efa`, n=3, $1.01). 6348 turn 1
+  DELIVERED in 3 of 3, delivered by turn 2 in 3 of 3, Manager losses 0, every
+  exit-1 subcommand 0. Links fell in 1 of 4 slots; `sources_kept` fell in 0.
+  **P3.13 ticked; B10 CLOSED; ledger 30 of 48, 8 of 14 buckets.**
+
+**Surprises / deviations:**
+- **The first dry-run's notes were not fit to show a lawyer, and only
+  reading them showed it.** 29 notes, three kinds of fault: a list cut
+  mid-parenthesis (6374), restatements of the kept subsection, and
+  near-duplicates of an answer sentence (6409). Each became a guard. After
+  that there were 15 notes, all read.
+- **The prompt clause cost retrieval, which no metric on this row watched.**
+  `wave3_p313b` rep 1 went to the Economic Crime and Corporate Transparency
+  Act 2023 and never searched FOISA. Its first brief was the lawyer's words
+  nearly verbatim. That brief form appeared in 3 of 6 runs with the clause
+  and 0 of 10 before. The first brief is written before any tool result, so
+  the clause was the only change of ours that could reach it. A first-round
+  probe agreed: 2 of 4 briefs did not name FOI with the clause, 0 of 4
+  without. The clause is out, and `prompts.py` is identical to `57cfae6`.
+  **A prompt change can move a call the fix never meant to touch; probe
+  every call the edited prompt drives, not only the one it targets.**
+- **With the clause gone, the Manager dropped s.36(2) in all 3 acceptance
+  answers, and the code restored all 3.** The number is the code's. Invariant
+  2 says that is the right outcome, and the row now says it plainly.
+- **Correction:** `ebd3efa`'s commit message says the verbatim brief
+  appeared "0 of 11 before". It is 0 of 10 (re-derived by an exact prefix
+  match; the test docstring is corrected).
+
+**Every published number was re-derived by a command or script before the
+handover:** `depth --seams` / `--before`, `discovery --before`, the grade
+loop, the dry-run (623 turns with the restore's own sweeps excluded, 647 with
+them), the brief counts, the FOISA-less count (1 of 33) and `plan_status` (48
+rows).
+
+**Machine state:** no uvicorn running; dev box restored; **39 replay
+directories** (+`wave3_p313b`, `wave3_p313c`). Branch pushed; nothing to
+`main`.
+
+**Spend (continued):** $2.18 in sweeps ($1.17 + $1.01), plus about 25 seam
+and probe draws. **Session 22 total:** about $8.8 in sweeps, plus about $1.5
+of seam draws.
+
+**Next action:** **P0.6**, then **P4.6**'s re-baseline. Raise **P4.5**.
+
+**Open with the user:**
+- whether the Fix Tracker should be updated (P3.13 → Fixed, B10 closed);
+- whether this branch should be cut to `main`;
+- the target's pull and backup, the eval-harness schema v5, P5.2, and
+  Thomas's document (all unchanged).

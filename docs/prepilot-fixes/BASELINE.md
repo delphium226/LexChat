@@ -3390,3 +3390,83 @@ fix. It is booked on P4.5.
 |---|---|
 | `wave3_p313` (acceptance, 3 reps; $4.89 of it two P4.5 turns) | $5.65 |
 | seam draws, 64 over the session (tool-free and with tools; not every draw's cost was captured, and the printed ones range $0.007–$0.030) | about $1 |
+
+### Option (i): the answer seam (user decision, 2026-09-23). ACCEPTED, 3 of 3
+
+**The code:** `citation_links.restore_dropped_siblings`, run in
+`process_user_request` for the conversational Manager on the reports exactly
+as it was handed them. It fires where the answer cites s.N(j) and a report
+linked s.N(k) that the answer names nowhere. The report's own clause about
+s.N(k) then goes after the answer paragraph that cites the section, as "Also
+in s.N: …". The words are verbatim Worker text, never generated, with at most
+3 notes. Nothing is added when:
+
+* the answer doesn't cite the section at subsection level;
+* the clause restates a subsection the answer already has;
+* an answer sentence already says it (content-word overlap of 60% or more);
+* the clause can't be cut cleanly (unbalanced brackets or quotes; never cut
+  at ", and").
+
+A plain-text "section 36(1)" counts as a citation only when every section link
+in the reports is to one instrument.
+
+**Dry-run over every recorded conversational answer, read in full:** 15 notes
+on 14 of 623 turns (37 directories, before this option's own sweeps). The
+first draft's 29 notes included three kinds of fault, and each became a guard:
+
+* broken list cuts (6374: "(the First Minister, Ministers, the Lord
+  Advocate.");
+* restatements (6348's s.2 notes repeating the answer's own s.2(2)(c)
+  sentence);
+* near-duplicates (6409's s.27(2) repeating an answer sentence).
+
+**The prompt clause came out again.** Its only reach before any tool result
+is the Manager's first delegation brief, so that is where it was measured:
+
+| 6348 turn 1, the Manager's first brief | briefs | the verbatim brief\* | not naming FOI |
+|---|---|---|---|
+| stored runs before the clause (`wave0_conv`, `wave0_conv_6348`, `_pre`, `wave3_p311_conv`) | 10 | 0 | 2 |
+| with the clause (`wave3_p313`, `wave3_p313b`) | 6 | **3** | 3 |
+| after it was removed (`wave3_p313c`) | 3 | 0 | 0 |
+| seam probe, first round only, with / without the clause | 4 / 4 | 0 / 0 | **2 / 0** |
+
+\* "What is the statutory provision which covers the legal advice privilege
+exemption for a disclosure request in Scotland?" In `wave3_p313b` rep 1 it
+led the Worker to the Economic Crime and Corporate Transparency Act 2023
+(ss.188–190 use "disclosure request" literally), and FOISA was never searched.
+That is the only answer without FOISA among the 33 stored 6348 turn-1 runs.
+
+**Seam, tools offered, six 6348 payloads:**
+
+| | delivered | restore fired |
+|---|---|---|
+| link + clause + restore | 6 of 6 | 3 payloads, 4 notes |
+| link + restore, no clause (as shipped) | 6 of 6 | 4 payloads, 5 notes (one on a draw where the Manager dropped every link and cited in words) |
+
+On the six wider payloads (with the clause), the restore fired 0 times.
+
+| directory | head | 6348 t1 delivered | Manager losses | exit-1 set | spend |
+|---|---|---|---|---|---|
+| `wave3_p313` | `778d30a` (link + clause) | 1 of 3 | 2 | `modes` 1 (P4.5) | $5.65 |
+| `wave3_p313b` | `66598f3` (+ restore) | 2 of 3 (miss: ECCTA route) | 0 | all 0 | $1.17 |
+| **`wave3_p313c`** | **`ebd3efa`** (link + restore, no clause) | **3 of 3** | **0** | **all 0** | **$1.01** |
+
+In `wave3_p313c` the Manager dropped s.36(2) from all 3 turn-1 answers and
+the restore put it back in all 3 (5 notes, s.45A(2) twice beside s.36(2)). The
+row's number is therefore the code's, not the Manager's.
+
+**Invariant 1, `wave3_p313c` against `wave3_p311_conv`** (`depth --before`,
+`discovery --before`):
+
+* links fell in 1 of 4 slots: t1 2.0 → 5.0, t2 1.7 → 3.7, t3 2.0 → 2.0,
+  t4 1.3 → 0.0;
+* `sources_kept` fell in 0 of 4, 4.0 → 5.0 per rep;
+* prose shrank in 2 of 4.
+
+T4's zero links are three honest "the Act does not define it; that is common
+law" answers citing no provision, and the restore only adds text, so it can't
+cause a lost link. `wave3_p313b`: links fell in 0 of 4, `sources_kept` 0 of 4.
+**Watch:** turn 1 prose roughly doubles (724 → 1,362 chars mean).
+
+**Spend for option (i):** $1.17 + $1.01 for the two sweeps, plus about 25 seam
+and probe draws at $0.007–0.04 each.

@@ -226,8 +226,9 @@ def test_the_conversational_manager_prompt_carries_no_sibling_clause():
     brief, written before any tool result: with it, 2 of 4 briefs for 6348
     t1 no longer named FOI, against 4 of 4 without; and the verbatim brief
     that sent `wave3_p313b` rep 1 to the Economic Crime and Corporate
-    Transparency Act 2023 appeared 3 times in 6 runs after it, 0 in 11
-    before. Invariant 2: the code does the job, the prompt is left as it was."""
+    Transparency Act 2023 appeared in 3 of 6 runs with it, 0 of 10 before
+    and 0 of 3 after it was removed. Invariant 2: the code does the job, the
+    prompt is left as it was."""
     body = prompts._MANAGER_CONV_BODY
     rules = body.split("CRITICAL RULES:")[1].split("YOUR APPROACH:")[0]
     bullet = [ln for ln in rules.splitlines() if ln.startswith("- CITATION PRESERVATION")]
