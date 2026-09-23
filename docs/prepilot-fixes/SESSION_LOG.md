@@ -5059,3 +5059,16 @@ it concerns, or in `BASELINE.md`, *The scripted negatives*.
   per empty completion.
 - P5.2 (B12, external).
 - Whether Thomas's review document should be committed.
+
+**Addendum to the Session 25 handover (same day, after it was written): pre-flight for the next row.**
+Both candidates were checked before writing the kick-off prompt, and the
+results are on their rows:
+- **P4.7** has no measured instance of its case-law half. That covers 149
+  stored `legislation_only` Deep Research turns, and the pre-pilot answers of
+  6365, 6405 and 6408 in the export. It needs re-scoping with the user.
+- **P3.7**'s instruments are still 404 in LEX today, and so is the stub's
+  section lookup. Its acceptance premise has moved since P2.4, so the
+  before-column is to be measured at HEAD.
+
+**Recommended next row: P3.7.** P4.7 is the alternative only after the user
+decides its scope.
