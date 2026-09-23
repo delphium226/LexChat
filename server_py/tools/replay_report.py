@@ -4933,10 +4933,21 @@ def _replay_set_module():
         return None
 
 
-def mode_rows(doc: dict, shape) -> list:
+def mode_rows(doc: dict, shape, reads: dict | None = None) -> list:
     """One row per replayed turn: the mode it ran in, where that mode came
     from, the shape of the answer it produced and the shape the pre-pilot
-    recorded for the same turn."""
+    recorded for the same turn.
+
+    P0.6: also the research type the turn SENT, what it rests on, and the
+    reviewer's read of the same turn where one exists (`reads`, keyed
+    (session id, turn)). A run file written before P4.1 has no per-turn type;
+    it sent the session's `filters.research_mode`, so that is what is
+    compared, and its source reads `unrecorded`. A scripted session's turn
+    indexes are the script's, not the export's, so it is never looked up.
+    """
+    reads = reads or {}
+    session_rm = (doc.get("filters") or {}).get("research_mode") or ""
+    scripted = bool(doc.get("script"))
     out = []
     for t in doc.get("turns", []):
         pre = t.get("prepilot") or {}
@@ -4961,8 +4972,26 @@ def mode_rows(doc: dict, shape) -> list:
             "source": t.get("chat_mode_source") or "?",
             "replay_shape": shape(t.get("answer") or "") or "no_answer",
             "prepilot_shape": pre_shape,
+            "research_mode": t.get("research_mode") or session_rm or "?",
+            "research_source": t.get("research_mode_source") or "unrecorded",
+            "research_read": None if scripted else (
+                reads.get((str(doc.get("session_id")), t.get("turn"))) or {}).get("value"),
         })
     return out
+
+
+def research_contradicts(sent: str, read: str | None) -> bool:
+    """Did the turn run under a tool set the reviewer's read rules out?
+
+    An exact read must match. `case_law_included` rules out only
+    legislation_only, the one type without the case-law tool. `unknown` and
+    no read rule out nothing — which is why they are named, not graded.
+    """
+    if read in ("legislation_only", "case_law_only", "legislation_and_case_law"):
+        return sent != read
+    if read == "case_law_included":
+        return sent == "legislation_only"
+    return False
 
 
 def mode_findings(rows: list) -> list:
@@ -4981,6 +5010,17 @@ def mode_findings(rows: list) -> list:
         if r["chat_mode"] == "conversational" and r["replay_shape"] == "research":
             out.append(f"{r['session']} r{r['rep']} t{r['turn']}: ran "
                        f"conversational, answer is research-shaped")
+        # P0.6. A labelled `unknown` is NOT a finding — it is named instead
+        # (`cmd_modes`), or every sweep containing the twelve would exit 1 on
+        # a gap that is stated. A `default` is a guess presented as a value,
+        # and a type the reviewer's read rules out is the wrong tool set.
+        if r.get("research_source") == "default":
+            out.append(f"{r['session']} r{r['rep']} t{r['turn']}: research_mode_source="
+                       f"default ({r['research_mode']}) - a harness default, not evidence")
+        if research_contradicts(r.get("research_mode", ""), r.get("research_read")):
+            out.append(f"{r['session']} r{r['rep']} t{r['turn']}: sent "
+                       f"{r['research_mode']}, the reviewer's read is "
+                       f"{r['research_read']} - the wrong tool set")
     return out
 
 
@@ -4998,8 +5038,9 @@ def cmd_modes(args) -> int:
     """
     rs = _replay_set_module()
     shape = rs.answer_shape if rs else (lambda _t: None)
+    reads = rs.load_research_reads() if rs else {}
     docs = load_runs(Path(args.dir))
-    rows = [r for doc in docs for r in mode_rows(doc, shape)]
+    rows = [r for doc in docs for r in mode_rows(doc, shape, reads)]
     print(f"P0.5 chat mode over {args.dir}  ({len(docs)} run file(s), "
           f"{len(rows)} turn(s))")
     if not rows:
@@ -5035,6 +5076,7 @@ def cmd_modes(args) -> int:
             cells = [ct.get((mode, s), 0) for s in shapes]
             print(f"    {mode:<16}" + "".join(f"{c:>16}" for c in cells)
                   + f"{sum(cells):>8}")
+        _print_research_provenance(rows, shown)
 
     findings = mode_findings(rows)
     print()
@@ -5043,13 +5085,54 @@ def cmd_modes(args) -> int:
         for f in findings:
             print(f"    [!] {f}")
     else:
-        print("  no findings: every turn's mode is evidence, and no "
-              "conversational turn produced a research-shaped answer.")
+        print("  no findings: every turn's mode is evidence, no "
+              "conversational turn produced a research-shaped answer, and no "
+              "turn sent a default research type or one a reviewer's read rules out.")
 
     if rs is not None and not args.no_export:
         print()
         _print_export_modes(rs)
     return 1 if findings else 0
+
+
+_RESEARCH_SOURCE_MEANS = {
+    "snapshot": "the export",
+    "reviewer": "a reviewer's read",
+    "reviewer_partial": "a reviewer's read of case law only (sent legislation_and_case_law)",
+    "script": "a script",
+    "unknown": "nothing (labelled unknown)",
+    "default": "a harness default (a finding)",
+    "unrecorded": "not recorded (run file written before P4.1; the session's filter was sent)",
+}
+
+
+def _print_research_provenance(rows: list, shown: list) -> None:
+    """P0.6: the research type each turn sent, what it rests on, and the turns
+    whose tool set is not known — named, because counting them is what hid
+    the default for a month."""
+    print(f"\n  research type sent: {_count(rows, 'research_mode')}")
+    print("  research type rests on:")
+    for src, n in Counter(r["research_source"] for r in rows).most_common():
+        print(f"    {src:<17} {n:>4}  {_RESEARCH_SOURCE_MEANS.get(src, '?')}")
+    rep1 = {(r["session"], r["turn"]) for r in shown}
+
+    def _names(pred) -> str:
+        keys = sorted({(r["session"], r["turn"]) for r in rows if pred(r)},
+                      key=lambda k: (k[0], k[1] or 0))
+        return ", ".join(f"{s} t{t}" for s, t in keys if (s, t) in rep1) or "none"
+
+    print("  turns whose tool set is unknown (no export value, no reviewer read): "
+          + _names(lambda r: r["research_source"] == "unknown"
+                   or (r["research_source"] in ("default", "unrecorded")
+                       and r["research_read"] == "unknown")))
+    print("  turns where only the case-law half is known: "
+          + _names(lambda r: r["research_source"] == "reviewer_partial"
+                   or (r["research_source"] in ("default", "unrecorded")
+                       and r["research_read"] == "case_law_included")))
+    wrong = [r for r in rows if research_contradicts(r["research_mode"], r["research_read"])]
+    if wrong:
+        print(f"  turns sent a type the reviewer's read rules out: {len(wrong)} "
+              f"(all reps) - see FINDINGS")
 
 
 def _print_export_modes(rs) -> None:
@@ -5083,6 +5166,18 @@ def _print_export_modes(rs) -> None:
     dft = rep["default_source_turns"]
     print(f"    turns falling through to a default: {len(dft)}"
           + ("" if not dft else ": " + ", ".join(dft)))
+    # P0.6: the research type over the whole export, the replay set's turns
+    # told apart from the PASS sessions the harness never replays.
+    replayed = {s.session_id for s in sessions if s.verdict in ("FAIL", "DEFECT")}
+    print("    research type rests on: "
+          + ", ".join(f"{k} {v}" for k, v in sorted(rep["research_sources"].items())))
+    for key, label in (("research_unknown", "unknown"),
+                       ("research_partial", "case-law half only"),
+                       ("research_default", "a default")):
+        ids = rep[key]
+        inset = [i for i in ids if i.split(":")[0] in replayed]
+        print(f"    research type {label}: {len(ids)} turn(s), {len(inset)} in the replay set"
+              + ("" if not inset else ": " + ", ".join(inset)))
 
 
 # P1.6's demotion marker, counted by `corpus` as the measured cost of P3.5's

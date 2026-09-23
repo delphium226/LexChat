@@ -3476,3 +3476,54 @@ and probe draws at $0.007–0.04 each.
 `replay_report --dir <any> siblings --all-dirs --exclude wave3_p313 wave3_p313b wave3_p313c --dry-run`.
 The restore's 15 notes on 14 of 623 turns is the same with
 `--exclude wave3_p313b wave3_p313c`; add `--show` to print every note.
+
+## The research-type default (P0.6, 2026-09-23)
+
+`Filter: Research mode` is blank in the export for the twelve P0.5 sessions,
+and for 50 of their turns the harness sent `legislation_only`, labelled
+`default`. A human read of the transcripts, committed as
+`evidence/research_mode_reads.json`, says that was wrong on **16** of those
+turns. On each of them the lawyer had case law in the tool set, and the
+replay did not.
+
+| read (50 turns) | turns | sessions and turns |
+|---|---|---|
+| `legislation_only` | 26 | 6333, 6334, 6335 t1–4, 6343, 6345, 6346, 6347 t1, 6350 t1–2 |
+| `legislation_and_case_law` | 10 | 6335 t7, 6338 t1–3, 6340 t1, 6341 t1–5 |
+| `case_law_included` (legislation half not settled) | 6 | 6335 t6, 6347 t2–4, 6350 t3–4 |
+| `unknown` | 8 | 6335 t5, 6341 t6–8, 6348 t1–4 |
+
+**Why a read is possible at all.** At the pre-pilot the research type was one
+saved preference per user (`users.research_mode`, default `legislation_only`,
+set through the Research filters modal). It carried across chats and logins,
+so a change is an event, and a turn between two equal reads of the same lawyer
+is bracketed. Each type also left behaviour in the answers. The legislation-only
+Manager declined every case-law question in these sessions. The hybrid Manager
+briefed its Worker to ALSO search case law, so its answers report case-law
+results nobody asked for, in the case-law tool's own coverage wording. A 2026
+judgment can only have come from the tool. A neutral citation alone is not
+evidence, because a refusal quotes the case the lawyer named.
+
+**What the default did to the sweeps.**
+`python -m tools.replay_report --dir <D> modes` now grades every turn against
+the read:
+
+| directories | holding a turn sent without the case-law tool its lawyer had | turn-runs | rep 1 |
+|---|---|---|---|
+| 39 | 14 | 153 | 16 each in `baseline`, `wave1`, `wave2`, `wave0_conv` |
+
+The scripted P4.1 directories (`wave4_p41`, `wave4_p41_pre`,
+`wave4_p41_dr_v1`) are unaffected. The one row whose evidence moves is
+**P4.6**. Its acceptance sessions 6340 and 6341 t1–5 ran hybrid, and
+`WORKER_SYSTEM_PROMPT_HYBRID` carries none of its three scripted lines.
+
+**What sweeps send from now on.** The reviewer's read, labelled `reviewer`. A
+`case_law_included` read goes out as `legislation_and_case_law`, labelled
+`reviewer_partial`. A turn nothing settles is labelled `unknown` and sends the
+nearest read in its own session, or `legislation_only` in a session with none,
+so 6348 is unchanged. `modes` names the unknown turns and exits 1 only on a
+`default` label or a type the read rules out.
+
+**What would replace the read:** the target's `request_timings.research_mode`
+holds the resolved value of every pre-pilot chat request. It can be joined to
+the export on `created_at` and `total_cost_usd` (P0.7, needs the target).

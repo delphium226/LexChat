@@ -122,6 +122,29 @@ which is the correct reading for the turns either side of the run: 6406 turn 1
 is a conversational-mode deflection ("I recommend switching to Research mode"),
 and the user switched on for turn 2.
 
+The research type is NOT readable the same way (P0.6)
+-----------------------------------------------------
+`Filter: Research mode` is blank for 20 of the 62 sessions — the twelve above
+plus eight PASS sessions outside the replay set — and until P0.6 the harness
+filled it with `legislation_only` and labelled it `default`. **That was wrong
+on 16 of the twelve's 50 turns**, which ran with case law in the tool set.
+
+An answer's shape does not give it away: a refusal quotes the case the lawyer
+named, so a neutral citation is not evidence. What an answer CAN show, read
+against the pre-pilot prompts, is behaviour: the legislation-only Manager
+declines every case-law question; the hybrid one briefs the Worker to ALSO
+search case law, so its answers report case-law results nobody asked for, in
+the case-law tool's own coverage wording; case law from 2026 can only have
+come from the tool. At the pre-pilot the type was one saved preference per
+user, so a change is an event and a turn between two equal reads of the same
+lawyer is bracketed. That is a human read, and it is committed as data, one
+entry per turn with a neutral evidence note:
+`docs/prepilot-fixes/evidence/research_mode_reads.json` (`load_research_reads`).
+Where nothing settles a turn the read says `unknown`, and the harness says so
+per turn (`research_mode_source`); `_resolve_research_modes` has the rules for
+what such a turn sends. The target's `request_timings.research_mode` recorded
+the real value per request and would replace the read (FIX_PLAN P0.7).
+
 Other decisions
 ---------------
 * **`Filter: Date to` maps to `year_to`, not `date_to`.** The export writes a
@@ -172,8 +195,19 @@ DEFAULT_REPLAY_SET = (
 # answered non-DR turns in the export is conversational-shaped, so `research`
 # was not merely unrecorded, it was contradicted by the data.
 DEFAULT_CHAT_MODE = "conversational"
-# `resolve_research_mode` default.
+# ~~`resolve_research_mode` default.~~ **P0.6, 2026-09-23: never a label, only
+# what is SENT** for a turn nothing settles (source `unknown`) in a session
+# with no read at all; the API needs a concrete value. It is the product's
+# default, and it was the pre-pilot's per-user default too.
 DEFAULT_RESEARCH_MODE = "legislation_only"
+DEFAULT_RESEARCH_READS = (
+    REPO_ROOT / "docs" / "prepilot-fixes" / "evidence" / "research_mode_reads.json"
+)
+RESEARCH_MODES = ("legislation_only", "case_law_only", "legislation_and_case_law")
+# A reviewer read may settle less than the whole type: `case_law_included`
+# says the tool set held case law, not whether it held legislation too.
+RESEARCH_READ_VALUES = RESEARCH_MODES + ("case_law_included", "unknown")
+RESEARCH_READ_BASES = ("answer", "lawyer", "bracketed")
 
 # The Deep Research fingerprint. Only DEEP_RESEARCH_SYNTHESIS_PROMPT asks for a
 # "**Key findings** bullet list" — see the module docstring for the measurement.
@@ -260,9 +294,12 @@ class Turn:
     recorded_model_blank: bool = False
     # P4.1 (B7): the research type is a property of the TURN too — 6346's
     # lawyer changed it mid-session — so it is carried per turn and sent per
-    # request. From the export it is still the session's one snapshot value
-    # (`snapshot`) or the harness default (`default`; see P0.6, which is where
-    # `unknown` belongs); a scripted session sets it per turn (`script`).
+    # request. `research_mode` is what the harness SENDS; the source says what
+    # that rests on (P0.6): `snapshot` (the export states it), `reviewer` (a
+    # human read settles it), `reviewer_partial` (a read settles only that
+    # case law was in the tool set; sent as legislation_and_case_law),
+    # `unknown` (nothing settles it) or `script`. `default` is never written
+    # any more and `replay_report modes` treats it as a finding.
     research_mode: str = ""
     research_mode_source: str = ""
 
@@ -280,7 +317,11 @@ class Session:
     session_mode: str | None = None  # thread-level, as exported
     filter_chat_mode: str | None = None  # toggle position at form submit
 
-    research_mode: str = DEFAULT_RESEARCH_MODE
+    # The export's own `Filter: Research mode`, or None where it is blank
+    # (P0.6): run files record it as `filters.research_mode`, a historical
+    # fact about the session, so it must not carry a value the export did
+    # not. What each turn SENT is `Turn.research_mode`.
+    research_mode: str | None = None
     jurisdiction: str | None = None
     year_from: int | None = None
     year_to: int | None = None
@@ -382,6 +423,93 @@ def _resolve_modes(turns: list, snapshot_mode: str | None) -> None:
             t.chat_mode, t.chat_mode_source = DEFAULT_CHAT_MODE, "default"
 
 
+def load_research_reads(path: Path | str | None = None) -> dict:
+    """The reviewer's research-type reads (P0.6), as {(session_id, turn): read}.
+
+    Validated hard, because a malformed read would be sent as if it were
+    evidence: every entry needs a known value and basis, `source: reviewer`,
+    and a non-empty evidence note, and nothing else — in particular no
+    `question` key, since the notes sit in the repo and a lawyer's question
+    must not (FIX_PLAN, Data handling). A missing file is an empty read set:
+    every blank-export turn is then `unknown`, which is honest, not an error.
+    """
+    p = Path(path or DEFAULT_RESEARCH_READS)
+    if not p.exists():
+        return {}
+    data = json.loads(p.read_text(encoding="utf-8"))
+    out: dict = {}
+    for sid, turns in (data.get("sessions") or {}).items():
+        for idx, read in turns.items():
+            where = f"{p.name}: {sid} turn {idx}"
+            extra = set(read) - {"value", "source", "basis", "evidence"}
+            if extra:
+                raise SystemExit(f"{where}: unexpected key(s) {sorted(extra)}")
+            if read.get("value") not in RESEARCH_READ_VALUES:
+                raise SystemExit(f"{where}: value must be one of {RESEARCH_READ_VALUES}")
+            if read.get("source") != "reviewer":
+                raise SystemExit(f"{where}: source must be 'reviewer'")
+            if read.get("basis") not in RESEARCH_READ_BASES:
+                raise SystemExit(f"{where}: basis must be one of {RESEARCH_READ_BASES}")
+            if not (read.get("evidence") or "").strip():
+                raise SystemExit(f"{where}: needs a one-line evidence note")
+            out[(str(sid), int(idx))] = dict(read)
+    return out
+
+
+def _resolve_research_modes(sid: str, turns: list, stated: str | None,
+                            reads: dict) -> None:
+    """Give every turn a research type to SEND and say what it rests on (P0.6).
+
+    The export states one value per session or none. Where it states one,
+    every turn takes it (`snapshot`) and a reviewer read would be a second
+    claim about the same fact, so one is refused. Where it is blank, the
+    reviewer's read decides: an exact type is `reviewer`; `case_law_included`
+    is sent as legislation_and_case_law — the one type that holds case law
+    AND legislation, so it withholds neither — labelled `reviewer_partial`.
+
+    **What an `unknown` turn sends.** The API needs a value, and the choice is
+    a claim, so it is the smallest one available: the research type was ONE
+    saved preference per user at the pre-pilot, so a change is an event, and
+    sending the nearest read in the same session (the one before on a tie)
+    asserts that no change happened that no evidence places. A global
+    default would assert changes instead — 6341 turns 6-8 would drop case
+    law after turn 5 and fire P4.1's mode-change marker on a change the
+    lawyer never made. A session with no read at all sends
+    `DEFAULT_RESEARCH_MODE`, exactly as before. Either way the turn is
+    labelled `unknown`, so every run file carries the caveat.
+    """
+    if stated:
+        own = sorted(i for (s, i) in reads if s == sid)
+        if own:
+            raise SystemExit(
+                f"research_mode_reads: session {sid} has an export value "
+                f"({stated}) and a reviewer read for turn(s) {own}; the export "
+                "wins, so the read is a second claim - remove it")
+        for t in turns:
+            t.research_mode, t.research_mode_source = stated, "snapshot"
+        return
+
+    known: list = []
+    for i, t in enumerate(turns):
+        read = reads.get((sid, t.index))
+        value = (read or {}).get("value", "unknown")
+        if value in RESEARCH_MODES:
+            t.research_mode, t.research_mode_source = value, "reviewer"
+        elif value == "case_law_included":
+            t.research_mode = "legislation_and_case_law"
+            t.research_mode_source = "reviewer_partial"
+        else:
+            t.research_mode, t.research_mode_source = "", "unknown"
+            continue
+        known.append((i, t.research_mode))
+    for i, t in enumerate(turns):
+        if t.research_mode:
+            continue
+        nearest = min(known, key=lambda p: (abs(p[0] - i), 0 if p[0] < i else 1),
+                      default=None)
+        t.research_mode = nearest[1] if nearest else DEFAULT_RESEARCH_MODE
+
+
 def mode_report(sessions: list) -> dict:
     """Cross-check the answer-shape marker against the export's own fields (P0.5).
 
@@ -397,6 +525,13 @@ def mode_report(sessions: list) -> dict:
         "shapes": {},
         "by_recorded_mode": {},
         "default_source_turns": [],
+        # P0.6: the research type's provenance, per turn. `research_unknown`
+        # and `research_partial` NAME the turns whose tool set is not (fully)
+        # known; `research_default` must stay empty.
+        "research_sources": {},
+        "research_unknown": [],
+        "research_partial": [],
+        "research_default": [],
     }
     for s in sessions:
         bucket = (
@@ -427,6 +562,12 @@ def mode_report(sessions: list) -> dict:
             row[shape] += 1
             if t.chat_mode_source == "default":
                 rep["default_source_turns"].append(f"{s.session_id}:{t.index}")
+            rsrc = t.research_mode_source or "unrecorded"
+            rep["research_sources"][rsrc] = rep["research_sources"].get(rsrc, 0) + 1
+            key = {"unknown": "research_unknown", "reviewer_partial": "research_partial",
+                   "default": "research_default", "unrecorded": "research_default"}.get(rsrc)
+            if key:
+                rep[key].append(f"{s.session_id}:{t.index}")
             if (
                 s.filter_chat_mode
                 and t.recorded_answer_shape in ("research", "conversational")
@@ -442,8 +583,10 @@ def mode_report(sessions: list) -> dict:
 def load_sessions(
     csv_path: str | None = None,
     classification: str | None = None,
+    research_reads: str | None = None,
 ) -> list[Session]:
-    """Build the replay set from the export plus the frozen classification."""
+    """Build the replay set from the export, the frozen classification and
+    the reviewer's research-type reads (P0.6)."""
     path = Path(csv_path or DEFAULT_CSV)
     if not path.exists():
         raise SystemExit(
@@ -454,6 +597,7 @@ def load_sessions(
         )
     cls_path = Path(classification or DEFAULT_CLASSIFICATION)
     cls = json.loads(cls_path.read_text(encoding="utf-8"))
+    reads = load_research_reads(research_reads)
 
     # utf-8-sig: the export carries a BOM.
     rows = list(csv.DictReader(io.open(path, encoding="utf-8-sig")))
@@ -534,14 +678,11 @@ def load_sessions(
 
         _resolve_modes(turns, snapshot_mode)
 
-        # P4.1: the export states one research type per session (or none —
-        # blank for the twelve P0.5 sessions, P0.6). Every turn gets that
-        # value, labelled with where it came from, so the run file records a
-        # per-turn fact and a scripted session can vary it.
+        # P4.1: the export states one research type per session, or none —
+        # blank for the twelve P0.5 sessions, where the reviewer's reads
+        # decide and a turn nothing settles is `unknown` (P0.6).
         stated_rm = _blank(head.get("Filter: Research mode"))
-        for t in turns:
-            t.research_mode = stated_rm or DEFAULT_RESEARCH_MODE
-            t.research_mode_source = "snapshot" if stated_rm else "default"
+        _resolve_research_modes(sid, turns, stated_rm, reads)
 
         out.append(
             Session(
@@ -554,8 +695,7 @@ def load_sessions(
                 diag=c.get("diag", ""),
                 session_mode=_blank(head.get("Session mode")),
                 filter_chat_mode=snapshot_mode,
-                research_mode=_blank(head.get("Filter: Research mode"))
-                or DEFAULT_RESEARCH_MODE,
+                research_mode=stated_rm,
                 jurisdiction=_blank(head.get("Filter: Jurisdiction")),
                 year_from=yf,
                 year_to=yt,
@@ -761,3 +901,5 @@ if __name__ == "__main__":
     print(f"  chat-mode sources     {json.dumps(cm['sources'])}")
     print(f"  snapshot vs marker    {len(cm['snapshot_disagreements'])} disagreement(s)"
           f"{': ' + '; '.join(cm['snapshot_disagreements']) if cm['snapshot_disagreements'] else ''}")
+    print(f"  research-type sources {json.dumps(cm['research_sources'])}")
+    print(f"  research type unknown {', '.join(cm['research_unknown']) or 'none'}")

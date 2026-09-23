@@ -1,0 +1,84 @@
+{
+  "schema": "aila-research-mode-reads/1",
+  "row": "FIX_PLAN P0.6",
+  "read_on": "2026-09-23",
+  "note": "A human read of the research type each turn ran under, for the twelve sessions whose export field `Filter: Research mode` is blank (the feedback snapshot predates the column). Keyed by session id, then by the 1-based user-turn index `replay_set.Turn.index` uses. Evidence notes describe the answer's behaviour and name public judgments only; they never quote a lawyer's question. `classification.json` stays frozen; this file sits beside it. Values: legislation_only | legislation_and_case_law | case_law_only | case_law_included (case law was in the tool set; whether legislation was too is not settled, so the harness sends legislation_and_case_law and labels it reviewer_partial) | unknown (nothing settles it; the harness labels it unknown and sends the nearest read in the same session, else legislation_only). Basis: answer (the turn's own saved answer, read against the pre-pilot prompts), lawyer (the lawyer's own words, in a later turn or the feedback form), bracketed (the same value is read on both sides with no evidence of a change between).",
+  "mechanism": "At the pre-pilot (product commit f8fe9ec), the research type was ONE saved preference per user (`users.research_mode`, default legislation_only), changed only by applying the Research filters modal, and it persisted across chats and logins. So a change is an event, and a turn between two reads of the same value for the same lawyer ran under that value unless the lawyer changed it and changed it back. In Conversational mode the research type decided three things a saved answer can show: legislation_only gave the Manager a note to decline case-law questions (it declined every such question in these sessions: 6335 t3, 6343 t1-t2, 6350 t2; the planner likewise); legislation_and_case_law gave the Manager a note to brief the Worker to ALSO search case law, and the Worker the search_case_law tool, whose description carries the coverage wording (England & Wales and UK-wide courts; Court of Session and Sheriff Courts not indexed); case_law_only removed the legislation tools and told the Manager to say so when asked about legislation. A neutral citation alone is NOT evidence: a refusal quotes the case the lawyer named.",
+  "authoritative_source": "The target's `request_timings.research_mode` (and `chat_mode`) recorded the resolved type of every pre-pilot request (column since 9e69e4c, 2026-07-14). It has no chat or user id, but `created_at` and `total_cost_usd` join it to the export's assistant messages. That query would replace this read; it needs the target (FIX_PLAN P0.7).",
+  "sessions": {
+    "6333": {
+      "1": {"value": "legislation_only", "source": "reviewer", "basis": "lawyer", "evidence": "The same lawyer's feedback on 6335, later that morning, says the filters were still at their default when case law was first asked for there (6335 t3); the default was legislation_only. No answer in this session mentions case law."},
+      "2": {"value": "legislation_only", "source": "reviewer", "basis": "lawyer", "evidence": "As turn 1."},
+      "3": {"value": "legislation_only", "source": "reviewer", "basis": "lawyer", "evidence": "As turn 1."}
+    },
+    "6334": {
+      "1": {"value": "legislation_only", "source": "reviewer", "basis": "lawyer", "evidence": "Same lawyer as 6333, before 6335; the 6335 feedback places the filters at their default (legislation_only) until 6335 t3. No answer mentions case law."},
+      "2": {"value": "legislation_only", "source": "reviewer", "basis": "lawyer", "evidence": "As turn 1."}
+    },
+    "6335": {
+      "1": {"value": "legislation_only", "source": "reviewer", "basis": "lawyer", "evidence": "The lawyer's feedback says the filters were still at their default (legislation_only) when case law was first asked for, at t3. Answer is legislation only, no case-law remark."},
+      "2": {"value": "legislation_only", "source": "reviewer", "basis": "lawyer", "evidence": "As turn 1."},
+      "3": {"value": "legislation_only", "source": "reviewer", "basis": "answer", "evidence": "The answer declines to retrieve case law with its current tools and points to another mode; the feedback confirms the filters were at their default here."},
+      "4": {"value": "legislation_only", "source": "reviewer", "basis": "lawyer", "evidence": "The feedback orders the events: after being pointed to another mode the lawyer switched, the product then said it could not research the topic with its current setting, and only then were the filters changed. That reply came at t4 or t5 (neither was saved), so t4 is at or before it."},
+      "5": {"value": "unknown", "source": "reviewer", "basis": "lawyer", "evidence": "No saved reply. The filter change falls after the product's refusal at t4 or t5 and before t6; nothing places it either side of t5."},
+      "6": {"value": "case_law_included", "source": "reviewer", "basis": "answer", "evidence": "Discusses two 2026 judgments by neutral citation ([2026] EWCA Civ 1005, [2026] UKSC 29), which post-date the model and so came from the case-law tool. The turn is a case-law question, so whether legislation was also in the tool set is not settled by it."},
+      "7": {"value": "legislation_and_case_law", "source": "reviewer", "basis": "answer", "evidence": "Two judgments with Find Case Law links (JCAM Commercial Real Estate Property XV Ltd v Davis Haulage Ltd [2017] EWCA Civ 267; Re Cross Transport Ltd [2026] EWHC 1636 (Ch)), and a legislation question answered on the statute without the note a Case Law Only Manager was given."}
+    },
+    "6338": {
+      "1": {"value": "legislation_and_case_law", "source": "reviewer", "basis": "answer", "evidence": "The answer reports a case-law search result on a question that asked for no case law: the legislation_and_case_law Manager note's brief to ALSO search case law. The same lawyer's saved type included case law at the end of 6335, twenty minutes earlier."},
+      "2": {"value": "legislation_and_case_law", "source": "reviewer", "basis": "answer", "evidence": "As turn 1, again unprompted, with two legislation.gov.uk /id/ links (the form the LEX tool returns)."},
+      "3": {"value": "legislation_and_case_law", "source": "reviewer", "basis": "answer", "evidence": "As turn 2: an unprompted case-law negative beside a /id/ legislation link."}
+    },
+    "6340": {
+      "1": {"value": "legislation_and_case_law", "source": "reviewer", "basis": "answer", "evidence": "Reports a case-law search in the case-law tool's own coverage wording (England & Wales and UK-wide courts; Court of Session and Sheriff Courts not indexed), beside three SIs given by /id/ legislation link."}
+    },
+    "6341": {
+      "1": {"value": "legislation_and_case_law", "source": "reviewer", "basis": "bracketed", "evidence": "No saved reply. Bracketed by 6340 t1 and 6341 t2, same lawyer, 28 minutes apart, both legislation_and_case_law."},
+      "2": {"value": "legislation_and_case_law", "source": "reviewer", "basis": "answer", "evidence": "Two 2026 judgments with Find Case Law links (Tapi Carpets Ltd v HMRC [2026] UKFTT 1128 (TC); FW Aviation (Holdings) 1 Ltd v VietJet [2026] EWHC 1996 (Comm)), and statutory definitions given without the Case Law Only note."},
+      "3": {"value": "legislation_and_case_law", "source": "reviewer", "basis": "answer", "evidence": "A Find Case Law link (12345 Retail Group Ltd v Bubble City Ltd [2025] EWHC 1083 (Ch)) beside further statutory definitions, again without the Case Law Only note."},
+      "4": {"value": "legislation_and_case_law", "source": "reviewer", "basis": "answer", "evidence": "A new Act by /id/ legislation link, and a case-law negative in the case-law tool's coverage wording."},
+      "5": {"value": "legislation_and_case_law", "source": "reviewer", "basis": "answer", "evidence": "States what the case-law search returned (a Supreme Court case on another subject) beside the articles of an SI."},
+      "6": {"value": "unknown", "source": "reviewer", "basis": "answer", "evidence": "Legislation only, no case-law remark. By this lawyer's next session (6350 t2) the type was legislation_only, and the 6350 feedback says the lawyer had set it; the change falls somewhere from here on and nothing places it."},
+      "7": {"value": "unknown", "source": "reviewer", "basis": "answer", "evidence": "A Deep Research report on legislation alone, no mention of case law either way. Does not settle it (see t6)."},
+      "8": {"value": "unknown", "source": "reviewer", "basis": "answer", "evidence": "A short legislation explanation; does not settle it (see t6)."}
+    },
+    "6343": {
+      "1": {"value": "legislation_only", "source": "reviewer", "basis": "answer", "evidence": "Declines to retrieve the case: no access to case-law databases in this session."},
+      "2": {"value": "legislation_only", "source": "reviewer", "basis": "answer", "evidence": "Says its tools are limited to UK legislation and it cannot retrieve case law."},
+      "3": {"value": "legislation_only", "source": "reviewer", "basis": "bracketed", "evidence": "The answer describes a control and retrieves nothing. Bracketed by t2 and t4, both legislation_only, under a minute apart."},
+      "4": {"value": "legislation_only", "source": "reviewer", "basis": "answer", "evidence": "A Deep Research planner clarification (blank model) stating the research type is Legislation Only."},
+      "5": {"value": "legislation_only", "source": "reviewer", "basis": "bracketed", "evidence": "No saved reply. Bracketed by t4 and 6346 t1 (planner states Legislation Only), same lawyer, 27 minutes; 6345 between shows the legislation tool and never mentions case law."}
+    },
+    "6345": {
+      "1": {"value": "legislation_only", "source": "reviewer", "basis": "bracketed", "evidence": "No saved reply. Bracketed by 6343 t4 and 6346 t1, same lawyer, both legislation_only."},
+      "2": {"value": "legislation_only", "source": "reviewer", "basis": "bracketed", "evidence": "As turn 1."},
+      "3": {"value": "legislation_only", "source": "reviewer", "basis": "bracketed", "evidence": "An /id/ legislation link (so not case_law_only) and no case-law remark; bracketed by 6343 t4 and 6346 t1, both legislation_only."},
+      "4": {"value": "legislation_only", "source": "reviewer", "basis": "bracketed", "evidence": "As turn 3."}
+    },
+    "6346": {
+      "1": {"value": "legislation_only", "source": "reviewer", "basis": "answer", "evidence": "A Deep Research planner clarification (blank model) stating the research type is Legislation Only."},
+      "2": {"value": "legislation_only", "source": "reviewer", "basis": "answer", "evidence": "A planner clarification asking for confirmation once the type is changed: it was not yet."},
+      "3": {"value": "legislation_only", "source": "reviewer", "basis": "answer", "evidence": "A planner clarification stating the searches are still restricted to Legislation Only."},
+      "4": {"value": "legislation_only", "source": "reviewer", "basis": "bracketed", "evidence": "No saved reply. Bracketed by t3 and 6347 t1 (planner states Legislation Only), same lawyer, 9 minutes. The lawyer's own words at this turn name the chat mode, not the research type (FIX_PLAN P4.1's corrected diagnosis)."},
+      "5": {"value": "legislation_only", "source": "reviewer", "basis": "bracketed", "evidence": "As turn 4."}
+    },
+    "6347": {
+      "1": {"value": "legislation_only", "source": "reviewer", "basis": "answer", "evidence": "A Deep Research planner clarification (blank model) stating the research type is Legislation Only."},
+      "2": {"value": "case_law_included", "source": "reviewer", "basis": "answer", "evidence": "A Deep Research report on the holding in Graham Andrew Evans v R [2025] EWCA Crim 1150, with Find Case Law links. The type changed after t1. The turn asks only about the case, so whether legislation was also in the tool set is not settled."},
+      "3": {"value": "case_law_included", "source": "reviewer", "basis": "answer", "evidence": "Answers a case-law question on the Evans holding with no refusal, where the legislation_only Manager declined every such question in these sessions."},
+      "4": {"value": "case_law_included", "source": "reviewer", "basis": "answer", "evidence": "As turn 3, and adds judgment detail that is not in the t2 report."}
+    },
+    "6348": {
+      "1": {"value": "unknown", "source": "reviewer", "basis": "answer", "evidence": "A legislation answer with /id/ links and no case-law remark. That fits legislation_only but does not rule it in: the Manager can drop the Worker's case-law negative. The lawyer's only session, so nothing brackets it."},
+      "2": {"value": "unknown", "source": "reviewer", "basis": "answer", "evidence": "As turn 1."},
+      "3": {"value": "unknown", "source": "reviewer", "basis": "answer", "evidence": "As turn 1."},
+      "4": {"value": "unknown", "source": "reviewer", "basis": "answer", "evidence": "As turn 1; the common-law test is stated without citing a case."}
+    },
+    "6350": {
+      "1": {"value": "legislation_only", "source": "reviewer", "basis": "lawyer", "evidence": "t2, three minutes later with no turn between, declines case law under legislation only, and the feedback says the lawyer had set legislation only; t1's answer carries no case-law remark."},
+      "2": {"value": "legislation_only", "source": "reviewer", "basis": "answer", "evidence": "Declines case law: restricted to the UK legislation database."},
+      "3": {"value": "case_law_included", "source": "reviewer", "basis": "lawyer", "evidence": "The lawyer's own turn says the filter was changed, and the answer discusses the holdings of two judgments ([2025] EWHC 2330 (KB); City of London v Samede [2012] EWCA Civ 160) without refusing. Whether legislation stayed in the tool set is not settled."},
+      "4": {"value": "case_law_included", "source": "reviewer", "basis": "answer", "evidence": "Two Find Case Law links, to judgments the lawyer had named, and their holdings discussed. Case questions only, so the legislation half is not settled."}
+    }
+  }
+}

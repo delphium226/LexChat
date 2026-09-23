@@ -375,7 +375,10 @@ def _cfg_for(doc: dict, turn: dict) -> dict:
     f = doc.get("filters") or {}
     return {
         "_provider": "openrouter",
-        "_research_mode": f.get("research_mode") or "legislation_only",
+        # The TURN's type, as the request sent it (P4.1); the session filter
+        # is only the export's value, and is None where the export was blank
+        # (P0.6).
+        "_research_mode": turn.get("research_mode") or f.get("research_mode") or "legislation_only",
         "_chat_mode": turn.get("chat_mode") or doc.get("filter_snapshot_chat_mode") or "",
         "_jurisdiction": f.get("jurisdiction"),
         "_legislation_type": f.get("legislation_type"),

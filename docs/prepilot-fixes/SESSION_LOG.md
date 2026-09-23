@@ -4549,3 +4549,124 @@ Consider raising **P4.5**:
   session did not change the schema.
 - P5.2 (B12, external).
 - Whether Thomas's review document should be committed.
+
+---
+
+## Session 23 — 2026-09-23 — P0.6 (the research-type default)
+
+**Done:**
+- **P0.6 is DONE, deterministic, $0, no replay.** Ledger 30 → **31 of 49
+  rows** (one new row, P0.7); buckets unchanged at 8 of 14, because P0.6 is
+  measurement.
+- **The human read.** I read all 50 turns of the twelve from the export in
+  the scratchpad (the export never entered the repo). The read is committed as
+  `docs/prepilot-fixes/evidence/research_mode_reads.json`: one entry per
+  turn, with value, `source: reviewer`, basis (`answer`, `lawyer`,
+  `bracketed`) and a neutral note. Totals: **26 `legislation_only`, 10
+  `legislation_and_case_law`, 6 `case_law_included`, 8 `unknown`**.
+  `classification.json` is untouched.
+- **Two pre-pilot facts made a read possible. Neither was on the row, and
+  both were checked in code at `f8fe9ec`, the last `main` commit before the
+  first of the twelve.**
+  (1) The research type was **one saved preference per user**
+  (`users.research_mode`, default `legislation_only`), written only when the
+  Research filters modal was applied, and restored on every chat and login. A
+  change is therefore an event, and a lawyer's turns between two equal reads
+  are bracketed.
+  (2) Each type left behaviour in the answers. The legislation-only Manager
+  declined every case-law question in these sessions. The hybrid Manager note
+  told the Worker to ALSO search case law, so hybrid answers report case-law
+  results nobody asked for (6338 three times out of three), in the
+  `search_case_law` description's own coverage wording (6340, 6341 t4). The
+  case-law-only Manager was told to say so when asked about legislation.
+- **The harness** (`replay_set._resolve_research_modes`) sends `snapshot`,
+  `reviewer` and `reviewer_partial` (`case_law_included`, sent as
+  `legislation_and_case_law`) values, or else `unknown`. It never writes
+  `default`. `Session.research_mode` is None where the export is blank. The
+  worker and synthesis seams in `seam_replay` now use the turn's type.
+- **`replay_report modes`** prints the research type each turn sent and what
+  that rests on. It names the unknown turns and the case-law-only turns, and
+  it exits 1 on a `default` label or on a type that the read rules out. The
+  export half prints the same provenance over all 62 sessions: snapshot 130,
+  reviewer 36, reviewer_partial 6, unknown 24 (16 of these in PASS sessions
+  that are never replayed).
+- **Tests 1578 → 1603**, all green (`pytest -q` redirected to a file, exit
+  code checked). On scratch copies:
+  - with the three tool files at HEAD, all 25 new tests and the amended
+    deadend test fail;
+  - with the resolver stubbed back to the default, 7 fail;
+  - without the `modes` graders, 4 fail;
+  - with the seam back on the session filter, 1 fails.
+  The two `git show` tests were not in the files run.
+
+**Surprises / deviations from FIX_PLAN:**
+- **The default was not just unlabelled; it was wrong on 16 of the 50
+  turns.** Those are 6335 t6–7, 6338 t1–3, 6340 t1, 6341 t1–5, 6347 t2–4 and
+  6350 t3–4, and every sweep sent them without the case-law tool the lawyer
+  had. Over the 39 directories that is 14 directories and 153 turn-runs; rep
+  1 of `baseline`, `wave1`, `wave2` and `wave0_conv` carries 16 each. The
+  brief expected the P4.6 counts on these sessions to be artefacts of the
+  chat mode; they are artefacts of the research type too.
+- **P4.6's acceptance needs re-choosing before it is built.** Its sessions
+  6340 and 6341 t1–5 ran hybrid, and `WORKER_SYSTEM_PROMPT_HYBRID` carries
+  none of P4.6's three scripted lines (checked in the prompt text). The
+  acceptance as written ("6340 and 6341 carry none of the scripted
+  sentences") would now pass whatever the fix did. This is recorded on the
+  row.
+- **Design point (a) went against the brief's recommendation.** An `unknown`
+  turn sends the nearest read in its own session, not `legislation_only`.
+  The global default would have introduced a type change nobody made:
+  6341 t6–8 would drop case law after t5, and P4.1's marker would fire on
+  it. The label is `unknown` either way, and 6348 sends exactly what it sent
+  before. Point (b) follows the brief: `unknown` is named and does not fail.
+- **`modes` now exits 1 on older directories.** The exit is new on exactly
+  four: `wave0_conv`, `wave3_p313b`, `wave3_p313c` and `wave4_p41_conv`. The
+  other 18 that exit 1 already did so on chat mode. P4.1's acceptance
+  directory still exits 0. Earlier statements that every exit-1 subcommand
+  was 0 on those four were true of the instrument at the time.
+- **The data-handling test caught my own notes twice.** Two notes named
+  judgments the lawyer had typed into a question in 6350, and the five-word
+  check tripped on the case names. The rule applies to public case names
+  too, so the notes now use neutral citations.
+- **The row's trap was worth recording, and it has a companion.** A neutral
+  citation alone is not evidence, and neither is a case-law negative alone:
+  P4.1's handover item (5) has a legislation-only replay claiming case-law
+  results. The reads use three things instead: the negative arriving
+  unprompted and repeatedly, the coverage wording that only the case-law tool
+  carried, and 2026 judgments.
+- **A chat-mode question I did not act on.** The 6335 lawyer's feedback says
+  that after being pointed to "research mode" at t3 they switched to it.
+  t4–t5 have no saved reply, and P0.5 reads their chat mode from a neighbour
+  as conversational. The Research flag was off, so this may have been Deep
+  Research. P0.7's timing rows would settle it, because an errored request
+  still writes one.
+
+**How this session worked, for whoever repeats it.**
+- The transcript dump and every script that read the export stayed in the
+  scratchpad. Notes were written from the dump, and the leak test checked
+  them against the export.
+- Every published figure was re-derived by one throwaway script over all 39
+  directories, using the `replay_report` functions. It is also behind
+  `modes` and pinned by `test_replay_research_reads.py`. To get the
+  directory table, run `modes` per directory.
+
+**State of the branch:** `fix/prepilot-defects`, pushed with this commit.
+1603 tests green. Ledger **31 of 49 rows, 8 of 14 buckets**, partial B5
+(P3.7, P4.6, P4.7) and B12 (P5.2). `main` is untouched at `c77e779`.
+
+**Machine state:** no uvicorn, no pin file, no worktrees, dev box on its
+normal settings (no replay was run). The local gitignored `replay_set.json`
+was re-frozen with the reads.
+
+**Spend:** $0.
+
+**Next action:** **P4.6**. Re-choose its acceptance from Research-mode turns
+whose type is `legislation_only`, taken from the export or a reviewer's read,
+then build Thomas's wording. Raise **P4.5** with the user. **P0.7** needs the
+target and can go with the deploy.
+
+**Open with the user:** deploy both cuts to the target: `pg_dump` first, then
+`git pull`, `stop_native.cmd` / `start_native.cmd`, `test_apis.ps1` and one
+real question. P0.7's read-only `request_timings` query can go with that
+deploy. Tell the eval-harness owner the audit event is schema v5. P5.2.
+Whether Thomas's review document should be committed.
