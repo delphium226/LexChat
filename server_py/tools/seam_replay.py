@@ -47,6 +47,7 @@ import json
 import re
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Optional
 
@@ -198,6 +199,56 @@ def rebuilt_result(tool: dict) -> str:
     return final[:cut] + new + final[cut:] if cut >= 0 else final + new
 
 
+def _prompt_constant_in_tree(name: str) -> str:
+    """The same constant as `_prompt_constant_at`, read from the working tree."""
+    text = (Path(__file__).resolve().parents[1] / "src" / "prompts.py").read_text(
+        encoding="utf-8")
+    m = re.search(rf'(?ms)^{re.escape(name)}\s*=\s*"""(.*?)"""', text)
+    if not m:
+        raise SystemExit(f"{name} not found in the working tree's prompts.py")
+    return m.group(1)
+
+
+def worker_constant_name(cfg: dict) -> str:
+    """The Worker prompt constant `get_worker_system_prompt` builds on for this
+    request: the chat mode first (the quick-lookup Worker), then the research
+    type. P4.6: this used to be conversational-or-`WORKER_SYSTEM_PROMPT`, so an
+    A/B on a case-law-only or hybrid turn swapped in the wrong Worker."""
+    rm = cfg.get("_research_mode") or "legislation_only"
+    if (cfg.get("_chat_mode") == "conversational"
+            and rm not in ("parliamentary_records", "westminster_records")):
+        return "WORKER_SYSTEM_PROMPT_CONVERSATIONAL"
+    return {
+        "case_law_only": "WORKER_SYSTEM_PROMPT_CASE_LAW",
+        "legislation_and_case_law": "WORKER_SYSTEM_PROMPT_HYBRID",
+        "parliamentary_records": "PARLIAMENT_WORKER_SYSTEM_PROMPT",
+        "westminster_records": "WESTMINSTER_WORKER_SYSTEM_PROMPT",
+    }.get(rm, "WORKER_SYSTEM_PROMPT")
+
+
+def _swap_worker_constant(system: str, cfg: dict, rev: str) -> str:
+    """The live Worker prompt with its constant's literal replaced by the one
+    at `rev`, so the A/B differs in that literal alone.
+
+    The live prompt is the date line, the literal, the rules appended to it
+    and the filter block; the constant at `rev` is the literal alone. Before
+    P4.6 the whole prompt was replaced by that bare literal, which dropped the
+    date line, the rules and the filter block from the "without" side as well
+    as the change being tested. If the working tree's literal is not in the
+    live prompt (the constant is no longer one literal), the bare literal is
+    used, as before.
+    """
+    name = worker_constant_name(cfg)
+    old = _prompt_constant_at(rev, name)
+    try:
+        current = _prompt_constant_in_tree(name)
+    except SystemExit:
+        current = ""
+    if current and current in system:
+        return system.replace(current, old, 1)
+    return old
+
+
 def worker_messages(doc: dict, turn: dict, delegation: int = 1,
                     without_fix: bool = False, rev: str = PRE_P31_REV,
                     from_raw: bool = False) -> list:
@@ -237,9 +288,7 @@ def worker_messages(doc: dict, turn: dict, delegation: int = 1,
     cfg = _cfg_for(doc, turn)
     system = get_worker_system_prompt(cfg.get("_research_mode") or "legislation_only", cfg)
     if without_fix:
-        name = ("WORKER_SYSTEM_PROMPT_CONVERSATIONAL"
-                if cfg.get("_chat_mode") == "conversational" else "WORKER_SYSTEM_PROMPT")
-        system = _prompt_constant_at(rev, name)
+        system = _swap_worker_constant(system, cfg, rev)
     calls, results = [], []
     for i, t in enumerate(tools, 1):
         cid = f"call_{i:02d}"
@@ -258,6 +307,66 @@ def worker_messages(doc: dict, turn: dict, delegation: int = 1,
         *results,
         {"role": "user", "content": closing},
     ]
+
+
+def worker_first_round_messages(doc: dict, turn: dict, delegation: int = 1,
+                                without_fix: bool = False,
+                                rev: str = PRE_P31_REV) -> list:
+    """The Worker's FIRST round (P4.6): its prompt and the brief, nothing else.
+
+    **Why.** The composition seam above needs recorded tool results, and in
+    the stored sweeps most of P4.6's scripted sentences came from a Worker
+    that made NO tool call: a case-law question sent to the legislation
+    Worker, which has no case-law tool and wrote its report at once. The
+    first round is therefore the seam for that shape, and it is also the
+    probe Session 22 asked for before any prompt change: does the edit move
+    what the Worker decides to search? `run_first_round` offers the Worker its
+    real tools and stops at the first call it makes.
+    """
+    dgs = (turn.get("audit") or {}).get("delegations", [])
+    if not dgs:
+        raise SystemExit("this turn has no delegation to take a brief from")
+    dg = dgs[min(max(delegation, 1), len(dgs)) - 1]
+    cfg = _cfg_for(doc, turn)
+    system = get_worker_system_prompt(cfg.get("_research_mode") or "legislation_only", cfg)
+    if without_fix:
+        system = _swap_worker_constant(system, cfg, rev)
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": dg.get("brief") or turn.get("question") or ""},
+    ]
+
+
+class _FirstRoundDone(BaseException):
+    """Raised by the probe's tool executor to end the loop at the first call.
+    A BaseException, so no `except Exception` on the way out swallows it."""
+
+
+async def run_first_round(messages: list, cfg: dict, tools: list) -> tuple:
+    """One Worker round with its real tools offered. Returns (content, calls,
+    cost, model): the report it wrote if it called no tool, else the calls."""
+    set_request_provider_config(cfg)
+    tc = TimingCollector("seam")
+    calls: list = []
+
+    async def _seen(event: dict) -> None:
+        # `chat_loop` emits the round's whole batch before executing any of it.
+        if event.get("type") == "tool_call":
+            for c in event.get("tool_calls") or []:
+                fn = c.get("function") or {}
+                calls.append((fn.get("name") or "", fn.get("arguments") or ""))
+
+    async def _stop(name: str, args: dict) -> str:
+        raise _FirstRoundDone()
+
+    try:
+        out = await chat_loop(messages, cfg["model"], None, 0, tools, _stop,
+                              on_chunk=_seen, emit_tool_details=True,
+                              timing_collector=tc)
+        content = (out or {}).get("content") or ""
+    except _FirstRoundDone:
+        content = ""
+    return content, calls, tc.total_cost_usd, cfg["model"]
 
 
 def manager_history(doc: dict, turn_no: int) -> list:
@@ -442,6 +551,57 @@ def _grade(session_id: str, text: str) -> str:
     return verdict + "\n      " + "\n      ".join(bits)
 
 
+def _scripted_line(text: str) -> str:
+    """P4.6's counts for one draw: the failing lines, then the counted ones."""
+    c = rr._scripted_counts(text)
+    fail = ", ".join(f"{k} {c[k]}" for k in rr.SCRIPTED_NEGATIVES)
+    info = ", ".join(f"{k} {c[k]}" for k in rr.SCRIPTED_INFORMATIONAL)
+    return f"{rr._scripted_failing(c)} failing ({fail}); counted: {info}"
+
+
+def _first_round_command(args, doc: dict, turn: dict, sid: str) -> int:
+    from src.agent.tools import get_worker_tools
+
+    messages = worker_first_round_messages(doc, turn, args.delegation,
+                                           args.without_fix, args.rev)
+    cfg_turn = _cfg_for(doc, turn)
+    rm = cfg_turn.get("_research_mode") or "legislation_only"
+    tools = get_worker_tools(rm)
+    recorded = (turn.get("audit") or {}).get("delegations", [])
+    dg = recorded[min(max(args.delegation, 1), len(recorded)) - 1] if recorded else {}
+    print(f"seam=worker FIRST ROUND  session={sid} turn={args.turn} "
+          f"delegation={args.delegation}  research type={rm}  "
+          f"{'WITHOUT fix (' + args.rev + ')' if args.without_fix else 'current code'}")
+    print(f"  prompt: {len(messages[0]['content']):,} chars; brief {len(messages[1]['content']):,} "
+          f"chars; tools offered: {len(tools)}; recorded run made "
+          f"{len(dg.get('tools') or [])} tool call(s)")
+    if args.dry_run:
+        return 0
+    cfg = asyncio.run(_provider_cfg(cfg_turn))
+    total = 0.0
+    for rep in range(1, args.reps + 1):
+        content, calls, cost, model = asyncio.run(run_first_round(messages, cfg, tools))
+        total += cost
+        if calls:
+            names = Counter(n for n, _ in calls)
+            print(f"  rep{rep}: ${cost:.4f}  SEARCHED: {len(calls)} call(s) "
+                  + ", ".join(f"{n} x{k}" for n, k in names.items()) + f"  model={model}")
+        else:
+            print(f"  rep{rep}: ${cost:.4f}  WROTE WITHOUT SEARCHING: {len(content):,} chars  "
+                  f"model={model}")
+            print(f"      scripted negatives (P4.6): {_scripted_line(content)}")
+        if args.out and content:
+            d = Path(args.out)
+            d.mkdir(parents=True, exist_ok=True)
+            suffix = "_nofix" if args.without_fix else ""
+            (d / f"{sid}_t{args.turn}_first{suffix}_rep{rep}.md").write_text(
+                content, encoding="utf-8")
+        if args.print:
+            print(content if content else "\n".join(f"      {n}({a})" for n, a in calls))
+    print(f"  total ${total:.4f}")
+    return 0
+
+
 def main(argv: Optional[list] = None) -> int:
     rr._utf8_stdout()
     p = argparse.ArgumentParser(prog="seam_replay")
@@ -463,6 +623,11 @@ def main(argv: Optional[list] = None) -> int:
                         "the Manager is offered its tools, as the live call is "
                         "(a call it makes is refused), because tool-free it "
                         "delivered a payload the live Manager flattened (P3.13)")
+    p.add_argument("--first-round", action="store_true",
+                   help="worker seam only (P4.6): the Worker's first round - its "
+                        "prompt and the brief, with its real tools offered, "
+                        "stopped at the first call. Prints the calls it chose, or "
+                        "the report it wrote without searching")
     p.add_argument("--dry-run", action="store_true",
                    help="build the payload and print its shape; no model call")
     p.add_argument("--out", default=None, help="write each answer to this directory")
@@ -471,6 +636,10 @@ def main(argv: Optional[list] = None) -> int:
     run_path = Path(args.run)
     doc, turn = load_turn(run_path, args.turn)
     sid = str(doc.get("session_id"))
+    if args.first_round:
+        if args.seam != "worker":
+            raise SystemExit("--first-round is a worker seam option")
+        return _first_round_command(args, doc, turn, sid)
     build = {"synthesis": synthesis_messages, "worker": worker_messages,
              "manager": manager_messages}[args.seam]
     kwargs = {"without_fix": args.without_fix, "rev": args.rev}
@@ -524,6 +693,8 @@ def main(argv: Optional[list] = None) -> int:
                 if restored:
                     print(f"      restored {restored} dropped sibling(s)")
         print(f"  rep{rep}: ${cost:.4f}  {len(clean):,} chars  model={model}")
+        if args.seam == "worker":
+            print(f"      scripted negatives (P4.6): {_scripted_line(clean)}")
         grade = _grade(sid, clean)
         if grade:
             print(f"      depth: {grade}")

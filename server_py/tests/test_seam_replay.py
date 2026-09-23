@@ -198,6 +198,44 @@ def test_without_fix_swaps_the_right_worker_prompt(run_file, monkeypatch):
     assert seen[-1] == "WORKER_SYSTEM_PROMPT_CONVERSATIONAL"
 
 
+@pytest.mark.parametrize("research_mode,chat_mode,name", [
+    ("legislation_only", "research", "WORKER_SYSTEM_PROMPT"),
+    ("case_law_only", "research", "WORKER_SYSTEM_PROMPT_CASE_LAW"),
+    ("legislation_and_case_law", "research", "WORKER_SYSTEM_PROMPT_HYBRID"),
+    ("case_law_only", "conversational", "WORKER_SYSTEM_PROMPT_CONVERSATIONAL"),
+    ("legislation_only", "deep_research", "WORKER_SYSTEM_PROMPT"),
+])
+def test_without_fix_swaps_the_constant_of_the_turns_research_type(
+        run_file, monkeypatch, research_mode, chat_mode, name):
+    """P4.6: the A/B side must be the Worker the turn actually ran. Before, a
+    case-law-only or hybrid turn got `WORKER_SYSTEM_PROMPT` swapped in, which
+    is the wrong Worker and carries the wrong scripted lines."""
+    seen = []
+    monkeypatch.setattr(sr, "_prompt_constant_at",
+                        lambda rev, n: seen.append(n) or "OLD WORKER")
+    doc, turn = sr.load_turn(run_file, 1)
+    turn["research_mode"], turn["chat_mode"] = research_mode, chat_mode
+    sr.worker_messages(doc, turn, without_fix=True)
+    assert seen == [name]
+
+
+def test_without_fix_replaces_only_the_literal(run_file, monkeypatch):
+    """The without side keeps the date line, the rules appended to the literal
+    and the filter block, so the A/B differs in the literal alone."""
+    monkeypatch.setattr(sr, "_prompt_constant_at", lambda rev, n: "OLD WORKER LITERAL")
+    doc, turn = sr.load_turn(run_file, 1)
+    turn["research_mode"], turn["chat_mode"] = "legislation_only", "research"
+    live = sr.worker_messages(doc, turn)[0]["content"]
+    old = sr.worker_messages(doc, turn, without_fix=True)[0]["content"]
+    assert "OLD WORKER LITERAL" in old
+    assert sr._prompt_constant_in_tree("WORKER_SYSTEM_PROMPT") not in old
+    for kept in ("Today's date is", "IN-FORCE STATUS", "NOT HELD IS NOT A WRONG CITATION"):
+        assert kept in live and kept in old
+    # Only the literal differs.
+    lit = sr._prompt_constant_in_tree("WORKER_SYSTEM_PROMPT")
+    assert old == live.replace(lit, "OLD WORKER LITERAL", 1)
+
+
 def test_the_prompt_reader_finds_a_real_constant():
     """Reads `prompts.py` at a revision with a regex; pinned against HEAD so a
     change to how the constants are written is caught here."""

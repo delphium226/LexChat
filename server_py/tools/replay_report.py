@@ -5379,6 +5379,206 @@ def _utf8_stdout() -> None:
             pass
 
 
+# --- P4.6: the negatives the Worker prompts scripted --------------------------
+#
+# Three research-Worker prompt lines told the model what to say when a search
+# fell short, and each says it about the whole database. The model says them
+# verbatim, so they are counted verbatim: in every Worker REPORT (where the
+# Worker composes them) and in the ANSWER (where the Manager may keep or drop
+# them). "before concluding nothing exists" is an instruction, not an output,
+# and is counted so that a model echoing it is seen. The case-law Worker's
+# PHASE 4 line is scoped to "this query" and is counted beside them, not as a
+# failure. `corpus` is the looser shape — any sentence saying a database or
+# index does not contain something — so a paraphrase is visible too.
+SCRIPTED_NEGATIVES = {
+    "database": re.compile(
+        r"available database does not contain information on this specific issue", re.I),
+    "nothing_exists": re.compile(r"before concluding nothing exists", re.I),
+    "caselaw": re.compile(
+        r"no reported case law directly addresses this specific issue in the "
+        r"national archives database", re.I),
+}
+SCRIPTED_INFORMATIONAL = {
+    "caselaw_p4": re.compile(
+        r"no directly relevant case law was found in the national archives find "
+        r"case law database for this query", re.I),
+    "corpus": re.compile(
+        r"\b(?:database|index)\b[^.]{0,60}\b(?:does|do) not (?:contain|hold|include)\b",
+        re.I),
+}
+
+
+def _strip_scope(text: str) -> str:
+    """The report with the code-appended scope blocks removed, via the
+    product's own stripper; the text unchanged if `src` cannot be imported."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from src.utils.search_scope import strip_scope_blocks  # noqa: PLC0415
+
+        return strip_scope_blocks(text or "")[0]
+    except Exception:  # pragma: no cover - the listing is a reading aid
+        return text or ""
+
+
+def _scripted_counts(text: str) -> Counter:
+    c = Counter()
+    for k, rx in {**SCRIPTED_NEGATIVES, **SCRIPTED_INFORMATIONAL}.items():
+        c[k] = len(rx.findall(text or ""))
+    return c
+
+
+def scripted_rows(doc: dict) -> list:
+    """One row per replayed turn: the scripted sentences in its Worker reports
+    and in its answer, and what Invariant 1 compares (links, `sources_kept`,
+    prose with the footer removed)."""
+    session_rm = (doc.get("filters") or {}).get("research_mode") or ""
+    rows = []
+    for t in doc.get("turns", []):
+        ans = t.get("answer") or ""
+        dgs = (t.get("audit") or {}).get("delegations") or []
+        reports = [dg.get("report") or "" for dg in dgs]
+        rep_c = Counter()
+        for r in reports:
+            rep_c.update(_scripted_counts(r))
+        rows.append({
+            "session": str(doc.get("session_id")),
+            "rep": doc.get("rep", 1),
+            "turn": t.get("turn"),
+            "chat_mode": t.get("chat_mode") or "?",
+            "research_mode": t.get("research_mode") or session_rm or "?",
+            "answered": bool(ans.strip()),
+            "delegations": len(dgs),
+            "worker_tools": sum(len(dg.get("tools") or []) for dg in dgs),
+            "report": rep_c,
+            "answer": _scripted_counts(ans),
+            "links": len(MD_LINK.findall(ans)),
+            "sources_kept": int((t.get("timing") or {}).get("sources_kept") or 0),
+            "prose": len(_without_footer(ans)),
+            "reports": reports,
+            "tools_per_report": [len(dg.get("tools") or []) for dg in dgs],
+        })
+    return rows
+
+
+def _scripted_failing(c: Counter) -> int:
+    return sum(c[k] for k in SCRIPTED_NEGATIVES)
+
+
+def scripted_findings(rows: list) -> list:
+    out = []
+    for r in rows:
+        for where in ("report", "answer"):
+            n = _scripted_failing(r[where])
+            if n:
+                kinds = ", ".join(k for k in SCRIPTED_NEGATIVES if r[where][k])
+                out.append(f"{r['session']} r{r['rep']} t{r['turn']}: {n} scripted "
+                           f"sentence(s) in the {where} ({kinds})")
+    return out
+
+
+def _scripted_slots(rows: list) -> dict:
+    """Means over reps per (session, turn) slot."""
+    acc = {}
+    for r in rows:
+        acc.setdefault((r["session"], r["turn"]), []).append(r)
+    out = {}
+    for slot, rs in acc.items():
+        n = len(rs)
+        out[slot] = {
+            "reps": n,
+            "report": sum(_scripted_failing(r["report"]) for r in rs) / n,
+            "answer": sum(_scripted_failing(r["answer"]) for r in rs) / n,
+            "links": sum(r["links"] for r in rs) / n,
+            "sources_kept": sum(r["sources_kept"] for r in rs) / n,
+            "prose": sum(r["prose"] for r in rs) / n,
+        }
+    return out
+
+
+def cmd_scripted(args) -> int:
+    """P4.6 acceptance: the prompt-scripted negatives, per turn, in the Worker
+    reports and the answers; `--before` for the Invariant 1 panel."""
+    docs = load_runs(Path(args.dir))
+    if args.session:
+        docs = [d for d in docs if str(d.get("session_id")) in set(args.session)]
+    rows = [r for doc in docs for r in scripted_rows(doc)]
+    print(f"P4.6 scripted negatives over {args.dir}  ({len(docs)} run file(s), "
+          f"{len(rows)} turn(s))")
+    print("  failing: " + ", ".join(f"{k}" for k in SCRIPTED_NEGATIVES)
+          + "; counted beside them: " + ", ".join(SCRIPTED_INFORMATIONAL))
+    print(f"\n    {'session':<10} {'r':>1} {'t':>2}  {'chat':<13} {'research type':<24} "
+          f"{'deleg':>5} {'tools':>5}  {'rpt':>3} {'ans':>3} {'corpus':>6} {'p4':>2}  "
+          f"{'links':>5} {'kept':>4} {'prose':>6}")
+    for r in sorted(rows, key=lambda r: (r["session"], r["rep"], r["turn"] or 0)):
+        corpus = r["report"]["corpus"] + r["answer"]["corpus"]
+        p4 = r["report"]["caselaw_p4"] + r["answer"]["caselaw_p4"]
+        print(f"    {r['session']:<10} {r['rep']:>1} {r['turn']:>2}  {r['chat_mode']:<13} "
+              f"{r['research_mode']:<24} {r['delegations']:>5} {r['worker_tools']:>5}  "
+              f"{_scripted_failing(r['report']):>3} {_scripted_failing(r['answer']):>3} "
+              f"{corpus:>6} {p4:>2}  {r['links']:>5} {r['sources_kept']:>4} {r['prose']:>6,}")
+        if args.reports:
+            for i, (rep, n_tools) in enumerate(zip(r["reports"], r["tools_per_report"]), 1):
+                # The hand read is of the Worker's own prose: the agent-facing
+                # scope block P2.2 appends in code is not what it wrote.
+                rep = _strip_scope(rep)
+                negs = [s for s in _sentences(rep)
+                        if NEG_ASSERTED.search(s) or _scripted_failing(_scripted_counts(s))
+                        or SCRIPTED_INFORMATIONAL["corpus"].search(s)]
+                print(f"        report {i} ({n_tools} tool call(s)): "
+                      f"{len(negs)} negative sentence(s)")
+                for s in negs:
+                    print(f"          - {s[:args.chars]}")
+
+    answered = [r for r in rows if r["answered"]]
+    tot = Counter()
+    for r in rows:
+        tot["report"] += _scripted_failing(r["report"])
+        tot["answer"] += _scripted_failing(r["answer"])
+    with_any = sum(1 for r in rows
+                   if _scripted_failing(r["report"]) or _scripted_failing(r["answer"]))
+    print(f"\n  {len(answered)} answered turn(s); {with_any} carry a scripted sentence "
+          f"(reports {tot['report']}, answers {tot['answer']}); "
+          f"delegations with no tool call: "
+          f"{sum(1 for r in rows for n in r['tools_per_report'] if n == 0)} of "
+          f"{sum(r['delegations'] for r in rows)}")
+
+    if args.before:
+        before_docs = load_runs(Path(args.before))
+        sessions = {str(d.get("session_id")) for d in docs}
+        before_rows = [r for d in before_docs if str(d.get("session_id")) in sessions
+                       for r in scripted_rows(d)]
+        b, a = _scripted_slots(before_rows), _scripted_slots(rows)
+        shared = sorted(set(b) & set(a), key=lambda s: (s[0], s[1] or 0))
+        print(f"\n  --before {Path(args.before).name}  (means per turn slot over reps, "
+              f"{len(shared)} shared slot(s)):")
+        keys = ("report", "answer", "links", "sources_kept", "prose")
+        fell = Counter()
+        for slot in shared:
+            x, y = b[slot], a[slot]
+            for k in ("links", "sources_kept", "prose"):
+                if y[k] < x[k]:
+                    fell[k] += 1
+            print(f"    {slot[0]} t{slot[1]}  (reps {x['reps']} -> {y['reps']})  "
+                  + "  ".join(f"{k} {x[k]:,.1f} -> {y[k]:,.1f}" for k in keys))
+        sums = {k: (sum(b[s][k] for s in shared), sum(a[s][k] for s in shared))
+                for k in keys}
+        print("    summed over the shared slots: "
+              + "  ".join(f"{k} {x:,.1f} -> {y:,.1f}" for k, (x, y) in sums.items()))
+        print("    slots that fell: "
+              + ", ".join(f"{k} {fell[k]}/{len(shared)}" for k in ("links", "sources_kept", "prose")))
+
+    findings = scripted_findings(rows)
+    print()
+    if findings:
+        print(f"  FINDINGS ({len(findings)}):")
+        for f in findings:
+            print(f"    [!] {f}")
+    else:
+        print("  no findings: no Worker report and no answer carries a scripted "
+              "negative.")
+    return 1 if findings else 0
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     _utf8_stdout()
     p = argparse.ArgumentParser(prog="replay_report")
@@ -5542,6 +5742,18 @@ def main(argv: Iterable[str] | None = None) -> int:
                          "count what they would add")
     sb.add_argument("--show", action="store_true",
                     help="with --dry-run: print every note the restore would add")
+    sc = sub.add_parser("scripted",
+                        help="P4.6 acceptance: the negatives the Worker prompts "
+                             "scripted, in every Worker report and answer")
+    sc.add_argument("--before", metavar="DIR", default=None,
+                    help="Invariant 1: links, sources_kept and prose per turn "
+                         "slot against DIR, same sessions")
+    sc.add_argument("--session", nargs="+", default=None,
+                    help="restrict to these session ids")
+    sc.add_argument("--reports", action="store_true",
+                    help="print every negative sentence in each Worker report, "
+                         "with the report's tool-call count (for the hand read)")
+    sc.add_argument("--chars", type=int, default=400)
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")
@@ -5566,6 +5778,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "depth": cmd_depth,
         "modes": cmd_modes,
         "deadend": cmd_deadend,
+        "scripted": cmd_scripted,
         "blanks": cmd_blanks,
         "siblings": cmd_siblings,
         "corpus": cmd_corpus,
