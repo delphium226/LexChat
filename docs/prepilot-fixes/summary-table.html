@@ -242,7 +242,7 @@
     border-radius: 12px;
     overflow-x: auto;
   }
-  table { width: 100%; border-collapse: collapse; min-width: 720px; }
+  table { width: 100%; border-collapse: collapse; min-width: 800px; }
   thead th {
     position: sticky;
     top: 0;
@@ -290,6 +290,12 @@
   .st-verified { background: var(--verified-soft); color: var(--verified); }
   .st-tbv { background: transparent; color: var(--tbv); border: 1px dashed var(--rule-strong); }
 
+  .sev { display: inline-block; min-width: 2.4em; text-align: center; padding: 1px 8px; border-radius: 4px;
+    font-family: var(--font-mono); font-size: 12px; font-weight: 600; border: 1px solid var(--rule-strong); color: var(--ink-soft); }
+  .sev-p1 { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .sev-p2 { background: var(--brand-soft); color: var(--ink); }
+  .sev-p3 { background: transparent; }
+
   .empty { padding: 24px 14px; color: var(--ink-faint); }
 
   .notes {
@@ -317,8 +323,8 @@
     <h1>Pre-pilot Fix Tracker</h1>
     <p class="lede">Every proposed fix, ours (<strong>R</strong>) and Thomas's (<strong>T</strong>), with its status,
       its row in the fix plan and its action number in Thomas's review of 10 September 2026.
-      <strong>“Fixed” means built and accepted on the fix branch: nothing reaches the server
-      until the whole plan is merged.</strong></p>
+      <strong>“Fixed” means built and accepted on the fix branch. Everything marked Fixed has been
+      merged for deployment to the server (first release 22 September, second 23 September).</strong></p>
   </header>
 
   <section class="progress" aria-label="Progress summary">
@@ -350,10 +356,11 @@
     <table>
       <thead>
         <tr>
-          <th scope="col">Source</th>
+          <th scope="col">Plan ref</th>
           <th scope="col">Fix</th>
           <th scope="col">Status</th>
-          <th scope="col">Plan ref</th>
+          <th scope="col">Severity</th>
+          <th scope="col">Source</th>
           <th scope="col">Thomas ref</th>
         </tr>
       </thead>
@@ -366,11 +373,18 @@
     <div>
       <h2>Status</h2>
       <dl>
-        <dt>Fixed</dt><dd>Built and accepted on the fix branch, not yet deployed.</dd>
+        <dt>Fixed</dt><dd>Built and accepted on the fix branch. Everything marked Fixed has been merged to <code>main</code> for deployment to the target: the first release on 22 September, the second (P3.13) on 23 September. A fix made after that stays on the branch until the next release.</dd>
         <dt>In progress</dt><dd>Under way. P5.2 is waiting on an external decision.</dd>
         <dt>Verified</dt><dd>The problem is confirmed in our replays, the code or a live test, but no fix is built yet.</dd>
         <dt>To be verified</dt><dd>Proposed, not yet confirmed or agreed.</dd>
       </dl>
+      <h2 style="margin-top:16px">Severity</h2>
+      <dl>
+        <dt>P1</dt><dd>The lawyer is given something wrong or misleading and has no way to tell: a false “not found”, an unsupported in-force claim, a silently incomplete answer, a lost reply, or a dead end with no way forward.</dd>
+        <dt>P2</dt><dd>The answer is correct but incomplete, shallow or harder to verify, or the lawyer has to work around the tool to get what they asked for.</dd>
+        <dt>P3</dt><dd>Presentation, wording no lawyer has yet seen, or our own measurement and tooling.</dd>
+      </dl>
+      <p style="margin-top:8px">Severity grades the defect, not the fix, and is a first-pass judgement from the transcripts and replays. Not to be confused with plan refs such as P1.1, which are rows in the fix plan.</p>
     </div>
     <div>
       <h2>References</h2>
@@ -378,21 +392,43 @@
         <code>TODO B6</code> is in <code>docs/TODO.md</code>, outside the plan.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.</p>
-      <p><strong>P0.5</strong> is a measurement row listed as an exception, and it is now done.
-        Twelve of the 41 replayed sessions had been replayed in Research mode where the lawyers
-        used Conversational, so every fix measured on them was re-checked against a
-        Conversational-mode replay. What it changed: the mode dead-end (<strong>P4.1</strong>)
-        reproduced for the first time in any replay; the prompt wording that says the whole
-        database lacks something (<strong>P4.6</strong>) turns out never to have reached a lawyer,
-        because that wording is in a prompt only Research mode uses; and the halt counts taken from
-        three of those sessions (<strong>P2.1</strong>, <strong>P3.8</strong>) are zero in the mode
-        their lawyers used. P3.1 and P3.11 both still hold, one step lower.</p>
-      <p><strong>Three rows opened by that work.</strong> <strong>P0.6</strong>: the same gap in the
-        records applies to which research filter those twelve sessions used, and unlike the mode it
-        cannot be recovered from the answers. <strong>P3.13</strong>: in a chat reply the research
-        step sometimes states a subsection and the reply then drops it. <strong>P3.14</strong>: the
-        quick-lookup step is not told which filters are active — the filters are still applied, but
-        it cannot say so when it reports finding nothing.</p>
+      <p><strong>P3.13</strong>, a chat reply dropping part of a provision, is now fixed. The lawyer
+        who asked which provision exempts legal advice from disclosure was told about section 36(1) of
+        the Freedom of Information (Scotland) Act 2002 and not section 36(2). The research step had
+        found and described both, and the chat reply cut 36(2) out. The reply now keeps it. Where the
+        research step explained a related subsection and the reply leaves it out, the research
+        step's own sentence about it is added under that citation, word for word, as “Also in
+        s.36: …”. That is at most three sentences, and they are never written fresh. Replayed three
+        times, the question now gets s.36(2) in all three first answers, where it got it in one of
+        three before. The chat reply still leaves it out on its own every time, so it is this step
+        that delivers it. Replies carry more links, not fewer.</p>
+      <p><strong>One thing tried and taken back out.</strong> We first added a sentence to the chat
+        instructions telling it to keep such subsections. That also changed how it phrased the
+        research request, and in one replay the research step went to the wrong Act (the Economic
+        Crime and Corporate Transparency Act 2023, which uses the phrase “disclosure request”) and
+        never looked at Freedom of Information. The instruction is gone, so the chat instructions are
+        as they were.</p>
+      <p><strong>Earlier, P4.1</strong>, the mode dead-end, was fixed. Replies now name the control a lawyer
+        actually has to use: the <em>Filters</em> button, then <em>Research type</em>, then
+        <em>Legislation &amp; case law</em>. Before, four prompts between them pointed to two different
+        controls, one of which does not exist. The system also notices when a setting changed since
+        the previous reply, and a suggestion button can no longer offer to change a setting it
+        cannot change. In a scripted test (refuse, change the setting, ask again), 12 of 12 answers
+        after the change came from case law. Over the four affected sessions, replies telling the
+        lawyer to switch or start again went from 14 to 0, and replies naming a non-existent
+        control went from 15 to 0.</p>
+      <p><strong>One correction to how this problem was understood.</strong> The system was thought to
+        repeat its own earlier refusal after the setting changed. Replays show it did not: before the
+        fix, 11 of 12 answers after a real change already searched case law. The failure in the
+        worst-rated session was the wording. The lawyer was told to change the "research mode", so
+        she changed the chat mode, which does not add case law. That session was also run in Deep
+        Research, not Conversational mode as the replays had assumed.</p>
+      <p><strong>One row opened.</strong> <strong>P4.9</strong>: show a change of setting in the
+        conversation itself, so the lawyer and the system see the same record.</p>
+      <p><strong>Earlier, from P0.5:</strong> twelve sessions had been replayed in the wrong mode and
+        were re-run. <strong>P0.6</strong> (which research filter those sessions used),
+        <strong>P3.14</strong> (the quick-lookup step is not told which filters are active) came
+        from that work and remain open. <strong>P3.13</strong> came from it too, and is fixed.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
         and three items from <code>docs/TODO.md</code> D16 (the impossible year window, always
@@ -407,56 +443,58 @@
 <script>
   // ---- Update here at the end of a session, when the user asks. ----
   // status: "Fixed" | "In progress" | "Verified" | "To be verified"
+  // sev:    "P1" | "P2" | "P3"  (see the Severity notes; grades the defect, not the fix)
   // src:    "T" | "R" | "T & R"
-  const UPDATED = "22 September 2026 (Session 20 — the twelve sessions re-run in Conversational mode, P0.5 done; P3.11 accepted on its Worker seam; three rows opened)";
+  const UPDATED = "23 September 2026 (Session 22 — P3.13 fixed: a chat reply no longer drops a subsection the research step described; second release merged to main for deployment)";
   const ROWS = [
-    { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", status: "Fixed", ref: "P0.5", t: "" },
-    { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", status: "Verified", ref: "P0.6", t: "" },
-    { src: "T & R", fix: "Make the jurisdiction filter work", status: "Fixed", ref: "P1.1", t: "5" },
-    { src: "R", fix: "Stop the “current only” filter implying in-force status", status: "Fixed", ref: "P1.2", t: "" },
-    { src: "T & R", fix: "Report the search's true match count", status: "Fixed", ref: "P1.3", t: "4" },
-    { src: "R", fix: "Link citations to the provision, not the Act", status: "Fixed", ref: "P1.4", t: "" },
-    { src: "R", fix: "Enforce provision links in code", status: "Fixed", ref: "P1.6", t: "" },
-    { src: "T & R", fix: "Disclose a research halt as a limit, not a finding", status: "Fixed", ref: "P2.1", t: "3" },
-    { src: "T & R", fix: "Explain every “not found”: what was searched, and its limits", status: "Fixed", ref: "P2.2", t: "4" },
-    { src: "T & R", fix: "Verify the enabling power", status: "Fixed", ref: "P2.3", t: "1" },
-    { src: "R", fix: "Disclose the Scottish case-law corpus gap", status: "Fixed", ref: "P2.4", t: "" },
-    { src: "R", fix: "Stop asserting in-force status", status: "Fixed", ref: "P2.5", t: "" },
-    { src: "T & R", fix: "Don't reformat a halted step into an empty report", status: "Fixed", ref: "P2.6", t: "3" },
-    { src: "R", fix: "Cap how long a step may keep searching", status: "Fixed", ref: "P2.7", t: "" },
-    { src: "R", fix: "Re-qualify a “not found” repeated from an earlier turn", status: "Fixed", ref: "P2.8", t: "" },
-    { src: "R", fix: "Record memo-served searches in the search scope", status: "Fixed", ref: "P2.9", t: "" },
-    { src: "R", fix: "Cite the provision at the subsection asked for, not the whole section", status: "Fixed", ref: "P3.1", t: "" },
-    { src: "R", fix: "Allow up to three section searches per Act, capped in code", status: "Fixed", ref: "P3.1", t: "" },
-    { src: "R", fix: "Stop reversing a correct answer under pushback", status: "Verified", ref: "P3.2", t: "" },
-    { src: "T & R", fix: "Separate retrieval from interpretation", status: "Verified", ref: "P3.3", t: "NH1" },
-    { src: "T & R", fix: "Default to Scottish jurisdiction; flag UK-wide divergence", status: "Verified", ref: "P3.4", t: "NH1" },
-    { src: "T", fix: "Correct the jurisdiction filter note in the prompt", status: "Verified", ref: "P3.4", t: "5" },
-    { src: "R", fix: "Retrieve amendment and commencement relations", status: "Fixed", ref: "P3.5", t: "" },
-    { src: "R", fix: "Keep the description field, which carries relationships", status: "Verified", ref: "P3.6", t: "" },
-    { src: "R", fix: "Test whether an instrument is held, by its number", status: "Verified", ref: "P3.7", t: "" },
-    { src: "T & R", fix: "Stop a step looping on instruments it already has; write up findings at the cap", status: "Fixed", ref: "P3.8", t: "3" },
-    { src: "T", fix: "Make the case-law date filter work", status: "Verified", ref: "P3.9", t: "6" },
-    { src: "T", fix: "Keep dependent Deep Research steps in one step", status: "Verified", ref: "P3.10", t: "3" },
-    { src: "R", fix: "Say what a cited subsection's sibling subsections provide", status: "Fixed", ref: "P3.11", t: "" },
-    { src: "R", fix: "Reach a Schedule paragraph asked for by number (LEX holds the Schedule as one provision)", status: "Verified", ref: "P3.12", t: "" },
-    { src: "R", fix: "Stop the chat reply dropping a subsection the research step had already written", status: "Verified", ref: "P3.13", t: "" },
-    { src: "R", fix: "Tell the quick-lookup step which research filters are active", status: "Verified", ref: "P3.14", t: "" },
-    { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", status: "Verified", ref: "P4.1", t: "9" },
-    { src: "R", fix: "Never show a blank or lost reply", status: "Fixed", ref: "P4.2", t: "" },
-    { src: "T & R", fix: "Make the sources list and inline links match the answer", status: "Verified", ref: "P4.3", t: "7" },
-    { src: "R", fix: "Remove the unused case-law court filter", status: "Fixed", ref: "P4.4", t: "" },
-    { src: "T & R", fix: "Report a lost research step as lost, not “no results”", status: "Verified", ref: "P4.5", t: "3" },
-    { src: "T", fix: "Label incomplete Deep Research steps as incomplete in progress messages", status: "Verified", ref: "P4.5", t: "3" },
-    { src: "T", fix: "Remove prompt wording that says the whole database lacks something", status: "Verified", ref: "P4.6", t: "4" },
-    { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", status: "Verified", ref: "P4.7", t: "2" },
-    { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", status: "Verified", ref: "P4.8", t: "" },
-    { src: "R", fix: "Source Scottish case law (Court of Session, Sheriff Courts)", status: "In progress", ref: "P5.2", t: "" },
-    { src: "T", fix: "Show provider errors (credit, rate limit) clearly when planning", status: "Verified", ref: "TODO B6", t: "8" },
-    { src: "T", fix: "Order case-law results by relevance", status: "To be verified", ref: "", t: "6" },
-    { src: "T", fix: "Reconcile summary counts with the answer's own list", status: "To be verified", ref: "", t: "NH2" },
-    { src: "T", fix: "Scan whole instruments for a literal “£”", status: "To be verified", ref: "", t: "4" },
-    { src: "T", fix: "Add an enabling-power rule to the synthesis prompt", status: "To be verified", ref: "P2.3", t: "1" },
+    { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "" },
+    { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Verified", ref: "P0.6", t: "" },
+    { src: "T & R", fix: "Make the jurisdiction filter work", sev: "P1", status: "Fixed", ref: "P1.1", t: "5" },
+    { src: "R", fix: "Stop the “current only” filter implying in-force status", sev: "P1", status: "Fixed", ref: "P1.2", t: "" },
+    { src: "T & R", fix: "Report the search's true match count", sev: "P2", status: "Fixed", ref: "P1.3", t: "4" },
+    { src: "R", fix: "Link citations to the provision, not the Act", sev: "P3", status: "Fixed", ref: "P1.4", t: "" },
+    { src: "R", fix: "Enforce provision links in code", sev: "P3", status: "Fixed", ref: "P1.6", t: "" },
+    { src: "T & R", fix: "Disclose a research halt as a limit, not a finding", sev: "P1", status: "Fixed", ref: "P2.1", t: "3" },
+    { src: "T & R", fix: "Explain every “not found”: what was searched, and its limits", sev: "P1", status: "Fixed", ref: "P2.2", t: "4" },
+    { src: "T & R", fix: "Verify the enabling power", sev: "P1", status: "Fixed", ref: "P2.3", t: "1" },
+    { src: "R", fix: "Disclose the Scottish case-law corpus gap", sev: "P1", status: "Fixed", ref: "P2.4", t: "" },
+    { src: "R", fix: "Stop asserting in-force status", sev: "P1", status: "Fixed", ref: "P2.5", t: "" },
+    { src: "T & R", fix: "Don't reformat a halted step into an empty report", sev: "P2", status: "Fixed", ref: "P2.6", t: "3" },
+    { src: "R", fix: "Cap how long a step may keep searching", sev: "P2", status: "Fixed", ref: "P2.7", t: "" },
+    { src: "R", fix: "Re-qualify a “not found” repeated from an earlier turn", sev: "P2", status: "Fixed", ref: "P2.8", t: "" },
+    { src: "R", fix: "Record memo-served searches in the search scope", sev: "P3", status: "Fixed", ref: "P2.9", t: "" },
+    { src: "R", fix: "Cite the provision at the subsection asked for, not the whole section", sev: "P2", status: "Fixed", ref: "P3.1", t: "" },
+    { src: "R", fix: "Allow up to three section searches per Act, capped in code", sev: "P2", status: "Fixed", ref: "P3.1", t: "" },
+    { src: "R", fix: "Stop reversing a correct answer under pushback", sev: "P1", status: "Verified", ref: "P3.2", t: "" },
+    { src: "T & R", fix: "Separate retrieval from interpretation", sev: "P2", status: "Verified", ref: "P3.3", t: "NH1" },
+    { src: "T & R", fix: "Default to Scottish jurisdiction; flag UK-wide divergence", sev: "P2", status: "Verified", ref: "P3.4", t: "NH1" },
+    { src: "T", fix: "Correct the jurisdiction filter note in the prompt", sev: "P3", status: "Verified", ref: "P3.4", t: "5" },
+    { src: "R", fix: "Retrieve amendment and commencement relations", sev: "P1", status: "Fixed", ref: "P3.5", t: "" },
+    { src: "R", fix: "Keep the description field, which carries relationships", sev: "P2", status: "Verified", ref: "P3.6", t: "" },
+    { src: "R", fix: "Test whether an instrument is held, by its number", sev: "P2", status: "Verified", ref: "P3.7", t: "" },
+    { src: "T & R", fix: "Stop a step looping on instruments it already has; write up findings at the cap", sev: "P2", status: "Fixed", ref: "P3.8", t: "3" },
+    { src: "T", fix: "Make the case-law date filter work", sev: "P2", status: "Verified", ref: "P3.9", t: "6" },
+    { src: "T", fix: "Keep dependent Deep Research steps in one step", sev: "P2", status: "Verified", ref: "P3.10", t: "3" },
+    { src: "R", fix: "Say what a cited subsection's sibling subsections provide", sev: "P2", status: "Fixed", ref: "P3.11", t: "" },
+    { src: "R", fix: "Reach a Schedule paragraph asked for by number (LEX holds the Schedule as one provision)", sev: "P2", status: "Verified", ref: "P3.12", t: "" },
+    { src: "R", fix: "Stop the chat reply dropping a subsection the research step had already written", sev: "P2", status: "Fixed", ref: "P3.13", t: "" },
+    { src: "R", fix: "Tell the quick-lookup step which research filters are active", sev: "P3", status: "Verified", ref: "P3.14", t: "" },
+    { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", sev: "P1", status: "Fixed", ref: "P4.1", t: "9" },
+    { src: "R", fix: "Show a change of mode or research type in the conversation itself", sev: "P3", status: "Verified", ref: "P4.9", t: "" },
+    { src: "R", fix: "Never show a blank or lost reply", sev: "P1", status: "Fixed", ref: "P4.2", t: "" },
+    { src: "T & R", fix: "Make the sources list and inline links match the answer", sev: "P2", status: "Verified", ref: "P4.3", t: "7" },
+    { src: "R", fix: "Remove the unused case-law court filter", sev: "P2", status: "Fixed", ref: "P4.4", t: "" },
+    { src: "T & R", fix: "Report a lost research step as lost, not “no results”", sev: "P1", status: "Verified", ref: "P4.5", t: "3" },
+    { src: "T", fix: "Label incomplete Deep Research steps as incomplete in progress messages", sev: "P3", status: "Verified", ref: "P4.5", t: "3" },
+    { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Verified", ref: "P4.6", t: "4" },
+    { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Verified", ref: "P4.7", t: "2" },
+    { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", sev: "P3", status: "Verified", ref: "P4.8", t: "" },
+    { src: "R", fix: "Source Scottish case law (Court of Session, Sheriff Courts)", sev: "P2", status: "In progress", ref: "P5.2", t: "" },
+    { src: "T", fix: "Show provider errors (credit, rate limit) clearly when planning", sev: "P3", status: "Verified", ref: "TODO B6", t: "8" },
+    { src: "T", fix: "Order case-law results by relevance", sev: "P3", status: "To be verified", ref: "", t: "6" },
+    { src: "T", fix: "Reconcile summary counts with the answer's own list", sev: "P2", status: "To be verified", ref: "", t: "NH2" },
+    { src: "T", fix: "Scan whole instruments for a literal “£”", sev: "P3", status: "To be verified", ref: "", t: "4" },
+    { src: "T", fix: "Add an enabling-power rule to the synthesis prompt", sev: "P2", status: "To be verified", ref: "P2.3", t: "1" },
   ];
   // ---- End of data. ----
 
@@ -494,19 +532,26 @@
     body.textContent = "";
     let shown = 0;
     let lastGroup = null;
-    for (const row of ROWS) {
+    // Status first (Fixed at the top), then severity (P1 first); ties keep plan order.
+    const ordered = ROWS.map((r, i) => [r, i]).sort((a, b) =>
+      STATUSES.indexOf(a[0].status) - STATUSES.indexOf(b[0].status) ||
+      a[0].sev.localeCompare(b[0].sev) || a[1] - b[1]).map(x => x[0]);
+    for (const row of ordered) {
       if (statusFilter !== "all" && row.status !== statusFilter) continue;
       if (!matchesSource(row)) continue;
       const tr = el("tr");
-      const group = (row.ref.match(/^P(\d)/) || [null, row.ref ? "x" : "none"])[1];
+      const group = row.status + "|" + row.sev;  // a rule between status/severity bands
       if (lastGroup !== null && group !== lastGroup) tr.className = "group-start";
       lastGroup = group;
-      tr.append(sourceCell(row.src));
+      tr.append(el("td", "ref", row.ref || "—"));
       tr.append(el("td", "fix", row.fix));
       const st = el("td");
       st.append(el("span", "status " + STATUS_CLASS[row.status], row.status));
       tr.append(st);
-      tr.append(el("td", "ref", row.ref || "—"));
+      const sv = el("td");
+      sv.append(el("span", "sev sev-" + row.sev.toLowerCase(), row.sev));
+      tr.append(sv);
+      tr.append(sourceCell(row.src));
       tr.append(el("td", "tref", row.t || "—"));
       body.append(tr);
       shown++;

@@ -26,6 +26,7 @@ Usage (from `server_py/`, with the pinned model — `tools.replay pin`):
     python -m tools.seam_replay synthesis --run <run.json> --turn 1 --without-fix
     python -m tools.seam_replay worker --run <run.json> --turn 1 [--delegation 1]
     python -m tools.seam_replay worker --run <run.json> --turn 1 --from-raw
+    python -m tools.seam_replay manager --run <run.json> --turn 1 [--without-fix] [--no-tools]
 
 `--without-fix` rebuilds the seam as it was at a given commit (default the
 commit before P3.1's product code): the synthesis prompt from that revision,
@@ -56,10 +57,14 @@ from src.agent import agent_core, agent_shared  # noqa: E402
 from src.agent.openrouter_client import chat_loop  # noqa: E402
 from src.agent.provider_factory import set_request_provider_config  # noqa: E402
 from src.prompts import get_worker_system_prompt  # noqa: E402
-from src.utils.citation_links import provision_url_block  # noqa: E402
+from src.utils.citation_links import (  # noqa: E402
+    provision_url_block,
+    restore_dropped_siblings,
+)
 from src.utils.research_halt import halt_writeup_instruction  # noqa: E402
 from src.utils.search_scope import strip_scope_blocks  # noqa: E402
 from src.utils.stopwatch import TimingCollector  # noqa: E402
+from src.utils.suggestions import extract_suggestions  # noqa: E402
 
 DEFAULT_DB_URL = "postgresql://lexuser:lexpassword@localhost/lexchat"
 # The commit before P3.1's product code, for `--without-fix`.
@@ -255,6 +260,116 @@ def worker_messages(doc: dict, turn: dict, delegation: int = 1,
     ]
 
 
+def manager_history(doc: dict, turn_no: int) -> list:
+    """The conversation the Manager was sent at `turn_no`, rebuilt the way
+    `tools.replay.replay_session` built it: each earlier user turn, then the
+    answer the replay got back (a planner clarification's question on a
+    clarification turn), stamped with the modes it ran under as the client
+    stamps a saved message (P4.1); a turn with no answer adds nothing."""
+    default_rm = (doc.get("filters") or {}).get("research_mode") or None
+    messages = []
+    for t in doc.get("turns", []):
+        messages.append({"role": "user", "content": t.get("question") or ""})
+        if t.get("turn") == turn_no:
+            return messages
+        reply = ((t.get("plan_clarification") or {}).get("question")
+                 if t.get("status") == "needs_clarification" else t.get("answer"))
+        if reply:
+            messages.append({"role": "assistant", "content": reply,
+                             "research_mode": t.get("research_mode") or default_rm,
+                             "chat_mode": t.get("chat_mode")})
+    raise SystemExit(f"turn {turn_no} not in the run file")
+
+
+def manager_cfg(doc: dict, turn: dict, messages: list) -> dict:
+    """The Manager's request config, via the product's own builder
+    (`build_request_config`), with the feature flags the run recorded.
+
+    `research_mode_enabled` was not recorded before P4.1 made it a pinned flag;
+    it defaults to the pinned value (OFF, as on the target), not the app's
+    default, so the conversational prompt is the one the acceptance runs.
+    """
+    from src.routers.agent_request import ChatRequest, build_request_config
+
+    f = doc.get("filters") or {}
+    state = doc.get("runtime_state") or {}
+    body = ChatRequest(
+        messages=messages, model=state.get("model") or "",
+        research_mode=turn.get("research_mode") or f.get("research_mode") or "legislation_only",
+        jurisdiction=f.get("jurisdiction"), year_from=f.get("year_from"),
+        year_to=f.get("year_to"), date_from=f.get("date_from"),
+        date_to=f.get("date_to"), legislation_type=f.get("legislation_type"),
+        chat_mode=turn.get("chat_mode") or "research",
+    )
+    features = {k: state[k] for k in (
+        "prompt_caching_enabled", "tool_memo_enabled", "suggested_questions_enabled")
+        if k in state}
+    features["local_prompt_cache_enabled"] = False
+    features["research_mode_enabled"] = state.get("research_mode_enabled", False)
+    return build_request_config(body, {}, "openrouter", features,
+                                chat_mode=body.chat_mode)
+
+
+def manager_messages(doc: dict, turn: dict, without_fix: bool = False,
+                     rev: str = PRE_P31_REV) -> list:
+    """The Manager's composition seam (P3.13): the conversation, then each
+    recorded delegation as the `delegate_research` call it was and the
+    `[Research Agent Result]` it returned, then the call that composes.
+
+    Built with the product's builders (`get_manager_system_prompt`,
+    `apply_mode_change_marker`), and the tool result is the one
+    `manager_tool_executor` returns — the audit's `report` is the worker
+    result's `content` verbatim, scope block included. **Approximations:** the
+    learning-examples injection (needs the feedback table) is left out, each
+    delegation is one round of its own (the live Manager may have batched
+    them). **The Manager is offered its tools, as the live call is** (a call
+    it makes is refused, and it composes on the next round): tool-free, the
+    seam DELIVERED in 3 of 3 draws a payload the live Manager had flattened
+    (`wave3_p313` rep 1 turn 1), and with the tools offered it reproduced the
+    miss in 3 of 3. `--no-tools` is the tool-free draw. `--without-fix`
+    swaps the conversational Manager body for the one at `rev` and hands over
+    the bare report.
+    """
+    from src.prompts import get_manager_system_prompt
+    from src.utils.mode_change import apply_mode_change_marker
+
+    dgs = [dg for dg in (turn.get("audit") or {}).get("delegations", [])
+           if dg.get("step") is None]
+    if not dgs:
+        raise SystemExit("this turn has no delegation to compose from")
+    history = manager_history(doc, turn.get("turn"))
+    cfg = manager_cfg(doc, turn, history)
+    system = get_manager_system_prompt(cfg["_research_mode"], cfg)
+    if without_fix:
+        # The constant at `rev` is the triple-quoted literal alone; the live
+        # body is that literal plus the research-mode hint appended to it.
+        import src.prompts as prompts
+        live = prompts._MANAGER_CONV_BODY
+        hint = prompts.RESEARCH_MODE_HINT_ON
+        literal = live[:-len(hint)] if live.endswith(hint) else live
+        if literal not in system:
+            raise SystemExit("--without-fix: the live conversational body is not in the prompt")
+        system = system.replace(literal, _prompt_constant_at(rev, "_MANAGER_CONV_BODY"), 1)
+    messages = [{"role": "system", "content": system}, *history]
+    messages, _change = apply_mode_change_marker(messages, cfg)
+    for i, dg in enumerate(dgs, 1):
+        cid = f"call_{i:02d}"
+        messages.append({"role": "assistant", "content": "", "tool_calls": [{
+            "id": cid, "type": "function", "function": {
+                "name": "delegate_research",
+                "arguments": json.dumps({"query": dg.get("brief") or ""})}}]})
+        report = dg.get("report") or ""
+        # The product's own builder (P3.13's sibling links included); the
+        # pre-fix result is the bare report under the same prefix.
+        messages.append({"role": "tool", "tool_call_id": cid,
+                         "name": "delegate_research",
+                         "content": f"[Research Agent Result]\n{report}" if without_fix
+                         else agent_core.worker_result_for_manager(report, cfg)})
+    # Strip the client-side stamps: they are not provider fields.
+    return [{k: v for k, v in m.items() if k not in ("research_mode", "chat_mode")}
+            for m in messages]
+
+
 def _cfg_for(doc: dict, turn: dict) -> dict:
     """The request config the recorded turn ran under (filters included)."""
     f = doc.get("filters") or {}
@@ -295,11 +410,13 @@ async def _no_tools(name: str, args: dict) -> str:
     return f"Error: Unknown tool {name}"
 
 
-async def run_seam(messages: list, cfg: dict) -> tuple:
-    """One tool-free model call. Returns (content, cost, model)."""
+async def run_seam(messages: list, cfg: dict, tools: Optional[list] = None) -> tuple:
+    """One model call, tool-free unless `tools` is given (then a call the model
+    makes is refused and it composes on the next round). Returns (content,
+    cost, model)."""
     set_request_provider_config(cfg)
     tc = TimingCollector("seam")
-    out = await chat_loop(messages, cfg["model"], None, 0, [], _no_tools,
+    out = await chat_loop(messages, cfg["model"], None, 0, tools or [], _no_tools,
                           timing_collector=tc)
     content = (out or {}).get("content") or ""
     return content, tc.total_cost_usd, cfg["model"]
@@ -325,7 +442,7 @@ def _grade(session_id: str, text: str) -> str:
 def main(argv: Optional[list] = None) -> int:
     rr._utf8_stdout()
     p = argparse.ArgumentParser(prog="seam_replay")
-    p.add_argument("seam", choices=["synthesis", "worker"])
+    p.add_argument("seam", choices=["synthesis", "worker", "manager"])
     p.add_argument("--run", required=True, help="a replay run file")
     p.add_argument("--turn", type=int, default=1)
     p.add_argument("--delegation", type=int, default=1, help="worker seam only")
@@ -338,6 +455,11 @@ def main(argv: Optional[list] = None) -> int:
                         "appended blocks from its recorded raw_result through "
                         "the product's builder (P3.11's outline reaches the seam)")
     p.add_argument("--print", action="store_true", help="print the answer")
+    p.add_argument("--no-tools", action="store_true",
+                   help="manager seam only: make the call tool-free. By default "
+                        "the Manager is offered its tools, as the live call is "
+                        "(a call it makes is refused), because tool-free it "
+                        "delivered a payload the live Manager flattened (P3.13)")
     p.add_argument("--dry-run", action="store_true",
                    help="build the payload and print its shape; no model call")
     p.add_argument("--out", default=None, help="write each answer to this directory")
@@ -346,7 +468,8 @@ def main(argv: Optional[list] = None) -> int:
     run_path = Path(args.run)
     doc, turn = load_turn(run_path, args.turn)
     sid = str(doc.get("session_id"))
-    build = synthesis_messages if args.seam == "synthesis" else worker_messages
+    build = {"synthesis": synthesis_messages, "worker": worker_messages,
+             "manager": manager_messages}[args.seam]
     kwargs = {"without_fix": args.without_fix, "rev": args.rev}
     if args.seam == "worker":
         kwargs["delegation"] = args.delegation
@@ -357,7 +480,14 @@ def main(argv: Optional[list] = None) -> int:
     print(f"seam={args.seam}  session={sid} turn={args.turn}  "
           f"{'WITHOUT fix (' + args.rev + ')' if args.without_fix else 'current code'}")
     print(f"  payload: {len(messages)} message(s), {chars:,} chars")
-    if args.seam == "synthesis":
+    if args.seam == "manager":
+        reports = [m for m in messages if m.get("role") == "tool"]
+        print(f"  delegations: {len(reports)}")
+        for i, m in enumerate(reports, 1):
+            grade = _grade(sid, strip_scope_blocks(m.get("content") or "")[0])
+            if grade:
+                print(f"  report {i} depth: {grade}")
+    elif args.seam == "synthesis":
         print(f"  pinpoint block: "
               f"{'present' if 'PINPOINTS TO KEEP' in messages[1]['content'] else 'absent'}")
     else:
@@ -369,11 +499,27 @@ def main(argv: Optional[list] = None) -> int:
         return 0
 
     cfg = asyncio.run(_provider_cfg(_cfg_for(doc, turn)))
+    tools = None
+    if args.seam == "manager" and not args.no_tools:
+        from src.agent.tools import get_manager_tools
+        tools = get_manager_tools("")
     total = 0.0
     for rep in range(1, args.reps + 1):
-        content, cost, model = asyncio.run(run_seam(messages, cfg))
+        content, cost, model = asyncio.run(run_seam(messages, cfg, tools))
         total += cost
         clean, _ = strip_scope_blocks(content)
+        if args.seam == "manager":
+            # What the product does to the Manager's text before the lawyer sees
+            # it, in the order `process_user_request` does it.
+            clean, _s = extract_suggestions(clean)
+            if not args.without_fix:
+                # The answer seam the product runs next (P3.13), on the
+                # reports exactly as the Manager was handed them.
+                handed = [(m.get("content") or "")[len(agent_core.RESEARCH_RESULT_PREFIX):]
+                          for m in messages if m.get("role") == "tool"]
+                clean, restored = restore_dropped_siblings(clean, handed)
+                if restored:
+                    print(f"      restored {restored} dropped sibling(s)")
         print(f"  rep{rep}: ${cost:.4f}  {len(clean):,} chars  model={model}")
         grade = _grade(sid, clean)
         if grade:

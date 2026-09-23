@@ -4266,3 +4266,214 @@ above changes anything for the pilot's user guidance — the control lawyers
 need is the Filters button, and no answer had ever named it.
 
 ---
+
+## Session 21, continued — 2026-09-22/23 — the first cut to `main`, and the tracker
+
+**Done (user decisions):**
+- **The branch was cut to `main`** (user decision, 2026-09-22), superseding the 2026-09-15 rule that nothing goes to `main` until the plan concludes. Later cuts go only when the user asks. This is recorded in CLAUDE.md, in FIX_PLAN's deployment note above the Ledger, and in memory.
+- **Rollback tag `pre-prepilot-fixes-2026-09-22`** (annotated, pushed) is on `6ada6d1`, the commit the target was running. That was `origin/main`, not local `main`, which was one docs commit ahead. Roll back on the target with `git checkout pre-prepilot-fixes-2026-09-22` and a restart. The new `messages` columns are additive, so the old code ignores them.
+- **Merge `d8fd73b`** (`--no-ff`) was pushed as `6ada6d1..d8fd73b`. `origin/main` was a strict ancestor, so there were no conflicts.
+- **`fix/prepilot-defects` pushed for the first time**, tracking `origin`, at `b91b7ec`. It stays the working branch.
+- Checked before merging: no new env vars, no new Python packages and no new whitelist hosts. `client/dist` is the current build. The two `messages` columns are created at startup.
+- **CLAUDE.md's mode-controls note is corrected.** It still said the model anchored on its refusal, the diagnosis this session disproved.
+- **Fix Tracker updated at the user's request:** P4.1 → Fixed, P4.9 added, the Fixed status reworded to say what was merged, and the notes rewritten for Session 21.
+
+**NOT done — needs the target, and is not recorded as done anywhere:**
+- The target has not been confirmed to have pulled `d8fd73b`. Deploy with `git pull`, `stop_native.cmd`, `start_native.cmd`, then `server_py	est_apis.ps1` and one real question.
+- **A `pg_dump` before pulling was recommended and not taken.** `install_backup_task.ps1` has never run, so no backup exists on the target.
+- **Tell whoever runs the lexchat-eval harness that the audit event is now schema v5.** The change is additive (top-level `mode_change`).
+
+**Consequence for measurement:** a replay directory taken before 2026-09-22 measured a system the target had never run. After the target pulls, replays of HEAD measure the deployed system plus whatever the branch has gained since `2eaeff0`.
+
+---
+
+## Session 22 — 2026-09-23 — P3.13 (B10, the conversational Manager seam)
+
+**Done:**
+- **P3.13 BUILT, acceptance NOT MET: 6348 turn 1 DELIVERED in 1 of 3**
+  (`wave3_p313`, head `778d30a`, n=3, $5.65), unchanged from
+  `wave3_p311_conv`. Not ticked. The next step is the user's decision; there
+  are three options on the row. B10 stays partial. Ledger unchanged at 29 of
+  48 rows, 7 of 14 buckets.
+- **The acceptance was stated on the row before the replay** (3 of 3; links
+  not lower in more than 1 of 4 slots; `sources_kept` inside the noise floor;
+  exit-1 set 0). It was committed with the product change in `778d30a`.
+- **Measured before building, free, and it named the mechanism.** New
+  `replay_report siblings`: over 1,060 non-Deep-Research delegations in 36
+  directories, where the answer keeps one subsection of a section, the
+  conversational Manager keeps a sibling written as a link 58 of 60 times and
+  one written as plain text 70 of 104. The research Manager keeps 441 of 441
+  either way. In every flattened 6348 answer, s.36(2) was the report's one
+  unlinked provision.
+- **Built (`778d30a`):** `citation_links.link_sibling_pinpoints` via
+  `agent_core.worker_result_for_manager`, for the conversational Manager
+  only, plus one clause in its existing CITATION PRESERVATION bullet.
+  **Instrument:** `seam_replay manager`. **Tests 1524 → 1559.** Each half was
+  proven to fail its own tests on scratch copies: wiring removed, linker
+  stubbed, clause removed.
+- **Dev box restored** (`replay restore`: model `google/gemini-3.1-pro-preview`,
+  local prompt cache ON, `research_mode_enabled` ON). Server stopped.
+
+**Surprises / deviations from FIX_PLAN:**
+
+- **The tool-free Manager seam predicted a pass the product did not deliver,
+  and I built on it.** Tool-free, link plus clause recovered 3 of 3 recorded
+  Manager losses. Rep 1 of the acceptance then flattened s.36(2) with the fix
+  live (the linker fired on two siblings). Its payload DELIVERED in 3 of 3
+  tool-free draws and failed in 3 of 3 once the Manager was offered its
+  tools, as the live call is. Re-drawn with tools, the fix is 1 of 3 on the
+  losses, not 3 of 3. The seam now offers the tools by default. **This is the
+  second time a seam has passed what live failed** (P3.11's rep 3 was the
+  first, at the Worker seam). Neither form of the Manager seam is exact: each
+  matched the live outcome on 5 of 6 recorded payloads. Take the harsher one.
+- **Linking alone was not enough, because the Manager also edits the sibling
+  out as off-topic.** The question is about legal advice privilege, which is
+  s.36(1). On the tool-free seam the link recovered 1 of 3 and the clause 2 of
+  3. Both halves are kept because together they did better, and neither costs
+  links.
+- **The first draft of the linker made a wrong-instrument link, and reading
+  every edit is what found it.** A research-mode report listing Use Classes
+  Orders would have handed the 1963 Order's s.2(2) the 1950 Order's s.2 URL:
+  a real page for the wrong instrument, which is Invariant 1's worst case. All
+  188 distinct edits over the corpus were read before any wiring. The
+  instrument rule and a test came from that reading.
+- **Rep 2 was lost to P4.5, not to this row, and it broke the conversational
+  format.** The first worker lost its final completion three times, each
+  attempt about 62,912 completion tokens with no content ($2.48, 1,171 s).
+  The Manager was handed a bodiless report, only the scope block, whose
+  text addresses the research Worker's "Jurisdiction & Status section". It
+  wrote that heading, and turns 3 and 4 repeated it: `modes` exits 1, the
+  first such answers in 128 conversational turns. The same payload on the
+  seam wrote no heading in 4 of 4 draws, with or without the fix. Rep 3
+  turn 3 was a second episode ($2.40, 1,120 s). Booked on P4.5.
+- **`--max-spend` is checked between reps, not within one.** The run was
+  capped at $4 and recorded $5.65.
+
+**How this session worked, for whoever repeats it.**
+- `python -m tools.seam_replay manager --run <run.json> --turn N`
+  (`--without-fix --rev <sha>` for the before-column; `--no-tools` for the
+  tool-free draw).
+- `python -m tools.replay_report --dir <D> siblings --all-dirs [--exclude NAME] [--list]`.
+- Before wiring a code change that rewrites what a model is handed, dry-run
+  it over every stored report and read the edits.
+
+**Every published number was re-derived before the handover** by one command
+or one scratch script over the saved draws. The scratch script regrades every
+seam draw with `replay_report.depth_verdict`. `siblings` reproduces 58/60 and
+70/104. `depth --seams`, `depth --before` and `discovery --before` give the
+acceptance and Invariant 1 figures, and `plan_status` counts 48 rows.
+
+**State of the branch:** `fix/prepilot-defects`. `778d30a` (product) and the
+handover commit are pushed to the branch, and nothing went to `main`. 1559
+tests green.
+
+**Machine state:** no uvicorn running, the dev box is restored and there are
+no worktrees. **37 replay directories** (+`wave3_p313`).
+
+**Spend:** $5.65 for `wave3_p313`, $4.89 of it two P4.5 turns. About $1 for
+64 seam draws; not every draw's cost was captured, and the printed ones range
+$0.007–$0.030.
+
+**Next action:** the user's decision on P3.13. (i), a code-written sibling
+at the answer seam, is recommended, and its design questions are placement
+and clutter. Otherwise take **P0.6**, then **P4.6**. Consider raising
+**P4.5**.
+
+**Open with the user:** P3.13's decision; whether the target has pulled
+`d8fd73b` and restarted; whether a `pg_dump` was taken there first (no backup
+has ever run on the target); telling whoever runs the eval harness that the
+audit event is schema v5; P5.2 (B12, external); whether Thomas's review
+document should be committed; whether the Fix Tracker should be updated.
+
+---
+
+## Session 22, continued — 2026-09-23 — P3.13 option (i): the answer seam; P3.13 DONE, B10 closed
+
+**Done:**
+- **The user chose option (i):** keep the linking, keep the row open, and put
+  a dropped sibling back in code after the answer is written. The design
+  choices were stated and taken by this session: verbatim Worker clause, after
+  the citing paragraph, "Also in s.N:", at most 3 notes, conversational
+  Manager only.
+- **Built:** `citation_links.restore_dropped_siblings` (`66598f3`). Then the
+  prompt clause was taken out and plain-text citations accepted (`ebd3efa`).
+  `seam_replay manager` applies the restore. **Tests 1559 → 1577.** The
+  restore stubbed fails 5 tests; unwired, it fails 1 (the integration test).
+- **ACCEPTED:** `wave3_p313c` (head `ebd3efa`, n=3, $1.01). 6348 turn 1
+  DELIVERED in 3 of 3, delivered by turn 2 in 3 of 3, Manager losses 0, every
+  exit-1 subcommand 0. Links fell in 1 of 4 slots; `sources_kept` fell in 0.
+  **P3.13 ticked; B10 CLOSED; ledger 30 of 48, 8 of 14 buckets.**
+
+**Surprises / deviations:**
+- **The first dry-run's notes were not fit to show a lawyer, and only
+  reading them showed it.** 29 notes, three kinds of fault: a list cut
+  mid-parenthesis (6374), restatements of the kept subsection, and
+  near-duplicates of an answer sentence (6409). Each became a guard. After
+  that there were 15 notes, all read.
+- **The prompt clause cost retrieval, which no metric on this row watched.**
+  `wave3_p313b` rep 1 went to the Economic Crime and Corporate Transparency
+  Act 2023 and never searched FOISA. Its first brief was the lawyer's words
+  nearly verbatim. That brief form appeared in 3 of 6 runs with the clause
+  and 0 of 10 before. The first brief is written before any tool result, so
+  the clause was the only change of ours that could reach it. A first-round
+  probe agreed: 2 of 4 briefs did not name FOI with the clause, 0 of 4
+  without. The clause is out, and `prompts.py` is identical to `57cfae6`.
+  **A prompt change can move a call the fix never meant to touch; probe
+  every call the edited prompt drives, not only the one it targets.**
+- **With the clause gone, the Manager dropped s.36(2) in all 3 acceptance
+  answers, and the code restored all 3.** The number is the code's. Invariant
+  2 says that is the right outcome, and the row now says it plainly.
+- **Correction:** `ebd3efa`'s commit message says the verbatim brief
+  appeared "0 of 11 before". It is 0 of 10 (re-derived by an exact prefix
+  match; the test docstring is corrected).
+
+**Every published number was re-derived by a command or script before the
+handover:** `depth --seams` / `--before`, `discovery --before`, the grade
+loop, the dry-run (623 turns with the restore's own sweeps excluded, 647 with
+them), the brief counts, the FOISA-less count (1 of 33) and `plan_status` (48
+rows).
+
+**Machine state:** no uvicorn running; dev box restored; **39 replay
+directories** (+`wave3_p313b`, `wave3_p313c`). Branch pushed; nothing to
+`main`.
+
+**Spend (continued):** $2.18 in sweeps ($1.17 + $1.01), plus about 25 seam
+and probe draws. **Session 22 total:** about $8.8 in sweeps, plus about $1.5
+of seam draws.
+
+**Next action:** **P0.6**, then **P4.6**'s re-baseline. Raise **P4.5**.
+
+**Open with the user:**
+- whether the Fix Tracker should be updated (P3.13 → Fixed, B10 closed);
+- whether this branch should be cut to `main`;
+- the target's pull and backup, the eval-harness schema v5, P5.2, and
+  Thomas's document (all unchanged).
+
+---
+
+## Session 22, continued further — 2026-09-23 — the second cut to `main`, and the tracker
+
+**Done (user decisions, both asked for):**
+- **The Fix Tracker was updated and republished to the same URL.** P3.13 is
+  now Fixed (25 Fixed rows), the release wording covers both cuts, and the
+  notes lead with P3.13 in plain terms, including the prompt instruction that
+  was tried and taken back out.
+- **The second cut went to `main`.** This commit records it and is the branch
+  head being merged (`--no-ff`). The pre-merge `main`, `d8fd73b` (the first
+  cut's merge commit), is tagged `pre-prepilot-fixes-2026-09-23` and pushed.
+- **Checked before merging:** the only product files that change against
+  `origin/main` are `server_py/src/agent/agent_core.py` and
+  `server_py/src/utils/citation_links.py`. `prompts.py` nets to no change.
+  There is no config, `.env`, dependency, `client/` (so `client/dist` is
+  current), schema or new-host change. `origin/main` held nothing the branch
+  lacks except the first cut's own merge commit, so the merge is clean.
+
+**NOT done — needs the target:**
+- pull, then `stop_native.cmd` / `start_native.cmd`, then `server_py\test_apis.ps1`
+  and one real question;
+- a `pg_dump` first (still no backup has ever run there);
+- confirmation that the first cut (`d8fd73b`) was ever pulled.
+
+**Rollback on the target:** `git checkout pre-prepilot-fixes-2026-09-23` and
+a restart returns it to the first cut; `pre-prepilot-fixes-2026-09-22`
+returns it to before both.

@@ -56,6 +56,8 @@ __all__ = [
     "harvest_legislation_urls",
     "provision_url_block",
     "enforce_provision_links",
+    "link_sibling_pinpoints",
+    "restore_dropped_siblings",
     "PROVISION_MARKER",
     "PROVISION_FOOTNOTE",
 ]
@@ -300,6 +302,416 @@ def pinpoint_block(texts, max_urls: int = 12, max_each: int = 6) -> str:
     except Exception:  # pragma: no cover - defensive
         logger.debug("[Citations] pinpoint block skipped", exc_info=True)
         return ""
+
+
+# An unlinked pinpoint whose type maps onto a URL segment: "s.36(2)",
+# "section 36(2)(a)", "reg. 4(3)", "art. 2(1)". It must carry at least one
+# bracketed subdivision - a bare "s.36" is a section, which is what the link
+# the report already carries says; it is not a sibling. Schedules and
+# paragraphs are left out: a Schedule's URL is `/schedule/1` and its
+# paragraphs are not sections of anything (P3.12).
+_SIBLING_PIN = re.compile(
+    r"\b(?P<kind>s\.|section|reg\.|regulation|art\.|article)\s?"
+    r"(?P<num>\d+[A-Z]{0,2})"
+    r"(?P<sub>(?:\s?\((?:\d+[A-Za-z]{0,2}|[a-z]{1,4})\))+)",
+    re.I,
+)
+_SIBLING_SEGMENT = {"s.": "section", "section": "section", "reg.": "regulation",
+                    "regulation": "regulation", "art.": "article", "article": "article"}
+# An instrument named in plain words, outside any link: "Order 1963",
+# "Regulations 2004", "the 2002 Act", "Regulation (EC) No 1069/2009",
+# "SSI 2004/520", "asp/2002/13". Which instrument it is cannot be known, so it
+# only ever blocks a link, never licenses one.
+_PLAIN_INSTRUMENT = re.compile(
+    r"\b(?:Act|Order|Regulations|Rules|Measure|Directive)\s+\d{4}\b"
+    r"|\b\d{4}\s+(?:Act|Order|Regulations|Rules)\b"
+    r"|\((?:EC|EU|EEC)\)\s*No\.?\s*\d+/\d{4}"
+    r"|\b(?:Regulation|Directive|Decision)\s+(?:No\.?\s*)?\d+/\d{4}"
+    r"|\b(?:S\.?S\.?I\.?|S\.?I\.?)\s*\d{4}/\d+"
+    r"|\b(?:asp|ukpga|ssi|uksi|nisr|nia|anaw|asc|wsi|eur)/\d{4}/\d+",
+    re.I,
+)
+# "s.36(2) of the ...": the instrument named straight after a pinpoint is the
+# one it belongs to, whatever came before it.
+_NAMED_AFTER = re.compile(r"\s*,?\s*(?:of|in|under)\s+(?:the\s+)?(?=\S)")
+_SCOPE_OPEN = "\n\n[SEARCH SCOPE"
+
+
+def _instrument_refs(para: str, masked: str) -> list:
+    """(start, end, instrument key or None) for every instrument reference in a
+    paragraph: each legislation link (keyed on its instrument) and each plain
+    title (None: unknown)."""
+    refs = []
+    for m in _MD_LINK.finditer(para):
+        key = normalise_leg_url(m.group(2))
+        if key:
+            refs.append((m.start(), m.end(), act_base_url(m.group(2)) or key))
+    links = list(refs)
+    for m in _PLAIN_INSTRUMENT.finditer(masked):
+        # "[s.36(1)](...) of the Freedom of Information (Scotland) Act 2002":
+        # a title written straight after a link, joined by "of the", names the
+        # link's own instrument, so it takes the link's key.
+        key = None
+        prior = [r for r in links if r[1] <= m.start()]
+        if prior:
+            gap = masked[prior[-1][1]:m.start()]
+            if (_NAMED_AFTER.match(gap) and not re.search(r"[.;:\x00]", gap)
+                    and len(gap) <= 120):
+                key = prior[-1][2]
+        refs.append((m.start(), m.end(), key))
+    return sorted(refs)
+
+
+def _owning_instrument(refs: list, start: int, end: int, masked: str):
+    """The instrument a pinpoint at [start, end) belongs to: the one named
+    straight after it if there is one, else the nearest reference before it,
+    else the nearest after it. False when there is no reference at all."""
+    after = _NAMED_AFTER.match(masked, end)
+    if after:
+        # The first reference in the same clause after "of the": a title match
+        # starts at "Act 2018" in "of the Data Protection Act 2018", not at
+        # "Data", so it is looked for up to the clause's end, not at one offset.
+        named = [r for r in refs if r[0] >= after.end()]
+        if named:
+            gap = masked[after.end():named[0][0]]
+            if len(gap) <= 100 and not re.search(r"[.;:,]", gap):
+                return named[0][2]
+    before = [r for r in refs if r[1] <= start]
+    if before:
+        return before[-1][2]
+    later = [r for r in refs if r[0] >= end]
+    return later[0][2] if later else False
+
+
+def link_sibling_pinpoints(text: str, retrieved: Optional[Iterable[str]] = None) -> tuple:
+    """Link each unlinked pinpoint to the section URL the same paragraph already
+    links for that section. Returns (text, linked).
+
+    **FIX_PLAN P3.13 (B10), the conversational Manager seam.** The quick-lookup
+    Worker cites a subsection with a link (`[s.36(1)](.../section/36)`) and
+    states its sibling in plain words ("s.36(2) exempts information obtained
+    from another person..."), because both subsections share one URL. The
+    conversational Manager is told to keep each provision the Worker cites
+    "with its link", and over every replayed run it kept a sibling subsection
+    it had been handed as a link 58 times in 60 and one handed as plain text 70
+    in 104 - 6348 turn 1's s.36(2) among the drops. Linking the sibling hands it
+    to the Manager as a citation, the form it keeps. P1.6's pattern: put the
+    data in the shape the model already honours rather than add a rule.
+
+    Only links to a URL the report already carries, in the same paragraph, for
+    the same section number and provision type; never builds a URL. Skipped,
+    so the text is left alone, when that paragraph links two different URLs for
+    the section; when the pinpoint does not belong to the URL's instrument - the
+    instrument named straight after it ("s.36(2) of the Data Protection Act
+    2018"), else the nearest instrument reference before it, must be that
+    instrument, and a title in plain words counts as an unknown instrument
+    unless it directly follows the link it restates ("[s.36(1)](...) of the
+    Freedom of Information (Scotland) Act 2002"); when `retrieved` is given
+    and does not hold the URL; and anywhere in the search-scope block.
+
+    Checked over every recorded worker report before it shipped (Session 22):
+    it would have added 102 links to 63 of the 777 conversational reports in
+    the 35 replay directories, every one read in context, and the one a first
+    draft got wrong - a list of Use Classes Orders where the 1963 Order's
+    s.2(2) took the 1950 Order's s.2 URL - is what the instrument rule is for.
+    Idempotent and fail-soft.
+    """
+    if not text:
+        return text, 0
+    try:
+        retrieved_keys = (None if retrieved is None else
+                          {k for k in (normalise_leg_url(u) for u in retrieved) if k})
+        cut = text.find(_SCOPE_OPEN)
+        body, tail = (text, "") if cut < 0 else (text[:cut], text[cut:])
+        linked = 0
+        out = []
+        for para in re.split(r"(\n\s*\n)", body):
+            # (segment, number) -> {normalised key: URL as written}
+            urls: dict = {}
+            for _label, url in _MD_LINK.findall(para):
+                m = re.search(r"/(section|regulation|article)/(\d+[a-z]{0,2})/?$",
+                              normalise_leg_url(url))
+                if m and not re.search(r"/schedule/", normalise_leg_url(url)):
+                    urls.setdefault((m.group(1), m.group(2).lower()), {})[
+                        normalise_leg_url(url)] = url.strip().rstrip(_URL_TRAILING)
+            if not urls:
+                out.append(para)
+                continue
+            # Mask existing links so a pinpoint inside a label or URL is never
+            # matched; the masks keep offsets, so the edits map straight back.
+            masked = _MD_LINK.sub(lambda m: "\x00" * len(m.group(0)), para)
+            refs = _instrument_refs(para, masked)
+            edits = []
+            for m in _SIBLING_PIN.finditer(masked):
+                key = (_SIBLING_SEGMENT[m.group("kind").lower()], m.group("num").lower())
+                cands = urls.get(key) or {}
+                if len(cands) != 1:
+                    continue
+                (norm, url), = cands.items()
+                # The pinpoint must belong to the instrument the URL is for: a
+                # list that runs "Order 1950 - [s.2](...) / Order 1963 - s.2(2)"
+                # would otherwise hand the 1963 Order's s.2(2) the 1950 Order's
+                # URL, a real page for the wrong instrument (Invariant 1).
+                if _owning_instrument(refs, m.start(), m.end(), masked) != act_base_url(url):
+                    continue
+                if retrieved_keys is not None and norm not in retrieved_keys:
+                    continue
+                edits.append((m.start(), m.end(), url))
+            for start, end, url in reversed(edits):
+                para = f"{para[:start]}[{para[start:end]}]({url}){para[end:]}"
+            linked += len(edits)
+            out.append(para)
+        return "".join(out) + tail, linked
+    except Exception:  # pragma: no cover - defensive
+        logger.debug("[Citations] sibling linking skipped", exc_info=True)
+        return text, 0
+
+
+_SECTION_URL = re.compile(r"/(section|regulation|article)/(\d+[a-z]{0,2})/?$")
+_NOTE_LABEL = {"section": "s.", "regulation": "reg. ", "article": "art. "}
+_FIRST_SUB = re.compile(r"\s?\((\w+)\)")
+# "subsection (2)", "subsections (1) and (2)": a sibling the answer kept in words.
+_SUBSECTION_WORDS = re.compile(
+    r"\bsub-?sections?\s*((?:\(\w+\)(?:\s*(?:,|and|or|to|-|–)\s*)?)+)", re.I)
+# Where a sentence ends: after . ! ? and before what can open the next one. A
+# pinpoint's "s.36" has no space after its dot, so it never splits here.
+_SENTENCE_END = re.compile(
+    r"(?:(?<=[.!?])|(?<=[.!?][\"'”’)]))\s+(?=[A-Z\x00*(\[])")
+# Where a clause of one sentence ends and the next begins ("..., while s.36(2)").
+# Never at ", and": that splits a list ("(the First Minister, Ministers, and
+# the Lord Advocate)") as readily as a clause.
+_CLAUSE_CUT = re.compile(r";\s+|,\s+(?=(?:while|whereas|but)\b)|\s+(?=(?:while|whereas)\b)")
+# "126(6) to (8)", "36(1)-(3)": a range of subsections the answer names.
+_SUB_RANGE = re.compile(r"(\d+[A-Za-z]{0,2})\s?\((\d+)\)\s*(?:to|-|–)\s*\((\d+)\)")
+_CONTENT_WORD = re.compile(r"[a-z]{4,}")
+_LEAD_IN = re.compile(
+    r"^(?:while|whereas|but|and|additionally|furthermore|separately|also|"
+    r"in addition|moreover)\b[,\s]*", re.I)
+_MAX_NOTE_CHARS = 450
+
+
+def _section_key(url: str):
+    """(normalised URL, provision type, number) for a section/regulation/
+    article URL, else None. Schedules are never a sibling's section (P3.12)."""
+    norm = normalise_leg_url(url)
+    m = _SECTION_URL.search(norm) if norm else None
+    if not m or "/schedule/" in norm:
+        return None
+    return norm, m.group(1), m.group(2)
+
+
+def _mask_links(text: str) -> str:
+    return _MD_LINK.sub(lambda m: "\x00" * len(m.group(0)), text)
+
+
+def _clause_around(body: str, start: int, end: int) -> str:
+    """The Worker's own words about the link at [start, end): the parenthetical
+    it sits in when that says something, else the clause of its sentence.
+    "" when there is no clean cut."""
+    masked = _mask_links(body)
+    ls = body.rfind("\n", 0, start) + 1
+    le = body.find("\n", end)
+    le = len(body) if le < 0 else le
+    s0, s1 = ls, le
+    for m in _SENTENCE_END.finditer(masked, ls, le):
+        if m.end() <= start:
+            s0 = m.end()
+        elif m.start() >= end:
+            s1 = m.start()
+            break
+    # An enclosing parenthesis, matched on the masked text so a URL's or a
+    # pinpoint's brackets never count.
+    depth, open_at = 0, None
+    for i in range(start - 1, s0 - 1, -1):
+        c = masked[i]
+        if c == ")":
+            depth += 1
+        elif c == "(":
+            if depth == 0:
+                open_at = i
+                break
+            depth -= 1
+    if open_at is not None:
+        depth, close_at = 0, None
+        for i in range(end, s1):
+            c = masked[i]
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                if depth == 0:
+                    close_at = i
+                    break
+                depth -= 1
+        if close_at is not None:
+            inner = body[open_at + 1:close_at]
+            # "(...[s.36(2)](url))" after a statement is a citation, not a clause.
+            if len(re.findall(r"[A-Za-z]{2,}", _mask_links(inner))) >= 4:
+                s0, s1 = open_at + 1, close_at
+    c0, c1 = s0, s1
+    for m in _CLAUSE_CUT.finditer(masked, s0, s1):
+        if m.end() <= start:
+            c0 = m.end()
+        elif m.start() >= end:
+            c1 = m.start()
+            break
+    clause = body[c0:c1].strip().rstrip(";,:").strip()
+    clause = _LEAD_IN.sub("", clause).strip()
+    if not clause or len(clause) > _MAX_NOTE_CHARS or "\x00" in clause:
+        return ""
+    bare = _mask_links(clause)
+    if bare.count("(") != bare.count(")") or bare.count('"') % 2:
+        return ""
+    if len(re.findall(r"[A-Za-z]{2,}", _mask_links(clause))) < 4:
+        return ""
+    clause = clause[0].upper() + clause[1:] if clause[0].isalpha() else clause
+    return clause if clause.endswith((".", "!", "?")) else clause + "."
+
+
+def restore_dropped_siblings(answer: str, reports, max_notes: int = 3) -> tuple:
+    """Put back a sibling subsection the Manager dropped from its Worker's
+    report. Returns (answer, notes added).
+
+    **FIX_PLAN P3.13 (B10), the answer seam.** Linking the sibling
+    (`link_sibling_pinpoints`), with a CITATION PRESERVATION clause then in
+    the prompt, still left the conversational Manager flattening 6348's
+    s.36(2) at a rate (rep 1 of `wave3_p313`: a two-Act bullet list keeping
+    s.36(1) only). Invariant 2's last step is to make it so, and with this in
+    place the clause was taken out again (it moved the Manager's first
+    delegation brief, see the P3.13 row). Where the answer cites a section at
+    subsection level (s.N(j), linked to the section's URL, or in plain words
+    when every section link in the reports is to one instrument) and a
+    report handed to the Manager cites another subsection of that section as
+    a link, s.N(k), and the answer mentions s.N(k) nowhere, the report's own
+    words about s.N(k) are placed after the answer paragraph that cites the
+    section, as "Also in s.N: ...".
+
+    **The text is the Worker's, verbatim** - the clause or parenthetical the
+    link sits in, lead-in connective dropped - so nothing is generated and the
+    link inside it is one a tool returned. Nothing is added when the answer
+    does not cite the section at subsection level (dropping the whole section
+    is a different failure), when the words cannot be cut out cleanly, or
+    beyond `max_notes`. The scope block is never read. Fail-soft.
+    """
+    if not answer or not reports:
+        return answer, 0
+    try:
+        # What the answer cites, per section URL: the first-level subsections
+        # its links name, and where the first such link sits.
+        cited: dict = {}
+        for m in _MD_LINK.finditer(answer):
+            key = _section_key(m.group(2))
+            if not key:
+                continue
+            shown = re.search(r"/(?:section|regulation|article)/([^/?#)\s]+)", m.group(2))
+            entry = cited.setdefault(key[0], {"key": key, "subs": set(), "at": m.start(),
+                                              "num": shown.group(1) if shown else key[2]})
+            for p in _SIBLING_PIN.finditer(m.group(1)):
+                if p.group("num").lower() == key[2]:
+                    sub = _FIRST_SUB.match(p.group("sub"))
+                    if sub:
+                        entry["subs"].add(sub.group(1).lower())
+        cited = {k: v for k, v in cited.items() if v["subs"]}
+        masked_answer = _mask_links(answer)
+        # A Manager that drops every link still cites in plain words ("section
+        # 36(1) of the ... Act"; `wave3_p311_conv` rep 2 on the seam). Such a
+        # pinpoint cites the reports' section URL only when every section-level
+        # link in the reports is to ONE instrument, so a plain "s.36(1)" can
+        # never be matched to another Act's s.36.
+        by_num: dict = {}
+        instruments = set()
+        for report in list(reports):
+            for m in _MD_LINK.finditer((report or "").split(_SCOPE_OPEN, 1)[0]):
+                key = _section_key(m.group(2))
+                if key:
+                    instruments.add(act_base_url(m.group(2)))
+                    by_num.setdefault((key[1], key[2]), {})[key[0]] = m.group(2)
+        if len(instruments) == 1:
+            for p in _SIBLING_PIN.finditer(masked_answer):
+                kind = _SIBLING_SEGMENT[p.group("kind").lower()]
+                urls = by_num.get((kind, p.group("num").lower())) or {}
+                sub = _FIRST_SUB.match(p.group("sub"))
+                if len(urls) != 1 or not sub:
+                    continue
+                (url_key, url), = urls.items()
+                entry = cited.setdefault(url_key, {
+                    "key": _section_key(url), "subs": set(), "at": p.start(),
+                    "num": p.group("num")})
+                entry["subs"].add(sub.group(1).lower())
+                entry["at"] = min(entry["at"], p.start())
+        if not cited:
+            return answer, 0
+        # Subsections the answer names in plain words count as kept.
+        plain: dict = {}
+        for p in _SIBLING_PIN.finditer(masked_answer):
+            sub = _FIRST_SUB.match(p.group("sub"))
+            if sub:
+                plain.setdefault(p.group("num").lower(), set()).add(sub.group(1).lower())
+        words = {s.lower() for m in _SUBSECTION_WORDS.finditer(masked_answer)
+                 for s in re.findall(r"\((\w+)\)", m.group(1))}
+        for m in _SUB_RANGE.finditer(answer):
+            lo, hi = int(m.group(2)), int(m.group(3))
+            if 0 < hi - lo <= 20:
+                plain.setdefault(m.group(1).lower(), set()).update(
+                    str(i) for i in range(lo, hi + 1))
+        sentences = [set(_CONTENT_WORD.findall(s.lower()))
+                     for s in _SENTENCE_END.split(masked_answer)]
+
+        notes: dict = {}   # section URL -> [clause, ...]
+        seen: set = set()
+        total = 0
+        for report in list(reports):
+            body = (report or "").split(_SCOPE_OPEN, 1)[0]
+            for m in _MD_LINK.finditer(body):
+                key = _section_key(m.group(2))
+                if not key or key[0] not in cited:
+                    continue
+                entry = cited[key[0]]
+                for p in _SIBLING_PIN.finditer(m.group(1)):
+                    if p.group("num").lower() != key[2]:
+                        continue
+                    sub = _FIRST_SUB.match(p.group("sub"))
+                    k = sub.group(1).lower() if sub else ""
+                    if (not k or k in entry["subs"] or k in plain.get(key[2], set())
+                            or k in words or (key[0], k) in seen):
+                        continue
+                    clause = _clause_around(body, m.start(), m.end())
+                    if not clause or total >= max_notes:
+                        continue
+                    # A clause that also cites a subsection the answer already
+                    # has restates it, with the sibling in passing.
+                    also = set()
+                    for q in _SIBLING_PIN.finditer(clause):
+                        qs = _FIRST_SUB.match(q.group("sub"))
+                        if q.group("num").lower() == key[2] and qs:
+                            also.add(qs.group(1).lower())
+                    if also & entry["subs"]:
+                        continue
+                    # The answer already says this, pinpoint aside.
+                    cw = set(_CONTENT_WORD.findall(_mask_links(clause).lower()))
+                    if cw and any(len(cw & s) >= 0.6 * len(cw) for s in sentences):
+                        continue
+                    seen.add((key[0], k))
+                    notes.setdefault(key[0], []).append(clause)
+                    total += 1
+        if not total:
+            return answer, 0
+        # Insert after the paragraph holding the section's first citation,
+        # from the end of the answer backwards so earlier offsets hold.
+        inserts = []
+        for url_key, clauses in notes.items():
+            entry = cited[url_key]
+            kind = entry["key"][1]
+            num = entry["num"]
+            brk = re.compile(r"\n[ \t]*\n").search(answer, entry["at"])
+            pos = brk.start() if brk else len(answer.rstrip())
+            label = f"{_NOTE_LABEL[kind]}{num}"
+            inserts.append((pos, f"\n\nAlso in {label}: " + " ".join(clauses)))
+        for pos, text in sorted(inserts, reverse=True):
+            answer = answer[:pos] + text + answer[pos:]
+        return answer, total
+    except Exception:  # pragma: no cover - defensive
+        logger.debug("[Citations] sibling restore skipped", exc_info=True)
+        return answer, 0
 
 
 def enforce_provision_links(
