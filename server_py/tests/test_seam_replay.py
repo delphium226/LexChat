@@ -336,3 +336,94 @@ def test_dry_run_reports_the_outline_count(run_file, monkeypatch, capsys):
     assert sr.main(["worker", "--run", str(run_file), "--turn", "1", "--dry-run",
                     "--from-raw"]) == 0
     assert "results: 2, with a subsection outline: 1  (rebuilt from raw)" in capsys.readouterr().out
+
+# --- 7. the Manager seam (P3.13) ---------------------------------------------
+#
+# The conversational Manager composing the worker report into the answer: the
+# conversation so far, each recorded delegation as the `delegate_research`
+# call it was and the result `manager_tool_executor` returns, then a tool-free
+# call. Pinned against the product's own builders, like the other two seams.
+
+FOISA36 = "http://www.legislation.gov.uk/id/asp/2002/13/section/36"
+CONV_REPORT = (f"Under [s.36(1)]({FOISA36}), information is exempt (while s.36(2) "
+               "exempts information obtained from another person).\n\n"
+               "[SEARCH SCOPE — what this research step actually did]\nx\n[/SEARCH SCOPE]")
+
+
+def _conv_doc():
+    return {
+        "session_id": "6348", "rep": 1,
+        "filters": {"research_mode": "legislation_only"},
+        "runtime_state": {"model": "m", "suggested_questions_enabled": True},
+        "turns": [
+            {"turn": 1, "question": "Q1", "chat_mode": "conversational",
+             "answer": "A1", "audit": {"delegations": [
+                 {"step": None, "brief": "brief one", "report": CONV_REPORT}]}},
+            {"turn": 2, "question": "Q2", "chat_mode": "conversational",
+             "answer": "A2", "audit": {"delegations": [
+                 {"step": None, "brief": "brief two", "report": CONV_REPORT},
+                 {"step": 3, "brief": "a Deep Research step", "report": "not mine"}]}},
+            {"turn": 3, "question": "Q3", "chat_mode": "conversational",
+             "answer": "A3", "audit": {"delegations": []}},
+        ],
+    }
+
+
+def test_the_manager_payload_is_built_by_the_product():
+    from src.prompts import get_manager_system_prompt
+    doc = _conv_doc()
+    msgs = sr.manager_messages(doc, doc["turns"][0])
+    cfg = sr.manager_cfg(doc, doc["turns"][0], [{"role": "user", "content": "Q1"}])
+    assert msgs[0] == {"role": "system",
+                       "content": get_manager_system_prompt("legislation_only", cfg)}
+    assert msgs[1] == {"role": "user", "content": "Q1"}
+    call = msgs[2]["tool_calls"][0]["function"]
+    assert call["name"] == "delegate_research"
+    assert json.loads(call["arguments"]) == {"query": "brief one"}
+    # The tool result is `worker_result_for_manager`'s, sibling link included.
+    assert msgs[3]["content"] == agent_core.worker_result_for_manager(CONV_REPORT, cfg)
+    assert f"[s.36(2)]({FOISA36})" in msgs[3]["content"]
+
+
+def test_the_conversational_prompt_is_the_one_the_target_runs():
+    """`research_mode_enabled` was OFF on the target and is pinned OFF for a
+    replay (P4.1); a run file recorded before it was a pinned flag must not
+    silently get the app's default, which is ON."""
+    from src.prompts import RESEARCH_MODE_HINT_OFF
+    doc = _conv_doc()
+    system = sr.manager_messages(doc, doc["turns"][0])[0]["content"]
+    assert "CURRENT MODE: Chat" in system
+    assert RESEARCH_MODE_HINT_OFF in system
+
+
+def test_a_later_turn_carries_the_history_and_skips_deep_research_steps():
+    doc = _conv_doc()
+    msgs = sr.manager_messages(doc, doc["turns"][1])
+    roles = [m["role"] for m in msgs]
+    assert roles == ["system", "user", "assistant", "user", "assistant", "tool"]
+    assert msgs[1]["content"] == "Q1" and msgs[2]["content"] == "A1"
+    assert msgs[3]["content"].endswith("Q2")
+    # The client's mode stamps are not provider fields.
+    assert all("chat_mode" not in m and "research_mode" not in m for m in msgs)
+    assert "not mine" not in json.dumps(msgs)
+
+
+def test_a_turn_with_no_delegation_is_refused():
+    doc = _conv_doc()
+    with pytest.raises(SystemExit):
+        sr.manager_messages(doc, doc["turns"][2])
+
+
+def test_manager_without_fix_hands_over_the_bare_report_and_the_old_body(monkeypatch):
+    monkeypatch.setattr(sr, "_prompt_constant_at",
+                        lambda rev, name: f"OLD {name} @ {rev}")
+    doc = _conv_doc()
+    msgs = sr.manager_messages(doc, doc["turns"][0], without_fix=True, rev="abc1234")
+    assert msgs[3]["content"] == f"[Research Agent Result]\n{CONV_REPORT}"
+    assert "OLD _MANAGER_CONV_BODY @ abc1234" in msgs[0]["content"]
+    assert "CITATION PRESERVATION" not in msgs[0]["content"]
+
+
+def test_the_manager_body_reader_finds_the_constant():
+    text = sr._prompt_constant_at("HEAD", "_MANAGER_CONV_BODY")
+    assert "CURRENT MODE: Chat" in text

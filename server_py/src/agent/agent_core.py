@@ -20,7 +20,11 @@ from ..prompts import (
     get_worker_system_prompt,
 )
 from ..utils.audit_trace import get_audit_collector
-from ..utils.citation_links import enforce_provision_links, pinpoint_block
+from ..utils.citation_links import (
+    enforce_provision_links,
+    link_sibling_pinpoints,
+    pinpoint_block,
+)
 from ..utils.discovery_budget import new_search_budget
 from ..utils.mode_change import apply_mode_change_marker, mode_change_for
 from ..utils.empty_completion import (
@@ -600,6 +604,25 @@ async def draft_research_plan(
 # Manager Agent (Main Chat Interface)
 # -----------------------------------------------------------------------
 
+def worker_result_for_manager(content: str, cfg: dict, retrieved_urls=None) -> str:
+    """The `delegate_research` tool result the Manager is handed.
+
+    P3.13 (B10): for the CONVERSATIONAL Manager, a sibling subsection the
+    Worker wrote in plain words ("s.36(2) exempts ...") is linked to the
+    section URL the report already carries for it, so it reaches the Manager
+    in the form it keeps. Measured over every replayed run: the conversational
+    Manager kept a sibling it was handed as a link 58 times in 60, and one it
+    was handed as plain text 70 in 104. The research Manager passes the report
+    through (it kept 441 of 441 either way), so it is left untouched. One
+    function, so `tools.seam_replay manager` builds exactly this.
+    """
+    if (cfg or {}).get("_chat_mode") == "conversational":
+        content, linked = link_sibling_pinpoints(content, retrieved_urls)
+        if linked:
+            logger.info("[Manager] Linked %d sibling pinpoint(s) in the worker report", linked)
+    return f"[Research Agent Result]\n{content}"
+
+
 async def process_user_request(
     chat_loop_fn: Callable,
     run_worker_agent_fn: Callable,
@@ -774,7 +797,7 @@ async def process_user_request(
                     "title": f"Research step {len(worker_reports) + 1}",
                     "content": result["content"],
                 })
-            return f"[Research Agent Result]\n{result['content']}"
+            return worker_result_for_manager(result["content"], _cfg, retrieved_urls)
 
         if name == "consult_peer":
             scope_unknown.append("peer_consulted")
