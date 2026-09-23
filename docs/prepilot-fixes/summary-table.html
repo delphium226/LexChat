@@ -317,8 +317,8 @@
     <h1>Pre-pilot Fix Tracker</h1>
     <p class="lede">Every proposed fix, ours (<strong>R</strong>) and Thomas's (<strong>T</strong>), with its status,
       its row in the fix plan and its action number in Thomas's review of 10 September 2026.
-      <strong>“Fixed” means built and accepted on the fix branch: nothing reaches the server
-      until the whole plan is merged.</strong></p>
+      <strong>“Fixed” means built and accepted on the fix branch. Everything fixed up to 22 September
+      has been merged for deployment to the server; later fixes follow in the next release.</strong></p>
   </header>
 
   <section class="progress" aria-label="Progress summary">
@@ -366,7 +366,7 @@
     <div>
       <h2>Status</h2>
       <dl>
-        <dt>Fixed</dt><dd>Built and accepted on the fix branch, not yet deployed.</dd>
+        <dt>Fixed</dt><dd>Built and accepted on the fix branch. Everything marked Fixed as of Session 21 was merged to <code>main</code> on 22 September for deployment to the target; anything fixed later is on the branch only until the next cut.</dd>
         <dt>In progress</dt><dd>Under way. P5.2 is waiting on an external decision.</dd>
         <dt>Verified</dt><dd>The problem is confirmed in our replays, the code or a live test, but no fix is built yet.</dd>
         <dt>To be verified</dt><dd>Proposed, not yet confirmed or agreed.</dd>
@@ -378,21 +378,28 @@
         <code>TODO B6</code> is in <code>docs/TODO.md</code>, outside the plan.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.</p>
-      <p><strong>P0.5</strong> is a measurement row listed as an exception, and it is now done.
-        Twelve of the 41 replayed sessions had been replayed in Research mode where the lawyers
-        used Conversational, so every fix measured on them was re-checked against a
-        Conversational-mode replay. What it changed: the mode dead-end (<strong>P4.1</strong>)
-        reproduced for the first time in any replay; the prompt wording that says the whole
-        database lacks something (<strong>P4.6</strong>) turns out never to have reached a lawyer,
-        because that wording is in a prompt only Research mode uses; and the halt counts taken from
-        three of those sessions (<strong>P2.1</strong>, <strong>P3.8</strong>) are zero in the mode
-        their lawyers used. P3.1 and P3.11 both still hold, one step lower.</p>
-      <p><strong>Three rows opened by that work.</strong> <strong>P0.6</strong>: the same gap in the
-        records applies to which research filter those twelve sessions used, and unlike the mode it
-        cannot be recovered from the answers. <strong>P3.13</strong>: in a chat reply the research
-        step sometimes states a subsection and the reply then drops it. <strong>P3.14</strong>: the
-        quick-lookup step is not told which filters are active — the filters are still applied, but
-        it cannot say so when it reports finding nothing.</p>
+      <p><strong>P4.1</strong>, the mode dead-end, is now fixed. Replies now name the control a lawyer
+        actually has to use: the <em>Filters</em> button, then <em>Research type</em>, then
+        <em>Legislation &amp; case law</em>. Before, four prompts between them pointed to two different
+        controls, one of which does not exist. The system also notices when a setting changed since
+        the previous reply, and a suggestion button can no longer offer to change a setting it
+        cannot change. In a scripted test (refuse, change the setting, ask again), 12 of 12 answers
+        after the change came from case law. Over the four affected sessions, replies telling the
+        lawyer to switch or start again went from 14 to 0, and replies naming a non-existent
+        control went from 15 to 0.</p>
+      <p><strong>One correction to how this problem was understood.</strong> The system was thought to
+        repeat its own earlier refusal after the setting changed. Replays show it did not: before the
+        fix, 11 of 12 answers after a real change already searched case law. The failure in the
+        worst-rated session was the wording. The lawyer was told to change the "research mode", so
+        she changed the chat mode, which does not add case law. That session was also run in Deep
+        Research, not Conversational mode as the replays had assumed.</p>
+      <p><strong>One row opened.</strong> <strong>P4.9</strong>: show a change of setting in the
+        conversation itself, so the lawyer and the system see the same record.</p>
+      <p><strong>Earlier, from P0.5:</strong> twelve sessions had been replayed in the wrong mode and
+        were re-run. <strong>P0.6</strong> (which research filter those sessions used),
+        <strong>P3.13</strong> (a chat reply dropping a subsection the research step wrote) and
+        <strong>P3.14</strong> (the quick-lookup step is not told which filters are active) came
+        from that work and remain open.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
         and three items from <code>docs/TODO.md</code> D16 (the impossible year window, always
@@ -408,7 +415,7 @@
   // ---- Update here at the end of a session, when the user asks. ----
   // status: "Fixed" | "In progress" | "Verified" | "To be verified"
   // src:    "T" | "R" | "T & R"
-  const UPDATED = "22 September 2026 (Session 20 — the twelve sessions re-run in Conversational mode, P0.5 done; P3.11 accepted on its Worker seam; three rows opened)";
+  const UPDATED = "23 September 2026 (Session 21 — the mode dead-end fixed, P4.1 done; first cut of the fix branch merged to main for deployment)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", status: "Fixed", ref: "P0.5", t: "" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", status: "Verified", ref: "P0.6", t: "" },
@@ -442,7 +449,8 @@
     { src: "R", fix: "Reach a Schedule paragraph asked for by number (LEX holds the Schedule as one provision)", status: "Verified", ref: "P3.12", t: "" },
     { src: "R", fix: "Stop the chat reply dropping a subsection the research step had already written", status: "Verified", ref: "P3.13", t: "" },
     { src: "R", fix: "Tell the quick-lookup step which research filters are active", status: "Verified", ref: "P3.14", t: "" },
-    { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", status: "Verified", ref: "P4.1", t: "9" },
+    { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", status: "Fixed", ref: "P4.1", t: "9" },
+    { src: "R", fix: "Show a change of mode or research type in the conversation itself", status: "Verified", ref: "P4.9", t: "" },
     { src: "R", fix: "Never show a blank or lost reply", status: "Fixed", ref: "P4.2", t: "" },
     { src: "T & R", fix: "Make the sources list and inline links match the answer", status: "Verified", ref: "P4.3", t: "7" },
     { src: "R", fix: "Remove the unused case-law court filter", status: "Fixed", ref: "P4.4", t: "" },

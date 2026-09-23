@@ -4266,3 +4266,23 @@ above changes anything for the pilot's user guidance — the control lawyers
 need is the Filters button, and no answer had ever named it.
 
 ---
+
+## Session 21, continued — 2026-09-22/23 — the first cut to `main`, and the tracker
+
+**Done (user decisions):**
+- **The branch was cut to `main`** (user decision, 2026-09-22), superseding the 2026-09-15 rule that nothing goes to `main` until the plan concludes. Later cuts go only when the user asks. This is recorded in CLAUDE.md, in FIX_PLAN's deployment note above the Ledger, and in memory.
+- **Rollback tag `pre-prepilot-fixes-2026-09-22`** (annotated, pushed) is on `6ada6d1`, the commit the target was running. That was `origin/main`, not local `main`, which was one docs commit ahead. Roll back on the target with `git checkout pre-prepilot-fixes-2026-09-22` and a restart. The new `messages` columns are additive, so the old code ignores them.
+- **Merge `d8fd73b`** (`--no-ff`) was pushed as `6ada6d1..d8fd73b`. `origin/main` was a strict ancestor, so there were no conflicts.
+- **`fix/prepilot-defects` pushed for the first time**, tracking `origin`, at `b91b7ec`. It stays the working branch.
+- Checked before merging: no new env vars, no new Python packages and no new whitelist hosts. `client/dist` is the current build. The two `messages` columns are created at startup.
+- **CLAUDE.md's mode-controls note is corrected.** It still said the model anchored on its refusal, the diagnosis this session disproved.
+- **Fix Tracker updated at the user's request:** P4.1 → Fixed, P4.9 added, the Fixed status reworded to say what was merged, and the notes rewritten for Session 21.
+
+**NOT done — needs the target, and is not recorded as done anywhere:**
+- The target has not been confirmed to have pulled `d8fd73b`. Deploy with `git pull`, `stop_native.cmd`, `start_native.cmd`, then `server_py	est_apis.ps1` and one real question.
+- **A `pg_dump` before pulling was recommended and not taken.** `install_backup_task.ps1` has never run, so no backup exists on the target.
+- **Tell whoever runs the lexchat-eval harness that the audit event is now schema v5.** The change is additive (top-level `mode_change`).
+
+**Consequence for measurement:** a replay directory taken before 2026-09-22 measured a system the target had never run. After the target pulls, replays of HEAD measure the deployed system plus whatever the branch has gained since `2eaeff0`.
+
+---
