@@ -57,7 +57,10 @@ from src.agent import agent_core, agent_shared  # noqa: E402
 from src.agent.openrouter_client import chat_loop  # noqa: E402
 from src.agent.provider_factory import set_request_provider_config  # noqa: E402
 from src.prompts import get_worker_system_prompt  # noqa: E402
-from src.utils.citation_links import provision_url_block  # noqa: E402
+from src.utils.citation_links import (  # noqa: E402
+    provision_url_block,
+    restore_dropped_siblings,
+)
 from src.utils.research_halt import halt_writeup_instruction  # noqa: E402
 from src.utils.search_scope import strip_scope_blocks  # noqa: E402
 from src.utils.stopwatch import TimingCollector  # noqa: E402
@@ -509,6 +512,14 @@ def main(argv: Optional[list] = None) -> int:
             # What the product does to the Manager's text before the lawyer sees
             # it, in the order `process_user_request` does it.
             clean, _s = extract_suggestions(clean)
+            if not args.without_fix:
+                # The answer seam the product runs next (P3.13), on the
+                # reports exactly as the Manager was handed them.
+                handed = [(m.get("content") or "")[len(agent_core.RESEARCH_RESULT_PREFIX):]
+                          for m in messages if m.get("role") == "tool"]
+                clean, restored = restore_dropped_siblings(clean, handed)
+                if restored:
+                    print(f"      restored {restored} dropped sibling(s)")
         print(f"  rep{rep}: ${cost:.4f}  {len(clean):,} chars  model={model}")
         grade = _grade(sid, clean)
         if grade:

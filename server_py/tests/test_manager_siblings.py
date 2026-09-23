@@ -233,6 +233,146 @@ def test_the_research_manager_is_unchanged():
     assert "other subsections provide" not in prompts._MANAGER_BODY
 
 
+# --- the answer seam: `restore_dropped_siblings` -------------------------------
+#
+# Link plus clause still left the Manager flattening s.36(2) at a rate
+# (`wave3_p313` rep 1, with both live). Option (i), user decision 2026-09-23:
+# put the Worker's own words back under the citation.
+
+from src.utils.citation_links import restore_dropped_siblings  # noqa: E402
+
+FLAT_ANSWER = (f"The provision is [section 36(1) of the FOISA]({S36}). It exempts "
+               "privileged communications.\n\nAdditionally, s.50(5) protects advice.")
+
+
+def _handed(report):
+    return link_sibling_pinpoints(report, RETRIEVED)[0]
+
+
+@pytest.mark.parametrize("report,words", [
+    (PARENTHETICAL, f"[s.36(2)]({S36}) exempts information obtained from another person"),
+    (SENTENCE, f"A related exemption in [s.36(2)]({S36}) applies to information"),
+    (REMAINDER, f"The remainder of the section, [s.36(2)]({S36}), provides a separate exemption"),
+])
+def test_the_workers_own_words_go_back_under_the_citation(report, words):
+    out, n = restore_dropped_siblings(FLAT_ANSWER, [_handed(report)])
+    assert n == 1
+    first, note, rest = out.split("\n\n")
+    assert first == FLAT_ANSWER.split("\n\n")[0]          # after the citing paragraph
+    assert note.startswith("Also in s.36: ") and words in note
+    assert note.endswith(".") and "(while" not in note and not note.startswith("Also in s.36: while")
+    assert rest == "Additionally, s.50(5) protects advice."
+
+
+@pytest.mark.parametrize("answer", [
+    f"The provision is [s.36(1)]({S36}); [s.36(2)]({S36}) covers confidences.",
+    f"The provision is [s.36(1)]({S36}); s.36(2) covers confidences.",
+    f"The provision is [s.36(1)]({S36}); subsection (2) covers confidences.",
+    f"The provision is [section 36(1) to (2)]({S36}).",
+])
+def test_a_sibling_the_answer_kept_in_any_form_is_not_repeated(answer):
+    assert restore_dropped_siblings(answer, [_handed(PARENTHETICAL)]) == (answer, 0)
+
+
+def test_nothing_is_added_unless_the_answer_cites_the_section_at_subsection_level():
+    """Dropping the whole section is a different failure, not a sibling."""
+    for answer in (f"See [section 36]({S36}) generally.", "FOISA has several exemptions."):
+        assert restore_dropped_siblings(answer, [_handed(PARENTHETICAL)]) == (answer, 0)
+
+
+def test_a_clause_that_restates_the_kept_subsection_is_not_added():
+    """6348 `wave3_p313` r2 t3's s.2 note would have repeated the answer's own
+    s.2(2)(c) sentence with s.2(1) mentioned in passing."""
+    s2 = "http://www.legislation.gov.uk/id/asp/2002/13/section/2"
+    report = (f"This is an absolute exemption under [s.2(2)(c)]({s2}), meaning it is not "
+              f"subject to the public interest test that applies under [s.2(1)]({s2}).")
+    answer = f"This is absolute under [section 2(2)(c)]({s2}). The test does not apply."
+    assert restore_dropped_siblings(answer, [report]) == (answer, 0)
+
+
+def test_a_clause_the_answer_already_says_is_not_added():
+    """6409: the answer said the remaining provisions come in by appointed day
+    and dropped only the pinpoint; a note would repeat the sentence."""
+    s27 = "http://www.legislation.gov.uk/id/asp/2025/2/section/27"
+    report = (f"Under [s.27(1)]({s27}), sections 24 to 28 came into force. The remaining "
+              f"provisions come into force on days appointed by the Scottish Ministers "
+              f"by regulations under [s.27(2)]({s27}).")
+    answer = (f"Under [section 27(1)]({s27}), sections 24 to 28 came into force. The "
+              "remaining provisions come into force on days appointed by the Scottish Ministers.")
+    assert restore_dropped_siblings(answer, [report]) == (answer, 0)
+
+
+def test_a_list_is_never_cut_into_a_fragment():
+    """6374's first draft: cutting at ", and" split a parenthesised list and
+    left "(the First Minister, Ministers, the Lord Advocate." as a note."""
+    s126 = "http://www.legislation.gov.uk/ukpga/1998/46/section/126"
+    report = (f"Under [section 126(7)]({s126}), the office-holders comprise members of the "
+              "Scottish Government (the First Minister, Ministers, and the Lord Advocate, "
+              "and the Solicitor General.")
+    answer = f"The definition is in [section 126(6)]({s126}). It covers office-holders."
+    out, n = restore_dropped_siblings(answer, [report])
+    assert n == 0 and out == answer
+
+
+def test_the_scope_block_is_never_read():
+    report = (f"Under [s.36(1)]({S36}), information is exempt.\n\n[SEARCH SCOPE — x]\n"
+              f"While [s.36(2)]({S36}) exempts information obtained from another person "
+              "where disclosure is actionable.\n[/SEARCH SCOPE]")
+    assert restore_dropped_siblings(FLAT_ANSWER, [report]) == (FLAT_ANSWER, 0)
+
+
+def test_the_label_is_the_urls_own_and_the_notes_are_capped():
+    u = "http://www.legislation.gov.uk/id/ukpga/2018/12/section/45A"
+    report = (f"Under [s.45A(1)(a)]({u}) a controller need not comply. [s.45A(2)]({u}) "
+              "requires the controller to inform the data subject of the restriction.")
+    out, n = restore_dropped_siblings(f"See [section 45A(1)(a)]({u}).", [report])
+    assert n == 1 and "Also in s.45A: " in out
+    many = [_handed(PARENTHETICAL)] + [report]
+    _, n = restore_dropped_siblings(f"[s.36(1)]({S36}); [s.45A(1)]({u}).", many, max_notes=1)
+    assert n == 1
+
+
+def test_restore_is_fail_soft_on_nothing():
+    assert restore_dropped_siblings("", [PARENTHETICAL]) == ("", 0)
+    assert restore_dropped_siblings(FLAT_ANSWER, []) == (FLAT_ANSWER, 0)
+
+
+def _flattening_manager(answer):
+    async def manager(messages, model, cancel_event, num_ctx, tools,
+                      tool_executor, on_chunk=None, **kw):
+        await tool_executor("delegate_research", {"query": "q"})
+        return {"role": "assistant", "content": answer}
+    return manager
+
+
+async def _worker(query, model, cancel_event, num_ctx, on_chunk, **kw):
+    kw["retrieved_urls"].update(RETRIEVED)
+    return {"content": PARENTHETICAL, "sources": [], "searches": []}
+
+
+async def test_process_user_request_restores_for_the_conversational_manager(_conversational_cfg):
+    from src.agent.agent_core import process_user_request
+    final = await process_user_request(_flattening_manager(FLAT_ANSWER), _worker,
+                                       [{"role": "user", "content": "q"}],
+                                       "test-model", None, None, 0)
+    assert f"Also in s.36: [s.36(2)]({S36}) exempts information" in final["content"]
+
+
+async def test_the_research_manager_answer_is_left_alone():
+    from src.agent.agent_core import process_user_request
+    from src.agent.provider_factory import set_request_provider_config
+    set_request_provider_config({"_provider": "openrouter", "_research_mode": "legislation_only",
+                                 "_chat_mode": "research", "model": "test-model",
+                                 "_tool_memo_enabled": False})
+    try:
+        final = await process_user_request(_flattening_manager(FLAT_ANSWER), _worker,
+                                           [{"role": "user", "content": "q"}],
+                                           "test-model", None, None, 0)
+    finally:
+        set_request_provider_config({})
+    assert "Also in s.36" not in final["content"]
+
+
 # --- the instrument: `replay_report siblings` ---------------------------------
 
 

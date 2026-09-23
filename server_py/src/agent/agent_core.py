@@ -24,6 +24,7 @@ from ..utils.citation_links import (
     enforce_provision_links,
     link_sibling_pinpoints,
     pinpoint_block,
+    restore_dropped_siblings,
 )
 from ..utils.discovery_budget import new_search_budget
 from ..utils.mode_change import apply_mode_change_marker, mode_change_for
@@ -604,6 +605,9 @@ async def draft_research_plan(
 # Manager Agent (Main Chat Interface)
 # -----------------------------------------------------------------------
 
+RESEARCH_RESULT_PREFIX = "[Research Agent Result]\n"
+
+
 def worker_result_for_manager(content: str, cfg: dict, retrieved_urls=None) -> str:
     """The `delegate_research` tool result the Manager is handed.
 
@@ -620,7 +624,7 @@ def worker_result_for_manager(content: str, cfg: dict, retrieved_urls=None) -> s
         content, linked = link_sibling_pinpoints(content, retrieved_urls)
         if linked:
             logger.info("[Manager] Linked %d sibling pinpoint(s) in the worker report", linked)
-    return f"[Research Agent Result]\n{content}"
+    return RESEARCH_RESULT_PREFIX + content
 
 
 async def process_user_request(
@@ -733,6 +737,9 @@ async def process_user_request(
     # completion does not also discard the research the lawyer already paid for.
     # Read only on that failure path; ordinary turns never touch it.
     worker_reports: list = []
+    # P3.13 (B10): every report as handed to the Manager (sibling links
+    # included), read once the answer is written.
+    manager_inputs: list = []
 
     async def manager_tool_executor(name: str, args: dict) -> str:
         if name == "delegate_research":
@@ -797,7 +804,10 @@ async def process_user_request(
                     "title": f"Research step {len(worker_reports) + 1}",
                     "content": result["content"],
                 })
-            return worker_result_for_manager(result["content"], _cfg, retrieved_urls)
+            handed = worker_result_for_manager(result["content"], _cfg, retrieved_urls)
+            # P3.13: the report exactly as the Manager saw it, for the answer seam.
+            manager_inputs.append(handed[len(RESEARCH_RESULT_PREFIX):])
+            return handed
 
         if name == "consult_peer":
             scope_unknown.append("peer_consulted")
@@ -862,6 +872,14 @@ async def process_user_request(
     # would render as raw markup in the answer.
     suggestions_enabled = _cfg.get("_suggested_questions_enabled", True)
     clean, suggestions = extract_suggestions(final.get("content") or "")
+    # P3.13 (B10): the conversational Manager still drops a sibling subsection
+    # its Worker wrote, at a rate, with the sibling linked and a prompt rule in
+    # place. Where it did, the report's own words go back under the citation.
+    # Above the link enforcement below, so the note's link is checked too.
+    if _cfg.get("_chat_mode") == "conversational" and not final.get("answer_failed"):
+        clean, _restored = restore_dropped_siblings(clean, manager_inputs)
+        if _restored:
+            logger.info("[Manager] Restored %d dropped sibling subsection(s)", _restored)
     # P1.6 (B14) belt and braces. The Worker's report was already enforced, but
     # the Manager is instructed to pass it through verbatim and is not compelled
     # to — and in conversational mode it answers in its own words. Idempotent, so
