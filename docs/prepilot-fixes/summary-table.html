@@ -324,7 +324,8 @@
     <p class="lede">Every proposed fix, ours (<strong>R</strong>) and Thomas's (<strong>T</strong>), with its status,
       its row in the fix plan and its action number in Thomas's review of 10 September 2026.
       <strong>“Fixed” means built and accepted on the fix branch. Everything marked Fixed has been
-      merged for deployment to the server (first release 22 September, second 23 September).</strong></p>
+      merged for deployment to the server (first release 22 September, second 23 September),
+      except P0.6, which changes only our test tooling and needs no deployment.</strong></p>
   </header>
 
   <section class="progress" aria-label="Progress summary">
@@ -392,7 +393,23 @@
         <code>TODO B6</code> is in <code>docs/TODO.md</code>, outside the plan.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.</p>
-      <p><strong>P3.13</strong>, a chat reply dropping part of a provision, is now fixed. The lawyer
+      <p><strong>P0.6</strong>, which research filter the twelve re-run sessions used, is now settled
+        from the transcripts rather than assumed. The session export does not record it for those
+        twelve, and our replays had filled the gap with “Legislation only”. We read all 50 of their
+        questions. On 16 of them the lawyer had case law switched on, so every replay of those 16
+        ran without the case-law search the lawyer actually had. Replays now use what each lawyer
+        had. The 8 questions the transcripts cannot settle are marked unknown, not guessed. Nothing
+        a lawyer sees changes: this corrects our measurements.</p>
+      <p><strong>Two things it found.</strong> First, the fix planned next (P4.6, wording that says
+        “the database does not contain” something) had taken its test sessions from among those 16.
+        The research step those lawyers actually used never contains that wording, so the test
+        would pass whatever the fix did, and has to be chosen again before the fix is built. Second,
+        until 13 August the research filter was not shown on screen in Conversational mode, though
+        it was in force and could be changed. All twelve sessions ran that way.</p>
+      <p><strong>One row opened.</strong> <strong>P0.7</strong>: the server logged which filter and
+        mode every question ran under. One read-only query of that log would replace our reading of
+        the transcripts with the recorded values. It can be run when the two releases are deployed.</p>
+      <p><strong>Earlier, P3.13</strong>, a chat reply dropping part of a provision, was fixed. The lawyer
         who asked which provision exempts legal advice from disclosure was told about section 36(1) of
         the Freedom of Information (Scotland) Act 2002 and not section 36(2). The research step had
         found and described both, and the chat reply cut 36(2) out. The reply now keeps it. Where the
@@ -426,13 +443,12 @@
       <p><strong>One row opened.</strong> <strong>P4.9</strong>: show a change of setting in the
         conversation itself, so the lawyer and the system see the same record.</p>
       <p><strong>Earlier, from P0.5:</strong> twelve sessions had been replayed in the wrong mode and
-        were re-run. <strong>P0.6</strong> (which research filter those sessions used),
-        <strong>P3.14</strong> (the quick-lookup step is not told which filters are active) came
-        from that work and remain open. <strong>P3.13</strong> came from it too, and is fixed.</p>
-      <p><strong>Next.</strong> <strong>P0.6</strong>: record which research filter the twelve
-        re-run sessions actually used, rather than assume it. The export does not say, and the
-        answers cannot settle it without a human read. After that, a fresh measurement across all
-        sessions (P4.6) to confirm where things stand before the remaining fixes.
+        were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
+        fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
+        remains open.</p>
+      <p><strong>Next.</strong> <strong>P4.6</strong>: choose its test again from questions whose
+        filter is known to have been “Legislation only”, then replace the wording that says the
+        whole database lacks something with wording about the search actually made.
         <strong>P4.5</strong> (a research step whose answer is lost) is becoming more pressing: it
         is now the main source of slow and costly replies in our replays.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
@@ -451,10 +467,11 @@
   // status: "Fixed" | "In progress" | "Verified" | "To be verified"
   // sev:    "P1" | "P2" | "P3"  (see the Severity notes; grades the defect, not the fix)
   // src:    "T" | "R" | "T & R"
-  const UPDATED = "23 September 2026, end of Session 22 (P3.13 fixed: a chat reply no longer drops a subsection the research step described; second release merged to main for deployment; next: P0.6)";
+  const UPDATED = "23 September 2026, end of Session 23 (P0.6 fixed: the research filter each re-run question used is now read from the transcripts, and was wrong in our replays on 16 of 50; P0.7 opened; next: P4.6, with its test chosen again)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "" },
-    { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Verified", ref: "P0.6", t: "" },
+    { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "" },
+    { src: "R", fix: "Confirm from the server's own request log which research filter and mode each pre-pilot question ran under", sev: "P3", status: "Verified", ref: "P0.7", t: "" },
     { src: "T & R", fix: "Make the jurisdiction filter work", sev: "P1", status: "Fixed", ref: "P1.1", t: "5" },
     { src: "R", fix: "Stop the “current only” filter implying in-force status", sev: "P1", status: "Fixed", ref: "P1.2", t: "" },
     { src: "T & R", fix: "Report the search's true match count", sev: "P2", status: "Fixed", ref: "P1.3", t: "4" },

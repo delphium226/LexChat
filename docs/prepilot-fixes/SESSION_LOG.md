@@ -4647,8 +4647,9 @@ Consider raising **P4.5**:
   them against the export.
 - Every published figure was re-derived by one throwaway script over all 39
   directories, using the `replay_report` functions. It is also behind
-  `modes` and pinned by `test_replay_research_reads.py`. To get the
-  directory table, run `modes` per directory.
+  `modes` and pinned by `test_replay_research_reads.py`. ~~To get the
+  directory table, run `modes` per directory.~~ Added at the handover:
+  `modes --all-dirs` prints that table and its totals.
 
 **State of the branch:** `fix/prepilot-defects`, pushed with this commit.
 1603 tests green. Ledger **31 of 49 rows, 8 of 14 buckets**, partial B5
@@ -4670,3 +4671,139 @@ target and can go with the deploy.
 real question. P0.7's read-only `request_timings` query can go with that
 deploy. Tell the eval-harness owner the audit event is schema v5. P5.2.
 Whether Thomas's review document should be committed.
+
+---
+
+## Session 23 — handover for Session 24 (2026-09-23)
+
+Written at the user's request before a new session starts, so nothing learned
+here depends on this session's context. Everything below is also on the rows
+it concerns.
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. `main` is untouched at `c77e779`,
+  the second cut. Rollback tags: `pre-prepilot-fixes-2026-09-23` (first cut
+  only) and `pre-prepilot-fixes-2026-09-22` (before both). Cuts go to `main`
+  only when the user asks.
+- **1604 tests green.**
+- Ledger **31 of 49 rows, 8 of 14 buckets closed.** Partial: B5 (waiting on
+  P3.7, P4.6, P4.7) and B12 (waiting on P5.2). Run `python -m
+  tools.plan_status` rather than trusting these figures.
+- P0.6 is a harness-only change: no product code moved. It needs no
+  deployment, and it is the one Fixed row not on `main`.
+
+**Next work: P4.6.** Read its row in full, including the P0.6 caveat at the
+end. **Re-choose its acceptance before building anything.** Its evidence
+sessions 6340 t1 and 6341 t1–5 ran as `legislation_and_case_law`.
+`WORKER_SYSTEM_PROMPT_HYBRID` carries none of P4.6's three scripted lines,
+which are in `WORKER_SYSTEM_PROMPT` (the sentence and the retry line) and in
+`WORKER_SYSTEM_PROMPT_CASE_LAW` (the case-law line). The acceptance as written
+would therefore pass whatever the fix did. Take the replacement from
+Research-mode turns whose type is `legislation_only`, by the export or a
+reviewer's read (`replay_report modes` shows which), and use `case_law_only`
+turns for the third line. The replay harness now sends the reviewer's reads,
+so 6340 and 6341 replay as hybrid. Remember that the Research flag was OFF on
+the target, so P4.6 is a forward-looking fix: 0 of 179 pre-pilot answers
+carry its sentence. Session 14's lesson applies: compare link and
+`sources_kept` counts as well as the row's metric.
+
+**Also:**
+- **P0.7 (new) needs the target.** It is one read-only `SELECT` of
+  `request_timings` for 11–22 August (the query is on the row), exported to
+  CSV and joined to the export on `created_at` + `total_cost_usd`. That
+  would replace P0.6's human read with the recorded research type and chat
+  mode, and would settle 6335 t4–5's chat mode. It can go with the deploy.
+- **Raise P4.5 with the user.** It cost $4.89 of `wave3_p313`'s $5.65, each
+  empty completion is about 62,912 reasoning tokens, and a bodiless report
+  made the Manager write a report heading into a conversational answer.
+
+**What this session established (all on rows; listed so none is lost):**
+- **The export's `Filter:` columns are blank for the twelve because the
+  feedback form began recording the filters in force only at `e008985`**
+  (13 August, 13:24), and the target had not pulled it by 6350 (14:24).
+- **At the pre-pilot the research type was one saved preference per user**
+  (`users.research_mode`, default `legislation_only`). It was set only
+  through the Research filters modal and restored on every chat and login.
+  So a change is an event, and turns between two equal reads of one lawyer
+  are bracketed.
+- **Until `bab9642` (13 August, 15:24) the research-type pill was hidden in
+  Conversational mode**, although the type was in force and editable. All
+  twelve sessions ran with it invisible on screen. This is on P4.9 and is
+  context for B7's user guidance.
+- **Behavioural signatures of each type in the pre-pilot answers** (prompts
+  at `f8fe9ec`):
+  - legislation-only Manager: declines every case-law question;
+  - hybrid Manager: briefs the Worker to ALSO search case law, so answers
+    volunteer case-law negatives in the `search_case_law` description's
+    coverage wording;
+  - case-law-only Manager: told to say so when asked about legislation;
+  - a 2026 judgment can only have come from the tool;
+  - a neutral citation alone is not evidence, and nor is a single case-law
+    negative.
+- **The default was wrong on 16 of the twelve's 50 turns** (list on P0.6).
+  14 of 39 directories are affected, 153 turn-runs; rep 1 of `baseline`,
+  `wave1`, `wave2` and `wave0_conv` carries 16 each.
+- **The target's `request_timings` records `research_mode` and `chat_mode`
+  per chat request** (since `9e69e4c`). An errored request still writes its
+  row. The planner endpoint wrote none at the pre-pilot.
+
+**Instruments added this session:**
+- `python -m tools.replay_report --dir <D> modes`: now also prints the
+  research type each turn sent, what it rests on (export / reviewer /
+  reviewer_partial / script / unknown / default / unrecorded), and names the
+  unknown and case-law-only turns. It exits 1 on a `default` label or a type
+  the reviewer's read rules out. It is still in the exit-1 set.
+- `modes --all-dirs`: the census over every directory beside `--dir`
+  (informational, exits 0).
+- `replay_set.load_research_reads` / `evidence/research_mode_reads.json`:
+  the reviewer's reads, validated. `test_replay_research_reads.py` fails if
+  a note repeats five words of a session's questions.
+
+**Expect these, and do not treat them as regressions:**
+- `modes` exits 1 on every pre-P0.6 directory holding an affected turn or a
+  `default` label: 22 in all, of which 4 are new (`wave0_conv`,
+  `wave3_p313b`, `wave3_p313c`, `wave4_p41_conv`).
+- A FRESH sweep of the twelve sends the reviewer's reads. It is no longer
+  like-for-like with any earlier directory on the 16 turns: they now carry
+  the case-law tool, so expect case-law searches, cost and `caselaw` /
+  scope-line output on them. Before comparing against an old directory, use
+  `--session`, or name the turns.
+
+**Hazards (carried forward, still live):**
+- Line endings: tracked files are CRLF. Check bytes with Python, not
+  `grep $'\r'`. The Write tool writes LF, so normalise before committing.
+- A Python script inside a bash heredoc mangles backslashes. Use the Edit
+  tool, or write the script to a file.
+- `git commit -F -` / `git merge -F -`: put the message in a file.
+- Ledger rows stay on ONE line with an even `**` count. Many ticked rows
+  have no closing ` |`, so an append helper must handle both shapes.
+- The data-handling test covers public case names too, where they are
+  written the way a lawyer typed them.
+- Scratch-copy revert checks: `test_the_prompt_reader_finds_a_real_constant`
+  and `test_the_manager_body_reader_finds_the_constant` fail in any non-git
+  copy.
+- Seam draws at temperature 0 are not byte-deterministic.
+
+**Machine state:**
+- no uvicorn running, no pin file, no worktrees;
+- dev box on its normal settings: model `google/gemini-3.1-pro-preview`,
+  summarisation `google/gemini-3-flash-preview`, local prompt cache ON,
+  `research_mode_enabled` ON;
+- 39 replay directories; none added this session;
+- the local gitignored `replay_set.json` was re-frozen with the reads;
+- transcript export (never in the repo):
+  `C:/Temp/aila-prepilot/pre-pilot sessions/session-transcripts-all-time-2026-09-14.csv`;
+- Fix Tracker: <https://claude.ai/artifact/JtrwLwRZnRihfe8kHj3EaJ> (source
+  `docs/prepilot-fixes/summary-table.html`; update only when asked;
+  updated at the end of this session).
+
+**Open with the user (unchanged unless they say otherwise):**
+- Deploy both cuts to the target: `pg_dump` first (no backup has ever run
+  there), then `git pull`, `stop_native.cmd` / `start_native.cmd`,
+  `server_py\test_apis.ps1` and one real question. It is still not
+  confirmed that the first cut (`d8fd73b`) was ever pulled. P0.7's query can
+  go with this.
+- Tell whoever runs the lexchat-eval harness that the audit event is schema
+  v5. This session did not change the schema.
+- P5.2 (B12, external).
+- Whether Thomas's review document should be committed.

@@ -308,6 +308,22 @@ def test_modes_names_the_unknown_turns_and_exits_on_a_guess(tmp_path, capsys):
     assert "harness default" in capsys.readouterr().out
 
 
+def test_the_census_counts_every_directory_beside_dir_and_exits_zero(tmp_path, capsys):
+    """`modes --all-dirs` is the command behind P0.6's cross-directory
+    figures: it must see every sibling directory, split P0.6's exits from
+    the chat-mode ones, and never fail a run itself."""
+    root = tmp_path / "replay"
+    for name, doc in (("a_clean", _doc("6341", [(2, "legislation_and_case_law", "reviewer")])),
+                      ("b_wrong", _doc("6341", [(2, "legislation_only", "reviewer")])),
+                      ("c_default", _doc("6348", [(1, "legislation_only", "default")]))):
+        (root / name).mkdir(parents=True)
+        _write(root / name, "run_rep1.json", doc)
+    assert rr.main(["--dir", str(root / "a_clean"), "modes", "--all-dirs"]) == 0
+    out = capsys.readouterr().out
+    assert "1 of 3 directories hold a turn" in out and ": 1 turn-runs." in out
+    assert "modes exits 1 on 2: 2 only because of P0.6, 0 on chat mode as well." in out
+
+
 def test_the_seam_takes_the_turn_research_type_not_the_session_filter():
     """The twelve's `filters.research_mode` is now None (the export had
     none); the seam must replay the type the turn sent."""

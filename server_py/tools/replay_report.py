@@ -5039,6 +5039,8 @@ def cmd_modes(args) -> int:
     rs = _replay_set_module()
     shape = rs.answer_shape if rs else (lambda _t: None)
     reads = rs.load_research_reads() if rs else {}
+    if getattr(args, "all_dirs", False):
+        return _modes_census(Path(args.dir), shape, reads)
     docs = load_runs(Path(args.dir))
     rows = [r for doc in docs for r in mode_rows(doc, shape, reads)]
     print(f"P0.5 chat mode over {args.dir}  ({len(docs)} run file(s), "
@@ -5093,6 +5095,39 @@ def cmd_modes(args) -> int:
         print()
         _print_export_modes(rs)
     return 1 if findings else 0
+
+
+def _modes_census(base: Path, shape, reads: dict) -> int:
+    """P0.6: every directory beside `base`, one line each — how many turns
+    sent a research type the reviewer's read rules out (all reps, and rep 1),
+    how many carry a `default` label, and whether `modes` would exit 1, split
+    into exits the P0.6 graders cause and exits already there on chat mode.
+    This is the command behind P0.6's cross-directory figures. Informational:
+    exits 0."""
+    dirs = [d for d in sorted(base.parent.iterdir()) if d.is_dir()]
+    print(f"P0.6 research-type census over {len(dirs)} director(ies) beside {base.name}")
+    print(f"    {'directory':<24} {'turns':>5} {'wrong':>5} {'rep1':>4} {'default':>7}  modes exit")
+    tot = Counter()
+    for d in dirs:
+        rows = [r for doc in load_runs(d) for r in mode_rows(doc, shape, reads)]
+        wrong = [r for r in rows if research_contradicts(r["research_mode"], r["research_read"])]
+        dflt = sum(1 for r in rows if r["research_source"] == "default")
+        findings = mode_findings(rows)
+        p06 = [f for f in findings if "research_mode_source=default" in f or "wrong tool set" in f]
+        why = ("-" if not findings else
+               "1 (P0.6 only)" if len(p06) == len(findings) else "1 (chat mode too)")
+        print(f"    {d.name:<24} {len(rows):>5} {len(wrong):>5} "
+              f"{sum(1 for r in wrong if r['rep'] == 1):>4} {dflt:>7}  {why}")
+        tot["dirs"] += 1
+        tot["with_wrong"] += bool(wrong)
+        tot["wrong"] += len(wrong)
+        tot["exit_p06_only"] += why == "1 (P0.6 only)"
+        tot["exit_already"] += why == "1 (chat mode too)"
+    print(f"\n  {tot['with_wrong']} of {tot['dirs']} directories hold a turn sent without a "
+          f"tool the reviewer's read says the lawyer had: {tot['wrong']} turn-runs.")
+    print(f"  modes exits 1 on {tot['exit_p06_only'] + tot['exit_already']}: "
+          f"{tot['exit_p06_only']} only because of P0.6, {tot['exit_already']} on chat mode as well.")
+    return 0
 
 
 _RESEARCH_SOURCE_MEANS = {
@@ -5478,6 +5513,10 @@ def main(argv: Iterable[str] | None = None) -> int:
                          "(findings are computed over all reps either way)")
     md.add_argument("--no-export", action="store_true",
                     help="skip the transcript-export half of the table")
+    md.add_argument("--all-dirs", action="store_true",
+                    help="P0.6: one line per directory beside --dir - turns sent a "
+                         "research type the reviewer's read rules out, and the exit "
+                         "(informational, exits 0)")
     de = sub.add_parser("deadend",
                         help="P4.1 acceptance: the research-mode dead-end — "
                              "switch/wrong-control/invented-UI counts, and every "
