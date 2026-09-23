@@ -1,0 +1,12 @@
+{
+  "session_id": "p46_6347",
+  "base": "6347",
+  "note": "P4.6 acceptance: turn 1, the only turn read as 'Legislation only' of session 6347, in Research chat mode under 'legislation_only' (the export's value or the reviewer's read, P0.6), so the research Worker whose prompt carries P4.6's scripted lines is the one that writes. Turn text is taken from the export by index and is never stored here.",
+  "turns": [
+    {
+      "from_turn": 1,
+      "research_mode": "legislation_only",
+      "chat_mode": "research"
+    }
+  ]
+}

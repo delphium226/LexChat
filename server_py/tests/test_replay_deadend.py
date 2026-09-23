@@ -148,6 +148,13 @@ def test_the_committed_scripts_hold_no_question_text():
         script = rs.load_script(p)
         for t in script["turns"]:
             assert "from_turn" in t and "question" not in t, f"{p.name}: literal question text"
+    # P4.1's own scripts: the rest of this test is about THEIR shape. Other
+    # rows' scripts (P4.6's hold the research type fixed) share only the
+    # no-question-text rule above.
+    p41 = [p for p in paths if p.name.startswith("p41_")]
+    assert p41, "P4.1's scripts are gone"
+    for p in p41:
+        script = rs.load_script(p)
         assert script["base"] in ("6343", "6346")
         # A mode change is the point: at least one turn differs from the first.
         modes = [t["research_mode"] for t in script["turns"]]

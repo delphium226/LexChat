@@ -1,0 +1,27 @@
+{
+  "session_id": "p46_6385",
+  "base": "6385",
+  "note": "P4.6 acceptance: every turn; the export's one 'Case law only' session, for the case-law Worker's line of session 6385, in Research chat mode under 'case_law_only' (the export's value or the reviewer's read, P0.6), so the research Worker whose prompt carries P4.6's scripted lines is the one that writes. Turn text is taken from the export by index and is never stored here.",
+  "turns": [
+    {
+      "from_turn": 1,
+      "research_mode": "case_law_only",
+      "chat_mode": "research"
+    },
+    {
+      "from_turn": 2,
+      "research_mode": "case_law_only",
+      "chat_mode": "research"
+    },
+    {
+      "from_turn": 3,
+      "research_mode": "case_law_only",
+      "chat_mode": "research"
+    },
+    {
+      "from_turn": 4,
+      "research_mode": "case_law_only",
+      "chat_mode": "research"
+    }
+  ]
+}
