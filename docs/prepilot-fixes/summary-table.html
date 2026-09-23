@@ -325,7 +325,8 @@
       its row in the fix plan and its action number in Thomas's review of 10 September 2026.
       <strong>“Fixed” means built and accepted on the fix branch. Everything marked Fixed has been
       merged for deployment to the server (first release 22 September, second 23 September),
-      except P0.6, which changes only our test tooling and needs no deployment.</strong></p>
+      except P0.6, which changes only our test tooling and needs no deployment, and P4.6, fixed
+      after the second release, which will go with the next one.</strong></p>
   </header>
 
   <section class="progress" aria-label="Progress summary">
@@ -374,7 +375,7 @@
     <div>
       <h2>Status</h2>
       <dl>
-        <dt>Fixed</dt><dd>Built and accepted on the fix branch. Everything marked Fixed has been merged to <code>main</code> for deployment to the target: the first release on 22 September, the second (P3.13) on 23 September. A fix made after that stays on the branch until the next release.</dd>
+        <dt>Fixed</dt><dd>Built and accepted on the fix branch. Everything marked Fixed has been merged to <code>main</code> for deployment to the target: the first release on 22 September, the second (P3.13) on 23 September. A fix made after that (P4.6) stays on the branch until the next release.</dd>
         <dt>In progress</dt><dd>Under way. P5.2 is waiting on an external decision.</dd>
         <dt>Verified</dt><dd>The problem is confirmed in our replays, the code or a live test, but no fix is built yet.</dd>
         <dt>To be verified</dt><dd>Proposed, not yet confirmed or agreed.</dd>
@@ -393,18 +394,33 @@
         <code>TODO B6</code> is in <code>docs/TODO.md</code>, outside the plan.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.</p>
-      <p><strong>P0.6</strong>, which research filter the twelve re-run sessions used, is now settled
+      <p><strong>P4.6</strong>, wording that says the whole database lacks something, is fixed. Three
+        lines in the research step's instructions told it what to say when its search came up short,
+        and each said it about the whole database: “The available database does not contain
+        information on this specific issue”, and a case-law equivalent. It now describes the search
+        it actually made: “The material retrieved in this search does not establish the answer”
+        (Thomas's wording). If a question needs a source it cannot search, such as case law in
+        “Legislation only”, it says that source was not searched, not that nothing was found. No
+        lawyer saw the old sentence in the pre-pilot, because it was only in Research mode, which was
+        switched off. This fix is for when Research mode is switched on.</p>
+      <p><strong>How it was tested.</strong> Its test was chosen again before the fix was built, from
+        questions whose filter is known to have been “Legislation only”. Re-running those questions
+        on the current system produced the sentence in none of 49 answers. Since P4.1, the system
+        declines a case-law question under “Legislation only” itself instead of passing it to the
+        research step, which is where most of these sentences came from. So we re-ran the research
+        step directly on the 37 stored cases where it had written the sentence. Before the fix 32
+        of 32 reports carried it; after the fix 0 of 31 did. All 31 now say what was not searched,
+        and the only two “database does not contain”-style sentences left are true: the legislation
+        database holds no judgments. Answers carry more links, not fewer.</p>
+      <p><strong>Earlier, P0.6</strong>: which research filter the twelve re-run sessions used is now settled
         from the transcripts rather than assumed. The session export does not record it for those
         twelve, and our replays had filled the gap with “Legislation only”. We read all 50 of their
         questions. On 16 of them the lawyer had case law switched on, so every replay of those 16
         ran without the case-law search the lawyer actually had. Replays now use what each lawyer
         had. The 8 questions the transcripts cannot settle are marked unknown, not guessed. Nothing
         a lawyer sees changes: this corrects our measurements.</p>
-      <p><strong>Two things it found.</strong> First, the fix planned next (P4.6, wording that says
-        “the database does not contain” something) had taken its test sessions from among those 16.
-        The research step those lawyers actually used never contains that wording, so the test
-        would pass whatever the fix did, and has to be chosen again before the fix is built. Second,
-        until 13 August the research filter was not shown on screen in Conversational mode, though
+      <p><strong>Two things it found.</strong> First, P4.6's test sessions had been taken from among
+        those 16, so its test had to be chosen again (done, above). Second, until 13 August the research filter was not shown on screen in Conversational mode, though
         it was in force and could be changed. All twelve sessions ran that way.</p>
       <p><strong>One row opened.</strong> <strong>P0.7</strong>: the server logged which filter and
         mode every question ran under. One read-only query of that log would replace our reading of
@@ -446,9 +462,9 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next.</strong> <strong>P4.6</strong>: choose its test again from questions whose
-        filter is known to have been “Legislation only”, then replace the wording that says the
-        whole database lacks something with wording about the search actually made.
+      <p><strong>Next.</strong> <strong>P4.7</strong>, the same problem in the Deep Research report,
+        which can say “no case law was found” when case law was never searched; or
+        <strong>P3.7</strong>, a direct check of whether the database holds a named instrument.
         <strong>P4.5</strong> (a research step whose answer is lost) is becoming more pressing: it
         is now the main source of slow and costly replies in our replays.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
@@ -467,7 +483,7 @@
   // status: "Fixed" | "In progress" | "Verified" | "To be verified"
   // sev:    "P1" | "P2" | "P3"  (see the Severity notes; grades the defect, not the fix)
   // src:    "T" | "R" | "T & R"
-  const UPDATED = "23 September 2026, end of Session 23 (P0.6 fixed: the research filter each re-run question used is now read from the transcripts, and was wrong in our replays on 16 of 50; P0.7 opened; next: P4.6, with its test chosen again)";
+  const UPDATED = "23 September 2026, end of Session 24 (P4.6 fixed: the research step now says what its search did not establish, not that the database lacks it; 32 of 32 affected reports before, 0 of 31 after; next: P4.7 or P3.7)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "" },
@@ -509,7 +525,7 @@
     { src: "R", fix: "Remove the unused case-law court filter", sev: "P2", status: "Fixed", ref: "P4.4", t: "" },
     { src: "T & R", fix: "Report a lost research step as lost, not “no results”", sev: "P1", status: "Verified", ref: "P4.5", t: "3" },
     { src: "T", fix: "Label incomplete Deep Research steps as incomplete in progress messages", sev: "P3", status: "Verified", ref: "P4.5", t: "3" },
-    { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Verified", ref: "P4.6", t: "4" },
+    { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Fixed", ref: "P4.6", t: "4" },
     { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Verified", ref: "P4.7", t: "2" },
     { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", sev: "P3", status: "Verified", ref: "P4.8", t: "" },
     { src: "R", fix: "Source Scottish case law (Court of Session, Sheriff Courts)", sev: "P2", status: "In progress", ref: "P5.2", t: "" },

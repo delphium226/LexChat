@@ -4908,3 +4908,154 @@ row's twin, which iterates on `seam_replay synthesis`), or **P3.7**.
 - P5.2.
 - Whether Thomas's review document should be committed.
 - Whether P4.6 should go in the next cut.
+
+---
+
+## Session 24 — handover for Session 25 (2026-09-23)
+
+Written at the user's request before a new session starts, so nothing learned
+here depends on this session's context. Everything below is also on the rows
+it concerns, or in `BASELINE.md`, *The scripted negatives*.
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. Session 24 commits:
+  - `d860675`: the acceptance, booked before any build;
+  - `9ba8ee8`: the fix and the instruments;
+  - `9f2a448`: the docs;
+  - this handover.
+- `main` is untouched at `c77e779`, the second cut. Rollback tags:
+  `pre-prepilot-fixes-2026-09-23` and `pre-prepilot-fixes-2026-09-22`.
+- **1641 tests green.**
+- Ledger **32 of 49 rows, 8 of 14 buckets.** Partial: B5 (waiting on P3.7
+  and P4.7) and B12 (waiting on P5.2). Run `python -m tools.plan_status`
+  rather than trusting these figures.
+- **Two Fixed rows are not on `main`:** P0.6 (harness only, needs no
+  deployment) and **P4.6, which is product code** (`src/prompts.py` only: no
+  config, schema, client or whitelist change). It reaches the target only in
+  a cut, and cuts go when the user asks.
+
+**Next work: P4.7 or P3.7** (the user's choice). Both close B5 with the other.
+
+- **P4.7** is P4.6's Deep Research twin. `DEEP_RESEARCH_SYNTHESIS_PROMPT`
+  (`prompts.py:1233`, the gap example at `:1257`) scripts *"No reported case
+  law was found on X"* for every research type. Read its row in full; its
+  evidence is thin and it says to measure first. Three things from this
+  session carry over:
+  1. **Book the acceptance on the row before building, and plan for an empty
+     before-column.** P4.6's replay at HEAD reproduced nothing, because P4.1
+     changed the path that produced the defect. Check the same for P4.7: does
+     the Deep Research planner or synthesis still reach "case law not found"
+     under 'Legislation only' since P4.1?
+  2. **The synthesis seam is the cheap instrument** (`seam_replay synthesis`,
+     about $0.11 a draw). Its `--without-fix` swaps the whole prompt for the
+     constant at `--rev`; the default rev is `2d9ae11` (pre-P3.1), so pass
+     `--rev` explicitly.
+  3. **Scripts can set `chat_mode: "deep_research"` per turn.**
+     `p41_6346_dr.json` is an example. Only the no-question-text rule applies
+     to non-`p41_` scripts now.
+- **P3.7** is deterministic (`/legislation/lookup`, the held/absent test).
+  Read the `external-apis` skill and `/openapi.json` first.
+
+**Instruments added this session (use them, don't rebuild):**
+- `python -m tools.replay_report --dir <D> scripted [--before <D>]
+  [--reports] [--session …]`
+  - counts P4.6's three scripted lines in every Worker REPORT and every
+    answer;
+  - prints links, `sources_kept` and prose per turn, with the Invariant 1
+    panel under `--before`;
+  - exits 1 on any scripted line.
+  - **It exits 1 on `baseline`, `wave1` and `wave2`**, which predate the fix
+    and replayed the twelve in Research mode. That is the before-state, not a
+    regression; it exits 0 on `wave0_conv`, `wave4_p41` and `wave3_p313`.
+  - **Add it to the exit-1 set for any new sweep:** modes halts negatives
+    derivations blanks scoperecord nosearch caselaw deadend **scripted**.
+- `python -m tools.seam_replay worker --run <f> --turn N --first-round`:
+  - replays the Worker's FIRST round with its real tools offered, stopping at
+    the first call;
+  - prints the calls it chose, or the report it wrote without searching.
+  - It is the only seam for a Worker that writes without searching, and it is
+    the probe Session 22's lesson asks for before any Worker prompt change.
+- `python -m tools.seam_sweep --dirs … --turns SID:T1,T2 …
+  [--without-fix --rev <sha>] [--out DIR] [--list]`:
+  - the Worker seam over every stored rep-1 delegation whose report matched a
+    defect, both sides from one command;
+  - a zero-tool delegation is drawn at the first round.
+  - Its `--report-matches` choices are `p46` and `any`; add a pattern for a
+    new row.
+- `seam_replay worker --without-fix` now swaps the constant of the turn's own
+  research type, in place. It used to swap `WORKER_SYSTEM_PROMPT` always and
+  replace the whole prompt with the bare literal.
+
+**What this session established (all on rows; listed so none is lost):**
+- **Since P4.1, the Research-mode Manager declines a case-law question under
+  'Legislation only' itself and delegates nothing.** In the p46 scripts, 39 of
+  49 turns delegated nothing. Every pre-P4.1 count of a Worker-written
+  negative on these sessions measured a path that no longer runs.
+- **Before P4.1, most of P4.6's sentences came from a legislation Worker given
+  a case-law brief, often with no tool call at all.** In `wave2`, 10 of 22
+  delegations over those five sessions made none.
+- **With the fix, the legislation Worker says a source it cannot search was
+  "not searched in this research".** That is true in 31 of 31 seam reports;
+  the two remaining "database does not contain" sentences are true (the
+  legislation index holds no judgments).
+- **On a case-law brief, the legislation Worker searches legislation first in
+  about 1 payload in 6, with or without the fix.** What it then writes is not
+  observable at a seam. Watch item, not a row.
+- **Seam draws at temperature 0 vary enough to fake an effect.** A scratch
+  A/B showed the fix making 6 payloads search first against 0 before; the
+  committed command's before side gave 5. Publish from a committed command,
+  never from a scratch run.
+- **6385 t4's before-run took 435 s and $0.91 with no empty completion.** It
+  was a long case-law Worker run (7 tool calls, 11 LLM calls), not a P4.5
+  episode. Do not count it for P4.5.
+- **6346 t2 is not a question** (the lawyer's acknowledgement). Every replay
+  answers it by asking for one, so do not grade it as a decline.
+- **The case-law Worker read 3 judgments where it had read 4** (6385 t4, n=1),
+  which is within its prompt's 1–3. It is the only `sources_kept` slot that
+  fell.
+
+**Hazards (carried forward, still live):**
+- Line endings: tracked files are CRLF. Check bytes with Python. The Write
+  tool writes LF, so normalise before committing (this session did so for
+  `seam_sweep.py` and the two new test files).
+- A Python script inside a bash heredoc mangles backslashes.
+- Commit messages: put them in a file and use `-F <file>`.
+- Ledger rows stay on ONE line with an even `**` count. An append helper must
+  assert the row is found exactly once.
+- Scratch-copy revert checks: the two `git show` tests fail in any non-git
+  copy.
+- **Seam and probe output can contain a lawyer's search terms** (the Worker
+  echoes them as queries). Keep that output in the scratchpad. Before
+  committing, grep the diff for the terms you saw.
+- The API runs any chat mode it is sent. `replay pin` turns
+  `research_mode_enabled` OFF.
+
+**Machine state:**
+- no uvicorn running, no pin file, no worktrees; `tools.replay restore` was
+  run;
+- dev box on its normal settings: model `google/gemini-3.1-pro-preview`,
+  summarisation `google/gemini-3-flash-preview`, local prompt cache ON,
+  `research_mode_enabled` ON;
+- 41 replay directories; new: `wave4_p46_pre` (`d860675`) and `wave4_p46`
+  (`9ba8ee8`);
+- transcript export (never in the repo):
+  `C:/Temp/aila-prepilot/pre-pilot sessions/session-transcripts-all-time-2026-09-14.csv`;
+- Fix Tracker: <https://claude.ai/artifact/JtrwLwRZnRihfe8kHj3EaJ>, updated
+  to **version 15** at the end of this session (P4.6 Fixed, and noted as not
+  yet deployed). Source `docs/prepilot-fixes/summary-table.html`; update only
+  when asked.
+
+**Spend this session: $8.33.**
+
+**Open with the user (unchanged unless they say otherwise):**
+- Whether P4.6 goes in the next cut to `main`.
+- Deploy both cuts to the target: `pg_dump` first (no backup has ever run
+  there), then `git pull`, `stop_native.cmd` / `start_native.cmd`,
+  `server_py\test_apis.ps1` and one real question. It is still not confirmed
+  that the first cut was ever pulled. P0.7's query can go with this.
+- Tell whoever runs the lexchat-eval harness that the audit event is schema
+  v5. This session did not change the schema.
+- Raise P4.5: $4.89 of `wave3_p313`'s $5.65; about 62,912 reasoning tokens
+  per empty completion.
+- P5.2 (B12, external).
+- Whether Thomas's review document should be committed.
