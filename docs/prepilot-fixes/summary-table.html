@@ -242,7 +242,7 @@
     border-radius: 12px;
     overflow-x: auto;
   }
-  table { width: 100%; border-collapse: collapse; min-width: 720px; }
+  table { width: 100%; border-collapse: collapse; min-width: 800px; }
   thead th {
     position: sticky;
     top: 0;
@@ -289,6 +289,12 @@
   .st-wip { background: var(--wip-soft); color: var(--wip); }
   .st-verified { background: var(--verified-soft); color: var(--verified); }
   .st-tbv { background: transparent; color: var(--tbv); border: 1px dashed var(--rule-strong); }
+
+  .sev { display: inline-block; min-width: 2.4em; text-align: center; padding: 1px 8px; border-radius: 4px;
+    font-family: var(--font-mono); font-size: 12px; font-weight: 600; border: 1px solid var(--rule-strong); color: var(--ink-soft); }
+  .sev-p1 { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .sev-p2 { background: var(--brand-soft); color: var(--ink); }
+  .sev-p3 { background: transparent; }
 
   .empty { padding: 24px 14px; color: var(--ink-faint); }
 
@@ -350,10 +356,11 @@
     <table>
       <thead>
         <tr>
-          <th scope="col">Source</th>
+          <th scope="col">Plan ref</th>
           <th scope="col">Fix</th>
           <th scope="col">Status</th>
-          <th scope="col">Plan ref</th>
+          <th scope="col">Severity</th>
+          <th scope="col">Source</th>
           <th scope="col">Thomas ref</th>
         </tr>
       </thead>
@@ -371,6 +378,13 @@
         <dt>Verified</dt><dd>The problem is confirmed in our replays, the code or a live test, but no fix is built yet.</dd>
         <dt>To be verified</dt><dd>Proposed, not yet confirmed or agreed.</dd>
       </dl>
+      <h2 style="margin-top:16px">Severity</h2>
+      <dl>
+        <dt>P1</dt><dd>The lawyer is given something wrong or misleading and has no way to tell: a false “not found”, an unsupported in-force claim, a silently incomplete answer, a lost reply, or a dead end with no way forward.</dd>
+        <dt>P2</dt><dd>The answer is correct but incomplete, shallow or harder to verify, or the lawyer has to work around the tool to get what they asked for.</dd>
+        <dt>P3</dt><dd>Presentation, wording no lawyer has yet seen, or our own measurement and tooling.</dd>
+      </dl>
+      <p style="margin-top:8px">Severity grades the defect, not the fix, and is a first-pass judgement from the transcripts and replays. Not to be confused with plan refs such as P1.1, which are rows in the fix plan.</p>
     </div>
     <div>
       <h2>References</h2>
@@ -414,57 +428,58 @@
 <script>
   // ---- Update here at the end of a session, when the user asks. ----
   // status: "Fixed" | "In progress" | "Verified" | "To be verified"
+  // sev:    "P1" | "P2" | "P3"  (see the Severity notes; grades the defect, not the fix)
   // src:    "T" | "R" | "T & R"
-  const UPDATED = "23 September 2026 (Session 21 — the mode dead-end fixed, P4.1 done; first cut of the fix branch merged to main for deployment)";
+  const UPDATED = "23 September 2026 (Session 21 — the mode dead-end fixed, P4.1 done; first cut merged to main for deployment; severity column added)";
   const ROWS = [
-    { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", status: "Fixed", ref: "P0.5", t: "" },
-    { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", status: "Verified", ref: "P0.6", t: "" },
-    { src: "T & R", fix: "Make the jurisdiction filter work", status: "Fixed", ref: "P1.1", t: "5" },
-    { src: "R", fix: "Stop the “current only” filter implying in-force status", status: "Fixed", ref: "P1.2", t: "" },
-    { src: "T & R", fix: "Report the search's true match count", status: "Fixed", ref: "P1.3", t: "4" },
-    { src: "R", fix: "Link citations to the provision, not the Act", status: "Fixed", ref: "P1.4", t: "" },
-    { src: "R", fix: "Enforce provision links in code", status: "Fixed", ref: "P1.6", t: "" },
-    { src: "T & R", fix: "Disclose a research halt as a limit, not a finding", status: "Fixed", ref: "P2.1", t: "3" },
-    { src: "T & R", fix: "Explain every “not found”: what was searched, and its limits", status: "Fixed", ref: "P2.2", t: "4" },
-    { src: "T & R", fix: "Verify the enabling power", status: "Fixed", ref: "P2.3", t: "1" },
-    { src: "R", fix: "Disclose the Scottish case-law corpus gap", status: "Fixed", ref: "P2.4", t: "" },
-    { src: "R", fix: "Stop asserting in-force status", status: "Fixed", ref: "P2.5", t: "" },
-    { src: "T & R", fix: "Don't reformat a halted step into an empty report", status: "Fixed", ref: "P2.6", t: "3" },
-    { src: "R", fix: "Cap how long a step may keep searching", status: "Fixed", ref: "P2.7", t: "" },
-    { src: "R", fix: "Re-qualify a “not found” repeated from an earlier turn", status: "Fixed", ref: "P2.8", t: "" },
-    { src: "R", fix: "Record memo-served searches in the search scope", status: "Fixed", ref: "P2.9", t: "" },
-    { src: "R", fix: "Cite the provision at the subsection asked for, not the whole section", status: "Fixed", ref: "P3.1", t: "" },
-    { src: "R", fix: "Allow up to three section searches per Act, capped in code", status: "Fixed", ref: "P3.1", t: "" },
-    { src: "R", fix: "Stop reversing a correct answer under pushback", status: "Verified", ref: "P3.2", t: "" },
-    { src: "T & R", fix: "Separate retrieval from interpretation", status: "Verified", ref: "P3.3", t: "NH1" },
-    { src: "T & R", fix: "Default to Scottish jurisdiction; flag UK-wide divergence", status: "Verified", ref: "P3.4", t: "NH1" },
-    { src: "T", fix: "Correct the jurisdiction filter note in the prompt", status: "Verified", ref: "P3.4", t: "5" },
-    { src: "R", fix: "Retrieve amendment and commencement relations", status: "Fixed", ref: "P3.5", t: "" },
-    { src: "R", fix: "Keep the description field, which carries relationships", status: "Verified", ref: "P3.6", t: "" },
-    { src: "R", fix: "Test whether an instrument is held, by its number", status: "Verified", ref: "P3.7", t: "" },
-    { src: "T & R", fix: "Stop a step looping on instruments it already has; write up findings at the cap", status: "Fixed", ref: "P3.8", t: "3" },
-    { src: "T", fix: "Make the case-law date filter work", status: "Verified", ref: "P3.9", t: "6" },
-    { src: "T", fix: "Keep dependent Deep Research steps in one step", status: "Verified", ref: "P3.10", t: "3" },
-    { src: "R", fix: "Say what a cited subsection's sibling subsections provide", status: "Fixed", ref: "P3.11", t: "" },
-    { src: "R", fix: "Reach a Schedule paragraph asked for by number (LEX holds the Schedule as one provision)", status: "Verified", ref: "P3.12", t: "" },
-    { src: "R", fix: "Stop the chat reply dropping a subsection the research step had already written", status: "Verified", ref: "P3.13", t: "" },
-    { src: "R", fix: "Tell the quick-lookup step which research filters are active", status: "Verified", ref: "P3.14", t: "" },
-    { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", status: "Fixed", ref: "P4.1", t: "9" },
-    { src: "R", fix: "Show a change of mode or research type in the conversation itself", status: "Verified", ref: "P4.9", t: "" },
-    { src: "R", fix: "Never show a blank or lost reply", status: "Fixed", ref: "P4.2", t: "" },
-    { src: "T & R", fix: "Make the sources list and inline links match the answer", status: "Verified", ref: "P4.3", t: "7" },
-    { src: "R", fix: "Remove the unused case-law court filter", status: "Fixed", ref: "P4.4", t: "" },
-    { src: "T & R", fix: "Report a lost research step as lost, not “no results”", status: "Verified", ref: "P4.5", t: "3" },
-    { src: "T", fix: "Label incomplete Deep Research steps as incomplete in progress messages", status: "Verified", ref: "P4.5", t: "3" },
-    { src: "T", fix: "Remove prompt wording that says the whole database lacks something", status: "Verified", ref: "P4.6", t: "4" },
-    { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", status: "Verified", ref: "P4.7", t: "2" },
-    { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", status: "Verified", ref: "P4.8", t: "" },
-    { src: "R", fix: "Source Scottish case law (Court of Session, Sheriff Courts)", status: "In progress", ref: "P5.2", t: "" },
-    { src: "T", fix: "Show provider errors (credit, rate limit) clearly when planning", status: "Verified", ref: "TODO B6", t: "8" },
-    { src: "T", fix: "Order case-law results by relevance", status: "To be verified", ref: "", t: "6" },
-    { src: "T", fix: "Reconcile summary counts with the answer's own list", status: "To be verified", ref: "", t: "NH2" },
-    { src: "T", fix: "Scan whole instruments for a literal “£”", status: "To be verified", ref: "", t: "4" },
-    { src: "T", fix: "Add an enabling-power rule to the synthesis prompt", status: "To be verified", ref: "P2.3", t: "1" },
+    { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "" },
+    { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Verified", ref: "P0.6", t: "" },
+    { src: "T & R", fix: "Make the jurisdiction filter work", sev: "P1", status: "Fixed", ref: "P1.1", t: "5" },
+    { src: "R", fix: "Stop the “current only” filter implying in-force status", sev: "P1", status: "Fixed", ref: "P1.2", t: "" },
+    { src: "T & R", fix: "Report the search's true match count", sev: "P2", status: "Fixed", ref: "P1.3", t: "4" },
+    { src: "R", fix: "Link citations to the provision, not the Act", sev: "P3", status: "Fixed", ref: "P1.4", t: "" },
+    { src: "R", fix: "Enforce provision links in code", sev: "P3", status: "Fixed", ref: "P1.6", t: "" },
+    { src: "T & R", fix: "Disclose a research halt as a limit, not a finding", sev: "P1", status: "Fixed", ref: "P2.1", t: "3" },
+    { src: "T & R", fix: "Explain every “not found”: what was searched, and its limits", sev: "P1", status: "Fixed", ref: "P2.2", t: "4" },
+    { src: "T & R", fix: "Verify the enabling power", sev: "P1", status: "Fixed", ref: "P2.3", t: "1" },
+    { src: "R", fix: "Disclose the Scottish case-law corpus gap", sev: "P1", status: "Fixed", ref: "P2.4", t: "" },
+    { src: "R", fix: "Stop asserting in-force status", sev: "P1", status: "Fixed", ref: "P2.5", t: "" },
+    { src: "T & R", fix: "Don't reformat a halted step into an empty report", sev: "P2", status: "Fixed", ref: "P2.6", t: "3" },
+    { src: "R", fix: "Cap how long a step may keep searching", sev: "P2", status: "Fixed", ref: "P2.7", t: "" },
+    { src: "R", fix: "Re-qualify a “not found” repeated from an earlier turn", sev: "P2", status: "Fixed", ref: "P2.8", t: "" },
+    { src: "R", fix: "Record memo-served searches in the search scope", sev: "P3", status: "Fixed", ref: "P2.9", t: "" },
+    { src: "R", fix: "Cite the provision at the subsection asked for, not the whole section", sev: "P2", status: "Fixed", ref: "P3.1", t: "" },
+    { src: "R", fix: "Allow up to three section searches per Act, capped in code", sev: "P2", status: "Fixed", ref: "P3.1", t: "" },
+    { src: "R", fix: "Stop reversing a correct answer under pushback", sev: "P1", status: "Verified", ref: "P3.2", t: "" },
+    { src: "T & R", fix: "Separate retrieval from interpretation", sev: "P2", status: "Verified", ref: "P3.3", t: "NH1" },
+    { src: "T & R", fix: "Default to Scottish jurisdiction; flag UK-wide divergence", sev: "P2", status: "Verified", ref: "P3.4", t: "NH1" },
+    { src: "T", fix: "Correct the jurisdiction filter note in the prompt", sev: "P3", status: "Verified", ref: "P3.4", t: "5" },
+    { src: "R", fix: "Retrieve amendment and commencement relations", sev: "P1", status: "Fixed", ref: "P3.5", t: "" },
+    { src: "R", fix: "Keep the description field, which carries relationships", sev: "P2", status: "Verified", ref: "P3.6", t: "" },
+    { src: "R", fix: "Test whether an instrument is held, by its number", sev: "P2", status: "Verified", ref: "P3.7", t: "" },
+    { src: "T & R", fix: "Stop a step looping on instruments it already has; write up findings at the cap", sev: "P2", status: "Fixed", ref: "P3.8", t: "3" },
+    { src: "T", fix: "Make the case-law date filter work", sev: "P2", status: "Verified", ref: "P3.9", t: "6" },
+    { src: "T", fix: "Keep dependent Deep Research steps in one step", sev: "P2", status: "Verified", ref: "P3.10", t: "3" },
+    { src: "R", fix: "Say what a cited subsection's sibling subsections provide", sev: "P2", status: "Fixed", ref: "P3.11", t: "" },
+    { src: "R", fix: "Reach a Schedule paragraph asked for by number (LEX holds the Schedule as one provision)", sev: "P2", status: "Verified", ref: "P3.12", t: "" },
+    { src: "R", fix: "Stop the chat reply dropping a subsection the research step had already written", sev: "P2", status: "Verified", ref: "P3.13", t: "" },
+    { src: "R", fix: "Tell the quick-lookup step which research filters are active", sev: "P3", status: "Verified", ref: "P3.14", t: "" },
+    { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", sev: "P1", status: "Fixed", ref: "P4.1", t: "9" },
+    { src: "R", fix: "Show a change of mode or research type in the conversation itself", sev: "P3", status: "Verified", ref: "P4.9", t: "" },
+    { src: "R", fix: "Never show a blank or lost reply", sev: "P1", status: "Fixed", ref: "P4.2", t: "" },
+    { src: "T & R", fix: "Make the sources list and inline links match the answer", sev: "P2", status: "Verified", ref: "P4.3", t: "7" },
+    { src: "R", fix: "Remove the unused case-law court filter", sev: "P2", status: "Fixed", ref: "P4.4", t: "" },
+    { src: "T & R", fix: "Report a lost research step as lost, not “no results”", sev: "P1", status: "Verified", ref: "P4.5", t: "3" },
+    { src: "T", fix: "Label incomplete Deep Research steps as incomplete in progress messages", sev: "P3", status: "Verified", ref: "P4.5", t: "3" },
+    { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Verified", ref: "P4.6", t: "4" },
+    { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Verified", ref: "P4.7", t: "2" },
+    { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", sev: "P3", status: "Verified", ref: "P4.8", t: "" },
+    { src: "R", fix: "Source Scottish case law (Court of Session, Sheriff Courts)", sev: "P2", status: "In progress", ref: "P5.2", t: "" },
+    { src: "T", fix: "Show provider errors (credit, rate limit) clearly when planning", sev: "P3", status: "Verified", ref: "TODO B6", t: "8" },
+    { src: "T", fix: "Order case-law results by relevance", sev: "P3", status: "To be verified", ref: "", t: "6" },
+    { src: "T", fix: "Reconcile summary counts with the answer's own list", sev: "P2", status: "To be verified", ref: "", t: "NH2" },
+    { src: "T", fix: "Scan whole instruments for a literal “£”", sev: "P3", status: "To be verified", ref: "", t: "4" },
+    { src: "T", fix: "Add an enabling-power rule to the synthesis prompt", sev: "P2", status: "To be verified", ref: "P2.3", t: "1" },
   ];
   // ---- End of data. ----
 
@@ -509,12 +524,15 @@
       const group = (row.ref.match(/^P(\d)/) || [null, row.ref ? "x" : "none"])[1];
       if (lastGroup !== null && group !== lastGroup) tr.className = "group-start";
       lastGroup = group;
-      tr.append(sourceCell(row.src));
+      tr.append(el("td", "ref", row.ref || "—"));
       tr.append(el("td", "fix", row.fix));
       const st = el("td");
       st.append(el("span", "status " + STATUS_CLASS[row.status], row.status));
       tr.append(st);
-      tr.append(el("td", "ref", row.ref || "—"));
+      const sv = el("td");
+      sv.append(el("span", "sev sev-" + row.sev.toLowerCase(), row.sev));
+      tr.append(sv);
+      tr.append(sourceCell(row.src));
       tr.append(el("td", "tref", row.t || "—"));
       body.append(tr);
       shown++;
