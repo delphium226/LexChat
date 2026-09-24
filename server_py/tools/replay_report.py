@@ -5579,6 +5579,262 @@ def cmd_scripted(args) -> int:
     return 1 if findings else 0
 
 
+# --- P3.7: the held/absent test for an instrument named by number -------------
+#
+# The graded slots, keyed on the EXPORT's turn numbers (a scripted run maps its
+# turns back through `script.turns[i].from_turn`). The instrument each slot
+# names, and what LEX holds for it, checked live at Session 24's pre-flight and
+# re-checked by `lex_probe`: `ssi/2025/377` and `ssi/2026/170` are 404 on
+# `/legislation/lookup`; `ssi/2025/119` is a stub (200 on lookup, 404 on
+# `/legislation/section/lookup`); `asp/2025/2` is held with text. `mention`
+# picks the sentences about the instrument out of the prose, by its number
+# only, so no lawyer's words are needed here. `graded` False is reported and
+# never failed: 6373 t3 names the instrument too, but the row does not grade it.
+# `must_claim` marks the turns the row requires an answer on. Elsewhere a reply
+# that makes no statement about the instrument and delegated nothing is a
+# clarifying question (6409 t8 and t10 are a bare citation and a bare title,
+# and every stored rep asks what the lawyer wants to know), which is not a
+# failure. 6409 t7 names the stub by title, not number, and retrieves it.
+LOOKUP_TARGETS = {
+    "6409": {
+        2: ("asp/2025/2", "held", r"\basp\s*2\b|\basp/2025/2\b", True, False),
+        7: ("ssi/2025/119", "stub", r"\b119\b|\bNo\.\s*1\b", True, False),
+        8: ("ssi/2025/119", "stub", r"\b119\b", True, False),
+        9: ("ssi/2025/377", "absent", r"\b377\b", True, True),
+        10: ("ssi/2025/377", "absent", r"\b377\b", True, False),
+        11: ("ssi/2025/377", "absent", r"\b377\b", True, True),
+    },
+    "6373": {
+        2: ("ssi/2026/170", "absent", r"\b170\b", True, True),
+        3: ("ssi/2026/170", "absent", r"\b170\b", False, False),
+    },
+}
+# The lookup tool P3.7 adds, and the statuses it reports.
+LOOKUP_TOOL = "lookup_legislation"
+# Sentence shapes, applied to a sentence that mentions the instrument, in the
+# model's prose with the code-written footer removed (P2.2's lesson: the footer
+# must never grade the model).
+#   RECORD_ABSENT: the INSTRUMENT is not held / not in the index. Definite.
+#   HEDGED:       it could not be found. True of a search, not of the index.
+#   TEXT_ONLY:    its TEXT is not available. Right for a stub, and on an
+#                 absent instrument it reads as if the record were held.
+LK_TEXT_WORD = re.compile(r"\b(?:full |official )?(?:text|content|contents|wording|terms|body)\b",
+                          re.I)
+LK_NEGATION = re.compile(
+    r"\bnot (?:currently |yet )?(?:held|available|included|present|indexed|published|"
+    r"contained|in)\b|\bno record\b|\bdoes not (?:hold|contain|include|have)\b"
+    r"|\bhas no\b|\bunavailable\b|\bmissing\b|\babsent\b", re.I)
+LK_INDEX_WORD = re.compile(r"\b(?:index|database|corpus|collection|holdings?)\b", re.I)
+LK_HEDGED = re.compile(
+    r"\bcould not (?:be )?(?:find|found|locate|located|retrieve|retrieved|identify)"
+    r"|\b(?:not|never) (?:be )?(?:found|located|retrieved|identified)\b"
+    r"|\bunable to (?:find|locate|retrieve|identify)\b"
+    r"|\bdid not (?:return|appear|surface)\b|\bno (?:results?|matches?)\b", re.I)
+LK_BLAME = re.compile(
+    NEG_BLAMED_USER.pattern
+    + r"|\bmay (?:be|contain) (?:an? )?(?:error|typo|mistake)\b|\btypo\b"
+    r"|\bdid you mean\b|\b(?:may|might) be referring to\b|\bperhaps you meant\b",
+    re.I)
+# The clause P3.7's code writes into the lawyer's footer for a looked-up
+# instrument. Read from the footer only.
+LK_FOOTER = re.compile(r"looked up by (?:its |their )?numbers?", re.I)
+
+
+def _lk_classify(sentence: str) -> str:
+    if LK_BLAME.search(sentence):
+        return "blame"
+    neg = LK_NEGATION.search(sentence)
+    if neg:
+        # A negation governing the text ("its full text is not available"),
+        # rather than the record, is TEXT_ONLY. Decided on the words before the
+        # negation, which is where the subject sits in every stored shape.
+        head = sentence[:neg.start()]
+        tail = sentence[neg.end():neg.end() + 30]
+        if LK_TEXT_WORD.search(head) or re.match(
+                r"\s*(?:the |its |any )?(?:full |official )?(?:text|content|wording|terms)\b",
+                tail, re.I):
+            return "text_only"
+        if LK_INDEX_WORD.search(sentence) or re.search(r"\bnot (?:currently )?held\b",
+                                                       sentence, re.I):
+            return "record_absent"
+    if LK_HEDGED.search(sentence):
+        return "hedged"
+    return ""
+
+
+def _lk_probes(turn: dict, lid: str) -> dict:
+    """By-number probes of `lid` in one turn's audit: P3.7's lookup (with its
+    status) and the de facto probe that predates it, `get_legislation_text` on
+    the id, which answers a missing instrument with a 404."""
+    out = {"lookup": [], "text404": 0, "text200": 0, "via_code": 0}
+    for dg in (turn.get("audit") or {}).get("delegations") or []:
+        for tl in dg.get("tools") or []:
+            name = tl.get("name")
+            args = tl.get("args") or {}
+            if name == LOOKUP_TOOL:
+                try:
+                    got = json.loads(tl.get("raw_result") or "{}")
+                except (TypeError, ValueError):
+                    got = {}
+                if not isinstance(got, dict) or got.get("legislation_id") != lid:
+                    continue
+                out["lookup"].append(got.get("status") or "?")
+                out["via_code"] += bool(got.get("routed_by_code"))
+            elif name == "get_legislation_text" and args.get("legislation_id") == lid:
+                raw = str(tl.get("raw_result") or "")
+                if "Legislation not found" in raw:
+                    out["text404"] += 1
+                else:
+                    out["text200"] += 1
+    return out
+
+
+def lookup_rows(doc: dict) -> list:
+    """One row per graded (session, turn) slot in a run file."""
+    script = doc.get("script") or {}
+    base = str(script.get("base") or doc.get("session_id"))
+    targets = LOOKUP_TARGETS.get(base)
+    if not targets:
+        return []
+    src_turns = [t.get("from_turn") for t in (script.get("turns") or [])]
+    rows = []
+    earlier_not_held: set = set()
+    for t in doc.get("turns") or []:
+        n = t.get("turn")
+        src = src_turns[n - 1] if script and n and n <= len(src_turns) else n
+        target = targets.get(src)
+        # What earlier turns of THIS run established by lookup, so a follow-up
+        # answered from history is graded against a fact the run really has.
+        probes_all = {}
+        for tl_lid in {v[0] for v in targets.values()}:
+            probes_all[tl_lid] = _lk_probes(t, tl_lid)
+        if target:
+            lid, state, mention, graded, must_claim = target
+            ans = t.get("answer") or ""
+            prose = _without_footer(ans)
+            footer = ans[len(prose):] if ans.startswith(prose) else ANSWER_FOOTER.search(ans or "")
+            footer = footer if isinstance(footer, str) else (footer.group(0) if footer else "")
+            mrx = re.compile(mention, re.I)
+            kinds = Counter()
+            sents = []
+            for s in _sentences(prose):
+                k = _lk_classify(s) if mrx.search(s) else ""
+                if k:
+                    kinds[k] += 1
+                    sents.append((k, s))
+            p = probes_all[lid]
+            rows.append({
+                "session": base, "run": str(doc.get("session_id")), "rep": doc.get("rep", 1),
+                "turn": n, "src_turn": src, "lid": lid, "state": state, "graded": graded,
+                "must_claim": must_claim,
+                "chat_mode": t.get("chat_mode") or "?",
+                "answered": bool(ans.strip()),
+                "delegations": len((t.get("audit") or {}).get("delegations") or []),
+                "probes": p,
+                "earlier_not_held": lid in earlier_not_held,
+                "kinds": kinds, "sentences": sents,
+                "footer_lookup": bool(LK_FOOTER.search(footer or "")),
+                "links": len(MD_LINK.findall(ans)),
+                "sources_kept": int((t.get("timing") or {}).get("sources_kept") or 0),
+                "prose": len(prose),
+            })
+        for tl_lid, p in probes_all.items():
+            if "not_held" in p["lookup"]:
+                earlier_not_held.add(tl_lid)
+    return rows
+
+
+def lookup_verdict(r: dict) -> tuple:
+    """(PASS/FAIL/n/a, reason) for one slot, per the acceptance on P3.7's row."""
+    k, p = r["kinds"], r["probes"]
+    if not r["answered"]:
+        return "FAIL", "no answer"
+    if not sum(k.values()) and not r["delegations"] and not r["must_claim"]:
+        return "NO CLAIM", "no statement about it and nothing researched"
+    if r["state"] == "absent":
+        if k["blame"]:
+            return "FAIL", "questions the citation"
+        earned = "not_held" in p["lookup"] or r["earlier_not_held"]
+        if not k["record_absent"]:
+            return "FAIL", "prose does not say it is not held"
+        if not earned:
+            return "FAIL", "not-held stated without a lookup saying so"
+        if "not_held" in p["lookup"] and not r["footer_lookup"]:
+            return "FAIL", "looked up, but the footer does not say so"
+        return "PASS", ""
+    # A held record reported as "could not be found" is a false negative too:
+    # `wave2_p22_final` r2 and r3 t7 say it of the stub they had just retrieved.
+    if r["state"] == "stub":
+        if k["record_absent"] or k["hedged"] or k["blame"]:
+            return "FAIL", "a held record reported as not held or not found"
+        return "PASS", ""
+    if r["state"] == "held":
+        if k["record_absent"] or k["hedged"] or k["blame"]:
+            return "FAIL", "a held instrument reported absent or not found"
+        return "PASS", ""
+    return "n/a", ""
+
+
+def _lk_probe_str(p: dict) -> str:
+    bits = []
+    if p["lookup"]:
+        bits.append("lookup:" + "/".join(p["lookup"])
+                    + (f" (code {p['via_code']})" if p["via_code"] else ""))
+    if p["text404"]:
+        bits.append(f"text404x{p['text404']}")
+    if p["text200"]:
+        bits.append(f"text200x{p['text200']}")
+    return ", ".join(bits) or "none"
+
+
+def cmd_lookup(args) -> int:
+    """P3.7 acceptance: is an instrument named by number reported as held, held
+    without text, or not held, and is a not-held answer backed by a lookup?"""
+    docs = load_runs(Path(args.dir))
+    rows = [r for d in docs for r in lookup_rows(d)]
+    print(f"P3.7 held/absent over {args.dir}  ({len(docs)} run file(s), "
+          f"{len(rows)} graded slot(s))")
+    print("  kinds (model prose, footer removed, sentences naming the instrument): "
+          "record_absent, text_only, hedged, blame")
+    print(f"\n    {'session':<6} {'r':>1} {'t':>2}({'src':>3})  {'instrument':<13} {'state':<6} "
+          f"{'deleg':>5}  {'probes':<28} {'earlier':>7} {'rec':>3} {'txt':>3} {'hdg':>3} "
+          f"{'blm':>3} {'foot':>4} {'links':>5} {'kept':>4}  verdict")
+    fails = []
+    tally = Counter()
+    for r in sorted(rows, key=lambda r: (r["session"], r["rep"], r["turn"] or 0)):
+        v, why = lookup_verdict(r)
+        k = r["kinds"]
+        tag = v if r["graded"] else f"({v}, not graded)"
+        print(f"    {r['session']:<6} {r['rep']:>1} {r['turn']:>2}({r['src_turn']:>3})  "
+              f"{r['lid']:<13} {r['state']:<6} {r['delegations']:>5}  "
+              f"{_lk_probe_str(r['probes']):<28} {('yes' if r['earlier_not_held'] else ''):>7} "
+              f"{k['record_absent']:>3} {k['text_only']:>3} {k['hedged']:>3} {k['blame']:>3} "
+              f"{('yes' if r['footer_lookup'] else ''):>4} {r['links']:>5} "
+              f"{r['sources_kept']:>4}  {tag}{(': ' + why) if why else ''}")
+        if args.answers:
+            for kind, s in r["sentences"]:
+                print(f"          [{kind}] {s[:args.chars]}")
+        if r["graded"]:
+            tally[(r["state"], v)] += 1
+            if v == "FAIL":
+                fails.append(f"{r['session']} r{r['rep']} t{r['turn']} (export t{r['src_turn']}) "
+                             f"{r['lid']}: {why}")
+    print()
+    for state in ("absent", "stub", "held"):
+        n = sum(c for (s, _), c in tally.items() if s == state)
+        if n:
+            print(f"  {state:<6}: {tally[(state, 'PASS')]} of {n} graded slot(s) pass, "
+                  f"{tally[(state, 'NO CLAIM')]} made no claim")
+    print()
+    if fails:
+        print(f"  FINDINGS ({len(fails)}):")
+        for f in fails:
+            print(f"    [!] {f}")
+        return 1
+    print("  no findings." if rows else "  no graded slot in this directory.")
+    return 0
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     _utf8_stdout()
     p = argparse.ArgumentParser(prog="replay_report")
@@ -5754,6 +6010,13 @@ def main(argv: Iterable[str] | None = None) -> int:
                     help="print every negative sentence in each Worker report, "
                          "with the report's tool-call count (for the hand read)")
     sc.add_argument("--chars", type=int, default=400)
+    lk = sub.add_parser("lookup",
+                        help="P3.7 acceptance: an instrument named by number, "
+                             "reported held / held without text / not held, and "
+                             "whether a not-held answer rests on a lookup")
+    lk.add_argument("--answers", action="store_true",
+                    help="print every classified sentence")
+    lk.add_argument("--chars", type=int, default=300)
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")
@@ -5779,6 +6042,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "modes": cmd_modes,
         "deadend": cmd_deadend,
         "scripted": cmd_scripted,
+        "lookup": cmd_lookup,
         "blanks": cmd_blanks,
         "siblings": cmd_siblings,
         "corpus": cmd_corpus,
