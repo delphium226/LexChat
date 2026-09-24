@@ -121,6 +121,16 @@ def test_the_report_does_not_borrow_the_halts_false_cause():
         assert "timeout" not in text.lower() and "timed out" not in text.lower()
 
 
+def test_the_report_says_whose_reply_was_lost():
+    """On the Manager seam (6373 r1 t3), the first wording drew "a lost reply
+    from the database" in 4 of 4 draws: false, and it points a lawyer at the
+    index. The lost reply is the model's own write-up."""
+    r = lost_worker_report(0)
+    assert "language model's final reply" in r
+    assert "NOT a fault in the legislation index or any other database" in r
+    assert "not the database" in r
+
+
 def test_the_report_permits_one_more_delegation_where_the_halt_forbids_it():
     """After 15 of 18 stored lost worker reports the Manager re-delegated and
     the later worker returned findings. The halt's "Do NOT call
