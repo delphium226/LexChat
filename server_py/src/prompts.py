@@ -176,7 +176,7 @@ _RELATIONSHIP_RULE = """COMMENCEMENT, AMENDMENT, REPEAL AND REVOCATION (relation
 # one governs the sentence written when that route comes back empty.
 #
 # **Removing the section was the obvious fix and is a trap.** "Jurisdiction &
-# Status" is mandatory in `_REPORT_SECTIONS` (agent_core.py), so an instruction
+# Status" is mandatory in `REPORT_SECTIONS` (below; `agent_core._REPORT_SECTIONS`), so an instruction
 # to omit it makes `_report_needs_reformat` judge the report malformed and spends
 # an A4 reformat call re-adding the heading — which the model then fills with the
 # same conflation. So the heading stays and the permitted content changes.
@@ -1230,11 +1230,139 @@ def get_planner_system_prompt(research_mode: str = "legislation_only", cfg: dict
     return "\n\n".join(parts)
 
 
-DEEP_RESEARCH_SYNTHESIS_PROMPT = """You are the Senior Legal Analyst composing the final report of a
+# ---------------------------------------------------------------------------
+# The Deep Research synthesis (FIX_PLAN P4.7, absorbing docs/TODO.md D17)
+# ---------------------------------------------------------------------------
+#
+# The required report sections per research type, mirroring the OUTPUT
+# STRUCTURE block of each Worker prompt above. ONE definition: the A4 reformat
+# check (`agent_core._REPORT_SECTIONS`, the same object) grades a Worker report
+# against it, and the synthesis prompt below is built from it. It lives here,
+# not in agent_core, because agent_core imports this module.
+REPORT_SECTIONS = {
+    "legislation_only": [
+        "Summary Answer (BLUF)", "Detailed Analysis", "Jurisdiction & Status", "References",
+    ],
+    "case_law_only": [
+        "Summary Answer (BLUF)", "Key Cases", "Analysis", "Jurisdiction & Currency", "References",
+    ],
+    "legislation_and_case_law": [
+        "Summary Answer (BLUF)", "Statutory Framework", "Key Cases", "Jurisdiction & Status", "References",
+    ],
+    "parliamentary_records": [
+        "Summary (BLUF)", "Key Speeches / Evidence", "Source & Date", "References",
+    ],
+    "westminster_records": [
+        "Summary (BLUF)", "Key Contributions", "House & Date", "References",
+    ],
+}
+
+# What each research type's Workers can search, and what they cannot. The
+# synthesis is otherwise told only the plan's free-text scope note, which is
+# how a 'Legislation only' report could present case law as searched and
+# empty (D17). A type absent here falls through to 'legislation_only', as
+# REPORT_SECTIONS does (e.g. 'drafting', which has no Worker on this branch).
+_SYNTHESIS_SOURCES = {
+    "legislation_only": (
+        "UK legislation, in the legislation index", "case law (court judgments)",
+        "The legislation retrieved in this research does not establish",
+    ),
+    "case_law_only": (
+        "court judgments, in the National Archives' Find Case Law service",
+        "the text of legislation",
+        "The judgments retrieved in this research do not establish",
+    ),
+    "legislation_and_case_law": (
+        "UK legislation, in the legislation index, and court judgments, in the National "
+        "Archives' Find Case Law service", None,
+        "The legislation and judgments retrieved in this research do not establish",
+    ),
+    "parliamentary_records": (
+        "Scottish Parliament records: the Official Report of plenary and committee "
+        "proceedings, written answers and bills",
+        "the text of legislation or case law",
+        "The Scottish Parliament records retrieved in this research do not establish",
+    ),
+    "westminster_records": (
+        "UK Parliament records (Hansard)", "the text of legislation or case law",
+        "The Hansard records retrieved in this research do not establish",
+    ),
+}
+
+# P2.5's currency rule, verbatim where the type has a Jurisdiction & Status
+# section; a type without one carries it as a rule instead, because a report
+# on debates or judgments can still say an Act is in force.
+_SYNTHESIS_STATUS = (
+    "Territorial extent where the findings report it. For in-force status, report ONLY a commencement, repeal or revocation that a step finding attributes to a retrieved change record, and name the instrument it came from. Where the findings do not establish currency — which is the usual case — say that in-force status was not verified, rather than omitting the question or asserting that the legislation is current. A text-version marker (`final`, `revised`, `stub`) is not evidence of currency, and neither is the absence of a repeal from the findings. Never write that all cited legislation is in force. Do NOT omit this section."
+)
+_SYNTHESIS_IN_FORCE_RULE = """- IN-FORCE STATUS: if the report says whether legislation is in force, report ONLY a commencement,
+  repeal or revocation that a step finding attributes to a retrieved change record, and name the
+  instrument it came from; otherwise say that in-force status was not verified.
+  Never write that all cited legislation is in force."""
+
+# What each section holds. Keyed by the section's name in REPORT_SECTIONS;
+# `{gap}` is the type's gap sentence.
+_SYNTHESIS_SECTION_TEXT = {
+    "Summary Answer (BLUF)": (
+        "A 2-4 sentence direct answer to the user's question, followed by a\n"
+        "   **Key findings** bullet list — one line per legal issue (not per research step), each with its\n"
+        "   pinpoint citation. Material gaps belong HERE, not buried in the analysis: if an aspect of the\n"
+        "   question was not answered, say so in the summary, by what happened (e.g. \"{gap} X\")."
+    ),
+    "Summary (BLUF)": (
+        "A 2-4 sentence direct answer to the user's question, followed by a\n"
+        "   **Key findings** bullet list — one line per issue (not per research step), each with its\n"
+        "   citation. Material gaps belong HERE, not buried in the detail: if an aspect of the question\n"
+        "   was not answered, say so in the summary, by what happened (e.g. \"{gap} X\")."
+    ),
+    "Detailed Analysis": (
+        "The integrated substance, organised by issue (not by research step). Quote\n"
+        "   key statutory text or judicial language where the findings provide it."
+    ),
+    "Statutory Framework": (
+        "The relevant legislative provisions, organised by issue (not by research\n"
+        "   step), with pinpoint citations. Quote key statutory text where the findings provide it."
+    ),
+    "Key Cases": (
+        "For each case the findings report: its name, neutral citation, court and date, and what\n"
+        "   it decides on the question (and how it interprets or applies any provision in issue)."
+    ),
+    "Analysis": (
+        "How the cases apply to the question, organised by issue (not by research step). Quote\n"
+        "   judicial language where the findings provide it."
+    ),
+    "Jurisdiction & Status": _SYNTHESIS_STATUS,
+    "Jurisdiction & Currency": (
+        "The geographic scope of the decisions, and whether a later decision in the\n"
+        "   findings modified an earlier one. Where the findings do not report a decision's later treatment,\n"
+        "   say so rather than asserting that it remains good law."
+    ),
+    "Key Speeches / Evidence": (
+        "Relevant quotes and context from the retrieved records, organised by issue\n"
+        "   (not by research step), each with its citation."
+    ),
+    "Source & Date": (
+        "Holyrood plenary or SP committee, and the date(s) of the proceedings, as the\n"
+        "   findings report them."
+    ),
+    "Key Contributions": (
+        "Relevant quotes and context from the retrieved records, organised by issue\n"
+        "   (not by research step), each with its citation."
+    ),
+    "House & Date": (
+        "Which House and location (Commons Chamber, Lords Chamber, Westminster Hall, Public\n"
+        "   Bill Committee), and the date(s) of the proceedings, as the findings report them."
+    ),
+    "References": "A complete list of ALL sources cited across every step. Never drop this section.",
+}
+
+_SYNTHESIS_BODY = """You are the Senior Legal Analyst composing the final report of a
 multi-step Deep Research run for a UK government legal department. Your readers are qualified lawyers.
 
 You will receive the approved research plan and the findings of each research step. Each step was
 researched independently against the primary sources; the findings are the ONLY material you may use.
+
+{sources}
 
 YOUR TASK:
 Compose ONE integrated report answering the user's original question — not a step-by-step recap.
@@ -1246,20 +1374,64 @@ CRITICAL RULES:
 - CITATION PRESERVATION: pass through every citation and URL from the findings verbatim — never alter,
   shorten, or remove them. A pinpoint stays a pinpoint: where a finding cites s.12(3) or Sch 2 para 3(1),
   so does the report, even when the link goes to the whole section. Never shorten it to s.12.
-- If a step's findings report that nothing was found, say so explicitly in the relevant part of the
-  report rather than silently omitting the topic.
-- If findings from different steps conflict, present both and flag the discrepancy.
+- GAPS: describe every gap by what actually happened, and never more widely than that.
+  * A source this research did not search was NOT SEARCHED: say it was not searched in this research.
+    Never write that it was searched, or that nothing was found in it.
+  * A step that halted or failed DID NOT COMPLETE: say so. What it did not reach is not a finding that
+    the material does not exist.
+  * Only a completed search can find nothing, and only in the sources it searched. Where a step's
+    findings report that its searches found nothing, say so explicitly in the relevant part of the
+    report, in those terms, rather than silently omitting the topic or stating that the material
+    does not exist: e.g. "{gap} X".
+- If findings from different steps conflict, present both and flag the discrepancy.{extra_rules}
 
 OUTPUT STRUCTURE (Use Markdown):
-1. **Summary Answer (BLUF):** A 2-4 sentence direct answer to the user's question, followed by a
-   **Key findings** bullet list — one line per legal issue (not per research step), each with its
-   pinpoint citation. Material gaps belong HERE, not buried in the analysis: if a step found nothing
-   on an aspect of the question, say so in the summary (e.g. "No reported case law was found on X").
-2. **Detailed Analysis:** The integrated substance, organised by issue (not by research step). Quote
-   key statutory text or judicial language where the findings provide it.
-3. **Jurisdiction & Status:** Territorial extent where the findings report it. For in-force status, report ONLY a commencement, repeal or revocation that a step finding attributes to a retrieved change record, and name the instrument it came from. Where the findings do not establish currency — which is the usual case — say that in-force status was not verified, rather than omitting the question or asserting that the legislation is current. A text-version marker (`final`, `revised`, `stub`) is not evidence of currency, and neither is the absence of a repeal from the findings. Never write that all cited legislation is in force. Do NOT omit this section.
-4. **References:** A complete list of ALL sources cited across every step. Never drop this section.
+{structure}
 
 Review before responding: does every claim trace to a step finding, and is every citation preserved
 verbatim? If yes, proceed."""
+
+
+def get_deep_research_synthesis_prompt(research_mode: str = "legislation_only") -> str:
+    """The Deep Research synthesis system prompt for a research type (P4.7).
+
+    It used to be one constant for every type: its model gap sentence was
+    "No reported case law was found on X", and its section list was the
+    legislation Worker's, so a 'Legislation only' report was scripted to
+    present an unsearched source as searched and a Holyrood report was told
+    to write a territorial-extent and in-force section (D17). Now the gap
+    wording is Thomas's (describe a gap by what happened: not searched, did
+    not complete, or searched and not established, only in what was
+    searched), the prompt names what the type searched and did not, and the
+    sections come from REPORT_SECTIONS. The research type is passed in
+    explicitly by the caller, not read from the request context, so the seam
+    tool can rebuild the prompt of a stored turn.
+    """
+    if research_mode not in REPORT_SECTIONS or research_mode not in _SYNTHESIS_SOURCES:
+        research_mode = "legislation_only"
+    searched, not_searched, gap = _SYNTHESIS_SOURCES[research_mode]
+    sources = f"WHAT THIS RESEARCH SEARCHED: {searched}."
+    if not_searched:
+        sources += (
+            f"\nIt did NOT search {not_searched}; that is outside this research type. Never write"
+            " that it was searched, or that nothing was found in it."
+        )
+    sections = REPORT_SECTIONS[research_mode]
+    structure = "\n".join(
+        f"{i}. **{name}:** {_SYNTHESIS_SECTION_TEXT[name]}"
+        for i, name in enumerate(sections, 1)
+    )
+    extra = "" if "Jurisdiction & Status" in sections else "\n" + _SYNTHESIS_IN_FORCE_RULE
+    # str.replace, not str.format: the prompt may one day carry a literal brace.
+    return (
+        _SYNTHESIS_BODY.replace("{sources}", sources)
+        .replace("{extra_rules}", extra)
+        .replace("{structure}", structure)
+        .replace("{gap}", gap)
+    )
+
+
+# The 'Legislation only' synthesis prompt, kept under its old name: the
+# tests that pin P3.1's pinpoint rule and P2.5's currency rules import it.
+DEEP_RESEARCH_SYNTHESIS_PROMPT = get_deep_research_synthesis_prompt("legislation_only")
 

@@ -122,7 +122,27 @@ def test_the_synthesis_payload_is_the_products_own(run_file):
     assert "PINPOINTS TO KEEP" in body                 # P3.1
     assert f"- {S57}: s.57(3)(a)" in body
     assert "step 2 of 2" in body or "incomplete" in body.lower()   # P2.1/P2.2
-    assert built[0]["content"] == agent_core.DEEP_RESEARCH_SYNTHESIS_PROMPT
+    assert built[0]["content"] == agent_core.get_deep_research_synthesis_prompt(
+        "legislation_only")
+
+
+@pytest.mark.parametrize("research_mode", [
+    "legislation_and_case_law", "parliamentary_records"])
+def test_the_synthesis_payload_carries_the_turns_research_type(run_file, research_mode):
+    """P4.7: the product builds the synthesis prompt per research type, so the
+    seam must pass the stored turn's type, or it replays the wrong prompt."""
+    doc, turn = sr.load_turn(run_file, 1)
+    turn["research_mode"] = research_mode
+    built = sr.synthesis_messages(doc, turn)
+    assert built[0]["content"] == agent_core.get_deep_research_synthesis_prompt(research_mode)
+
+
+def test_an_old_run_file_takes_the_type_the_audit_recorded(run_file):
+    """A run file written before turns carried a type: the audit trace's."""
+    doc, turn = sr.load_turn(run_file, 1)
+    doc["filters"]["research_mode"] = None
+    turn["audit"]["research_mode"] = "legislation_and_case_law"
+    assert sr._cfg_for(doc, turn)["_research_mode"] == "legislation_and_case_law"
 
 
 def test_a_turn_with_no_step_findings_is_refused(run_file):
@@ -283,10 +303,21 @@ def test_without_fix_replaces_only_the_literal(run_file, monkeypatch):
 def test_the_prompt_reader_finds_a_real_constant():
     """Reads `prompts.py` at a revision with a regex; pinned against HEAD so a
     change to how the constants are written is caught here."""
-    text = sr._prompt_constant_at("HEAD", "DEEP_RESEARCH_SYNTHESIS_PROMPT")
-    assert "CITATION PRESERVATION" in text
+    # A constant that is still one literal. The synthesis prompt stopped being
+    # one at P4.7, so it is read at the commit before (`9cacde8`) below.
+    text = sr._prompt_constant_at("HEAD", "WORKER_SYSTEM_PROMPT")
+    assert "OUTPUT STRUCTURE" in text
     with pytest.raises(SystemExit):
         sr._prompt_constant_at("HEAD", "NO_SUCH_PROMPT_CONSTANT")
+
+
+def test_the_synthesis_prompt_before_p47_is_the_one_literal():
+    """At the commit P4.7's acceptance was booked on, the synthesis prompt is
+    the single constant, whatever the research type. (Needs git.)"""
+    old = sr._synthesis_prompt_at("9cacde8", "parliamentary_records")
+    assert "No reported case law was found on X" in old
+    assert "Jurisdiction & Status" in old
+    assert old == sr._synthesis_prompt_at("9cacde8", "legislation_only")
 
 
 # --- 5. the command ---------------------------------------------------------

@@ -208,12 +208,12 @@ def synthesis_messages(doc: dict, turn: dict, without_fix: bool = False,
     if not any(f["content"] for f in findings):
         raise SystemExit("this turn has no Deep Research step findings "
                          "(is it a `plan` turn?)")
+    research_mode = _cfg_for(doc, turn)["_research_mode"]
     messages = agent_core.build_synthesis_messages(
         turn.get("question") or "", turn.get("plan") or {}, findings,
-        halts_from(turn), len(findings),
+        halts_from(turn), len(findings), research_mode=research_mode,
     )
     if without_fix:
-        research_mode = _cfg_for(doc, turn)["_research_mode"]
         messages[0]["content"] = _synthesis_prompt_at(rev, research_mode)
         if not rev_has_pinpoint_block(rev):
             messages[1]["content"] = strip_pinpoint_block(messages[1]["content"])

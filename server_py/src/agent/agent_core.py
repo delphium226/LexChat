@@ -14,7 +14,8 @@ import uuid
 from typing import Callable, Optional
 
 from ..prompts import (
-    DEEP_RESEARCH_SYNTHESIS_PROMPT,
+    REPORT_SECTIONS,
+    get_deep_research_synthesis_prompt,
     get_manager_system_prompt,
     get_planner_system_prompt,
     get_worker_system_prompt,
@@ -72,24 +73,9 @@ def _get_cfg() -> dict:
 # OUTPUT STRUCTURE block in each worker system prompt (prompts.py). Used both
 # to grade a returned report and to tell the model the target shape on a
 # reformat retry. Conversational chat mode is deliberately unstructured and is
-# never validated.
-_REPORT_SECTIONS = {
-    "legislation_only": [
-        "Summary Answer (BLUF)", "Detailed Analysis", "Jurisdiction & Status", "References",
-    ],
-    "case_law_only": [
-        "Summary Answer (BLUF)", "Key Cases", "Analysis", "Jurisdiction & Currency", "References",
-    ],
-    "legislation_and_case_law": [
-        "Summary Answer (BLUF)", "Statutory Framework", "Key Cases", "Jurisdiction & Status", "References",
-    ],
-    "parliamentary_records": [
-        "Summary (BLUF)", "Key Speeches / Evidence", "Source & Date", "References",
-    ],
-    "westminster_records": [
-        "Summary (BLUF)", "Key Contributions", "House & Date", "References",
-    ],
-}
+# never validated. Defined in prompts.py since P4.7, because the Deep Research
+# synthesis prompt is built from the same lists; this is the same object.
+_REPORT_SECTIONS = REPORT_SECTIONS
 
 # A section header line: an ATX header (`## Foo`) or a bold label at the start of
 # a line, optionally list-numbered (`1. **Foo:**` / `- **Foo**`). Captures the
@@ -1049,8 +1035,14 @@ def build_synthesis_messages(
     step_findings: list,
     halts: Optional[list] = None,
     steps_count: Optional[int] = None,
+    research_mode: str = "legislation_only",
 ) -> list:
     """The Deep Research synthesis call's messages, from the steps' findings.
+
+    `research_mode` picks the system prompt (P4.7): what the research type
+    searched and did not, and its report sections. It is a parameter rather
+    than a read of the request context so the seam tool can rebuild a stored
+    turn's payload with that turn's type.
 
     **Extracted so it has one definition.** `tools/seam_replay.py` rebuilds this
     seam from a stored replay run file and makes the single synthesis call, for
@@ -1078,7 +1070,7 @@ def build_synthesis_messages(
         halts or [], steps_count if steps_count is not None else len(step_findings)
     )
     return [
-        {"role": "system", "content": DEEP_RESEARCH_SYNTHESIS_PROMPT},
+        {"role": "system", "content": get_deep_research_synthesis_prompt(research_mode)},
         {"role": "user", "content": synthesis_user},
     ]
 
@@ -1189,7 +1181,8 @@ async def run_deep_research(
 
     # Synthesis: one tool-free call composing the integrated report.
     synthesis_messages = build_synthesis_messages(
-        user_query, approved_plan, step_findings, halts, len(steps)
+        user_query, approved_plan, step_findings, halts, len(steps),
+        research_mode=_get_cfg().get("_research_mode") or "legislation_only",
     )
 
     async def _no_tools_executor(name: str, args: dict) -> str:

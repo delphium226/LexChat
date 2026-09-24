@@ -36,7 +36,9 @@ chats and one user). So it is reconstructed from the answer text:
     a turn ran Deep Research  <=>  its answer contains "**Key findings"
 
 `DEEP_RESEARCH_SYNTHESIS_PROMPT` (prompts.py:1046) is the only prompt in the
-codebase that asks for a "**Key findings** bullet list"; no worker or manager
+codebase that asks for a "**Key findings** bullet list" (since P4.7, the one
+per research type that `get_deep_research_synthesis_prompt` builds, every one
+of which keeps it: `tests/test_synthesis_prompt.py`); no worker or manager
 prompt mentions it. Measured over the 47 sessions whose thread-level mode is
 known, the marker is exact:
 
@@ -209,8 +211,9 @@ RESEARCH_MODES = ("legislation_only", "case_law_only", "legislation_and_case_law
 RESEARCH_READ_VALUES = RESEARCH_MODES + ("case_law_included", "unknown")
 RESEARCH_READ_BASES = ("answer", "lawyer", "bracketed")
 
-# The Deep Research fingerprint. Only DEEP_RESEARCH_SYNTHESIS_PROMPT asks for a
-# "**Key findings** bullet list" — see the module docstring for the measurement.
+# The Deep Research fingerprint. Only the Deep Research synthesis prompt asks
+# for a "**Key findings** bullet list" — see the module docstring for the
+# measurement.
 DR_MARKER = re.compile(r"\*\*key\s*findings", re.IGNORECASE)
 
 # The Research-mode fingerprint (P0.5). The research Worker's OUTPUT STRUCTURE
