@@ -1306,14 +1306,16 @@ _SYNTHESIS_SECTION_TEXT = {
     "Summary Answer (BLUF)": (
         "A 2-4 sentence direct answer to the user's question, followed by a\n"
         "   **Key findings** bullet list — one line per legal issue (not per research step), each with its\n"
-        "   pinpoint citation. Material gaps belong HERE, not buried in the analysis: if an aspect of the\n"
-        "   question was not answered, say so in the summary, by what happened (e.g. \"{gap} X\")."
+        "   pinpoint citation, under that bold label. Material gaps belong HERE, not buried in the\n"
+        "   analysis: if an aspect of the question was not answered, say so in the summary, by what\n"
+        "   happened (e.g. \"{gap} X\")."
     ),
     "Summary (BLUF)": (
         "A 2-4 sentence direct answer to the user's question, followed by a\n"
         "   **Key findings** bullet list — one line per issue (not per research step), each with its\n"
-        "   citation. Material gaps belong HERE, not buried in the detail: if an aspect of the question\n"
-        "   was not answered, say so in the summary, by what happened (e.g. \"{gap} X\")."
+        "   citation, under that bold label. Material gaps belong HERE, not buried in the detail: if an\n"
+        "   aspect of the question was not answered, say so in the summary, by what happened\n"
+        "   (e.g. \"{gap} X\")."
     ),
     "Detailed Analysis": (
         "The integrated substance, organised by issue (not by research step). Quote\n"
@@ -1374,6 +1376,8 @@ CRITICAL RULES:
 - CITATION PRESERVATION: pass through every citation and URL from the findings verbatim — never alter,
   shorten, or remove them. A pinpoint stays a pinpoint: where a finding cites s.12(3) or Sch 2 para 3(1),
   so does the report, even when the link goes to the whole section. Never shorten it to s.12.
+  Keep each citation as the Markdown link the findings give it ([label](url)), in the body and in
+  References alike: never turn a link into a bare URL or into plain text.
 - GAPS: describe every gap by what actually happened, and never more widely than that.
   * A source this research did not search was NOT SEARCHED: say it was not searched in this research.
     Never write that it was searched, or that nothing was found in it.

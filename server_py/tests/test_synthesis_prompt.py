@@ -94,10 +94,21 @@ def test_every_type_keeps_p25s_currency_rules(rm):
 
 
 @pytest.mark.parametrize("rm", TYPES)
+def test_every_type_keeps_links_as_links(rm):
+    """Found on the seam (Session 26): with the first per-type wording, one
+    payload (6408) wrote its references as bare URLs in 2 of 4 draws, against
+    0 of 4 before."""
+    assert "never turn a link into a bare URL or into plain text" in synth(rm)
+
+
+@pytest.mark.parametrize("rm", TYPES)
 def test_every_type_carries_the_deep_research_fingerprint(rm):
     """`replay_set` reads '**Key findings' as the Deep Research marker, and the
-    P0.5 mode evidence rests on it."""
-    assert "**Key findings**" in synth(rm)
+    P0.5 mode evidence rests on it. The label is named as a label because the
+    first per-type wording lost it on a hybrid payload in 2 of 4 draws."""
+    p = synth(rm)
+    assert "**Key findings**" in p
+    assert "under that bold label" in p
 
 
 # --- the gap wording ---------------------------------------------------------
