@@ -498,7 +498,7 @@ def test_audit_event_shape():
     # asserting the literal here just makes the bump noisy without checking
     # that the event carries the version the module declares.
     assert event["schema_version"] == AUDIT_SCHEMA_VERSION
-    assert AUDIT_SCHEMA_VERSION == 5  # v5: mode_change (P4.1); v4: halted.written_up (P3.8); v3: empty_completions[] (P4.2)
+    assert AUDIT_SCHEMA_VERSION == 6  # v6: delegations[].lost (P4.5); v5: mode_change (P4.1); v4: halted.written_up (P3.8); v3: empty_completions[] (P4.2)
     assert "mode_change" in event and event["mode_change"] is None
     # Present and empty on a healthy request, which is the whole point: a
     # consumer can tell "no completion was lost" from "this trace predates the
@@ -517,6 +517,20 @@ def test_audit_event_shape():
     assert event["timings"]["total_ms"] == 1234
     # Must survive json.dumps — it goes down an SSE stream.
     assert json.loads(json.dumps(event))["request_id"] == "req123"
+
+
+def test_a_delegation_carries_lost_as_null_unless_its_reply_was_lost():
+    """Schema v6 (P4.5). Present and null on every delegation whose worker
+    answered, so a consumer can tell "answered" from "predates the field"."""
+    audit = AuditCollector("req123")
+    ok = audit.start_delegation("brief")
+    audit.end_delegation(ok, report="a report")
+    assert ok["lost"] is None
+    gone = audit.start_delegation("brief")
+    audit.end_delegation(gone, report="[label]",
+                         lost={"reason": "empty_completion", "sources_retrieved": 3})
+    assert gone["lost"] == {"reason": "empty_completion", "sources_retrieved": 3}
+    assert gone["halted"] is None  # a lost reply is not a halt
 
 
 def test_audit_field_truncation_is_marked():

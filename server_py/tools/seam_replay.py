@@ -40,6 +40,15 @@ Session 17.
 a SUMMARISED result from each tool's recorded `raw_result`, through the
 product's own builder — so a block built since the run was recorded reaches
 the seam. The recorded payload is the before-column; `--from-raw` the after.
+
+`--apply-lost` (synthesis and Manager seams, P4.5) rebuilds every recorded
+report whose worker's final reply was lost (no halt, no error, and a report
+that is empty or the scope block alone) as the product now builds it: the
+label from `lost_worker_report`, with the source count the product would have
+had (re-extracted from the recorded raw results by the product's own
+extractor), then the recorded report. The synthesis is also handed the lost
+steps (`incomplete_steps_note`), and the draw is put through the answer seam's
+`apply_lost_disclosure`. Without it the recorded payload is the before-column.
 """
 
 from __future__ import annotations
@@ -65,7 +74,11 @@ from src.utils.citation_links import (  # noqa: E402
     provision_url_block,
     restore_dropped_siblings,
 )
-from src.utils.research_halt import halt_writeup_instruction  # noqa: E402
+from src.utils.research_halt import (  # noqa: E402
+    apply_lost_disclosure,
+    halt_writeup_instruction,
+    lost_worker_report,
+)
 from src.utils.search_scope import strip_scope_blocks  # noqa: E402
 from src.utils.stopwatch import TimingCollector  # noqa: E402
 from src.utils.suggestions import extract_suggestions  # noqa: E402
@@ -90,11 +103,62 @@ def load_turn(run_path: Path, turn: int) -> tuple:
     )
 
 
-def step_findings_from(turn: dict) -> list:
+def is_lost_shaped(dg: dict) -> bool:
+    """A recorded delegation whose worker's final reply was lost, before
+    P4.5 labelled it: it did not halt or raise, and its report is empty or
+    the scope block alone (`replay_report.lost_sites`' reading)."""
+    if dg.get("halted") or dg.get("error") or dg.get("lost"):
+        return False
+    return rr._report_shape(dg.get("report") or "", None) in ("empty", "scope")
+
+
+def sources_retrieved(dg: dict) -> int:
+    """The sources the product's accumulator would have held for this worker
+    run, re-extracted from the recorded raw results by the product's own
+    extractor, so the label's count is the one the product would state."""
+    from src.agent.agent_shared import _extract_sources_from_tool
+
+    acc: list = []
+    for t in dg.get("tools") or []:
+        try:
+            _extract_sources_from_tool(t.get("name") or "", t.get("args") or {},
+                                       t.get("raw_result") or "", acc)
+        except Exception:  # noqa: BLE001 — a count, not a gate
+            pass
+    return len(acc)
+
+
+def lost_report_for(dg: dict) -> str:
+    """The recorded report as the product now builds it for a lost reply:
+    the label, then what the step recorded (its scope block, or nothing)."""
+    return lost_worker_report(sources_retrieved(dg)) + (dg.get("report") or "")
+
+
+def lost_from(turn: dict, apply_lost: bool = False) -> list:
+    """The lost plan steps, in the shape `incomplete_steps_note` expects:
+    recorded as `lost` (schema v6), or lost-shaped when `apply_lost`."""
+    out = []
+    for dg in (turn.get("audit") or {}).get("delegations", []):
+        if dg.get("step") is None:
+            continue
+        if dg.get("lost"):
+            rec = dict(dg["lost"])
+        elif apply_lost and is_lost_shaped(dg):
+            rec = {"reason": "empty_completion", "sources_retrieved": sources_retrieved(dg)}
+        else:
+            continue
+        out.append({**rec, "scope": "step", "step": dg.get("step"),
+                    "title": dg.get("title") or ""})
+    return out
+
+
+def step_findings_from(turn: dict, apply_lost: bool = False) -> list:
     """The Deep Research step findings, as `run_deep_research` assembled them.
 
     The stored report is what the step handed the synthesis, scope block and
     all, so it is used verbatim. `plan` gives each step its title and detail.
+    With `apply_lost` (P4.5), a lost-shaped report is rebuilt by
+    `lost_report_for`.
     """
     plan_steps = ((turn.get("plan") or {}).get("steps")) or []
     by_step = {}
@@ -108,7 +172,8 @@ def step_findings_from(turn: dict) -> list:
         findings.append({
             "title": step.get("title") or f"Step {i}",
             "detail": step.get("detail") or "",
-            "content": dg.get("report") or "",
+            "content": (lost_report_for(dg) if apply_lost and dg and is_lost_shaped(dg)
+                        else dg.get("report") or ""),
         })
     return findings
 
@@ -198,13 +263,15 @@ def strip_pinpoint_block(body: str) -> str:
 
 
 def synthesis_messages(doc: dict, turn: dict, without_fix: bool = False,
-                       rev: str = PRE_P31_REV) -> list:
+                       rev: str = PRE_P31_REV, apply_lost: bool = False) -> list:
     """The Deep Research synthesis seam, via the product's own builder.
 
     `--without-fix` rebuilds it as the code at `rev` did: that revision's
     prompt for the turn's research type, and the pinpoint block only if that
-    revision's builder added one. Nothing else in the payload changes."""
-    findings = step_findings_from(turn)
+    revision's builder added one. Nothing else in the payload changes.
+    `--apply-lost` (P4.5): lost-shaped step reports are labelled and the lost
+    steps are named in the note."""
+    findings = step_findings_from(turn, apply_lost)
     if not any(f["content"] for f in findings):
         raise SystemExit("this turn has no Deep Research step findings "
                          "(is it a `plan` turn?)")
@@ -212,6 +279,7 @@ def synthesis_messages(doc: dict, turn: dict, without_fix: bool = False,
     messages = agent_core.build_synthesis_messages(
         turn.get("question") or "", turn.get("plan") or {}, findings,
         halts_from(turn), len(findings), research_mode=research_mode,
+        lost=lost_from(turn, apply_lost),
     )
     if without_fix:
         messages[0]["content"] = _synthesis_prompt_at(rev, research_mode)
@@ -474,7 +542,7 @@ def manager_cfg(doc: dict, turn: dict, messages: list) -> dict:
 
 
 def manager_messages(doc: dict, turn: dict, without_fix: bool = False,
-                     rev: str = PRE_P31_REV) -> list:
+                     rev: str = PRE_P31_REV, apply_lost: bool = False) -> list:
     """The Manager's composition seam (P3.13): the conversation, then each
     recorded delegation as the `delegate_research` call it was and the
     `[Research Agent Result]` it returned, then the call that composes.
@@ -491,7 +559,8 @@ def manager_messages(doc: dict, turn: dict, without_fix: bool = False,
     (`wave3_p313` rep 1 turn 1), and with the tools offered it reproduced the
     miss in 3 of 3. `--no-tools` is the tool-free draw. `--without-fix`
     swaps the conversational Manager body for the one at `rev` and hands over
-    the bare report.
+    the bare report. `--apply-lost` (P4.5) hands over a lost-shaped report as
+    the product now builds it (`lost_report_for`).
     """
     from src.prompts import get_manager_system_prompt
     from src.utils.mode_change import apply_mode_change_marker
@@ -521,7 +590,8 @@ def manager_messages(doc: dict, turn: dict, without_fix: bool = False,
             "id": cid, "type": "function", "function": {
                 "name": "delegate_research",
                 "arguments": json.dumps({"query": dg.get("brief") or ""})}}]})
-        report = dg.get("report") or ""
+        report = (lost_report_for(dg) if apply_lost and is_lost_shaped(dg)
+                  else dg.get("report") or "")
         # The product's own builder (P3.13's sibling links included); the
         # pre-fix result is the bare report under the same prefix.
         messages.append({"role": "tool", "tool_call_id": cid,
@@ -692,6 +762,11 @@ def main(argv: Optional[list] = None) -> int:
                    help="worker seam only: rebuild each summarised result's "
                         "appended blocks from its recorded raw_result through "
                         "the product's builder (P3.11's outline reaches the seam)")
+    p.add_argument("--apply-lost", action="store_true",
+                   help="synthesis and manager seams (P4.5): rebuild each lost-shaped "
+                        "recorded report (no halt, no error, empty or scope block "
+                        "alone) through the product's lost-report builder, and put "
+                        "the draw through the answer seam's lost disclosure")
     p.add_argument("--print", action="store_true", help="print the answer")
     p.add_argument("--no-tools", action="store_true",
                    help="manager seam only: make the call tool-free. By default "
@@ -724,12 +799,40 @@ def main(argv: Optional[list] = None) -> int:
     if args.seam == "worker":
         kwargs["delegation"] = args.delegation
         kwargs["from_raw"] = args.from_raw
+        if args.apply_lost:
+            raise SystemExit("--apply-lost is a synthesis or manager seam option")
+    else:
+        kwargs["apply_lost"] = args.apply_lost
     messages = build(doc, turn, **kwargs)
+    # P4.5: what the answer seam does with a lost step, in code.
+    lost_for_answer, any_completed = [], True
+    _dgs = (turn.get("audit") or {}).get("delegations", [])
+    if args.seam == "synthesis":
+        lost_for_answer = lost_from(turn, args.apply_lost)
+        any_completed = any(not (d.get("lost") or d.get("halted") or d.get("error")
+                                 or (args.apply_lost and is_lost_shaped(d)))
+                            for d in _dgs if d.get("step") is not None)
+    elif args.seam == "manager":
+        mgr = [d for d in _dgs if d.get("step") is None]
+        is_lost = [bool(d.get("lost") or (args.apply_lost and is_lost_shaped(d)))
+                   for d in mgr]
+        done = [not is_lost[i] and not d.get("halted") and not d.get("error")
+                for i, d in enumerate(mgr)]
+        lost_for_answer = [{"reason": "empty_completion"}
+                           for i in range(len(mgr)) if is_lost[i] and not any(done[i + 1:])]
+        any_completed = any(done)
 
     chars = sum(len(m.get("content") or "") for m in messages)
     print(f"seam={args.seam}  session={sid} turn={args.turn}  "
           f"{'WITHOUT fix (' + args.rev + ')' if args.without_fix else 'current code'}")
     print(f"  payload: {len(messages)} message(s), {chars:,} chars")
+    if args.seam in ("synthesis", "manager"):
+        labelled = sum(1 for m in messages
+                       if "[Research Incomplete — answer lost]" in (m.get("content") or ""))
+        print(f"  lost-report labels in the payload: {labelled}"
+              f"{'  (--apply-lost)' if args.apply_lost else '  (as recorded)'}; "
+              f"lawyer notice at the answer seam: "
+              f"{'yes' if lost_for_answer else 'no'}")
     if args.seam == "manager":
         reports = [m for m in messages if m.get("role") == "tool"]
         print(f"  delegations: {len(reports)}")
@@ -761,6 +864,8 @@ def main(argv: Optional[list] = None) -> int:
         content, cost, model = asyncio.run(run_seam(messages, cfg, tools))
         total += cost
         clean, _ = strip_scope_blocks(content)
+        if args.seam in ("synthesis", "manager"):
+            clean, _ = apply_lost_disclosure(clean, lost_for_answer, any_completed)
         if args.seam == "manager":
             # What the product does to the Manager's text before the lawyer sees
             # it, in the order `process_user_request` does it.
@@ -782,7 +887,8 @@ def main(argv: Optional[list] = None) -> int:
         if args.out:
             d = Path(args.out)
             d.mkdir(parents=True, exist_ok=True)
-            suffix = "_nofix" if args.without_fix else ""
+            suffix = ("_nofix" if args.without_fix else "") + (
+                "_lost" if args.apply_lost else "")
             (d / f"{sid}_t{args.turn}_{args.seam}{suffix}_rep{rep}.md").write_text(
                 clean, encoding="utf-8")
         if args.print:

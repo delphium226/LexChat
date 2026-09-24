@@ -54,6 +54,23 @@ prevent. Prototyped on the seam before it was built: two tool-free draws from
 6335's recorded retrievals both produced a structured partial report whose
 every link the tools had returned, and both said the Schedule B1 paragraphs
 had not been retrieved rather than inventing them (SESSION_LOG Session 18).
+
+**P4.5 — the lost step, which is not a halt.** A worker's final completion
+can come back empty on every attempt of `chat_loop`'s bounded retry (P4.2).
+`chat_loop` then returns `content: ""` with no flag, and before this the report
+the Manager or the synthesis received was the scope block alone, "Searched the
+legislation index 2 time(s) for: ...", which reads as searched and found
+nothing (6409 r3 t11, 6373 r1 t3), or nothing at all for a case-law step, which
+the synthesis told a lawyer "found no results" (6375 r3 t2). So a lost step
+gets its own label, in code, the way a halt does, with its own wording:
+`halt_notice` says "a fixed internal limit of 20 tool-call rounds", which is
+false for a lost reply, and Invariant 1 is that the disclosure is TRUE. Two
+differences from the halt, both from the stored runs: the report does not
+forbid a further `delegate_research` (the Manager re-delegated after 15 of 18
+lost worker reports and every later delegation returned a body), and it never
+says "not a timeout" (6409's failed attempts ended "Upstream idle timeout
+exceeded"). The block is closed, so the answer seam can strip it whole if a
+Manager copies it.
 """
 
 from __future__ import annotations
@@ -74,6 +91,12 @@ __all__ = [
     "halt_worker_report",
     "halt_notice",
     "apply_halt_disclosure",
+    "LOST_REPORT_TAG",
+    "lost_worker_report",
+    "strip_lost_blocks",
+    "lost_notice",
+    "apply_lost_disclosure",
+    "progress_result",
 ]
 
 # The literal `chat_loop` emits. Matched loosely on the limit so a future change
@@ -327,3 +350,139 @@ def apply_halt_disclosure(text: str, halts: Optional[Iterable]) -> tuple:
     if not notice or notice in out:
         return out, bool(notice)
     return (notice + "\n\n" + out).strip() if out else notice, True
+
+
+# ---------------------------------------------------------------------------
+# P4.5: a step whose final reply was lost
+# ---------------------------------------------------------------------------
+
+LOST_REPORT_TAG = "[Research Incomplete — answer lost]"
+LOST_REPORT_CLOSE = "[/Research Incomplete]"
+# The whole block, or a stray marker if a model quoted only one line of it.
+_LOST_BLOCK = re.compile(
+    re.escape(LOST_REPORT_TAG) + r"[\s\S]*?" + re.escape(LOST_REPORT_CLOSE)
+)
+_LOST_MARKER = re.compile(
+    re.escape(LOST_REPORT_TAG) + "|" + re.escape(LOST_REPORT_CLOSE)
+)
+
+
+def lost_worker_report(sources_retrieved: int = 0) -> str:
+    """What a worker whose final reply was lost hands back in place of a report.
+
+    Addressed to the agent that reads it, like `halt_worker_report`. The
+    worker's scope block is appended AFTER it by `run_worker_agent`, so the
+    first thing the Manager or the synthesis reads is that the answer was lost,
+    and the search record below reads as work done, not as a search that found
+    nothing.
+    """
+    retrieved = (
+        f"{sources_retrieved} source(s) had been retrieved by then; none of them "
+        "was written up."
+        if sources_retrieved
+        else "No sources had been retrieved by then."
+    )
+    return (
+        f"{LOST_REPORT_TAG}\n"
+        "This research step ran, but the model's final reply came back empty on "
+        f"every attempt, so it wrote no findings. {retrieved}\n\n"
+        "The cause is a lost reply. It is NOT the step limit, and NOT evidence "
+        "that the material does not exist or could not be found. Any search "
+        "record below lists what the step ran: it is a record of work, not "
+        "findings, and nothing was concluded from it.\n\n"
+        "REQUIRED: do NOT tell the user that anything was not found, does not "
+        "exist or was not made on the strength of this step. If you can call "
+        "delegate_research, you may call it once more for the same question: the "
+        "failure is intermittent, and a repeat has usually returned findings. "
+        "Otherwise, or if it fails again, tell the user plainly that this part of "
+        "the research did not return its findings, and that the reason was a lost "
+        "reply, not a finding about the law. Do NOT invent findings or answer from "
+        "memory.\n"
+        f"{LOST_REPORT_CLOSE}"
+    )
+
+
+def strip_lost_blocks(text: str) -> tuple:
+    """Remove every lost-report block, and any stray marker, from `text`.
+    Returns (text, count). Unconditional, like `strip_halt_markers`: the block
+    is addressed to an agent and must never render to a lawyer."""
+    if not text:
+        return text, 0
+    out, n = _LOST_BLOCK.subn("", text)
+    out, n2 = _LOST_MARKER.subn("", out)
+    n += n2
+    if n:
+        out = re.sub(r"\n{3,}", "\n\n", out).strip()
+    return out, n
+
+
+def lost_notice(lost: list, any_completed: bool = True) -> str:
+    """The lawyer-facing disclosure of a lost step. Code-emitted.
+
+    Deliberately its own wording, not `halt_notice`'s: no limit was reached.
+    `any_completed` says whether any research in the turn did return findings,
+    which decides the last sentence: the answer below either rests on partial
+    research or on none.
+    """
+    if not lost:
+        return ""
+    steps = [x for x in lost if x.get("step")]
+    if steps:
+        labels = []
+        for x in sorted(steps, key=lambda y: y["step"]):
+            title = (x.get("title") or "").strip()
+            labels.append(f"step {x['step']}" + (f" ({title})" if title else ""))
+        if len(labels) == 1:
+            subject, plural = f"Research {labels[0]}", False
+        else:
+            subject = "Research " + ", ".join(labels[:-1]) + f" and {labels[-1]}"
+            plural = True
+    elif len(lost) == 1:
+        subject, plural = "One research step", False
+    else:
+        subject, plural = f"{len(lost)} research steps", True
+    tail = (
+        "Treat the coverage below as partial, and consider asking again."
+        if any_completed
+        else "No completed research stands behind what follows, so do not rely "
+             "on it as researched. Please ask again."
+    )
+    return (
+        "> **⚠ This answer is incomplete.** "
+        f"{subject} did not return {'their' if plural else 'its'} findings: the "
+        "model's reply came back empty on every attempt, so what "
+        f"{'they' if plural else 'it'} retrieved did not reach this answer. This "
+        "is **not** the step limit, and it is **not** a finding that the "
+        f"material does not exist. {tail}"
+    )
+
+
+def apply_lost_disclosure(text: str, lost: Optional[Iterable],
+                          any_completed: bool = True) -> tuple:
+    """Strip the lost-report blocks and prepend the notice. Returns
+    (text, disclosed). Idempotent; strips even with nothing lost."""
+    out, _ = strip_lost_blocks(text or "")
+    lost = list(lost or [])
+    if not lost:
+        return out, False
+    notice = lost_notice(lost, any_completed)
+    if notice in out:
+        return out, True
+    return (notice + "\n\n" + out).strip() if out else notice, True
+
+
+def progress_result(result: dict, step: bool) -> str:
+    """The `tool_end` progress event's `result` for one worker run.
+
+    It used to read "Step complete" (and "Research Complete") for every run,
+    halted or lost. The chat UI does not show it; the developer page and an
+    eval harness reading the stream do.
+    """
+    if result.get("lost"):
+        outcome = "incomplete: no reply returned"
+    elif result.get("halted"):
+        outcome = "incomplete: stopped at the step limit" + (
+            " (partial findings)" if result["halted"].get("written_up") else "")
+    else:
+        return "Step complete" if step else "Research Complete"
+    return ("Step " if step else "Research ") + outcome

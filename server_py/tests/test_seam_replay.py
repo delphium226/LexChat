@@ -564,3 +564,93 @@ def test_the_manager_is_offered_its_tools_unless_told_not_to(tmp_path, monkeypat
     assert sr.main(["manager", "--run", str(p), "--turn", "1", *flags]) == 0
     names = [t["function"]["name"] for t in (seen["tools"] or [])]
     assert ("delegate_research" in names) is offered
+
+
+
+# --- P4.5: --apply-lost -------------------------------------------------------
+
+_SCOPE_ONLY = (
+    "\n\n[SEARCH SCOPE — what this research step actually did]\n"
+    "Searched the legislation index 1 time(s) for: \"x\".\n[/SEARCH SCOPE]"
+)
+
+
+def _lost_doc():
+    """A Deep Research turn whose step 1 reply was lost (6375 r3 t2's shape:
+    report "") and whose step 2 report is its scope block alone (6374 r3
+    t4's shape)."""
+    doc = _run_doc()
+    dgs = doc["turns"][0]["audit"]["delegations"]
+    dgs[0]["report"] = ""
+    dgs[1].pop("halted")
+    dgs[1]["report"] = _SCOPE_ONLY
+    return doc
+
+
+def test_the_recorded_payload_is_the_before_side():
+    doc = _lost_doc()
+    body = sr.synthesis_messages(doc, doc["turns"][0])[1]["content"]
+    assert "[Research Incomplete" not in body and "LOST STEPS" not in body
+
+
+def test_apply_lost_labels_each_lost_report_ahead_of_what_was_recorded():
+    from src.utils.research_halt import LOST_REPORT_TAG
+    doc = _lost_doc()
+    turn = doc["turns"][0]
+    findings = sr.step_findings_from(turn, apply_lost=True)
+    assert all(f["content"].startswith(LOST_REPORT_TAG) for f in findings)
+    assert findings[1]["content"].endswith(_SCOPE_ONLY)  # the record kept, after
+    assert [x["step"] for x in sr.lost_from(turn, apply_lost=True)] == [1, 2]
+    body = sr.synthesis_messages(doc, turn, apply_lost=True)[1]["content"]
+    assert "LOST STEPS" in body
+
+
+def test_a_halted_or_answered_step_is_never_relabelled(run_file):
+    _doc, turn = sr.load_turn(run_file, 1)
+    assert not any(sr.is_lost_shaped(d) for d in turn["audit"]["delegations"])
+    assert sr.lost_from(turn, apply_lost=True) == []
+
+
+def test_a_step_recorded_as_lost_is_read_without_the_flag():
+    doc = _lost_doc()
+    turn = doc["turns"][0]
+    turn["audit"]["delegations"][0]["lost"] = {"reason": "empty_completion",
+                                               "sources_retrieved": 4}
+    (x,) = [x for x in sr.lost_from(turn) if x["step"] == 1]
+    assert x["sources_retrieved"] == 4
+
+
+def test_the_manager_seam_hands_over_the_labelled_report(tmp_path, monkeypatch):
+    from src.utils.research_halt import LOST_REPORT_TAG
+    doc = _conv_doc()
+    doc["turns"][0]["audit"]["delegations"][0]["report"] = _SCOPE_ONLY
+    msgs = sr.manager_messages(doc, doc["turns"][0], apply_lost=True)
+    tool = [m for m in msgs if m.get("role") == "tool"][0]["content"]
+    assert tool.startswith("[Research Agent Result]\n" + LOST_REPORT_TAG)
+    before = sr.manager_messages(doc, doc["turns"][0])
+    assert LOST_REPORT_TAG not in [m for m in before if m.get("role") == "tool"][0]["content"]
+
+    # The draw goes through the answer seam: one lost delegation that nothing
+    # made good, so the lawyer notice is prepended.
+    p = tmp_path / "6348_rep1.json"
+    p.write_text(json.dumps(doc), encoding="utf-8")
+    out = tmp_path / "out"
+
+    async def fake_cfg(extra):
+        return {"model": "m", **extra}
+
+    async def fake_seam(messages, cfg, tools=None):
+        return "Nothing was found.", 0.0, "m"
+
+    monkeypatch.setattr(sr, "_provider_cfg", fake_cfg)
+    monkeypatch.setattr(sr, "run_seam", fake_seam)
+    assert sr.main(["manager", "--run", str(p), "--turn", "1", "--apply-lost",
+                    "--out", str(out)]) == 0
+    text = (out / "6348_t1_manager_lost_rep1.md").read_text(encoding="utf-8")
+    assert text.startswith("> **⚠ This answer is incomplete.**")
+
+
+def test_apply_lost_is_not_a_worker_seam_option(run_file):
+    with pytest.raises(SystemExit):
+        sr.main(["worker", "--run", str(run_file), "--turn", "1", "--apply-lost",
+                 "--dry-run"])

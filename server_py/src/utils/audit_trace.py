@@ -68,7 +68,13 @@ _audit_ctx: ContextVar[Optional["AuditCollector"]] = ContextVar("audit_collector
 # `{"research_mode": {from, to} | null, "chat_mode": {from, to} | null}` and
 # the mode-change marker was injected ahead of the user's message. Additive,
 # and `null` on every request whose history carries no stamped modes.
-AUDIT_SCHEMA_VERSION = 5
+# v6 (2026-09-24, FIX_PLAN P4.5): `delegations[].lost` — `null` unless the
+# worker's final reply came back empty on every attempt of `chat_loop`'s retry,
+# in which case `{"reason": "empty_completion", "sources_retrieved": N}` and
+# `report` opens with the lost-report label. A new key rather than a new
+# `halted.reason`, so `halted` keeps its documented meaning (the step cap).
+# Additive, and `null` on every delegation whose worker answered.
+AUDIT_SCHEMA_VERSION = 6
 
 
 def set_audit_collector(collector: Optional["AuditCollector"]) -> None:
@@ -143,6 +149,9 @@ class AuditCollector:
                 # to know — and the Manager's own loop can halt without any
                 # delegation report carrying it, so that was never reliable.
                 "halted": None,
+                # P4.5 (B13/B5), schema v6: {"reason", "sources_retrieved"}
+                # when this worker's final reply was lost, else None.
+                "lost": None,
                 "error": None,
                 "tools": [],
                 "started_at": round(time.time() - self._started, 3),
@@ -163,6 +172,7 @@ class AuditCollector:
         error: Optional[str] = None,
         reformatted: bool = False,
         halted: Optional[dict] = None,
+        lost: Optional[dict] = None,
     ) -> None:
         if rec is None:
             return
@@ -171,6 +181,7 @@ class AuditCollector:
             rec["error"] = error
             rec["reformatted"] = reformatted
             rec["halted"] = halted
+            rec["lost"] = lost
             rec["duration_s"] = round(
                 time.time() - self._started - rec["started_at"], 3
             )

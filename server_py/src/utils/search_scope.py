@@ -1312,7 +1312,8 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
     return lead
 
 
-def incomplete_steps_note(halts: list, steps_total: int = 0) -> str:
+def incomplete_steps_note(halts: list, steps_total: int = 0,
+                          lost: Optional[list] = None) -> str:
     """Instruction to the Deep Research synthesis when a plan step was cut short.
 
     P2.1 made the halt visible to the lawyer; it does not stop the *synthesis*
@@ -1329,7 +1330,47 @@ def incomplete_steps_note(halts: list, steps_total: int = 0) -> str:
     a tool result and not a system rule: an instruction naming *these* steps, in
     the material being composed from, is per-occurrence and cannot be diluted by
     the rest of a long standing prompt.
+
+    P4.5: `lost` names the steps whose final reply came back empty on every
+    attempt. They get their own paragraph, because the halt's ("stopped by an
+    internal limit on tool-call rounds") would be false for them. 6375 r3 t2 is
+    why: a case-law step retrieved 4, 43 and 31 judgments, its reply was lost,
+    and the synthesis told the lawyer "Step 1 found no results".
     """
+    note = _halted_steps_note(halts, steps_total)
+    note += _lost_steps_note(lost, steps_total)
+    return note
+
+
+def _lost_steps_note(lost: Optional[list], steps_total: int = 0) -> str:
+    steps = [x for x in (lost or []) if x.get("step")]
+    if not steps:
+        return ""
+    labels = []
+    for x in sorted(steps, key=lambda y: y["step"]):
+        title = (x.get("title") or "").strip()
+        labels.append(f"step {x['step']}" + (f" ({title})" if title else ""))
+    plural = len(labels) > 1
+    named = (", ".join(labels[:-1]) + f" and {labels[-1]}") if plural else labels[0]
+    scale = f" ({len(labels)} of {steps_total} steps)" if steps_total else ""
+    those = "those steps" if plural else "that step"
+    return (
+        "\n\nLOST STEPS — READ BEFORE WRITING THE BLUF:\n"
+        f"{named} did not return findings{scale}: the model's reply to "
+        f"{'them' if plural else 'it'} came back empty on every attempt. Nothing "
+        f"{'they' if plural else 'it'} retrieved reached you, so anything "
+        f"{those} covered is missing because the reply was lost, NOT because the "
+        "material was searched for and not found. Any search record under "
+        f"{those} lists work done, not findings.\n"
+        f"You MUST NOT write, in the BLUF or anywhere else, that anything covered "
+        f"by {those} does not exist, was not made, or could not be found. State "
+        "instead that the point was not established because that part of the "
+        "research did not return its findings. Answer fully from the steps that "
+        "DID return findings, and be specific about which question remains open."
+    )
+
+
+def _halted_steps_note(halts: list, steps_total: int = 0) -> str:
     steps = [h for h in (halts or []) if h.get("step")]
     if not steps:
         return ""

@@ -35,7 +35,14 @@ from ..utils.empty_completion import (
     fallback_from_reports,
     is_empty_completion,
 )
-from ..utils.research_halt import apply_halt_disclosure, halt_worker_report, strip_halt_markers
+from ..utils.research_halt import (
+    apply_halt_disclosure,
+    apply_lost_disclosure,
+    halt_worker_report,
+    lost_worker_report,
+    progress_result,
+    strip_halt_markers,
+)
 from ..utils.search_scope import (
     answer_scope_footer,
     carried_scope_footer,
@@ -289,6 +296,17 @@ async def run_worker_agent(
             _audit.end_delegation(_audit_delegation, error=describe_agent_error(e) or type(e).__name__)
         raise
 
+    # P4.5: the worker's final reply was lost. `chat_loop` has already retried
+    # an empty completion (P4.2) and, when every attempt came back empty,
+    # returns `content: ""` with no flag. Not a halt: a halted loop returns its
+    # marker and `halted`. Detected here, in code, because what the Manager or
+    # the synthesis otherwise receives is the scope block alone ("Searched the
+    # legislation index 2 time(s) for: ..."), which reads as a search that
+    # found nothing (6409 r3 t11), or "" for a case-law step, which a synthesis
+    # reported to a lawyer as "Step 1 found no results" (6375 r3 t2).
+    lost = (not result.get("halted")
+            and is_empty_completion(result.get("content"), None))
+
     # A4: validate the report structure and, if malformed, issue ONE no-tools
     # reformat retry. Skipped in conversational chat mode (deliberately unstructured).
     # Runs before source filtering so the filter sees the reformatted content.
@@ -304,6 +322,9 @@ async def run_worker_agent(
     # never had a report to format.
     if result.get("halted"):
         logger.info("[Worker] Halted — skipping the A4 reformat retry (nothing to format)")
+    elif lost:
+        # P4.5: nothing to format either (and "" is under the 40-char floor).
+        pass
     elif cfg.get("_chat_mode") != "conversational":
         content = result.get("content", "") or ""
         if _report_needs_reformat(content, has_sources=bool(source_accumulator)):
@@ -347,6 +368,23 @@ async def run_worker_agent(
             result["halted"], sources_retrieved=len(source_accumulator),
             writeup=_writeup,
         )
+
+    # P4.5: the lost reply, labelled. Placed here so it is the report's first
+    # line: the scope block is appended after it, below, and so reads as the
+    # work the step did rather than as a search that found nothing. In every
+    # chat mode, so the conversational quick-lookup Worker is labelled too
+    # (wave3_p313 rep 2: handed the scope block alone, that Manager wrote a
+    # research-report heading into a conversational answer).
+    if lost:
+        logger.warning(
+            "[Worker] Final reply lost (empty on every attempt) — %d source(s) "
+            "retrieved; returning a labelled lost report", len(source_accumulator),
+        )
+        result["lost"] = {
+            "reason": "empty_completion",
+            "sources_retrieved": len(source_accumulator),
+        }
+        result["content"] = lost_worker_report(len(source_accumulator))
 
     # P1.6 (B14): a provision URL no tool returned still resolves, so it reads
     # to a lawyer as a verified citation. Enforced here, AFTER the reformat retry
@@ -409,6 +447,7 @@ async def run_worker_agent(
             report=result.get("content", "") or "",
             reformatted=bool(_audit_delegation and _audit_delegation.get("reformatted")),
             halted=result.get("halted"),
+            lost=result.get("lost"),
         )
 
     return result
@@ -742,6 +781,13 @@ async def process_user_request(
     # precisely that the answer does not mention it.
     halts: list = []
 
+    # P4.5: every worker whose final reply was lost, and the outcome of every
+    # worker run in order, so the answer seam can tell a lost step the Manager
+    # made good (a later delegation returned findings, as after 15 of 18 stored
+    # lost reports) from one it did not.
+    lost: list = []
+    outcomes: list = []
+
     # P4.2 (B13): every completed worker report, kept so an empty Manager
     # completion does not also discard the research the lawyer already paid for.
     # Read only on that failure path; ordinary turns never touch it.
@@ -797,7 +843,9 @@ async def process_user_request(
                 )
 
             if on_chunk:
-                await call_chunk(on_chunk, {"type": "tool_end", "tool": "Research Agent", "id": research_id, "result": "Research Complete"})
+                # P4.5: the event names the outcome; it said "Research Complete"
+                # for a halted or lost run too.
+                await call_chunk(on_chunk, {"type": "tool_end", "tool": "Research Agent", "id": research_id, "result": progress_result(result, step=False)})
 
             # Dedup across multiple delegate_research calls — the manager can
             # delegate more than once, and each worker independently reports the
@@ -807,8 +855,17 @@ async def process_user_request(
                     accumulated_sources.append(src)
             if result.get("halted"):
                 halts.append({**result["halted"], "scope": "delegation"})
+            if result.get("lost"):
+                lost.append({**result["lost"], "scope": "delegation",
+                             "index": len(outcomes)})
+            outcomes.append(
+                "lost" if result.get("lost")
+                else ("partial" if result["halted"].get("written_up") else "halted")
+                if result.get("halted") else "complete")
             all_searches.extend(result.get("searches") or [])
-            if (result.get("content") or "").strip():
+            # P4.5: a lost report is a label, not research, so P4.2's fallback
+            # must not reproduce it to the lawyer as findings.
+            if (result.get("content") or "").strip() and not result.get("lost"):
                 worker_reports.append({
                     "title": f"Research step {len(worker_reports) + 1}",
                     "content": result["content"],
@@ -920,6 +977,30 @@ async def process_user_request(
     clean, _stripped = strip_scope_blocks(clean)
     if _stripped:
         logger.info("[Manager] Stripped %d search-scope block(s) from the answer", _stripped)
+    # P4.5: a lost worker's block is stripped whatever happened (a Manager
+    # told to pass a report through verbatim can copy it). The lawyer is told
+    # only about a lost step nothing made good: after 15 of 18 stored lost
+    # reports the Manager re-delegated and the later worker returned findings,
+    # and the answer then rests on completed research like any other.
+    _unredone = [
+        x for x in lost if "complete" not in outcomes[x.get("index", 0) + 1:]
+    ]
+    clean, _lost_disclosed = apply_lost_disclosure(
+        clean, _unredone,
+        any_completed=any(o in ("complete", "partial") for o in outcomes),
+    )
+    if lost:
+        logger.warning(
+            "[Manager] %d worker(s) lost their final reply, %d not made good — %s",
+            len(lost), len(_unredone),
+            "answer marked incomplete" if _unredone else "no notice",
+        )
+        final["research_lost"] = {
+            "reason": "empty_completion",
+            "lost": lost,
+            "not_made_good": len(_unredone),
+            "disclosed": _lost_disclosed,
+        }
     clean, _disclosed = apply_halt_disclosure(clean, halts)
     if halts:
         logger.warning(
@@ -1036,6 +1117,7 @@ def build_synthesis_messages(
     halts: Optional[list] = None,
     steps_count: Optional[int] = None,
     research_mode: str = "legislation_only",
+    lost: Optional[list] = None,
 ) -> list:
     """The Deep Research synthesis call's messages, from the steps' findings.
 
@@ -1053,7 +1135,8 @@ def build_synthesis_messages(
     subsection citations each step attached to a provision URL, because the
     synthesis otherwise rewrites them to the bare section) and P2.2/P2.1's
     incomplete-steps note (a negative reached under a halted step is a negative
-    reached under a limit).
+    reached under a limit), which since P4.5 also names a step whose reply was
+    lost (`lost`).
     """
     findings_blocks = [
         f"### Step {i}: {f['title']}\n{f['detail']}\n\nFINDINGS:\n{f['content']}"
@@ -1067,7 +1150,8 @@ def build_synthesis_messages(
     )
     synthesis_user += pinpoint_block([f["content"] for f in step_findings])
     synthesis_user += incomplete_steps_note(
-        halts or [], steps_count if steps_count is not None else len(step_findings)
+        halts or [], steps_count if steps_count is not None else len(step_findings),
+        lost=lost,
     )
     return [
         {"role": "system", "content": get_deep_research_synthesis_prompt(research_mode)},
@@ -1126,6 +1210,9 @@ async def run_deep_research(
     # and approved title — only this loop knows them, and "step 4 is incomplete"
     # is far more use to a lawyer than "some research was incomplete".
     halts: list = []
+    # P4.5: plan steps whose final reply was lost, likewise named. A plan step
+    # is never redone, so every one is disclosed.
+    lost: list = []
     # P2.2 (B5): every legislation search the plan ran, across all steps, and
     # (P2.4) every case-law search.
     all_searches: list = []
@@ -1161,15 +1248,20 @@ async def run_deep_research(
         )
 
         if on_chunk:
-            await call_chunk(on_chunk, {"type": "tool_end", "tool": label, "id": step_id, "result": "Step complete"})
+            # P4.5: the step's outcome, not "Step complete" for every step.
+            await call_chunk(on_chunk, {"type": "tool_end", "tool": label, "id": step_id, "result": progress_result(result, step=True)})
 
         if result.get("halted"):
             halts.append({**result["halted"], "scope": "step", "step": i, "title": title})
+        if result.get("lost"):
+            lost.append({**result["lost"], "scope": "step", "step": i, "title": title})
 
         step_findings.append({
             "title": title,
             "detail": step.get("detail") or "",
             "content": result.get("content", "") or "",
+            "lost": bool(result.get("lost")),
+            "halted": bool(result.get("halted")),
         })
         for src in result.get("sources", []):
             if not _is_duplicate_source(src, accumulated_sources):
@@ -1183,6 +1275,7 @@ async def run_deep_research(
     synthesis_messages = build_synthesis_messages(
         user_query, approved_plan, step_findings, halts, len(steps),
         research_mode=_get_cfg().get("_research_mode") or "legislation_only",
+        lost=lost,
     )
 
     async def _no_tools_executor(name: str, args: dict) -> str:
@@ -1210,7 +1303,10 @@ async def run_deep_research(
         )
         final["content"] = fallback_from_reports(
             [
-                {"title": f"Step {i}: {f['title']}", "content": f["content"]}
+                # P4.5: a lost step's label is not findings; dropping it
+                # leaves the notice below to say the step was lost.
+                {"title": f"Step {i}: {f['title']}",
+                 "content": "" if f.get("lost") else f["content"]}
                 for i, f in enumerate(step_findings, 1)
             ],
             kind="synthesis",
@@ -1246,6 +1342,25 @@ async def run_deep_research(
         logger.info(
             "[DeepResearch] Stripped %d search-scope block(s) from the report", _stripped
         )
+    # P4.5: a lost step is disclosed in code, in its own words (it hit no
+    # limit), and its block is stripped if the synthesis copied it.
+    _content, _lost_disclosed = apply_lost_disclosure(
+        _content, lost,
+        any_completed=any(not f.get("lost") and not f.get("halted")
+                          for f in step_findings)
+        or any(h.get("written_up") for h in halts),
+    )
+    if lost:
+        logger.warning(
+            "[DeepResearch] %d of %d plan step(s) lost their final reply — "
+            "report marked incomplete", len(lost), len(steps),
+        )
+        final["research_lost"] = {
+            "reason": "empty_completion",
+            "lost": lost,
+            "steps_total": len(steps),
+            "disclosed": _lost_disclosed,
+        }
     _content, _disclosed = apply_halt_disclosure(_content, halts)
     if halts:
         logger.warning(
