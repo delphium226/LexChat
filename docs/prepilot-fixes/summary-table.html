@@ -182,6 +182,19 @@
   .key b { color: var(--ink); font-weight: 500; }
   .key .n { font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
   .by-source { display: grid; gap: 8px; }
+  /* By severity: one stacked bar per severity, same status fills and order as the
+     main bar (no new colours, so the validated palette above still covers it). */
+  .bar-group { display: grid; gap: 8px; }
+  .group-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .by-severity { display: grid; gap: 8px; }
+  .bar.mid { height: 16px; }
+  .bar-label.sev-label { font-family: var(--font-mono); font-weight: 600; color: var(--ink); }
   .tip {
     position: fixed;
     z-index: 10;
@@ -342,7 +355,14 @@
         <div class="bar" id="bar-all" role="group" aria-label="Every fix, by status"></div>
       </div>
       <div class="legend" id="legend" aria-label="Status key"></div>
-      <div class="by-source" id="by-source"></div>
+      <div class="bar-group">
+        <span class="group-label">By severity</span>
+        <div class="by-severity" id="by-severity"></div>
+      </div>
+      <div class="bar-group">
+        <span class="group-label">By source</span>
+        <div class="by-source" id="by-source"></div>
+      </div>
     </div>
   </section>
   <div class="tip" id="tip" hidden role="status"></div>
@@ -738,6 +758,19 @@
       swatch.dataset.status = s;
       key.append(swatch, el("b", "", s), el("span", "n", String(counts[s])));
       legend.append(key);
+    }
+    const bySev = document.getElementById("by-severity");
+    bySev.textContent = "";
+    for (const sev of ["P1", "P2", "P3"]) {
+      const rows = ROWS.filter(r => r.sev === sev);
+      const row = el("div", "bar-row");
+      const bar = el("div", "bar mid");
+      bar.setAttribute("role", "group");
+      bar.setAttribute("aria-label", sev + ": " + rows.length + " fixes, " +
+        rows.filter(r => r.status === "Fixed").length + " fixed, by status");
+      buildBar(bar, rows, false);
+      row.append(el("span", "bar-label sev-label", sev), bar, el("span", "bar-total", String(rows.length)));
+      bySev.append(row);
     }
     const by = document.getElementById("by-source");
     by.textContent = "";
