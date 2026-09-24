@@ -2990,6 +2990,15 @@ def cmd_scoperecord(args) -> int:
 # its fixed opening clause. A fresh footer says the opposite, in these words.
 CARRIED_SCOPE = "no search of the legislation index was run for this reply"
 FRESH_SCOPE = "*Search scope: the legislation index was searched for"
+# P3.7's line for a turn that looked an instrument up and ran no ranked search
+# (`search_scope.lookup_scope_footer`). A scope statement the lawyer saw, so a
+# turn carrying it is not UNQUALIFIED. Missing from this grader at first, it
+# read five such turns in `wave4_p37` as carrying no statement at all.
+LOOKUP_SCOPE = "*Search scope: no ranked search of the legislation index was run for this reply"
+# Its form for a turn that also searched WITHIN an instrument, which claims
+# nothing about searching (a lookup line on such a turn first said "no ranked
+# search", which is false: 6373 r1 t3 in `wave4_p37`, graded MISATTRIBUTED).
+LOOKUP_IN_TURN = "*Search scope: for this reply,"
 _LEG_SEARCH_TOOLS = ("search_legislation", "search_legislation_sections")
 
 
@@ -3013,7 +3022,8 @@ def nosearch_rows(doc: dict) -> list:
     history the next turn is sent (`replay.py`). It is the audit-side mirror of
     the product's gate, which reads the fresh footer out of that history.
 
-    `line` is "carried", "fresh" or "none": the scope statement the lawyer saw.
+    `line` is "carried", "fresh", "lookup" (P3.7) or "none": the scope
+    statement the lawyer saw.
     """
     rows = []
     searched_before = False
@@ -3029,6 +3039,10 @@ def nosearch_rows(doc: dict) -> list:
                 line = "carried"
             elif FRESH_SCOPE in answer:
                 line = "fresh"
+            elif LOOKUP_SCOPE in answer:
+                line = "lookup"
+            elif LOOKUP_IN_TURN in answer and "looked up by" in answer:
+                line = "lookup_in_turn"
             else:
                 line = "none"
             rows.append({
@@ -3061,7 +3075,7 @@ def nosearch_verdict(row: dict) -> Optional[str]:
     there on purpose, because the peer's searches are not in this turn's record.
     """
     if row["searched_now"]:
-        return "MISATTRIBUTED" if row["line"] == "carried" else None
+        return "MISATTRIBUTED" if row["line"] in ("carried", "lookup") else None
     if row["line"] == "fresh":
         return "MISATTRIBUTED"
     if row["line"] == "carried" and not row["searched_before"]:
@@ -5787,9 +5801,62 @@ def _lk_probe_str(p: dict) -> str:
     return ", ".join(bits) or "none"
 
 
+def _lookup_routing(dirs: list, live: bool) -> int:
+    """How far P3.7's routing reaches: over every Worker brief stored in `dirs`,
+    the instruments the product's own parser would look up before round 1.
+    Prints ids only, never brief text. `--live` also looks each distinct id up
+    against LEX (two small calls each, no model) and tallies the statuses."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from src.utils.instrument_lookup import extract_instrument_citations
+
+    briefs = routed = 0
+    per_session, ids = Counter(), Counter()
+    for d in dirs:
+        for doc in load_runs(d):
+            script = doc.get("script") or {}
+            base = str(script.get("base") or doc.get("session_id"))
+            for t in doc.get("turns") or []:
+                for dg in (t.get("audit") or {}).get("delegations") or []:
+                    briefs += 1
+                    refs = extract_instrument_citations(dg.get("brief") or "")
+                    if refs:
+                        routed += 1
+                        per_session[base] += 1
+                        for r in refs:
+                            ids["/".join(map(str, r))] += 1
+    print(f"  routing over {', '.join(p.name for p in dirs)}: {routed} of {briefs} "
+          f"delegation brief(s) name an instrument by number, in {len(per_session)} "
+          f"session(s); {len(ids)} distinct id(s)")
+    print("    by session: " + ", ".join(f"{s} {n}" for s, n in sorted(per_session.items())))
+    status = {}
+    if live:
+        import asyncio as _asyncio
+
+        from src.agent.tools.executor import execute_worker_tool
+        from src.utils.instrument_lookup import LOOKUP_TOOL, lookup_args
+
+        async def _one(lid):
+            t, y, n = lookup_args({"legislation_id": lid})
+            got = json.loads(await execute_worker_tool(
+                LOOKUP_TOOL, {"legislation_type": t, "year": y, "number": n}))
+            return lid, got.get("status")
+
+        async def _all():
+            return await _asyncio.gather(*(_one(lid) for lid in ids))
+
+        status = dict(_asyncio.run(_all()))
+        print("    statuses (live, distinct ids): "
+              + ", ".join(f"{k} {v}" for k, v in Counter(status.values()).most_common()))
+    for lid, n in ids.most_common():
+        print(f"    {lid:<16} {n:>4} brief(s)  {status.get(lid, '')}")
+    return 0
+
+
 def cmd_lookup(args) -> int:
     """P3.7 acceptance: is an instrument named by number reported as held, held
     without text, or not held, and is a not-held answer backed by a lookup?"""
+    if args.routing:
+        return _lookup_routing([Path(p) for p in args.routing], args.live)
     docs = load_runs(Path(args.dir))
     rows = [r for d in docs for r in lookup_rows(d)]
     print(f"P3.7 held/absent over {args.dir}  ({len(docs)} run file(s), "
@@ -6017,6 +6084,11 @@ def main(argv: Iterable[str] | None = None) -> int:
     lk.add_argument("--answers", action="store_true",
                     help="print every classified sentence")
     lk.add_argument("--chars", type=int, default=300)
+    lk.add_argument("--routing", nargs="+", metavar="DIR", default=None,
+                    help="instead of grading: which stored Worker briefs in DIR(s) "
+                         "the routing would look up (ids only)")
+    lk.add_argument("--live", action="store_true",
+                    help="with --routing: look each distinct id up against LEX")
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")

@@ -979,12 +979,6 @@ async def process_user_request(
     # appends its own — the lawyer reads the same disclosure twice. Strip any
     # echo before appending the one computed from THIS turn's searches.
     _footer = answer_scope_footer(all_searches, _cfg)
-    # P3.7 (B5): a turn that looked an instrument up and ran no ranked search
-    # has no line above, and the lookup's answer is the one a lawyer most needs
-    # stated. Only a not-held or held-without-text outcome speaks, so a lookup
-    # of a held instrument leaves the lines below exactly as before.
-    if not _footer:
-        _footer = lookup_scope_footer(all_searches)
     # P2.8 (B5): a reply that searched nothing gets no footer above, even when
     # it restates an earlier turn's negative. That is the case of a follow-up
     # answered from history. The earlier searches are restated here, labelled
@@ -994,6 +988,14 @@ async def process_user_request(
     # conversation, so it cannot restate an earlier turn's negative.
     if not _footer and not scope_unknown:
         _footer = carried_scope_footer(messages, all_searches)
+    # P3.7 (B5): a turn that looked an instrument up and ran no ranked search,
+    # with no earlier search to carry. (The carried line above states the
+    # lookup itself when there is one: placing this line first dropped the
+    # earlier search terms from a follow-up, found by `replay_report
+    # nosearch` on `wave4_p37`.) Only a not-held or held-without-text outcome
+    # speaks, so a lookup of a held instrument changes nothing here.
+    if not _footer:
+        _footer = lookup_scope_footer(all_searches)
     # P2.4 (B12): the case-law corpus disclosure. Both lines above already carry
     # it as a clause when this turn searched case law; this is the turn with no
     # legislation line to join it to, which is every `case_law_only` turn. Not

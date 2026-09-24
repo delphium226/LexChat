@@ -2230,11 +2230,17 @@ def _lookup_limb(log: Optional[list]) -> str:
              HELD: "held"}
     listed = "; ".join(f"{e['label']} {words.get(e['status'], e['status'])}"
                        for e in rows[:8])
+    # "The instrument itself" is the acceptance's lesson (`wave4_p37`): in 4 of
+    # 12 slots the Worker wrote "is not held in this index" and the
+    # conversational Manager narrowed it to "does not hold the TEXT of", which
+    # reads as if the record were held.
     return (
         f"Looked up by number (an exact test of the index, not a search): {listed}. "
-        "Report a not-held instrument as not held in this index, not as 'not found' by "
-        "a search, and never as a possible error in the user's citation. Report one "
-        "held without text as held with no text available here, never as not found."
+        "For a NOT HELD instrument, say that this index does not hold the instrument "
+        "itself: not merely that its text is unavailable, which reads as if its record "
+        "were held, and not that a search did not find it. Never suggest an error in "
+        "the user's citation. Report one held without text as held with no text "
+        "available here, never as not found."
     )
 
 
@@ -2290,6 +2296,12 @@ def lookup_scope_footer(entries: Optional[list]) -> str:
     clause = _lookup_footer_clause(entries)
     if not clause:
         return ""
+    # A search WITHIN an instrument is a search (P2.8 keeps such a turn silent
+    # for the same reason), so "no ranked search … was run" would be false
+    # there. Found by `replay_report nosearch` on `wave4_p37` (6373 r1 t3,
+    # MISATTRIBUTED). The opener then says nothing about searching.
+    if any(e.get("tool") in _SEARCH_TOOLS for e in entries or []):
+        return f"\n\n*Search scope: for this reply,{clause}{case_law_scope_clause(entries)}*"
     return (
         "\n\n*Search scope: no ranked search of the legislation index was run for this "
         f"reply.{clause}{case_law_scope_clause(entries)}*"
@@ -2490,6 +2502,9 @@ def carried_scope_footer(
             f"the same as being absent from the law.{_enabling_footer_clause(entries)}"
             f"{_relations_footer_clause(entries)}"
             f"{_currency_footer_clause(entries)}"
+            # P3.7: a follow-up that looked an instrument up, which is not a
+            # search, so "no search … was run" stays true beside it.
+            f"{_lookup_footer_clause(entries)}"
             # P2.4 (B12): a hybrid follow-up that searched only case law. This
             # clause is about THIS reply's own search, so it is true here too.
             f"{case_law_scope_clause(entries)}*"

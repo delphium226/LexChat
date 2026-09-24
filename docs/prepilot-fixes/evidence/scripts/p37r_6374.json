@@ -1,0 +1,17 @@
+{
+ "session_id": "p37r_6374",
+ "base": "6374",
+ "note": "P3.7 reach check (Invariant 1, n=1): session 6374 up to export turn 3, whose Worker brief named a held UK SI by number in `wave2`, so P3.7's routing now reaches it. Conversational under 'legislation_only' (the export's values). The Deep Research turn 2 is left out for cost; turn 3 is replayed after turn 1. Turn text is taken from the export by index and is never stored here.",
+ "turns": [
+  {
+   "from_turn": 1,
+   "research_mode": "legislation_only",
+   "chat_mode": "conversational"
+  },
+  {
+   "from_turn": 3,
+   "research_mode": "legislation_only",
+   "chat_mode": "conversational"
+  }
+ ]
+}

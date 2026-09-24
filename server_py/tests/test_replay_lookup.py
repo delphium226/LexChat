@@ -144,3 +144,8 @@ def test_the_p37_scripts_hold_no_question_text_and_name_the_graded_turns():
         assert all(t["chat_mode"] == "conversational" for t in script["turns"])
         graded = {k for k, v in rr.LOOKUP_TARGETS[base].items() if v[3]}
         assert graded <= set(turns)
+    # The reach-check scripts carry no question text either.
+    for name in ("p37r_6374", "p37r_6383"):
+        script = rs.load_script(SCRIPTS / f"{name}.json")
+        assert all("question" not in t for t in script["turns"]), name
+        assert all(t["chat_mode"] == "conversational" for t in script["turns"])

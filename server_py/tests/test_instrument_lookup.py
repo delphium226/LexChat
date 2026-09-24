@@ -359,6 +359,46 @@ def test_a_turn_that_only_looked_up_still_tells_the_lawyer():
     assert line.startswith("\n\n*Search scope: no ranked search of the legislation index")
     assert "SSI 2025/377 was looked up by its number" in line and line.endswith("*")
     assert lookup_scope_footer(_log(_outcome("held", "asp/2025/2", "2025 asp 2"))) == ""
+    # A search WITHIN an instrument is a search: the line then claims nothing
+    # about searching (6373 r1 t3 in `wave4_p37` said "no ranked search" here).
+    with_sections = [{"tool": "search_legislation_sections", "legislation_id": "asp/2025/2"}]
+    line = lookup_scope_footer(with_sections + only)
+    assert line.startswith("\n\n*Search scope: for this reply, SSI 2025/377 was looked up")
+    assert "no ranked search" not in line
+
+
+def test_a_follow_up_keeps_its_carried_search_terms_and_states_the_lookup():
+    """Found by `replay_report nosearch` on `wave4_p37`: with the lookup-only
+    line tried first, a follow-up that only looked up lost P2.8's carried line,
+    which restates the earlier search terms. The carried line now states the
+    lookup, and the lookup-only line is the fallback."""
+    from src.utils.search_scope import carried_scope_footer
+
+    earlier = [{"role": "assistant", "content": "Answer." + answer_scope_footer(
+        [{"tool": "search_legislation", "query": "SSI 2025/377"}])}]
+    carried = carried_scope_footer(earlier, _log(_outcome("not_held")))
+    assert "no search of the legislation index was run for this reply" in carried
+    assert 'searched for "SSI 2025/377"' in carried
+    assert "SSI 2025/377 was looked up by its number and is not held" in carried
+    assert carried.endswith("*")
+
+
+def test_nosearch_reads_the_lookup_line_as_a_scope_statement():
+    from tools import replay_report as rr
+
+    line = lookup_scope_footer(_log(_outcome("not_held")))
+    searched = {"turn": 1, "answer": "Found." + answer_scope_footer(
+        [{"tool": "search_legislation", "query": "q"}]),
+        "audit": {"delegations": [{"tools": [{"name": "search_legislation",
+                                              "raw_result": "{}"}]}]}}
+    looked = {"turn": 2, "answer": "SSI 2025/377 could not be found." + line,
+              "audit": {"delegations": [{"tools": [{"name": LOOKUP_TOOL,
+                                                    "raw_result": "{}"}]}]}}
+    rows = {r["turn"]: r for r in rr.nosearch_rows({"turns": [searched, looked]})}
+    assert rows[2]["line"] == "lookup"
+    assert rr.nosearch_verdict(rows[2]) is None
+    # The same line on a turn that DID search describes a search not run.
+    assert rr.nosearch_verdict(dict(rows[1], line="lookup")) == "MISATTRIBUTED"
 
 
 def test_the_footer_clause_trips_no_detector_and_is_stripped():
