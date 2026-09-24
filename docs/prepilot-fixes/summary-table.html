@@ -534,12 +534,15 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next.</strong> <strong>P3.15</strong>, the last open fix for false “not found”
-        answers: a follow-up answered from earlier in the conversation can still say an
-        instrument's text is not held, rather than the instrument. It will be measured first.
-        <strong>P4.5</strong> (a research step whose answer is lost) is still the main source of
-        slow and costly replies in our replays. The new report instructions describe such a step
-        as incomplete, but the step itself is not yet labelled as lost.</p>
+      <p><strong>Next.</strong> <strong>P4.5</strong>, a research step whose answer is lost. Today
+        a lost step can read as a search that found nothing. It will be labelled as lost by the
+        system itself, and the progress message will stop calling it complete. The new report
+        instructions from P4.7 already describe such a step as incomplete; this makes it certain.
+        P4.5 has been split in two. The cost half is a new row, <strong>P4.10</strong>. A lost
+        reply is also slow and expensive: each failed attempt uses about 63,000 tokens of the
+        model's hidden reasoning, and single replies have taken nearly 20 minutes and cost $2.40. That
+        change affects every research step, so it will be measured before anything is chosen.
+        <strong>P3.15</strong> follows: the last open fix for false “not found” answers.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
         and three items from <code>docs/TODO.md</code> D16 (the impossible year window, always
@@ -558,7 +561,7 @@
   // src:    "T" | "R" | "T & R"
   // fixed:  "YYYY-MM-DD" on a Fixed row only: the first commit in which FIX_PLAN.md shows the
   //         row ticked [x] (git log -- docs/prepilot-fixes/FIX_PLAN.md). Not a deployment date.
-  const UPDATED = "24 September 2026, end of Session 26 (P4.7 fixed: the Deep Research report now has instructions for each research type, and says a source it never searched was not searched; next: P3.15)";
+  const UPDATED = "24 September 2026, end of Session 26 (P4.7 fixed: the Deep Research report now has instructions for each research type, and says a source it never searched was not searched; next: P4.5, labelling a lost step; new row P4.10 for the cost of a lost reply)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23" },
@@ -601,6 +604,7 @@
     { src: "R", fix: "Remove the unused case-law court filter", sev: "P2", status: "Fixed", ref: "P4.4", t: "", fixed: "2026-09-15" },
     { src: "T & R", fix: "Report a lost research step as lost, not “no results”", sev: "P1", status: "Verified", ref: "P4.5", t: "3" },
     { src: "T", fix: "Label incomplete Deep Research steps as incomplete in progress messages", sev: "P3", status: "Verified", ref: "P4.5", t: "3" },
+    { src: "R", fix: "Cut the cost and the wait of a lost reply (about 63,000 reasoning tokens per failed attempt)", sev: "P2", status: "Verified", ref: "P4.10", t: "" },
     { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Fixed", ref: "P4.6", t: "4", fixed: "2026-09-23" },
     { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Fixed", ref: "P4.7", t: "2", fixed: "2026-09-24" },
     { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", sev: "P3", status: "Verified", ref: "P4.8", t: "" },

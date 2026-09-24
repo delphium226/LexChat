@@ -5541,3 +5541,17 @@ worktrees; the dev box is on its normal settings; 49 replay directories.
 - **Start Session 27 from P4.5's row** (its USER DECISION paragraph), then
   its pre-flight: recount the lost-completion episodes over all 49
   directories with `replay_report blanks`.
+
+**Fix Tracker v20** (same URL, at the user's request, after the P4.5 decision):
+- P4.10 added: "Cut the cost and the wait of a lost reply", Verified, **P2**.
+  - The severity is a first-pass judgement: the answer is still correct but
+    the lawyer waits nearly 20 minutes. It is not a P1, because P4.5 carries
+    the wrong-answer half.
+- "Next" now says P4.5 (labelling), then P4.10 (cost, measure-first), then
+  P3.15.
+- Render-checked: 28 of 51 fixed; by severity P1 11 of 13, P2 12 of 23, P3 5
+  of 15.
+- No `fixed` dates changed.
+
+**Nothing else is outstanding for Session 27.** It starts from P4.5's row
+(the USER DECISION paragraph) and its pre-flight.
