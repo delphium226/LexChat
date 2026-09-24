@@ -1394,7 +1394,10 @@ def test_a_scope_block_alone_is_a_lost_worker():
     """6409 r3 t11: the report is the code-appended scope block and nothing
     else, which reads to the Manager as searched-and-found-nothing."""
     sites = rr.lost_sites(_lturn([_ldg(_SCOPE_ONLY), _ldg("A real report.")]))
-    assert sites == [{"site": "worker", "step": None, "shape": "scope"}]
+    assert sites == [{"site": "worker", "step": None, "shape": "scope",
+                      "redone": True}]
+    # the Manager did not re-delegate (6373 r1 t3's shape)
+    assert rr.lost_sites(_lturn([_ldg(_SCOPE_ONLY)]))[0]["redone"] is False
 
 
 def test_an_empty_case_law_step_is_a_lost_step():
@@ -1439,7 +1442,8 @@ def test_a_labelled_lost_report_is_recognised():
     label = "[Research Incomplete — answer lost]"
     sites = rr.lost_sites(_lturn([_ldg(label + "\nThe step ..." + _SCOPE_ONLY)]),
                           label=label)
-    assert sites == [{"site": "worker", "step": None, "shape": "labelled"}]
+    assert sites == [{"site": "worker", "step": None, "shape": "labelled",
+                      "redone": False}]
 
 
 def test_cmd_lost_ties_unrecovered_calls_to_sites(tmp_path, capsys):
@@ -1462,6 +1466,7 @@ def test_cmd_lost_ties_unrecovered_calls_to_sites(tmp_path, capsys):
     assert rr.cmd_lost(args) == 1  # the lost worker is not labelled
     out = capsys.readouterr().out
     assert "research worker 1" in out and "untied 1" in out
+    assert "none did in 1" in out
     assert "dir/1 r1 t2: 1 unrecovered call(s), sites none" in out
 
 

@@ -2913,22 +2913,32 @@ def lost_sites(turn: dict, label: Optional[str] = None) -> list:
     they disagree the turn is listed, and no split is trusted over it.
 
     Returns a list of `{"site", "step", "shape"}`, site one of "worker",
-    "step", "manager", "synthesis".
+    "step", "manager", "synthesis". A "worker" site also carries `redone`:
+    whether a later delegation in the same turn returned a body (the Manager
+    re-delegating), which is what decides whether the lawyer needs telling.
     """
     audit = turn.get("audit") or {}
     delegations = audit.get("delegations") or []
     sites: list = []
-    for dg in delegations:
+    for i, dg in enumerate(delegations):
         if dg.get("halted") or dg.get("error"):
             continue
         shape = _report_shape(dg.get("report") or "", label)
         if shape == "body":
             continue
-        sites.append({
+        site = {
             "site": "step" if dg.get("kind") == "deep_research_step" else "worker",
             "step": dg.get("step"),
             "shape": shape,
-        })
+        }
+        if site["site"] == "worker":
+            # Did the Manager make it good? A later delegation in the same turn
+            # that returned a body (the Manager re-delegating).
+            site["redone"] = any(
+                not x.get("halted") and not x.get("error")
+                and _report_shape(x.get("report") or "", label) == "body"
+                for x in delegations[i + 1:])
+        sites.append(site)
     answer = turn.get("answer") or ""
     body = _without_footer(answer)
     is_dr = (any(dg.get("kind") == "deep_research_step" for dg in delegations)
@@ -2981,6 +2991,7 @@ def cmd_lost(args) -> int:
     listing = []
     mismatches = []
     unlabelled = 0
+    workers_all = workers_redone = 0
     print(f"P4.5: lost completions, by where they landed "
           f"({len(dirs)} director{'y' if len(dirs) == 1 else 'ies'})")
     print()
@@ -3021,11 +3032,16 @@ def cmd_lost(args) -> int:
                 for s in sites:
                     if s["site"] in ("worker", "step") and s["shape"] != "labelled":
                         unlabelled += 1
+                    if s["site"] == "worker":
+                        workers_all += 1
+                        workers_redone += bool(s.get("redone"))
+                    redone = ("-" if s["site"] != "worker"
+                              else "yes" if s.get("redone") else "no")
                     listing.append((d.name, doc.get("session_id"), doc.get("rep", 1),
                                     t.get("turn"), s["site"], s["step"], s["shape"],
                                     t.get("chat_mode") or "?",
                                     audit.get("research_mode") or "?",
-                                    "v3" if v3 else "pre-v3"))
+                                    "v3" if v3 else "pre-v3", redone))
         pooled.update(c)
         print(f"{d.name:<22} {c['turns']:>5} {c['v3']:>4} {c['calls']:>5} "
               f"{c['recov']:>5} {c['unrec']:>5} {c['worker']:>6} {c['step']:>4} "
@@ -3041,7 +3057,8 @@ def cmd_lost(args) -> int:
     print()
     c = pooled
     lo, hi = _wilson(c["unrec"], c["v3"])
-    print(f"answered turns {c['turns']}, of which schema v3 (records kept) {c['v3']}")
+    print(f"turns (with an answer or a trace) {c['turns']}, of which schema v3 "
+          f"(records kept) {c['v3']}")
     print(f"provider calls that came back empty at least once: {c['calls']} "
           f"(recovered by the retry {c['recov']}, NOT recovered {c['unrec']})")
     if c["v3"]:
@@ -3052,6 +3069,9 @@ def cmd_lost(args) -> int:
           f"synthesis {c['synthesis']}, untied {c['untied']}")
     print(f"lost-shaped outcomes before schema v3 (mechanism unrecorded): "
           f"{c['pre_v3']}")
+    print(f"lost research-worker reports, all directories: {workers_all}; a later "
+          f"delegation in the same turn returned a body in {workers_redone}, "
+          f"none did in {workers_all - workers_redone}")
     if mismatches:
         print()
         print("Turns where the unrecovered calls and the lost sites disagree "
@@ -3063,11 +3083,11 @@ def cmd_lost(args) -> int:
         print()
         print(f"{'directory':<22} {'session':>10} {'rep':>3} {'turn':>4} "
               f"{'site':<9} {'step':>4} {'shape':<9} {'chat mode':<15} "
-              f"{'research type':<24} records")
-        for dn, sid, rep, turn, site, step, shape, cm, rm, v in listing:
+              f"{'research type':<24} {'records':<7} redone")
+        for dn, sid, rep, turn, site, step, shape, cm, rm, v, redone in listing:
             print(f"{dn:<22} {str(sid):>10} {rep:>3} {turn!s:>4} {site:<9} "
                   f"{step if step is not None else '-':>4} {shape:<9} {cm:<15} "
-                  f"{rm:<24} {v}")
+                  f"{rm:<24} {v:<7} {redone}")
     if args.require_label:
         print()
         if unlabelled:
