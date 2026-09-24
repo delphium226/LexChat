@@ -5292,3 +5292,26 @@ $0.47, scratch Manager A/B $0.14.
   - P3.7: 24 Sep.
 - **When a row is next ticked, add `fixed:` with that commit's date.** The
   page does not compute it.
+
+**Fix Tracker v17 and v18** (same day, both at the user's request, same URL):
+- **v17** (`5e77dea`): the table is ordered by **severity** (P1 first), then
+  **status** (Fixed first), then **fixed date** (oldest first). Undated rows
+  and ties keep plan order. It was status then severity. The divider rules
+  fall between severity/status bands.
+- **v18** (`89b7b3d`): the progress panel has a **By severity** group, one
+  stacked bar each for P1/P2/P3 split by status, above a **By source** group.
+  - It is computed from `ROWS`, so it needs no editing when rows change.
+  - It reuses the page's validated status fills and order (no new colours),
+    so the palette validation noted in the page's CSS still covers it.
+  - At v18: P1 10 fixed of 13; P2 12 of 22; P3 5 of 15.
+- Both were checked by rendering the page in a browser, light, dark and at
+  390px.
+  - The Playwright tool blocks `file:` URLs, so serve the directory first:
+    `python -m http.server 8765 --bind 127.0.0.1` from
+    `docs/prepilot-fixes/`, then stop it.
+  - The quotes show as mojibake there only because that server sends no
+    charset; the artifact host serves UTF-8.
+
+**New hazard: `sed -i` in Git Bash rewrote the tracker's CRLF line endings to
+LF.** It was caught by the byte check and normalised before commit. Edit
+tracked files with the Edit tool or a Python byte script, not `sed -i`.
