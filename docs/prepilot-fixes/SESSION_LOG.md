@@ -5072,3 +5072,173 @@ results are on their rows:
 
 **Recommended next row: P3.7.** P4.7 is the alternative only after the user
 decides its scope.
+
+---
+
+## Session 25 — 2026-09-24 — P3.7 (the held/absent test), and P4.7's scope decided
+
+**Done:**
+- **P4.7's scope was put to the user first, and decided: option (a).** Build
+  the per-mode synthesis prompt as defence in depth, with a seam-only
+  acceptance, as P4.6 was. It is recorded on the row and was not started.
+- **P3.7 is DONE** (user decision on the result, on P3.1/P3.11's precedent).
+  Ledger 32 → **33 of 50 rows**; buckets unchanged at 8 of 14. **B5 stays
+  partial, now waiting on P3.15 (new) and P4.7.**
+- **The acceptance was re-chosen and committed before any build**
+  (`b694fac`), around definiteness. It comes with a new grader
+  (`replay_report lookup`) and two scripts (`p37_6409`, `p37_6373`). The
+  grader was checked against eight stored directories and corrected twice
+  before its first use.
+- **The fix** (`475ef57`, `0c91fb6`, `782a9e8`):
+  - `lookup_legislation` reports held / held without text / not held.
+  - Code runs it on every instrument a Worker's brief names by number,
+    before the Worker's first round.
+  - The outcome reaches the Manager in the worker block, and the lawyer in a
+    code-written footer clause, which P2.8's carried line now restates on
+    follow-ups.
+  - No prompt changed.
+- **Results** (all on the row and in `BASELINE.md`, *The held/absent test*):
+  - Absent slots went from 0 of 12 to **11 of 12** in both runs on the fixed
+    code. Delegated slots pass 21 of 21, and the misses are from-history
+    follow-ups (P3.15).
+  - Stub 6 of 6 throughout; the held Act was never reported absent; zero
+    sentences questioning a citation in any run.
+  - The exit-1 set exits 0 on both fixed runs.
+- **Tests 1641 → 1698**, all green. That is 57 new: 48 product, 9 grader.
+  Reverting one product file at a time on a scratch copy fails 12 / 2 / 1 / 2
+  tests (executor / schemas / agent_core / agent_shared).
+- **Instruments:**
+  - `replay_report lookup [--answers] [--routing DIR… --live]`.
+  - `seam_replay worker --first-round` now applies the routing to a stored
+    brief; `--without-lookup` is the before side.
+  - `nosearch` reads P3.7's two lookup lines.
+
+**Surprises / deviations from FIX_PLAN:**
+- **The before-column was not empty, but the defect had changed.** Nothing
+  questions the citation any more (P2.2/P2.4). But 6373 t2 already said "does
+  not hold" in 3 of 3 reps with no by-number probe behind it: the right
+  words, unearned. And 6409 t9-11 mostly said only that the TEXT is not held.
+- **At HEAD the Worker already probed the SSI by id.** It called
+  `get_legislation_text` on an id it had guessed from a change record, and
+  got a 404 that P2.4 annotates. So a lookup existed by accident, only on
+  turns where the model thought of it.
+- **The index holds a change record BY an instrument it does not hold.**
+  `/amendment/search` returns 1 relation made by `ssi/2025/377` and 46 made
+  by `ssi/2026/170`. The not-held sentence now names that call.
+  - A first draft instead said "do not search for it again". On the
+    first-round probe the Worker then wrote at once on 4 of 5 stored briefs,
+    losing 6409's s.18 commencement.
+  - The probe caught it for $0.13, before any replay.
+- **A held instrument with the same number as the one asked about is a live
+  hazard.** `uksi/2026/170` is held and is an unrelated planning instrument.
+  - The routing looks it up when a Manager brief names it, and the survey
+    found three such briefs in the corpus.
+  - The block for a held instrument therefore names its title and says to
+    check it is the one asked about. "Use it directly" was cut before any
+    run.
+  - In `wave4_p37` that held: the answer described it as unrelated.
+- **The first acceptance run found three product defects, not one.**
+  1. The Manager narrowed "not held" to "its text".
+  2. The lookup-only footer said "no ranked search" on a turn that had
+     searched within an instrument.
+  3. That line pre-empted P2.8's carried search terms.
+
+  Each was fixed and tested before the re-run.
+- **The measuring instrument was wrong twice and the product right both
+  times.**
+  - `nosearch` did not know the lookup line.
+  - `lookup` read "This index does not hold the instrument itself" as silence
+    because the sentence names no number. That moved `wave4_p37c` from 8 to
+    11 of 12.
+  - After each fix every stored directory was re-graded and every changed
+    row read. No verdict flipped anywhere else.
+- **A commit made mid-run changed three run files' recorded head.**
+  `wave4_p37_reach`'s 6360, 6378 and 6410 record `782a9e8` but ran against
+  the `0c91fb6` server. The difference is footer-only, and the row says so.
+  New hazard: do not commit while a replay whose head matters is running.
+- **The `external-apis` skill is not tracked in git.** `.claude` is ignored.
+  The skill was updated on this machine only (6 of 13 endpoints; the lookup
+  facts).
+- **My product commit message says "11" executor failures on revert.** That
+  was measured before the memo-path test existed; it is 12 on the committed
+  code. The row carries 12.
+
+**State of the branch:** `fix/prepilot-defects`, pushed with this commit.
+`main` is untouched at `c77e779`.
+- **P3.7 is product code:** `agent_core`, `agent_shared`, the executor, the
+  schema and `search_scope`, plus the new `utils/instrument_lookup.py`.
+- No config, schema, client or whitelist change. The LEX base URL is
+  unchanged: the two endpoints are on the same host.
+- It reaches the target only in a cut, when the user asks.
+
+**Machine state:**
+- no uvicorn running, no pin file, no worktrees; `tools.replay restore` was
+  run;
+- the dev box is on its normal settings;
+- 47 replay directories. New: `wave4_p37_pre`, `wave4_p37`, `wave4_p37b`,
+  `wave4_p37c`, `wave4_p37_reach`, `wave4_p37_reach_pre`.
+
+**Spend: $10.01.** Replays $9.18, committed seam $0.22, scratch seam probes
+$0.47, scratch Manager A/B $0.14.
+
+---
+
+## Session 25 — handover for Session 26 (2026-09-24)
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. Session 25 commits:
+  - `b694fac`: the acceptance;
+  - `475ef57`: the fix;
+  - `0c91fb6`: three defects from the first run;
+  - `782a9e8`: the carried lookup;
+  - this docs commit.
+- `main` is untouched at `c77e779`. Rollback tags:
+  `pre-prepilot-fixes-2026-09-23` and `pre-prepilot-fixes-2026-09-22`.
+- **1698 tests green.**
+- Ledger **33 of 50 rows, 8 of 14 buckets.** Partial: B5 (waiting on P3.15
+  and P4.7) and B12 (waiting on P5.2). Run `python -m tools.plan_status`.
+- **Three Fixed rows are not on `main`:**
+  - P0.6 (harness only);
+  - P4.6 (`prompts.py`);
+  - P3.7 (code, listed above).
+
+**Next work: P4.7, option (a)** (the user's decision this session).
+- Put the pre-flight counts behind a command first, as its row says.
+- Then iterate on `seam_replay synthesis`, passing `--rev` explicitly.
+- P3.15 is measure-first and small.
+
+**Instruments added this session (use them, don't rebuild):**
+- `python -m tools.replay_report --dir <D> lookup [--answers]`:
+  - grades P3.7's slots;
+  - exits 1 on any failing graded slot. **It exits 1 on `wave4_p37b` and
+    `wave4_p37c` because of the P3.15 residual: expected.**
+- `lookup --routing DIR… [--live]`: which stored briefs the routing reaches,
+  printing ids only.
+- `seam_replay worker --first-round [--without-lookup]`.
+- Add `lookup` to the exit-1 set for any sweep that replays 6409 or 6373.
+
+**Hazards (carried forward, plus one new):**
+- **New: do not commit while a replay is running.** The run files record the
+  repo's head at write time, not the server's.
+- Line endings, heredoc backslashes, `-F <file>`, one-line ledger rows: as
+  before. Python in a bash heredoc bit twice this session. Both times it
+  stopped at an assert before writing anything.
+- Seam and probe output echoes the Worker's queries, and some graders echo
+  the question. Keep that output in the scratchpad.
+
+**Open with the user (unchanged unless they say otherwise):**
+- Whether P4.6 and P3.7 go in the next cut to `main`.
+- Deploy both cuts to the target: `pg_dump` first (no backup has ever run
+  there), then `git pull`, `stop_native.cmd` / `start_native.cmd`,
+  `server_py\test_apis.ps1` and one real question.
+  - It is still not confirmed that the first cut was ever pulled.
+  - P0.7's query can go with the deploy.
+  - **P3.7 calls two more LEX endpoints on the same host**, so the whitelist
+    does not change.
+- Tell whoever runs the lexchat-eval harness that the audit event is still
+  schema v5. A new tool name, `lookup_legislation`, now appears in
+  `delegations[].tools[]`, usually first; `AUDIT_TRACE.md` documents it.
+- Raise P4.5: $4.89 of `wave3_p313`'s $5.65; about 62,912 reasoning tokens
+  per empty completion.
+- P5.2 (B12, external).
+- Whether Thomas's review document should be committed.

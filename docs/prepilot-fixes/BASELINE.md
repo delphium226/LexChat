@@ -3591,3 +3591,68 @@ term.
 **Spend for the row: $8.33**, of which $0.74 + $0.85 + $0.20 was a scratch
 A/B and probe run before the command above existed; the published seam
 figures are the command's.
+
+## The held/absent test (P3.7, 2026-09-24)
+
+P3.7 adds `lookup_legislation` (`/legislation/lookup`, with
+`/legislation/section/lookup` as the text check) and runs it in code on every
+instrument a Worker's brief names by number. The acceptance was re-chosen and
+committed before any build (`b694fac`), around definiteness. An absent
+instrument is reported not held because a lookup said so. A stub is reported
+held without text. A held instrument is never reported absent. The scripts
+are `evidence/scripts/p37_6409.json` (export turns 1, 2 and 7-11,
+Conversational) and `p37_6373.json` (turns 1-3); both sessions are FAIL, so
+n=3.
+
+**The replay.** `python -m tools.replay_report --dir <D> lookup` reads the
+model's prose with the footer removed. It reads the sentences that name the
+instrument, or refer back to it without naming another. The table's `deleg`
+column separates a from-history follow-up (0) from a researched turn.
+
+| | `wave4_p37_pre` (`b694fac`) | `wave4_p37` (`475ef57`) | `wave4_p37b` (`0c91fb6`) | `wave4_p37c` (`782a9e8`) |
+|---|---|---|---|---|
+| absent slots passing (6409 t9-11, 6373 t2) | 0 of 12 | 8 of 12 | 11 of 12 | 11 of 12 |
+| of them delegated / from history | — | — | 11 of 11 / 0 of 1 | 10 of 10 / 1 of 2 |
+| stub slots (6409 t7, t8) | 6 of 6 | 6 of 6 | 6 of 6 | 6 of 6 |
+| held slot (6409 t2) | 1 of 3, 2 no claim | 1 of 3, 2 no claim | 2 of 3, 1 no claim | 1 of 3, 2 no claim |
+| sentences questioning the citation | 0 | 0 | 0 | 0 |
+| exit-1 subcommands exiting 1 | none | `nosearch` | none | none |
+| spend | $1.82 | $1.75 | $1.81 | $1.69 |
+
+The `wave4_p37` column is graded by the fixed instruments. On the day,
+`nosearch` also read five lookup-line turns as carrying no statement. The one
+it still flags (6373 r1 t3) is a real misattribution, fixed in `0c91fb6`.
+
+**Invariant 1** (`scripted --before wave4_p37_pre` on `wave4_p37c`, 10 slots):
+- links 6.3 → 8.7 summed, fell in 3 slots;
+- `sources_kept` 45.7 → 21.0, fell in 6;
+- prose 4,394 → 5,190 chars.
+
+The `sources_kept` fall is the ranked search for a number going away. On
+6409 export t8 and t11 the before-side kept 10 unrelated SIs and cited none;
+the after-side keeps the Act.
+
+**The first-round seam** (`seam_replay worker --first-round
+[--without-lookup]`, committed command, one draw each side, $0.22). It covers
+the stored briefs of the graded turns and the five other sessions the routing
+reaches in `wave2`.
+
+| payloads | without the lookup | with it |
+|---|---|---|
+| 5 briefs naming an unheld SSI (6409 t9 ×2, t11; 6373 t2 ×2) | `search_legislation` first, 5 of 5 | `get_legislation_changes` on the unheld id, direction 'by', 5 of 5 |
+| 1 brief naming the stub (6409 t8) | `search_legislation` | writes from its record (the description carries the commencement date) |
+| 5 briefs in 6360, 6374, 6378, 6383, 6410 | `search_legislation` first, 5 of 5 | 6360 unchanged; 6374, 6378, 6383 go straight to the held id's provisions; 6410 adds SSI 2025/388's change record |
+
+**Reach.** `lookup --routing wave2 --live` finds 12 of 189 stored Worker
+briefs naming an instrument by number, in 7 sessions: 9 ids, of which 5 are
+held, 3 not held and 1 a stub. `wave4_p37_reach` against
+`wave4_p37_reach_pre` (n=1, the five sessions outside the acceptance set,
+$1.05 + $1.06):
+- routed on 3 turns, with links unchanged there;
+- links 24 → 23 and `sources_kept` 24 → 25 over 12 slots;
+- the only exit is `derivations` on 6374 export t3, a turn that made no
+  lookup (P2.3's known 6374 exit);
+- `commencements` still OK on 6410.
+
+**Spend for the row: $10.01** (replays $9.18, seam $0.69, a scratch Manager
+A/B $0.14 that guided the limb wording and is not quoted).

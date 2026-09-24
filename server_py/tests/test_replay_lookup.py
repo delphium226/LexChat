@@ -105,6 +105,18 @@ def test_text_only_hedged_and_blame_fail_an_absent_slot():
         assert _verdicts(doc)[9][0] == "FAIL", answer
 
 
+def test_a_sentence_referring_back_to_the_instrument_is_read_as_about_it():
+    """`wave4_p37c`: "This index does not hold the instrument itself" names no
+    number, and the number-only reading scored three correct answers as
+    silent. A sentence naming another instrument's number is not borrowed."""
+    doc = _doc(_t(1, "This index does not hold the instrument itself." + FOOTER,
+                  [_lookup_tool("ssi/2025/377", "not_held", True)]), from_turns=[9])
+    assert _verdicts(doc)[9] == ("PASS", "")
+    doc = _doc(_t(1, "The instrument SSI 2025/119 is not held in this index." + FOOTER,
+                  [_lookup_tool("ssi/2025/377", "not_held", True)]), from_turns=[9])
+    assert _verdicts(doc)[9][0] == "FAIL"
+
+
 def test_a_clarifying_question_is_no_claim_except_where_the_row_needs_an_answer():
     ask = "What would you like to know about these regulations?"
     doc = _doc(_t(1, ask, delegations=0), _t(2, ask, delegations=0), from_turns=[10, 9])

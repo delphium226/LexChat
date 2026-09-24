@@ -5652,6 +5652,16 @@ LK_BLAME = re.compile(
 # The clause P3.7's code writes into the lawyer's footer for a looked-up
 # instrument. Read from the footer only.
 LK_FOOTER = re.compile(r"looked up by (?:its |their )?numbers?", re.I)
+# **A sentence that refers BACK to the instrument is about it too.** Found on
+# `wave4_p37c`: three answers said "This index does not hold the instrument
+# itself" on turns asking only about SSI 2025/377, and the number-only
+# `mention` read them as saying nothing. Such a sentence is attributed to the
+# slot's instrument only when it names no instrument number of its own, so it
+# cannot be credited with a claim about a different one.
+LK_ANAPHOR = re.compile(
+    r"\b(?:the|this|that) (?:instrument|statutory instrument|SSI|regulations|order)\b"
+    r"|\bthese regulations\b|\bit is not held\b", re.I)
+LK_ANY_NUMBER = re.compile(r"\b\d{4}/\d{1,5}\b|\b\d{4} (?:asp|c\.) \d{1,4}\b", re.I)
 
 
 def _lk_classify(sentence: str) -> str:
@@ -5732,7 +5742,8 @@ def lookup_rows(doc: dict) -> list:
             kinds = Counter()
             sents = []
             for s in _sentences(prose):
-                k = _lk_classify(s) if mrx.search(s) else ""
+                about = mrx.search(s) or (LK_ANAPHOR.search(s) and not LK_ANY_NUMBER.search(s))
+                k = _lk_classify(s) if about else ""
                 if k:
                     kinds[k] += 1
                     sents.append((k, s))
