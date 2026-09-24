@@ -1227,7 +1227,7 @@ be attributed to either side. Before quoting accuracy numbers: get a lawyer thro
 ---
 
 ### D17. Deep Research synthesis prompt is mode-blind — MOVED to the pre-pilot fix plan as P4.7
-**MOVED 2026-09-18 to `docs/prepilot-fixes/FIX_PLAN.md` row P4.7**, together with the same point from Thomas's external review (action 2). It had not been carried into that plan when D16 was. Track it there; the analysis below is kept for reference. ~~**Status: PARKED by user decision, 2026-08-19**, to be taken up with D16 as one piece of
+**DONE 2026-09-24 as P4.7** on `fix/prepilot-defects` (`get_deep_research_synthesis_prompt(research_mode)`; sections from `REPORT_SECTIONS`, now in `prompts.py`; not yet on `main`). **MOVED 2026-09-18 to `docs/prepilot-fixes/FIX_PLAN.md` row P4.7**, together with the same point from Thomas's external review (action 2). It had not been carried into that plan when D16 was. Track it there; the analysis below is kept for reference. ~~**Status: PARKED by user decision, 2026-08-19**, to be taken up with D16 as one piece of
 work once the further feedback lands.~~ Raised by an external colleague reviewing the Deep
 Research ReAct loop; verified against the code the same day (their line numbers were off —
 corrected below).

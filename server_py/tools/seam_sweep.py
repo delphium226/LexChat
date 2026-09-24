@@ -154,7 +154,7 @@ def pinned_pairs(text: str) -> set:
 
 
 # A Markdown link whose label may hold ONE level of balanced brackets, as a
-# judgment's does: `[*Berezovsky v Hine* [2011] EWCA Civ 1089](url)`, which
+# judgment's does: `[*A v B* [2011] EWCA Civ 1](url)`, which
 # CommonMark renders as a link. **Corrected at first use (Session 26):**
 # `replay_report.MD_LINK` forbids `]` in a label, so it does not see that
 # link at all, and a v2 hybrid draw (`wave2_p24_pre`/6375 r1 t2) that linked

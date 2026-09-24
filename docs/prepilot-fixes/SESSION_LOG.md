@@ -5315,3 +5315,170 @@ $0.47, scratch Manager A/B $0.14.
 **New hazard: `sed -i` in Git Bash rewrote the tracker's CRLF line endings to
 LF.** It was caught by the byte check and normalised before commit. Edit
 tracked files with the Edit tool or a Python byte script, not `sed -i`.
+
+---
+
+## Session 26 — 2026-09-24 — P4.7 (the Deep Research synthesis, per research type)
+
+**Done:**
+- **P4.7 is DONE** (option (a), the user's decision in Session 25). Ledger
+  33 → **34 of 50 rows**; buckets unchanged at 8 of 14. **B5 stays partial,
+  now waiting on P3.15 alone.**
+- **The pre-flight went behind a command first**:
+  `replay_report drgaps [--all-dirs] [--export] [--list] [--sentences]`
+  (`09fb1ed`). It reproduces the scratch read (149 `legislation_only`
+  syntheses, 20 turns matching a case-law word, 5 synthesis reports naming
+  case law, all as excluded) and finds 0 case-law 'not found'. Its recall was
+  checked on the export (6338, 6370 and 6407 fire, as the pre-flight said).
+- **The seam's `--without-fix` confound was fixed before any A/B**
+  (`09fb1ed`). The pinpoint block is now stripped only if `--rev` predates
+  P3.1's builder. The prompt is built for the turn's research type, including
+  at a revision whose prompt is per-type (that revision's `prompts.py` is
+  executed in isolation). `_cfg_for` falls back to the audit's research type.
+  `seam_sweep --synthesis p47 [--grade]` is the synthesis sweep.
+- **The acceptance was re-chosen and committed before any product code**
+  (`9cacde8`): seam-only, with four pass conditions and the empty-before
+  contingency written down.
+- **The fix** (`d304652`, then `158841d`):
+  `get_deep_research_synthesis_prompt(research_mode)`.
+  - It names what the type searched and did not, and carries Thomas's gap
+    wording for every type.
+  - Its sections come from `REPORT_SECTIONS`, moved to `prompts.py` as the one
+    definition.
+  - P2.5's rules and P3.1's pinpoint rule are kept for every type.
+  - `research_mode` is passed explicitly from `run_deep_research` and by the
+    seam tool.
+- **Results** (all on the row and in `BASELINE.md`, *The Deep Research
+  synthesis, per research type*):
+  - `legislation_only` case-law 'not found' 1 → 0 (D17's own sentence, 6341
+    t7).
+  - All 6 hybrid true negatives survive; hybrid sections 0 → 8 of 8.
+  - Links 594 → 691 and 182 → 208; pinpoints 24 → 24 and 15 → 17; Key
+    findings 20/20 and 8/8.
+  - Smoke `wave4_p47b`: every grader exits 0, depth DELIVERED.
+- **Tests 1698 → 1795**, all green.
+
+**Surprises / deviations from FIX_PLAN:**
+- **The before column was NOT empty.** The replays hold no instance (0 in
+  165 `legislation_only` Deep Research turns), but the seam at `9cacde8`
+  wrote D17's sentence on 6341 t7 in 2 of 4 draws. Its stored report says
+  the accurate thing, so the sentence is live in the prompt and the replay
+  had simply not drawn it. The contingency was not needed.
+- **The first wording failed Invariant 1 on the seam, and the committed
+  command caught it.**
+  - 6408 wrote bare-URL references (2 of 4 after-draws against 0 of 4).
+  - 6407 dropped the **Key findings** label (2 of 4 against 0 of 4).
+  - Three redraws a side confirmed each.
+  - Two lines, for every type, fixed both. The after column was then
+    redrawn in full at the new commit, and only that column is published.
+- **The instrument was wrong four times, the product right each time:**
+  - `drgaps` flagged an accurate exclusion before first use;
+  - the sweep compared pinpoint spellings literally;
+  - it read a did-not-complete gap as silence;
+  - it could not see a judgment link with a bracketed year.
+  Each changed row was re-read after re-grading. The last is a defect in
+  `replay_report.MD_LINK` itself, left unchanged: **every grader that counts
+  links with it undercounts judgment links.** That is a watch item.
+- **My own slip, caught before it reached a number:** I first put
+  `wave4_p41`/p41_6346_dr t2 in the `legislation_only` payload set from a
+  4-character slice of its type. It ran hybrid. It was removed before any
+  draw.
+- **One observation the row did not ask for:** on a hybrid payload whose
+  step 1 returned nothing, the before-draw said step 1 "found no" case law.
+  That is a negative from a search that never completed, and the after-draw
+  says the step "did not return findings". This is Thomas's second limb, and
+  it is the only place this session saw it tested.
+
+**State of the branch:** `fix/prepilot-defects`, pushed with this commit.
+`main` is untouched at `c77e779`. **P4.7 is product code** (`prompts.py`,
+`agent_core.py`): no config, schema, client or whitelist change. It reaches
+the target only in a cut, when the user asks.
+
+**Machine state:**
+- no uvicorn running, no pin file, no worktrees; `tools.replay restore` was
+  run;
+- the dev box is on its normal settings;
+- 49 replay directories. New: `wave4_p47` (6365 at `d304652`, the first
+  wording) and `wave4_p47b` (6365 at `ac7878e`, whose product code is
+  `158841d`'s).
+- The seam draws are in the session scratchpad, not the repo (they echo
+  lawyers' terms).
+
+**Spend: $14.49 (seam sweeps $8.54, committed redraws $3.16, scratch probe $0.71, replays $2.08).**
+
+---
+
+## Session 26 — handover for Session 27 (2026-09-24)
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. Session 26 commits:
+  - `09fb1ed`: the instruments (`drgaps`, the seam confound, the synthesis
+    sweep);
+  - `9cacde8`: the acceptance;
+  - `d304652`: the fix;
+  - `158841d`: the link and label lines;
+  - `ac7878e`: the grader corrections;
+  - this docs commit.
+- `main` is untouched at `c77e779`. Rollback tags:
+  `pre-prepilot-fixes-2026-09-23` and `pre-prepilot-fixes-2026-09-22`.
+- **1795 tests green.**
+- Ledger **34 of 50 rows, 8 of 14 buckets.** Partial: B5 (waiting on P3.15)
+  and B12 (waiting on P5.2). Run `python -m tools.plan_status`.
+- **Four Fixed rows are not on `main`:**
+  - P0.6 (harness only);
+  - P4.6 (`prompts.py`);
+  - P3.7 (code);
+  - P4.7 (`prompts.py`, `agent_core.py`).
+
+**Next work: P3.15**, the last row B5 waits on. It is measure-first: count
+the from-history absent slots over any sweep that replays 6409 or 6373 past
+their lookup turn before building. Its lever is the conversational Manager's
+NOT HELD rule, so Session 22's first-round probe applies. Otherwise the
+unblocked Wave 3/4 rows stand as the recommended-order line lists them.
+
+**Instruments added this session (use them, don't rebuild):**
+- `python -m tools.replay_report --dir <D> drgaps [--all-dirs] [--export]
+  [--list] [--sentences]`:
+  - every answered Deep Research turn by research type;
+  - exits 1 on a case-law 'not found' under a type with no case-law tool;
+  - `--sentences` prints text, so keep that output in the scratchpad.
+  - **It joins the exit-1 set for any sweep with Deep Research turns.**
+- `python -m tools.seam_sweep --synthesis p47[_legislation or _hybrid] --out
+  DIR [--without-fix --rev SHA]`, then `--grade DIR`:
+  - the synthesis seam over fixed payloads;
+  - `--rev` is required on the without side.
+- `seam_replay synthesis --without-fix`:
+  - the pinpoint block is stripped only if `--rev` predates it;
+  - the prompt is built per type at a per-type revision.
+- **Watch item:** `replay_report.MD_LINK` misses `[… [2011] EWCA Civ
+  1089](url)`. Any link count it produces undercounts judgments.
+  `seam_sweep.MD_LINK_NESTED` does not.
+
+**Hazards (carried forward):** line endings (and `sed -i`), heredoc
+backslashes, `-F <file>`, one-line ledger rows, not committing during a
+replay, keeping seam output (which echoes lawyers' terms) in the scratchpad.
+**New:**
+- a background job started with a trailing `&` inside one Bash call dies
+  with that shell; use the tool's background mode;
+- never read a research type from a truncated string.
+
+**Open with the user (unchanged unless they say otherwise):**
+- Whether P4.6, P3.7 and P4.7 go in the next cut to `main`.
+- Deploy both cuts to the target: `pg_dump` first (no backup has ever run
+  there), then `git pull`, `stop_native.cmd` / `start_native.cmd`,
+  `server_py\test_apis.ps1` and one real question.
+  - It is still not confirmed that the first cut was ever pulled.
+  - P0.7's query can go with the deploy.
+- Tell whoever runs the lexchat-eval harness:
+  - the audit event is still schema v5;
+  - `lookup_legislation` now appears in `delegations[].tools[]`;
+  - a Deep Research report's section headings now follow its research type
+    (a hybrid report has Statutory Framework and Key Cases).
+- Raise P4.5: $4.89 of `wave3_p313`'s $5.65; about 62,912 reasoning tokens
+  per empty completion. P4.7's prompt now reads an empty step as one that
+  did not complete (on the seam, P4.5's own 6375 instance). The labelled
+  lost-step report P4.5 proposes is still not built: note on its row.
+- P5.2 (B12, external).
+- Whether Thomas's review document should be committed.
+- **The Fix Tracker has not been updated this session** (update only when
+  asked). When it is, P4.7 becomes Fixed with `fixed: "2026-09-24"`.

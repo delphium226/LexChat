@@ -167,9 +167,9 @@ def test_a_gap_by_what_happened_counts_as_a_case_law_gap():
 def test_a_judgment_label_with_a_bracketed_year_is_still_a_link():
     """Corrected at first use: `replay_report.MD_LINK` misses this link, so a
     hybrid draw that linked six judgments this way graded as dropping them."""
-    t = "[*Berezovsky v Hine & Ors* [2011] EWCA Civ 1089](https://caselaw.nationalarchives.gov.uk/ewca/civ/2011/1089)"
+    t = "[*A v B* [2011] EWCA Civ 1](https://caselaw.nationalarchives.gov.uk/ewca/civ/2011/1)"
     assert rr.MD_LINK.findall(t) == []
-    assert ss.link_targets(t) == {"https://caselaw.nationalarchives.gov.uk/ewca/civ/2011/1089"}
+    assert ss.link_targets(t) == {"https://caselaw.nationalarchives.gov.uk/ewca/civ/2011/1"}
 
 
 def test_link_targets_fold_scheme_and_id_and_ignore_repeats():

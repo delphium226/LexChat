@@ -3656,3 +3656,128 @@ $1.05 + $1.06):
 
 **Spend for the row: $10.01** (replays $9.18, seam $0.69, a scratch Manager
 A/B $0.14 that guided the limb wording and is not quoted).
+
+## The Deep Research synthesis, per research type (P4.7, 2026-09-24)
+
+`DEEP_RESEARCH_SYNTHESIS_PROMPT` was one constant for every research type.
+Its model gap sentence was "No reported case law was found on X", and its
+sections were the legislation Worker's. P4.7 option (a), the user's decision,
+builds it per type (`get_deep_research_synthesis_prompt`) as defence in depth,
+with a seam-only acceptance booked before any build (`9cacde8`).
+
+**The pre-flight, behind a command.** `python -m tools.replay_report --dir
+<any> drgaps --all-dirs --export` (`09fb1ed`) reads every answered Deep
+Research turn, and exits 1 on a case-law 'not found' under a type with no
+case-law tool.
+
+| | replay run files (47 directories) | the export |
+|---|---|---|
+| answered Deep Research turns | 198 | 27 |
+| under `legislation_only` | 165 (149 syntheses, 16 planner answers) | 21 |
+| of those, matching a case-law word | 20 | 0 |
+| naming case law as a source | 17 (12 planner, 5 synthesis) | 0 |
+| case-law 'not found' sentences | **0** | **0** |
+
+Recall: the classifier fires on 8 hybrid replay turns, and on 13 export
+answers of any chat mode (6337, 6338, 6340, 6341, 6370, 6407). Twelve of the
+13 are hybrid. The 13th, 6337 t1, is a Conversational answer whose research
+type P0.6 reads as `unknown`. It was corrected once before first use: a bare
+'no reported' alternative flagged an accurate exclusion (6341 t7, case law
+"not searched or retrieved").
+
+**The seam A/B.** One draw a payload a side. The two sides differ in the
+system prompt alone, because `09fb1ed` fixed `seam_replay`'s pinpoint-block
+confound.
+
+```
+python -m tools.seam_sweep --synthesis p47 --out <scratch> --without-fix --rev 9cacde8
+python -m tools.seam_sweep --synthesis p47 --out <scratch>
+python -m tools.seam_sweep --synthesis p47 --grade <scratch>     # graded at ac7878e
+```
+
+The after column is `158841d`, the second wording. The first (`d304652`)
+is below.
+
+| `p47_legislation` (20 payloads) | before (`9cacde8`) | after (`158841d`) |
+|---|---|---|
+| reports with a case-law 'not found' | **1** (6341 t7: D17's own sentence) | **0** |
+| links, summed | 594 | 691 |
+| distinct link targets, summed | 262 | 261 |
+| pinpoints kept, summed (of 29) | 24 | 24 |
+| reports carrying **Key findings** | 20 | 20 |
+| reports with every section of the type | 20 | 20 |
+| currency UNSUPPORTED (P2.5) | 0 | 0 |
+
+| `p47_hybrid` (8 payloads, each with a TRUE case-law negative stored) | before | after |
+|---|---|---|
+| reports stating a case-law gap | 6 | 7 (all 6 of the before's, plus 1) |
+| case-law 'not found' / gap sentences | 9 / 9 | 3 / 17 |
+| links, summed | 182 | 208 |
+| distinct link targets, summed | 67 | 70 |
+| pinpoints kept, summed (of 17) | 15 | 17 |
+| reports carrying **Key findings** | 8 | 8 |
+| reports with every section of the type | **0** | **8** |
+| currency UNSUPPORTED | 0 | 0 |
+
+Read by hand:
+- **The before column is not empty.** At `9cacde8` the seam wrote D17's own
+  sentence on 6341 t7 ("…restricted by a Legislation Only filter, no reported
+  case law was found…"). It did so in 2 of 4 before-draws (the sweep and
+  three redraws). The first wording wrote it in 0 of 4: three stated the
+  exclusion instead and one did not mention case law. `158841d`'s draw does
+  not mention case law either.
+- **A hybrid true negative is restated, not dropped.** "Not found" sentences
+  fall from 9 to 3 while gap sentences rise from 9 to 17: they become "the
+  legislation and judgments retrieved in this research do not establish…".
+- **The fix's second limb, observed.** Step 1 of `wave2_p24_pre`/6375 r3 t2
+  has empty findings. Before, the report said step 1 "found no" case law, a
+  negative a search never reached. After, it says step 1 "did not return
+  findings".
+- Links fell in 8 payloads, and none of them lost a distinct target: the
+  fall is repeated citations. One other payload, `wave1`/6408 t2, lost one
+  instrument's top-level link, and the instrument is still named 4 times.
+
+**The first wording failed two of Invariant 1's checks, and the seam caught
+both.** At `d304652`, with three redraws a side from `seam_replay synthesis`
+confirming each one:
+- `wave2`/6408 t2 wrote bare-URL references in 2 of 4 after-draws against 0
+  of 4 before (`legislation_only` links 594 → 575);
+- `wave2`/6407 t3 dropped the **Key findings** label in 2 of 4 against 0 of 4
+  (8 → 6 hybrid reports).
+
+`158841d` adds two lines, for every type: keep each citation as the findings'
+Markdown link, never a bare URL; and put the findings under that bold label.
+A scratch probe drew 6408 linked 3 of 3 and 6407 labelled 3 of 3, and then
+the committed after column above was drawn.
+
+**The grader was wrong three times at first use.** Each was found by reading
+a flagged payload, and each changed row was re-read after re-grading.
+- Pinpoints were compared literally (`s. 126(7)(a)` against `Section
+  126(7)(a)`).
+- A gap stated as "step 1 did not return findings" read as silence.
+- `replay_report.MD_LINK` does not see a link whose label holds a bracketed
+  year, `[… [2011] EWCA Civ 1089](url)`. So a hybrid draw that linked all six
+  of its judgments that way graded as dropping them.
+  - The sweep now uses a nested-bracket regex.
+  - **`MD_LINK` itself is unchanged, so every grader that counts links with
+    it undercounts judgment links.** That is a watch item, not measured here.
+
+**The smoke replay** (`wave4_p47b`, 6365 at `158841d`, n=1): all 12 subcommands (the exit-1 set, `drgaps` and `depth`) exit 0; depth DELIVERED; 58 links, 22 of 22 pinpoints, **Key findings** and all four sections, no case-law sentence; 5 plan steps, 41 tool calls, no empty completion, $1.05. The same session at the first wording (`wave4_p47`, `d304652`) also exited 0 on all of them and was DELIVERED ($1.03). Neither is a before: the planner and everything upstream draw afresh.
+
+**Deterministic half** (`tests/test_synthesis_prompt.py`, 57 tests):
+- every research type keeps CITATION PRESERVATION, the pinpoint rule, the
+  link rule, **Key findings** and P2.5's currency rules;
+- the Holyrood and Westminster prompts carry their own sections and no
+  extent or in-force section;
+- no type scripts a case-law negative;
+- an unknown type (`drafting`) falls through to `legislation_only`.
+
+Revert checks on scratch copies:
+- the builder returning the old literal fails 34 of the 57;
+- `agent_core.py` at `9cacde8` fails 8 of them and 9 seam tests;
+- each copy also fails the 4 tests that call `git show`.
+
+**D17 item 2 has no stored payload and no replay route** (the harness has
+never run the parliament bot). Its evidence is the deterministic half alone.
+
+**Spend for the row: $14.49: the seam sweeps $8.54 (before $2.57; after at the first wording $2.87 and at `158841d` $3.10), redraws from the committed `seam_replay` command $3.16, a scratch probe of the second wording $0.71, and the two smoke replays $2.08.**
