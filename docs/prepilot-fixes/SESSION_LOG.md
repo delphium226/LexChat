@@ -5242,3 +5242,53 @@ $0.47, scratch Manager A/B $0.14.
   per empty completion.
 - P5.2 (B12, external).
 - Whether Thomas's review document should be committed.
+
+**Addendum to Session 25 (same day, after the handover was written, at the user's request).**
+
+**Recorded here so they are not lost:**
+- **Watch item from the reach check (n=1, `wave4_p37_reach` against
+  `wave4_p37_reach_pre`).** Links fell in 3 of 12 slots: 6378 t1 3 → 0,
+  6378 t2 1 → 0, 6383 t1 2 → 1. None of those turns ran the lookup.
+  - 6378 t1's brief named no instrument by number.
+  - 6378 t2 answered from history with no delegation.
+  - The only difference on 6378 t1 is that `lookup_legislation` is now in
+    the tool list, offered and not called. n=1 cannot separate that from
+    draw noise. If a later sweep shows links falling on turns that did NOT
+    route, suspect the offered tool (Session 14 saw a context change move
+    the quick-lookup Worker's format).
+  - On the acceptance slots, 6409 export t10's links went 0.7 → 0.0
+    (`wave4_p37c`, n=3).
+- **The lookup-only footer line is gated on `scope_unknown`** (`782a9e8`),
+  like P2.8's carried line. After a failed delegation or a peer consult the
+  turn's searches are unknown, so "no ranked search was run" could be false.
+  It was in a commit message only.
+- **Where the unused scratch evidence went.** The first-round probe outputs
+  and the scratch Manager A/B echo the Worker's and the lawyers' own search
+  terms, so they were left in the session scratchpad and not committed.
+  - Every number quoted from them is on P3.7's row, from the committed
+    `seam_replay` command.
+  - The scratch Manager A/B ($0.14) only guided the limb wording and is not
+    quoted.
+
+**Fix Tracker v16** (published to the same URL at the user's request):
+- New **Fixed date** column: the first commit in which `FIX_PLAN.md` shows
+  the row ticked `[x]`, from `git log --reverse --
+  docs/prepilot-fixes/FIX_PLAN.md`.
+  - It was checked against this log's session dates and agrees for every
+    row.
+  - It is the date a fix was accepted, not deployed, and the page says so.
+  - Rows carry it as `fixed: "YYYY-MM-DD"`.
+- P3.7 → Fixed (24 Sep 2026). P3.15 added (Verified, P3). The prose now
+  covers P3.7 and "next: P4.7 (a)".
+- The tracker's `fixed` values, 27 rows on 26 refs (P3.1 appears twice):
+  - P1.1-P1.4: 14 Sep.
+  - P1.6, P2.1, P2.2, P2.6, P4.4: 15 Sep.
+  - P2.3, P2.5, P2.9, P3.5, P4.2: 16 Sep.
+  - P2.4, P2.7, P2.8: 17 Sep.
+  - P3.1: 18 Sep.
+  - P3.8: 21 Sep.
+  - P0.5, P3.11, P4.1: 22 Sep.
+  - P0.6, P3.13, P4.6: 23 Sep.
+  - P3.7: 24 Sep.
+- **When a row is next ticked, add `fixed:` with that commit's date.** The
+  page does not compute it.

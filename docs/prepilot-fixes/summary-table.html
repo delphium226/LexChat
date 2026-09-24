@@ -242,7 +242,7 @@
     border-radius: 12px;
     overflow-x: auto;
   }
-  table { width: 100%; border-collapse: collapse; min-width: 800px; }
+  table { width: 100%; border-collapse: collapse; min-width: 900px; }
   thead th {
     position: sticky;
     top: 0;
@@ -271,6 +271,7 @@
     color: var(--ink-soft);
     white-space: nowrap;
   }
+  td.fdate { white-space: nowrap; font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
   td.src { white-space: nowrap; font-family: var(--font-mono); font-size: 12.5px; font-weight: 500; }
   .src-t { color: var(--gold); }
   .src-r { color: var(--brand); }
@@ -325,8 +326,9 @@
       its row in the fix plan and its action number in Thomas's review of 10 September 2026.
       <strong>“Fixed” means built and accepted on the fix branch. Everything marked Fixed has been
       merged for deployment to the server (first release 22 September, second 23 September),
-      except P0.6, which changes only our test tooling and needs no deployment, and P4.6, fixed
-      after the second release, which will go with the next one.</strong></p>
+      except P0.6, which changes only our test tooling and needs no deployment, and P4.6 and P3.7,
+      fixed after the second release, which will go with the next one. The fixed date is the day a
+      fix was accepted, not the day it reached the server.</strong></p>
   </header>
 
   <section class="progress" aria-label="Progress summary">
@@ -361,6 +363,7 @@
           <th scope="col">Plan ref</th>
           <th scope="col">Fix</th>
           <th scope="col">Status</th>
+          <th scope="col">Fixed date</th>
           <th scope="col">Severity</th>
           <th scope="col">Source</th>
           <th scope="col">Thomas ref</th>
@@ -375,7 +378,7 @@
     <div>
       <h2>Status</h2>
       <dl>
-        <dt>Fixed</dt><dd>Built and accepted on the fix branch. Everything marked Fixed has been merged to <code>main</code> for deployment to the target: the first release on 22 September, the second (P3.13) on 23 September. A fix made after that (P4.6) stays on the branch until the next release.</dd>
+        <dt>Fixed</dt><dd>Built and accepted on the fix branch. Everything marked Fixed has been merged to <code>main</code> for deployment to the target: the first release on 22 September, the second (P3.13) on 23 September. Fixes made after that (P4.6, P3.7) stay on the branch until the next release.</dd>
         <dt>In progress</dt><dd>Under way. P5.2 is waiting on an external decision.</dd>
         <dt>Verified</dt><dd>The problem is confirmed in our replays, the code or a live test, but no fix is built yet.</dd>
         <dt>To be verified</dt><dd>Proposed, not yet confirmed or agreed.</dd>
@@ -392,9 +395,31 @@
       <h2>References</h2>
       <p><strong>Plan ref</strong> is the row in <code>docs/prepilot-fixes/FIX_PLAN.md</code>.
         <code>TODO B6</code> is in <code>docs/TODO.md</code>, outside the plan.</p>
+      <p><strong>Fixed date</strong> is the day the fix was accepted on the fix branch, taken from the
+        history of the fix plan. It is not the day it was deployed: that is the release date above.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.</p>
-      <p><strong>P4.6</strong>, wording that says the whole database lacks something, is fixed. Three
+      <p><strong>P3.7</strong>, a direct check of whether the database holds a named instrument, is
+        fixed. When a question names an instrument by its number (for example SSI 2025/377), the
+        system now looks that number up in the database before it starts researching. Before, it
+        could only run a ranked keyword search, and not finding an instrument near the top of a
+        ranked list is not proof that it is absent. The answer now says one of three things: the
+        instrument is held; it is held but its text is not; or it is not held. When it is not held,
+        a line under the answer says so, written by the system itself rather than left to the
+        model: “SSI 2025/377 was looked up by its number and is not held in this index; that is a
+        gap in the index, not a sign that the citation is wrong.” The official record of changes
+        still says what an unheld instrument does, so the answer still reports that, for example,
+        SSI 2025/377 brings section 18 of the Act into force.</p>
+      <p><strong>How it was tested.</strong> We re-ran the two sessions where lawyers asked about
+        instruments the database does not hold, three times each. Before the fix, none of 12
+        answers said definitely that the instrument was not held because it had been checked.
+        After it, 11 of 12 did. The one that did not was a follow-up answered from the earlier
+        conversation, which said the instrument’s text was not held; the line under that answer
+        still states that the instrument itself is not held. That remaining wording is a new row,
+        <strong>P3.15</strong>. The instrument that is held but has no text was reported correctly
+        every time, no answer questioned the lawyer’s citation, and answers carry more links, not
+        fewer.</p>
+      <p><strong>Earlier, P4.6</strong>, wording that says the whole database lacks something, is fixed. Three
         lines in the research step's instructions told it what to say when its search came up short,
         and each said it about the whole database: “The available database does not contain
         information on this specific issue”, and a case-law equivalent. It now describes the search
@@ -463,8 +488,9 @@
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
       <p><strong>Next.</strong> <strong>P4.7</strong>, the same problem in the Deep Research report,
-        which can say “no case law was found” when case law was never searched; or
-        <strong>P3.7</strong>, a direct check of whether the database holds a named instrument.
+        which can say “no case law was found” when case law was never searched. We found no case
+        of it in our replays or in the pre-pilot answers, so it will be built as a safeguard and
+        tested on the report-writing step alone, as P4.6 was.
         <strong>P4.5</strong> (a research step whose answer is lost) is becoming more pressing: it
         is now the main source of slow and costly replies in our replays.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
@@ -483,49 +509,52 @@
   // status: "Fixed" | "In progress" | "Verified" | "To be verified"
   // sev:    "P1" | "P2" | "P3"  (see the Severity notes; grades the defect, not the fix)
   // src:    "T" | "R" | "T & R"
-  const UPDATED = "23 September 2026, end of Session 24 (P4.6 fixed: the research step now says what its search did not establish, not that the database lacks it; 32 of 32 affected reports before, 0 of 31 after; next: P4.7 or P3.7)";
+  // fixed:  "YYYY-MM-DD" on a Fixed row only: the first commit in which FIX_PLAN.md shows the
+  //         row ticked [x] (git log -- docs/prepilot-fixes/FIX_PLAN.md). Not a deployment date.
+  const UPDATED = "24 September 2026, end of Session 25 (P3.7 fixed: a named instrument is now looked up by its number, so “not held” is definite; new column: the date each fix was accepted; next: P4.7)";
   const ROWS = [
-    { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "" },
-    { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "" },
+    { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22" },
+    { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23" },
     { src: "R", fix: "Confirm from the server's own request log which research filter and mode each pre-pilot question ran under", sev: "P3", status: "Verified", ref: "P0.7", t: "" },
-    { src: "T & R", fix: "Make the jurisdiction filter work", sev: "P1", status: "Fixed", ref: "P1.1", t: "5" },
-    { src: "R", fix: "Stop the “current only” filter implying in-force status", sev: "P1", status: "Fixed", ref: "P1.2", t: "" },
-    { src: "T & R", fix: "Report the search's true match count", sev: "P2", status: "Fixed", ref: "P1.3", t: "4" },
-    { src: "R", fix: "Link citations to the provision, not the Act", sev: "P3", status: "Fixed", ref: "P1.4", t: "" },
-    { src: "R", fix: "Enforce provision links in code", sev: "P3", status: "Fixed", ref: "P1.6", t: "" },
-    { src: "T & R", fix: "Disclose a research halt as a limit, not a finding", sev: "P1", status: "Fixed", ref: "P2.1", t: "3" },
-    { src: "T & R", fix: "Explain every “not found”: what was searched, and its limits", sev: "P1", status: "Fixed", ref: "P2.2", t: "4" },
-    { src: "T & R", fix: "Verify the enabling power", sev: "P1", status: "Fixed", ref: "P2.3", t: "1" },
-    { src: "R", fix: "Disclose the Scottish case-law corpus gap", sev: "P1", status: "Fixed", ref: "P2.4", t: "" },
-    { src: "R", fix: "Stop asserting in-force status", sev: "P1", status: "Fixed", ref: "P2.5", t: "" },
-    { src: "T & R", fix: "Don't reformat a halted step into an empty report", sev: "P2", status: "Fixed", ref: "P2.6", t: "3" },
-    { src: "R", fix: "Cap how long a step may keep searching", sev: "P2", status: "Fixed", ref: "P2.7", t: "" },
-    { src: "R", fix: "Re-qualify a “not found” repeated from an earlier turn", sev: "P2", status: "Fixed", ref: "P2.8", t: "" },
-    { src: "R", fix: "Record memo-served searches in the search scope", sev: "P3", status: "Fixed", ref: "P2.9", t: "" },
-    { src: "R", fix: "Cite the provision at the subsection asked for, not the whole section", sev: "P2", status: "Fixed", ref: "P3.1", t: "" },
-    { src: "R", fix: "Allow up to three section searches per Act, capped in code", sev: "P2", status: "Fixed", ref: "P3.1", t: "" },
+    { src: "T & R", fix: "Make the jurisdiction filter work", sev: "P1", status: "Fixed", ref: "P1.1", t: "5", fixed: "2026-09-14" },
+    { src: "R", fix: "Stop the “current only” filter implying in-force status", sev: "P1", status: "Fixed", ref: "P1.2", t: "", fixed: "2026-09-14" },
+    { src: "T & R", fix: "Report the search's true match count", sev: "P2", status: "Fixed", ref: "P1.3", t: "4", fixed: "2026-09-14" },
+    { src: "R", fix: "Link citations to the provision, not the Act", sev: "P3", status: "Fixed", ref: "P1.4", t: "", fixed: "2026-09-14" },
+    { src: "R", fix: "Enforce provision links in code", sev: "P3", status: "Fixed", ref: "P1.6", t: "", fixed: "2026-09-15" },
+    { src: "T & R", fix: "Disclose a research halt as a limit, not a finding", sev: "P1", status: "Fixed", ref: "P2.1", t: "3", fixed: "2026-09-15" },
+    { src: "T & R", fix: "Explain every “not found”: what was searched, and its limits", sev: "P1", status: "Fixed", ref: "P2.2", t: "4", fixed: "2026-09-15" },
+    { src: "T & R", fix: "Verify the enabling power", sev: "P1", status: "Fixed", ref: "P2.3", t: "1", fixed: "2026-09-16" },
+    { src: "R", fix: "Disclose the Scottish case-law corpus gap", sev: "P1", status: "Fixed", ref: "P2.4", t: "", fixed: "2026-09-17" },
+    { src: "R", fix: "Stop asserting in-force status", sev: "P1", status: "Fixed", ref: "P2.5", t: "", fixed: "2026-09-16" },
+    { src: "T & R", fix: "Don't reformat a halted step into an empty report", sev: "P2", status: "Fixed", ref: "P2.6", t: "3", fixed: "2026-09-15" },
+    { src: "R", fix: "Cap how long a step may keep searching", sev: "P2", status: "Fixed", ref: "P2.7", t: "", fixed: "2026-09-17" },
+    { src: "R", fix: "Re-qualify a “not found” repeated from an earlier turn", sev: "P2", status: "Fixed", ref: "P2.8", t: "", fixed: "2026-09-17" },
+    { src: "R", fix: "Record memo-served searches in the search scope", sev: "P3", status: "Fixed", ref: "P2.9", t: "", fixed: "2026-09-16" },
+    { src: "R", fix: "Cite the provision at the subsection asked for, not the whole section", sev: "P2", status: "Fixed", ref: "P3.1", t: "", fixed: "2026-09-18" },
+    { src: "R", fix: "Allow up to three section searches per Act, capped in code", sev: "P2", status: "Fixed", ref: "P3.1", t: "", fixed: "2026-09-18" },
     { src: "R", fix: "Stop reversing a correct answer under pushback", sev: "P1", status: "Verified", ref: "P3.2", t: "" },
     { src: "T & R", fix: "Separate retrieval from interpretation", sev: "P2", status: "Verified", ref: "P3.3", t: "NH1" },
     { src: "T & R", fix: "Default to Scottish jurisdiction; flag UK-wide divergence", sev: "P2", status: "Verified", ref: "P3.4", t: "NH1" },
     { src: "T", fix: "Correct the jurisdiction filter note in the prompt", sev: "P3", status: "Verified", ref: "P3.4", t: "5" },
-    { src: "R", fix: "Retrieve amendment and commencement relations", sev: "P1", status: "Fixed", ref: "P3.5", t: "" },
+    { src: "R", fix: "Retrieve amendment and commencement relations", sev: "P1", status: "Fixed", ref: "P3.5", t: "", fixed: "2026-09-16" },
     { src: "R", fix: "Keep the description field, which carries relationships", sev: "P2", status: "Verified", ref: "P3.6", t: "" },
-    { src: "R", fix: "Test whether an instrument is held, by its number", sev: "P2", status: "Verified", ref: "P3.7", t: "" },
-    { src: "T & R", fix: "Stop a step looping on instruments it already has; write up findings at the cap", sev: "P2", status: "Fixed", ref: "P3.8", t: "3" },
+    { src: "R", fix: "Test whether an instrument is held, by its number", sev: "P2", status: "Fixed", ref: "P3.7", t: "", fixed: "2026-09-24" },
+    { src: "T & R", fix: "Stop a step looping on instruments it already has; write up findings at the cap", sev: "P2", status: "Fixed", ref: "P3.8", t: "3", fixed: "2026-09-21" },
     { src: "T", fix: "Make the case-law date filter work", sev: "P2", status: "Verified", ref: "P3.9", t: "6" },
     { src: "T", fix: "Keep dependent Deep Research steps in one step", sev: "P2", status: "Verified", ref: "P3.10", t: "3" },
-    { src: "R", fix: "Say what a cited subsection's sibling subsections provide", sev: "P2", status: "Fixed", ref: "P3.11", t: "" },
+    { src: "R", fix: "Say what a cited subsection's sibling subsections provide", sev: "P2", status: "Fixed", ref: "P3.11", t: "", fixed: "2026-09-22" },
     { src: "R", fix: "Reach a Schedule paragraph asked for by number (LEX holds the Schedule as one provision)", sev: "P2", status: "Verified", ref: "P3.12", t: "" },
-    { src: "R", fix: "Stop the chat reply dropping a subsection the research step had already written", sev: "P2", status: "Fixed", ref: "P3.13", t: "" },
+    { src: "R", fix: "Stop the chat reply dropping a subsection the research step had already written", sev: "P2", status: "Fixed", ref: "P3.13", t: "", fixed: "2026-09-23" },
     { src: "R", fix: "Tell the quick-lookup step which research filters are active", sev: "P3", status: "Verified", ref: "P3.14", t: "" },
-    { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", sev: "P1", status: "Fixed", ref: "P4.1", t: "9" },
+    { src: "R", fix: "In a follow-up answered without new research, say the instrument itself is not held, not just its text", sev: "P3", status: "Verified", ref: "P3.15", t: "" },
+    { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", sev: "P1", status: "Fixed", ref: "P4.1", t: "9", fixed: "2026-09-22" },
     { src: "R", fix: "Show a change of mode or research type in the conversation itself", sev: "P3", status: "Verified", ref: "P4.9", t: "" },
-    { src: "R", fix: "Never show a blank or lost reply", sev: "P1", status: "Fixed", ref: "P4.2", t: "" },
+    { src: "R", fix: "Never show a blank or lost reply", sev: "P1", status: "Fixed", ref: "P4.2", t: "", fixed: "2026-09-16" },
     { src: "T & R", fix: "Make the sources list and inline links match the answer", sev: "P2", status: "Verified", ref: "P4.3", t: "7" },
-    { src: "R", fix: "Remove the unused case-law court filter", sev: "P2", status: "Fixed", ref: "P4.4", t: "" },
+    { src: "R", fix: "Remove the unused case-law court filter", sev: "P2", status: "Fixed", ref: "P4.4", t: "", fixed: "2026-09-15" },
     { src: "T & R", fix: "Report a lost research step as lost, not “no results”", sev: "P1", status: "Verified", ref: "P4.5", t: "3" },
     { src: "T", fix: "Label incomplete Deep Research steps as incomplete in progress messages", sev: "P3", status: "Verified", ref: "P4.5", t: "3" },
-    { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Fixed", ref: "P4.6", t: "4" },
+    { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Fixed", ref: "P4.6", t: "4", fixed: "2026-09-23" },
     { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Verified", ref: "P4.7", t: "2" },
     { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", sev: "P3", status: "Verified", ref: "P4.8", t: "" },
     { src: "R", fix: "Source Scottish case law (Court of Session, Sheriff Courts)", sev: "P2", status: "In progress", ref: "P5.2", t: "" },
@@ -548,6 +577,12 @@
     if (cls) e.className = cls;
     if (text !== undefined) e.textContent = text;
     return e;
+  }
+
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function fmtDate(iso) {
+    const [y, m, d] = iso.split("-").map(Number);
+    return d + " " + MONTHS[m - 1] + " " + y;
   }
 
   function sourceCell(src) {
@@ -587,6 +622,7 @@
       const st = el("td");
       st.append(el("span", "status " + STATUS_CLASS[row.status], row.status));
       tr.append(st);
+      tr.append(el("td", "fdate", row.fixed ? fmtDate(row.fixed) : "—"));
       const sv = el("td");
       sv.append(el("span", "sev sev-" + row.sev.toLowerCase(), row.sev));
       tr.append(sv);
