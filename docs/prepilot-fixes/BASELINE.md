@@ -3781,3 +3781,70 @@ Revert checks on scratch copies:
 never run the parliament bot). Its evidence is the deterministic half alone.
 
 **Spend for the row: $14.49: the seam sweeps $8.54 (before $2.57; after at the first wording $2.87 and at `158841d` $3.10), redraws from the committed `seam_replay` command $3.16, a scratch probe of the second wording $0.71, and the two smoke replays $2.08.**
+
+## The lost step, labelled (P4.5, 2026-09-24)
+
+When every attempt of `chat_loop`'s bounded retry (P4.2) comes back empty,
+`chat_loop` returns `content: ""` with no flag. Before this row, a worker in
+that state handed the Manager or the synthesis its scope block alone, which
+reads as a search that found nothing, or `""` for a case-law step. P4.5
+option (c), the user's decision, is the labelling half only; the cost of an
+empty attempt is P4.10.
+
+**The pre-flight, behind a command.** `python -m tools.replay_report --dir
+<any> lost --all-dirs [--list]` (`e25e678`, `637a882`). An
+`empty_completions` record carries no delegation id, so the command reads
+where a loss landed off the outcome, and checks every turn: its unrecovered
+calls must equal its lost sites.
+
+| over all 49 directories | |
+|---|---|
+| turns (with an answer or a trace) | 1,557 |
+| of them with schema-v3 records | 929 |
+| provider calls empty at least once | 34 |
+| recovered by the retry | 18 |
+| **not recovered** | **16** (1.7% of v3 turns, 95% Wilson 1.1-2.8%) |
+| landed in a research worker | 11 |
+| landed in a Deep Research step | 2 |
+| landed in the Manager (P4.2's fallback served) | 3 |
+| landed in the synthesis | 0 |
+| untied turns | **0** |
+| lost-shaped outcomes before schema v3 (mechanism unrecorded) | 22 |
+
+Every stored instance on P4.5's row is found with the right site and shape.
+Over the 18 lost research-worker reports in all directories, a later
+delegation in the same turn returned a body in **15**, and none did in 3
+(`baseline`/6340 r1 t1, `wave2`/6385 r1 t4, `wave2_p24`/6373 r1 t3). That
+decided two things: the label permits one more `delegate_research` (the
+halt's forbids it), and the lawyer notice on the Manager path is kept for a
+lost step nothing made good.
+
+**Acceptance (deterministic).** (a) `tests/test_lost_step.py`, 29 tests,
+each seam failing with its product file reverted on a scratch copy. (b)
+`replay_report lost --require-label` exits 1 on exactly the 15 directories
+holding a lost worker or step report, and 0 on the other 34.
+
+**Seam confirmation** (`seam_replay synthesis|manager --apply-lost`; before
+is the recorded payload, after is it rebuilt through the product's
+builder):
+
+| payload | before | after (`ba04d7c`) |
+|---|---|---|
+| `wave2_p24_pre`/6375 r3 t2 (synthesis; case-law step 1 lost) | step 1 "did not return findings" (P4.7's prompt); no negative | notice; the principles "not established … the reason was a lost reply from the language model"; no negative |
+| `wave2_p27_pre`/6374 r3 t4 (synthesis; step 2 scope-only) | silent on step 2; no negative | notice; the Orders list "may not be exhaustive" because of a lost reply; no negative |
+| `wave2_p28`/6409 r3 t11 (Manager; made good) | no negative from the lost step | the same; no notice (made good) |
+| `wave3_p313`/6348 r2 t1 (Manager; made good) | no heading, no negative | the same; no notice |
+| `wave2_p24`/6373 r1 t3 (Manager; **not** made good) | 4 of 4 restate "not held" with nothing saying the research was lost | 3 of 3 carry the notice and say the step did not return its findings, "a lost reply from the language model, rather than an issue with the database" |
+
+**The first wording failed on the seam, and the redraw caught it.** At
+`4dfce68`, all 4 after-draws on 6373 said the cause was "a lost reply from
+the database": false, and it points a lawyer at the index. `ba04d7c` says
+whose reply was lost, and the after column above was redrawn in full at that
+commit. 6374's sentence that a Schedule's text is missing from the database
+is on both sides: it comes from a completed step, not from the lost one.
+
+**Spend: $0.88 on the seam** (first pass $0.52, the 6373 redraws $0.08, the
+after column at `ba04d7c` $0.29), and $1.03 for the smoke replay
+(`wave4_p45`, 6365 at `ba04d7c`, n=1: the exit-1 set, `drgaps`, `depth` and
+`lost --require-label` all exit 0; depth DELIVERED; schema 6, `lost: null`
+on all 5 steps; no empty completion in the run). **$1.91 for the row.**

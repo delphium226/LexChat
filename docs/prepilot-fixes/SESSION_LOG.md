@@ -5555,3 +5555,161 @@ worktrees; the dev box is on its normal settings; 49 replay directories.
 
 **Nothing else is outstanding for Session 27.** It starts from P4.5's row
 (the USER DECISION paragraph) and its pre-flight.
+
+---
+
+## Session 27 — 2026-09-24 — P4.5 (the lost step, labelled)
+
+**Done:**
+- **P4.5 is DONE** (option (c), the labelling half, the user's decision at
+  the end of Session 26). Ledger 34 → **35 of 51 rows**; buckets unchanged
+  at 8 of 14 (P4.5 is in no bucket's closure list).
+- **The pre-flight went behind a command first** (`e25e678`):
+  `replay_report --dir <D> lost [--all-dirs] [--list] [--require-label]`.
+  - An `empty_completions` record has no delegation id, so the site is read
+    off the outcome. Each turn is checked (unrecovered calls = lost sites);
+    **0 untied** over all 49 directories.
+  - It found every stored instance on P4.5's row with the right site and
+    shape before any number was quoted.
+  - **16 unrecovered calls in 929 schema-v3 turns (1.7%, Wilson 1.1-2.8%)**:
+    research worker 11, Deep Research step 2, Manager 3, synthesis 0. This
+    replaces Session 18's 8 in 342.
+  - After **15 of 18** lost research-worker reports, a later delegation in
+    the same turn returned findings (`637a882` added that count).
+- **The acceptance was booked and committed before any product code**
+  (`637a882`), with the audit decision: option (i), `delegations[].lost`,
+  schema v6.
+- **The fix** (`4dfce68`, then `ba04d7c`):
+  - `run_worker_agent` labels a lost reply, ahead of the scope block, in
+    every chat mode (`lost_worker_report`, a closed
+    `[Research Incomplete — answer lost]` block);
+  - the Manager path strips the block, keeps it out of P4.2's fallback, and
+    prepends a lawyer notice only when no later delegation made the loss
+    good;
+  - Deep Research names a lost step in `incomplete_steps_note` (its own
+    LOST STEPS paragraph) and always in the notice;
+  - `progress_result` names each run's outcome on `tool_end`;
+  - `seam_replay --apply-lost` rebuilds a recorded lost report through the
+    product's builder.
+- **Results** (on the row and in `BASELINE.md`, *The lost step, labelled*):
+  - acceptance (a): 29 tests in `tests/test_lost_step.py`, each seam failing
+    with its file reverted on a scratch copy;
+  - acceptance (b): `lost --require-label` exits 1 on exactly the 15 stored
+    directories holding a lost report, 0 on the other 34;
+  - seam: 6373 r1 t3 (the lost step nothing made good) went from 4 of 4
+    restating "not held" to 3 of 3 disclosing the loss; no payload drew a
+    negative from a lost step on the after side;
+  - smoke `wave4_p45` (6365, n=1): 13 checks exit 0, depth DELIVERED,
+    schema 6.
+- **Tests 1795 → 1839**, all green.
+
+**Surprises / deviations from FIX_PLAN:**
+- **The label must not forbid re-delegation, unlike the halt's.** The
+  Manager already recovers that way (15 of 18), so the label permits one
+  more call and the Manager-path notice is kept for a loss nothing made
+  good. Emitting it always would have warned the lawyer on answers that
+  rest on completed research.
+- **The label must not deny a timeout.** 6409's failed attempts ended
+  "Upstream idle timeout exceeded", so "NOT a timeout" (the halt's line)
+  would have been false. The lost-step text never mentions a timeout.
+- **The first wording failed on the seam.** All 4 after-draws on 6373 said
+  the cause was "a lost reply from the database". `ba04d7c` names the
+  model's reply and denies a database fault; 3 of 3 redraws then say so.
+  The after column was redrawn in full at that commit.
+- **The seam cannot reproduce the Jurisdiction & Status heading**
+  (`wave3_p313` rep 2 t1: 0 heading on both sides, as in Session 22), so
+  that finding is covered only by the label being applied in conversational
+  mode, which a test pins.
+- **My own slips, caught before they reached a number:** two Python edits
+  run from bash heredocs mangled backslashes (both failed at an assertion or
+  at import and were redone from files written with the Write tool); a
+  multi-line replacement first failed on CRLF and wrote nothing.
+
+**State of the branch:** `fix/prepilot-defects`, pushed with this commit.
+`main` is untouched at `c77e779`. **P4.5 is product code**
+(`agent_core.py`, `research_halt.py`, `search_scope.py`, `audit_trace.py`):
+no config, DB schema, client or whitelist change, but an **audit schema
+change (v6)** the eval harness owner must be told about. It reaches the
+target only in a cut, when the user asks.
+
+**Machine state:**
+- no uvicorn running (stopped by PID), no pin file (`tools.replay restore`
+  run), no worktrees; the dev box is on its normal settings;
+- **50 replay directories**; new: `wave4_p45` (6365 at `ba04d7c`).
+- The seam draws are in the session scratchpad, not the repo (they echo
+  lawyers' terms).
+
+**Spend: $1.91 (seam $0.88, smoke replay $1.03), plus about $0.002 of
+model probes.**
+
+---
+
+## Session 27 — handover for Session 28 (2026-09-24)
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. Session 27 commits:
+  - `e25e678`: the instrument (`replay_report lost`);
+  - `637a882`: the acceptance, and `lost`'s re-delegation count;
+  - `4dfce68`: the fix;
+  - `ba04d7c`: the label's wording (whose reply was lost);
+  - this docs commit.
+- `main` is untouched at `c77e779`. Rollback tags:
+  `pre-prepilot-fixes-2026-09-23` and `pre-prepilot-fixes-2026-09-22`.
+- **1839 tests green.**
+- Ledger **35 of 51 rows, 8 of 14 buckets.** Partial: B5 (waiting on P3.15)
+  and B12 (waiting on P5.2). Run `python -m tools.plan_status`.
+- **Five Fixed rows are not on `main`:**
+  - P0.6 (harness only);
+  - P4.6 (`prompts.py`);
+  - P3.7 (code);
+  - P4.7 (`prompts.py`, `agent_core.py`);
+  - P4.5 (code, audit schema v6).
+
+**Next work: P4.10** (the cost of a lost completion). It is measure-first
+and now unblocked. `replay_report lost --list` names every episode; P4.10's
+row asks for cost and wall clock per episode, which `lost` does not print
+yet. Check whether the provider honours a reasoning cap on this model before
+designing around one. **Then P3.15**, which B5 waits on alone.
+
+**Instruments added this session (use them, don't rebuild):**
+- `python -m tools.replay_report --dir <D> lost [--all-dirs] [--list]
+  [--require-label]`:
+  - provider calls empty at least once, recovered or not, and where each
+    unrecovered one landed (worker / Deep Research step / Manager /
+    synthesis), tied turn by turn;
+  - `--list` prints ids, modes, shapes and whether the Manager redid it,
+    and no text;
+  - **`lost --require-label` joins the exit-1 set for every new
+    directory.**
+- `python -m tools.seam_replay synthesis|manager --run <f> --turn N
+  --apply-lost`: a recorded lost report rebuilt through the product's
+  builder, with the product's own source count, and the draw put through
+  the answer seam's disclosure.
+
+**Hazards (carried forward):** line endings (and `sed -i`), heredoc
+backslashes (twice more this session), `-F <file>`, one-line ledger rows,
+not committing during a replay, keeping seam output (which echoes lawyers'
+terms) in the scratchpad, never reading an enum from a truncated string.
+**New:** a Python replacement script must normalise CRLF to LF before
+matching multi-line text, and restore CRLF on write.
+
+**Open with the user (unchanged unless they say otherwise):**
+- Whether P4.6, P3.7, P4.7 and P4.5 go in the next cut to `main`.
+- Deploy both cuts to the target: `pg_dump` first (no backup has ever run
+  there), then `git pull`, `stop_native.cmd` / `start_native.cmd`,
+  `server_py\test_apis.ps1` and one real question.
+  - It is still not confirmed that the first cut was ever pulled.
+  - P0.7's query can go with the deploy.
+- Tell whoever runs the lexchat-eval harness:
+  - **the audit event is now schema v6**: `delegations[].lost` (null, or
+    `{reason: "empty_completion", sources_retrieved}`); a delegation with it
+    set is a lost reply, not a negative;
+  - the `tool_end` event's `result` now names each worker's outcome;
+  - `lookup_legislation` appears in `delegations[].tools[]`;
+  - a Deep Research report's section headings follow its research type.
+- Whether the chat UI should show a step's outcome (the progress event now
+  carries it; showing it is a client change and a `client/dist` rebuild).
+- P4.10 next or later; P3.15 after. P5.2 (external). Whether Thomas's
+  review document should be committed.
+- **The Fix Tracker has not been updated this session** (update only when
+  asked). When it is, P4.5 becomes Fixed with `fixed: "2026-09-24"`.
