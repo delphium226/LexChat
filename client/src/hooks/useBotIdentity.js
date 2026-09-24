@@ -12,6 +12,8 @@ export function useBotIdentity(loading) {
     brandColor: null,
     logoEmoji: null,
     researchMode: '',
+    version: null,
+    build: null,
   });
   const [botLogoUrl, setBotLogoUrl] = useState(null);
 
@@ -25,6 +27,10 @@ export function useBotIdentity(loading) {
             brandColor: info.brand_color || null,
             logoEmoji: info.logo_emoji || null,
             researchMode: info.research_mode || '',
+            // The release (VERSION) and the exact build (git describe), shown
+            // in the About modal so a user can say which version they were on.
+            version: info.version || null,
+            build: info.build || null,
           });
           document.title = info.name;
         }

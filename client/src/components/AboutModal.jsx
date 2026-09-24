@@ -94,7 +94,17 @@ export default function AboutModal({ botInfo, onClose, isParliament = false, isW
           </p>
         </div>
       </div>
-      <div className="mt-6 flex justify-end">
+      <div className="mt-6 flex items-center justify-between gap-4">
+        {/* The release, and the exact build when it is not the release itself
+            (a checkout past the tag), so a problem report can name both. */}
+        <span className="font-ui text-xs text-ink-600">
+          {botInfo.version && (
+            <>
+              Version {botInfo.version}
+              {botInfo.build && botInfo.build !== `v${botInfo.version}` && ` (build ${botInfo.build})`}
+            </>
+          )}
+        </span>
         <button
           onClick={onClose}
           className="bg-brand text-white font-ui text-sm font-medium rounded-md px-4 py-2 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"

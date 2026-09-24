@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from ..bot_state import get_bot_identity
 from ..config import settings
+from ..version import APP_BUILD, APP_VERSION
 
 router = APIRouter(tags=["Identity"])
 
@@ -18,6 +19,10 @@ class BotInfoOut(BaseModel):
     research_mode: str
     brand_color: Optional[str] = None
     logo_emoji: Optional[str] = None
+    # The release (`VERSION`, e.g. "2026.09.2") and the exact build
+    # (`git describe`, e.g. "v2026.09.2-3-gabc1234"; absent without git).
+    version: Optional[str] = None
+    build: Optional[str] = None
 
 # identity.py lives at server_py/src/routers/identity.py — four dirname calls reach
 # the repo root (routers -> src -> server_py -> repo). Three stopped at server_py/,
@@ -40,7 +45,10 @@ async def bot_info():
         "name": bot_identity.get("name", "AILA"),
         "tagline": bot_identity.get("tagline", "AI Legal Assistant"),
         "research_mode": settings.research_mode or "",
+        "version": APP_VERSION,
     }
+    if APP_BUILD:
+        result["build"] = APP_BUILD
     if brand_color := bot_identity.get("brand_color"):
         result["brand_color"] = brand_color
     if logo_emoji := bot_identity.get("logo_emoji"):

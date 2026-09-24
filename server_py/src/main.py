@@ -26,6 +26,7 @@ from .services.parliament_crawler import (
     backfill_sessions,
 )
 from .utils.logger import setup_logging
+from .version import APP_BUILD, APP_VERSION
 from .utils.log_context import request_id_var
 
 # Initialise structured logging before anything else
@@ -143,6 +144,9 @@ async def _load_bot_config() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    # The release and the exact commit, first thing in the log: which code a
+    # server is running must be answerable from the target's logs alone.
+    logger.info("[Startup] AILA %s (build %s)", APP_VERSION, APP_BUILD or "unknown")
     if settings.jwt_secret in ("dev_secret_key_change_me", "production_secret_key_change_me"):
         logger.warning(
             "[Security] JWT_SECRET is set to a well-known default value. "
@@ -192,7 +196,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="LexChat API",
     description="FastAPI Backend for LexChat",
-    version="2.0.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 

@@ -225,6 +225,19 @@ The **only** way to deploy to the target server is via GitHub — the target doe
 3. Commit **including** `client/dist/` (force-add — it is gitignored): `git add -f client/dist/`
 4. Push to `origin main`
 5. On the target: `git pull`, then restart with `stop_native.cmd` and `start_native.cmd`
+6. Confirm what the target is now running: the **About** box, `GET /api/bot-info` (`version`, `build`), or the first line the server logs, `[Startup] AILA <version> (build <build>)`.
 
 Always commit and push together in the same step — uncommitted or unpushed changes are invisible to the target.
 
+## Releases
+Calendar versions, **`vYYYY.MM.N`**: the Nth release cut in that month (user decision, 2026-09-24). Chosen over semantic versioning because a release here is a cut made when the user decides, not an API contract. The one external contract, the eval harness's audit event, has its own `schema_version`, and the two numbers are unrelated.
+
+- **`VERSION`** (repo root) names the last release the code contains. `server_py/src/version.py` reads it (`APP_VERSION`), together with `git describe --tags --match "v[0-9]*"` of the running checkout (`APP_BUILD`: exactly `v2026.09.2` on a release, `v2026.09.2-3-gabc1234` past it, `None` without git). Both appear in `/api/bot-info`, the About box, the startup log and FastAPI's OpenAPI version.
+- **Each release is an annotated tag on `main`** and a dated section in **`CHANGELOG.md`**. `v2026.09.1` (`d8fd73b`) and `v2026.09.2` (`c77e779`) are the two pre-pilot cuts, tagged retroactively. The older `pre-prepilot-fixes-*` tags are rollback markers from before this scheme; from now on the previous release tag is the rollback point.
+- **Cutting a release** (every cut of `fix/prepilot-defects`, and any other release):
+  1. merge to `main` as usual (`--no-ff` for a branch cut);
+  2. on `main`, set `VERSION` to the new number and move the CHANGELOG's *Unreleased* entries into a new dated section, in one commit (`release: vYYYY.MM.N`);
+  3. `git tag -a vYYYY.MM.N -m "…"` on that commit;
+  4. `git push origin main` **and** `git push origin vYYYY.MM.N`: a plain push does not send tags.
+- **`tests/test_version.py` enforces the rule:** it fails if the nearest release tag is not `v` + `VERSION`, which catches a bump without a tag and a tag without a bump. It skips where no tag is reachable (a scratch copy, a clone without tags).
+- **Not yet done (decisions for the user):** the target still deploys the head of `origin/main`, which can sit past the last release because unrelated work commits straight to `main`; deploying a tag instead (`git fetch --tags`, then `git checkout vYYYY.MM.N`) is proposed, not adopted. Stamping the version on the audit event and on `request_timings` waits until after the next cut, because `main`'s audit schema is v5 while the branch's is v6, and bumping it on `main` would create two different v6s.
