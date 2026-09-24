@@ -383,6 +383,59 @@ def test_a_follow_up_keeps_its_carried_search_terms_and_states_the_lookup():
     assert carried.endswith("*")
 
 
+def _assistant(content):
+    return {"role": "assistant", "content": content}
+
+
+def test_every_footer_shape_that_states_a_lookup_is_read_back():
+    """Round trip, so the wording and the parse cannot drift apart silently."""
+    from src.utils.search_scope import _earlier_lookups, carried_scope_footer
+
+    lk = _log(_outcome("not_held"),
+              _outcome("not_held", "ssi/2026/170", "SSI 2026/170"),
+              _outcome("held_without_text", "ssi/2025/119", "SSI 2025/119"),
+              _outcome("not_held", "asp/2026/9", "2026 asp 9"))
+    searched = [{"tool": "search_legislation", "query": "q"}]
+    earlier = [_assistant("A." + answer_scope_footer(searched))]
+    for footer in (answer_scope_footer(searched + lk), lookup_scope_footer(lk),
+                   carried_scope_footer(earlier, lk)):
+        got = {e["label"]: e["status"] for e in _earlier_lookups([_assistant("X." + footer)])}
+        assert got == {"SSI 2025/377": "not_held", "SSI 2026/170": "not_held",
+                       "2026 asp 9": "not_held", "SSI 2025/119": "held_without_text"}, footer
+    # Only a footer counts: the same words in the answer body, or from the
+    # user, are not read.
+    assert _earlier_lookups([_assistant("SSI 2025/377 was looked up by its number and "
+                                        "is not held in this index. More text.")]) == []
+    assert _earlier_lookups([{"role": "user", "content": "Y." + lookup_scope_footer(lk)}]) == []
+
+
+def test_a_follow_up_from_history_restates_the_earlier_lookup():
+    """`wave4_p37b` 6409 r1 export t11: the Manager answered from history, and
+    the carried line restated the earlier searches but not the lookup."""
+    from src.utils.search_scope import carried_scope_footer
+
+    searched = [{"tool": "search_legislation", "query": "the Act"}]
+    history = [_assistant("Earlier." + answer_scope_footer(searched + _log(_outcome("not_held"))))]
+    carried = carried_scope_footer(history, [])
+    assert ("Earlier in this conversation, SSI 2025/377 was looked up by its number and "
+            "is not held in this index") in carried
+    # Looked up again this turn: stated once, as this turn's.
+    again = carried_scope_footer(history, _log(_outcome("not_held")))
+    assert again.count("SSI 2025/377 was looked up") == 1
+    assert "Earlier in this conversation, SSI" not in again
+
+
+def test_an_unsearched_follow_up_to_a_lookup_only_turn_restates_it():
+    history = [_assistant("Earlier." + lookup_scope_footer(_log(_outcome("not_held"))))]
+    line = lookup_scope_footer([], history)
+    assert line.startswith("\n\n*Search scope: no ranked search of the legislation index")
+    assert "Earlier in this conversation, SSI 2025/377 was looked up" in line
+    # A turn that searched within an instrument stays silent about it (P2.8).
+    sections = [{"tool": "search_legislation_sections", "legislation_id": "asp/2025/2"}]
+    assert lookup_scope_footer(sections, history) == ""
+    assert lookup_scope_footer([], []) == ""
+
+
 def test_nosearch_reads_the_lookup_line_as_a_scope_statement():
     from tools import replay_report as rr
 

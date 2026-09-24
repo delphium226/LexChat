@@ -994,8 +994,8 @@ async def process_user_request(
     # earlier search terms from a follow-up, found by `replay_report
     # nosearch` on `wave4_p37`.) Only a not-held or held-without-text outcome
     # speaks, so a lookup of a held instrument changes nothing here.
-    if not _footer:
-        _footer = lookup_scope_footer(all_searches)
+    if not _footer and not scope_unknown:
+        _footer = lookup_scope_footer(all_searches, messages)
     # P2.4 (B12): the case-law corpus disclosure. Both lines above already carry
     # it as a clause when this turn searched case law; this is the turn with no
     # legislation line to join it to, which is every `case_law_only` turn. Not

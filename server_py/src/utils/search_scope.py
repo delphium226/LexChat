@@ -2275,6 +2275,60 @@ def _lookup_footer_clause(entries: Optional[list]) -> str:
     return "".join(bits)
 
 
+# The labels `citation_label` writes, and the two clauses above, read back out
+# of an earlier answer's footer, so a follow-up answered from the history can
+# restate what an earlier lookup established. The acceptance's lesson
+# (`wave4_p37b` 6409 r1 export t11): a follow-up the Manager answered from
+# history narrowed "not held" to "its text", and P2.8's carried line, which
+# restates earlier SEARCHES, said nothing of the earlier LOOKUP. Coupled to
+# `_lookup_footer_clause` by `test_instrument_lookup.py`, which round-trips it;
+# if the wording drifts the parse goes silent, it does not go wrong.
+_LABEL = r"(?:SSI|SI|WSI|SR) \d{4}/\d{1,5}|\d{4} (?:asp|c\.|anaw|asc) \d{1,5}|[a-z]+/\d{4}/\d{1,5}"
+_LABELS = rf"((?:{_LABEL})(?:(?:, | and )(?:{_LABEL}))*)"
+_EARLIER_LOOKUP = re.compile(
+    _LABELS + r" (?:was|were) looked up by (?:its number|their numbers)"
+    r"(?P<absent> and (?:is|are) not held in this index)?"
+    r"(?P<stub>: this index holds (?:its record|their records) but not)?"
+)
+
+
+def _earlier_lookups(messages: Optional[list]) -> list:
+    """The not-held and held-without-text outcomes earlier answers' footers
+    stated, as lookup entries keyed on the label. Only assistant messages, and
+    only their trailing footer block, which is what code appended."""
+    out = []
+    for m in messages or []:
+        if not isinstance(m, dict) or m.get("role") != "assistant":
+            continue
+        content = m.get("content")
+        if not isinstance(content, str) or "looked up by" not in content:
+            continue
+        tail = _ECHOED_FOOTER.search(content)
+        if not tail:
+            continue
+        for found in _EARLIER_LOOKUP.finditer(tail.group(0)):
+            status = NOT_HELD if found.group("absent") else (
+                HELD_WITHOUT_TEXT if found.group("stub") else None)
+            if not status:
+                continue
+            for label in re.split(r", | and ", found.group(1)):
+                out.append({"tool": LOOKUP_ENTRY, "legislation_id": label,
+                            "label": label, "status": status})
+    return _lookups(out)
+
+
+def _earlier_lookup_clause(messages: Optional[list], entries: Optional[list]) -> str:
+    """" Earlier in this conversation, <the clause>" for instruments an earlier
+    answer's footer reported and this turn did not look up again. Never raises."""
+    try:
+        now = {e.get("label") for e in _lookups(entries)}
+        earlier = [e for e in _earlier_lookups(messages) if e["label"] not in now]
+        clause = _lookup_footer_clause(earlier)
+        return f" Earlier in this conversation,{clause}" if clause else ""
+    except Exception:
+        return ""
+
+
 def _and_join(items: list) -> str:
     items = list(items)
     if len(items) <= 1:
@@ -2282,7 +2336,7 @@ def _and_join(items: list) -> str:
     return ", ".join(items[:-1]) + " and " + items[-1]
 
 
-def lookup_scope_footer(entries: Optional[list]) -> str:
+def lookup_scope_footer(entries: Optional[list], messages: Optional[list] = None) -> str:
     """The footer for a turn that looked an instrument up but ran no ranked
     search, where `answer_scope_footer` (gated on a search) says nothing.
 
@@ -2294,14 +2348,21 @@ def lookup_scope_footer(entries: Optional[list]) -> str:
     above. "" when no lookup reported anything a lawyer needs told.
     """
     clause = _lookup_footer_clause(entries)
-    if not clause:
-        return ""
     # A search WITHIN an instrument is a search (P2.8 keeps such a turn silent
     # for the same reason), so "no ranked search … was run" would be false
     # there. Found by `replay_report nosearch` on `wave4_p37` (6373 r1 t3,
-    # MISATTRIBUTED). The opener then says nothing about searching.
+    # MISATTRIBUTED). The opener then says nothing about searching, and an
+    # earlier lookup is not restated: that turn is P2.8's silent case.
     if any(e.get("tool") in _SEARCH_TOOLS for e in entries or []):
+        if not clause:
+            return ""
         return f"\n\n*Search scope: for this reply,{clause}{case_law_scope_clause(entries)}*"
+    # `messages` (the history) on the Manager path only: an unsearched
+    # follow-up after a turn that only looked up has no fresh footer for P2.8
+    # to carry, so this is where the earlier lookup is restated.
+    clause += _earlier_lookup_clause(messages, entries)
+    if not clause:
+        return ""
     return (
         "\n\n*Search scope: no ranked search of the legislation index was run for this "
         f"reply.{clause}{case_law_scope_clause(entries)}*"
@@ -2503,8 +2564,10 @@ def carried_scope_footer(
             f"{_relations_footer_clause(entries)}"
             f"{_currency_footer_clause(entries)}"
             # P3.7: a follow-up that looked an instrument up, which is not a
-            # search, so "no search … was run" stays true beside it.
+            # search, so "no search … was run" stays true beside it; and what
+            # an earlier lookup established, restated like the earlier terms.
             f"{_lookup_footer_clause(entries)}"
+            f"{_earlier_lookup_clause(messages, entries)}"
             # P2.4 (B12): a hybrid follow-up that searched only case law. This
             # clause is about THIS reply's own search, so it is true here too.
             f"{case_law_scope_clause(entries)}*"
