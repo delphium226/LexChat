@@ -5482,3 +5482,43 @@ replay, keeping seam output (which echoes lawyers' terms) in the scratchpad.
 - Whether Thomas's review document should be committed.
 - **The Fix Tracker has not been updated this session** (update only when
   asked). When it is, P4.7 becomes Fixed with `fixed: "2026-09-24"`.
+
+**Addendum to Session 26 (same day, after the handover was written, at the user's request).**
+
+**Fix Tracker v19** (published to the same URL at the user's request):
+- P4.7 → Fixed, `fixed: "2026-09-24"`. It is added to the fixes waiting for
+  the next release (P4.6, P3.7, P4.7).
+- A plain-language note on P4.7 and how it was tested; the P3.7 note is now
+  headed "Earlier". "Next" names P3.15 and keeps P4.5.
+- The render was checked in a browser (served over `http.server`, as before):
+  28 of 50 fixed. By severity: P1 11 of 13, P2 12 of 22, P3 5 of 15.
+
+**Recorded here so they are not lost (the seam draws were in the session
+scratchpad, which the next session cannot read):**
+- **6357 t3's pinpoint loss at the first wording was draw noise.** The
+  after-draw kept 0 of 3 pinpoints, and three redraws a side from
+  `seam_replay` gave 0 of 3 in 2 of 3 draws on BOTH sides. At `158841d`,
+  that payload's sweep draw keeps 3 of 3.
+- **How the redraws were made.** From the committed command, three draws per
+  payload per side, output to a scratch directory:
+  `python -m tools.seam_replay synthesis --run <run.json> --turn N --reps 3
+  --out <scratch> [--without-fix --rev 9cacde8]`.
+  - Payloads: `wave2`/6408 t2, `wave2`/6407 t3, `wave4_p41_pre`/p41_6346_dr
+    t2, `wave2`/6357 t3, `wave2_p28_smoke`/6341 t7, `wave2_p24_pre`/6375 r1 t2.
+  - Grade the files with `seam_sweep.synthesis_grade` (or re-run the sweep).
+  - Draws at temperature 0 are not byte-reproducible, so a re-run gives
+    counts of the same order, not the same bytes.
+- **The per-payload hybrid claim** ("all 6 payloads whose before-draw stated
+  a case-law gap still state one") is read from `seam_sweep --synthesis p47
+  --grade`: it prints each payload's before and after line with `cl-gap`.
+  The command prints no pair table.
+- **6375 r1's judgments were never lost.** The grade of the second wording
+  (`158841d`) first showed that payload losing 6 judgment links. They were there all
+  along, written `[... [2011] EWCA Civ 1](url)`, which `MD_LINK` cannot see.
+  That is how the watch item was found.
+- **Where each after column lives:** the first wording's in the sweep output
+  graded at `ac7878e`, and the published one at `158841d`. The before column
+  (`9cacde8`) is shared by both.
+
+**Machine state (unchanged):** no uvicorn, no `http.server`, no pin file, no
+worktrees; the dev box is on its normal settings; 49 replay directories.

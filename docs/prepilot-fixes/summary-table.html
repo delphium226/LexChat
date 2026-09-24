@@ -339,8 +339,8 @@
       its row in the fix plan and its action number in Thomas's review of 10 September 2026.
       <strong>“Fixed” means built and accepted on the fix branch. Everything marked Fixed has been
       merged for deployment to the server (first release 22 September, second 23 September),
-      except P0.6, which changes only our test tooling and needs no deployment, and P4.6 and P3.7,
-      fixed after the second release, which will go with the next one. The fixed date is the day a
+      except P0.6, which changes only our test tooling and needs no deployment, and P4.6, P3.7 and
+      P4.7, fixed after the second release, which will go with the next one. The fixed date is the day a
       fix was accepted, not the day it reached the server.</strong></p>
   </header>
 
@@ -398,7 +398,7 @@
     <div>
       <h2>Status</h2>
       <dl>
-        <dt>Fixed</dt><dd>Built and accepted on the fix branch. Everything marked Fixed has been merged to <code>main</code> for deployment to the target: the first release on 22 September, the second (P3.13) on 23 September. Fixes made after that (P4.6, P3.7) stay on the branch until the next release.</dd>
+        <dt>Fixed</dt><dd>Built and accepted on the fix branch. Everything marked Fixed has been merged to <code>main</code> for deployment to the target: the first release on 22 September, the second (P3.13) on 23 September. Fixes made after that (P4.6, P3.7, P4.7) stay on the branch until the next release.</dd>
         <dt>In progress</dt><dd>Under way. P5.2 is waiting on an external decision.</dd>
         <dt>Verified</dt><dd>The problem is confirmed in our replays, the code or a live test, but no fix is built yet.</dd>
         <dt>To be verified</dt><dd>Proposed, not yet confirmed or agreed.</dd>
@@ -419,7 +419,34 @@
         history of the fix plan. It is not the day it was deployed: that is the release date above.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.</p>
-      <p><strong>P3.7</strong>, a direct check of whether the database holds a named instrument, is
+      <p><strong>P4.7</strong>, a Deep Research report saying “no case law was found” when case law
+        was never searched, is fixed. The step that writes the final report used one set of
+        instructions for every research type, and its example of how to describe a gap was “No
+        reported case law was found on X”, even under “Legislation only”. It now has instructions
+        for each research type. They say what that type searched and what it did not, and they
+        describe a gap by what happened (Thomas's wording). A source outside the research was not
+        searched. A step that failed did not complete. Only a completed search can find nothing, and
+        only in what it searched. The report's sections now follow the research type too: a
+        “Legislation &amp; case law” report has its own case-law section, and a Holyrood or
+        Westminster report is no longer told to write a territorial-extent and in-force section.</p>
+      <p><strong>How it was tested.</strong> Our replays and the pre-pilot answers held no instance of
+        the sentence, so, as for P4.6, the test was chosen before building and run on the
+        report-writing step alone. We re-ran that step on 28 stored Deep Research cases, before and
+        after the fix. Before, one “Legislation only” report wrote exactly the sentence the review
+        described (“…restricted by a Legislation Only filter, no reported case law was found…”), in
+        two of four tries. After the fix, none did. Where case law had been searched and really found
+        nothing, all six reports still say so, now as “the legislation and judgments retrieved in
+        this research do not establish…”. Reports carry more links, not fewer, keep their
+        subsection citations, and every one keeps its key-findings summary. One case showed the
+        second half of the wording at work: a step that returned nothing, which the old report
+        described as having “found no” case law, is now reported as a step that did not return
+        findings. The Holyrood and Westminster sections are covered by automated checks only,
+        because we have never re-run a parliament-bot session.</p>
+      <p><strong>One thing caught before release.</strong> The first version of the new instructions
+        made one report cite its sources as bare web addresses and another drop its key-findings
+        heading. The same test caught both, the wording was tightened, and the test was run again in
+        full.</p>
+      <p><strong>Earlier, P3.7</strong>, a direct check of whether the database holds a named instrument, is
         fixed. When a question names an instrument by its number (for example SSI 2025/377), the
         system now looks that number up in the database before it starts researching. Before, it
         could only run a ranked keyword search, and not finding an instrument near the top of a
@@ -507,12 +534,12 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next.</strong> <strong>P4.7</strong>, the same problem in the Deep Research report,
-        which can say “no case law was found” when case law was never searched. We found no case
-        of it in our replays or in the pre-pilot answers, so it will be built as a safeguard and
-        tested on the report-writing step alone, as P4.6 was.
-        <strong>P4.5</strong> (a research step whose answer is lost) is becoming more pressing: it
-        is now the main source of slow and costly replies in our replays.</p>
+      <p><strong>Next.</strong> <strong>P3.15</strong>, the last open fix for false “not found”
+        answers: a follow-up answered from earlier in the conversation can still say an
+        instrument's text is not held, rather than the instrument. It will be measured first.
+        <strong>P4.5</strong> (a research step whose answer is lost) is still the main source of
+        slow and costly replies in our replays. The new report instructions describe such a step
+        as incomplete, but the step itself is not yet labelled as lost.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
         and three items from <code>docs/TODO.md</code> D16 (the impossible year window, always
@@ -531,7 +558,7 @@
   // src:    "T" | "R" | "T & R"
   // fixed:  "YYYY-MM-DD" on a Fixed row only: the first commit in which FIX_PLAN.md shows the
   //         row ticked [x] (git log -- docs/prepilot-fixes/FIX_PLAN.md). Not a deployment date.
-  const UPDATED = "24 September 2026, end of Session 25 (table now ordered by severity, status and fixed date; P3.7 fixed: a named instrument is now looked up by its number, so “not held” is definite; new column: the date each fix was accepted; next: P4.7)";
+  const UPDATED = "24 September 2026, end of Session 26 (P4.7 fixed: the Deep Research report now has instructions for each research type, and says a source it never searched was not searched; next: P3.15)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23" },
@@ -575,7 +602,7 @@
     { src: "T & R", fix: "Report a lost research step as lost, not “no results”", sev: "P1", status: "Verified", ref: "P4.5", t: "3" },
     { src: "T", fix: "Label incomplete Deep Research steps as incomplete in progress messages", sev: "P3", status: "Verified", ref: "P4.5", t: "3" },
     { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Fixed", ref: "P4.6", t: "4", fixed: "2026-09-23" },
-    { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Verified", ref: "P4.7", t: "2" },
+    { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Fixed", ref: "P4.7", t: "2", fixed: "2026-09-24" },
     { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", sev: "P3", status: "Verified", ref: "P4.8", t: "" },
     { src: "R", fix: "Source Scottish case law (Court of Session, Sheriff Courts)", sev: "P2", status: "In progress", ref: "P5.2", t: "" },
     { src: "T", fix: "Show provider errors (credit, rate limit) clearly when planning", sev: "P3", status: "Verified", ref: "TODO B6", t: "8" },
