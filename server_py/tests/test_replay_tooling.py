@@ -1360,6 +1360,112 @@ def test_missing_timing_does_not_raise():
 
 
 # ---------------------------------------------------------------------------
+# lost_sites — P4.5's pre-flight: where a lost completion landed
+# ---------------------------------------------------------------------------
+#
+# Read off the outcome, because an `empty_completions` record carries no
+# delegation id. Checked against every stored instance on P4.5's row before any
+# number was quoted: 6409 r3 t11 (worker, scope only), 6375 r3 t2 (step, empty),
+# 6374 r3 t4 (step, scope only), 6373 r1 t3 (worker, scope only),
+# wave3_p313 rep 2 t1 (worker, scope only), wave3_p38/6374 r1 t1 (Manager
+# fallback) and baseline/6363 r1 t5 (two empty steps, pre-v3).
+
+_SCOPE_ONLY = (
+    "\n\n[SEARCH SCOPE — what this research step actually did]\n"
+    "Searched the legislation index 2 time(s) for: \"x\".\n[/SEARCH SCOPE]"
+)
+
+
+def _ldg(report="", kind="delegation", **kw):
+    d = {"kind": kind, "report": report, "halted": None, "error": None}
+    d.update(kw)
+    return d
+
+
+def _lturn(delegations, answer="An answer.", cost=0.1, chat_mode="research", **kw):
+    t = {"turn": 1, "answer": answer, "chat_mode": chat_mode,
+         "timing": {"total_cost_usd": cost},
+         "audit": {"delegations": delegations, "empty_completions": []}}
+    t.update(kw)
+    return t
+
+
+def test_a_scope_block_alone_is_a_lost_worker():
+    """6409 r3 t11: the report is the code-appended scope block and nothing
+    else, which reads to the Manager as searched-and-found-nothing."""
+    sites = rr.lost_sites(_lturn([_ldg(_SCOPE_ONLY), _ldg("A real report.")]))
+    assert sites == [{"site": "worker", "step": None, "shape": "scope"}]
+
+
+def test_an_empty_case_law_step_is_a_lost_step():
+    """6375 r3 t2: a case-law step has no scope block, so the report is ''."""
+    t = _lturn([_ldg("", kind="deep_research_step", step=1),
+                _ldg("Findings.", kind="deep_research_step", step=2)],
+               chat_mode="deep_research")
+    assert rr.lost_sites(t) == [{"site": "step", "step": 1, "shape": "empty"}]
+
+
+def test_a_halted_or_failed_worker_is_not_a_lost_one():
+    """A halt has its own label (P2.1) and a raised worker its own error
+    string; neither is the lost-completion shape."""
+    t = _lturn([_ldg("", halted={"reason": "step_cap"}), _ldg("", error="boom")])
+    assert rr.lost_sites(t) == []
+
+
+def test_the_managers_fallback_is_a_lost_manager_completion():
+    """wave3_p38/6374 r1 t1: P4.2's labelled fallback served."""
+    t = _lturn([_ldg("Report.")],
+               answer="**The answering step returned no text, so this is not a "
+                      "composed answer.** The research completed ...")
+    assert rr.lost_sites(t) == [{"site": "manager", "step": None, "shape": "fallback"}]
+
+
+def test_the_synthesis_fallback_is_a_lost_synthesis():
+    t = _lturn([_ldg("F.", kind="deep_research_step", step=1)],
+               answer="**The final synthesis step returned no text, so this "
+                      "report is not an integrated answer.** ...",
+               chat_mode="deep_research")
+    assert rr.lost_sites(t)[0]["site"] == "synthesis"
+
+
+def test_a_blank_billed_answer_before_p42_is_a_lost_manager():
+    assert rr.lost_sites(_lturn([], answer="", cost=0.2)) == [
+        {"site": "manager", "step": None, "shape": "blank"}]
+    # free and blank: nothing ran, nothing was lost (P4.2's exclusion)
+    assert rr.lost_sites(_lturn([], answer="", cost=0.0)) == []
+
+
+def test_a_labelled_lost_report_is_recognised():
+    label = "[Research Incomplete — answer lost]"
+    sites = rr.lost_sites(_lturn([_ldg(label + "\nThe step ..." + _SCOPE_ONLY)]),
+                          label=label)
+    assert sites == [{"site": "worker", "step": None, "shape": "labelled"}]
+
+
+def test_cmd_lost_ties_unrecovered_calls_to_sites(tmp_path, capsys):
+    """One unrecovered call (three failed attempts) and one lost worker: tied,
+    so the split is trusted. A second turn with an unrecovered call and no
+    site is listed as a disagreement rather than guessed at."""
+    probes = [{"model": "m", "sent_chars": 10, "react_turn": 3, "attempt": a,
+               "retried": a < 3} for a in (1, 2, 3)]
+    t1 = _lturn([_ldg(_SCOPE_ONLY)])
+    t1["audit"]["empty_completions"] = probes
+    t2 = _lturn([_ldg("Report.")])
+    t2["turn"] = 2
+    t2["audit"]["empty_completions"] = [dict(p, sent_chars=99) for p in probes]
+    d = tmp_path / "dir"
+    d.mkdir()
+    (d / "1_rep1.json").write_text(
+        json.dumps({"session_id": "1", "rep": 1, "turns": [t1, t2]}), encoding="utf-8")
+    args = type("A", (), {"dir": str(d), "all_dirs": False, "list": False,
+                          "require_label": True})()
+    assert rr.cmd_lost(args) == 1  # the lost worker is not labelled
+    out = capsys.readouterr().out
+    assert "research worker 1" in out and "untied 1" in out
+    assert "dir/1 r1 t2: 1 unrecovered call(s), sites none" in out
+
+
+# ---------------------------------------------------------------------------
 # scope_record_gap — P2.9's acceptance detector (bucket B5)
 # ---------------------------------------------------------------------------
 #

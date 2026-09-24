@@ -2854,6 +2854,230 @@ def cmd_blanks(args) -> int:
     return 0 if not bad else 1
 
 
+# --- P4.5: where a lost completion landed ------------------------------------
+
+# P4.2's fallback bodies, matched on their opening words so a later rewording
+# of the rest of the sentence still counts. Imported from the product where
+# possible; these literals are the fallback when `src` cannot be imported.
+_LOST_MANAGER_OPENERS = (
+    "The answering step returned no text",
+    "No answer was returned for this turn",
+)
+_LOST_SYNTHESIS_OPENERS = (
+    "The final synthesis step returned no text",
+    "No answer was returned for this turn",
+)
+
+
+def _lost_report_label() -> Optional[str]:
+    """P4.5's lost-report header, or None before it existed."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from src.utils.research_halt import LOST_REPORT_TAG  # noqa: PLC0415
+
+        return LOST_REPORT_TAG
+    except Exception:
+        return None
+
+
+def _report_shape(report: str, label: Optional[str]) -> str:
+    """How a worker report reads when its final completion may have been lost.
+
+    "labelled" — P4.5's lost-report header opens it;
+    "empty"    — nothing at all (a case-law-only step has no scope block);
+    "scope"    — the code-appended scope block and nothing above it, which
+                 reads as "searched, found nothing";
+    "body"     — the worker wrote something.
+    """
+    text = report or ""
+    if label and text.lstrip().startswith(label):
+        return "labelled"
+    if not text.strip():
+        return "empty"
+    if not _strip_scope(text).strip():
+        return "scope"
+    return "body"
+
+
+def lost_sites(turn: dict, label: Optional[str] = None) -> list:
+    """Every place in one stored turn where a completion's answer was lost.
+
+    Read off the OUTCOME, not off `audit.empty_completions`: those records
+    carry no delegation id and no timestamp, so a record cannot be tied to the
+    call it came from. The outcome can. A worker run that did not halt, did not
+    raise, and returned no body is a lost worker completion (`chat_loop`
+    returns `content: ""` when every attempt came back empty). A Manager or a
+    synthesis whose completion was lost shows P4.2's fallback, or, before
+    P4.2, a blank body. `cmd_lost` then checks, turn by turn, that the number
+    of sites equals the number of unrecovered calls the records show; where
+    they disagree the turn is listed, and no split is trusted over it.
+
+    Returns a list of `{"site", "step", "shape"}`, site one of "worker",
+    "step", "manager", "synthesis".
+    """
+    audit = turn.get("audit") or {}
+    delegations = audit.get("delegations") or []
+    sites: list = []
+    for dg in delegations:
+        if dg.get("halted") or dg.get("error"):
+            continue
+        shape = _report_shape(dg.get("report") or "", label)
+        if shape == "body":
+            continue
+        sites.append({
+            "site": "step" if dg.get("kind") == "deep_research_step" else "worker",
+            "step": dg.get("step"),
+            "shape": shape,
+        })
+    answer = turn.get("answer") or ""
+    body = _without_footer(answer)
+    is_dr = (any(dg.get("kind") == "deep_research_step" for dg in delegations)
+             or (turn.get("chat_mode") == "deep_research" and bool(turn.get("plan"))))
+    openers = _LOST_SYNTHESIS_OPENERS if is_dr else _LOST_MANAGER_OPENERS
+    head = body.lstrip("*_ \n")[:200]
+    cost = float((turn.get("timing") or {}).get("total_cost_usd") or 0.0)
+    if any(head.startswith(o) for o in openers):
+        sites.append({"site": "synthesis" if is_dr else "manager", "step": None,
+                      "shape": "fallback"})
+    elif not body.strip() and cost > 0 and turn.get("status", "ok") == "ok":
+        sites.append({"site": "synthesis" if is_dr else "manager", "step": None,
+                      "shape": "blank"})
+    return sites
+
+
+def _wilson(k: int, n: int, z: float = 1.96) -> tuple:
+    if not n:
+        return 0.0, 0.0
+    p = k / n
+    den = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / den
+    half = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5) / den
+    return max(0.0, centre - half), min(1.0, centre + half)
+
+
+def cmd_lost(args) -> int:
+    """P4.5 pre-flight and acceptance aid: where each lost completion landed.
+
+    Per directory (`--all-dirs`: every directory beside `--dir`), counts the
+    answered turns, the provider calls that came back empty (from
+    `audit.empty_completions`, schema v3 on) and whether the retry recovered
+    them, and splits the UNRECOVERED ones by where the loss landed: a
+    research worker (`delegate_research`), a Deep Research step, the Manager,
+    or the synthesis. A recovered call landed nowhere, so it has no site.
+
+    Directories before schema v3 have no records; their lost-shaped outcomes
+    are counted separately as "mechanism unrecorded" (6363 in `baseline`).
+
+    `--list` prints one line per lost site (ids, modes and shapes only: no
+    question or answer text). `--require-label` exits 1 when a lost worker or
+    step report is not labelled as lost: that is P4.5's invariant, for a
+    directory recorded after the fix. Otherwise informational (exit 0).
+    """
+    base = Path(args.dir)
+    dirs = ([d for d in sorted(base.parent.iterdir()) if d.is_dir()]
+            if args.all_dirs else [base])
+    label = _lost_report_label()
+    pooled = Counter()
+    listing = []
+    mismatches = []
+    unlabelled = 0
+    print(f"P4.5: lost completions, by where they landed "
+          f"({len(dirs)} director{'y' if len(dirs) == 1 else 'ies'})")
+    print()
+    hdr = (f"{'directory':<22} {'turns':>5} {'v3':>4} {'calls':>5} {'recov':>5} "
+           f"{'unrec':>5} {'worker':>6} {'step':>4} {'mgr':>4} {'synth':>5} "
+           f"{'untied':>6} {'pre-v3':>6}")
+    print(hdr)
+    print("-" * len(hdr))
+    for d in dirs:
+        c = Counter()
+        for doc in sorted(load_runs(d), key=lambda x: (str(x.get("session_id")),
+                                                        x.get("rep", 1))):
+            for t in doc.get("turns") or []:
+                if not (t.get("answer") or "").strip() and not (t.get("audit") or {}):
+                    continue
+                c["turns"] += 1
+                audit = t.get("audit") or {}
+                v3 = "empty_completions" in audit
+                sites = lost_sites(t, label)
+                if v3:
+                    c["v3"] += 1
+                    calls = empty_completion_calls(audit.get("empty_completions") or [])
+                    rec = sum(1 for _, ok in calls if ok)
+                    unrec = sum(1 for _, ok in calls if not ok)
+                    c["calls"] += len(calls)
+                    c["recov"] += rec
+                    c["unrec"] += unrec
+                    if unrec == len(sites):
+                        for s in sites:
+                            c[s["site"]] += 1
+                    else:
+                        c["untied"] += unrec
+                        mismatches.append((d.name, doc.get("session_id"),
+                                           doc.get("rep", 1), t.get("turn"),
+                                           unrec, [s["site"] for s in sites]))
+                else:
+                    c["pre_v3"] += len(sites)
+                for s in sites:
+                    if s["site"] in ("worker", "step") and s["shape"] != "labelled":
+                        unlabelled += 1
+                    listing.append((d.name, doc.get("session_id"), doc.get("rep", 1),
+                                    t.get("turn"), s["site"], s["step"], s["shape"],
+                                    t.get("chat_mode") or "?",
+                                    audit.get("research_mode") or "?",
+                                    "v3" if v3 else "pre-v3"))
+        pooled.update(c)
+        print(f"{d.name:<22} {c['turns']:>5} {c['v3']:>4} {c['calls']:>5} "
+              f"{c['recov']:>5} {c['unrec']:>5} {c['worker']:>6} {c['step']:>4} "
+              f"{c['manager']:>4} {c['synthesis']:>5} {c['untied']:>6} "
+              f"{c['pre_v3']:>6}")
+    if len(dirs) > 1:
+        print("-" * len(hdr))
+        c = pooled
+        print(f"{'ALL':<22} {c['turns']:>5} {c['v3']:>4} {c['calls']:>5} "
+              f"{c['recov']:>5} {c['unrec']:>5} {c['worker']:>6} {c['step']:>4} "
+              f"{c['manager']:>4} {c['synthesis']:>5} {c['untied']:>6} "
+              f"{c['pre_v3']:>6}")
+    print()
+    c = pooled
+    lo, hi = _wilson(c["unrec"], c["v3"])
+    print(f"answered turns {c['turns']}, of which schema v3 (records kept) {c['v3']}")
+    print(f"provider calls that came back empty at least once: {c['calls']} "
+          f"(recovered by the retry {c['recov']}, NOT recovered {c['unrec']})")
+    if c["v3"]:
+        print(f"unrecovered calls per v3 turn: {c['unrec']}/{c['v3']} "
+              f"(95% Wilson {100 * lo:.1f}-{100 * hi:.1f}%)")
+    print(f"where the unrecovered ones landed: research worker {c['worker']}, "
+          f"Deep Research step {c['step']}, Manager {c['manager']}, "
+          f"synthesis {c['synthesis']}, untied {c['untied']}")
+    print(f"lost-shaped outcomes before schema v3 (mechanism unrecorded): "
+          f"{c['pre_v3']}")
+    if mismatches:
+        print()
+        print("Turns where the unrecovered calls and the lost sites disagree "
+              "(no split trusted there; read the turn):")
+        for dn, sid, rep, turn, unrec, sites in mismatches:
+            print(f"  {dn}/{sid} r{rep} t{turn}: {unrec} unrecovered call(s), "
+                  f"sites {sites or 'none'}")
+    if args.list and listing:
+        print()
+        print(f"{'directory':<22} {'session':>10} {'rep':>3} {'turn':>4} "
+              f"{'site':<9} {'step':>4} {'shape':<9} {'chat mode':<15} "
+              f"{'research type':<24} records")
+        for dn, sid, rep, turn, site, step, shape, cm, rm, v in listing:
+            print(f"{dn:<22} {str(sid):>10} {rep:>3} {turn!s:>4} {site:<9} "
+                  f"{step if step is not None else '-':>4} {shape:<9} {cm:<15} "
+                  f"{rm:<24} {v}")
+    if args.require_label:
+        print()
+        if unlabelled:
+            print(f"P4.5 INVARIANT BROKEN: {unlabelled} lost worker/step report(s) "
+                  "not labelled as lost.")
+            return 1
+        print("P4.5 invariant holds: every lost worker/step report is labelled.")
+    return 0
+
+
 _SCOPE_COUNT = re.compile(r"Searched the legislation index (\d+) time\(s\)")
 _SCOPE_SECTIONS = re.compile(r"Searched within (\d+) instrument\(s\)")
 _SCOPE_BLOCK_CLOSE = "[/SEARCH SCOPE]"
@@ -6365,6 +6589,18 @@ def main(argv: Iterable[str] | None = None) -> int:
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")
+    lo = sub.add_parser("lost",
+                        help="P4.5: provider calls that came back empty, whether "
+                             "the retry recovered them, and where each unrecovered "
+                             "one landed (worker / Deep Research step / Manager / "
+                             "synthesis)")
+    lo.add_argument("--all-dirs", action="store_true",
+                    help="every directory beside --dir, one line each, pooled")
+    lo.add_argument("--list", action="store_true",
+                    help="one line per lost site (ids, modes and shapes only)")
+    lo.add_argument("--require-label", action="store_true",
+                    help="exit 1 if a lost worker/step report is not labelled "
+                         "as lost (for a directory recorded after P4.5)")
     sub.add_parser("corpus",
                    help="retrieval shape: raw volume, where an enabling power "
                         "can come from, and what the tool memo costs P2.2")
@@ -6390,6 +6626,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "lookup": cmd_lookup,
         "drgaps": cmd_drgaps,
         "blanks": cmd_blanks,
+        "lost": cmd_lost,
         "siblings": cmd_siblings,
         "corpus": cmd_corpus,
     }[args.cmd](args)
