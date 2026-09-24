@@ -141,6 +141,44 @@ def test_pinned_pairs_read_the_label_pinpoint_against_the_provision_url():
     assert u.endswith("asp/2002/3/section/57") and "57(3)(a)" in pin
 
 
+@pytest.mark.parametrize("a,b", [
+    ("Section 126(7)(a)", "s. 126(7)(a)"), ("s.126(6)", "section 126(6)"),
+    ("Sch 5 para 1(1)", "schedule 5, paragraph 1(1)"), ("Article 3(5)", "art. 3(5)"),
+    ("regulation 2(1)", "reg 2(1)"),
+])
+def test_pinpoints_are_compared_in_one_spelling(a, b):
+    """Corrected at first use: 'Section 126(7)(a)' in the findings and
+    's. 126(7)(a)' in the report are one pinpoint kept, not one lost."""
+    assert ss.pin_key(a) == ss.pin_key(b)
+    assert ss.pin_key("s.126(6)") != ss.pin_key("s.126(7)")
+
+
+def test_a_gap_by_what_happened_counts_as_a_case_law_gap():
+    """Corrected at first use: 'step 1 did not return findings, so the common
+    law cases were not established' states the gap by what happened."""
+    assert ss.case_law_gap_sentences(
+        "Step 1 did not return findings; so the leading common law cases are not set out.") == 1
+    assert ss.case_law_gap_sentences("No reported case law was found on X.") == 1
+    # A legislation title is not case law.
+    assert ss.case_law_gap_sentences(
+        "For the Specified Authority Order, no repeal record was retrieved.") == 0
+
+
+def test_a_judgment_label_with_a_bracketed_year_is_still_a_link():
+    """Corrected at first use: `replay_report.MD_LINK` misses this link, so a
+    hybrid draw that linked six judgments this way graded as dropping them."""
+    t = "[*Berezovsky v Hine & Ors* [2011] EWCA Civ 1089](https://caselaw.nationalarchives.gov.uk/ewca/civ/2011/1089)"
+    assert rr.MD_LINK.findall(t) == []
+    assert ss.link_targets(t) == {"https://caselaw.nationalarchives.gov.uk/ewca/civ/2011/1089"}
+
+
+def test_link_targets_fold_scheme_and_id_and_ignore_repeats():
+    t = ("[a](http://www.legislation.gov.uk/id/asp/2016/10/section/3) "
+         "[b](https://www.legislation.gov.uk/asp/2016/10/section/3/) "
+         "[c](https://caselaw.nationalarchives.gov.uk/ewca/civ/2011/1089)")
+    assert len(ss.link_targets(t)) == 2
+
+
 def test_the_synthesis_sweep_needs_an_explicit_rev_on_the_without_side(tmp_path):
     with pytest.raises(SystemExit):
         ss.main(["--synthesis", "p47", "--out", str(tmp_path), "--without-fix"])

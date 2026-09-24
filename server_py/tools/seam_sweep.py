@@ -108,20 +108,76 @@ DR_MARKER = re.compile(r"\*\*key\s*findings", re.I)
 # hybrid report that rewords its true negative still counts as stating it.
 GAP_BY_RETRIEVAL = re.compile(
     r"\bdo(?:es)?\s+not\s+(?:establish|address|consider|interpret)\b"
-    r"|\bdid\s+not\s+(?:establish|address|return|identify|find)\b", re.I)
+    r"|\bdid\s+not\s+(?:establish|address|return|identify|find|complete)\b", re.I)
+# Case law as the subject of a gap sentence. Wider than `drgaps`'s source
+# regex, which must stay narrow because it FLAGS a defect: here a sentence is
+# only being counted as stating a gap. **Corrected at first use (Session 26):**
+# the v2 after-draw of `wave2_p24_pre`/6375 r3 t2 said step 1 "did not return
+# findings", so the "common law cases" it covered were not established. That
+# is a gap stated by what happened (step 1's findings are empty), and the
+# narrow regex read it as silence.
+# ("authority" was tried and dropped: it matched a legislation title, a
+# "Specified Authority" Order, on 6407.)
+_CL_GAP_SUBJECT = re.compile(rr.DR_CASE_WORD.pattern + r"|\bcases\b", re.I)
+
+# Pinpoint spellings, canonicalised before two labels are compared.
+# **Corrected at first use (Session 26):** the comparison was literal, so an
+# after-draw of `wave3_p38`/6374 t2 that wrote "s. 126(7)(a)" where the
+# findings wrote "Section 126(7)(a)" scored as losing 5 of 6 pinpoints it kept.
+_PIN_WORDS = (
+    (r"\bsections?\b\.?|\bss?\.", "s"),
+    (r"\bschedules?\b|\bsched\b\.?|\bsch\b\.?", "sch"),
+    (r"\bparagraphs?\b|\bparas?\b\.?", "para"),
+    (r"\barticles?\b|\barts?\b\.?", "art"),
+    (r"\bregulations?\b|\bregs?\b\.?", "reg"),
+)
+
+
+def pin_key(pin: str) -> str:
+    s = pin.lower()
+    for pat, rep in _PIN_WORDS:
+        s = re.sub(pat, rep, s)
+    return re.sub(r"[\s.,]", "", s)
 
 
 def pinned_pairs(text: str) -> set:
-    """{(normalised provision URL, pinpoint)} over the links in `text`."""
+    """{(normalised provision URL, canonical pinpoint)} over the links in `text`."""
     from src.utils.citation_links import (  # noqa: PLC0415
-        _MD_LINK, _PINPOINT, is_provision_url, normalise_leg_url)
+        _PINPOINT, is_provision_url, normalise_leg_url)
     out = set()
-    for label, url in _MD_LINK.findall(text or ""):
+    for label, url in MD_LINK_NESTED.findall(text or ""):
         if not is_provision_url(url):
             continue
         for m in _PINPOINT.finditer(label):
-            out.add((normalise_leg_url(url), re.sub(r"\s+", "", m.group(0)).lower()))
+            out.add((normalise_leg_url(url), pin_key(m.group(0))))
     return out
+
+
+# A Markdown link whose label may hold ONE level of balanced brackets, as a
+# judgment's does: `[*Berezovsky v Hine* [2011] EWCA Civ 1089](url)`, which
+# CommonMark renders as a link. **Corrected at first use (Session 26):**
+# `replay_report.MD_LINK` forbids `]` in a label, so it does not see that
+# link at all, and a v2 hybrid draw (`wave2_p24_pre`/6375 r1 t2) that linked
+# all six of its judgments this way graded as having dropped them.
+MD_LINK_NESTED = re.compile(
+    r"\[((?:[^\[\]\n]|\[[^\[\]\n]*\]){1,300})\]\((https?://[^)\s]+)\)")
+
+
+def link_targets(text: str) -> set:
+    """The distinct targets the text links to, scheme and `/id/` folded.
+    A link count rises and falls with repeated citations; this is the set a
+    report may not lose (added in Session 26)."""
+    return {u.rstrip("/").replace("http://", "https://").replace("/id/", "/")
+            for _label, u in MD_LINK_NESTED.findall(text or "")}
+
+
+def case_law_gap_sentences(text: str) -> int:
+    """Sentences stating a gap about case law: a case-law negative, or a
+    gap put by what the retrieval did (does not establish / did not return
+    or complete)."""
+    return sum(1 for s in rr._sentences(text or "")
+               if _CL_GAP_SUBJECT.search(s)
+               and (rr.DR_ABSENT.search(s) or GAP_BY_RETRIEVAL.search(s)))
 
 
 def synthesis_grade(text: str, doc: dict, turn: dict) -> dict:
@@ -131,18 +187,18 @@ def synthesis_grade(text: str, doc: dict, turn: dict) -> dict:
     rm = sr._cfg_for(doc, turn)["_research_mode"]
     cl = rr.dr_classify(text)
     absent = sum(1 for k, _ in cl if k in ("absent", "absent_excluded"))
-    gap_cl = sum(1 for k, s in cl if k in ("absent", "absent_excluded")
-                 or GAP_BY_RETRIEVAL.search(s))
+    gap_cl = case_law_gap_sentences(text)
     headers = _extract_section_headers(text)
     sections = _REPORT_SECTIONS.get(rm, _REPORT_SECTIONS["legislation_only"])
     missing = [s for s in sections if not any(s.lower() in h for h in headers)]
     have = pinned_pairs("\n".join(f["content"] for f in sr.step_findings_from(turn)))
     return {
         "research_mode": rm,
+        "urls": link_targets(text),
         "cl_absent": absent,
         "cl_excluded": sum(1 for k, _ in cl if k == "excluded"),
         "cl_gap": gap_cl,
-        "links": len(rr.MD_LINK.findall(text)),
+        "links": len(MD_LINK_NESTED.findall(text)),
         "pins": len(pinned_pairs(text) & have), "pins_of": len(have),
         "missing": missing,
         "marker": bool(DR_MARKER.search(text)),
@@ -239,6 +295,15 @@ def synthesis_grade_dir(set_name: str, out: Path) -> int:
                 ("reports with every section of the type", lambda g: not g["missing"]),
                 ("currency UNSUPPORTED (P2.5)", lambda g: g["currency"] == "unsupported")):
             print(f"      {label:<56} {cnt('before', fn):>6} {cnt('after', fn):>7}")
+        print(f"      {'distinct link targets, summed':<56} "
+              f"{sum(len(pr['before']['urls']) for _p, pr in sub):>6} "
+              f"{sum(len(pr['after']['urls']) for _p, pr in sub):>7}")
+        lost = [(p, pr['before']['urls'] - pr['after']['urls']) for p, pr in sub]
+        lost = [(p, u) for p, u in lost if u]
+        print(f"      payloads whose after-draw lost a target the before-draw linked: "
+              f"{len(lost)}" + ("" if not lost else ": " + "; ".join(
+                  f"{p[0]}/{p[1]} r{p[2]} t{p[3]} {len(u)} "
+                  f"({sum('caselaw' in x for x in u)} judgments)" for p, u in lost)))
         fell = [(p, pr) for p, pr in sub
                 if pr["after"]["links"] < pr["before"]["links"]
                 or pr["after"]["pins"] < pr["before"]["pins"]]
