@@ -2744,24 +2744,11 @@ def empty_completion_calls(probes: list) -> list:
     A call is recovered when its LAST record says `retried: true`, because the
     retry then succeeded and left no record. Records are grouped by what
     identifies the request (model, payload size, ReAct round) and split
-    wherever the attempt number does not continue.
+    wherever the attempt number does not continue
+    (`empty_completion_call_records`, which keeps the records).
     """
-    calls: list = []
-    open_calls: dict = {}
-    for pr in probes or []:
-        if not isinstance(pr, dict):
-            continue
-        key = (pr.get("model"), pr.get("sent_chars"), pr.get("react_turn"))
-        attempt = pr.get("attempt") or 1
-        call = open_calls.get(key)
-        if call is None or not call["last_retried"] or attempt <= call["last_attempt"]:
-            call = {"attempts": 0}
-            calls.append(call)
-            open_calls[key] = call
-        call["attempts"] += 1
-        call["last_attempt"] = attempt
-        call["last_retried"] = bool(pr.get("retried"))
-    return [(c["attempts"], c["last_retried"]) for c in calls]
+    return [(len(records), ok)
+            for records, ok in empty_completion_call_records(probes)]
 
 
 def cmd_blanks(args) -> int:
@@ -3095,6 +3082,433 @@ def cmd_lost(args) -> int:
                   "not labelled as lost.")
             return 1
         print("P4.5 invariant holds: every lost worker/step report is labelled.")
+    return 0
+
+
+# --- P4.10: what a lost completion costs --------------------------------------
+
+# An attempt that spent this many completion tokens (or this many reasoning
+# characters) and returned nothing is mechanism (a), whatever its finish reason.
+# The stored (a) attempts sit at 62,912-62,917 tokens and the (b) and (c) ones
+# at 0-310, so the threshold has three orders of magnitude of room either side.
+_HEAVY_TOKENS = 10_000
+_HEAVY_REASONING_CHARS = 20_000
+# A window of this many seconds with no tool running is a slow model call. A
+# healthy ReAct round is 5-40 s; one (b) attempt is about 130 s, one (a) about
+# 350 s.
+_SLOW_GAP_S = 60.0
+
+MECHANISMS = {
+    "a": "reasoned to nothing (heavy reasoning, no content)",
+    "b": "stream error (upstream idle timeout)",
+    "c": "clean stop, no reasoning, no content",
+    "d": "upstream rate limit",
+    "?": "unclassified",
+}
+
+
+def empty_mechanism(probe: dict) -> str:
+    """Which mechanism one `empty_completions` record shows.
+
+    (a) the model reasoned for tens of thousands of tokens and emitted no
+        content: `finish_reason=stop`/`native=STOP` at ~62,9xx tokens, or
+        `length`/`MAX_TOKENS` at the model's output ceiling. The cost problem.
+    (b) a mid-stream failure (`finish_reason=error`, typically "Upstream idle
+        timeout exceeded", ~130-310 tokens).
+    (c) a clean stop with no reasoning and no token count.
+    (d) an upstream rate limit, reported as a stream error with 0 tokens.
+
+    Heavy reasoning is tested first: it is what an attempt cost, whatever
+    ended it.
+    """
+    tokens = probe.get("completion_tokens") or 0
+    reasoning = probe.get("reasoning_chars") or 0
+    err = str(probe.get("stream_error") or "")
+    if tokens >= _HEAVY_TOKENS or reasoning >= _HEAVY_REASONING_CHARS:
+        return "a"
+    if "rate-limit" in err or "rate limit" in err:
+        return "d"
+    if probe.get("finish_reason") == "error" or err:
+        return "b"
+    if probe.get("finish_reason") in ("stop", None) and not reasoning:
+        return "c"
+    return "?"
+
+
+def _call_mechanism(mechs: str) -> str:
+    """One call's mechanism, from its attempts': the costliest one present."""
+    for m in "abcd":
+        if m in mechs:
+            return m
+    return "?"
+
+
+def empty_completion_call_records(probes: list) -> list:
+    """Group `audit.empty_completions` records into provider calls, keeping
+    each call's records. Returns one `(records, recovered)` pair per call; see
+    `empty_completion_calls` for the grouping rule."""
+    calls: list = []
+    open_calls: dict = {}
+    for pr in probes or []:
+        if not isinstance(pr, dict):
+            continue
+        key = (pr.get("model"), pr.get("sent_chars"), pr.get("react_turn"))
+        attempt = pr.get("attempt") or 1
+        call = open_calls.get(key)
+        if call is None or not call["last_retried"] or attempt <= call["last_attempt"]:
+            call = {"records": []}
+            calls.append(call)
+            open_calls[key] = call
+        call["records"].append(pr)
+        call["last_attempt"] = attempt
+        call["last_retried"] = bool(pr.get("retried"))
+    return [(c["records"], c["last_retried"]) for c in calls]
+
+
+def _uncovered_max(lo: float, hi: float, spans: list) -> float:
+    """The longest stretch of [lo, hi] that no span in `spans` covers."""
+    best, cursor = 0.0, lo
+    for s, e in sorted(spans):
+        if s > cursor:
+            best = max(best, min(s, hi) - cursor)
+        cursor = max(cursor, e)
+        if cursor >= hi:
+            break
+    return max(best, hi - cursor)
+
+
+def slow_call_location(turn: dict) -> tuple:
+    """Where the turn's slowest model call ran, read off the timeline.
+
+    Returns `(where, seconds)`: where is "inside" (within a worker or Deep
+    Research step, in a window no tool covered, i.e. a worker's model call) or
+    "outside" (between or after delegations, i.e. the Manager's or the
+    synthesis's model call), and seconds is the length of that window. Tool and
+    delegation `started_at` are seconds from the turn's start.
+
+    Used only to place a RECOVERED call, which left no outcome to read a site
+    from. `cmd_lostcost` checks it against the sites `lost_sites` ties to the
+    unrecovered calls before any inferred site is printed.
+    """
+    delegations = (turn.get("audit") or {}).get("delegations") or []
+    elapsed = float(turn.get("elapsed_s") or 0.0)
+    inside = longest_worker_window(delegations)
+    spans = [_span(dg) for dg in delegations]
+    outside = _uncovered_max(0.0, elapsed, spans) if elapsed else 0.0
+    return ("inside", inside) if inside >= outside else ("outside", outside)
+
+
+def _span(x: dict) -> tuple:
+    s = float(x.get("started_at") or 0.0)
+    return s, s + float(x.get("duration_s") or 0.0)
+
+
+def longest_worker_window(delegations: list) -> float:
+    """The longest stretch inside any delegation with no tool running: one
+    worker model round (summarisation runs inside a tool's own duration), so
+    an upper bound on the turn's longest worker model call."""
+    return max((_uncovered_max(*_span(dg), [_span(t) for t in dg.get("tools") or []])
+                for dg in delegations), default=0.0)
+
+
+def _slot_key(turn: dict) -> tuple:
+    """Turns that asked the same thing the same way: the question, the chat
+    mode and the research type. Hashed, so no question text is held or
+    printed."""
+    import hashlib  # noqa: PLC0415
+
+    q = hashlib.sha1((turn.get("question") or "").encode("utf-8")).hexdigest()
+    return (q, turn.get("chat_mode"), turn.get("research_mode"))
+
+
+def _fisher_upper(k: int, n: int, total_k: int, total_n: int) -> float:
+    """One-sided Fisher exact test: the chance that a group of `n` of
+    `total_n` runs holds `k` or more of the `total_k` events, if the events
+    fell on runs at random (hypergeometric upper tail)."""
+    from math import comb  # noqa: PLC0415
+
+    if not total_n or not total_k:
+        return 1.0
+    den = comb(total_n, total_k)
+    return sum(comb(n, j) * comb(total_n - n, total_k - j)
+               for j in range(k, min(n, total_k) + 1)) / den
+
+
+def _median(xs: list) -> Optional[float]:
+    xs = sorted(xs)
+    if not xs:
+        return None
+    m = len(xs) // 2
+    return xs[m] if len(xs) % 2 else (xs[m - 1] + xs[m]) / 2
+
+
+def cmd_lostcost(args) -> int:
+    """P4.10 pre-flight: what each empty-completion call cost, and why.
+
+    For every provider call that came back empty at least once (schema v3
+    records; `--all-dirs` pools every directory beside `--dir`): the
+    mechanism of each attempt ((a)-(d), `empty_mechanism`), whether the retry
+    recovered the call, where it landed, and the turn's cost and wall clock
+    against the median of CLEAN turns in the same slot (same question, chat
+    mode and research type) across every rep and directory loaded. The excess
+    is what the episode cost.
+
+    **Where it landed.** An unrecovered call takes the site `lost_sites` ties
+    to it (in order: records and sites are both chronological). A recovered
+    call left no outcome, so its site is inferred from the timeline
+    (`slow_call_location`) when it is the turn's only slow call (an (a) or (b)
+    attempt) and the turn has a window of `_SLOW_GAP_S` or more with no tool
+    running; otherwise "?". Inferred sites carry "~". The inference is checked
+    against every tied site it could have been applied to, and the agreement
+    printed.
+
+    **Excess is per TURN**, printed on the turn's first call; a turn with two
+    empty calls is not counted twice. A clean turn is one with a trace, no
+    empty-completion record and no lost site; a slot with no clean turn gets
+    no excess ("-").
+
+    Ids, modes and numbers only: no question or answer text. Exit 0.
+    """
+    base = Path(args.dir)
+    dirs = ([d for d in sorted(base.parent.iterdir()) if d.is_dir()]
+            if args.all_dirs else [base])
+    label = _lost_report_label()
+    # Every turn loaded, for the slot baselines.
+    all_turns = []
+    for d in dirs:
+        for doc in sorted(load_runs(d), key=lambda x: (str(x.get("session_id")),
+                                                        x.get("rep", 1))):
+            for t in doc.get("turns") or []:
+                if not (t.get("answer") or "").strip() and not (t.get("audit") or {}):
+                    continue
+                all_turns.append((d.name, doc, t))
+    clean: dict = {}
+    for dn, doc, t in all_turns:
+        audit = t.get("audit") or {}
+        if (audit and not audit.get("empty_completions") and not lost_sites(t, label)
+                and t.get("status", "ok") == "ok" and (t.get("answer") or "").strip()):
+            clean.setdefault(_slot_key(t), []).append(
+                (float((t.get("timing") or {}).get("total_cost_usd") or 0.0),
+                 float(t.get("elapsed_s") or 0.0)))
+
+    rows = []
+    attempts_by = Counter()
+    # What the retry bought: after an attempt of each mechanism that was
+    # retried, did the next attempt answer (no further record) or come back
+    # empty again (and how)?
+    retry_next: dict = {}
+    redone = Counter()
+    v3_turns = Counter()
+    v3_workers = Counter()
+    v3_spend = 0.0
+    agree = checked = 0
+    for dn, doc, t in all_turns:
+        audit = t.get("audit") or {}
+        if "empty_completions" not in audit:
+            continue
+        mode = t.get("chat_mode") or "?"
+        v3_turns[mode] += 1
+        v3_workers[mode] += len(audit.get("delegations") or [])
+        cost = float((t.get("timing") or {}).get("total_cost_usd") or 0.0)
+        secs = float(t.get("elapsed_s") or 0.0)
+        v3_spend += cost
+        calls = empty_completion_call_records(audit.get("empty_completions") or [])
+        if not calls:
+            continue
+        sites = lost_sites(t, label)
+        unrec = [i for i, (_, ok) in enumerate(calls) if not ok]
+        tied = len(unrec) == len(sites)
+        where, gap = slow_call_location(t)
+        is_dr = any(dg.get("kind") == "deep_research_step"
+                    for dg in audit.get("delegations") or [])
+        inferred_site = (("step" if is_dr else "worker") if where == "inside"
+                         else ("synthesis" if is_dr else "manager"))
+        base_ = clean.get(_slot_key(t)) or []
+        med_c = _median([c for c, _ in base_])
+        med_s = _median([s for _, s in base_])
+        site_iter = iter(sites)
+        # One timeline window places one slow call. With two in the turn
+        # (wave2_p24_final/6385 r2 t3: a worker's and the Manager's, ~395 s
+        # each) it cannot say which is which, so nothing is inferred there.
+        n_slow = sum(any(empty_mechanism(r) in "ab" for r in recs)
+                     for recs, _ in calls)
+        can_infer = n_slow == 1 and gap >= _SLOW_GAP_S
+        for i, (records, ok) in enumerate(calls):
+            mechs = "".join(empty_mechanism(r) for r in records)
+            for m in mechs:
+                attempts_by[m] += 1
+            for j, r in enumerate(records):
+                if not r.get("retried"):
+                    continue
+                nxt = mechs[j + 1] if j + 1 < len(mechs) else "answered"
+                retry_next.setdefault(mechs[j], Counter())[nxt] += 1
+            slow = any(m in "ab" for m in mechs)
+            if not ok:
+                s = next(site_iter, None) if tied else None
+                site = s["site"] if s else "untied"
+                if s and s["site"] == "worker":
+                    redone[(_call_mechanism(mechs), bool(s.get("redone")))] += 1
+                if s and slow and can_infer:
+                    checked += 1
+                    agree += inferred_site == site
+            elif slow and can_infer:
+                site = inferred_site + "~"
+            else:
+                site = "?"
+            first = i == 0
+            rows.append({
+                "dir": dn, "sid": doc.get("session_id"), "rep": doc.get("rep", 1),
+                "turn": t.get("turn"), "mode": mode, "site": site,
+                "recovered": ok, "mechs": mechs, "mech": _call_mechanism(mechs),
+                "tokens": max((r.get("completion_tokens") or 0) for r in records),
+                "first": first, "cost": cost, "secs": secs,
+                "med_c": med_c, "med_s": med_s, "n": len(base_),
+            })
+
+    def _f(x, spec):
+        return "-" if x is None else format(x, spec)
+
+    print(f"P4.10: what each empty-completion call cost "
+          f"({len(dirs)} director{'y' if len(dirs) == 1 else 'ies'})")
+    print()
+    hdr = (f"{'directory':<22} {'session':>14} {'rep':>3} {'turn':>4} "
+           f"{'chat mode':<15} {'site':<10} {'recov':<5} {'attempts':<8} "
+           f"{'max tok':>7} {'cost $':>7} {'slot $':>6} {'n':>3} {'excess $':>8} "
+           f"{'secs':>6} {'slot s':>6} {'excess s':>8}")
+    print(hdr)
+    print("-" * len(hdr))
+    for r in rows:
+        if r["first"]:
+            ex_c = None if r["med_c"] is None else r["cost"] - r["med_c"]
+            ex_s = None if r["med_s"] is None else r["secs"] - r["med_s"]
+            turn_cols = (f"{r['cost']:>7.2f} {_f(r['med_c'], '6.2f'):>6} {r['n']:>3} "
+                         f"{_f(ex_c, '8.2f'):>8} {r['secs']:>6.0f} "
+                         f"{_f(r['med_s'], '6.0f'):>6} {_f(ex_s, '8.0f'):>8}")
+        else:
+            turn_cols = f"{'(same turn)':>7}"
+        print(f"{r['dir']:<22} {str(r['sid']):>14} {r['rep']:>3} {r['turn']!s:>4} "
+              f"{r['mode']:<15} {r['site']:<10} {'yes' if r['recovered'] else 'no':<5} "
+              f"{r['mechs']:<8} {r['tokens']:>7} {turn_cols}")
+    print()
+    print("attempts by mechanism: " + ", ".join(
+        f"({m}) {attempts_by[m]}" for m in "abcd?" if attempts_by[m]))
+    for m in "abcd":
+        print(f"  ({m}) {MECHANISMS[m]}")
+    print()
+    print(f"{'calls, by costliest attempt':<34} {'calls':>5} {'recov':>5} "
+          f"{'unrec':>5}  sites")
+    for m in "abcd?":
+        cs = [r for r in rows if r["mech"] == m]
+        if not cs:
+            continue
+        where_ = Counter(r["site"] for r in cs)
+        print(f"  ({m}) {MECHANISMS[m][:28]:<28} {len(cs):>5} "
+              f"{sum(r['recovered'] for r in cs):>5} "
+              f"{sum(not r['recovered'] for r in cs):>5}  "
+              + ", ".join(f"{k} {v}" for k, v in sorted(where_.items())))
+    print(f"  {'all':<32} {len(rows):>5} {sum(r['recovered'] for r in rows):>5} "
+          f"{sum(not r['recovered'] for r in rows):>5}")
+    print()
+    # Per turn, by the costliest mechanism among its calls.
+    turns_by = {}
+    for r in rows:
+        k = (r["dir"], r["sid"], r["rep"], r["turn"])
+        prev = turns_by.get(k)
+        if prev is None:
+            turns_by[k] = dict(r)
+        elif "abcd?".index(r["mech"]) < "abcd?".index(prev["mech"]):
+            prev["mech"] = r["mech"]
+    print(f"{'turns, by costliest mechanism':<34} {'turns':>5} {'w/ base':>7} "
+          f"{'excess $':>9} {'median':>7} {'excess s':>9} {'median':>7}")
+    tot_c = 0.0
+    for m in "abcd?":
+        ts = [r for r in turns_by.values() if r["mech"] == m]
+        if not ts:
+            continue
+        based = [r for r in ts if r["med_c"] is not None]
+        exc = [r["cost"] - r["med_c"] for r in based]
+        exs = [r["secs"] - r["med_s"] for r in based]
+        tot_c += sum(exc)
+        print(f"  ({m}) {MECHANISMS[m][:28]:<28} {len(ts):>5} {len(based):>7} "
+              f"{sum(exc):>9.2f} {_f(_median(exc), '7.2f'):>7} "
+              f"{sum(exs):>9.0f} {_f(_median(exs), '7.0f'):>7}")
+    print(f"schema-v3 spend {v3_spend:.2f} USD over {sum(v3_turns.values())} turns; "
+          f"excess on turns with an empty call {tot_c:.2f} "
+          f"({100 * tot_c / v3_spend if v3_spend else 0:.1f}%)")
+    print()
+    print("(a) calls by chat mode, against schema-v3 turns and worker runs "
+          "(delegations and Deep Research steps) in that mode:")
+    a_by = Counter(r["mode"] for r in rows if r["mech"] == "a")
+    runs_all, a_all = sum(v3_workers.values()), sum(a_by.values())
+    for mode in sorted(v3_turns):
+        p = _fisher_upper(a_by[mode], v3_workers[mode], a_all, runs_all)
+        print(f"  {mode:<15} (a) calls {a_by[mode]:>3}   v3 turns {v3_turns[mode]:>4}"
+              f"   worker runs {v3_workers[mode]:>4}   P(this many or more by "
+              f"chance) {p:.4f}")
+    print()
+    print("what the retry bought, by the mechanism of the attempt it followed:")
+    for m in "abcd?":
+        nx = retry_next.get(m)
+        if not nx:
+            continue
+        print(f"  after ({m}): {sum(nx.values()):>3} retries; the next attempt "
+              f"answered {nx['answered']:>2}, came back empty "
+              + ", ".join(f"({k}) {v}" for k, v in sorted(nx.items()) if k != "answered"))
+    print("unrecovered calls that landed in a research worker, and whether a later "
+          "delegation in the same turn returned a body (the Manager redid it):")
+    for m in "abcd?":
+        y, n = redone[(m, True)], redone[(m, False)]
+        if y or n:
+            print(f"  ({m}): redone {y}, not redone {n}")
+    print()
+    print(f"site inference from the timeline (recovered calls, marked ~): agrees "
+          f"with the tied site on {agree} of {checked} unrecovered slow calls "
+          f"(turns with one slow call)")
+    print()
+    # How long does a HEALTHY worker model call run? A wall-clock ceiling below
+    # `longest_worker_window` would have cut that turn's longest call.
+    ceilings = (60, 120, 180, 300)
+    print("clean v3 turns whose longest worker model call (longest window inside "
+          "a delegation with no tool running) exceeded a ceiling:")
+    print(f"  {'chat mode':<15} {'turns':>5} {'median s':>8} {'max s':>6} "
+          + " ".join(f"{'>' + str(c) + 's':>6}" for c in ceilings))
+    by_mode_gap: dict = {}
+    for dn, doc, t in all_turns:
+        audit = t.get("audit") or {}
+        if "empty_completions" not in audit or audit.get("empty_completions"):
+            continue
+        if lost_sites(t, label) or not audit.get("delegations"):
+            continue
+        by_mode_gap.setdefault(t.get("chat_mode") or "?", []).append(
+            longest_worker_window(audit["delegations"]))
+    for mode, gaps in sorted(by_mode_gap.items()):
+        print(f"  {mode:<15} {len(gaps):>5} {_median(gaps):>8.0f} {max(gaps):>6.0f} "
+              + " ".join(f"{sum(g > c for g in gaps):>6}" for c in ceilings))
+    print()
+    # Could a per-call output cap bind on a HEALTHY turn? No healthy call
+    # records its tokens, but a turn's output tokens cannot exceed its cost
+    # over the output price, so a turn below the cap by that bound cannot have
+    # had any single call reach it. An upper bound: input tokens are billed
+    # too, so the true figure is lower.
+    price = args.out_price / 1e6
+    caps = (4_000, 8_000, 16_000, 32_000)
+    print(f"clean v3 turns where a per-call output cap CANNOT have bound "
+          f"(turn cost / ${args.out_price:g} per M output tokens < cap):")
+    print(f"  {'chat mode':<15} {'turns':>5} {'median bound':>12} "
+          + " ".join(f"{'<' + format(c, ','):>8}" for c in caps))
+    by_mode: dict = {}
+    for dn, doc, t in all_turns:
+        audit = t.get("audit") or {}
+        if "empty_completions" not in audit or audit.get("empty_completions"):
+            continue
+        if lost_sites(t, label):
+            continue
+        cost = float((t.get("timing") or {}).get("total_cost_usd") or 0.0)
+        by_mode.setdefault(t.get("chat_mode") or "?", []).append(cost / price)
+    for mode, bounds in sorted(by_mode.items()):
+        print(f"  {mode:<15} {len(bounds):>5} {_median(bounds):>12,.0f} "
+              + " ".join(f"{100 * sum(b < c for b in bounds) / len(bounds):>7.0f}%"
+                         for c in caps))
     return 0
 
 
@@ -6621,6 +7035,16 @@ def main(argv: Iterable[str] | None = None) -> int:
     lo.add_argument("--require-label", action="store_true",
                     help="exit 1 if a lost worker/step report is not labelled "
                          "as lost (for a directory recorded after P4.5)")
+    lc = sub.add_parser("lostcost",
+                        help="P4.10: every provider call that came back empty, "
+                             "its mechanism per attempt, where it landed, and the "
+                             "turn's cost and wall clock against its slot's median")
+    lc.add_argument("--all-dirs", action="store_true",
+                    help="every directory beside --dir, pooled")
+    lc.add_argument("--out-price", type=float, default=12.0,
+                    help="output price, USD per million tokens, for the cap bound "
+                         "(default 12: google/gemini-3.1-pro-preview's list price "
+                         "on OpenRouter's models endpoint, 2026-09-24)")
     sub.add_parser("corpus",
                    help="retrieval shape: raw volume, where an enabling power "
                         "can come from, and what the tool memo costs P2.2")
@@ -6647,6 +7071,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "drgaps": cmd_drgaps,
         "blanks": cmd_blanks,
         "lost": cmd_lost,
+        "lostcost": cmd_lostcost,
         "siblings": cmd_siblings,
         "corpus": cmd_corpus,
     }[args.cmd](args)

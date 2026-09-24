@@ -459,6 +459,228 @@ def worker_first_round_messages(doc: dict, turn: dict, delegation: int = 1,
     ]
 
 
+def tool_rounds(tools: list, tolerance_s: float = 1.0) -> list:
+    """Group a delegation's recorded tool calls into the ReAct rounds that
+    issued them (P4.10).
+
+    The audit records no round index, but a round's tools are started together
+    and the next round cannot start until the model has answered the last, so a
+    tool that starts after every tool of the current round has finished (plus
+    `tolerance_s`, which absorbs a memo hit's zero duration) opens a new round.
+    Checked against the recorded `react_turn` of every stored (a) call before
+    it was used.
+    """
+    rounds: list = []
+    end = 0.0
+    for t in sorted(tools, key=lambda x: float(x.get("started_at") or 0.0)):
+        s = float(t.get("started_at") or 0.0)
+        e = s + float(t.get("duration_s") or 0.0)
+        if rounds and s <= end + tolerance_s:
+            rounds[-1].append(t)
+            end = max(end, e)
+        else:
+            rounds.append([t])
+            end = e
+    return rounds
+
+
+def worker_as_sent_messages(doc: dict, turn: dict, delegation: int = 1,
+                            upto_round: Optional[int] = None) -> list:
+    """A Worker's model call rebuilt as `chat_loop` sent it (P4.10).
+
+    `worker_messages` is a composition seam: every result in one round, no
+    tools offered, and a closing "compose" message. That is not the call that
+    reasoned to nothing. This one is: the system prompt, the brief, then each
+    recorded round as an assistant tool-call message followed by its results,
+    cut after `upto_round` rounds (the probe's `react_turn`; default: every
+    round). No closing message; the caller offers the Worker's real tools.
+
+    Faithful only where the recorded brief is what was sent. Since P3.7 code
+    appends an instrument-lookup block to the brief that the audit does not
+    record, so the command prints the payload's size the way `chat_loop`
+    counts it (`sent_chars`) beside the recorded probes'.
+    """
+    dgs = (turn.get("audit") or {}).get("delegations", [])
+    if not dgs:
+        raise SystemExit("this turn has no delegation to rebuild")
+    dg = dgs[min(max(delegation, 1), len(dgs)) - 1]
+    rounds = tool_rounds(dg.get("tools") or [])
+    if upto_round is not None:
+        rounds = rounds[:upto_round]
+    cfg = _cfg_for(doc, turn)
+    messages = [
+        {"role": "system", "content": get_worker_system_prompt(
+            cfg.get("_research_mode") or "legislation_only", cfg)},
+        {"role": "user", "content": dg.get("brief") or turn.get("question") or ""},
+    ]
+    n = 0
+    for rnd in rounds:
+        calls, results = [], []
+        for t in rnd:
+            n += 1
+            cid = f"call_{n:02d}"
+            calls.append({"id": cid, "type": "function", "function": {
+                "name": t.get("name") or "", "arguments": json.dumps(t.get("args") or {})}})
+            results.append({"role": "tool", "tool_call_id": cid,
+                            "name": t.get("name") or "",
+                            "content": t.get("final_result") or ""})
+        messages.append({"role": "assistant", "content": "", "tool_calls": calls})
+        messages.extend(results)
+    return messages
+
+
+def sent_chars(messages: list) -> int:
+    """A payload's size as `chat_loop` logs and probes it."""
+    return sum(len(str(m.get("content", "") or "")) for m in messages)
+
+
+async def run_as_sent(messages: list, cfg: dict, tools: list,
+                      extra: Optional[dict] = None) -> dict:
+    """ONE streamed attempt of `messages`, with the product's payload shape
+    (model, messages, stream, temperature, tools, tool_choice) plus `extra`
+    (a lever under test: `reasoning`, `max_tokens`). No retry, so one draw is
+    one attempt and an (a) draw costs one attempt, not three.
+
+    Returns what an `empty_completions` record would hold, and the attempt's
+    seconds and cost, which no record holds.
+    """
+    import time
+
+    import httpx
+
+    from src.agent import openrouter_client as oc
+
+    set_request_provider_config(cfg)
+    payload = {
+        "model": cfg["model"],
+        "messages": oc._convert_messages_to_openai(messages),
+        "stream": True,
+        "temperature": cfg.get("temperature", 0),
+    }
+    if tools:
+        payload["tools"] = oc._convert_tools_to_openai(tools)
+        payload["tool_choice"] = "auto"
+    payload.update(extra or {})
+    out = {"content_chars": 0, "tool_calls": [], "finish_reason": None,
+           "native_finish_reason": None, "reasoning_chars": 0,
+           "completion_tokens": None, "reasoning_tokens": None, "cost": 0.0,
+           "stream_error": None, "seconds": 0.0, "content": ""}
+    names: dict = {}
+    t0 = time.perf_counter()
+    timeout = httpx.Timeout(None, connect=30.0, read=180.0)  # as chat_loop's
+    try:
+        async with httpx.AsyncClient(timeout=timeout, verify=False) as client:
+            async with client.stream("POST", f"{oc._base_url()}/chat/completions",
+                                     json=payload, headers=oc._get_headers()) as r:
+                r.raise_for_status()
+                async for line in r.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    raw = line[6:].strip()
+                    if raw == "[DONE]":
+                        break
+                    try:
+                        data = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    if data.get("usage"):
+                        u = data["usage"]
+                        out["completion_tokens"] = u.get("completion_tokens")
+                        out["reasoning_tokens"] = (u.get("completion_tokens_details")
+                                                   or {}).get("reasoning_tokens")
+                        out["cost"] = float(u.get("cost") or 0.0)
+                    if data.get("error"):
+                        out["stream_error"] = (data["error"].get("message")
+                                               if isinstance(data["error"], dict)
+                                               else str(data["error"]))
+                    for ch in data.get("choices") or []:
+                        if ch.get("finish_reason"):
+                            out["finish_reason"] = ch["finish_reason"]
+                        if ch.get("native_finish_reason"):
+                            out["native_finish_reason"] = ch["native_finish_reason"]
+                        d = ch.get("delta") or {}
+                        out["reasoning_chars"] += len(d.get("reasoning")
+                                                      or d.get("reasoning_content") or "")
+                        out["content"] += d.get("content") or ""
+                        out["content_chars"] += len(d.get("content") or "")
+                        for tc in d.get("tool_calls") or []:
+                            f = (tc.get("function") or {}).get("name")
+                            if f:
+                                names[tc.get("index", 0)] = f
+    except httpx.TimeoutException as e:
+        out["stream_error"] = f"{type(e).__name__} (client read timeout)"
+    out["tool_calls"] = [names[k] for k in sorted(names)]
+    out["seconds"] = time.perf_counter() - t0
+    return out
+
+
+def as_sent_outcome(r: dict) -> str:
+    """"answered", "tool call", or the empty-completion mechanism ((a)-(d))."""
+    if r["content_chars"]:
+        return "answered"
+    if r["tool_calls"]:
+        return "tool call"
+    return "empty (" + rr.empty_mechanism(r) + ")"
+
+
+def _as_sent_command(args, doc: dict, turn: dict, sid: str) -> int:
+    """`worker --as-sent`: redraw a recorded Worker call as it was sent."""
+    from src.agent.tools import get_worker_tools
+
+    messages = worker_as_sent_messages(doc, turn, args.delegation, args.round)
+    cfg0 = _cfg_for(doc, turn)
+    probes = (turn.get("audit") or {}).get("empty_completions") or []
+    dgs = (turn.get("audit") or {}).get("delegations", [])
+    dg = dgs[min(max(args.delegation, 1), len(dgs)) - 1] if dgs else {}
+    rounds = tool_rounds(dg.get("tools") or [])
+    extra = {}
+    if args.reasoning_effort:
+        extra["reasoning"] = {"effort": args.reasoning_effort}
+    if args.max_tokens:
+        extra["max_tokens"] = args.max_tokens
+    print(f"seam=worker --as-sent  session={sid} turn={args.turn} "
+          f"delegation={args.delegation}")
+    print(f"  recorded rounds: {len(rounds)}; sent here: "
+          f"{args.round if args.round is not None else len(rounds)}")
+    print(f"  payload: {len(messages)} message(s), sent_chars {sent_chars(messages):,}")
+    for sc, rt in sorted({(p.get('sent_chars'), p.get('react_turn')) for p in probes},
+                         key=lambda x: (x[1] or 0)):
+        print(f"  recorded empty-completion call: sent_chars {sc:,}, react_turn {rt}")
+    print(f"  lever: {json.dumps(extra) if extra else 'none (the product payload)'}")
+    if args.dry_run:
+        return 0
+    cfg = asyncio.run(_provider_cfg(cfg0))
+    tools = get_worker_tools(cfg0.get("_research_mode") or "legislation_only")
+    total = 0.0
+    for rep in range(1, args.reps + 1):
+        r = asyncio.run(run_as_sent(messages, cfg, tools, extra))
+        total += r["cost"]
+        print(f"  rep{rep}: {as_sent_outcome(r):<12} ${r['cost']:.4f} {r['seconds']:6.0f}s "
+              f"completion_tokens={r['completion_tokens']} "
+              f"reasoning_tokens={r['reasoning_tokens']} "
+              f"reasoning_chars={r['reasoning_chars']} content_chars={r['content_chars']} "
+              f"tools={','.join(r['tool_calls']) or '-'} "
+              f"finish={r['finish_reason']}/{r['native_finish_reason']}"
+              + (f" error={r['stream_error'][:60]!r}" if r["stream_error"] else ""))
+        text = r.get("content") or ""
+        if text:
+            # What a lever costs in answer quality: links, and the depth grader
+            # where the session has a ground truth (6348: s.36(2)).
+            grade = _grade(sid, text)
+            print(f"      links: {text.count('](http')}"
+                  + (f"  depth: {grade}" if grade else ""))
+        if args.out:
+            d = Path(args.out)
+            d.mkdir(parents=True, exist_ok=True)
+            lever = "_".join(f"{k}-{v}" for k, v in (
+                ("effort", args.reasoning_effort), ("max", args.max_tokens)) if v)
+            (d / f"{sid}_t{args.turn}_d{args.delegation}_as_sent"
+                 f"{'_' + lever if lever else ''}_rep{rep}.md").write_text(
+                text, encoding="utf-8")
+    print(f"  total ${total:.4f}")
+    return 0
+
+
 class _FirstRoundDone(BaseException):
     """Raised by the probe's tool executor to end the loop at the first call.
     A BaseException, so no `except Exception` on the way out swallows it."""
@@ -781,6 +1003,20 @@ def main(argv: Optional[list] = None) -> int:
     p.add_argument("--without-lookup", action="store_true",
                    help="--first-round only (P3.7): leave out the instrument-lookup "
                         "block code appends to the brief, and the lookup tool")
+    p.add_argument("--as-sent", action="store_true",
+                   help="worker seam only (P4.10): the Worker's model call rebuilt "
+                        "as chat_loop sent it (recorded rounds, tools offered, no "
+                        "closing message), ONE attempt per rep, and the attempt's "
+                        "outcome, tokens, seconds and cost")
+    p.add_argument("--round", type=int, default=None,
+                   help="--as-sent only: send the first N recorded rounds (the "
+                        "empty-completion record's react_turn); default all")
+    p.add_argument("--reasoning-effort", choices=["low", "medium", "high"],
+                   help="--as-sent only: add reasoning.effort to the payload "
+                        "(a lever under test; the product sends none)")
+    p.add_argument("--max-tokens", type=int, default=None,
+                   help="--as-sent only: add max_tokens to the payload (a lever "
+                        "under test; the product sends none)")
     p.add_argument("--dry-run", action="store_true",
                    help="build the payload and print its shape; no model call")
     p.add_argument("--out", default=None, help="write each answer to this directory")
@@ -793,7 +1029,13 @@ def main(argv: Optional[list] = None) -> int:
         if args.seam != "worker":
             raise SystemExit("--first-round is a worker seam option")
         return _first_round_command(args, doc, turn, sid)
-    build = {"synthesis": synthesis_messages, "worker": worker_messages,
+    if args.as_sent:
+        if args.seam != "worker":
+            raise SystemExit("--as-sent is a worker seam option")
+        return _as_sent_command(args, doc, turn, sid)
+    if args.round is not None or args.reasoning_effort or args.max_tokens:
+        raise SystemExit("--round, --reasoning-effort and --max-tokens need --as-sent")
+    build ={"synthesis": synthesis_messages, "worker": worker_messages,
              "manager": manager_messages}[args.seam]
     kwargs = {"without_fix": args.without_fix, "rev": args.rev}
     if args.seam == "worker":

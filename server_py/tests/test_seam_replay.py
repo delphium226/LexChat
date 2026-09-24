@@ -654,3 +654,124 @@ def test_apply_lost_is_not_a_worker_seam_option(run_file):
     with pytest.raises(SystemExit):
         sr.main(["worker", "--run", str(run_file), "--turn", "1", "--apply-lost",
                  "--dry-run"])
+
+
+# ---------------------------------------------------------------------------
+# --as-sent (P4.10): a Worker call rebuilt as chat_loop sent it
+# ---------------------------------------------------------------------------
+#
+# Checked on the stored (a) calls before any draw: the regrouped rounds equal
+# every call's recorded react_turn, and both wave3_p313 payloads rebuild to
+# exactly the recorded sent_chars (41,906 and 25,277).
+
+def _t(name, start, dur, result="r"):
+    return {"name": name, "args": {"q": name}, "final_result": result,
+            "started_at": start, "duration_s": dur}
+
+
+def test_parallel_tools_share_a_round_and_a_later_start_opens_one():
+    tools = [_t("a", 9.4, 0.7), _t("b", 13.2, 4.9), _t("c", 13.21, 1.0),
+             _t("d", 25.8, 0.0),   # a memo hit: zero duration
+             _t("e", 25.81, 0.4),  # started with d, after d "ended"
+             _t("f", 31.2, 0.4)]
+    rounds = sr.tool_rounds(tools)
+    assert [[t["name"] for t in r] for r in rounds] == [["a"], ["b", "c"],
+                                                       ["d", "e"], ["f"]]
+
+
+def _as_sent_doc():
+    return {"session_id": "6348", "rep": 2,
+            "filters": {"research_mode": "legislation_only"},
+            "turns": [{"turn": 1, "question": "Q", "chat_mode": "conversational",
+                       "audit": {"empty_completions": [
+                           {"sent_chars": 1, "react_turn": 2, "attempt": 1}],
+                           "delegations": [{"brief": "the brief", "tools": [
+                               _t("search_legislation", 5.0, 1.0, "R1"),
+                               _t("search_legislation_sections", 9.0, 2.0, "R2"),
+                               _t("get_legislation_changes", 9.1, 1.0, "R3")]}]}}]}
+
+
+def test_the_as_sent_payload_is_rounds_not_a_compose_message():
+    doc = _as_sent_doc()
+    msgs = sr.worker_as_sent_messages(doc, doc["turns"][0])
+    assert [m["role"] for m in msgs] == ["system", "user", "assistant", "tool",
+                                         "assistant", "tool", "tool"]
+    assert msgs[1]["content"] == "the brief"
+    assert [c["function"]["name"] for c in msgs[4]["tool_calls"]] == [
+        "search_legislation_sections", "get_legislation_changes"]
+    # the ids pair each call with its result
+    assert [m["tool_call_id"] for m in msgs[5:]] == [
+        c["id"] for c in msgs[4]["tool_calls"]]
+    # no closing "compose" message: the call that reasoned to nothing had none
+    assert msgs[-1]["role"] == "tool"
+    # sent_chars counts content the way chat_loop does
+    assert sr.sent_chars(msgs) == len(msgs[0]["content"]) + len("the brief") + 6
+    # cut at a round
+    assert len(sr.worker_as_sent_messages(doc, doc["turns"][0], upto_round=1)) == 4
+
+
+def test_an_as_sent_draw_offers_the_workers_tools_and_prints_the_outcome(
+        tmp_path, monkeypatch, capsys):
+    p = tmp_path / "6348_rep2.json"
+    p.write_text(json.dumps(_as_sent_doc()), encoding="utf-8")
+    seen = {}
+
+    async def fake_cfg(extra):
+        return {"model": "m", **extra}
+
+    async def fake_run(messages, cfg, tools, extra=None):
+        seen.update(tools=[t["function"]["name"] for t in tools], extra=extra)
+        return {"content_chars": 0, "tool_calls": [], "finish_reason": "stop",
+                "native_finish_reason": "STOP", "reasoning_chars": 60000,
+                "completion_tokens": 62912, "reasoning_tokens": 62900,
+                "cost": 0.77, "stream_error": None, "seconds": 350.0}
+
+    monkeypatch.setattr(sr, "_provider_cfg", fake_cfg)
+    monkeypatch.setattr(sr, "run_as_sent", fake_run)
+    assert sr.main(["worker", "--run", str(p), "--turn", "1", "--as-sent",
+                    "--reasoning-effort", "low", "--max-tokens", "16000"]) == 0
+    assert "search_legislation" in seen["tools"]
+    assert seen["extra"] == {"reasoning": {"effort": "low"}, "max_tokens": 16000}
+    out = capsys.readouterr().out
+    assert "recorded empty-completion call: sent_chars 1, react_turn 2" in out
+    assert "rep1: empty (a)" in out and "$0.7700" in out
+    assert "links:" not in out  # nothing to grade on an empty draw
+
+
+def test_an_answered_as_sent_draw_is_graded_and_written(tmp_path, monkeypatch, capsys):
+    p = tmp_path / "6348_rep2.json"
+    p.write_text(json.dumps(_as_sent_doc()), encoding="utf-8")
+
+    async def fake_cfg(extra):
+        return {"model": "m", **extra}
+
+    async def fake_run(messages, cfg, tools, extra=None):
+        return {"content_chars": 60, "content": f"See [s.36(1)]({FOISA36}).",
+                "tool_calls": [], "finish_reason": "stop", "native_finish_reason": "STOP",
+                "reasoning_chars": 0, "completion_tokens": 200, "reasoning_tokens": 0,
+                "cost": 0.01, "stream_error": None, "seconds": 4.0}
+
+    monkeypatch.setattr(sr, "_provider_cfg", fake_cfg)
+    monkeypatch.setattr(sr, "run_as_sent", fake_run)
+    out_dir = tmp_path / "out"
+    assert sr.main(["worker", "--run", str(p), "--turn", "1", "--as-sent",
+                    "--reasoning-effort", "low", "--out", str(out_dir)]) == 0
+    out = capsys.readouterr().out
+    assert "rep1: answered" in out and "links: 1" in out
+    assert (out_dir / "6348_t1_d1_as_sent_effort-low_rep1.md").read_text(
+        encoding="utf-8").startswith("See [s.36(1)]")
+
+
+def test_as_sent_outcomes():
+    base = {"content_chars": 0, "tool_calls": [], "finish_reason": "stop",
+            "reasoning_chars": 0, "completion_tokens": None, "stream_error": None}
+    assert sr.as_sent_outcome({**base, "content_chars": 5}) == "answered"
+    assert sr.as_sent_outcome({**base, "tool_calls": ["x"]}) == "tool call"
+    assert sr.as_sent_outcome({**base, "completion_tokens": 62912}) == "empty (a)"
+    assert sr.as_sent_outcome(base) == "empty (c)"
+
+
+def test_lever_flags_need_as_sent(run_file):
+    with pytest.raises(SystemExit):
+        sr.main(["worker", "--run", str(run_file), "--turn", "1",
+                 "--max-tokens", "100", "--dry-run"])

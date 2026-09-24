@@ -1471,6 +1471,144 @@ def test_cmd_lost_ties_unrecovered_calls_to_sites(tmp_path, capsys):
 
 
 # ---------------------------------------------------------------------------
+# lostcost — P4.10's pre-flight: what each empty-completion call cost
+# ---------------------------------------------------------------------------
+#
+# Every fixture is a stored record's shape: (a) wave3_p313/6348 r2 t1 and
+# wave2_p27_pre/6374 r3 t1 (the one MAX_TOKENS attempt), (b) wave2_p24/6373
+# r1 t3, (c) wave2_p24_pre/6375 r3 t2, (d) wave4_p46/6343 r3 t1.
+
+def _probe(**kw):
+    p = {"model": "m", "sent_chars": 100, "react_turn": 3, "attempt": 1,
+         "retried": False, "finish_reason": "stop", "native_finish_reason": "STOP",
+         "reasoning_chars": 0, "completion_tokens": None, "stream_error": None}
+    p.update(kw)
+    return p
+
+
+def test_each_stored_empty_completion_shape_gets_its_mechanism():
+    assert rr.empty_mechanism(_probe(reasoning_chars=98394, completion_tokens=62912)) == "a"
+    assert rr.empty_mechanism(_probe(finish_reason="length", native_finish_reason="MAX_TOKENS",
+                                     reasoning_chars=55239, completion_tokens=65556)) == "a"
+    assert rr.empty_mechanism(_probe(finish_reason="error", native_finish_reason=None,
+                                     reasoning_chars=695, completion_tokens=176,
+                                     stream_error="Upstream idle timeout exceeded")) == "b"
+    assert rr.empty_mechanism(_probe()) == "c"
+    assert rr.empty_mechanism(_probe(
+        finish_reason="error", reasoning_chars=791, completion_tokens=0,
+        stream_error="google/gemini-3.1-pro-preview is temporarily rate-limited "
+                     "upstream. Please retry shortly")) == "d"
+    # a call is named after its costliest attempt (6409 r3 t11: b, a, b)
+    assert rr._call_mechanism("bab") == "a"
+
+
+def test_call_records_group_exactly_as_the_call_counter_does():
+    probes = [_probe(attempt=a, retried=a < 3) for a in (1, 2, 3)]
+    probes += [_probe(attempt=1, retried=True, sent_chars=7)]
+    recs = rr.empty_completion_call_records(probes)
+    assert [(len(r), ok) for r, ok in recs] == rr.empty_completion_calls(probes)
+    assert [(len(r), ok) for r, ok in recs] == [(3, False), (1, True)]
+
+
+def test_the_slow_call_is_placed_inside_a_worker_or_outside_it():
+    """wave3_p313/6348 r2 t1: the worker's last tool ends at ~48 s and the
+    delegation runs to ~1,136 s, so the slow window is inside it."""
+    inside = {"elapsed_s": 1171.0, "audit": {"delegations": [
+        {"started_at": 5.0, "duration_s": 1131.0,
+         "tools": [{"started_at": 9.0, "duration_s": 1.0},
+                   {"started_at": 42.0, "duration_s": 6.0}]},
+        {"started_at": 1142.0, "duration_s": 24.0, "tools": []}]}}
+    where, gap = rr.slow_call_location(inside)
+    assert where == "inside" and gap == pytest.approx(1088.0)
+    # wave4_p41_pre/6346 r2 t2: short delegations, then ~384 s after them
+    outside = {"elapsed_s": 456.0, "audit": {"delegations": [
+        {"started_at": 5.0, "duration_s": 31.0,
+         "tools": [{"started_at": 6.0, "duration_s": 29.0}]},
+        {"started_at": 59.0, "duration_s": 13.0,
+         "tools": [{"started_at": 60.0, "duration_s": 11.0}]}]}}
+    assert rr.slow_call_location(outside)[0] == "outside"
+
+
+def _cost_turn(question, cost, secs, probes=(), report="A report.", tools_end=10.0):
+    return {"turn": 1, "question": question, "chat_mode": "conversational",
+            "research_mode": "legislation_only", "answer": "An answer.",
+            "status": "ok", "elapsed_s": secs,
+            "timing": {"total_cost_usd": cost},
+            "audit": {"empty_completions": list(probes), "delegations": [
+                {"kind": "delegation", "report": report, "halted": None,
+                 "error": None, "started_at": 1.0, "duration_s": secs - 2.0,
+                 "tools": [{"started_at": 2.0, "duration_s": tools_end - 2.0}]}]}}
+
+
+def _write_runs(d, turns_by_rep):
+    d.mkdir(parents=True, exist_ok=True)
+    for rep, turns in turns_by_rep.items():
+        (d / f"1_rep{rep}.json").write_text(
+            json.dumps({"session_id": "1", "rep": rep, "turns": turns}), encoding="utf-8")
+
+
+def test_lostcost_prices_an_episode_against_its_slot_median(tmp_path, capsys):
+    """Three clean reps of one question at $0.06-0.08 and ~30 s, and one rep
+    whose worker reasoned to nothing twice and recovered on the third
+    attempt: the excess is the episode's turn less the slot's median, the
+    recovered call's site is inferred from the timeline, and the other
+    question's clean turn is not in the slot."""
+    heavy = [_probe(attempt=a, retried=True, reasoning_chars=58000,
+                    completion_tokens=62917) for a in (1, 2)]
+    d = tmp_path / "dir"
+    _write_runs(d, {
+        1: [_cost_turn("Q", 0.06, 30.0)],
+        2: [_cost_turn("Q", 0.08, 34.0)],
+        3: [_cost_turn("Q", 0.07, 32.0)],
+        4: [_cost_turn("Q", 1.62, 768.0, heavy)],
+        5: [_cost_turn("other", 9.0, 900.0)],
+    })
+    args = type("A", (), {"dir": str(d), "all_dirs": False, "out_price": 12.0})()
+    assert rr.cmd_lostcost(args) == 0
+    out = capsys.readouterr().out
+    row = [ln for ln in out.splitlines() if ln.startswith("dir ")][0]
+    assert "worker~" in row and " yes " in row and " aa " in row
+    assert "1.62" in row and "0.07" in row and "1.55" in row  # excess $
+    assert " 736" in row  # 768 s less the 32 s median
+    assert "(a) calls   1" in out
+
+
+def test_lostcost_infers_no_site_when_a_turn_has_two_slow_calls(tmp_path, capsys):
+    """wave2_p24_final/6385 r2 t3: a worker's and the Manager's call each
+    stalled ~395 s. One timeline window cannot say which was which."""
+    idle = [_probe(finish_reason="error", completion_tokens=140, reasoning_chars=551,
+                   stream_error="Upstream idle timeout exceeded", attempt=1,
+                   retried=True)]
+    t = _cost_turn("Q", 0.05, 810.0, idle + [dict(idle[0], sent_chars=7)])
+    d = tmp_path / "dir"
+    _write_runs(d, {1: [t], 2: [_cost_turn("Q", 0.04, 31.0)]})
+    args = type("A", (), {"dir": str(d), "all_dirs": False, "out_price": 12.0})()
+    rr.cmd_lostcost(args)
+    rows = [ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("dir ")]
+    assert len(rows) == 2 and all(" ? " in r for r in rows)
+
+
+def test_the_fisher_tail_is_the_hypergeometric_upper_tail():
+    # all 2 events in a group of 2 of 4 runs: C(2,2)C(2,0)/C(4,2) = 1/6
+    assert rr._fisher_upper(2, 2, 2, 4) == pytest.approx(1 / 6)
+    assert rr._fisher_upper(0, 2, 2, 4) == pytest.approx(1.0)
+    assert rr._fisher_upper(1, 2, 2, 4) == pytest.approx(5 / 6)
+
+
+def test_the_cap_bound_is_cost_over_the_output_price(tmp_path, capsys):
+    d = tmp_path / "dir"
+    # $0.06 at $12/M bounds the turn's output at 5,000 tokens: under 8,000 but
+    # not under 4,000.
+    _write_runs(d, {1: [_cost_turn("Q", 0.06, 30.0)]})
+    args = type("A", (), {"dir": str(d), "all_dirs": False, "out_price": 12.0})()
+    rr.cmd_lostcost(args)
+    line = [ln for ln in capsys.readouterr().out.splitlines()
+            if ln.strip().startswith("conversational") and "%" in ln][0]
+    assert line.split()[2] == "5,000"
+    assert line.split()[3:] == ["0%", "100%", "100%", "100%"]
+
+
+# ---------------------------------------------------------------------------
 # scope_record_gap — P2.9's acceptance detector (bucket B5)
 # ---------------------------------------------------------------------------
 #
