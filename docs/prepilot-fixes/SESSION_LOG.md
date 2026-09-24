@@ -5522,3 +5522,22 @@ scratchpad, which the next session cannot read):**
 
 **Machine state (unchanged):** no uvicorn, no `http.server`, no pin file, no
 worktrees; the dev box is on its normal settings; 49 replay directories.
+
+**Addendum, continued: the next row decided (user decision, 2026-09-24).**
+- **P4.5 next, as option (c).** Three options were put: (a) labelling only;
+  (b) labelling plus the cost; (c) labelling now, with the cost booked as a
+  new row. The user chose (c).
+  - P4.5 is the LABELLING half: a lost worker or Deep Research step is
+    reported as lost, in code, and the progress event stops saying "Step
+    complete".
+  - Its acceptance is deterministic. Scope and pre-flight are on its row.
+- **New row P4.10:** the cost of a lost completion (about 63,000 reasoning
+  tokens per empty attempt; turns of $2.40 and about 20 minutes).
+  Measure-first; depends on P4.5. Candidate levers are listed on the row, and
+  none is chosen.
+  - Ledger: **51 rows**, still 34 done.
+  - Recommended-order line added. The Fix Tracker does not list P4.10 yet
+    (update it only when asked).
+- **Start Session 27 from P4.5's row** (its USER DECISION paragraph), then
+  its pre-flight: recount the lost-completion episodes over all 49
+  directories with `replay_report blanks`.
