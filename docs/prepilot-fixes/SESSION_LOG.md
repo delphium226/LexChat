@@ -5713,3 +5713,47 @@ matching multi-line text, and restore CRLF on write.
   review document should be committed.
 - **The Fix Tracker has not been updated this session** (update only when
   asked). When it is, P4.5 becomes Fixed with `fixed: "2026-09-24"`.
+
+**Addendum to Session 27 (same day, after the handover was written, at the user's request).**
+
+**Release versioning (user decision: calendar versions, `vYYYY.MM.N`).**
+- Built on **`main`** as `b2a3fd8`, pushed. This branch does not carry it until the next cut.
+  - `VERSION` (repo root, `2026.09.2`): the last release the code contains.
+  - `server_py/src/version.py`: `APP_VERSION` from `VERSION`; `APP_BUILD` from
+    `git describe --tags --match "v[0-9]*"` (exact on a release, `-N-g<sha>` past one,
+    `None` without git).
+  - `/api/bot-info` returns `version` and `build`; the About box shows them; FastAPI's
+    version is `VERSION`; the first log line is `[Startup] AILA <version> (build <build>)`.
+    Live-checked on the dev box and in the browser.
+  - `CHANGELOG.md`: 2026.09.1, 2026.09.2, and *Unreleased* (what is queued on this branch).
+  - CLAUDE.md on `main` gains *Releases* and a deploy step 6 (confirm the version).
+  - `tests/test_version.py`: fails if the nearest release tag is not `v` + `VERSION`
+    (checked: a wrong `VERSION` fails 2 tests). 1583 tests green on `main`.
+- **Tags, created locally and NOT pushed** (awaiting the user's go-ahead):
+  `v2026.09.1` → `d8fd73b`, `v2026.09.2` → `c77e779`, annotated, dated to each merge.
+- **The next cut must follow the release procedure** (in CLAUDE.md on `main`, and in
+  FIX_PLAN's deployment note): merge; one commit on `main` bumping `VERSION` and moving the
+  CHANGELOG's *Unreleased* into a dated section; `git tag -a`; push the tag explicitly.
+- Open (in `docs/TODO.md` D19): push the tags; deploy by tag rather than the head of
+  `main`; stamp the version on the audit event, `request_timings` and replay run files
+  (after the next cut: `main` is audit v5, this branch v6); a pre-existing lint error in
+  `useBotIdentity.js`. D20: whether the chat UI should show a step's outcome.
+
+**Fix Tracker v21** (published to the same URL at the user's request):
+- **New Version column**: the release each Fixed row is part of, `2026.09.1`, `2026.09.2`,
+  or "Next release". Derived mechanically: a row belongs to the first release tag whose
+  FIX_PLAN shows it `[x]`. 23 rows in 2026.09.1, 1 in 2026.09.2 (P3.13), and 6 queued (P0.6,
+  P3.7, P4.6, P4.7, and both P4.5 rows). Data field `ver`, documented in the ROWS comment.
+- P4.5's two rows → Fixed, `fixed: "2026-09-24"` (first ticked in `6bda956`).
+- A plain-language P4.5 note; P4.7's becomes "Earlier"; "Next" names P4.10, then P3.15.
+- `<meta charset="utf-8">` added: without it, `python -m http.server` served the page as
+  Windows-1252 and every curly quote rendered as mojibake in the local render check. The
+  file itself was clean UTF-8 and the published page was never affected.
+- Render-checked: 30 of 51 fixed; by severity P1 12 of 13, P2 12 of 23, P3 6 of 15.
+
+**Hazards met again:** Python run from a bash heredoc turned a regex's `\n` into a real
+newline twice more (both failed before writing anything). Playwright may only write
+screenshots under the repo (`.playwright-mcp/`, gitignored), not the scratchpad.
+
+**Machine state:** no uvicorn, no `http.server`, no pin file, no worktrees; the dev box is on
+its normal settings; the checkout is back on `fix/prepilot-defects`.

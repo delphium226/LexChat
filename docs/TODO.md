@@ -1296,3 +1296,39 @@ P2.7's **8 search rounds** and P3.1's **3 section-search rounds per instrument**
 
 Not a fix-plan row; do it after the plan concludes, or sooner only if a model change makes a
 limit live.
+
+### D19. Release versioning follow-ups (added 2026-09-24, after calendar versions were adopted)
+
+Calendar versions (`vYYYY.MM.N`) were adopted on 2026-09-24 (user decision) and set up on
+`main` in `b2a3fd8`: `VERSION`, `server_py/src/version.py`, the version in `/api/bot-info`,
+the About box and the startup log, `CHANGELOG.md`, and a *Releases* section in CLAUDE.md
+(on `main` only until the next cut). `v2026.09.1` (`d8fd73b`) and `v2026.09.2` (`c77e779`)
+are tagged retroactively. Four things were left open deliberately:
+
+- **Push the two tags.** They exist only in the dev machine's repo until
+  `git push origin v2026.09.1 v2026.09.2` (the user confirms first: pushing publishes them).
+  Until then `git describe` on the target falls back to a bare hash, and `/api/bot-info`
+  shows `build` without a release name.
+- **Deploy by tag, not by the head of `main`** (proposed, not adopted). Unrelated work
+  commits straight to `main`, so its head can sit past the last release. Deploying
+  `git fetch --tags` then `git checkout vYYYY.MM.N` makes each deploy and rollback an
+  explicit version. It changes CLAUDE.md's *Deployment Workflow*, so it is the user's call.
+- **Stamp the version on the audit event, `request_timings` and replay run files.** Deferred
+  until after the next cut, because `main`'s audit schema is v5 and the fix branch's is v6:
+  bumping on `main` now would create two different v6s. When done: a top-level `app_version`
+  (and `build`) on the audit event (schema v7, `AUDIT_TRACE.md`, harness owner told), an
+  additive `request_timings.app_version` column, and `runtime_state.app_version` in replay
+  run files beside `git_head`.
+- **A lint error that predates this work:** `client/src/hooks/useBotIdentity.js:64`, a plain
+  helper named `useSvgLogo` trips `react-hooks/rules-of-hooks`. Renaming it (for example
+  `loadSvgLogo`) clears it; it does not affect the build.
+
+### D20. Show a research step's outcome in the chat UI (added 2026-09-24, from P4.5)
+
+Since P4.5 the `tool_end` progress event names each worker's outcome ("Step complete",
+"Step incomplete: stopped at the step limit", "Step incomplete: no reply returned", and
+"Research …" for a Manager delegation). The chat UI ignores the field
+(`client/src/hooks/useChat.js`, about line 213, shows "Analysing findings…"), so only the
+SystemChat developer page and an eval harness see it. The lawyer is told in the answer's own
+notice, so nothing is hidden; showing the outcome live is a client change and a
+`client/dist` rebuild, and was out of P4.5's scope. The user's call.
