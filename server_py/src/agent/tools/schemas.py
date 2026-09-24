@@ -99,6 +99,51 @@ WORKER_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "lookup_legislation",
+            # P3.7 (bucket B5). The description states what each answer MEANS,
+            # because the defect was a model reading "not in the top results of
+            # a ranked search" as "not held" (or as "the citation is wrong").
+            # Code already runs this on every instrument the brief names by
+            # number (`run_worker_agent`); it is offered too, for an instrument
+            # met mid-run, e.g. named in a change record.
+            "description": (
+                "Check whether the legislation index holds ONE instrument named by its type, "
+                "year and number, e.g. SSI 2025/377 = legislation_type 'ssi', year 2025, "
+                "number 377; 2025 asp 2 = 'asp', 2025, 2; SI 2020/1234 = 'uksi'. "
+                "This is an exact test, unlike search_legislation, which is ranked and cannot "
+                "show that something is absent. Returns status 'held' (with its "
+                "legislation_id and title), 'held_without_text' (the index holds the record "
+                "but none of its text, so do not search inside it) or 'not_held' (the index "
+                "has no record: say it is not held in this index; that is a gap in the index, "
+                "not evidence that the citation is wrong). 'lookup_failed' means the check did "
+                "not complete and says nothing either way."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "legislation_type": {
+                        "type": "string",
+                        "description": (
+                            "The type code: 'ssi', 'uksi', 'wsi', 'nisr', 'asp', 'ukpga', "
+                            "'anaw', 'asc', 'nia', 'eur' and the other legislation.gov.uk codes."
+                        ),
+                    },
+                    "year": {
+                        "type": "integer",
+                        "description": "The year in the citation (e.g. 2025).",
+                    },
+                    "number": {
+                        "type": "integer",
+                        "description": "The number in the citation (e.g. 377).",
+                    },
+                },
+                "required": ["legislation_type", "year", "number"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_legislation_sections",
             "description": (
                 "Search for specific sections within a known piece of legislation. "

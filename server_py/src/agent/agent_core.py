@@ -27,6 +27,7 @@ from ..utils.citation_links import (
     restore_dropped_siblings,
 )
 from ..utils.discovery_budget import new_search_budget
+from ..utils.instrument_lookup import routed_lookup_block
 from ..utils.mode_change import apply_mode_change_marker, mode_change_for
 from ..utils.empty_completion import (
     LOST_ANSWER_NOTICE,
@@ -37,6 +38,7 @@ from ..utils.research_halt import apply_halt_disclosure, halt_worker_report, str
 from ..utils.search_scope import (
     answer_scope_footer,
     carried_scope_footer,
+    lookup_scope_footer,
     case_law_scope_footer,
     strip_answer_footer,
     incomplete_steps_note,
@@ -265,6 +267,27 @@ async def run_worker_agent(
             retrieved_urls=retrieved_urls,
             search_log=search_log,
         )
+
+    # P3.7 (B5): every instrument the brief names by number is looked up in
+    # code before the Worker's first round, and the outcome goes into the
+    # brief. A ranked search cannot say an instrument is not held; this can,
+    # and a rule telling the Worker to call the tool would be obeyed at a rate
+    # (Invariant 2). Run through `worker_tool_executor`, so the audit, the memo
+    # and the step's scope record see a lookup exactly as they see one the
+    # Worker makes. Legislation research types only: the tool is in their tool
+    # set and in no other.
+    try:
+        _block = await routed_lookup_block(
+            query, [t.get("function", {}).get("name") for t in worker_tools],
+            worker_tool_executor)
+        if _block:
+            messages[1]["content"] = query + _block
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        # Fail-soft (Invariant 5): without the block the Worker researches
+        # exactly as it did before P3.7.
+        logger.warning("[Worker] Instrument lookup before round 1 failed", exc_info=True)
 
     try:
         result = await chat_loop_fn(
@@ -956,6 +979,12 @@ async def process_user_request(
     # appends its own — the lawyer reads the same disclosure twice. Strip any
     # echo before appending the one computed from THIS turn's searches.
     _footer = answer_scope_footer(all_searches, _cfg)
+    # P3.7 (B5): a turn that looked an instrument up and ran no ranked search
+    # has no line above, and the lookup's answer is the one a lawyer most needs
+    # stated. Only a not-held or held-without-text outcome speaks, so a lookup
+    # of a held instrument leaves the lines below exactly as before.
+    if not _footer:
+        _footer = lookup_scope_footer(all_searches)
     # P2.8 (B5): a reply that searched nothing gets no footer above, even when
     # it restates an earlier turn's negative. That is the case of a follow-up
     # answered from history. The earlier searches are restated here, labelled
@@ -1256,6 +1285,7 @@ async def run_deep_research(
     final["content"] = strip_answer_footer(
         final.get("content") or ""
     ) + (answer_scope_footer(all_searches, _get_cfg())
+         or lookup_scope_footer(all_searches)
          or case_law_scope_footer(all_searches))
 
     return final

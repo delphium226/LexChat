@@ -11,6 +11,17 @@ from typing import Callable, Optional
 import httpx
 
 from ...config import settings
+from ...utils.instrument_lookup import (
+    HELD,
+    HELD_WITHOUT_TEXT,
+    INVALID,
+    LOOKUP_FAILED,
+    LOOKUP_TOOL,
+    NOT_HELD,
+    citation_label,
+    legislation_id as lookup_legislation_id,
+    lookup_args,
+)
 from ...utils.redact import redact_args
 from ..provider_factory import get_request_provider_config
 from ._util import _emit
@@ -415,6 +426,107 @@ async def execute_worker_tool(
                     if not slimmed["window_complete"]:
                         slimmed["window_size"] = requested
                 return json.dumps(slimmed)
+
+            elif name == LOOKUP_TOOL:
+                # P3.7 (bucket B5): the one question a ranked search cannot
+                # answer, "does the index hold this instrument?". See
+                # `utils/instrument_lookup.py` for the three states and why a
+                # 200 on its own does not mean the text is held.
+                ref = lookup_args(args)
+                if ref is None:
+                    return json.dumps({
+                        "tool": LOOKUP_TOOL, "status": INVALID,
+                        "note": (
+                            "Not looked up: pass legislation_type (e.g. 'ssi', 'uksi', "
+                            "'asp', 'ukpga'), year and number, or a legislation_id such "
+                            "as 'ssi/2025/377'. This says nothing about the index."
+                        ),
+                    })
+                lid = lookup_legislation_id(ref)
+                out = {"tool": LOOKUP_TOOL, "legislation_id": lid,
+                       "label": citation_label(ref)}
+
+                async def _post(path: str, payload: dict, suffix: str):
+                    call = f"{call_id}{suffix}"
+                    call_url = f"{LEX_API_URL}{path}"
+                    await _emit(on_chunk, {
+                        "type": "api_call_start", "id": call, "url": call_url,
+                        "method": "POST", "payload": payload,
+                    })
+                    t0 = time.perf_counter()
+                    resp = await _request_with_retry(
+                        client, "POST", call_url, name=name, json=payload)
+                    elapsed_ms = (time.perf_counter() - t0) * 1000
+                    if timing_collector:
+                        timing_collector.record_lex_api_call(name, elapsed_ms)
+                    try:
+                        body = resp.json()
+                    except ValueError:
+                        body = {"text": resp.text}
+                    await _emit(on_chunk, {
+                        "type": "api_call_end", "id": call, "url": call_url,
+                        "status": resp.status_code, "response": body,
+                        "elapsed_ms": round(elapsed_ms),
+                    })
+                    return resp.status_code, body
+
+                def _detail(body) -> str:
+                    return str(body.get("detail") or "") if isinstance(body, dict) else ""
+
+                # A failure of either call is `lookup_failed`, never a negative:
+                # only the API's own "not found" is evidence of absence
+                # (Invariant 1).
+                try:
+                    status, record = await _post(
+                        "/legislation/lookup",
+                        {"legislation_type": ref[0], "year": ref[1], "number": ref[2]}, "")
+                except (httpx.TimeoutException, httpx.TransportError) as e:
+                    status, record = None, {"text": repr(e)}
+                # The API's own sentence, not any 404: a route 404 (an endpoint
+                # moved) says `{"detail": "Not Found"}`, and reading that as
+                # not-held would tell a lawyer something false about every
+                # instrument at once.
+                if status == 404 and _detail(record).startswith("Legislation not found"):
+                    out.update(status=NOT_HELD, http_status=404,
+                               lex_detail=_detail(record)[:200])
+                    return json.dumps(out)
+                if status != 200 or not isinstance(record, dict):
+                    out.update(status=LOOKUP_FAILED, http_status=status,
+                               note="The lookup did not complete. This says nothing about "
+                                    "whether the index holds the instrument; search for it "
+                                    "as usual.")
+                    return json.dumps(out)
+
+                url = str(record.get("uri") or record.get("id") or "")
+                if url.startswith("http://"):
+                    url = "https://" + url[len("http://"):]
+                out.update(
+                    title=record.get("title"),
+                    url=url or None,
+                    category=record.get("category"),
+                    enactment_date=record.get("enactment_date"),
+                    # The description carries a commencement instrument's
+                    # effect and date ("bring sections 2, 9 … into force on 10
+                    # May 2025"), which is all a stub has to offer. Capped: the
+                    # reason `_slim_search_results` drops it is its size.
+                    description=(str(record.get("description") or "")[:600] or None),
+                )
+                try:
+                    s_status, sections = await _post(
+                        "/legislation/section/lookup",
+                        {"legislation_id": lid, "limit": 1}, "-sections")
+                except (httpx.TimeoutException, httpx.TransportError):
+                    s_status, sections = None, None
+                if s_status == 200 and isinstance(sections, list) and sections:
+                    out.update(status=HELD, http_status=200, text_held=True)
+                elif s_status == 404 and _detail(sections).startswith("No sections found"):
+                    out.update(status=HELD_WITHOUT_TEXT, http_status=200, text_held=False)
+                else:
+                    # Held, and whether its text is held could not be checked.
+                    # Reported as held with the text question left open, which
+                    # is what was established.
+                    out.update(status=HELD, http_status=200, text_held=None)
+                return json.dumps(out)
 
             elif name == "get_legislation_text":
                 url = f"{LEX_API_URL}/legislation/text"

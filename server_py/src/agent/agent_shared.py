@@ -31,6 +31,7 @@ from ..utils.search_scope import (
     record_case_law_search,
     record_currency,
     record_enabling_power,
+    record_lookup,
     record_not_held,
     record_relations,
     record_search,
@@ -650,6 +651,9 @@ async def run_worker_tool(
             record_case_law_search(search_log, name, args, hit["raw"])
             # P2.4 (6373): a memoised not-found is still this step's not-found.
             record_not_held(search_log, name, args, hit["raw"])
+            # P3.7: and a memoised lookup is still this step's lookup. A model
+            # repeating the lookup code ran for it is served from here.
+            record_lookup(search_log, name, args, hit["raw"])
             if parent_on_chunk:
                 await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
                 await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done (cached)"})
@@ -1025,6 +1029,9 @@ async def run_worker_tool(
     # never on the model's prose.
     not_held = not_held_note(args, raw_result)
     record_not_held(search_log, name, args, raw_result)
+    # P3.7: the lookup's definite outcome, for the worker's block and the
+    # lawyer's footer. Self-gated on the tool name.
+    record_lookup(search_log, name, args, raw_result)
 
     from .provider_factory import get_summarise_threshold
     # Two independent triggers: this result is large on its own, OR the run has

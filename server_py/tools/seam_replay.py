@@ -567,11 +567,28 @@ def _first_round_command(args, doc: dict, turn: dict, sid: str) -> int:
     cfg_turn = _cfg_for(doc, turn)
     rm = cfg_turn.get("_research_mode") or "legislation_only"
     tools = get_worker_tools(rm)
+    # P3.7: the product looks up every instrument the brief names by number
+    # before the Worker's first round and appends the outcome to the brief.
+    # Rebuilt here by the product's own routing, against live LEX (two cheap
+    # calls per instrument, no model). `--without-lookup` is the before side:
+    # neither the block nor the tool.
+    from src.utils.instrument_lookup import LOOKUP_TOOL, routed_lookup_block
+
+    if args.without_lookup:
+        tools = [t for t in tools if t["function"]["name"] != LOOKUP_TOOL]
+    else:
+        from src.agent.tools.executor import execute_worker_tool
+
+        block = asyncio.run(routed_lookup_block(
+            messages[1]["content"], [t["function"]["name"] for t in tools],
+            execute_worker_tool))
+        messages[1]["content"] += block
     recorded = (turn.get("audit") or {}).get("delegations", [])
     dg = recorded[min(max(args.delegation, 1), len(recorded)) - 1] if recorded else {}
     print(f"seam=worker FIRST ROUND  session={sid} turn={args.turn} "
           f"delegation={args.delegation}  research type={rm}  "
-          f"{'WITHOUT fix (' + args.rev + ')' if args.without_fix else 'current code'}")
+          f"{'WITHOUT fix (' + args.rev + ')' if args.without_fix else 'current code'}"
+          f"{'; WITHOUT the P3.7 lookup' if args.without_lookup else ''}")
     print(f"  prompt: {len(messages[0]['content']):,} chars; brief {len(messages[1]['content']):,} "
           f"chars; tools offered: {len(tools)}; recorded run made "
           f"{len(dg.get('tools') or [])} tool call(s)")
@@ -593,7 +610,8 @@ def _first_round_command(args, doc: dict, turn: dict, sid: str) -> int:
         if args.out and content:
             d = Path(args.out)
             d.mkdir(parents=True, exist_ok=True)
-            suffix = "_nofix" if args.without_fix else ""
+            suffix = ("_nofix" if args.without_fix else "") + (
+                "_nolookup" if args.without_lookup else "")
             (d / f"{sid}_t{args.turn}_first{suffix}_rep{rep}.md").write_text(
                 content, encoding="utf-8")
         if args.print:
@@ -628,6 +646,9 @@ def main(argv: Optional[list] = None) -> int:
                         "prompt and the brief, with its real tools offered, "
                         "stopped at the first call. Prints the calls it chose, or "
                         "the report it wrote without searching")
+    p.add_argument("--without-lookup", action="store_true",
+                   help="--first-round only (P3.7): leave out the instrument-lookup "
+                        "block code appends to the brief, and the lookup tool")
     p.add_argument("--dry-run", action="store_true",
                    help="build the payload and print its shape; no model call")
     p.add_argument("--out", default=None, help="write each answer to this directory")
