@@ -511,7 +511,7 @@
   // src:    "T" | "R" | "T & R"
   // fixed:  "YYYY-MM-DD" on a Fixed row only: the first commit in which FIX_PLAN.md shows the
   //         row ticked [x] (git log -- docs/prepilot-fixes/FIX_PLAN.md). Not a deployment date.
-  const UPDATED = "24 September 2026, end of Session 25 (P3.7 fixed: a named instrument is now looked up by its number, so “not held” is definite; new column: the date each fix was accepted; next: P4.7)";
+  const UPDATED = "24 September 2026, end of Session 25 (table now ordered by severity, status and fixed date; P3.7 fixed: a named instrument is now looked up by its number, so “not held” is definite; new column: the date each fix was accepted; next: P4.7)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23" },
@@ -606,15 +606,17 @@
     body.textContent = "";
     let shown = 0;
     let lastGroup = null;
-    // Status first (Fixed at the top), then severity (P1 first); ties keep plan order.
+    // Severity first (P1 at the top), then status (Fixed first), then fixed date (oldest
+    // first); rows with no fixed date, and ties, keep plan order.
     const ordered = ROWS.map((r, i) => [r, i]).sort((a, b) =>
+      a[0].sev.localeCompare(b[0].sev) ||
       STATUSES.indexOf(a[0].status) - STATUSES.indexOf(b[0].status) ||
-      a[0].sev.localeCompare(b[0].sev) || a[1] - b[1]).map(x => x[0]);
+      (a[0].fixed || "").localeCompare(b[0].fixed || "") || a[1] - b[1]).map(x => x[0]);
     for (const row of ordered) {
       if (statusFilter !== "all" && row.status !== statusFilter) continue;
       if (!matchesSource(row)) continue;
       const tr = el("tr");
-      const group = row.status + "|" + row.sev;  // a rule between status/severity bands
+      const group = row.sev + "|" + row.status;  // a rule between severity/status bands
       if (lastGroup !== null && group !== lastGroup) tr.className = "group-start";
       lastGroup = group;
       tr.append(el("td", "ref", row.ref || "—"));
