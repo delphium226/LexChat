@@ -29,9 +29,12 @@ Usage (from `server_py/`, with the pinned model — `tools.replay pin`):
     python -m tools.seam_replay manager --run <run.json> --turn 1 [--without-fix] [--no-tools]
 
 `--without-fix` rebuilds the seam as it was at a given commit (default the
-commit before P3.1's product code): the synthesis prompt from that revision,
-and no pinpoint block. That is how this tool was validated — see
-`tests/test_seam_replay.py` and SESSION_LOG Session 17.
+commit before P3.1's product code): the synthesis prompt from that revision
+for the turn's research type, and the pinpoint block only if that revision
+added one (P4.7: it used to be stripped whatever the revision, so an A/B at a
+post-P3.1 commit changed two things). Pass `--rev` explicitly. That is how
+this tool was validated — see `tests/test_seam_replay.py` and SESSION_LOG
+Session 17.
 
 `--from-raw` (Worker seam, P3.11) rebuilds the blocks the product appends after
 a SUMMARISED result from each tool's recorded `raw_result`, through the
@@ -142,9 +145,65 @@ def _prompt_constant_at(rev: str, name: str) -> str:
 # --- the seams --------------------------------------------------------------
 
 
+def _file_at(rev: str, path: str) -> str:
+    """One tracked file's text at a git revision ("" if it is not there)."""
+    proc = subprocess.run(
+        ["git", "show", f"{rev}:{path}"], capture_output=True,
+        cwd=str(Path(__file__).resolve().parents[2]),
+    )
+    return proc.stdout.decode("utf-8") if proc.returncode == 0 else ""
+
+
+def rev_has_pinpoint_block(rev: str) -> bool:
+    """Did the synthesis builder at `rev` append P3.1's pinpoint block?
+
+    **Read from the revision, not assumed (P4.7, Session 26).** `--without-fix`
+    used to strip the block whatever `--rev` was, because the only A/B it had
+    served was P3.1's own, whose before-side predates the block. A P4.7
+    before-side at a post-P3.1 commit then differed from the after-side in the
+    prompt AND in the block, so the A/B measured two changes as one. P4.6
+    found the same class of bug in the Worker seam."""
+    return "pinpoint_block(" in _file_at(rev, "server_py/src/agent/agent_core.py")
+
+
+def _synthesis_prompt_at(rev: str, research_mode: str) -> str:
+    """The synthesis system prompt as the code at `rev` built it for this
+    research type.
+
+    Before P4.7 it was one literal, `DEEP_RESEARCH_SYNTHESIS_PROMPT`, the same
+    for every type, read with `_prompt_constant_at`. From P4.7 it is built per
+    type by `get_deep_research_synthesis_prompt`, which a regex cannot
+    recover, so that revision's `prompts.py` is executed in isolation, its
+    relative imports resolving against the working tree's `src` package (the
+    constants it imports are UI strings), and the function is called."""
+    blob = _file_at(rev, "server_py/src/prompts.py")
+    if not blob:
+        raise SystemExit(f"server_py/src/prompts.py not found at {rev}")
+    if "def get_deep_research_synthesis_prompt" not in blob:
+        return _prompt_constant_at(rev, "DEEP_RESEARCH_SYNTHESIS_PROMPT")
+    import types
+
+    mod = types.ModuleType(f"src._prompts_at_{rev}")
+    mod.__package__ = "src"
+    exec(compile(blob, f"{rev}:server_py/src/prompts.py", "exec"), mod.__dict__)  # noqa: S102
+    return mod.get_deep_research_synthesis_prompt(research_mode)
+
+
+def strip_pinpoint_block(body: str) -> str:
+    start = body.find("\n\n[PINPOINTS TO KEEP")
+    if start < 0:
+        return body
+    end = body.find("[/PINPOINTS TO KEEP]", start)
+    return body[:start] + (body[end + len("[/PINPOINTS TO KEEP]"):] if end >= 0 else "")
+
+
 def synthesis_messages(doc: dict, turn: dict, without_fix: bool = False,
                        rev: str = PRE_P31_REV) -> list:
-    """The Deep Research synthesis seam, via the product's own builder."""
+    """The Deep Research synthesis seam, via the product's own builder.
+
+    `--without-fix` rebuilds it as the code at `rev` did: that revision's
+    prompt for the turn's research type, and the pinpoint block only if that
+    revision's builder added one. Nothing else in the payload changes."""
     findings = step_findings_from(turn)
     if not any(f["content"] for f in findings):
         raise SystemExit("this turn has no Deep Research step findings "
@@ -154,15 +213,10 @@ def synthesis_messages(doc: dict, turn: dict, without_fix: bool = False,
         halts_from(turn), len(findings),
     )
     if without_fix:
-        messages[0]["content"] = _prompt_constant_at(
-            rev, "DEEP_RESEARCH_SYNTHESIS_PROMPT")
-        body = messages[1]["content"]
-        start = body.find("\n\n[PINPOINTS TO KEEP")
-        if start >= 0:
-            end = body.find("[/PINPOINTS TO KEEP]", start)
-            body = body[:start] + (body[end + len("[/PINPOINTS TO KEEP]"):]
-                                   if end >= 0 else "")
-        messages[1]["content"] = body
+        research_mode = _cfg_for(doc, turn)["_research_mode"]
+        messages[0]["content"] = _synthesis_prompt_at(rev, research_mode)
+        if not rev_has_pinpoint_block(rev):
+            messages[1]["content"] = strip_pinpoint_block(messages[1]["content"])
     return messages
 
 
@@ -484,10 +538,13 @@ def _cfg_for(doc: dict, turn: dict) -> dict:
     f = doc.get("filters") or {}
     return {
         "_provider": "openrouter",
-        # The TURN's type, as the request sent it (P4.1); the session filter
-        # is only the export's value, and is None where the export was blank
-        # (P0.6).
-        "_research_mode": turn.get("research_mode") or f.get("research_mode") or "legislation_only",
+        # The TURN's type, as the request sent it (P4.1); then, for a run file
+        # written before turns carried it, the type the product recorded on
+        # the turn's audit trace (P4.7); the session filter is only the
+        # export's value, and is None where the export was blank (P0.6).
+        "_research_mode": (turn.get("research_mode")
+                           or (turn.get("audit") or {}).get("research_mode")
+                           or f.get("research_mode") or "legislation_only"),
         "_chat_mode": turn.get("chat_mode") or doc.get("filter_snapshot_chat_mode") or "",
         "_jurisdiction": f.get("jurisdiction"),
         "_legislation_type": f.get("legislation_type"),
@@ -681,8 +738,11 @@ def main(argv: Optional[list] = None) -> int:
             if grade:
                 print(f"  report {i} depth: {grade}")
     elif args.seam == "synthesis":
+        print(f"  research type: {_cfg_for(doc, turn)['_research_mode']}")
         print(f"  pinpoint block: "
-              f"{'present' if 'PINPOINTS TO KEEP' in messages[1]['content'] else 'absent'}")
+              f"{'present' if 'PINPOINTS TO KEEP' in messages[1]['content'] else 'absent'}"
+              + (f" ({args.rev} {'has' if rev_has_pinpoint_block(args.rev) else 'predates'}"
+                 " P3.1's block)" if args.without_fix else ""))
     else:
         tool_msgs = [m for m in messages if m.get("role") == "tool"]
         with_outline = sum(1 for m in tool_msgs if "[SECTION OUTLINE" in (m.get("content") or ""))

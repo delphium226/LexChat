@@ -174,9 +174,17 @@ def test_the_recorded_filters_reach_the_prompt(run_file):
 # --- 4. --without-fix really removes the fix --------------------------------
 
 
-def test_without_fix_strips_the_block_and_swaps_the_prompt(run_file, monkeypatch):
+def _fake_rev(monkeypatch, agent_core_text: str, prompts_text: str = "OLD = 1"):
+    """`_file_at` for a made-up revision: its agent_core.py and prompts.py."""
+    def _file_at(rev, path):
+        return agent_core_text if path.endswith("agent_core.py") else prompts_text
+    monkeypatch.setattr(sr, "_file_at", _file_at)
     monkeypatch.setattr(sr, "_prompt_constant_at",
                         lambda rev, name: f"OLD {name} @ {rev}")
+
+
+def test_without_fix_before_p31_strips_the_block_and_swaps_the_prompt(run_file, monkeypatch):
+    _fake_rev(monkeypatch, "def build_synthesis_messages(): pass")
     doc, turn = sr.load_turn(run_file, 1)
     msgs = sr.synthesis_messages(doc, turn, without_fix=True, rev="abc1234")
     assert msgs[0]["content"] == "OLD DEEP_RESEARCH_SYNTHESIS_PROMPT @ abc1234"
@@ -184,6 +192,42 @@ def test_without_fix_strips_the_block_and_swaps_the_prompt(run_file, monkeypatch
     # Everything else is untouched: the findings and the halt note survive.
     assert "s.57(3)(a)" in msgs[1]["content"]
     assert "STEP FINDINGS" in msgs[1]["content"]
+
+
+def test_without_fix_after_p31_keeps_the_block_and_changes_only_the_prompt(
+        run_file, monkeypatch):
+    """P4.7: the block used to be stripped whatever `--rev` was, so a
+    before-side at a post-P3.1 commit differed from the after-side in the
+    prompt AND the block. Now the user message is byte-identical."""
+    _fake_rev(monkeypatch, "x += pinpoint_block([f['content'] for f in s])")
+    doc, turn = sr.load_turn(run_file, 1)
+    live = sr.synthesis_messages(doc, turn)
+    old = sr.synthesis_messages(doc, turn, without_fix=True, rev="abc1234")
+    assert old[1] == live[1]
+    assert "PINPOINTS TO KEEP" in old[1]["content"]
+    assert old[0]["content"] == "OLD DEEP_RESEARCH_SYNTHESIS_PROMPT @ abc1234"
+
+
+@pytest.mark.parametrize("research_mode", [
+    "legislation_only", "legislation_and_case_law", "parliamentary_records"])
+def test_without_fix_at_a_per_type_revision_builds_that_types_prompt(
+        run_file, monkeypatch, research_mode):
+    """From P4.7 the prompt is built per research type, which a regex cannot
+    read back; the revision's own builder is run for the turn's type."""
+    _fake_rev(monkeypatch, "pinpoint_block(",
+              "def get_deep_research_synthesis_prompt(research_mode):\n"
+              "    return 'OLD BUILT FOR ' + research_mode\n")
+    doc, turn = sr.load_turn(run_file, 1)
+    turn["research_mode"] = research_mode
+    msgs = sr.synthesis_messages(doc, turn, without_fix=True, rev="abc1234")
+    assert msgs[0]["content"] == f"OLD BUILT FOR {research_mode}"
+
+
+def test_the_pinpoint_block_is_read_off_real_revisions():
+    """Pinned against git: the default rev predates P3.1's block, HEAD has it.
+    (Fails in a copy that is not a git checkout, like the two readers below.)"""
+    assert sr.rev_has_pinpoint_block(sr.PRE_P31_REV) is False
+    assert sr.rev_has_pinpoint_block("HEAD") is True
 
 
 def test_without_fix_swaps_the_right_worker_prompt(run_file, monkeypatch):

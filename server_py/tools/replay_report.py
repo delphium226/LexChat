@@ -5913,6 +5913,254 @@ def cmd_lookup(args) -> int:
     return 0
 
 
+# --- P4.7: the Deep Research synthesis's gap sentences ---------------------
+#
+# The row's defect (D17): the synthesis prompt scripted "No reported case law
+# was found on X" for every research type, so a report run under 'Legislation
+# only' could present a source it never searched as searched and empty. The
+# pre-flight (end of Session 24) was a scratch read; this is that read behind a
+# command, over every directory, plus the export's own answers.
+#
+# Three regexes, read in order, on each sentence of the model's prose (the
+# code-written footer removed, as everywhere else in this module):
+#   DR_CASE_WORD    the broad net the scratch read used. It fires on
+#                   'final judgment' and 'judicial machinery', which is why
+#                   it only COUNTS turns;
+#   DR_CASE_SOURCE  case law as a SOURCE (the thing a search covers). Only a
+#                   sentence matching this one is classified;
+#   DR_ABSENT       the source reported as searched and empty;
+#   DR_EXCLUDED     the source reported as outside the research.
+# A sentence carrying both ABSENT and EXCLUDED is D17's own example ("No
+# reported case law was found ... (case law was excluded ...)") and is the
+# defect: it still presents the source as searched.
+#
+# **Corrected before first use (Session 26).** ABSENT first carried a bare
+# `no reported` alternative, and it flagged `wave2_p28_smoke`/6341 t7, whose
+# sentence says case law was "not searched or retrieved" under the
+# 'Legislation only' filter: an accurate exclusion. ABSENT now needs a
+# found-type verb, and "no ... was searched" reads as EXCLUDED.
+
+DR_CASE_WORD = re.compile(
+    r"\bcase[\s-]*law\b|\bjudge?ments?\b|\bprecedents?\b|\bjudicial\b"
+    r"|\breported\s+(?:cases?|decisions?)\b|\bcourt\s+decisions?\b", re.I)
+DR_CASE_SOURCE = re.compile(
+    r"\bcase[\s-]*law\b|\breported\s+(?:cases?|decisions?)\b|\bcourt\s+decisions?\b"
+    r"|\bjudicial\s+(?:decisions?|authorit(?:y|ies)|consideration|interpretation"
+    r"|treatment|guidance)\b|\bprecedents?\b|\bjudgments\b(?!\s+of\s+the\s+court\b)",
+    re.I)
+DR_ABSENT = re.compile(
+    r"\bno\b[^.;:]{0,80}?\b(?:was|were|has\s+been|have\s+been|could\s+be|is|are)\s+"
+    r"(?:found|identified|located|returned|retrieved|available)\b"
+    r"|\b(?:found|identified|located|returned|retrieved|revealed)\s+no\b"
+    r"|\bdid\s+not\s+(?:find|identify|locate|return|retrieve|reveal)\b"
+    r"|\bnone\s+(?:was|were)\s+(?:found|identified|located)\b"
+    r"|\bnot\s+(?:been\s+)?(?:found|identified|located)\b"
+    r"|\bno\s+(?:relevant\s+|reported\s+)?(?:case[\s-]*law|judgments?|cases?)\s+"
+    r"(?:directly\s+)?(?:address|addresses|exists?|considers?|on)\b", re.I)
+DR_EXCLUDED = re.compile(
+    r"\bexclu(?:de|ded|des|sion)\b|\bnot\s+(?:been\s+)?searched\b|\bdid\s+not\s+search\b"
+    r"|\bno\b[^.;:]{0,80}?\b(?:was|were)\s+searched\b"
+    r"|\bwas\s+not\s+(?:part|within|included)|\bout(?:side)?\s+(?:of\s+)?(?:the\s+)?"
+    r"(?:research\s+|approved\s+)?scope\b|\bnot\s+(?:with)?in\s+(?:the\s+)?"
+    r"(?:research\s+|approved\s+)?scope\b|\blegislation[\s-]+only\b|\bnot\s+included\b"
+    r"|\bnot\s+(?:researched|covered|examined|consulted)\b|\bbeyond\s+the\s+scope\b",
+    re.I)
+# The research types whose tool set holds no case-law tool: a case-law
+# 'not found' under one of these is the defect. A hybrid or case-law run
+# DID search case law, so the same sentence there is a true negative and is
+# listed as the detector's recall check, not as a finding.
+DR_NO_CASE_LAW = ("legislation_only", "parliamentary_records", "westminster_records")
+
+
+def dr_turn_kind(turn: dict) -> str:
+    """synthesis (the step findings reached the synthesis), planner (the
+    planner answered: a clarification, or P4.1's decline) or other."""
+    dgs = (turn.get("audit") or {}).get("delegations") or []
+    if turn.get("plan") and any(d.get("step") is not None for d in dgs):
+        return "synthesis"
+    if turn.get("plan_clarification") or not turn.get("plan"):
+        return "planner"
+    return "other"
+
+
+def dr_classify(text: str) -> list:
+    """[(kind, sentence)] for every sentence that names case law as a source.
+    kind: absent, absent_excluded (D17's mixed form), excluded, mention."""
+    out = []
+    for s in _sentences(_without_footer(text)):
+        if not DR_CASE_SOURCE.search(s):
+            continue
+        absent, excluded = bool(DR_ABSENT.search(s)), bool(DR_EXCLUDED.search(s))
+        kind = ("absent_excluded" if absent and excluded else "absent" if absent
+                else "excluded" if excluded else "mention")
+        out.append((kind, s))
+    return out
+
+
+def dr_rows(doc: dict) -> list:
+    """One row per answered Deep Research turn of a run file."""
+    session_rm = (doc.get("filters") or {}).get("research_mode") or ""
+    rows = []
+    for t in doc.get("turns") or []:
+        if t.get("chat_mode") != "deep_research":
+            continue
+        answer = t.get("answer") or ""
+        if not answer.strip():
+            continue
+        audit_rm = (t.get("audit") or {}).get("research_mode") or ""
+        rm = audit_rm or t.get("research_mode") or session_rm or "?"
+        sentences = dr_classify(answer)
+        kinds = Counter(k for k, _ in sentences)
+        rows.append({
+            "session": str(doc.get("session_id")), "rep": doc.get("rep", 1),
+            "turn": t.get("turn"), "research_mode": rm, "kind": dr_turn_kind(t),
+            "case_word": bool(DR_CASE_WORD.search(_without_footer(answer))),
+            "kinds": kinds, "sentences": sentences,
+        })
+    return rows
+
+
+def dr_defect(row: dict) -> bool:
+    """A case-law 'not found' in a report whose research never searched it."""
+    k = row["kinds"]
+    return row["research_mode"] in DR_NO_CASE_LAW and bool(
+        k["absent"] + k["absent_excluded"])
+
+
+def _dr_export_rows(rs, dr_only: bool = True) -> list:
+    """The same rows over the export's own Deep Research answers (the
+    pre-pilot's saved text, which never reached a run file). The research
+    type is the one `replay_set` resolves per turn (P0.6); the text is read
+    from the CSV in the order `load_sessions` pairs replies with turns.
+    `dr_only=False` reads every answer, for the recall check."""
+    import csv  # noqa: PLC0415
+    import io  # noqa: PLC0415
+
+    sessions = {s.session_id: s for s in rs.load_sessions()}
+    grouped: dict = {}
+    for r in csv.DictReader(io.open(Path(rs.DEFAULT_CSV), encoding="utf-8-sig")):
+        grouped.setdefault(r["Session ID"], []).append(r)
+    rows = []
+    for sid, srows in grouped.items():
+        s = sessions.get(sid)
+        if s is None:
+            continue
+        n = 0
+        for r in sorted(srows, key=lambda r: int(r["Message #"] or 0)):
+            if r["Message role"] == "user":
+                n += 1
+                continue
+            if r["Message role"] != "assistant" or not n:
+                continue
+            content = r["Message content"] or ""
+            if dr_only and not rs.DR_MARKER.search(content):
+                continue
+            t = s.turns[n - 1] if n <= len(s.turns) else None
+            rm = (t.research_mode if t else "") or s.research_mode or "?"
+            sentences = dr_classify(content)
+            rows.append({
+                "session": sid, "rep": 0, "turn": n, "research_mode": rm,
+                "kind": "synthesis",
+                "case_word": bool(DR_CASE_WORD.search(_without_footer(content))),
+                "kinds": Counter(k for k, _ in sentences), "sentences": sentences,
+            })
+    return rows
+
+
+def _dr_print(rows: list, label: str, args) -> list:
+    """Print one population's table; return its findings."""
+    by_rm = Counter(r["research_mode"] for r in rows)
+    print(f"\n  {label}: {len(rows)} answered Deep Research turn(s)  "
+          + ", ".join(f"{k} {v}" for k, v in sorted(by_rm.items())))
+    no_cl = [r for r in rows if r["research_mode"] in DR_NO_CASE_LAW]
+    kinds = Counter(r["kind"] for r in no_cl)
+    print(f"    under a type with no case-law tool ({', '.join(DR_NO_CASE_LAW)}): "
+          f"{len(no_cl)} turn(s); " + ", ".join(f"{k} {v}" for k, v in sorted(kinds.items())))
+    word = [r for r in no_cl if r["case_word"]]
+    src = [r for r in no_cl if r["sentences"]]
+    print(f"      matching a case-law word anywhere in the prose: {len(word)}")
+    src_kinds = Counter(r["kind"] for r in src)
+    print(f"      naming case law as a source: {len(src)}"
+          + (f"  ({', '.join(f'{k} {v}' for k, v in sorted(src_kinds.items()))})"
+             if src else ""))
+    tot = Counter()
+    for r in src:
+        tot.update(r["kinds"])
+    print(f"      their sentences: absent {tot['absent']}, absent+excluded "
+          f"{tot['absent_excluded']}, excluded {tot['excluded']}, mention {tot['mention']}")
+    listed = src if args.list else [r for r in src if dr_defect(r)]
+    for r in sorted(listed, key=lambda r: (r.get("dir", ""), r["session"], r["rep"], r["turn"] or 0)):
+        k = r["kinds"]
+        print(f"        {r.get('dir', 'export'):<22} {r['session']:<6} r{r['rep']} t{r['turn']:<2} "
+              f"{r['kind']:<9} absent {k['absent']} absent+excl {k['absent_excluded']} "
+              f"excluded {k['excluded']} mention {k['mention']}"
+              + ("   DEFECT" if dr_defect(r) else ""))
+        if args.sentences:
+            for kind, s in r["sentences"]:
+                print(f"            [{kind}] {s[:args.chars]}")
+    # Recall: the same classifier on the turns that DID search case law.
+    searched = [r for r in rows if r["research_mode"] not in DR_NO_CASE_LAW
+                and (r["kinds"]["absent"] + r["kinds"]["absent_excluded"])]
+    print(f"    recall check, types that searched case law: {len(searched)} turn(s) "
+          "carry a case-law 'not found' (true negatives there, not findings)"
+          + (": " + ", ".join(f"{r.get('dir', 'export')}/{r['session']} r{r['rep']} t{r['turn']}"
+                              for r in sorted(searched, key=lambda r: (r.get('dir', ''), r['session'], r['rep'], r['turn'] or 0)))
+             if searched and args.list else ""))
+    return [f"{r.get('dir', 'export')}/{r['session']} r{r['rep']} t{r['turn']} "
+            f"({r['research_mode']}): case law reported searched and not found"
+            for r in src if dr_defect(r)]
+
+
+def cmd_drgaps(args) -> int:
+    """P4.7: every answered Deep Research turn, by research type, and every
+    sentence naming case law as a source — searched and absent, excluded, or
+    a mention. Exits 1 if a report whose research type holds no case-law tool
+    says case law was not found (the defect), so it joins the exit-1 set for
+    a sweep that includes Deep Research turns."""
+    base = Path(args.dir)
+    dirs = ([d for d in sorted(base.parent.iterdir()) if d.is_dir()]
+            if args.all_dirs else [base])
+    rows = []
+    for d in dirs:
+        for doc in load_runs(d):
+            for r in dr_rows(doc):
+                r["dir"] = d.name
+                rows.append(r)
+    where = f"{len(dirs)} director(ies) beside {base.name}" if args.all_dirs else str(base)
+    print(f"P4.7 Deep Research gap sentences over {where}")
+    print("  prose only (the code-written footer removed); a sentence is classified "
+          "only when it names case law as a source")
+    findings = _dr_print(rows, "replay run files (all reps)", args)
+    if args.export:
+        rs = _replay_set_module()
+        if rs is None:
+            print("\n  export not read: replay_set unavailable")
+        else:
+            try:
+                findings += _dr_print(_dr_export_rows(rs), "the export's own answers", args)
+                # Recall over EVERY export answer, any chat mode: the explicit
+                # wording the pre-flight found (6338, 6370, 6407) must fire.
+                every = [r for r in _dr_export_rows(rs, dr_only=False)
+                         if r["kinds"]["absent"] + r["kinds"]["absent_excluded"]]
+                print(f"\n  recall check, every export answer (any chat mode): "
+                      f"{len(every)} answer(s) carry a case-law 'not found', in "
+                      f"session(s) {', '.join(sorted({r['session'] for r in every}))}; "
+                      "by research type: " + ", ".join(
+                          f"{k} {v}" for k, v in sorted(
+                              Counter(r['research_mode'] for r in every).items())))
+            except SystemExit as e:
+                print(f"\n  export not read: {e}")
+    print()
+    if findings:
+        print(f"  FINDINGS ({len(findings)}):")
+        for f in findings:
+            print(f"    [!] {f}")
+        return 1
+    print("  no findings: no report run under a type without case law says case "
+          "law was not found.")
+    return 0
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     _utf8_stdout()
     p = argparse.ArgumentParser(prog="replay_report")
@@ -6100,6 +6348,20 @@ def main(argv: Iterable[str] | None = None) -> int:
                          "the routing would look up (ids only)")
     lk.add_argument("--live", action="store_true",
                     help="with --routing: look each distinct id up against LEX")
+    dg = sub.add_parser("drgaps",
+                        help="P4.7: every answered Deep Research turn by research "
+                             "type, and every sentence naming case law as a source "
+                             "(searched and absent / excluded / mention)")
+    dg.add_argument("--all-dirs", action="store_true",
+                    help="every directory beside --dir, pooled")
+    dg.add_argument("--export", action="store_true",
+                    help="also the transcript export's own Deep Research answers")
+    dg.add_argument("--list", action="store_true",
+                    help="list every turn naming case law as a source, not only defects")
+    dg.add_argument("--sentences", action="store_true",
+                    help="print the classified sentences (they can echo a "
+                         "lawyer's terms: keep the output out of the repo)")
+    dg.add_argument("--chars", type=int, default=300)
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")
@@ -6126,6 +6388,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "deadend": cmd_deadend,
         "scripted": cmd_scripted,
         "lookup": cmd_lookup,
+        "drgaps": cmd_drgaps,
         "blanks": cmd_blanks,
         "siblings": cmd_siblings,
         "corpus": cmd_corpus,
