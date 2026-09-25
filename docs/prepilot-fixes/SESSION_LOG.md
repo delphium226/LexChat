@@ -6359,3 +6359,64 @@ whether a retry with changed bytes recovers.
 seam processes. The dev box is on its normal settings. The draw drivers, their
 logs and the answer texts are in the session scratchpad only. Every number
 from them is in BASELINE.md, and the seam commands there re-draw them.
+
+**Addendum to Session 30 (same day, at the user's request: "make sure we're
+not going to lose any pertinent information", then "update the tracker").**
+What the session knew that the handover above did not say:
+
+1. **The Manager seam's numbers** (now also on P4.12's row).
+   `manager --first-round --date recorded` rebuilt the two round-1 (b)
+   payloads to:
+   - 9,832 characters against a recorded 9,243 (`wave2`/6343 r1 t2);
+   - 7,923 against 11,870 (`wave4_p37_reach`/p37r_6374 r1 t2).
+
+   At their heads, as Worker calls, they rebuild to 12,744 (6343) and to
+   9,004 with the brief alone or 12,791 with one round (p37r_6374). So
+   neither call is placed by a seam.
+2. **How far the Worker prompt drifted, per recorded head** (today's code
+   against the record):
+   - +393 characters at `2d9ae11` and `051472d`;
+   - +44 at `8006db9`;
+   - +570 at `2545184`;
+   - +69 at `8dbae59`;
+   - 0 at `b694fac` and `778d30a`.
+
+   **`--without-fix --rev`'s literal swap (`_swap_worker_constant`) closed
+   the gap on 6 of the 8 payloads, but not on the two at `8006db9`** (526 short):
+   there, P2.4's not-held rule was appended outside the constant. So a
+   `--without-fix` A/B whose before-side changed text outside the constant
+   compares a partial prompt. `--at-rev` builds the whole prompt.
+3. **Per-draw detail behind the BASELINE tables.**
+   - Reproductions to the token: 6409's (a) at 62,915 (the recorded attempt
+     2); 6410's (b) at 164 (the recorded (b)); 6385 `p24`'s second draw at
+     141 (its recorded attempt 1). 6410 answered twice at 537 tokens, then
+     timed out.
+   - **The 29 (b) draws streamed 265-1,013 reasoning characters, but usage
+     billed 0 reasoning tokens** (completion 68-257, `finish=error/None`).
+     The 4 (a) draws billed every token as reasoning (57,812-76,656
+     characters, `stop/STOP`). So "deliberation cut short" rests on the
+     route contrast, not on the usage fields.
+   - No rate limit in 43 draws run four at a time.
+4. **Unread, not findings.** The quick answers on today's date line (links
+   0-1) and 6410's recorded-line answers (2 links) were never graded for
+   correctness. Their texts were in the scratchpad only.
+5. **The draw driver**, in the scratchpad only; P4.12 will want one:
+   - four lanes of two payloads, sequential within a payload;
+   - one `seam_replay` subprocess per draw, its output parsed into one
+     JSON line;
+   - a spend guard checked before each draw, which cannot stop draws
+     already in flight;
+   - stopping the driver's task kills its in-flight subprocesses, and their
+     results are lost.
+6. **OpenRouter's routes** are now in the `external-apis` skill (not
+   tracked: `.claude/` is ignored):
+   - six endpoints: Vertex and AI Studio, each standard, flex and
+     priority;
+   - Vertex is the default;
+   - the tiers are untested.
+7. **Fix Tracker v25**, published at the user's request to the same URL:
+   - P4.11 Verified to Fixed (`fixed: "2026-09-25"`, `ver: "Next release"`);
+   - P4.12 added (Verified, P2);
+   - new notes on P4.11's check, the cost accepted, the measuring fix and
+     P4.12;
+   - "Next" reads P3.2, P3.3, P3.4 and P4.3.

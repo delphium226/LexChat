@@ -358,8 +358,8 @@
       its row in the fix plan and its action number in Thomas's review of 10 September 2026.
       <strong>“Fixed” means built and accepted on the fix branch. The Version column says which
       release carries each fix: 2026.09.1 (22 September) or 2026.09.2 (23 September), both merged
-      for deployment to the server, or “Next release” for P0.6, P4.6, P3.7, P4.7, P4.5, P4.10 and
-      P3.15, fixed since and waiting for the next one (P0.6 changes only our test tooling, and
+      for deployment to the server, or “Next release” for P0.6, P4.6, P3.7, P4.7, P4.5, P4.10,
+      P3.15 and P4.11, fixed since and waiting for the next one (P0.6 changes only our test tooling, and
       P3.15 was closed without a change to the system). The fixed date is
       the day a fix was accepted, not the day it reached the server.</strong></p>
   </header>
@@ -419,7 +419,7 @@
     <div>
       <h2>Status</h2>
       <dl>
-        <dt>Fixed</dt><dd>Built and accepted on the fix branch. Fixed rows with a version number are merged to <code>main</code> for deployment to the target: release 2026.09.1 on 22 September and 2026.09.2 (P3.13) on 23 September. Rows marked “Next release” (P0.6, P4.6, P3.7, P4.7, P4.5, P4.10, P3.15) stay on the branch until then.</dd>
+        <dt>Fixed</dt><dd>Built and accepted on the fix branch. Fixed rows with a version number are merged to <code>main</code> for deployment to the target: release 2026.09.1 on 22 September and 2026.09.2 (P3.13) on 23 September. Rows marked “Next release” (P0.6, P4.6, P3.7, P4.7, P4.5, P4.10, P3.15, P4.11) stay on the branch until then.</dd>
         <dt>In progress</dt><dd>Under way. P5.2 is waiting on an external decision.</dd>
         <dt>Partial</dt><dd>A fix was attempted, and we decided to defer it and come back to it later. No fix is Partial now: P4.10 was, until its last check was run on 25 September.</dd>
         <dt>Verified</dt><dd>The problem is confirmed in our replays, the code or a live test, but no fix is built yet.</dd>
@@ -445,7 +445,38 @@
         box (Settings, then About), so a problem report can say which release it was.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.</p>
-      <p><strong>P4.10</strong>, the cost of a lost reply, is fixed.
+      <p><strong>P4.11</strong>, the wait when the model's provider stops responding mid-reply, is
+        fixed. Sometimes the provider running the model stops sending a reply partway through and,
+        after about two minutes of silence, drops it. The system used to try up to three times, so
+        one such reply could add six to nine minutes to an answer. We re-sent 8 stored cases exactly
+        as they were first sent, including the original date. They stalled again 19 times in 24, and
+        a stalled request sent again unchanged stalled again every time (11 of 11). Changing only the
+        date line made 7 of the 8 answer within seconds. The same cases also sometimes produced
+        P4.10's runaway, so the stall looks like the same long thinking, cut off by the provider.
+        Sending them to the model's other provider (Google AI Studio instead of Google Vertex) did
+        not help: two stalled there too, and the other two ran away in full.</p>
+      <p><strong>What changed.</strong> When a research step's reply stalls this way, it is no
+        longer tried again. It goes straight to P4.5's “answer lost” label, and the chat asks for the
+        research again, as a new request, which made good 3 of the 5 such cases in our replays.
+        Across our replays this removes 10 wasted attempts, about 20 to 30 minutes of waiting in
+        all. A reply refused because the provider was busy is still tried again (that works 13 times
+        in 14), and so is a stalled chat reply.</p>
+      <p><strong>How it was tested.</strong> What the model is sent does not change, only whether a
+        stalled reply is tried again, so the test is a set of automated checks, one at each point
+        the change touches. They fail if the fix is removed, and further checks fail if it reaches
+        too far: if it stopped retrying a busy provider or the chat's own replies.</p>
+      <p><strong>The cost we accept.</strong> In our replays, trying a stalled research step again
+        rescued it once in 14 tries. That case now relies on the chat asking for the research
+        again.</p>
+      <p><strong>One row opened.</strong> <strong>P4.12</strong>: when the chat's own reply stalls,
+        there is no second research request behind it (3 cases in our replays). Changing the date
+        line suggests that trying again with slightly different wording might work where an exact
+        repeat does not. It will be measured before anything is chosen.</p>
+      <p><strong>One fix to our own measuring.</strong> Our tool for re-sending a stored research
+        request rebuilt it with today's instructions. They have changed since most of these cases
+        were recorded, so only 1 of the 8 was a faithful copy. The tool now rebuilds a request with
+        the instructions of the day it was recorded, and all 8 match.</p>
+      <p><strong>Earlier, P4.10</strong>, the cost of a lost reply, was fixed.
         Sometimes the model behind a research step thinks until it has used almost all the output
         it is allowed (about 63,000 tokens), then writes nothing. Each attempt took about six
         minutes and cost about 76 cents, and the system used to try three times. Across all our
@@ -476,8 +507,8 @@
         nothing: the step is labelled as lost (P4.5) and the chat asks for the research again, which
         in our replays made good every such case (6 of 6). That is still quicker and cheaper than
         waiting the runaway out.</p>
-      <p><strong>P3.15</strong>, a follow-up saying an instrument's <em>text</em> is not held when the
-        instrument itself is not held, is closed without a change to the system. We re-ran the two
+      <p><strong>Earlier, P3.15</strong>, a follow-up saying an instrument's <em>text</em> is not held when the
+        instrument itself is not held, was closed without a change to the system. We re-ran the two
         sessions three more times first, and this time every answer was right, including both
         follow-ups answered from the earlier conversation. Across all our re-runs of these sessions,
         such follow-ups were right 3 times in 5, and every answer that ran new research was right
@@ -492,11 +523,6 @@
         correct answer as wrong. It read “this index does not hold this instrument”, written about
         one instrument, as a claim about the Act named in the heading above it. The checker is
         fixed, and re-checking every stored re-run changed only that one result.</p>
-      <p><strong>Earlier, one row opened.</strong> <strong>P4.11</strong>: when the model's provider stops
-        responding mid-reply, each attempt waits two to three minutes before giving up, and trying
-        again rarely helps (3 times in 22). It adds about six minutes to the answers it hits. It will
-        be measured before anything is chosen. The P4.10 check gave a first clue: this stall
-        appeared only in the re-runs where a runaway was possible, so the two may share a cause.</p>
       <p><strong>Earlier, P4.5</strong>, a research step whose answer is lost, was fixed. About one question in
         sixty, the model returns an empty reply to a research step, even after three tries. Before,
         what that step handed on was only its record of the searches it had run, which reads like a
@@ -636,11 +662,11 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next.</strong> <strong>P4.11</strong>, the wait when the model's provider stops
-        responding, measured first. Then the fixes the four open groups of problems wait on:
+      <p><strong>Next.</strong> The fixes the four open groups of problems wait on:
         <strong>P3.2</strong> (reversing a correct answer under pushback), <strong>P3.3</strong>
         (separating retrieval from interpretation), <strong>P3.4</strong> (the Scottish
-        jurisdiction default) and <strong>P4.3</strong> (the sources list).</p>
+        jurisdiction default) and <strong>P4.3</strong> (the sources list). <strong>P4.12</strong>
+        when we choose to measure it.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
         and three items from <code>docs/TODO.md</code> D16 (the impossible year window, always
@@ -664,7 +690,7 @@
   // ver:    on a Fixed row only: the release that carries it ("2026.09.1", the git tag
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
-  const UPDATED = "25 September 2026, end of Session 29 (P4.10 fixed: its last check passed; P3.15 closed without a change, completing the fixes for false “not found” answers; next: P4.11, then P3.2, P3.3, P3.4 and P4.3)";
+  const UPDATED = "25 September 2026, end of Session 30 (P4.11 fixed: a research step's stalled reply is no longer tried again; P4.12 opened; next: P3.2, P3.3, P3.4 and P4.3)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23", ver: "Next release" },
@@ -708,7 +734,8 @@
     { src: "T & R", fix: "Report a lost research step as lost, not “no results”", sev: "P1", status: "Fixed", ref: "P4.5", t: "3", fixed: "2026-09-24", ver: "Next release" },
     { src: "T", fix: "Label incomplete Deep Research steps as incomplete in progress messages", sev: "P3", status: "Fixed", ref: "P4.5", t: "3", fixed: "2026-09-24", ver: "Next release" },
     { src: "R", fix: "Cut the cost and the wait of a lost reply (about 63,000 reasoning tokens per failed attempt)", sev: "P2", status: "Fixed", ref: "P4.10", t: "", fixed: "2026-09-25", ver: "Next release" },
-    { src: "R", fix: "Cut the wait when the model's provider stops responding mid-reply (two to three minutes per failed attempt)", sev: "P2", status: "Verified", ref: "P4.11", t: "" },
+    { src: "R", fix: "Cut the wait when the model's provider stops responding mid-reply (two to three minutes per failed attempt)", sev: "P2", status: "Fixed", ref: "P4.11", t: "", fixed: "2026-09-25", ver: "Next release" },
+    { src: "R", fix: "Recover a chat reply lost when the model's provider stops responding (no second research request is behind it)", sev: "P2", status: "Verified", ref: "P4.12", t: "" },
     { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Fixed", ref: "P4.6", t: "4", fixed: "2026-09-23", ver: "Next release" },
     { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Fixed", ref: "P4.7", t: "2", fixed: "2026-09-24", ver: "Next release" },
     { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", sev: "P3", status: "Verified", ref: "P4.8", t: "" },
