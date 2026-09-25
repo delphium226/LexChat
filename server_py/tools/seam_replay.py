@@ -524,8 +524,8 @@ def as_sent_rev(value: Optional[str], doc: dict) -> Optional[str]:
     recorded at, `runtime_state.git_head`), or a revision.
 
     P4.11: the Worker prompt changed under most stored (b) payloads, so
-    today's code rebuilt 1 of 7 to its recorded `sent_chars`; the recorded
-    head's own builder rebuilt all of them."""
+    today's code rebuilt 1 of the 8 Worker payloads drawn to its recorded
+    `sent_chars`; the recorded head's own builder rebuilt all 8."""
     if not value:
         return None
     if value != "recorded":
@@ -1242,8 +1242,8 @@ def main(argv: Optional[list] = None) -> int:
                    help="--as-sent only (P4.11): build the Worker prompt and its "
                         "tools with the code at this revision: 'recorded' (the "
                         "run's runtime_state.git_head) or a sha; default the "
-                        "working tree. Today's code rebuilt 1 of 7 stored (b) "
-                        "payloads to their recorded sent_chars")
+                        "working tree. Today's code rebuilt 1 of the 8 stored "
+                        "(b) Worker payloads to its recorded sent_chars")
     p.add_argument("--provider", default=None,
                    help="--as-sent only (P4.11): route the draw to this OpenRouter "
                         "upstream alone (e.g. google-vertex, google-ai-studio), with "

@@ -946,9 +946,9 @@ def test_an_as_sent_draw_with_a_date_prints_and_names_it(tmp_path, monkeypatch, 
 # --at-rev (P4.11): the Worker prompt and tools as the recorded head built them
 # ---------------------------------------------------------------------------
 #
-# Checked before any draw: today's code rebuilt 1 of 7 stored (b) Worker
-# payloads to their recorded sent_chars; the recorded head's own builder
-# rebuilt all 7, and the two P4.10 payloads.
+# Checked before any draw: today's code rebuilt 1 of the 8 stored (b) Worker
+# payloads drawn to its recorded sent_chars; the recorded head's own builder
+# rebuilt all 8, and the two P4.10 payloads.
 
 _OLD_PROMPTS = (
     "from datetime import date\n"

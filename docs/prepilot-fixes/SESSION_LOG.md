@@ -6208,3 +6208,154 @@ What the session knew that the handover above did not say:
      on P3.15's closure; and on the grader fix;
    - "Next" reads: P4.11, then P3.2, P3.3, P3.4 and P4.3;
    - render-checked once, in light, before publishing.
+
+## Session 30 — 2026-09-25 — P4.11 (the latency of an upstream idle timeout)
+
+**Free checks before any draw.**
+- The records already mix (a) and (b) on identical bytes: 6369 `abb`, 6409
+  `bab`, 6348 (`wave3_p311_conv`) `abb`.
+- `worker --as-sent` rebuilt the Worker prompt with today's code. Of the 8
+  Worker payloads to draw, it rebuilt 1 (6410) to its recorded `sent_chars`.
+  The rest were off by 44-570 characters: the prompt changed under them.
+- The recorded head's own `get_worker_system_prompt` rebuilt all 8, and
+  P4.10's two. Every stored head predates `lookup_legislation`, so the tool
+  list differed too.
+- None of the 5 Manager (b) calls rebuilds on an existing seam (rounds 1, 1,
+  2, 3 and 5).
+- OpenRouter serves the model from Vertex and AI Studio (its public
+  `/endpoints` listing).
+
+**Asked the user before spending** (all four answered with the
+recommendation): build `--at-rev recorded`; leave the Manager calls out; stop
+at about $5; test the route only if (b) recurred.
+
+**1. Tooling, each committed before its draws.**
+- `1de4419`: `worker --as-sent --at-rev recorded|SHA`, which builds the prompt
+  and tools with that revision's modules, as `_synthesis_prompt_at` already
+  did. It is refused off `--as-sent` and on both first rounds.
+- `866a2b3`: `lostcost` splits the retry yield by site, pooled over tied and
+  inferred sites with the inferred share said. After a (b): Worker 1 in 14,
+  Manager 2 in 8.
+- `400d486`: `--provider SLUG` (OpenRouter's `provider.order`, no fallback).
+  Every draw now prints the provider that served it.
+- 9 tests. Each failed against the previous file on a scratch copy, or, for a
+  refusal, with that refusal removed.
+
+**2. Step 1: 32 draws, $1.67** (8 payloads, 3 on the recorded date line and 1
+on today's).
+- Recorded line: 19 (b), 2 (a) and 3 answers in 24. Every payload drew (b) at
+  least once, at 123-149 s and $0.
+- After a (b), the same bytes drew (b) again 11 times in 11.
+- Today's line: 7 of 8 answered or called a tool in 3-8 s.
+- The (a) draws came from 6369 and 6409, whose records mixed the two. 6409's
+  was the recorded attempt's 62,915 tokens exactly.
+
+**3. Step 2: the route, $1.53.**
+- AI Studio drew (b) on both case-law payloads.
+- On both steady-(b) legislation payloads (6373 and 6348), AI Studio ran away
+  to 62,913 tokens and about 360 s. Vertex timed out at about 125 s on the
+  same bytes.
+- A draw with no routing field was served by "Google", i.e. Vertex.
+- I stopped the driver when its remaining AI Studio draws (likely runaways)
+  would have gone past $5. The four draws it cut were redrawn cheaply: 5
+  draws, all (b), $0.
+
+**4. User decision: lever (i).** Booked before any code (`d34c48e`):
+deterministic unit tests at each seam, no replay and no seam draw, since no
+payload changes.
+
+**5. Built and accepted** (this commit).
+- `is_idle_timeout` joins `is_heavy_empty` in `should_retry_empty`'s
+  Worker-only exception.
+- `tests/test_idle_timeout.py`: 9 tests. With `empty_completion.py` reverted,
+  6 fail; with only the rule reverted, 5. The 3 guards each fail against an
+  over-broad variant.
+- P4.10's `[b_idle]` case is reversed; its old form fails against the fix.
+- 1898 pass.
+- `AUDIT_TRACE.md` and CLAUDE.md say so. No shape change.
+- The "1 of 7" in `1de4419`'s help text and test comment corrected to "1 of
+  8".
+
+**6. P4.12 booked** (the residual; measure-first): the Manager's (b), and
+whether a retry with changed bytes recovers.
+
+**Spend, Session 30: $3.20.** The ~$2 more the user allowed was not used.
+
+**Surprises.**
+- (b) is not a flaky upstream: a stored (b) payload came back (b) again 11
+  times in 11. One changed prompt line cured 7 of 8.
+- The other route did not avoid (b). It turned (b) into (a) on the same bytes,
+  which is the best evidence so far that on those payloads (b) is (a)'s
+  deliberation, cut short by Vertex's idle limit.
+- A stored payload older than the latest prompt change is not redrawn by
+  `--as-sent` alone.
+
+**Hazards met.**
+- A background driver with a spend guard still overshoots by the draws in
+  flight. A runaway-prone payload on a new route is about $0.77 a draw, so
+  check the plan against the budget after each surprising draw, not only
+  after the run.
+- Stopping the driver's task killed its in-flight draws with it. No orphaned
+  processes were left, but their outcomes and costs were lost, so they were
+  redrawn.
+
+## Session 30 — handover for Session 31 (2026-09-25)
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. Session 30 commits:
+  - `1de4419`: `--at-rev`;
+  - `866a2b3`: `lostcost` by site;
+  - `400d486`: `--provider`;
+  - `d34c48e`: the pre-flight and the booked acceptance;
+  - this commit: P4.11 built and accepted, P4.12 booked, this log.
+- `main` is untouched at `b2a3fd8`.
+- **1898 tests green.**
+- Ledger **38 of 53 rows** (P4.11 ticked, P4.12 new), **9 of 14 buckets**. In
+  progress: P0.4 and P5.2.
+- **Not on `main`:** P0.6, P4.6, P3.7, P4.7, P4.5, P4.10, P4.11 (product
+  changes) and P3.15 (tooling and docs only).
+
+**Next work.**
+1. The rows the four open buckets wait on: P3.2 (B6), P3.3 (B11), P3.4 (B9)
+   and P4.3 (B8). Read each row in full first.
+2. P4.12, when the user wants it. Start with the Worker half: a seam lever
+   for a benign change of bytes on `worker --as-sent`, drawn with `--at-rev
+   recorded --date recorded` on the stored (b) payloads. Mind the runaway risk
+   (6369, 6409), about $0.77 a draw.
+
+**Instruments added this session (use them, don't rebuild):**
+- `seam_replay worker --as-sent --at-rev recorded` (with `--date recorded`).
+  **Check the dry run's `sent_chars` against the record before drawing.**
+  It cannot restore P3.7's instrument-lookup block, which code appends to
+  the brief and the audit does not record: a Worker payload from a head at
+  or after `475ef57` whose brief named an instrument by number is not
+  faithful even at its head (possibly why `wave4_p37_reach`/p37r_6374 r1 t2
+  did not rebuild).
+- `seam_replay worker --as-sent --provider google-vertex|google-ai-studio`.
+- `replay_report lostcost`: the retry yield by site.
+
+**Open with the user (carried forward):**
+- The Fix Tracker has not been updated this session. P4.11 would become
+  Fixed (`fixed: "2026-09-25"`, `ver: "Next release"`), and P4.12 is a new
+  row. Update it only when asked.
+- Push the two release tags? Deploy by tag? (docs/TODO.md D19)
+- Whether P0.6, P4.6, P3.7, P4.7, P4.5, P4.10, P4.11 and P3.15 go in the next
+  cut: v2026.09.3, or v2026.10.1 in October.
+- Deploy both cuts to the target: `pg_dump` first, then pull, restart,
+  `test_apis.ps1`, one real question; P0.7's query with it.
+- Tell the lexchat-eval harness owner:
+  - schema v6 on the branch (`delegations[].lost`);
+  - `tool_end`'s outcome wording;
+  - `lookup_legislation` in `tools[]`;
+  - Deep Research headings follow the research type;
+  - a Worker's heavy empty, **and now its upstream idle timeout**, leaves one
+    `attempt: 1, retried: false` record.
+- D20 (show a step's outcome in the UI); P5.2 (external); Thomas's review
+  document.
+- Session 29's unread observation (the held-Act slot made no claim in 5 of 9
+  reps) is still unread.
+
+**Machine state:** no uvicorn, no http.server, no pin file, no worktrees, no
+seam processes. The dev box is on its normal settings. The draw drivers, their
+logs and the answer texts are in the session scratchpad only. Every number
+from them is in BASELINE.md, and the seam commands there re-draw them.

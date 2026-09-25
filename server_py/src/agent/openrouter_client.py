@@ -365,8 +365,9 @@ async def chat_loop(
                     sent_chars=total_chars,
                     turn=_turn,
                 )
-                # P4.10: a worker's heavy empty is not retried; it goes to
-                # P4.5's lost-report label and the Manager re-delegates.
+                # P4.10/P4.11: a worker's heavy empty or upstream idle timeout
+                # is not retried; it goes to P4.5's lost-report label and the
+                # Manager re-delegates.
                 retrying = should_retry_empty(
                     probe, attempt=attempt, attempts_max=_MAX_STREAM_ATTEMPTS,
                     worker_call=worker_call)

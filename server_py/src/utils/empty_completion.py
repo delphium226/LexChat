@@ -80,8 +80,9 @@ def is_empty_completion(content: str, tool_calls: Any) -> bool:
 #     96% of clean research turns could have reached it;
 #   * no retry of an empty completion that reasoned heavily. It returns empty
 #     at once into P4.5's lost-report label, and the Manager re-delegates. A
-#     light empty (a stream error, a clean stop with nothing, a rate limit) is
-#     retried as before: after a rate limit the retry answered 13 times in 14.
+#     light empty (a clean stop with nothing, a rate limit) is retried as
+#     before: after a rate limit the retry answered 13 times in 14. (An
+#     upstream idle timeout is light too, but is not retried: P4.11, below.)
 #
 # The Manager, the planner and the synthesis are not Worker calls: no heavy
 # empty was ever measured there, and a lost Manager reply has no re-delegation
@@ -104,15 +105,42 @@ def is_heavy_empty(probe: dict) -> bool:
         return False
 
 
+# ---------------------------------------------------------------------------
+# P4.11 — an upstream idle timeout, on a Worker call
+# ---------------------------------------------------------------------------
+#
+# The other slow empty: the stream ends `finish_reason=error`, "Upstream idle
+# timeout exceeded", after ~130-310 tokens and ~125-190 s. It costs ~$0 but a
+# retry costs the same wait again, and a retry resends identical bytes: redrawn
+# as sent (BASELINE.md, "The latency of an upstream idle timeout"), the next
+# draw of a (b) payload was (b) again 11 times in 11, and the recorded Worker
+# retries answered 1 time in 14. The same payloads also ran away ((a)), and one
+# changed line of the prompt cured both, so it is a property of the bytes. A
+# re-delegation sends new bytes, and the Manager redid 3 of 5 such calls. So,
+# on a Worker call only, it is not retried either. A rate limit is also a
+# stream error and IS retried: its retry answered 13 times in 14.
+IDLE_TIMEOUT_MARKER = "idle timeout"
+
+
+def is_idle_timeout(probe: dict) -> bool:
+    """An empty completion whose stream the upstream dropped as idle."""
+    try:
+        err = probe.get("stream_error")
+        return isinstance(err, str) and IDLE_TIMEOUT_MARKER in err.lower()
+    except Exception:
+        return False
+
+
 def should_retry_empty(probe: dict, *, attempt: int, attempts_max: int,
                        worker_call: bool) -> bool:
-    """P4.2's bounded retry, less a Worker call's heavy empty (P4.10).
+    """P4.2's bounded retry, less a Worker call's heavy empty (P4.10) and its
+    upstream idle timeout (P4.11).
 
     `attempt` is 0-based, as in the `chat_loop` loops.
     """
     if attempt >= attempts_max - 1:
         return False
-    return not (worker_call and is_heavy_empty(probe))
+    return not (worker_call and (is_heavy_empty(probe) or is_idle_timeout(probe)))
 
 
 def build_probe(

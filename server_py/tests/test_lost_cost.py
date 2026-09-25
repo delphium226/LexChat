@@ -167,7 +167,9 @@ async def test_the_same_heavy_empty_off_a_worker_is_retried_as_before(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("body", [_OR_IDLE, _OR_BARE], ids=["b_idle", "c_bare"])
+# P4.11 reversed the (b) case, a Worker's upstream idle timeout, which is no
+# longer retried: see test_idle_timeout.py. (d) is retried there.
+@pytest.mark.parametrize("body", [_OR_BARE], ids=["c_bare"])
 async def test_a_workers_light_empty_is_still_retried(body, _no_sleep, _mock_http, _audit):
     h = _recording([httpx.Response(200, text=body), httpx.Response(200, text=_OR_CONTENT)])
     _mock_http(h)
