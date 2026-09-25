@@ -10,9 +10,11 @@ import httpx
 
 from ..config import OPENROUTER_MODEL_LIST, settings
 from ..utils.empty_completion import (
+    WORKER_MAX_OUTPUT_TOKENS,
     build_probe,
     is_empty_completion,
     report_empty_completion,
+    should_retry_empty,
 )
 from ..utils.discovery_budget import set_react_round
 from ..utils.research_halt import halt_marker_text, run_halt_writeup
@@ -157,8 +159,16 @@ async def chat_loop(
     _turn: int = 0,
     max_turns: int = 20,
     _final_round: bool = False,
+    worker_call: bool = False,
 ) -> dict:
-    """Core ReAct loop using OpenRouter's OpenAI-compatible streaming API."""
+    """Core ReAct loop using OpenRouter's OpenAI-compatible streaming API.
+
+    `worker_call` (P4.10) is set by `run_worker_agent` alone: the payload then
+    carries `max_tokens` (WORKER_MAX_OUTPUT_TOKENS), and an empty completion
+    that reasoned heavily is not retried. It is forwarded through the ReAct
+    recursion and the step-cap write-up, so every call a worker run makes has
+    it. Every other caller's payload and retry are unchanged.
+    """
     if cancel_event and cancel_event.is_set():
         raise asyncio.CancelledError("Aborted")
 
@@ -182,7 +192,7 @@ async def chat_loop(
         writeup = "" if _final_round else await run_halt_writeup(
             chat_loop, messages, model, cancel_event, num_ctx, on_chunk,
             emit_tool_details, timing_collector, _turn, max_turns,
-            log_prefix="[OpenRouter]",
+            log_prefix="[OpenRouter]", worker_call=worker_call,
         )
         if writeup:
             logger.info("[OpenRouter] Step cap: partial findings written up (%d chars)", len(writeup))
@@ -207,8 +217,12 @@ async def chat_loop(
     if openai_tools:
         payload["tools"] = openai_tools
         payload["tool_choice"] = "auto"
+    if worker_call:
+        # P4.10: one attempt's output, reasoning included, is bounded. On the
+        # seam a capped runaway ended at ~96% of the cap instead of ~62,900.
+        payload["max_tokens"] = WORKER_MAX_OUTPUT_TOKENS
 
-    total_chars = sum(len(str(m.get("content", "") or "")) for m in messages)
+    total_chars =sum(len(str(m.get("content", "") or "")) for m in messages)
     logger.info(
         f"[OpenRouter] Sending request (model={model}, tools={len(tools)}, "
         f"msgs={len(messages)}, ~{total_chars} chars)..."
@@ -338,23 +352,25 @@ async def chat_loop(
             # P4.2 (B13). The stream finished cleanly. If it carried nothing,
             # this is the blank-reply failure — retry it like a stall.
             if is_empty_completion(full_content, tool_calls_map):
-                retrying = attempt < _MAX_STREAM_ATTEMPTS - 1
-                report_empty_completion(
-                    build_probe(
-                        provider="OpenRouter",
-                        model=model,
-                        attempt=attempt,
-                        attempts_max=_MAX_STREAM_ATTEMPTS,
-                        finish_reason=finish_reason,
-                        native_finish_reason=native_finish_reason,
-                        reasoning_chars=reasoning_chars,
-                        stream_error=stream_error,
-                        usage=usage_stats,
-                        sent_chars=total_chars,
-                        turn=_turn,
-                    ),
-                    retrying=retrying,
+                probe = build_probe(
+                    provider="OpenRouter",
+                    model=model,
+                    attempt=attempt,
+                    attempts_max=_MAX_STREAM_ATTEMPTS,
+                    finish_reason=finish_reason,
+                    native_finish_reason=native_finish_reason,
+                    reasoning_chars=reasoning_chars,
+                    stream_error=stream_error,
+                    usage=usage_stats,
+                    sent_chars=total_chars,
+                    turn=_turn,
                 )
+                # P4.10: a worker's heavy empty is not retried; it goes to
+                # P4.5's lost-report label and the Manager re-delegates.
+                retrying = should_retry_empty(
+                    probe, attempt=attempt, attempts_max=_MAX_STREAM_ATTEMPTS,
+                    worker_call=worker_call)
+                report_empty_completion(probe, retrying=retrying)
                 if retrying:
                     # The abandoned attempt was billed. Bank it before the reset
                     # so the request's recorded cost stays honest — under-reporting
@@ -395,6 +411,15 @@ async def chat_loop(
                 body = "(body unreadable)"
             logger.error(f"[OpenRouter] HTTP {e.response.status_code}: {body}")
             raise
+
+    if worker_call and finish_reason == "length" and full_content.strip():
+        # P4.10 watch item: the cap ended a call that was still writing, so the
+        # report may be cut. By cost it should be rare; this is how to see it.
+        logger.warning(
+            f"[OpenRouter] Worker call reached the {WORKER_MAX_OUTPUT_TOKENS}-token "
+            f"output cap with {len(full_content)} chars of content — the report "
+            f"may be cut (react_turn={_turn})"
+        )
 
     # Record timing
     if timing_collector:
@@ -510,6 +535,7 @@ async def chat_loop(
             _turn=_turn + 1,
             max_turns=max_turns,
             _final_round=_final_round,
+            worker_call=worker_call,
         )
 
     return assistant_message

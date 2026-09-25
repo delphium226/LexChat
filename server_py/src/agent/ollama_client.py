@@ -11,6 +11,7 @@ from ..utils.empty_completion import (
     build_probe,
     is_empty_completion,
     report_empty_completion,
+    should_retry_empty,
 )
 from ..utils.discovery_budget import set_react_round
 from ..utils.research_halt import halt_marker_text, run_halt_writeup
@@ -64,8 +65,13 @@ async def chat_loop(
     _turn: int = 0,
     max_turns: int = 20,
     _final_round: bool = False,
+    worker_call: bool = False,
 ) -> dict:
     """Core ReAct loop: stream from Ollama, handle tool calls, recurse.
+
+    `worker_call` (P4.10): an empty completion that reasoned heavily is not
+    retried, as in the OpenRouter loop. The output cap is NOT applied here:
+    what `num_predict` does to an Ollama cloud model's reasoning is unmeasured.
 
     Args:
         messages: Conversation history.
@@ -102,7 +108,7 @@ async def chat_loop(
         writeup = "" if _final_round else await run_halt_writeup(
             chat_loop, messages, model, cancel_event, num_ctx, on_chunk,
             emit_tool_details, timing_collector, _turn, max_turns,
-            log_prefix="[ChatLoop]",
+            log_prefix="[ChatLoop]", worker_call=worker_call,
         )
         if writeup:
             logger.info("[ChatLoop] Step cap: partial findings written up (%d chars)", len(writeup))
@@ -223,22 +229,23 @@ async def chat_loop(
             # P4.2 (B13). A clean stream that carried nothing is the blank-reply
             # failure, not a finished answer — retry it like a stall.
             if is_empty_completion(full_content, tool_calls):
-                retrying = attempt < _MAX_STREAM_ATTEMPTS - 1
-                report_empty_completion(
-                    build_probe(
-                        provider="Ollama",
-                        model=model,
-                        attempt=attempt,
-                        attempts_max=_MAX_STREAM_ATTEMPTS,
-                        finish_reason=finish_reason,
-                        reasoning_chars=reasoning_chars,
-                        stream_error=stream_error,
-                        usage=final_stats,
-                        sent_chars=total_chars,
-                        turn=_turn,
-                    ),
-                    retrying=retrying,
+                probe = build_probe(
+                    provider="Ollama",
+                    model=model,
+                    attempt=attempt,
+                    attempts_max=_MAX_STREAM_ATTEMPTS,
+                    finish_reason=finish_reason,
+                    reasoning_chars=reasoning_chars,
+                    stream_error=stream_error,
+                    usage=final_stats,
+                    sent_chars=total_chars,
+                    turn=_turn,
                 )
+                # P4.10: a worker's heavy empty is not retried.
+                retrying = should_retry_empty(
+                    probe, attempt=attempt, attempts_max=_MAX_STREAM_ATTEMPTS,
+                    worker_call=worker_call)
+                report_empty_completion(probe, retrying=retrying)
                 if retrying:
                     await asyncio.sleep(_STREAM_RETRY_BASE_S * (2 ** attempt))
                     continue
@@ -369,6 +376,7 @@ async def chat_loop(
             _turn=_turn + 1,
             max_turns=max_turns,
             _final_round=_final_round,
+            worker_call=worker_call,
         )
 
     return message

@@ -107,7 +107,7 @@ def _chat_loop_returning(*contents):
     calls = []
 
     async def chat_loop(messages, model, cancel_event, num_ctx, tools, tool_executor,
-                        on_chunk, emit_tool_details=False, timing_collector=None):
+                        on_chunk, emit_tool_details=False, timing_collector=None, worker_call=False):
         calls.append({"messages": messages, "tools": tools})
         return {"content": seq[len(calls) - 1]}
 

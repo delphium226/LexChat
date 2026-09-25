@@ -80,7 +80,7 @@ def _worker_loop(tool_calls, final_content, calls=None):
     """A worker chat_loop that runs `tool_calls`, then returns `final_content`
     (what `chat_loop` returns after three empty attempts is "")."""
     async def chat_loop(messages, model, cancel_event, num_ctx, tools, executor,
-                        on_chunk=None, emit_tool_details=False, timing_collector=None):
+                        on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False):
         if calls is not None:
             calls.append(tools)
         for name, args in tool_calls:
@@ -91,7 +91,7 @@ def _worker_loop(tool_calls, final_content, calls=None):
 
 @pytest.fixture
 def _fake_tools(monkeypatch):
-    async def fake_execute(name, args, on_chunk=None, timing_collector=None):
+    async def fake_execute(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         return json.dumps({"results": []})
     monkeypatch.setattr("src.agent.agent_shared.execute_worker_tool", fake_execute)
 
@@ -415,7 +415,7 @@ def _step_worker(lost_steps):
 
 def _synthesis(capture, content="INTEGRATED REPORT."):
     async def chat_loop(messages, model, cancel_event, num_ctx, tools, executor,
-                        on_chunk, emit_tool_details=False, timing_collector=None):
+                        on_chunk, emit_tool_details=False, timing_collector=None, worker_call=False):
         capture.append(messages)
         return {"content": content}
     return chat_loop

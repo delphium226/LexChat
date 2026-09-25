@@ -92,7 +92,7 @@ _SEARCH = {"results": [
 def calls(monkeypatch):
     seen = []
 
-    async def fake_exec(name, args, on_chunk=None, timing_collector=None):
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         seen.append((name, dict(args)))
         if name == "search_legislation":
             return json.dumps(_SEARCH)
@@ -357,7 +357,7 @@ async def test_the_parliamentary_budget_still_counts_calls_not_rounds(monkeypatc
                                  "_research_mode": "parliamentary_records"})
     ran = []
 
-    async def fake_parl(name, args, on_chunk=None, timing_collector=None):
+    async def fake_parl(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         ran.append(name)
         return json.dumps({"results": [], "total": 0})
 
@@ -378,7 +378,7 @@ async def test_a_parliamentary_memo_hit_is_still_served_after_the_budget(monkeyp
                                  "_research_mode": "parliamentary_records"})
     ran = []
 
-    async def fake_parl(name, args, on_chunk=None, timing_collector=None):
+    async def fake_parl(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         ran.append(name)
         return json.dumps({"results": [{"meeting_id": 1}], "total": 1})
 
@@ -394,7 +394,7 @@ async def test_a_parliamentary_memo_hit_is_still_served_after_the_budget(monkeyp
 @pytest.mark.asyncio
 async def test_a_parliamentary_tool_name_under_a_legislation_budget_is_not_a_keyerror(
         calls, monkeypatch):
-    async def fake_parl(name, args, on_chunk=None, timing_collector=None):
+    async def fake_parl(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         return json.dumps({"results": [], "total": 0})
 
     monkeypatch.setattr(agent_shared, "execute_parliament_tool", fake_parl)
@@ -512,7 +512,7 @@ async def _worker_run(monkeypatch, rounds, research_mode="legislation_only"):
                                  "model": "test-model", "_tool_memo_enabled": False})
 
     async def loop(messages, model, cancel_event, num_ctx, tools, executor,
-                   on_chunk=None, emit_tool_details=False, timing_collector=None):
+                   on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False):
         for i, round_calls in enumerate(rounds):
             set_react_round(i)
             for name, args in round_calls:
@@ -591,7 +591,7 @@ _PLAN = {"scope_note": "", "steps": [
 
 
 async def _synthesis(messages, model, cancel_event, num_ctx, tools, tool_executor,
-                     on_chunk=None, emit_tool_details=False, timing_collector=None):
+                     on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False):
     _synthesis.seen = messages[-1]["content"]
     return {"role": "assistant", "content": "Integrated report."}
 

@@ -288,6 +288,10 @@ async def run_worker_agent(
             worker_tools, worker_tool_executor, None,  # on_chunk=None for worker to avoid mixing tokens
             emit_tool_details=emit_tool_details,
             timing_collector=timing_collector,
+            # P4.10: this loop's calls are capped, and a heavy empty is not
+            # retried (it falls into the lost-report label below). The Manager,
+            # planner, synthesis and the A4 reformat do not pass it.
+            worker_call=True,
         )
     except BaseException as e:
         # Close the audit delegation on the failure path too — a trace that

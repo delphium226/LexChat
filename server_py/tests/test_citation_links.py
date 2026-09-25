@@ -241,7 +241,7 @@ def _chat_loop_that_cites(report: str, tool_call: bool):
     calls = []
 
     async def chat_loop(messages, model, cancel_event, num_ctx, tools, tool_executor,
-                        on_chunk, emit_tool_details=False, timing_collector=None):
+                        on_chunk, emit_tool_details=False, timing_collector=None, worker_call=False):
         calls.append(messages)
         if tool_call and len(calls) == 1:
             await tool_executor(

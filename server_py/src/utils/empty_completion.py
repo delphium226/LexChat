@@ -60,6 +60,61 @@ def is_empty_completion(content: str, tool_calls: Any) -> bool:
     return not (content or "").strip() and not tool_calls
 
 
+# ---------------------------------------------------------------------------
+# P4.10 — what a lost completion costs, on a Worker call
+# ---------------------------------------------------------------------------
+#
+# On the pinned model a Worker call sometimes reasons until it has spent about
+# 96% of its output budget and then emits nothing: ~62,900 reasoning tokens
+# (~$0.76 and ~6 minutes) per attempt, and the retry above paid it up to three
+# times. Measured (BASELINE.md, "The cost of a lost completion"): 8 such calls
+# in 930 v3 turns cost $12.38 and 7,073 s over their slots' medians; the retry
+# after one answered 2 times in 12, and the Manager's re-delegation made good
+# 6 of 6. On the seam, a `max_tokens` cap ended the same failure at 96% of the
+# cap (so the cap bounds it, it does not cure it), and a lower reasoning effort
+# did not bound it at all. Hence two rules, Worker calls only:
+#
+#   * a cap on the call's output (reasoning included), so one attempt costs at
+#     most WORKER_MAX_OUTPUT_TOKENS — OpenRouter's `max_tokens`. Chosen so it
+#     cannot bind on a healthy call: by cost, no clean conversational turn and
+#     96% of clean research turns could have reached it;
+#   * no retry of an empty completion that reasoned heavily. It returns empty
+#     at once into P4.5's lost-report label, and the Manager re-delegates. A
+#     light empty (a stream error, a clean stop with nothing, a rate limit) is
+#     retried as before: after a rate limit the retry answered 13 times in 14.
+#
+# The Manager, the planner and the synthesis are not Worker calls: no heavy
+# empty was ever measured there, and a lost Manager reply has no re-delegation
+# to fall back on.
+WORKER_MAX_OUTPUT_TOKENS = 32_000
+
+# The instrument's own threshold for mechanism (a) (`replay_report
+# .empty_mechanism`): the stored (a) attempts sit at 62,912-65,556 tokens and
+# every other empty at 0-310, so there are orders of magnitude either side.
+HEAVY_EMPTY_TOKENS = 10_000
+HEAVY_EMPTY_REASONING_CHARS = 20_000
+
+
+def is_heavy_empty(probe: dict) -> bool:
+    """An empty completion that spent a reasoning budget to produce nothing."""
+    try:
+        return (int(probe.get("completion_tokens") or 0) >= HEAVY_EMPTY_TOKENS
+                or int(probe.get("reasoning_chars") or 0) >= HEAVY_EMPTY_REASONING_CHARS)
+    except Exception:
+        return False
+
+
+def should_retry_empty(probe: dict, *, attempt: int, attempts_max: int,
+                       worker_call: bool) -> bool:
+    """P4.2's bounded retry, less a Worker call's heavy empty (P4.10).
+
+    `attempt` is 0-based, as in the `chat_loop` loops.
+    """
+    if attempt >= attempts_max - 1:
+        return False
+    return not (worker_call and is_heavy_empty(probe))
+
+
 def build_probe(
     *,
     provider: str,

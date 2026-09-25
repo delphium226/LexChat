@@ -331,7 +331,7 @@ async def test_the_block_is_appended_to_what_the_worker_actually_receives(monkey
         "_jurisdiction": "scotland", "model": "test-model",
     })
     try:
-        async def fake_exec(name, args, on_chunk=None, timing_collector=None):
+        async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
             return json.dumps(_search_result())
 
         monkeypatch.setattr(agent_shared, "execute_worker_tool", fake_exec)
@@ -353,7 +353,7 @@ async def test_section_search_gets_one_too(monkeypatch):
 
     set_request_provider_config({"_provider": "openrouter", "model": "test-model"})
     try:
-        async def fake_exec(name, args, on_chunk=None, timing_collector=None):
+        async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
             return json.dumps({"results": [], "returned": 0})
 
         monkeypatch.setattr(agent_shared, "execute_worker_tool", fake_exec)
@@ -409,7 +409,7 @@ async def test_the_synthesis_payload_carries_it_end_to_end():
     seen = {}
 
     async def synthesis(messages, model, cancel_event, num_ctx, tools, executor,
-                        on_chunk, emit_tool_details=False, timing_collector=None):
+                        on_chunk, emit_tool_details=False, timing_collector=None, worker_call=False):
         seen["user"] = messages[-1]["content"]
         return {"content": "INTEGRATED REPORT"}
 
@@ -450,7 +450,7 @@ async def test_a_clean_deep_research_payload_is_unchanged():
     seen = {}
 
     async def synthesis(messages, model, cancel_event, num_ctx, tools, executor,
-                        on_chunk, emit_tool_details=False, timing_collector=None):
+                        on_chunk, emit_tool_details=False, timing_collector=None, worker_call=False):
         seen["user"] = messages[-1]["content"]
         return {"content": "INTEGRATED REPORT"}
 
@@ -585,11 +585,11 @@ async def test_the_block_lands_on_the_report_the_manager_reads(monkeypatch):
         "_jurisdiction": "scotland", "model": "test-model", "_tool_memo_enabled": False,
     })
 
-    async def fake_exec(name, args, on_chunk=None, timing_collector=None):
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         return json.dumps(_search_result())
 
     async def chat_loop(messages, model, cancel_event, num_ctx, tools, executor,
-                        on_chunk=None, emit_tool_details=False, timing_collector=None):
+                        on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False):
         await executor("search_legislation", {"query": "commencement regulations"})
         return {"role": "assistant", "content": (
             "1. **Summary Answer (BLUF):** No commencement regulations were found.\n"
@@ -626,11 +626,11 @@ async def test_the_block_does_not_mark_a_source_as_cited(monkeypatch):
         "model": "test-model", "_tool_memo_enabled": False,
     })
 
-    async def fake_exec(name, args, on_chunk=None, timing_collector=None):
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         return json.dumps(_search_result(shown=1))
 
     async def chat_loop(messages, model, cancel_event, num_ctx, tools, executor,
-                        on_chunk=None, emit_tool_details=False, timing_collector=None):
+                        on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False):
         await executor("search_legislation_sections",
                        {"query": "s 5", "legislation_id": "asp/2018/0"})
         return {"role": "assistant", "content": (
@@ -760,12 +760,12 @@ async def test_the_footer_reaches_the_answer_and_sits_after_the_sources(monkeypa
         "model": "test-model", "_tool_memo_enabled": False,
     })
 
-    async def fake_exec(name, args, on_chunk=None, timing_collector=None):
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         return json.dumps(_search_result())
 
     async def worker_chat_loop(messages, model, cancel_event, num_ctx, tools,
                                executor, on_chunk=None, emit_tool_details=False,
-                               timing_collector=None):
+                               timing_collector=None, worker_call=False):
         await executor("search_legislation", {"query": "commencement regulations"})
         return {"role": "assistant", "content": (
             "1. **Summary Answer (BLUF):** Nothing found.\n"
@@ -1109,7 +1109,7 @@ async def test_the_enabling_block_reaches_what_the_worker_actually_receives(monk
 
     set_request_provider_config({"_provider": "openrouter", "model": "test-model"})
     try:
-        async def fake_exec(name, args, on_chunk=None, timing_collector=None):
+        async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
             return json.dumps(_text_result(description=_REAL_RECITAL))
 
         monkeypatch.setattr(agent_shared, "execute_worker_tool", fake_exec)
@@ -1128,7 +1128,7 @@ async def test_an_instrument_with_no_preamble_gets_the_prohibition(monkeypatch):
 
     set_request_provider_config({"_provider": "openrouter", "model": "test-model"})
     try:
-        async def fake_exec(name, args, on_chunk=None, timing_collector=None):
+        async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
             return json.dumps(_text_result(description=_NOT_A_RECITAL))
 
         monkeypatch.setattr(agent_shared, "execute_worker_tool", fake_exec)
@@ -1155,14 +1155,14 @@ async def test_the_whole_seam_end_to_end(monkeypatch):
 
     set_request_provider_config({"_provider": "openrouter", "model": "test-model"})
 
-    async def fake_exec(name, args, on_chunk=None, timing_collector=None):
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         if name == "search_legislation":
             return json.dumps(_search_result())
         return json.dumps(_text_result(description=_NOT_A_RECITAL))
 
     async def worker_chat_loop(messages, model, cancel_event, num_ctx, tools,
                                executor, on_chunk=None, emit_tool_details=False,
-                               timing_collector=None):
+                               timing_collector=None, worker_call=False):
         await executor("search_legislation", {"query": "social security"})
         await executor("get_legislation_text", {"legislation_id": "ssi/2018/273"})
         return {"role": "assistant", "content": (
@@ -1693,12 +1693,12 @@ async def _p28_turn(monkeypatch, messages, manager, worker=None):
         "model": "test-model", "_tool_memo_enabled": False,
     })
 
-    async def fake_exec(name, args, on_chunk=None, timing_collector=None):
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         return json.dumps(_search_result())
 
     async def worker_chat_loop(messages, model, cancel_event, num_ctx, tools,
                                executor, on_chunk=None, emit_tool_details=False,
-                               timing_collector=None):
+                               timing_collector=None, worker_call=False):
         await executor("search_legislation", {"query": "this turn's own search"})
         return {"role": "assistant", "content": (
             "1. **Summary Answer (BLUF):** Found.\n"

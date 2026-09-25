@@ -176,6 +176,7 @@ async def run_halt_writeup(
     turn: int,
     limit: int,
     log_prefix: str = "[ChatLoop]",
+    worker_call: bool = False,
 ) -> str:
     """One bounded, tool-free call at the step cap. Returns the write-up or "".
 
@@ -186,6 +187,9 @@ async def run_halt_writeup(
     the plain halt. Fail-soft on any error — the caller then returns exactly
     what it returned before this existed. A cancel is a `BaseException` and
     still propagates.
+
+    `worker_call` (P4.10) is the calling loop's own, passed on so the write-up
+    round of a worker run is capped and retried as every other round of it is.
     """
     async def _no_tools(name: str, args: dict) -> str:
         return _NO_TOOLS_AT_CAP
@@ -199,6 +203,7 @@ async def run_halt_writeup(
             _turn=turn,
             max_turns=turn + 1,
             _final_round=True,
+            worker_call=worker_call,
         )
     except Exception as e:  # noqa: BLE001 — fail-soft by design; see docstring
         logger.warning(
