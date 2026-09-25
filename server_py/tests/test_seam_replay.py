@@ -566,6 +566,98 @@ def test_the_manager_is_offered_its_tools_unless_told_not_to(tmp_path, monkeypat
     assert ("delegate_research" in names) is offered
 
 
+# --- P3.15: manager --first-round ------------------------------------------------
+
+def _p315_doc():
+    """p37_6409-shaped: export turn 9 looks SSI 2025/377 up (not held), and
+    export turn 11 is answered from history."""
+    look = {"name": "lookup_legislation", "args": {},
+            "raw_result": json.dumps({"legislation_id": "ssi/2025/377",
+                                      "status": "not_held", "routed_by_code": True})}
+    return {
+        "session_id": "p37_6409", "rep": 1,
+        "script": {"base": "6409", "turns": [{"from_turn": 9}, {"from_turn": 11}]},
+        "filters": {"research_mode": "legislation_only"},
+        "runtime_state": {"model": "m"},
+        "turns": [
+            {"turn": 1, "question": "Q9", "chat_mode": "conversational",
+             "answer": "SSI 2025/377 is not held in this index.",
+             "audit": {"delegations": [{"step": None, "brief": "Find SSI 2025/377",
+                                        "report": "r", "tools": [look]}]}},
+            {"turn": 2, "question": "Q11", "chat_mode": "conversational",
+             "answer": "A", "audit": {"delegations": []}},
+        ],
+    }
+
+
+def test_the_manager_head_is_the_first_round_of_a_from_history_turn():
+    doc = _p315_doc()
+    msgs, cfg = sr.manager_head(doc, doc["turns"][1])
+    assert [m["role"] for m in msgs] == ["system", "user", "assistant", "user"]
+    assert msgs[-1]["content"].endswith("Q11")
+    # the composition seam still refuses a turn with nothing to compose from,
+    # and starts with the same head
+    with pytest.raises(SystemExit):
+        sr.manager_messages(doc, doc["turns"][1])
+    head, _ = sr.manager_head(doc, doc["turns"][0])
+    assert sr.manager_messages(doc, doc["turns"][0])[:2] == sr._strip_stamps(head)
+    # --date pins the Manager prompt's date line and changes nothing else
+    pinned, _ = sr.manager_head(doc, doc["turns"][1], on_date=sr.date(2026, 9, 24))
+    assert "Today's date is 24 September 2026." in pinned[0]["content"]
+    assert pinned[0]["content"].replace(
+        "Today's date is 24 September 2026.",
+        sr.worker_date_line(sr.date.today()), 1) == msgs[0]["content"]
+    assert pinned[1:] == msgs[1:]
+
+
+@pytest.mark.parametrize("answer,verdict", [
+    ("The text of SSI 2025/377 is not available here.", "FAIL"),
+    ("This index does not hold SSI 2025/377 itself.", "PASS"),
+])
+def test_a_manager_first_round_answer_is_graded_by_lookup(tmp_path, monkeypatch, capsys,
+                                                         answer, verdict):
+    p = tmp_path / "p37_6409_rep1.json"
+    p.write_text(json.dumps(_p315_doc()), encoding="utf-8")
+    seen = {}
+
+    async def fake_cfg(extra):
+        return {"model": "m", **extra}
+
+    async def fake_first(messages, cfg, tools):
+        seen["tools"] = [t["function"]["name"] for t in tools]
+        seen["roles"] = [m["role"] for m in messages]
+        return answer, [], 0.01, "m"
+
+    monkeypatch.setattr(sr, "_provider_cfg", fake_cfg)
+    monkeypatch.setattr(sr, "run_first_round", fake_first)
+    assert sr.main(["manager", "--run", str(p), "--turn", "2", "--first-round"]) == 0
+    out = capsys.readouterr().out
+    assert "delegate_research" in seen["tools"]
+    assert seen["roles"][-1] == "user"
+    assert "ANSWERED FROM HISTORY" in out
+    assert f"lookup: ssi/2025/377 {verdict}" in out
+
+
+def test_a_manager_first_round_delegation_prints_the_numbers_its_brief_names(
+        tmp_path, monkeypatch, capsys):
+    p = tmp_path / "p37_6409_rep1.json"
+    p.write_text(json.dumps(_p315_doc()), encoding="utf-8")
+
+    async def fake_cfg(extra):
+        return {"model": "m", **extra}
+
+    async def fake_first(messages, cfg, tools):
+        return "", [("delegate_research",
+                     json.dumps({"query": "Commencement of 2025 asp 2 by SSI 2025/377"}))], 0.01, "m"
+
+    monkeypatch.setattr(sr, "_provider_cfg", fake_cfg)
+    monkeypatch.setattr(sr, "run_first_round", fake_first)
+    assert sr.main(["manager", "--run", str(p), "--turn", "1", "--first-round"]) == 0
+    out = capsys.readouterr().out
+    assert "its first brief named 2025/377" in out
+    assert "DELEGATED: delegate_research" in out
+    assert "brief names: 2025 asp 2, 2025/377" in out
+
 
 # --- P4.5: --apply-lost -------------------------------------------------------
 

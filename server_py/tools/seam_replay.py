@@ -807,6 +807,68 @@ def manager_cfg(doc: dict, turn: dict, messages: list) -> dict:
                                 chat_mode=body.chat_mode)
 
 
+def manager_head(doc: dict, turn: dict, without_fix: bool = False,
+                 rev: str = PRE_P31_REV, on_date: Optional[date] = None) -> tuple:
+    """The Manager's prompt and the conversation up to this turn's question,
+    before any delegation: (messages, cfg). The start of `manager_messages`,
+    and the whole of the Manager's first round (`--first-round`, P3.15).
+    `without_fix` swaps the conversational Manager body for the one at `rev`.
+    `on_date` replaces the prompt's date line, as `--as-sent --date` does for
+    the Worker (P4.10: that line alone decided what a stored payload drew).
+    Messages keep the client's mode stamps; callers strip them."""
+    from src.prompts import get_manager_system_prompt
+    from src.utils.mode_change import apply_mode_change_marker
+
+    history = manager_history(doc, turn.get("turn"))
+    cfg = manager_cfg(doc, turn, history)
+    system = get_manager_system_prompt(cfg["_research_mode"], cfg)
+    if without_fix:
+        # The constant at `rev` is the triple-quoted literal alone; the live
+        # body is that literal plus the research-mode hint appended to it.
+        import src.prompts as prompts
+        live = prompts._MANAGER_CONV_BODY
+        hint = prompts.RESEARCH_MODE_HINT_ON
+        literal = live[:-len(hint)] if live.endswith(hint) else live
+        if literal not in system:
+            raise SystemExit("--without-fix: the live conversational body is not in the prompt")
+        system = system.replace(literal, _prompt_constant_at(rev, "_MANAGER_CONV_BODY"), 1)
+    if on_date is not None:
+        today = worker_date_line(date.today())
+        if today not in system:
+            raise SystemExit("the Manager prompt's date line has changed shape; "
+                             "--date cannot pin it")
+        system = system.replace(today, worker_date_line(on_date), 1)
+    messages = [{"role": "system", "content": system}, *history]
+    messages, _change = apply_mode_change_marker(messages, cfg)
+    return messages, cfg
+
+
+def _strip_stamps(messages: list) -> list:
+    """The client-side mode stamps are not provider fields."""
+    return [{k: v for k, v in m.items() if k not in ("research_mode", "chat_mode")}
+            for m in messages]
+
+
+def lookup_grade(doc: dict, turn: dict, text: str) -> Optional[dict]:
+    """`replay_report lookup`'s verdict on `text` as this turn's answer given
+    from history (no delegation), where the run file grades a slot here
+    (P3.15). None where it does not."""
+    t2 = {**turn, "answer": text,
+          "audit": {**(turn.get("audit") or {}), "delegations": []}}
+    doc2 = {**doc, "turns": [t2 if t.get("turn") == turn.get("turn") else t
+                             for t in doc.get("turns") or []]}
+    rows = [r for r in rr.lookup_rows(doc2) if r["turn"] == turn.get("turn")]
+    if not rows:
+        return None
+    verdict, why = rr.lookup_verdict(rows[0])
+    return {**rows[0], "verdict": verdict, "why": why}
+
+
+def _named_in(brief: str) -> list:
+    """Instrument numbers a delegation brief names (the drift probe's read)."""
+    return sorted(set(rr.LK_ANY_NUMBER.findall(brief or "")))
+
+
 def manager_messages(doc: dict, turn: dict, without_fix: bool = False,
                      rev: str = PRE_P31_REV, apply_lost: bool = False) -> list:
     """The Manager's composition seam (P3.13): the conversation, then each
@@ -828,28 +890,11 @@ def manager_messages(doc: dict, turn: dict, without_fix: bool = False,
     the bare report. `--apply-lost` (P4.5) hands over a lost-shaped report as
     the product now builds it (`lost_report_for`).
     """
-    from src.prompts import get_manager_system_prompt
-    from src.utils.mode_change import apply_mode_change_marker
-
     dgs = [dg for dg in (turn.get("audit") or {}).get("delegations", [])
            if dg.get("step") is None]
     if not dgs:
         raise SystemExit("this turn has no delegation to compose from")
-    history = manager_history(doc, turn.get("turn"))
-    cfg = manager_cfg(doc, turn, history)
-    system = get_manager_system_prompt(cfg["_research_mode"], cfg)
-    if without_fix:
-        # The constant at `rev` is the triple-quoted literal alone; the live
-        # body is that literal plus the research-mode hint appended to it.
-        import src.prompts as prompts
-        live = prompts._MANAGER_CONV_BODY
-        hint = prompts.RESEARCH_MODE_HINT_ON
-        literal = live[:-len(hint)] if live.endswith(hint) else live
-        if literal not in system:
-            raise SystemExit("--without-fix: the live conversational body is not in the prompt")
-        system = system.replace(literal, _prompt_constant_at(rev, "_MANAGER_CONV_BODY"), 1)
-    messages = [{"role": "system", "content": system}, *history]
-    messages, _change = apply_mode_change_marker(messages, cfg)
+    messages, cfg = manager_head(doc, turn, without_fix, rev)
     for i, dg in enumerate(dgs, 1):
         cid = f"call_{i:02d}"
         messages.append({"role": "assistant", "content": "", "tool_calls": [{
@@ -864,9 +909,7 @@ def manager_messages(doc: dict, turn: dict, without_fix: bool = False,
                          "name": "delegate_research",
                          "content": f"[Research Agent Result]\n{report}" if without_fix
                          else agent_core.worker_result_for_manager(report, cfg)})
-    # Strip the client-side stamps: they are not provider fields.
-    return [{k: v for k, v in m.items() if k not in ("research_mode", "chat_mode")}
-            for m in messages]
+    return _strip_stamps(messages)
 
 
 def _cfg_for(doc: dict, turn: dict) -> dict:
@@ -1013,6 +1056,71 @@ def _first_round_command(args, doc: dict, turn: dict, sid: str) -> int:
     return 0
 
 
+def _manager_first_round_command(args, doc: dict, turn: dict, sid: str) -> int:
+    """`manager --first-round` (P3.15): the Manager's first round of a turn,
+    its tools offered, stopped at the first call. A turn it answers from its
+    history is graded by `replay_report lookup` for the turn's slot; a turn it
+    delegates prints the instrument numbers the brief names, which is the
+    first-delegation drift probe (Session 22: a Manager prompt edit moved the
+    first brief to another Act)."""
+    from src.agent.tools import get_manager_tools
+
+    on_date = as_sent_date(args.date, doc)
+    messages, _cfg = manager_head(doc, turn, args.without_fix, args.rev, on_date)
+    messages = _strip_stamps(messages)
+    tools = get_manager_tools("")
+    recorded = [d for d in (turn.get("audit") or {}).get("delegations", [])
+                if d.get("step") is None]
+    print(f"seam=manager FIRST ROUND  session={sid} turn={args.turn}  "
+          f"{'WITHOUT fix (' + args.rev + ')' if args.without_fix else 'current code'}  "
+          f"date line: {(on_date or date.today()).strftime('%d %B %Y')}")
+    print(f"  payload: {len(messages)} message(s), "
+          f"{sum(len(m.get('content') or '') for m in messages):,} chars; "
+          f"the recorded turn delegated {len(recorded)} time(s)"
+          + (f"; its first brief named {', '.join(_named_in(recorded[0].get('brief'))) or 'no number'}"
+             if recorded else ""))
+    if args.dry_run:
+        return 0
+    cfg = asyncio.run(_provider_cfg(_cfg_for(doc, turn)))
+    total = 0.0
+    for rep in range(1, args.reps + 1):
+        content, calls, cost, model = asyncio.run(run_first_round(messages, cfg, tools))
+        total += cost
+        text = ""
+        if calls:
+            print(f"  rep{rep}: ${cost:.4f}  DELEGATED: "
+                  + ", ".join(n for n, _ in calls) + f"  model={model}")
+            for name, raw in calls:
+                try:
+                    brief = (json.loads(raw or "{}") or {}).get("query") or ""
+                except ValueError:
+                    brief = raw or ""
+                if name == "delegate_research":
+                    print(f"      brief names: {', '.join(_named_in(brief)) or 'no number'}"
+                          f"  ({len(brief):,} chars)")
+                    text += brief + "\n"
+        else:
+            text, _s = extract_suggestions(content)
+            g = lookup_grade(doc, turn, text)
+            print(f"  rep{rep}: ${cost:.4f}  ANSWERED FROM HISTORY: {len(text):,} chars  "
+                  f"model={model}")
+            if g:
+                k = g["kinds"]
+                print(f"      lookup: {g['lid']} {g['verdict']}"
+                      f"{' (not graded)' if not g['graded'] else ''}"
+                      f"{': ' + g['why'] if g['why'] else ''}  (rec {k['record_absent']}, "
+                      f"txt {k['text_only']}, hdg {k['hedged']}, blm {k['blame']})")
+        if args.out and text:
+            d = Path(args.out)
+            d.mkdir(parents=True, exist_ok=True)
+            (d / f"{sid}_t{args.turn}_manager_first{'_nofix' if args.without_fix else ''}"
+                 f"_rep{rep}.md").write_text(text, encoding="utf-8")
+        if args.print:
+            print(text)
+    print(f"  total ${total:.4f}")
+    return 0
+
+
 def main(argv: Optional[list] = None) -> int:
     rr._utf8_stdout()
     p = argparse.ArgumentParser(prog="seam_replay")
@@ -1040,10 +1148,13 @@ def main(argv: Optional[list] = None) -> int:
                         "(a call it makes is refused), because tool-free it "
                         "delivered a payload the live Manager flattened (P3.13)")
     p.add_argument("--first-round", action="store_true",
-                   help="worker seam only (P4.6): the Worker's first round - its "
+                   help="worker seam (P4.6): the Worker's first round - its "
                         "prompt and the brief, with its real tools offered, "
                         "stopped at the first call. Prints the calls it chose, or "
-                        "the report it wrote without searching")
+                        "the report it wrote without searching. Manager seam "
+                        "(P3.15): the Manager's first round of the turn - an "
+                        "answer from history, graded by `replay_report lookup`, "
+                        "or the delegation, with the numbers its brief names")
     p.add_argument("--without-lookup", action="store_true",
                    help="--first-round only (P3.7): leave out the instrument-lookup "
                         "block code appends to the brief, and the lookup tool")
@@ -1063,7 +1174,7 @@ def main(argv: Optional[list] = None) -> int:
                         "the product's Worker call sends 32000; without this flag "
                         "the seam sends none, i.e. the pre-P4.10 payload")
     p.add_argument("--date", default=None,
-                   help="--as-sent only: the Worker prompt's date line: 'recorded' "
+                   help="--as-sent, or manager --first-round: the prompt's date line: 'recorded' "
                         "(the run's started_at) or YYYY-MM-DD; default today. The "
                         "date line alone decided whether a stored (a) payload ran "
                         "away (P4.10, Session 29)")
@@ -1076,8 +1187,10 @@ def main(argv: Optional[list] = None) -> int:
     doc, turn = load_turn(run_path, args.turn)
     sid = str(doc.get("session_id"))
     if args.first_round:
+        if args.seam == "manager":
+            return _manager_first_round_command(args, doc, turn, sid)
         if args.seam != "worker":
-            raise SystemExit("--first-round is a worker seam option")
+            raise SystemExit("--first-round is a worker or manager seam option")
         return _first_round_command(args, doc, turn, sid)
     if args.as_sent:
         if args.seam != "worker":
