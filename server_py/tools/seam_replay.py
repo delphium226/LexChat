@@ -247,12 +247,23 @@ def _synthesis_prompt_at(rev: str, research_mode: str) -> str:
         raise SystemExit(f"server_py/src/prompts.py not found at {rev}")
     if "def get_deep_research_synthesis_prompt" not in blob:
         return _prompt_constant_at(rev, "DEEP_RESEARCH_SYNTHESIS_PROMPT")
+    mod = _module_at(rev, "server_py/src/prompts.py", "src")
+    return mod.get_deep_research_synthesis_prompt(research_mode)
+
+
+def _module_at(rev: str, path: str, package: str):
+    """A tracked module as it was at `rev`, executed in isolation, its relative
+    imports resolving against the working tree's `package` (see
+    `_synthesis_prompt_at`)."""
     import types
 
-    mod = types.ModuleType(f"src._prompts_at_{rev}")
-    mod.__package__ = "src"
-    exec(compile(blob, f"{rev}:server_py/src/prompts.py", "exec"), mod.__dict__)  # noqa: S102
-    return mod.get_deep_research_synthesis_prompt(research_mode)
+    blob = _file_at(rev, path)
+    if not blob:
+        raise SystemExit(f"{path} not found at {rev}")
+    mod = types.ModuleType(f"{package}._at_{rev}_{Path(path).stem}")
+    mod.__package__ = package
+    exec(compile(blob, f"{rev}:{path}", "exec"), mod.__dict__)  # noqa: S102
+    return mod
 
 
 def strip_pinpoint_block(body: str) -> str:
@@ -508,9 +519,37 @@ def as_sent_date(value: Optional[str], doc: dict) -> Optional[date]:
                          + (" (the run has no started_at)" if value == "recorded" else ""))
 
 
+def as_sent_rev(value: Optional[str], doc: dict) -> Optional[str]:
+    """`--at-rev`: None (the working tree), "recorded" (the head the run was
+    recorded at, `runtime_state.git_head`), or a revision.
+
+    P4.11: the Worker prompt changed under most stored (b) payloads, so
+    today's code rebuilt 1 of 7 to its recorded `sent_chars`; the recorded
+    head's own builder rebuilt all of them."""
+    if not value:
+        return None
+    if value != "recorded":
+        return value
+    rev = (doc.get("runtime_state") or {}).get("git_head") or ""
+    if not rev:
+        raise SystemExit("--at-rev recorded: the run has no runtime_state.git_head")
+    return rev
+
+
+def worker_prompt_and_tools_at(rev: str, cfg: dict) -> tuple:
+    """The Worker's system prompt and tool list as the code at `rev` built
+    them for this request. The tools are sent too, and `sent_chars` does not
+    count them: every stored (b) head predates `lookup_legislation` (P3.7)."""
+    rm = cfg.get("_research_mode") or "legislation_only"
+    prompts = _module_at(rev, "server_py/src/prompts.py", "src")
+    schemas = _module_at(rev, "server_py/src/agent/tools/schemas.py", "src.agent.tools")
+    return prompts.get_worker_system_prompt(rm, cfg), schemas.get_worker_tools(rm)
+
+
 def worker_as_sent_messages(doc: dict, turn: dict, delegation: int = 1,
                             upto_round: Optional[int] = None,
-                            on_date: Optional[date] = None) -> list:
+                            on_date: Optional[date] = None,
+                            at_rev: Optional[str] = None) -> list:
     """A Worker's model call rebuilt as `chat_loop` sent it (P4.10).
 
     `worker_messages` is a composition seam: every result in one round, no
@@ -527,6 +566,9 @@ def worker_as_sent_messages(doc: dict, turn: dict, delegation: int = 1,
 
     `on_date` replaces the prompt's date line (see `as_sent_date`). The line
     is the same length on any date of the same month-name length.
+
+    `at_rev` builds the system prompt with that revision's code (see
+    `as_sent_rev`); the caller offers that revision's tools.
     """
     dgs = (turn.get("audit") or {}).get("delegations", [])
     if not dgs:
@@ -536,7 +578,10 @@ def worker_as_sent_messages(doc: dict, turn: dict, delegation: int = 1,
     if upto_round is not None:
         rounds = rounds[:upto_round]
     cfg = _cfg_for(doc, turn)
-    system = get_worker_system_prompt(cfg.get("_research_mode") or "legislation_only", cfg)
+    if at_rev:
+        system, _tools = worker_prompt_and_tools_at(at_rev, cfg)
+    else:
+        system = get_worker_system_prompt(cfg.get("_research_mode") or "legislation_only", cfg)
     if on_date is not None:
         today = worker_date_line(date.today())
         if today not in system:
@@ -668,8 +713,14 @@ def _as_sent_command(args, doc: dict, turn: dict, sid: str) -> int:
     from src.agent.tools import get_worker_tools
 
     on_date = as_sent_date(args.date, doc)
-    messages = worker_as_sent_messages(doc, turn, args.delegation, args.round, on_date)
+    rev = as_sent_rev(args.at_rev, doc)
+    messages = worker_as_sent_messages(doc, turn, args.delegation, args.round, on_date,
+                                       at_rev=rev)
     cfg0 = _cfg_for(doc, turn)
+    if rev:
+        _system, tools = worker_prompt_and_tools_at(rev, cfg0)
+    else:
+        tools = get_worker_tools(cfg0.get("_research_mode") or "legislation_only")
     probes = (turn.get("audit") or {}).get("empty_completions") or []
     dgs = (turn.get("audit") or {}).get("delegations", [])
     dg = dgs[min(max(args.delegation, 1), len(dgs)) - 1] if dgs else {}
@@ -689,11 +740,12 @@ def _as_sent_command(args, doc: dict, turn: dict, sid: str) -> int:
         print(f"  recorded empty-completion call: sent_chars {sc:,}, react_turn {rt}")
     print(f"  date line: {(on_date or date.today()).strftime('%d %B %Y')} "
           f"({'pinned by --date' if on_date else 'today'})")
+    print(f"  code: {rev + ' (--at-rev)' if rev else 'the working tree'}; tools offered: "
+          + ", ".join(t["function"]["name"] for t in tools))
     print(f"  lever: {json.dumps(extra) if extra else 'none (the pre-P4.10 payload)'}")
     if args.dry_run:
         return 0
     cfg = asyncio.run(_provider_cfg(cfg0))
-    tools = get_worker_tools(cfg0.get("_research_mode") or "legislation_only")
     total = 0.0
     for rep in range(1, args.reps + 1):
         r = asyncio.run(run_as_sent(messages, cfg, tools, extra))
@@ -717,7 +769,7 @@ def _as_sent_command(args, doc: dict, turn: dict, sid: str) -> int:
             d.mkdir(parents=True, exist_ok=True)
             lever = "_".join(f"{k}-{v}" for k, v in (
                 ("effort", args.reasoning_effort), ("max", args.max_tokens),
-                ("date", on_date)) if v)
+                ("date", on_date), ("rev", rev)) if v)
             (d / f"{sid}_t{args.turn}_d{args.delegation}_as_sent"
                  f"{'_' + lever if lever else ''}_rep{rep}.md").write_text(
                 text, encoding="utf-8")
@@ -1178,6 +1230,12 @@ def main(argv: Optional[list] = None) -> int:
                         "(the run's started_at) or YYYY-MM-DD; default today. The "
                         "date line alone decided whether a stored (a) payload ran "
                         "away (P4.10, Session 29)")
+    p.add_argument("--at-rev", default=None,
+                   help="--as-sent only (P4.11): build the Worker prompt and its "
+                        "tools with the code at this revision: 'recorded' (the "
+                        "run's runtime_state.git_head) or a sha; default the "
+                        "working tree. Today's code rebuilt 1 of 7 stored (b) "
+                        "payloads to their recorded sent_chars")
     p.add_argument("--dry-run", action="store_true",
                    help="build the payload and print its shape; no model call")
     p.add_argument("--out", default=None, help="write each answer to this directory")
@@ -1187,6 +1245,10 @@ def main(argv: Optional[list] = None) -> int:
     doc, turn = load_turn(run_path, args.turn)
     sid = str(doc.get("session_id"))
     if args.first_round:
+        if args.at_rev:
+            # Not built for either first round: refuse rather than draw the
+            # working tree's prompt under a flag that says otherwise.
+            raise SystemExit("--at-rev is a worker --as-sent option")
         if args.seam == "manager":
             return _manager_first_round_command(args, doc, turn, sid)
         if args.seam != "worker":
@@ -1201,9 +1263,10 @@ def main(argv: Optional[list] = None) -> int:
         if args.seam != "worker":
             raise SystemExit("--as-sent is a worker seam option")
         return _as_sent_command(args, doc, turn, sid)
-    if args.round is not None or args.reasoning_effort or args.max_tokens or args.date:
-        raise SystemExit("--round, --reasoning-effort, --max-tokens and --date need "
-                         "--as-sent")
+    if (args.round is not None or args.reasoning_effort or args.max_tokens or args.date
+            or args.at_rev):
+        raise SystemExit("--round, --reasoning-effort, --max-tokens, --date and "
+                         "--at-rev need --as-sent")
     build ={"synthesis": synthesis_messages, "worker": worker_messages,
              "manager": manager_messages}[args.seam]
     kwargs = {"without_fix": args.without_fix, "rev": args.rev}

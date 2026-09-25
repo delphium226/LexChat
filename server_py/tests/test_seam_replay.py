@@ -940,3 +940,113 @@ def test_an_as_sent_draw_with_a_date_prints_and_names_it(tmp_path, monkeypatch, 
     # a lone newline is empty, and an empty reply is not graded
     assert "rep1: empty (a)" in out and "links:" not in out
     assert (out_dir / "6348_t1_d1_as_sent_max-32000_date-2026-09-23_rep1.md").exists()
+
+
+# ---------------------------------------------------------------------------
+# --at-rev (P4.11): the Worker prompt and tools as the recorded head built them
+# ---------------------------------------------------------------------------
+#
+# Checked before any draw: today's code rebuilt 1 of 7 stored (b) Worker
+# payloads to their recorded sent_chars; the recorded head's own builder
+# rebuilt all 7, and the two P4.10 payloads.
+
+_OLD_PROMPTS = (
+    "from datetime import date\n"
+    "def get_worker_system_prompt(rm, cfg):\n"
+    "    return (f\"Today's date is {date.today().strftime('%d %B %Y')}.\\n\"\n"
+    "            f\"OLD WORKER PROMPT {rm}\")\n"
+)
+_OLD_SCHEMAS = (
+    "def get_worker_tools(rm):\n"
+    "    return [{'type': 'function', 'function': {'name': 'old_tool_' + rm,\n"
+    "             'description': '', 'parameters': {'type': 'object'}}}]\n"
+)
+
+
+def _fake_file_at(seen):
+    def fake(rev, path):
+        seen.append((rev, path))
+        return {"server_py/src/prompts.py": _OLD_PROMPTS,
+                "server_py/src/agent/tools/schemas.py": _OLD_SCHEMAS}.get(path, "")
+    return fake
+
+
+def test_at_rev_resolves_recorded_to_the_runs_git_head():
+    doc = {"runtime_state": {"git_head": "2d9ae11"}}
+    assert sr.as_sent_rev(None, doc) is None
+    assert sr.as_sent_rev("recorded", doc) == "2d9ae11"
+    assert sr.as_sent_rev("8006db9", doc) == "8006db9"
+    with pytest.raises(SystemExit):
+        sr.as_sent_rev("recorded", {"runtime_state": {}})
+
+
+def test_the_as_sent_payload_at_a_rev_uses_that_revs_worker_prompt(monkeypatch):
+    seen = []
+    monkeypatch.setattr(sr, "_file_at", _fake_file_at(seen))
+    doc = _as_sent_doc()
+    now = sr.worker_as_sent_messages(doc, doc["turns"][0], on_date=sr.date(2026, 9, 18))
+    old = sr.worker_as_sent_messages(doc, doc["turns"][0], on_date=sr.date(2026, 9, 18),
+                                     at_rev="2d9ae11")
+    # the rev's own builder, with the pinned date line
+    assert old[0]["content"] == ("Today's date is 18 September 2026.\n"
+                                 "OLD WORKER PROMPT legislation_only")
+    assert ("2d9ae11", "server_py/src/prompts.py") in seen
+    # only the system prompt is the rev's: the brief and the rounds are recorded
+    assert old[1:] == now[1:]
+
+
+def test_an_as_sent_draw_at_the_recorded_rev_offers_that_revs_tools(
+        tmp_path, monkeypatch, capsys):
+    seen_files = []
+    monkeypatch.setattr(sr, "_file_at", _fake_file_at(seen_files))
+    p = tmp_path / "6385_rep1.json"
+    p.write_text(json.dumps({**_as_sent_doc(), "started_at": "2026-09-18T12:56:23+00:00",
+                             "runtime_state": {"git_head": "2d9ae11"}}),
+                 encoding="utf-8")
+    seen = {}
+
+    async def fake_cfg(extra):
+        return {"model": "m", **extra}
+
+    async def fake_run(messages, cfg, tools, extra=None):
+        seen.update(system=messages[0]["content"],
+                    tools=[t["function"]["name"] for t in tools])
+        return {"content_chars": 0, "content": "", "tool_calls": [],
+                "finish_reason": "error", "native_finish_reason": None,
+                "reasoning_chars": 560, "completion_tokens": 140,
+                "reasoning_tokens": 139, "cost": 0.0,
+                "stream_error": "Upstream idle timeout exceeded", "seconds": 130.0}
+
+    monkeypatch.setattr(sr, "_provider_cfg", fake_cfg)
+    monkeypatch.setattr(sr, "run_as_sent", fake_run)
+    out_dir = tmp_path / "out"
+    assert sr.main(["worker", "--run", str(p), "--turn", "1", "--as-sent",
+                    "--date", "recorded", "--at-rev", "recorded",
+                    "--out", str(out_dir)]) == 0
+    out = capsys.readouterr().out
+    assert seen["system"].endswith("OLD WORKER PROMPT legislation_only")
+    assert seen["tools"] == ["old_tool_legislation_only"]
+    assert ("2d9ae11", "server_py/src/agent/tools/schemas.py") in seen_files
+    assert "code: 2d9ae11 (--at-rev); tools offered: old_tool_legislation_only" in out
+    assert "rep1: empty (b)" in out
+    assert (out_dir / "6348_t1_d1_as_sent_date-2026-09-18_rev-2d9ae11_rep1.md").exists()
+
+
+def test_the_working_tree_draw_names_its_code_and_tools(tmp_path, capsys):
+    p = tmp_path / "6348_rep2.json"
+    p.write_text(json.dumps(_as_sent_doc()), encoding="utf-8")
+    assert sr.main(["worker", "--run", str(p), "--turn", "1", "--as-sent",
+                    "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "code: the working tree; tools offered: search_legislation" in out
+
+
+def test_at_rev_is_an_as_sent_option_only(run_file):
+    # refused rather than ignored, on every path that does not honour it
+    for argv in (["worker", "--at-rev", "recorded"],
+                 ["worker", "--first-round", "--at-rev", "recorded"],
+                 ["manager", "--first-round", "--at-rev", "recorded"],
+                 ["manager", "--at-rev", "recorded"]):
+        with pytest.raises(SystemExit):
+            sr.main([argv[0], "--run", str(run_file), "--turn", "1", *argv[1:],
+                     "--dry-run"])
