@@ -5757,3 +5757,167 @@ screenshots under the repo (`.playwright-mcp/`, gitignored), not the scratchpad.
 
 **Machine state:** no uvicorn, no `http.server`, no pin file, no worktrees; the dev box is on
 its normal settings; the checkout is back on `fix/prepilot-defects`.
+
+## Session 28 — 2026-09-24/25 — P4.10 (the cost of a lost completion)
+
+**Measure first.** P4.10 had no lever chosen, and every candidate touched every
+Worker call. So the session measured, probed and put the levers to the user
+before booking anything.
+
+**1. The instrument: `replay_report lostcost [--all-dirs]`** (`23ac8e4`).
+- Classifies every empty-completion attempt by mechanism:
+  - (a) reasoned to nothing, 10,000+ tokens;
+  - (b) stream error or upstream idle timeout;
+  - (c) clean stop with no reasoning;
+  - (d) upstream rate limit, a mechanism nobody had separated before.
+- Ties each call to where it landed:
+  - an unrecovered call takes the site `lost_sites` gives it;
+  - a recovered call is placed from the timeline when it is the turn's only
+    slow call. That inference agrees with the tied site on 10 of 10 calls. The
+    first version agreed on 13 of 14: it cannot split a turn with two slow
+    calls, so it now refuses there.
+- Prices each turn against the median of clean turns in its slot (same
+  question hash, chat mode and research type).
+- Also prints:
+  - what the retry bought after each mechanism;
+  - whether the Manager redid an unrecovered worker call;
+  - (a) per chat mode, with a Fisher tail;
+  - how long healthy worker calls run;
+  - a cost-derived bound on whether an output cap could bind a healthy turn.
+- Checked against every episode on the row before any number was quoted:
+  - 6348 rep 2 t1: $2.40 and 1,133 s against a median of $0.07 and 34 s;
+  - p313: $2.48 and $2.40;
+  - 6383: $1.62, 768 s;
+  - 6409: `bab`, $0.86;
+  - 6346: 456 s and 233 s.
+- The totals match `lost`: 34 calls, 18 recovered, 16 not, and 930 v3 turns
+  now that `wave4_p45` is included.
+
+**2. What it found** (the table is in BASELINE.md, "The cost of a lost
+completion").
+- (a) is 8 calls, and they carry all the cost: $12.38 and 7,073 s over the slot
+  medians, against $156.55 for all v3 turns.
+- Every (a) call was in the **conversational quick-lookup Worker**: 8 of 478
+  runs there, 0 of 522 elsewhere (Fisher 0.0026). But 4 of the 8 are 6348, so
+  5 sessions.
+- The retry after (a) answered 2 times in 12. The Manager made good 6 of 6.
+- (b) is a latency cost (median 371 s per turn), not a spend one.
+- (d) the retry fixes (13 of 14).
+
+**3. The probes.**
+- `reasoning_probe`, committed: the output ceiling is 65,536 tokens. With no
+  `reasoning` field the model reasons in the `high` range.
+  `reasoning.max_tokens` lands on an effort level. A top-level `max_tokens`
+  binds.
+  - The first, scratch run had "default = high" byte for byte; the committed
+    re-run did not (8,709 against 7,861). The docstring and the ledger say
+    "the high range".
+- `seam_replay worker --as-sent` is new. The old worker seam was a composition
+  seam (one round, no tools, a "compose" message), which is not the call that
+  failed.
+  - The rebuild regroups rounds from tool timing and reproduces every stored
+    (a) call's `react_turn`.
+  - Both `wave3_p313` payloads rebuild to exactly their recorded
+    `sent_chars`.
+- Both p313 payloads ran away on 2026-09-24:
+  - one empty, 370 s, $0.77;
+  - one answered after 62,916 reasoning tokens, 310 s, $0.77. The cost is the
+    runaway, and "empty" is how some runaways end.
+- `max_tokens=16000`: empty at 15,360 tokens (96% of the cap), 93 s, $0.20.
+  The cap bounds the failure; it does not cure it.
+- Effort `medium` or `low` did not bound it: 3 of 4 empty on r2 t1.
+- Spend on the pre-flight: $4.35.
+
+**4. User decision:** lever (ii) plus a 32,000-token cap on Worker calls,
+evidenced by a seam A/B plus unit tests, with no replay. Booked in `484f32f`
+before any product code.
+
+**5. The build** (`df95c09`):
+- `worker_call` on both clients' `chat_loop`, forwarded through the recursion
+  and P3.8's write-up;
+- `run_worker_agent` passes it on its research loop only;
+- OpenRouter adds `max_tokens: 32000` to a Worker call's payload;
+- both clients skip the retry for a Worker call's heavy empty, which falls into
+  P4.5's label;
+- Ollama gets no cap;
+- a length-cut report with content is logged.
+- No audit shape change. `AUDIT_TRACE.md` notes that a single
+  `attempt: 1, retried: false` record is now possible, and CLAUDE.md's
+  stream-retry note says why Worker calls differ.
+
+**6. Acceptance.**
+- (a) PASSED: 16 tests, and each product file reverted alone fails them.
+  - 49 test fakes across 10 files had no `**kwargs`. Two of them sat behind
+    the halt write-up's fail-soft path, which turned the `TypeError` into a
+    silent "no write-up" (`assert 0 == 1`), not a crash.
+- (c) PASSED: the cap changed nothing where it could not bind. One flagged
+  payload (p46_6385) proved to have two stable answers that both sides draw.
+- **(b) NOT EVALUABLE:** on 2026-09-25 no draw ran away, 0 in 16 across all
+  eight stored (a) payloads, lever-on or off. **User decision: keep P4.10
+  `[~]` and redraw later.**
+- Spend on the acceptance: $0.80. **Session total: $5.15.**
+
+**Hazards met.**
+- A fake `chat_loop` without `**kwargs` breaks the moment a real keyword is
+  added. The halt write-up hides it (fail-soft).
+- A seam's lever-off side must be drawn on the same day as its lever-on side:
+  the failure's rate varies by day.
+- The `Write` tool wrote LF into a new test file (299 bare LFs). It was
+  normalised before the commit.
+
+## Session 28 — handover for Session 29 (2026-09-25)
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. Session 28 commits:
+  - `23ac8e4`: the instruments (`lostcost`, `--as-sent`);
+  - `484f32f`: the acceptance, `reasoning_probe`, the BASELINE pre-flight;
+  - `df95c09`: the fix;
+  - this docs commit.
+- `main` is untouched at `b2a3fd8`.
+- **1872 tests green.**
+- Ledger **35 of 51 rows, 8 of 14 buckets**, with **3 in progress**: P0.4,
+  P5.2 and now **P4.10**.
+- **Six Fixed-or-built rows are not on `main`:** P0.6, P4.6, P3.7, P4.7 and
+  P4.5, plus P4.10 (built, not accepted).
+
+**Next work.**
+1. **Close P4.10's (b).** Redraw `wave3_p313`/6348 r2 t1 and r3 t3 at
+   lever-off (`python -m tools.seam_replay worker --run <f> --turn N
+   --as-sent`) until one runs away (about $0.02 a healthy draw, $0.77 a
+   runaway). Then make three lever-on draws with `--max-tokens 32000` on that
+   payload and apply (b) as booked on the row.
+   - Draw both sides on the same day.
+   - If the runaway never comes back, say so and put it to the user; do not
+     re-scope on your own.
+2. **Then P3.15**, which B5 waits on alone.
+
+**Instruments added this session (use them, don't rebuild):**
+- `python -m tools.replay_report --dir <D> lostcost [--all-dirs]
+  [--out-price 12]`;
+- `python -m tools.seam_replay worker --run <f> --turn N [--delegation N]
+  --as-sent [--round N] [--max-tokens N] [--reasoning-effort E] [--reps N]
+  [--out D]`: one attempt per rep, no retry, graded;
+- `python -m tools.reasoning_probe [--limits] [CONFIG ...]`.
+
+**Open with the user (carried forward, plus one):**
+- Push the two release tags? Deploy by tag? (docs/TODO.md D19)
+- Whether P0.6, P4.6, P3.7, P4.7, P4.5 (and P4.10 once accepted) go in the
+  next cut: v2026.09.3, or v2026.10.1 in October.
+- Deploy both cuts to the target: `pg_dump` first, then pull, restart,
+  `test_apis.ps1`, one real question; P0.7's query with it.
+- **Tell the lexchat-eval harness owner:**
+  - schema v6 on the branch (`delegations[].lost`);
+  - `tool_end`'s outcome wording;
+  - `lookup_legislation` in `tools[]`;
+  - Deep Research headings follow the research type;
+  - **new:** a Worker's heavy empty now leaves one `attempt: 1,
+    retried: false` record.
+- D20 (show a step's outcome in the UI); P5.2 (external); Thomas's review
+  document.
+- **The Fix Tracker has not been updated this session** (only when asked).
+  P4.10 is `[~]`, so it stays not-Fixed.
+
+**Machine state:** no uvicorn, no pin file, no worktrees, no replay run. The
+dev box is on its normal settings (the seam and probe calls read
+`app_settings` and change nothing). The seam draws' answers are in the
+scratchpad only.

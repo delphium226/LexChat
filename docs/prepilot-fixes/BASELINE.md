@@ -3932,3 +3932,25 @@ acceptance is on P4.10's row.
 
 **Spend on the pre-flight: $4.35** ($0.93 on the tiny probe calls, including
 the committed re-run; $3.42 on the seam).
+
+**The acceptance draws (2026-09-25, `seam_replay worker --as-sent`, lever-on
+is `--max-tokens 32000`).** The product change is `df95c09`; the seam adds the
+same `max_tokens` a Worker call now carries.
+
+| payload | side | draws | outcome | tokens | seconds |
+|---|---|---|---|---|---|
+| `wave3_p313`/6348 r2 t1 (affected) | off | 2 (+ the pre-flight's runaway) | answered 2 of 2, s.36(2) MISSED | 270, 224 | 4, 3 |
+| | on | 3 | answered 3 of 3, MISSED | 270 each | 4 each |
+| `wave3_p313`/6348 r3 t3 (affected) | off | 2 (+ the pre-flight's runaway) | answered 2 of 2, DELIVERED | 206, 239 | 4, 3 |
+| | on | 3 | answered 3 of 3, DELIVERED | 206 each | 3 each |
+| the other six stored (a) payloads | off | 1 each | 3 answered, 3 called a tool; none ran away | 32-1,548 | 2-11 |
+| `wave0_conv_6348_pre`/6348 r2 t3 (unaffected) | off / on | 1 / 1 | identical: 3 links, DELIVERED | 1,079 | 9 |
+| `wave2`/6341 r1 t7, delegation 2 | off / on | 1 / 1 | identical: 11 links | 3,538 | 23 |
+| `wave3_p313`/6348 r1 t1 | off / on | 1 / 1 | identical: 4 links, DELIVERED | 968 | 8 |
+| `wave4_p46_pre`/p46_6385 r1 t4 | off / on | 4 / 4 | the same two answers on both sides: 8 links in 3 of 4 off and 2 of 4 on (in the three-a-side redraw, 2 of 3 each); otherwise 4 links | 1,957-2,370 | 16-18 |
+
+**No draw ran away on 2026-09-25: 0 in 16 across the eight stored (a)
+payloads**, against 2 in 2 product-payload draws of the two faithful ones the
+day before. The affected-turns half of P4.10's acceptance is therefore not
+yet evaluated. The unaffected half passes: where the cap cannot bind, it
+changes nothing. Spend on these draws: $0.80.
