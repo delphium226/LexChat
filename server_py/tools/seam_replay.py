@@ -60,6 +60,7 @@ import re
 import subprocess
 import sys
 from collections import Counter
+from datetime import date
 from pathlib import Path
 from typing import Optional
 
@@ -484,8 +485,32 @@ def tool_rounds(tools: list, tolerance_s: float = 1.0) -> list:
     return rounds
 
 
+def worker_date_line(d: date) -> str:
+    """The Worker prompt's first line, as `get_worker_system_prompt` writes it."""
+    return f"Today's date is {d.strftime('%d %B %Y')}."
+
+
+def as_sent_date(value: Optional[str], doc: dict) -> Optional[date]:
+    """`--date`: None (today, as the prompt builder writes it), "recorded" (the
+    day the run started, `started_at`), or an ISO date.
+
+    P4.10: at temperature 0 the pinned model draws much the same completion
+    for the same bytes, so the date line alone decided whether a stored (a)
+    payload ran away. Today's date is not the payload that was sent.
+    """
+    if not value:
+        return None
+    raw = (doc.get("started_at") or "")[:10] if value == "recorded" else value
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        raise SystemExit(f"--date: {value!r} is neither 'recorded' nor YYYY-MM-DD"
+                         + (" (the run has no started_at)" if value == "recorded" else ""))
+
+
 def worker_as_sent_messages(doc: dict, turn: dict, delegation: int = 1,
-                            upto_round: Optional[int] = None) -> list:
+                            upto_round: Optional[int] = None,
+                            on_date: Optional[date] = None) -> list:
     """A Worker's model call rebuilt as `chat_loop` sent it (P4.10).
 
     `worker_messages` is a composition seam: every result in one round, no
@@ -499,6 +524,9 @@ def worker_as_sent_messages(doc: dict, turn: dict, delegation: int = 1,
     appends an instrument-lookup block to the brief that the audit does not
     record, so the command prints the payload's size the way `chat_loop`
     counts it (`sent_chars`) beside the recorded probes'.
+
+    `on_date` replaces the prompt's date line (see `as_sent_date`). The line
+    is the same length on any date of the same month-name length.
     """
     dgs = (turn.get("audit") or {}).get("delegations", [])
     if not dgs:
@@ -508,9 +536,15 @@ def worker_as_sent_messages(doc: dict, turn: dict, delegation: int = 1,
     if upto_round is not None:
         rounds = rounds[:upto_round]
     cfg = _cfg_for(doc, turn)
+    system = get_worker_system_prompt(cfg.get("_research_mode") or "legislation_only", cfg)
+    if on_date is not None:
+        today = worker_date_line(date.today())
+        if today not in system:
+            raise SystemExit("the Worker prompt's date line has changed shape; "
+                             "--date cannot pin it")
+        system = system.replace(today, worker_date_line(on_date), 1)
     messages = [
-        {"role": "system", "content": get_worker_system_prompt(
-            cfg.get("_research_mode") or "legislation_only", cfg)},
+        {"role": "system", "content": system},
         {"role": "user", "content": dg.get("brief") or turn.get("question") or ""},
     ]
     n = 0
@@ -615,8 +649,14 @@ async def run_as_sent(messages: list, cfg: dict, tools: list,
 
 
 def as_sent_outcome(r: dict) -> str:
-    """"answered", "tool call", or the empty-completion mechanism ((a)-(d))."""
-    if r["content_chars"]:
+    """"answered", "tool call", or the empty-completion mechanism ((a)-(d)).
+
+    Empty is the product's test (`is_empty_completion`): whitespace alone is
+    empty. A capped runaway ended in a lone newline (P4.10, Session 29), which
+    `chat_loop` treats as empty and this used to call "answered".
+    """
+    text = r["content"] if "content" in r else ("x" if r.get("content_chars") else "")
+    if (text or "").strip():
         return "answered"
     if r["tool_calls"]:
         return "tool call"
@@ -627,7 +667,8 @@ def _as_sent_command(args, doc: dict, turn: dict, sid: str) -> int:
     """`worker --as-sent`: redraw a recorded Worker call as it was sent."""
     from src.agent.tools import get_worker_tools
 
-    messages = worker_as_sent_messages(doc, turn, args.delegation, args.round)
+    on_date = as_sent_date(args.date, doc)
+    messages = worker_as_sent_messages(doc, turn, args.delegation, args.round, on_date)
     cfg0 = _cfg_for(doc, turn)
     probes = (turn.get("audit") or {}).get("empty_completions") or []
     dgs = (turn.get("audit") or {}).get("delegations", [])
@@ -646,7 +687,9 @@ def _as_sent_command(args, doc: dict, turn: dict, sid: str) -> int:
     for sc, rt in sorted({(p.get('sent_chars'), p.get('react_turn')) for p in probes},
                          key=lambda x: (x[1] or 0)):
         print(f"  recorded empty-completion call: sent_chars {sc:,}, react_turn {rt}")
-    print(f"  lever: {json.dumps(extra) if extra else 'none (the product payload)'}")
+    print(f"  date line: {(on_date or date.today()).strftime('%d %B %Y')} "
+          f"({'pinned by --date' if on_date else 'today'})")
+    print(f"  lever: {json.dumps(extra) if extra else 'none (the pre-P4.10 payload)'}")
     if args.dry_run:
         return 0
     cfg = asyncio.run(_provider_cfg(cfg0))
@@ -663,7 +706,7 @@ def _as_sent_command(args, doc: dict, turn: dict, sid: str) -> int:
               f"finish={r['finish_reason']}/{r['native_finish_reason']}"
               + (f" error={r['stream_error'][:60]!r}" if r["stream_error"] else ""))
         text = r.get("content") or ""
-        if text:
+        if text.strip():
             # What a lever costs in answer quality: links, and the depth grader
             # where the session has a ground truth (6348: s.36(2)).
             grade = _grade(sid, text)
@@ -673,7 +716,8 @@ def _as_sent_command(args, doc: dict, turn: dict, sid: str) -> int:
             d = Path(args.out)
             d.mkdir(parents=True, exist_ok=True)
             lever = "_".join(f"{k}-{v}" for k, v in (
-                ("effort", args.reasoning_effort), ("max", args.max_tokens)) if v)
+                ("effort", args.reasoning_effort), ("max", args.max_tokens),
+                ("date", on_date)) if v)
             (d / f"{sid}_t{args.turn}_d{args.delegation}_as_sent"
                  f"{'_' + lever if lever else ''}_rep{rep}.md").write_text(
                 text, encoding="utf-8")
@@ -1015,8 +1059,14 @@ def main(argv: Optional[list] = None) -> int:
                    help="--as-sent only: add reasoning.effort to the payload "
                         "(a lever under test; the product sends none)")
     p.add_argument("--max-tokens", type=int, default=None,
-                   help="--as-sent only: add max_tokens to the payload (a lever "
-                        "under test; the product sends none)")
+                   help="--as-sent only: add max_tokens to the payload. Since P4.10 "
+                        "the product's Worker call sends 32000; without this flag "
+                        "the seam sends none, i.e. the pre-P4.10 payload")
+    p.add_argument("--date", default=None,
+                   help="--as-sent only: the Worker prompt's date line: 'recorded' "
+                        "(the run's started_at) or YYYY-MM-DD; default today. The "
+                        "date line alone decided whether a stored (a) payload ran "
+                        "away (P4.10, Session 29)")
     p.add_argument("--dry-run", action="store_true",
                    help="build the payload and print its shape; no model call")
     p.add_argument("--out", default=None, help="write each answer to this directory")
@@ -1033,8 +1083,9 @@ def main(argv: Optional[list] = None) -> int:
         if args.seam != "worker":
             raise SystemExit("--as-sent is a worker seam option")
         return _as_sent_command(args, doc, turn, sid)
-    if args.round is not None or args.reasoning_effort or args.max_tokens:
-        raise SystemExit("--round, --reasoning-effort and --max-tokens need --as-sent")
+    if args.round is not None or args.reasoning_effort or args.max_tokens or args.date:
+        raise SystemExit("--round, --reasoning-effort, --max-tokens and --date need "
+                         "--as-sent")
     build ={"synthesis": synthesis_messages, "worker": worker_messages,
              "manager": manager_messages}[args.seam]
     kwargs = {"without_fix": args.without_fix, "rev": args.rev}

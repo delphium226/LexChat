@@ -769,9 +769,77 @@ def test_as_sent_outcomes():
     assert sr.as_sent_outcome({**base, "tool_calls": ["x"]}) == "tool call"
     assert sr.as_sent_outcome({**base, "completion_tokens": 62912}) == "empty (a)"
     assert sr.as_sent_outcome(base) == "empty (c)"
+    # P4.10, Session 29: a capped runaway ended in a lone newline. The product
+    # (`is_empty_completion`) calls that empty; so must the seam.
+    assert sr.as_sent_outcome({**base, "content": "\n", "content_chars": 1,
+                               "completion_tokens": 30719}) == "empty (a)"
+    assert sr.as_sent_outcome({**base, "content": " \n", "content_chars": 2,
+                               "tool_calls": ["x"]}) == "tool call"
+    assert sr.as_sent_outcome({**base, "content": "Yes.", "content_chars": 4}) == "answered"
 
 
 def test_lever_flags_need_as_sent(run_file):
     with pytest.raises(SystemExit):
         sr.main(["worker", "--run", str(run_file), "--turn", "1",
                  "--max-tokens", "100", "--dry-run"])
+    with pytest.raises(SystemExit):
+        sr.main(["worker", "--run", str(run_file), "--turn", "1",
+                 "--date", "recorded", "--dry-run"])
+
+
+def test_as_sent_date_resolves_recorded_and_iso():
+    doc = {"started_at": "2026-09-23T08:12:08+00:00"}
+    assert sr.as_sent_date(None, doc) is None
+    assert sr.as_sent_date("recorded", doc) == sr.date(2026, 9, 23)
+    assert sr.as_sent_date("2026-09-24", doc) == sr.date(2026, 9, 24)
+    with pytest.raises(SystemExit):
+        sr.as_sent_date("recorded", {})
+    with pytest.raises(SystemExit):
+        sr.as_sent_date("24/09/2026", doc)
+
+
+def test_the_as_sent_payload_carries_the_pinned_date_line():
+    # P4.10, Session 29: the date line alone decided whether a stored (a)
+    # payload ran away, so the faithful payload is the one with its own date.
+    doc = _as_sent_doc()
+    today = sr.worker_as_sent_messages(doc, doc["turns"][0])
+    pinned = sr.worker_as_sent_messages(doc, doc["turns"][0],
+                                        on_date=sr.date(2026, 9, 23))
+    assert today[0]["content"].startswith(sr.worker_date_line(sr.date.today()))
+    assert pinned[0]["content"].startswith("Today's date is 23 September 2026.")
+    # only the date line differs
+    assert pinned[0]["content"].replace(
+        "Today's date is 23 September 2026.",
+        sr.worker_date_line(sr.date.today()), 1) == today[0]["content"]
+    assert pinned[1:] == today[1:]
+
+
+def test_an_as_sent_draw_with_a_date_prints_and_names_it(tmp_path, monkeypatch, capsys):
+    p = tmp_path / "6348_rep2.json"
+    p.write_text(json.dumps({**_as_sent_doc(), "started_at": "2026-09-23T08:12:08+00:00"}),
+                 encoding="utf-8")
+    seen = {}
+
+    async def fake_cfg(extra):
+        return {"model": "m", **extra}
+
+    async def fake_run(messages, cfg, tools, extra=None):
+        seen["system"] = messages[0]["content"]
+        return {"content_chars": 1, "content": "\n", "tool_calls": [],
+                "finish_reason": "stop", "native_finish_reason": "STOP",
+                "reasoning_chars": 37310, "completion_tokens": 30719,
+                "reasoning_tokens": 30718, "cost": 0.38, "stream_error": None,
+                "seconds": 163.0}
+
+    monkeypatch.setattr(sr, "_provider_cfg", fake_cfg)
+    monkeypatch.setattr(sr, "run_as_sent", fake_run)
+    out_dir = tmp_path / "out"
+    assert sr.main(["worker", "--run", str(p), "--turn", "1", "--as-sent",
+                    "--max-tokens", "32000", "--date", "recorded",
+                    "--out", str(out_dir)]) == 0
+    out = capsys.readouterr().out
+    assert seen["system"].startswith("Today's date is 23 September 2026.")
+    assert "date line: 23 September 2026 (pinned by --date)" in out
+    # a lone newline is empty, and an empty reply is not graded
+    assert "rep1: empty (a)" in out and "links:" not in out
+    assert (out_dir / "6348_t1_d1_as_sent_max-32000_date-2026-09-23_rep1.md").exists()
