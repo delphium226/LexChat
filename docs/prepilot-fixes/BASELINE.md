@@ -3848,3 +3848,87 @@ after column at `ba04d7c` $0.29), and $1.03 for the smoke replay
 (`wave4_p45`, 6365 at `ba04d7c`, n=1: the exit-1 set, `drgaps`, `depth` and
 `lost --require-label` all exit 0; depth DELIVERED; schema 6, `lost: null`
 on all 5 steps; no empty completion in the run). **$1.91 for the row.**
+
+
+## The cost of a lost completion (P4.10, 2026-09-25)
+
+P4.5 labelled a lost reply; P4.10 takes its cost. Measure-first: nothing below
+was built before the user chose a lever.
+
+**The pre-flight, behind a command.** `python -m tools.replay_report --dir
+<any> lostcost --all-dirs` (`23ac8e4`, and the booking commit). Each
+`empty_completions` record is classified by mechanism. Each call is tied to
+where it landed: an unrecovered call to the site `lost_sites` gives it, and a
+recovered call by the timeline, when it is the turn's only slow call. That
+inference agrees with the tied site on 10 of 10 calls where both exist. Each
+turn is then priced against the median of clean turns in the same slot (same
+question, chat mode and research type) across every rep and directory.
+
+| over 50 directories, 930 schema-v3 turns ($156.55) | calls (attempts) | recovered | excess over slot median, total (per-turn median) | where |
+|---|---|---|---|---|
+| (a) reasoned to nothing (10,000+ tokens, no content) | 8 (15) | 2 | **$12.38, 7,073 s** ($1.33, 902 s) | a research Worker, 8 of 8 |
+| (b) stream error, upstream idle timeout | 11 (32) | 3 | $0.29, 3,143 s ($0.01, 371 s) | Worker 6, Manager 5 |
+| (c) clean stop, no reasoning, no content | 2 (6) | 0 | none | Deep Research step 2 |
+| (d) upstream rate limit | 13 (15) | 13 | none | not placeable (fast) |
+
+| after an attempt of | retries | the next attempt answered |
+|---|---|---|
+| (a) | 12 | 2 |
+| (b) | 22 | 3 |
+| (c) | 4 | 0 |
+| (d) | 14 | 13 |
+
+Unrecovered calls in a research Worker that the Manager made good by
+re-delegating in the same turn: (a) 6 of 6, (b) 3 of 5.
+
+**Where (a) happens.** It happened 8 times in 478 conversational worker runs
+(the quick-lookup Worker), against 0 in 336 Deep Research steps and 0 in 186
+research-mode worker runs. The one-sided Fisher tail is 0.0026. But 4 of the 8
+are session 6348, so they come from 5 sessions, not 8 independent draws.
+
+**Healthy calls.** A turn's output tokens cannot exceed its cost over the output
+price ($12 per million). On that bound, a 32,000-token call cannot have occurred
+in 100% of 533 clean conversational turns or in 96% of 284 clean research turns.
+The bound says nothing for Deep Research, whose turns sum many calls. A clean
+turn's longest worker window (a stretch inside a delegation with no tool
+running, i.e. one model round) exceeded 180 s in 1 turn per mode (of 425, 83 and
+181).
+
+**The model** (`python -m tools.reasoning_probe --limits`, and one tiny call per
+configuration on an arithmetic puzzle):
+- Its output ceiling is 65,536 tokens, and reasoning is mandatory.
+- With no `reasoning` field it reasoned 8,709 tokens: the `high` range (7,861),
+  about twice `medium` (4,199).
+- `reasoning.max_tokens` lands token-for-token on an effort level (512 on `low`,
+  16000 on `high`). It is not a hard budget.
+- A top-level `max_tokens` binds: at 800 the model answered in 768 tokens, and
+  answered differently.
+
+**The seam** (`seam_replay worker --as-sent`: the Worker's call rebuilt as
+`chat_loop` sent it, one attempt per draw). Both `wave3_p313`/6348 payloads
+rebuild to exactly their recorded `sent_chars` (41,906 and 25,277), and the
+regrouped rounds equal every stored (a) call's `react_turn`.
+
+| payload | lever | draw | outcome | tokens | seconds | cost |
+|---|---|---|---|---|---|---|
+| r2 t1 | none (the product) | 1 | empty (a) | 62,916 | 370 | $0.77 |
+| r3 t3 | none (the product) | 1 | answered, after 62,916 reasoning tokens | 63,111 | 310 | $0.77 |
+| r3 t3 | `max_tokens` 16,000 | 1 | **empty (a)** | 15,360 | 93 | $0.20 |
+| r2 t1 | effort `medium` | 2 | empty (a); empty (b) | 62,913; 1,028 | 372; 188 | $0.77; $0 |
+| r2 t1 | effort `low` | 2 | answered (s.36(2) MISSED); empty (a) at `MAX_TOKENS` | 207; 65,544 | 3; 392 | $0.02; $0.81 |
+| r3 t3 | effort `medium` | 3 | answered 3 of 3 (graded: DELIVERED 2 of 2) | ~200 | 4-5 | ~$0.015 |
+| r3 t3 | effort `low` | 3 | answered 3 of 3 (graded: DELIVERED 2 of 2) | ~200 | 4-16 | ~$0.015 |
+
+What the draws say:
+- The model either answers with no reasoning or runs away to about 96% of
+  whatever output budget it has. That happens at every effort level.
+- A cap bounds the runaway in proportion to the cap, but does not turn it into
+  an answer.
+- Lowering the effort does not bound it.
+
+This decided the lever: **(ii) do not retry a heavy empty Worker completion,
+plus a 32,000-token cap on Worker calls** (user decision). The seam A/B
+acceptance is on P4.10's row.
+
+**Spend on the pre-flight: $4.35** ($0.93 on the tiny probe calls, including
+the committed re-run; $3.42 on the seam).

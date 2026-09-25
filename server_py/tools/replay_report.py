@@ -3480,10 +3480,14 @@ def cmd_lostcost(args) -> int:
         if lost_sites(t, label) or not audit.get("delegations"):
             continue
         by_mode_gap.setdefault(t.get("chat_mode") or "?", []).append(
-            longest_worker_window(audit["delegations"]))
-    for mode, gaps in sorted(by_mode_gap.items()):
-        print(f"  {mode:<15} {len(gaps):>5} {_median(gaps):>8.0f} {max(gaps):>6.0f} "
-              + " ".join(f"{sum(g > c for g in gaps):>6}" for c in ceilings))
+            (longest_worker_window(audit["delegations"]),
+             f"{dn}/{doc.get('session_id')} r{doc.get('rep', 1)} t{t.get('turn')}"))
+    for mode, pairs in sorted(by_mode_gap.items()):
+        gaps = [g for g, _ in pairs]
+        top = max(pairs)
+        print(f"  {mode:<15} {len(gaps):>5} {_median(gaps):>8.0f} {top[0]:>6.0f} "
+              + " ".join(f"{sum(g > c for g in gaps):>6}" for c in ceilings)
+              + f"   longest: {top[1]}")
     print()
     # Could a per-call output cap bind on a HEALTHY turn? No healthy call
     # records its tokens, but a turn's output tokens cannot exceed its cost
