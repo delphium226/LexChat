@@ -19,15 +19,23 @@
     --fixed-soft: oklch(0.95 0.04 155);
     --wip: oklch(0.46 0.11 65);
     --wip-soft: oklch(0.96 0.05 65);
+    --partial: #8a3d78;
+    --partial-soft: #f8e9f3;
     --verified: oklch(0.34 0.09 255);
     --verified-soft: oklch(0.94 0.03 240);
     --tbv: #465277;
     --focus: oklch(0.50 0.10 240);
     /* Bar fills for the progress summary: the chip hues re-stepped into the mark band
        and validated (dataviz skill, validate_palette.js): light worst adjacent CVD
-       ΔE 16.1, every fill >= 3.2:1 on --paper, every in-segment label >= 4.5:1. */
+       ΔE 16.1, every fill >= 3.2:1 on --paper, every in-segment label >= 4.5:1.
+       Partial (added in v23) sits between In progress and Verified. It is separated
+       from the navy by lightness, because a violet of the same weight collapses into
+       it under protanopia (ΔE 5.4). Re-validated with it in place: the worst adjacent
+       pair is still green/brown (light 16.1, dark 9.2); its fill is 3.16:1 on --paper
+       light and 4.23:1 dark; its count label is 5.5:1 light and 4.8:1 dark. */
     --bar-fixed: #46a16b;    --bar-fixed-ink: #111a2e;
     --bar-wip: #81520a;      --bar-wip-ink: #ffffff;
+    --bar-partial: #c975b0;  --bar-partial-ink: #111a2e;
     --bar-verified: #085491; --bar-verified-ink: #ffffff;
     --bar-tbv: #c3cbdd;      --bar-tbv-ink: #111a2e;   /* neutral: sub-3:1 by design, label + table carry it */
     --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -51,12 +59,15 @@
       --fixed-soft: oklch(0.27 0.05 155);
       --wip: oklch(0.82 0.12 70);
       --wip-soft: oklch(0.29 0.06 65);
+      --partial: #e3a6d2;
+      --partial-soft: #3a2238;
       --verified: oklch(0.82 0.08 250);
       --verified-soft: oklch(0.26 0.06 240);
       --tbv: #a8b0c8;
       --focus: oklch(0.70 0.12 240);
       --bar-fixed: #4ca871;    --bar-fixed-ink: #0f1830;
       --bar-wip: #c8800d;      --bar-wip-ink: #0f1830;
+      --bar-partial: #c65a9a;  --bar-partial-ink: #0a1020;
       --bar-verified: #488acb; --bar-verified-ink: #0f1830;
       --bar-tbv: #313f5c;      --bar-tbv-ink: #e4e8f2;
     }
@@ -77,12 +88,15 @@
     --fixed-soft: oklch(0.27 0.05 155);
     --wip: oklch(0.82 0.12 70);
     --wip-soft: oklch(0.29 0.06 65);
+    --partial: #e3a6d2;
+    --partial-soft: #3a2238;
     --verified: oklch(0.82 0.08 250);
     --verified-soft: oklch(0.26 0.06 240);
     --tbv: #a8b0c8;
     --focus: oklch(0.70 0.12 240);
     --bar-fixed: #4ca871;    --bar-fixed-ink: #0f1830;
     --bar-wip: #c8800d;      --bar-wip-ink: #0f1830;
+    --bar-partial: #c65a9a;  --bar-partial-ink: #0a1020;
     --bar-verified: #488acb; --bar-verified-ink: #0f1830;
     --bar-tbv: #313f5c;      --bar-tbv-ink: #e4e8f2;
   }
@@ -160,6 +174,7 @@
   .bar.thin { height: 10px; }
   [data-status="Fixed"]          { --seg: var(--bar-fixed);    --seg-ink: var(--bar-fixed-ink); }
   [data-status="In progress"]    { --seg: var(--bar-wip);      --seg-ink: var(--bar-wip-ink); }
+  [data-status="Partial"]        { --seg: var(--bar-partial);  --seg-ink: var(--bar-partial-ink); }
   [data-status="Verified"]       { --seg: var(--bar-verified); --seg-ink: var(--bar-verified-ink); }
   [data-status="To be verified"] { --seg: var(--bar-tbv);      --seg-ink: var(--bar-tbv-ink); }
   .seg {
@@ -304,6 +319,7 @@
   }
   .st-fixed { background: var(--fixed-soft); color: var(--fixed); }
   .st-wip { background: var(--wip-soft); color: var(--wip); }
+  .st-partial { background: var(--partial-soft); color: var(--partial); }
   .st-verified { background: var(--verified-soft); color: var(--verified); }
   .st-tbv { background: transparent; color: var(--tbv); border: 1px dashed var(--rule-strong); }
 
@@ -403,7 +419,8 @@
       <h2>Status</h2>
       <dl>
         <dt>Fixed</dt><dd>Built and accepted on the fix branch. Fixed rows with a version number are merged to <code>main</code> for deployment to the target: release 2026.09.1 on 22 September and 2026.09.2 (P3.13) on 23 September. Rows marked “Next release” (P0.6, P4.6, P3.7, P4.7, P4.5) stay on the branch until then.</dd>
-        <dt>In progress</dt><dd>Under way. P5.2 is waiting on an external decision. P4.10 is built and waiting on one last check.</dd>
+        <dt>In progress</dt><dd>Under way. P5.2 is waiting on an external decision.</dd>
+        <dt>Partial</dt><dd>A fix was attempted, and we decided to defer it and come back to it later. P4.10 is built; its last check waits until the failure it fixes happens again.</dd>
         <dt>Verified</dt><dd>The problem is confirmed in our replays, the code or a live test, but no fix is built yet.</dd>
         <dt>To be verified</dt><dd>Proposed, not yet confirmed or agreed.</dd>
       </dl>
@@ -446,7 +463,7 @@
         the change, and fail if it is removed. On four normal stored questions the ceiling changed
         nothing. The last check is to watch the ceiling stop a real runaway, and it could not be
         run. On 24 September the two stored cases ran away every time; on 25 September none of 16
-        attempts did, across all eight stored cases. The fix stays in progress until a runaway comes
+        attempts did, across all eight stored cases. The fix is marked Partial until a runaway comes
         back and the check can be run. One consequence to watch for: a runaway that would have
         ended in an answer after five minutes is now cut off, and the research is asked for again
         instead.</p>
@@ -609,7 +626,9 @@
 
 <script>
   // ---- Update here at the end of a session, when the user asks. ----
-  // status: "Fixed" | "In progress" | "Verified" | "To be verified"
+  // status: "Fixed" | "In progress" | "Partial" | "Verified" | "To be verified"
+  //         Partial: a fix was attempted and deferred, to be revisited. Set only by the
+  //         user's decision; FIX_PLAN.md has no ledger marker for it.
   // sev:    "P1" | "P2" | "P3"  (see the Severity notes; grades the defect, not the fix)
   // src:    "T" | "R" | "T & R"
   // fixed:  "YYYY-MM-DD" on a Fixed row only: the first commit in which FIX_PLAN.md shows the
@@ -617,7 +636,7 @@
   // ver:    on a Fixed row only: the release that carries it ("2026.09.1", the git tag
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
-  const UPDATED = "25 September 2026, end of Session 28 (P4.10 built, one check outstanding: a research step's reply is capped, and an empty reply after heavy thinking is not tried again; P4.11 opened: the wait when the model's provider times out; next: P4.10's last check, then P3.15)";
+  const UPDATED = "25 September 2026, end of Session 28 (new status, Partial: a fix attempted and deferred to be revisited; P4.10 is Partial, built with one check deferred; P4.11 opened: the wait when the model's provider times out; next: P4.10's last check, then P3.15)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23", ver: "Next release" },
@@ -660,7 +679,7 @@
     { src: "R", fix: "Remove the unused case-law court filter", sev: "P2", status: "Fixed", ref: "P4.4", t: "", fixed: "2026-09-15", ver: "2026.09.1" },
     { src: "T & R", fix: "Report a lost research step as lost, not “no results”", sev: "P1", status: "Fixed", ref: "P4.5", t: "3", fixed: "2026-09-24", ver: "Next release" },
     { src: "T", fix: "Label incomplete Deep Research steps as incomplete in progress messages", sev: "P3", status: "Fixed", ref: "P4.5", t: "3", fixed: "2026-09-24", ver: "Next release" },
-    { src: "R", fix: "Cut the cost and the wait of a lost reply (about 63,000 reasoning tokens per failed attempt)", sev: "P2", status: "In progress", ref: "P4.10", t: "" },
+    { src: "R", fix: "Cut the cost and the wait of a lost reply (about 63,000 reasoning tokens per failed attempt)", sev: "P2", status: "Partial", ref: "P4.10", t: "" },
     { src: "R", fix: "Cut the wait when the model's provider stops responding mid-reply (two to three minutes per failed attempt)", sev: "P2", status: "Verified", ref: "P4.11", t: "" },
     { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Fixed", ref: "P4.6", t: "4", fixed: "2026-09-23", ver: "Next release" },
     { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Fixed", ref: "P4.7", t: "2", fixed: "2026-09-24", ver: "Next release" },
@@ -674,8 +693,8 @@
   ];
   // ---- End of data. ----
 
-  const STATUSES = ["Fixed", "In progress", "Verified", "To be verified"];
-  const STATUS_CLASS = { "Fixed": "st-fixed", "In progress": "st-wip", "Verified": "st-verified", "To be verified": "st-tbv" };
+  const STATUSES = ["Fixed", "In progress", "Partial", "Verified", "To be verified"];
+  const STATUS_CLASS = { "Fixed": "st-fixed", "In progress": "st-wip", "Partial": "st-partial", "Verified": "st-verified", "To be verified": "st-tbv" };
   const SOURCES = [["all", "All"], ["T", "Thomas"], ["R", "Us"], ["T & R", "Both"]];
   let statusFilter = "all";
   let sourceFilter = "all";
@@ -838,7 +857,7 @@
     document.getElementById("hero-n").textContent = String(counts["Fixed"]);
     document.getElementById("hero-of").textContent = "of " + total + " fixes";
     document.getElementById("hero-sub").textContent =
-      counts["In progress"] + " in progress · " + counts["Verified"] + " verified, not yet built · " +
+      counts["In progress"] + " in progress · " + counts["Partial"] + " partial · " + counts["Verified"] + " verified, not yet built · " +
       counts["To be verified"] + " to be verified";
     buildBar(document.getElementById("bar-all"), ROWS, false);
     const legend = document.getElementById("legend");
