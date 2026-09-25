@@ -5875,8 +5875,8 @@ before any product code.
   - this docs commit.
 - `main` is untouched at `b2a3fd8`.
 - **1872 tests green.**
-- Ledger **35 of 51 rows, 8 of 14 buckets**, with **3 in progress**: P0.4,
-  P5.2 and now **P4.10**.
+- Ledger **35 of 52 rows** (P4.11 booked in the addendum below), **8 of 14
+  buckets**, with **3 in progress**: P0.4, P5.2 and now **P4.10**.
 - **Six Fixed-or-built rows are not on `main`:** P0.6, P4.6, P3.7, P4.7 and
   P4.5, plus P4.10 (built, not accepted).
 
@@ -5921,3 +5921,41 @@ before any product code.
 dev box is on its normal settings (the seam and probe calls read
 `app_settings` and change nothing). The seam draws' answers are in the
 scratchpad only.
+
+**Addendum to Session 28 (same day, before the session closed, at the user's
+request: "make sure we're not going to lose anything").** Four things the
+session knew that the handover did not say:
+
+1. **P4.11 booked** as P4.10's residual: mechanism (b), the upstream idle
+   timeout, is a latency cost that P4.10's lever does not touch.
+   - The figures: 11 calls; +371 s median per affected turn; the retry
+     answered 3 of 22.
+   - Not retrying (b) on Worker calls was offered and not chosen.
+   - The ledger is now **35 of 52 rows**. Order: the P4.10 redraw, then P3.15,
+     then P4.11.
+2. **A runaway can end in an answer, and then it is invisible** (a watch item,
+   now on P4.10's row).
+   - The r3 t3 draw on 2026-09-24 reasoned 62,916 tokens, then answered.
+   - Such a call leaves no `empty_completions` record, so `lost` and
+     `lostcost` cannot count it.
+   - The 32,000-token cap turns it into a lost reply that the Manager
+     re-delegates. That is the one quality consequence of the cap to read for
+     when (b) is finally drawn on a runaway.
+3. **Per-attempt durations**, from the delegation timelines and the seam
+   draws:
+   - an (a) attempt takes about 310-390 s;
+   - a (b) attempt takes about 130-190 s. That is the upstream's own idle
+     limit, which our 180 s read timeout cannot shorten.
+4. **An unproven hypothesis, not evidence:** why (a) is confined to the
+   quick-lookup Worker.
+   - Its prompt packs several duties into "2-5 sentences": report the change
+     relations first, add a clause on the sibling subsections, say what was
+     searched.
+   - A model that cannot satisfy all of them in that length may deliberate
+     without end.
+   - Nothing tests this. The counter-evidence is that effort `medium` and
+     `low` still ran away on r2 t1. Do not act on it without a seam test.
+
+**Kept out of the repo on purpose:** the seam draws' answer texts (they echo a
+lawyer's terms) stayed in the session scratchpad and are gone with it. Every
+number from them is in BASELINE.md, and the commands re-draw them.

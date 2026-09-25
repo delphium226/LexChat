@@ -403,7 +403,7 @@
       <h2>Status</h2>
       <dl>
         <dt>Fixed</dt><dd>Built and accepted on the fix branch. Fixed rows with a version number are merged to <code>main</code> for deployment to the target: release 2026.09.1 on 22 September and 2026.09.2 (P3.13) on 23 September. Rows marked “Next release” (P0.6, P4.6, P3.7, P4.7, P4.5) stay on the branch until then.</dd>
-        <dt>In progress</dt><dd>Under way. P5.2 is waiting on an external decision.</dd>
+        <dt>In progress</dt><dd>Under way. P5.2 is waiting on an external decision. P4.10 is built and waiting on one last check.</dd>
         <dt>Verified</dt><dd>The problem is confirmed in our replays, the code or a live test, but no fix is built yet.</dd>
         <dt>To be verified</dt><dd>Proposed, not yet confirmed or agreed.</dd>
       </dl>
@@ -427,7 +427,34 @@
         box (Settings, then About), so a problem report can say which release it was.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.</p>
-      <p><strong>P4.5</strong>, a research step whose answer is lost, is fixed. About one question in
+      <p><strong>P4.10</strong>, the cost of a lost reply, is built, with one check still to run.
+        Sometimes the model behind a research step thinks until it has used almost all the output
+        it is allowed (about 63,000 tokens), then writes nothing. Each attempt took about six
+        minutes and cost about 76 cents, and the system used to try three times. Across all our
+        replays this happened 8 times, always in the quick research step behind a Conversational
+        answer. Those 8 answers cost $12.38 more than the same questions normally do, and took
+        nearly two hours longer in total. Trying again rarely helped (2 times in 12); the chat
+        asking for the research again, which it already does, fixed all 6 cases where it was
+        needed.</p>
+      <p><strong>What changed.</strong> A research step's reply now has a ceiling of 32,000 tokens,
+        and a reply that comes back empty after that much thinking is not tried again. It goes
+        straight to P4.5's “answer lost” label, and the chat asks for the research again. A ceiling
+        does not make the model answer, but it stops the waste sooner: in a test, a 16,000-token
+        ceiling ended the same failure after 93 seconds and 20 cents. Telling the model to think
+        less did not stop it at all.</p>
+      <p><strong>How it was tested, and what is left.</strong> Automated checks cover each part of
+        the change, and fail if it is removed. On four normal stored questions the ceiling changed
+        nothing. The last check is to watch the ceiling stop a real runaway, and it could not be
+        run. On 24 September the two stored cases ran away every time; on 25 September none of 16
+        attempts did, across all eight stored cases. The fix stays in progress until a runaway comes
+        back and the check can be run. One consequence to watch for: a runaway that would have
+        ended in an answer after five minutes is now cut off, and the research is asked for again
+        instead.</p>
+      <p><strong>One row opened.</strong> <strong>P4.11</strong>: when the model's provider stops
+        responding mid-reply, each attempt waits two to three minutes before giving up, and trying
+        again rarely helps (3 times in 22). It adds about six minutes to the answers it hits. It will
+        be measured before anything is chosen.</p>
+      <p><strong>Earlier, P4.5</strong>, a research step whose answer is lost, was fixed. About one question in
         sixty, the model returns an empty reply to a research step, even after three tries. Before,
         what that step handed on was only its record of the searches it had run, which reads like a
         search that found nothing, and in one Deep Research case the report told the lawyer
@@ -450,8 +477,7 @@
       <p><strong>One thing caught before release.</strong> The first wording made the chat reply
         blame “a lost reply from the database”, which is false and points the lawyer at the
         legislation database. The label now says the lost reply was the language model's own, and
-        the re-run replies say so. The cost of a lost reply (P4.10) is a separate fix, still to
-        come.</p>
+        the re-run replies say so. The cost of a lost reply is a separate fix, P4.10, above.</p>
       <p><strong>Earlier, P4.7</strong>, a Deep Research report saying “no case law was found” when case law
         was never searched, is fixed. The step that writes the final report used one set of
         instructions for every research type, and its example of how to describe a gap was “No
@@ -567,11 +593,9 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next.</strong> <strong>P4.10</strong>, the cost of a lost reply. A lost reply is
-        slow and expensive: each failed attempt uses about 63,000 tokens of the model's hidden
-        reasoning, and single replies have taken nearly 20 minutes and cost $2.40. The change
-        affects every research step, so it will be measured before anything is chosen.
-        <strong>P3.15</strong> follows: the last open fix for false “not found” answers.</p>
+      <p><strong>Next.</strong> The last check on <strong>P4.10</strong>, then
+        <strong>P3.15</strong>: the last open fix for false “not found” answers. <strong>P4.11</strong>
+        after that.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
         and three items from <code>docs/TODO.md</code> D16 (the impossible year window, always
@@ -593,7 +617,7 @@
   // ver:    on a Fixed row only: the release that carries it ("2026.09.1", the git tag
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
-  const UPDATED = "24 September 2026, end of Session 27 (P4.5 fixed: a lost research step is labelled as lost, not read as a search that found nothing; new Version column: the release each fix is part of; next: P4.10, the cost of a lost reply)";
+  const UPDATED = "25 September 2026, end of Session 28 (P4.10 built, one check outstanding: a research step's reply is capped, and an empty reply after heavy thinking is not tried again; P4.11 opened: the wait when the model's provider times out; next: P4.10's last check, then P3.15)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23", ver: "Next release" },
@@ -636,7 +660,8 @@
     { src: "R", fix: "Remove the unused case-law court filter", sev: "P2", status: "Fixed", ref: "P4.4", t: "", fixed: "2026-09-15", ver: "2026.09.1" },
     { src: "T & R", fix: "Report a lost research step as lost, not “no results”", sev: "P1", status: "Fixed", ref: "P4.5", t: "3", fixed: "2026-09-24", ver: "Next release" },
     { src: "T", fix: "Label incomplete Deep Research steps as incomplete in progress messages", sev: "P3", status: "Fixed", ref: "P4.5", t: "3", fixed: "2026-09-24", ver: "Next release" },
-    { src: "R", fix: "Cut the cost and the wait of a lost reply (about 63,000 reasoning tokens per failed attempt)", sev: "P2", status: "Verified", ref: "P4.10", t: "" },
+    { src: "R", fix: "Cut the cost and the wait of a lost reply (about 63,000 reasoning tokens per failed attempt)", sev: "P2", status: "In progress", ref: "P4.10", t: "" },
+    { src: "R", fix: "Cut the wait when the model's provider stops responding mid-reply (two to three minutes per failed attempt)", sev: "P2", status: "Verified", ref: "P4.11", t: "" },
     { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Fixed", ref: "P4.6", t: "4", fixed: "2026-09-23", ver: "Next release" },
     { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Fixed", ref: "P4.7", t: "2", fixed: "2026-09-24", ver: "Next release" },
     { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", sev: "P3", status: "Verified", ref: "P4.8", t: "" },
