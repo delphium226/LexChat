@@ -1587,6 +1587,28 @@ def test_lostcost_infers_no_site_when_a_turn_has_two_slow_calls(tmp_path, capsys
     rows = [ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("dir ")]
     assert len(rows) == 2 and all(" ? " in r for r in rows)
 
+def test_lostcost_splits_the_retry_yield_by_site(tmp_path, capsys):
+    """P4.11: a lever that stops retrying on one site gives up that site's
+    recoveries. A recovered (b) call inside a worker (site inferred) and an
+    unrecovered one that no lost site ties: pooled by site, the inferred share
+    said."""
+    def idle(attempt, retried):
+        return _probe(finish_reason="error", completion_tokens=140, reasoning_chars=551,
+                      stream_error="Upstream idle timeout exceeded", attempt=attempt,
+                      retried=retried)
+    d = tmp_path / "dir"
+    _write_runs(d, {
+        1: [_cost_turn("Q", 0.05, 400.0, [idle(1, True)])],
+        2: [_cost_turn("Q", 0.05, 400.0, [idle(1, True), idle(2, True), idle(3, False)])],
+        3: [_cost_turn("Q", 0.04, 31.0)],
+    })
+    args = type("A", (), {"dir": str(d), "all_dirs": False, "out_price": 12.0})()
+    rr.cmd_lostcost(args)
+    out = capsys.readouterr().out
+    assert "  after (b):   3 retries; the next attempt answered  1" in out
+    assert "    worker     after (b):   1 retries; answered  1; 1 on an inferred site" in out
+    assert "    untied     after (b):   2 retries; answered  0; 0 on an inferred site" in out
+
 
 def test_the_fisher_tail_is_the_hypergeometric_upper_tail():
     # all 2 events in a group of 2 of 4 runs: C(2,2)C(2,0)/C(4,2) = 1/6

@@ -3297,6 +3297,9 @@ def cmd_lostcost(args) -> int:
     # retried, did the next attempt answer (no further record) or come back
     # empty again (and how)?
     retry_next: dict = {}
+    # The same, by the site the call landed in (P4.11: a lever that stops
+    # retrying on one site gives up that site's recoveries, not the pool's).
+    retry_by_site: dict = {}
     redone = Counter()
     v3_turns = Counter()
     v3_workers = Counter()
@@ -3337,11 +3340,13 @@ def cmd_lostcost(args) -> int:
             mechs = "".join(empty_mechanism(r) for r in records)
             for m in mechs:
                 attempts_by[m] += 1
+            pairs = []
             for j, r in enumerate(records):
                 if not r.get("retried"):
                     continue
                 nxt = mechs[j + 1] if j + 1 < len(mechs) else "answered"
                 retry_next.setdefault(mechs[j], Counter())[nxt] += 1
+                pairs.append((mechs[j], nxt))
             slow = any(m in "ab" for m in mechs)
             if not ok:
                 s = next(site_iter, None) if tied else None
@@ -3355,6 +3360,10 @@ def cmd_lostcost(args) -> int:
                 site = inferred_site + "~"
             else:
                 site = "?"
+            for m, nxt in pairs:
+                c = retry_by_site.setdefault(site.rstrip("~"), {}).setdefault(m, Counter())
+                c[nxt] += 1
+                c["inferred"] += site.endswith("~")
             first = i == 0
             rows.append({
                 "dir": dn, "sid": doc.get("session_id"), "rep": doc.get("rep", 1),
@@ -3454,6 +3463,18 @@ def cmd_lostcost(args) -> int:
         print(f"  after ({m}): {sum(nx.values()):>3} retries; the next attempt "
               f"answered {nx['answered']:>2}, came back empty "
               + ", ".join(f"({k}) {v}" for k, v in sorted(nx.items()) if k != "answered"))
+    # A tied site belongs to an unrecovered call, so its retries never
+    # answered; a recovered call's site can only be inferred. Pooled, and the
+    # inferred share said, so neither half reads as the site's yield alone.
+    print("  by the site the call landed in (an unrecovered call's site is tied, "
+          "a recovered call's inferred):")
+    for site in sorted(retry_by_site):
+        for m in "abcd?":
+            nx = retry_by_site[site].get(m)
+            if nx:
+                n = sum(v for k, v in nx.items() if k != "inferred")
+                print(f"    {site:<10} after ({m}): {n:>3} retries; answered "
+                      f"{nx['answered']:>2}; {nx['inferred']} on an inferred site")
     print("unrecovered calls that landed in a research worker, and whether a later "
           "delegation in the same turn returned a body (the Manager redid it):")
     for m in "abcd?":
