@@ -643,7 +643,7 @@ async def run_as_sent(messages: list, cfg: dict, tools: list,
     out = {"content_chars": 0, "tool_calls": [], "finish_reason": None,
            "native_finish_reason": None, "reasoning_chars": 0,
            "completion_tokens": None, "reasoning_tokens": None, "cost": 0.0,
-           "stream_error": None, "seconds": 0.0, "content": ""}
+           "stream_error": None, "seconds": 0.0, "content": "", "provider": None}
     names: dict = {}
     t0 = time.perf_counter()
     timeout = httpx.Timeout(None, connect=30.0, read=180.0)  # as chat_loop's
@@ -662,6 +662,9 @@ async def run_as_sent(messages: list, cfg: dict, tools: list,
                         data = json.loads(raw)
                     except json.JSONDecodeError:
                         continue
+                    if data.get("provider"):
+                        # which upstream OpenRouter routed the attempt to (P4.11)
+                        out["provider"] = data["provider"]
                     if data.get("usage"):
                         u = data["usage"]
                         out["completion_tokens"] = u.get("completion_tokens")
@@ -730,6 +733,10 @@ def _as_sent_command(args, doc: dict, turn: dict, sid: str) -> int:
         extra["reasoning"] = {"effort": args.reasoning_effort}
     if args.max_tokens:
         extra["max_tokens"] = args.max_tokens
+    if args.provider:
+        # OpenRouter's routing field: this upstream only, no fallback, so a
+        # draw is that route's outcome (P4.11). The product sends none.
+        extra["provider"] = {"order": [args.provider], "allow_fallbacks": False}
     print(f"seam=worker --as-sent  session={sid} turn={args.turn} "
           f"delegation={args.delegation}")
     print(f"  recorded rounds: {len(rounds)}; sent here: "
@@ -755,7 +762,8 @@ def _as_sent_command(args, doc: dict, turn: dict, sid: str) -> int:
               f"reasoning_tokens={r['reasoning_tokens']} "
               f"reasoning_chars={r['reasoning_chars']} content_chars={r['content_chars']} "
               f"tools={','.join(r['tool_calls']) or '-'} "
-              f"finish={r['finish_reason']}/{r['native_finish_reason']}"
+              f"finish={r['finish_reason']}/{r['native_finish_reason']} "
+              f"provider={r.get('provider') or '-'}"
               + (f" error={r['stream_error'][:60]!r}" if r["stream_error"] else ""))
         text = r.get("content") or ""
         if text.strip():
@@ -769,7 +777,7 @@ def _as_sent_command(args, doc: dict, turn: dict, sid: str) -> int:
             d.mkdir(parents=True, exist_ok=True)
             lever = "_".join(f"{k}-{v}" for k, v in (
                 ("effort", args.reasoning_effort), ("max", args.max_tokens),
-                ("date", on_date), ("rev", rev)) if v)
+                ("date", on_date), ("rev", rev), ("provider", args.provider)) if v)
             (d / f"{sid}_t{args.turn}_d{args.delegation}_as_sent"
                  f"{'_' + lever if lever else ''}_rep{rep}.md").write_text(
                 text, encoding="utf-8")
@@ -1236,6 +1244,11 @@ def main(argv: Optional[list] = None) -> int:
                         "run's runtime_state.git_head) or a sha; default the "
                         "working tree. Today's code rebuilt 1 of 7 stored (b) "
                         "payloads to their recorded sent_chars")
+    p.add_argument("--provider", default=None,
+                   help="--as-sent only (P4.11): route the draw to this OpenRouter "
+                        "upstream alone (e.g. google-vertex, google-ai-studio), with "
+                        "no fallback; the product sends no routing field. Each draw "
+                        "prints the provider that served it either way")
     p.add_argument("--dry-run", action="store_true",
                    help="build the payload and print its shape; no model call")
     p.add_argument("--out", default=None, help="write each answer to this directory")
@@ -1245,10 +1258,11 @@ def main(argv: Optional[list] = None) -> int:
     doc, turn = load_turn(run_path, args.turn)
     sid = str(doc.get("session_id"))
     if args.first_round:
-        if args.at_rev:
+        if args.at_rev or args.provider:
             # Not built for either first round: refuse rather than draw the
-            # working tree's prompt under a flag that says otherwise.
-            raise SystemExit("--at-rev is a worker --as-sent option")
+            # working tree's prompt, or the default route, under a flag that
+            # says otherwise.
+            raise SystemExit("--at-rev and --provider are worker --as-sent options")
         if args.seam == "manager":
             return _manager_first_round_command(args, doc, turn, sid)
         if args.seam != "worker":
@@ -1264,9 +1278,9 @@ def main(argv: Optional[list] = None) -> int:
             raise SystemExit("--as-sent is a worker seam option")
         return _as_sent_command(args, doc, turn, sid)
     if (args.round is not None or args.reasoning_effort or args.max_tokens or args.date
-            or args.at_rev):
-        raise SystemExit("--round, --reasoning-effort, --max-tokens, --date and "
-                         "--at-rev need --as-sent")
+            or args.at_rev or args.provider):
+        raise SystemExit("--round, --reasoning-effort, --max-tokens, --date, --at-rev "
+                         "and --provider need --as-sent")
     build ={"synthesis": synthesis_messages, "worker": worker_messages,
              "manager": manager_messages}[args.seam]
     kwargs = {"without_fix": args.without_fix, "rev": args.rev}

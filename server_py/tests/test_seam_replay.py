@@ -1050,3 +1050,97 @@ def test_at_rev_is_an_as_sent_option_only(run_file):
         with pytest.raises(SystemExit):
             sr.main([argv[0], "--run", str(run_file), "--turn", "1", *argv[1:],
                      "--dry-run"])
+
+
+# ---------------------------------------------------------------------------
+# --provider (P4.11): one OpenRouter upstream, and which one served the draw
+# ---------------------------------------------------------------------------
+
+def test_an_as_sent_draw_on_a_provider_routes_it_and_prints_who_served(
+        tmp_path, monkeypatch, capsys):
+    p = tmp_path / "6348_rep2.json"
+    p.write_text(json.dumps(_as_sent_doc()), encoding="utf-8")
+    seen = {}
+
+    async def fake_cfg(extra):
+        return {"model": "m", **extra}
+
+    async def fake_run(messages, cfg, tools, extra=None):
+        seen["extra"] = extra
+        return {"content_chars": 3, "content": "Yes", "tool_calls": [],
+                "finish_reason": "stop", "native_finish_reason": "STOP",
+                "reasoning_chars": 0, "completion_tokens": 20, "reasoning_tokens": 0,
+                "cost": 0.001, "stream_error": None, "seconds": 3.0,
+                "provider": "Google AI Studio"}
+
+    monkeypatch.setattr(sr, "_provider_cfg", fake_cfg)
+    monkeypatch.setattr(sr, "run_as_sent", fake_run)
+    out_dir = tmp_path / "out"
+    assert sr.main(["worker", "--run", str(p), "--turn", "1", "--as-sent",
+                    "--provider", "google-ai-studio", "--out", str(out_dir)]) == 0
+    assert seen["extra"] == {"provider": {"order": ["google-ai-studio"],
+                                          "allow_fallbacks": False}}
+    out = capsys.readouterr().out
+    assert "provider=Google AI Studio" in out
+    assert '"allow_fallbacks": false' in out  # the lever line names the route
+    assert (out_dir / "6348_t1_d1_as_sent_provider-google-ai-studio_rep1.md").exists()
+
+
+def test_run_as_sent_reads_the_serving_provider_off_the_stream(monkeypatch):
+    chunks = [
+        {"provider": "Google", "choices": [{"delta": {"reasoning": "hm"}}]},
+        {"provider": "Google", "choices": [{"delta": {"content": "Yes"},
+                                            "finish_reason": "stop"}],
+         "usage": {"completion_tokens": 5, "cost": 0.001}},
+    ]
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        async def aiter_lines(self):
+            for c in chunks:
+                yield "data: " + json.dumps(c)
+            yield "data: [DONE]"
+
+    class FakeStream:
+        async def __aenter__(self):
+            return FakeResponse()
+
+        async def __aexit__(self, *a):
+            return False
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        def stream(self, method, url, json=None, headers=None):
+            FakeClient.payload = json
+            return FakeStream()
+
+    import asyncio
+
+    import httpx
+    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+    msgs = [{"role": "user", "content": "q"}]
+    r = asyncio.run(sr.run_as_sent(msgs, {"model": "m", "api_key": "k"}, [],
+                                   {"provider": {"order": ["google-vertex"],
+                                                 "allow_fallbacks": False}}))
+    assert r["provider"] == "Google" and r["content"] == "Yes"
+    assert FakeClient.payload["provider"] == {"order": ["google-vertex"],
+                                              "allow_fallbacks": False}
+
+
+def test_provider_is_an_as_sent_option_only(run_file):
+    for argv in (["worker", "--provider", "google-ai-studio"],
+                 ["worker", "--first-round", "--provider", "google-ai-studio"],
+                 ["manager", "--first-round", "--provider", "google-ai-studio"]):
+        with pytest.raises(SystemExit):
+            sr.main([argv[0], "--run", str(run_file), "--turn", "1", *argv[1:],
+                     "--dry-run"])
