@@ -5982,3 +5982,73 @@ Tracker.**
       dark).
 - Both versions were render-checked in light and dark before publishing, at the
   same URL: 30 of 52 fixed, 1 in progress, 1 partial.
+
+## Session 29 — 2026-09-25 — P4.10's (b), closed; the date line
+
+**Asked the user two questions before drawing.**
+- **The comparison.** The booked (b) compares medians of three draws a side.
+  That can pass only if two of the three lever-off draws run away; at Session
+  28's rate both medians are healthy draws and tie. **User decision:**
+  alternate lever-off and lever-on draws on one day until each side has a
+  runaway, compare the runaways, and require healthy draws to match across
+  sides.
+- **The stop budget:** about $3 all-in.
+
+**1. Why Session 28 drew nothing: the date line.**
+- The first lever-off draw of r2 t1 reproduced Session 28's first draw byte
+  for byte: 270 tokens, $0.0221, 4 s.
+- `--as-sent` built the Worker prompt with `date.today()`. The recorded calls
+  carried 23 September (the runs' `started_at`); the pre-flight's draws
+  carried 24 September; Session 28's carried 25 September.
+- With the date pinned back (a scratch wrapper at first, then the committed
+  `--date`), the same payloads ran away again on the same day:
+  - 25 September line: 11 of 11 draws answered, no reasoning (Session 28's
+    ten, plus one);
+  - 23 or 24 September line: 12 draws gave 4 runaways, 6 (b) and 2 answers.
+- The r3 t3 runaway on the 24 September line reproduced the pre-flight's
+  63,111 completion tokens exactly.
+- The draws are not fully deterministic: r3 t3 on the 23 September line
+  answered twice and timed out once.
+
+**2. The instrument** (`d94867a`):
+- `seam_replay worker --as-sent --date recorded` (or `--date YYYY-MM-DD`)
+  replaces the date line and nothing else, and prints it. Its payloads are
+  byte-identical to the wrapper's for all three payload/date pairs drawn.
+- `as_sent_outcome` now uses the product's emptiness test: a capped runaway
+  ended in a lone newline, which `chat_loop` counts as a heavy empty and the
+  seam had called "answered". An empty draw is no longer graded.
+- The help text says the lever-off side is the pre-P4.10 payload, since the
+  product's Worker call now carries the cap.
+- 3 tests new, 2 extended; each new one fails against the previous
+  `seam_replay.py` on a scratch copy. **1875 pass.**
+
+**3. (b) PASSED; P4.10 ticked `[x]`.**
+- r2 t1 (23 September line): off 63,168 tokens, 338 s, $0.777, answered
+  (2 links, MISSED); on 30,719 tokens, 163 s, $0.381, empty.
+- r3 t3 (24 September line): off 63,111 tokens, 342 s, $0.764, answered
+  (1 link, DELIVERED); on 30,720 tokens, 167 s, $0.382, empty (a).
+- Healthy draws matched across sides on both payloads.
+- **The watch item:** both uncapped runaways answered, and both capped ones
+  came back empty. In the product that is one attempt, P4.5's label and a
+  re-delegation. The two answers lost were one DELIVERED, one MISSED.
+- The tracker still shows P4.10 as Partial. Moving it is the user's call.
+
+**4. A P4.11 hint, written on its row.** (b) came only on the date lines that
+could run away (6 of 12 against 0 of 11), each at 125-133 s. It may share
+(a)'s cause. Not a measurement.
+
+**Spend: $2.40** on 13 seam draws.
+
+**Surprises.**
+- The "rate varies by day" was the date line: a two-digit change in a
+  25,000-character payload flips a stored payload between answering in 4 s and
+  reasoning for six minutes.
+- A capped runaway can emit one newline and `finish=stop`, not `length`, so
+  P4.10's length-cut warning does not fire for it (correctly: it is empty).
+
+**Hazards met.**
+- `date.today()` inside a replayed prompt makes a "faithful" payload
+  unfaithful the next day. Any seam that rebuilds a dated prompt has the same
+  trap. Only `--as-sent` pins it so far.
+- A draw that ends (b) costs $0 but about two minutes. Budget time, not
+  money, for them.

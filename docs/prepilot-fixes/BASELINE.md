@@ -3954,3 +3954,60 @@ payloads**, against 2 in 2 product-payload draws of the two faithful ones the
 day before. The affected-turns half of P4.10's acceptance is therefore not
 yet evaluated. The unaffected half passes: where the cap cannot bind, it
 changes nothing. Spend on these draws: $0.80.
+
+**Why 2026-09-25 drew no runaway: the date line (Session 29).** The Worker
+prompt opens with "Today's date is ...", and `--as-sent` built it with the
+day of the draw. The recorded calls carried 23 September (the runs'
+`started_at`), the pre-flight's draws 24 September, and Session 28's draws 25
+September. Every other byte is the same, and the three lines are the same
+length. At temperature 0 the model draws much the same completion for the same
+bytes, so the date line decided which payload was being drawn. `seam_replay
+worker --as-sent --date recorded` (or `--date YYYY-MM-DD`) now pins the line
+(`d94867a`). Its payloads are byte-identical to those of the scratch wrapper
+that made the first twelve draws below.
+
+The two faithful payloads, all drawn on 2026-09-25:
+
+| date line | draws | ran away | (b) upstream idle timeout | answered, no runaway |
+|---|---|---|---|---|
+| 25 September (today; Session 28's ten, plus one) | 11 | 0 | 0 | 11 |
+| 23 September (recorded): r2 t1 3, r3 t3 3 | 6 | 2 | 2 | 2 |
+| 24 September (the pre-flight's): r3 t3 6 | 6 | 2 | 4 | 0 |
+
+On the 24 September line, the r3 t3 runaway reproduced the pre-flight's
+63,111 completion tokens exactly. The draws are still not fully deterministic:
+r3 t3 on the 23 September line answered twice (2,107 tokens both times) and
+timed out once. Every (b) ended at 125-133 s, and none came on the 25 September
+line. That is a hint for P4.11, not a measurement of (b).
+
+**The acceptance, completed: runaway against runaway (user decision).** The
+booked comparison was the medians of three draws a side. That can pass only if
+two of the three lever-off draws run away; otherwise both medians are healthy
+draws and tie. The user chose instead to alternate the sides on one day until
+each had a runaway, compare the runaways, and require the healthy draws to
+match.
+
+| payload (date line) | side | tokens | seconds | cost | outcome |
+|---|---|---|---|---|---|
+| r2 t1 (23 September) | off | 63,168 | 338 | $0.777 | answered: 2 links, s.36(2) MISSED |
+| | on (`--max-tokens 32000`) | 30,719 | 163 | $0.381 | empty (a lone newline) |
+| r3 t3 (24 September) | off | 63,111 | 342 | $0.764 | answered: 1 link, DELIVERED |
+| | on | 30,720 | 167 | $0.382 | empty (a) |
+| r3 t3 (23 September), healthy | off / on | 2,107 / 2,107 | 15 / 15 | $0.038 / $0.032 | identical: 3 links, DELIVERED |
+| r2 t1 (25 September), healthy | off (this session) / on (Session 28, 3 draws) | 270 / 270 each | 4 / 4 each | $0.022 / not recorded | identical |
+
+(b) passes: no capped draw exceeded 32,000 tokens (each ended at 96% of the
+cap, as uncapped runaways end at 96% of 65,536). Each capped runaway cost half
+and took half the time of its payload's uncapped one.
+
+**The watch item, read.** Both uncapped runaways ended in an answer, and both
+capped ones came back empty. The lone newline counts as empty in the product
+(`is_empty_completion`); the seam called it "answered" until `d94867a`. In the
+product each capped runaway is a heavy empty: one attempt, P4.5's label, and a
+re-delegation by the Manager, which made good 6 of 6 such calls in the replays.
+So on a runaway that would have answered, the cap trades an answer (about $0.77
+and 340 s) for a lost reply (about $0.38 and 165 s) plus the re-delegation,
+whose cost the seam cannot draw. The two answers lost this way were one
+DELIVERED and one MISSED.
+
+Spend on these draws: $2.40 (13 draws).
