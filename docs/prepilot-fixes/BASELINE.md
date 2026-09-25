@@ -4011,3 +4011,49 @@ whose cost the seam cannot draw. The two answers lost this way were one
 DELIVERED and one MISSED.
 
 Spend on these draws: $2.40 (13 draws).
+
+## A NOT HELD answered from history (P3.15, 2026-09-25)
+
+P3.7's residual: a follow-up the Manager answers from its own history, with no
+delegation, could narrow a lookup's NOT HELD to "its text is not held". The row
+said to measure before building. Closed by user decision on the measurement,
+with no product change.
+
+**The sweep** (`wave4_p315_pre`: p37_6409 and p37_6373, n=3, at `2cb77e3`,
+$1.83; the exit-1 set exits 0). `python -m tools.replay_report --dir <D>
+lookup` now splits the absent slots by route (`d37b517`):
+
+| sweep (code) | graded, delegated | graded, from history | not graded (6373 t3) |
+|---|---|---|---|
+| `wave4_p37b` (`0c91fb6`, P3.7) | 11 of 11 | 0 of 1 | delegated 1 of 3 |
+| `wave4_p37c` (`782a9e8`, P3.7) | 10 of 10 | 1 of 2 | delegated 1 of 1, from history 0 of 2 |
+| `wave4_p315_pre` (`2cb77e3`) | 10 of 10 | 2 of 2 | delegated 1 of 2, from history 1 of 1 |
+| pooled | 31 of 31 | **3 of 5** | delegated 3 of 6, from history 1 of 3 |
+
+No commit between `782a9e8` and `2cb77e3` edits the conversational Manager's
+prompt. The unfixed product met P3.15's booked acceptance (every graded absent
+slot passes, n=3) on the third sweep, so that acceptance cannot tell a fix from
+none.
+
+**The seam** (`python -m tools.seam_replay manager --run <f> --turn N
+--first-round --date recorded`, `8aed49c`: the Manager's first round of the
+turn, its tools offered, stopped at the first call, graded by `lookup`). Current
+code, the recorded date line:
+
+| from-history payload (its live outcome) | draws | seam outcome |
+|---|---|---|
+| `wave4_p37b` 6409 r1 t7, export t11 (miss) | 3 | delegated 3 of 3 |
+| `wave4_p37c` 6409 r2 t6, export t10 (miss) | 3 | delegated 3 of 3 |
+| `wave4_p37c` 6373 r1 t3 (miss, not graded) | 3 | answered from history, PASS 3 of 3 |
+| `wave4_p37c` 6373 r3 t3 (miss, not graded) | 3 | delegated 1, answered and PASS 2 |
+| the four live passes | 1 each | PASS 2, delegated 2 |
+
+No miss in 16 draws, so a prompt lever had nothing to be measured against.
+$0.26.
+
+**The grader fix** (`d37b517`). The sweep drew one FAIL on a held Act
+(6409 r1, export t2). The answer was right: "This index does not hold this
+instrument" followed a bullet naming SSI 2025/377, under a heading that named
+the Act. An anaphor now belongs to the subordinate instrument named last. An
+Act's citation or section link does not move it, and it is never credited to
+an Act. Regraded over all 51 directories, only that verdict moved.

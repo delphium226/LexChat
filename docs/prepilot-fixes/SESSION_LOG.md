@@ -6052,3 +6052,115 @@ could run away (6 of 12 against 0 of 11), each at 125-133 s. It may share
   trap. Only `--as-sent` pins it so far.
 - A draw that ends (b) costs $0 but about two minutes. Budget time, not
   money, for them.
+
+## Session 29, continued — 2026-09-25 — P3.15 (NOT HELD from history), closed on the measurement
+
+**The sweep the row asked for first** (user go-ahead: n=3, stop at ~$3).
+- `wave4_p315_pre`: p37_6409 and p37_6373, n=3, at `2cb77e3`. $1.83, 30 of
+  30 turns ok. Pin, fresh uvicorn, restore and server stop all done.
+- The exit-1 set exits 0 on it. `lookup` exited 1 on one finding: a held Act
+  "reported absent".
+
+**1. That finding was the grader's** (`d37b517`).
+- The answer was right. "This index does not hold this instrument" followed a
+  bullet naming SSI 2025/377, under a heading naming the Act. The anaphor rule
+  credited it to the slot's instrument, the Act.
+- **First cut:** attribute the anaphor to the instrument named last. That
+  dropped true anaphors that came after a link to the Act's sections (found by
+  listing every sentence the change stopped counting).
+- **Second cut:** only subordinate instruments move the referent, and an
+  anaphor is never credited to an Act. Regraded over all 51 directories, only
+  that verdict moved.
+- Also new: `lookup` prints the absent slots by route (delegated / from
+  history), the count the row asks for.
+
+**2. The measurement.**
+- This sweep: graded from-history slots 2 of 2, so the unfixed product met the
+  booked acceptance.
+- Pooled over three sweeps: from history 3 of 5, delegated 31 of 31.
+- **User decision:** rebook as a seam A/B first.
+
+**3. The seam could not reproduce the miss** (`8aed49c`).
+- A from-history turn has no delegation, so the composition seam cannot draw
+  it. `manager --first-round` draws the Manager's first round, its tools
+  offered:
+  - an answer is graded by `lookup`;
+  - a delegation prints the numbers its brief names (the drift probe);
+  - `--date` pins the Manager's date line too.
+- Four miss payloads at 3 draws each, four passes at 1 each, current code,
+  recorded date: **0 misses in 16**. The two graded 6409 misses delegated 6
+  of 6 times; the 6373 ones answered and passed. $0.26.
+- **User decision: close P3.15 on the measurement, with no product change**
+  (the P3.1/P3.11 precedent). The code-written footer already states the
+  definite line, and the miss narrows a true negative and never invents one.
+  **B5 closes: 9 of 14 buckets, 37 of 52 rows.**
+
+**Spend, Session 29: $4.49** ($2.40 P4.10 draws, $1.83 replay, $0.26 Manager
+seam).
+
+**Surprises.**
+- A booked acceptance can be met by the unfixed product. It happened twice in
+  one session (P4.10's medians, P3.15's n=3). A defect with a low base rate
+  needs its acceptance checked against a pre-fix draw before the build.
+- The live Manager answered two follow-ups from history that the seam, on the
+  same bytes and date, delegated 6 of 6 times. The seam leaves out the
+  learning-examples injection; whether that is the difference is not shown.
+
+**Hazards met.**
+- Python in a bash heredoc ate a backslash again (`split('\')`). Use `Path.name`.
+- An anaphor rule has to be checked by listing the sentences it stops
+  counting, not only the verdicts that move: the first cut moved one verdict
+  correctly and silently stopped counting five true sentences.
+
+## Session 29 — handover for Session 30 (2026-09-25)
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. Session 29 commits:
+  - `d94867a`: `--as-sent --date`, whitespace is empty;
+  - `2cb77e3`: P4.10 accepted (docs);
+  - `d37b517`: the `lookup` anaphor fix and the by-route tally;
+  - `8aed49c`: `manager --first-round`, with `--date`;
+  - this docs commit (P3.15 closed, the handover).
+- `main` is untouched at `b2a3fd8`.
+- **1881 tests green.**
+- Ledger **37 of 52 rows**, **9 of 14 buckets** (B5 closed). In progress:
+  P0.4 and P5.2.
+- **Not on `main`:** P0.6, P4.6, P3.7, P4.7, P4.5, P4.10 and P3.15 (P3.15
+  has no product change: only tooling and docs).
+
+**Next work.**
+1. **P4.11** (measure-first). Its row carries this session's hint that (b)
+   may be (a)'s deliberation with the upstream going idle. Test that first
+   with `seam_replay worker --as-sent --date recorded` on the stored (b)
+   Worker payloads (`replay_report lostcost --all-dirs` lists them).
+2. Then the rows the open buckets wait on: P3.2 (B6), P3.3 (B11), P3.4 (B9)
+   and P4.3 (B8). Read each row in full first.
+
+**Instruments added this session (use them, don't rebuild):**
+- `seam_replay worker --as-sent --date recorded|YYYY-MM-DD`: **always pass
+  `--date recorded`** when redrawing a stored payload;
+- `seam_replay manager --first-round [--date recorded] [--without-fix --rev R]`;
+- `replay_report lookup` prints absent slots by route.
+
+**Open with the user (carried forward):**
+- **The Fix Tracker has not been updated this session.** P4.10 is `[x]` in
+  the ledger but Partial on the tracker (the user's call); P3.15 would become
+  Fixed (`fixed: "2026-09-25"`, `ver: "Next release"`) when the user asks.
+- Push the two release tags? Deploy by tag? (docs/TODO.md D19)
+- Whether P0.6, P4.6, P3.7, P4.7, P4.5, P4.10 and P3.15 go in the next cut:
+  v2026.09.3, or v2026.10.1 in October.
+- Deploy both cuts to the target: `pg_dump` first, then pull, restart,
+  `test_apis.ps1`, one real question; P0.7's query with it.
+- Tell the lexchat-eval harness owner:
+  - schema v6 on the branch (`delegations[].lost`);
+  - `tool_end`'s outcome wording;
+  - `lookup_legislation` in `tools[]`;
+  - Deep Research headings follow the research type;
+  - a Worker's heavy empty leaves one `attempt: 1, retried: false` record.
+- D20 (show a step's outcome in the UI); P5.2 (external); Thomas's review
+  document.
+
+**Machine state:** no uvicorn (stopped by PID), no pin file (restored), no
+worktrees. The dev box is on its normal settings. The seam draws' texts and
+the scratch wrapper are in the session scratchpad only; every number from
+them is in BASELINE.md, and the commands re-draw them.
