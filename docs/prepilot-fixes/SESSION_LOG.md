@@ -5914,8 +5914,8 @@ before any product code.
     retried: false` record.
 - D20 (show a step's outcome in the UI); P5.2 (external); Thomas's review
   document.
-- **The Fix Tracker has not been updated this session** (only when asked).
-  P4.10 is `[~]`, so it stays not-Fixed.
+- ~~**The Fix Tracker has not been updated this session**~~ **Updated at the
+  user's request, twice** (see the addenda below): v22 and v23.
 
 **Machine state:** no uvicorn, no pin file, no worktrees, no replay run. The
 dev box is on its normal settings (the seam and probe calls read
@@ -5959,3 +5959,26 @@ session knew that the handover did not say:
 **Kept out of the repo on purpose:** the seam draws' answer texts (they echo a
 lawyer's terms) stayed in the session scratchpad and are gone with it. Every
 number from them is in BASELINE.md, and the commands re-draw them.
+
+**Second addendum to Session 28 (2026-09-25, at the user's request): the Fix
+Tracker.**
+- **v22** (`5e4d11b`): P4.10 went Verified to In progress, P4.11 was added
+  (Verified, P2, a first-pass grade), with a plain-language P4.10 note, P4.5's
+  note moved to "Earlier", and a new "Next" paragraph. It read 30 of 52 fixed.
+- **v23** (`35c1dc8`): a **new status, Partial**, meaning a fix was attempted
+  and deferred, to be revisited later (the user's definition).
+  - It sits between In progress and Verified in the bar, legend, filters and
+    sort order.
+  - **P4.10 is Partial** (user decision): built, with its last check deferred.
+  - **Only the user moves a row to Partial.** The ledger has no marker for it,
+    so P4.10 stays `[~]` in FIX_PLAN. Step 7 of "How to use this file" now
+    records the status mapping.
+  - Its fill, validated with the dataviz skill's `validate_palette.js`: mauve
+    `#c975b0` (light) and `#c65a9a` (dark), dark count ink `#0a1020`.
+    - A violet of the same weight failed: it collapses into the navy Verified
+      under protanopia (ΔE 5.4).
+    - `#0f1830` ink gave 4.47:1, under the 4.5 floor.
+    - The worst adjacent pair is unchanged (green/brown: 16.1 light, 9.2
+      dark).
+- Both versions were render-checked in light and dark before publishing, at the
+  same URL: 30 of 52 fixed, 1 in progress, 1 partial.
