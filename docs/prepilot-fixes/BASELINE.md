@@ -4057,3 +4057,139 @@ instrument" followed a bullet naming SSI 2025/377, under a heading that named
 the Act. An anaphor now belongs to the subordinate instrument named last. An
 Act's citation or section link does not move it, and it is never credited to
 an Act. Regraded over all 51 directories, only that verdict moved.
+
+## The latency of an upstream idle timeout (P4.11, 2026-09-25)
+
+P4.10's residual. Mechanism (b): a model call ends `finish_reason=error`,
+"Upstream idle timeout exceeded", after about 130-310 tokens. It costs about $0
+but two to three minutes an attempt. Measure-first: nothing below was built
+before the user chose a lever.
+
+**What was already measured** (`replay_report lostcost --all-dirs`, 51
+directories). There were 11 (b) calls (32 attempts), 3 of them recovered: 6 in
+a research Worker and 5 in the Manager. They cost $0.29 but 3,143 s over their
+slot medians. The retry after a (b) attempt answered 3 times in 22.
+
+**New, from the same command** (`866a2b3` splits the retry yield by the site
+the call landed in):
+
+| after a (b) attempt, on a call that landed in | retries | the next attempt answered |
+|---|---|---|
+| a research Worker | 14 | 1 (6410, whose site is inferred) |
+| the Manager | 8 | 2 (both on inferred sites) |
+
+A tied site belongs to an unrecovered call, whose retries never answered, and
+a recovered call's site can only be inferred. The two are pooled so that
+neither reads as the site's yield alone.
+
+The records also mix (a) and (b) on identical bytes. Three calls did it
+(6369 `abb`, 6409 `bab`, 6348 in `wave3_p311_conv` `abb`), and in the retry
+table 3 of 12 retries after an (a) came back (b), and 1 of 22 after a (b) came
+back (a).
+
+### A faithful redraw needs the recorded head's code
+
+`seam_replay worker --as-sent` built the Worker prompt with the working tree.
+The prompt changed under most stored (b) payloads. Of the 8 Worker payloads
+drawn below, today's code rebuilt 1 (6410) to its recorded `sent_chars`; the
+rest were off by 44 to 570 characters. `--at-rev recorded` (`1de4419`) builds
+the prompt with the run's `runtime_state.git_head` and offers that head's
+tools. With it, all 8 rebuild exactly, as do P4.10's two payloads (41,906 and
+25,277). Every stored head predates `lookup_legislation`, so the tool list is 4
+tools where today's is 5. `sent_chars` does not count tools, so only
+`--at-rev` makes the tool list faithful too.
+
+None of the 5 Manager (b) calls rebuilds on an existing seam. Their records
+sit at rounds 1, 1, 2, 3 and 5. Two of them (`wave2`/6343 r1 t2,
+`wave4_p37_reach`/p37r_6374 r1 t2, both recovered) do not rebuild as a Worker
+call either, so their site stays the timeline's inference. **User decision:
+leave the Manager calls out** (lever (i) is Worker-only, and the Manager keeps
+its retry).
+
+### Step 1: the eight Worker payloads, as sent
+
+`python -m tools.seam_replay worker --run <f> --turn N --delegation 1
+--as-sent --at-rev recorded --round <react_turn> [--date recorded]`, one
+attempt a draw. Three draws on the recorded date line, then one on today's (25
+September), all drawn on 2026-09-25 through the default route. The payloads,
+by run file: `wave2_p24_final`/6385_rep2 t3 r2, `wave3_p311_conv`/6348_rep3 t2
+r3, `wave2`/6369_rep1 t5 r7, `wave2_p28`/6409_rep3 t11 r3,
+`wave4_p37_reach_pre`/6410_rep1 t2 r2, `wave2_p24`/6373_rep1 t3 r2,
+`wave2_p24`/6385_rep2 t3 r2 and `wave2`/6385_rep1 t4 r2. The three 6385
+payloads are the case-law Worker.
+
+| payload (`sent_chars`) | recorded call | recorded date line: 3 draws | today's line: 1 draw |
+|---|---|---|---|
+| 6385 `p24_final` (12,929) | bbb | b b b | b |
+| 6348 p311 (24,424) | abb | b b b | answered, 4 s |
+| 6369 (54,534) | abb, bbb | **(a)** b b | tool call, 8 s |
+| 6409 (16,724) | bab | **(a)** b b | answered, 4 s |
+| 6410 (15,627) | b, then answered | answered answered b | answered, 5 s |
+| 6373 (16,952) | bbb | b b b | answered, 3 s |
+| 6385 `p24` (11,822) | bbd | answered b b | answered, 3 s |
+| 6385 `wave2` (13,393) | bbb | b b b | answered, 5 s |
+
+- **On the recorded line, 19 of 24 draws were (b), 2 were (a) and 3 answered.**
+  Every payload drew (b) at least once. Each (b) ended at 123-149 s and 68-257
+  tokens, for $0. The (a) draws were 62,912 and 62,915 tokens (318 and 328 s,
+  $0.78 and $0.76); 62,915 is the recorded 6409 attempt's count to the token.
+- **After a (b) draw, the next draw of the same bytes was (b) 11 times in 11.**
+  A retry that resends identical bytes does not escape it, as the recorded
+  Worker retries (1 in 14) say.
+- **Today's date line turned 7 of 8 payloads into an answer or a tool call in
+  3-8 s.** 6385 `p24_final` stayed (b).
+- **(a) and (b) come from the same payloads**, and the same one-line change
+  cures both. So (b) is, like (a), a property of the payload's bytes, not an
+  independent upstream fault.
+
+Spend: $1.67 (32 draws).
+
+### Step 2: the other upstream route
+
+OpenRouter serves the model from Google (Vertex) and Google AI Studio (its
+`/models/google/gemini-3.1-pro-preview/endpoints` listing, each with standard,
+flex and priority tiers). `--provider SLUG` (`400d486`) routes a draw to one of
+them with no fallback, and every draw now prints the provider that served it.
+All drawn on the recorded date line:
+
+| payload | Vertex (the default route) | AI Studio |
+|---|---|---|
+| 6373 | (b) 1 (step 1: 3) | **(a) runaway**: 62,913 tokens, 356 s, $0.76 |
+| 6348 p311 | (b) 1 (step 1: 3) | **(a) runaway**: 62,913 tokens, 360 s, $0.77 |
+| 6385 `wave2` (case law) | (b) 2, one of them with no routing field (step 1: 3) | (b) 2 |
+| 6385 `p24_final` (case law) | (b) 1 (step 1: 3) | (b) 2 |
+
+- **The product's default route is Vertex:** a draw with no routing field was
+  served by "Google".
+- **No route avoids it.** AI Studio drew the same (b) on the case-law payloads.
+  On the two legislation payloads it turned a (b) at $0 and 125 s into a
+  runaway at $0.77 and six minutes, which P4.10's cap would still end at about
+  $0.38 and 165 s.
+- **On those two payloads, (b) looks like the (a) deliberation cut short.** On
+  the same bytes, AI Studio streamed the runaway to its end, where Vertex went
+  idle after about 150 tokens and was dropped at about 125 s. That is the
+  row's Session 29 hint, now seen on (b)'s own payloads. It is not shown for
+  the case-law Worker, where both routes timed out.
+
+Spend: $1.53 on 6 completed draws. Four more draws, cut when the plan was
+reduced to stay in budget, left no record: a Vertex control on 6373 and 6348
+and a second AI Studio draw on each case-law payload. They were redrawn: 5
+draws, all (b), $0.
+
+**Spend on P4.11's measurement: $3.20.**
+
+### What it decided
+
+**User decision: lever (i).** A research Worker's idle-timeout empty is not
+retried. It falls into P4.5's lost-report label, and the Manager re-delegates:
+it redid 3 of the 5 unrecovered Worker (b) calls, and a re-delegation sends a
+new brief, i.e. different bytes. Rate limits ((d): the retry answered 13 of
+14) and every non-Worker call keep their retry. The price is the Worker retry's
+1 in 14.
+
+What it removes, from the recorded attempts: an unrecovered Worker (b) call
+made 3 attempts at about 125-190 s each. It now makes 1. Over the 51
+directories that is 10 attempts removed from the 5 unrecovered Worker (b)
+calls (6369 `bbb`, 6385 `wave2`, 6373, 6385 `p24` `bbd`, 6385 `p24_final`),
+about 1,250-1,900 s. It also removes 6409's `bab` second attempt: after P4.10 a
+Worker's heavy empty ends the call, so `bab` becomes `b`.
