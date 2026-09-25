@@ -6324,6 +6324,11 @@ LK_ANAPHOR = re.compile(
     r"\b(?:the|this|that) (?:instrument|statutory instrument|SSI|regulations|order)\b"
     r"|\bthese regulations\b|\bit is not held\b", re.I)
 LK_ANY_NUMBER = re.compile(r"\b\d{4}/\d{1,5}\b|\b\d{4} (?:asp|c\.) \d{1,4}\b", re.I)
+# An Act's number, cited or inside a legislation.gov.uk link. An anaphor above
+# names subordinate legislation, so an Act mention does not move its referent.
+LK_ACT_REF = re.compile(r"\b(?:ukpga|asp|anaw|asc|nia|mwa|ukla)/\d{4}/\d+"
+                        r"|\b\d{4} (?:asp|c\.) \d{1,4}\b", re.I)
+LK_PRIMARY_LID = re.compile(r"(?:ukpga|asp|anaw|asc|nia|mwa|ukla)/", re.I)
 
 
 def _lk_classify(sentence: str) -> str:
@@ -6403,8 +6408,25 @@ def lookup_rows(doc: dict) -> list:
             mrx = re.compile(mention, re.I)
             kinds = Counter()
             sents = []
+            # Session 29 (`wave4_p315_pre`): an anaphor refers back to the
+            # instrument named LAST, not to the slot's. "SSI 2025/377 brings
+            # s.18 into force. This index does not hold this instrument" under
+            # a heading naming 2025 asp 2 was scored as the Act reported absent.
+            # The anaphors name subordinate legislation ("this instrument", "the
+            # regulations"), so one is never an Act slot's, and an Act's number
+            # (a citation, or inside a section link) does not change which
+            # instrument was named last.
+            anaphor_ok = not LK_PRIMARY_LID.match(lid)
+            last_is_slot = None
             for s in _sentences(prose):
-                about = mrx.search(s) or (LK_ANAPHOR.search(s) and not LK_ANY_NUMBER.search(s))
+                si_named = LK_ANY_NUMBER.search(LK_ACT_REF.sub(" ", s))
+                about = mrx.search(s) or (anaphor_ok and LK_ANAPHOR.search(s)
+                                          and not LK_ANY_NUMBER.search(s)
+                                          and last_is_slot is not False)
+                if mrx.search(s):
+                    last_is_slot = True
+                elif si_named:
+                    last_is_slot = False
                 k = _lk_classify(s) if about else ""
                 if k:
                     kinds[k] += 1
@@ -6525,6 +6547,23 @@ def _lookup_routing(dirs: list, live: bool) -> int:
     return 0
 
 
+def lookup_route_tally(rows: list) -> dict:
+    """P3.15: absent slots by route, {(route, graded): (passed, total)}.
+
+    A turn the Manager answered from its history ("from history", no
+    delegation) has no worker block to carry the lookup's wording, so P3.15's
+    residual lives there; the delegated turns are P3.7's own result.
+    """
+    out: dict = {}
+    for r in rows:
+        if r["state"] != "absent":
+            continue
+        key = ("delegated" if r["delegations"] else "from history", bool(r["graded"]))
+        p, n = out.get(key, (0, 0))
+        out[key] = (p + (lookup_verdict(r)[0] == "PASS"), n + 1)
+    return out
+
+
 def cmd_lookup(args) -> int:
     """P3.7 acceptance: is an instrument named by number reported as held, held
     without text, or not held, and is a not-held answer backed by a lookup?"""
@@ -6565,6 +6604,15 @@ def cmd_lookup(args) -> int:
         if n:
             print(f"  {state:<6}: {tally[(state, 'PASS')]} of {n} graded slot(s) pass, "
                   f"{tally[(state, 'NO CLAIM')]} made no claim")
+    routes = lookup_route_tally(rows)
+    if routes:
+        print("  absent, by route (P3.15):")
+        for graded in (True, False):
+            parts = [f"{route} {routes[(route, graded)][0]} of {routes[(route, graded)][1]}"
+                     for route in ("delegated", "from history") if (route, graded) in routes]
+            if parts:
+                print(f"    {'graded' if graded else 'not graded'}: " + ", ".join(parts)
+                      + " pass")
     print()
     if fails:
         print(f"  FINDINGS ({len(fails)}):")

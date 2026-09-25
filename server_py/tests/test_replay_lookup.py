@@ -117,6 +117,46 @@ def test_a_sentence_referring_back_to_the_instrument_is_read_as_about_it():
     assert _verdicts(doc)[9][0] == "FAIL"
 
 
+def test_a_sentence_referring_back_belongs_to_the_instrument_named_last():
+    """Session 29, `wave4_p315_pre` 6409 r1 t2: a heading named the held Act,
+    a bullet named SSI 2025/377, and "This index does not hold this
+    instrument" followed it. The Act was scored as reported absent."""
+    ans = ("Regarding the commencement regulations for the 2025 Act (2025 asp 2):\n\n"
+           "* SSI 2025/377 brings section 18 into force. This index does not hold "
+           "this instrument, so its date cannot be verified here.")
+    doc = _doc(_t(1, ans + FOOTER, [_lookup_tool("asp/2025/2", "held", True)]),
+               from_turns=[2])
+    assert _verdicts(doc)[2][0] != "FAIL"
+    # ...and it still counts for the instrument it follows
+    doc = _doc(_t(1, ans + FOOTER, [_lookup_tool("ssi/2025/377", "not_held", True)]),
+               from_turns=[9])
+    assert _verdicts(doc)[9] == ("PASS", "")
+    # an Act's section link between them does not move the referent: an
+    # anaphor names subordinate legislation (`wave4_p37b` r1 export t9)
+    doc = _doc(_t(1, "SSI 2025/377 brings [s.18](https://www.legislation.gov.uk/id/asp/"
+                  "2025/2/section/18) into force. Because the instrument itself is not "
+                  "held, its date cannot be verified." + FOOTER,
+                  [_lookup_tool("ssi/2025/377", "not_held", True)]), from_turns=[9])
+    assert _verdicts(doc)[9] == ("PASS", "")
+    # an anaphor following the slot's own number is still the slot's
+    doc = _doc(_t(1, "SSI 2025/119 is held. SSI 2025/377 was looked up. This index "
+                  "does not hold the instrument itself." + FOOTER,
+                  [_lookup_tool("ssi/2025/377", "not_held", True)]), from_turns=[9])
+    assert _verdicts(doc)[9] == ("PASS", "")
+
+
+def test_absent_slots_are_tallied_by_route():
+    """P3.15 counts the from-history slots (no delegation) apart."""
+    held = "SSI 2025/377 is not held in this index."
+    text = "The text of SSI 2025/377 is not available."
+    doc = _doc(_t(1, held + FOOTER, [_lookup_tool("ssi/2025/377", "not_held", True)]),
+               _t(2, text + FOOTER, delegations=0),
+               _t(3, held + FOOTER, delegations=0),
+               from_turns=[9, 10, 11])
+    assert rr.lookup_route_tally(rr.lookup_rows(doc)) == {
+        ("delegated", True): (1, 1), ("from history", True): (1, 2)}
+
+
 def test_a_clarifying_question_is_no_claim_except_where_the_row_needs_an_answer():
     ask = "What would you like to know about these regulations?"
     doc = _doc(_t(1, ask, delegations=0), _t(2, ask, delegations=0), from_turns=[10, 9])
