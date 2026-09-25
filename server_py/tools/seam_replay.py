@@ -1191,6 +1191,11 @@ def main(argv: Optional[list] = None) -> int:
             return _manager_first_round_command(args, doc, turn, sid)
         if args.seam != "worker":
             raise SystemExit("--first-round is a worker or manager seam option")
+        if args.date:
+            # Not pinned here yet: refuse rather than draw today's date line
+            # under a flag that says otherwise (Session 29).
+            raise SystemExit("--date is not supported on worker --first-round; "
+                             "it draws with today's date line")
         return _first_round_command(args, doc, turn, sid)
     if args.as_sent:
         if args.seam != "worker":

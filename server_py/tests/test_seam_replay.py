@@ -877,6 +877,11 @@ def test_lever_flags_need_as_sent(run_file):
     with pytest.raises(SystemExit):
         sr.main(["worker", "--run", str(run_file), "--turn", "1",
                  "--date", "recorded", "--dry-run"])
+    # worker --first-round does not pin the date line, so it refuses the flag
+    # rather than silently drawing today's (Session 29)
+    with pytest.raises(SystemExit):
+        sr.main(["worker", "--run", str(run_file), "--turn", "1", "--first-round",
+                 "--date", "recorded", "--dry-run"])
 
 
 def test_as_sent_date_resolves_recorded_and_iso():

@@ -6164,3 +6164,47 @@ seam).
 worktrees. The dev box is on its normal settings. The seam draws' texts and
 the scratch wrapper are in the session scratchpad only; every number from
 them is in BASELINE.md, and the commands re-draw them.
+
+**Addendum to Session 29 (same day, at the user's request: "make sure we're
+not going to lose any pertinent information", then "update the tracker").**
+What the session knew that the handover above did not say:
+
+1. **Which seams pin the date line, and what that means for earlier seam
+   work.**
+   - `worker --as-sent` and `manager --first-round` take `--date`.
+   - `worker --first-round` silently ignored `--date` (its branch returns
+     before the flag check). It now refuses it (this commit, with a test).
+   - The composition seams (synthesis, worker, manager) already refused it,
+     and draw with today's date line.
+   - The seam A/Bs of P3.11, P3.13, P4.6 and P4.7 drew both sides on one day,
+     so they are not confounded by it.
+   - But a seam check of whether a recorded miss *reproduces*, drawn with
+     today's date, is not a faithful redraw. The seam-against-live gaps of
+     Sessions 19 and 22 may partly be this; that is untested.
+   - P3.15's non-reproduction used `--date recorded`, so it is not this.
+   - This supersedes "Only `--as-sent` pins it so far" in the first Session 29
+     section.
+2. **P3.15's drift probe, as far as it went.** Every delegation drawn on the
+   before side named only the instrument its recorded turn was about
+   (2025/377 on 6409, 2026/170 on 6373). No after side was drawn, because no
+   product change was made.
+3. **An unread observation, not a finding.** The held-Act slot (6409 export
+   t2, 2025 asp 2 named by number) made no claim in 5 of 9 reps across
+   `wave4_p37b`, `wave4_p37c` and `wave4_p315_pre` (1, 2 and 2): the Manager
+   answered without delegating and said nothing about whether the Act is held.
+   The grader allows it (`must_claim` is False for that slot). Nobody has read
+   whether those answers were otherwise right.
+4. **Machine state.**
+   - 51 gitignored replay directories (`wave4_p315_pre` is new).
+   - The scratch date wrapper and draw loops are superseded by `--date` and
+     are gone with the scratchpad.
+   - No uvicorn, no http.server, no pin file.
+5. **Fix Tracker v24** was published at the user's request, to the same URL:
+   - P4.10 moved from Partial to Fixed (user decision);
+   - P3.15 Fixed;
+   - both `fixed: "2026-09-25"`, `ver: "Next release"`;
+   - 32 of 52 fixed, none Partial;
+   - new notes on P4.10's check, the date line and the cost the cap trades;
+     on P3.15's closure; and on the grader fix;
+   - "Next" reads: P4.11, then P3.2, P3.3, P3.4 and P4.3;
+   - render-checked once, in light, before publishing.

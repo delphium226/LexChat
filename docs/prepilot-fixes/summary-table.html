@@ -358,8 +358,9 @@
       its row in the fix plan and its action number in Thomas's review of 10 September 2026.
       <strong>“Fixed” means built and accepted on the fix branch. The Version column says which
       release carries each fix: 2026.09.1 (22 September) or 2026.09.2 (23 September), both merged
-      for deployment to the server, or “Next release” for P0.6, P4.6, P3.7, P4.7 and P4.5, fixed
-      since and waiting for the next one (P0.6 changes only our test tooling). The fixed date is
+      for deployment to the server, or “Next release” for P0.6, P4.6, P3.7, P4.7, P4.5, P4.10 and
+      P3.15, fixed since and waiting for the next one (P0.6 changes only our test tooling, and
+      P3.15 was closed without a change to the system). The fixed date is
       the day a fix was accepted, not the day it reached the server.</strong></p>
   </header>
 
@@ -418,9 +419,9 @@
     <div>
       <h2>Status</h2>
       <dl>
-        <dt>Fixed</dt><dd>Built and accepted on the fix branch. Fixed rows with a version number are merged to <code>main</code> for deployment to the target: release 2026.09.1 on 22 September and 2026.09.2 (P3.13) on 23 September. Rows marked “Next release” (P0.6, P4.6, P3.7, P4.7, P4.5) stay on the branch until then.</dd>
+        <dt>Fixed</dt><dd>Built and accepted on the fix branch. Fixed rows with a version number are merged to <code>main</code> for deployment to the target: release 2026.09.1 on 22 September and 2026.09.2 (P3.13) on 23 September. Rows marked “Next release” (P0.6, P4.6, P3.7, P4.7, P4.5, P4.10, P3.15) stay on the branch until then.</dd>
         <dt>In progress</dt><dd>Under way. P5.2 is waiting on an external decision.</dd>
-        <dt>Partial</dt><dd>A fix was attempted, and we decided to defer it and come back to it later. P4.10 is built; its last check waits until the failure it fixes happens again.</dd>
+        <dt>Partial</dt><dd>A fix was attempted, and we decided to defer it and come back to it later. No fix is Partial now: P4.10 was, until its last check was run on 25 September.</dd>
         <dt>Verified</dt><dd>The problem is confirmed in our replays, the code or a live test, but no fix is built yet.</dd>
         <dt>To be verified</dt><dd>Proposed, not yet confirmed or agreed.</dd>
       </dl>
@@ -444,7 +445,7 @@
         box (Settings, then About), so a problem report can say which release it was.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.</p>
-      <p><strong>P4.10</strong>, the cost of a lost reply, is built, with one check still to run.
+      <p><strong>P4.10</strong>, the cost of a lost reply, is fixed.
         Sometimes the model behind a research step thinks until it has used almost all the output
         it is allowed (about 63,000 tokens), then writes nothing. Each attempt took about six
         minutes and cost about 76 cents, and the system used to try three times. Across all our
@@ -459,18 +460,43 @@
         does not make the model answer, but it stops the waste sooner: in a test, a 16,000-token
         ceiling ended the same failure after 93 seconds and 20 cents. Telling the model to think
         less did not stop it at all.</p>
-      <p><strong>How it was tested, and what is left.</strong> Automated checks cover each part of
-        the change, and fail if it is removed. On four normal stored questions the ceiling changed
-        nothing. The last check is to watch the ceiling stop a real runaway, and it could not be
-        run. On 24 September the two stored cases ran away every time; on 25 September none of 16
-        attempts did, across all eight stored cases. The fix is marked Partial until a runaway comes
-        back and the check can be run. One consequence to watch for: a runaway that would have
-        ended in an answer after five minutes is now cut off, and the research is asked for again
-        instead.</p>
-      <p><strong>One row opened.</strong> <strong>P4.11</strong>: when the model's provider stops
+      <p><strong>How it was tested.</strong> Automated checks cover each part of the change, and
+        fail if it is removed. On four normal stored questions the ceiling changed nothing. The last
+        check, watching the ceiling stop a real runaway, was run on 25 September on the two stored
+        cases. With the ceiling, each runaway ended at about 30,700 tokens, after about 165 seconds
+        and 38 cents. Without it, the same runaway ran to about 63,000 tokens, 340 seconds and
+        77 cents.</p>
+      <p><strong>Why that check could not be run at first.</strong> The research step's instructions
+        begin with today's date. Given exactly the same text, the model gives much the same reply,
+        so on a different day it was in effect being asked a slightly different question, and the
+        runaway did not happen. Re-run with the date the question was first asked, the stored cases
+        ran away again. Our re-run tools now keep the original date.</p>
+      <p><strong>The cost we accept.</strong> Both runaways in that check would, without the
+        ceiling, have ended in an answer after five to six minutes. With the ceiling they end with
+        nothing: the step is labelled as lost (P4.5) and the chat asks for the research again, which
+        in our replays made good every such case (6 of 6). That is still quicker and cheaper than
+        waiting the runaway out.</p>
+      <p><strong>P3.15</strong>, a follow-up saying an instrument's <em>text</em> is not held when the
+        instrument itself is not held, is closed without a change to the system. We re-ran the two
+        sessions three more times first, and this time every answer was right, including both
+        follow-ups answered from the earlier conversation. Across all our re-runs of these sessions,
+        such follow-ups were right 3 times in 5, and every answer that ran new research was right
+        (31 of 31). We then re-ran the chat step alone 16 times on those follow-ups, 12 of them on the
+        ones that had gone wrong, so that a change to its instructions could be tested. The wrong
+        wording never appeared. So there was
+        nothing to test a change against. A change to those instructions is also the kind that once
+        sent a research request to the wrong Act (P3.13, below). The line the system itself writes
+        under such an answer already says the instrument is not held. With P3.15 closed, the group
+        of fixes for false “not found” answers is complete.</p>
+      <p><strong>One fix to our own measuring.</strong> The re-run also showed our checker marking a
+        correct answer as wrong. It read “this index does not hold this instrument”, written about
+        one instrument, as a claim about the Act named in the heading above it. The checker is
+        fixed, and re-checking every stored re-run changed only that one result.</p>
+      <p><strong>Earlier, one row opened.</strong> <strong>P4.11</strong>: when the model's provider stops
         responding mid-reply, each attempt waits two to three minutes before giving up, and trying
         again rarely helps (3 times in 22). It adds about six minutes to the answers it hits. It will
-        be measured before anything is chosen.</p>
+        be measured before anything is chosen. The P4.10 check gave a first clue: this stall
+        appeared only in the re-runs where a runaway was possible, so the two may share a cause.</p>
       <p><strong>Earlier, P4.5</strong>, a research step whose answer is lost, was fixed. About one question in
         sixty, the model returns an empty reply to a research step, even after three tries. Before,
         what that step handed on was only its record of the searches it had run, which reads like a
@@ -610,9 +636,11 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next.</strong> The last check on <strong>P4.10</strong>, then
-        <strong>P3.15</strong>: the last open fix for false “not found” answers. <strong>P4.11</strong>
-        after that.</p>
+      <p><strong>Next.</strong> <strong>P4.11</strong>, the wait when the model's provider stops
+        responding, measured first. Then the fixes the four open groups of problems wait on:
+        <strong>P3.2</strong> (reversing a correct answer under pushback), <strong>P3.3</strong>
+        (separating retrieval from interpretation), <strong>P3.4</strong> (the Scottish
+        jurisdiction default) and <strong>P4.3</strong> (the sources list).</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
         and three items from <code>docs/TODO.md</code> D16 (the impossible year window, always
@@ -636,7 +664,7 @@
   // ver:    on a Fixed row only: the release that carries it ("2026.09.1", the git tag
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
-  const UPDATED = "25 September 2026, end of Session 28 (new status, Partial: a fix attempted and deferred to be revisited; P4.10 is Partial, built with one check deferred; P4.11 opened: the wait when the model's provider times out; next: P4.10's last check, then P3.15)";
+  const UPDATED = "25 September 2026, end of Session 29 (P4.10 fixed: its last check passed; P3.15 closed without a change, completing the fixes for false “not found” answers; next: P4.11, then P3.2, P3.3, P3.4 and P4.3)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23", ver: "Next release" },
@@ -671,7 +699,7 @@
     { src: "R", fix: "Reach a Schedule paragraph asked for by number (LEX holds the Schedule as one provision)", sev: "P2", status: "Verified", ref: "P3.12", t: "" },
     { src: "R", fix: "Stop the chat reply dropping a subsection the research step had already written", sev: "P2", status: "Fixed", ref: "P3.13", t: "", fixed: "2026-09-23", ver: "2026.09.2" },
     { src: "R", fix: "Tell the quick-lookup step which research filters are active", sev: "P3", status: "Verified", ref: "P3.14", t: "" },
-    { src: "R", fix: "In a follow-up answered without new research, say the instrument itself is not held, not just its text", sev: "P3", status: "Verified", ref: "P3.15", t: "" },
+    { src: "R", fix: "In a follow-up answered without new research, say the instrument itself is not held, not just its text", sev: "P3", status: "Fixed", ref: "P3.15", t: "", fixed: "2026-09-25", ver: "Next release" },
     { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", sev: "P1", status: "Fixed", ref: "P4.1", t: "9", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Show a change of mode or research type in the conversation itself", sev: "P3", status: "Verified", ref: "P4.9", t: "" },
     { src: "R", fix: "Never show a blank or lost reply", sev: "P1", status: "Fixed", ref: "P4.2", t: "", fixed: "2026-09-16", ver: "2026.09.1" },
@@ -679,7 +707,7 @@
     { src: "R", fix: "Remove the unused case-law court filter", sev: "P2", status: "Fixed", ref: "P4.4", t: "", fixed: "2026-09-15", ver: "2026.09.1" },
     { src: "T & R", fix: "Report a lost research step as lost, not “no results”", sev: "P1", status: "Fixed", ref: "P4.5", t: "3", fixed: "2026-09-24", ver: "Next release" },
     { src: "T", fix: "Label incomplete Deep Research steps as incomplete in progress messages", sev: "P3", status: "Fixed", ref: "P4.5", t: "3", fixed: "2026-09-24", ver: "Next release" },
-    { src: "R", fix: "Cut the cost and the wait of a lost reply (about 63,000 reasoning tokens per failed attempt)", sev: "P2", status: "Partial", ref: "P4.10", t: "" },
+    { src: "R", fix: "Cut the cost and the wait of a lost reply (about 63,000 reasoning tokens per failed attempt)", sev: "P2", status: "Fixed", ref: "P4.10", t: "", fixed: "2026-09-25", ver: "Next release" },
     { src: "R", fix: "Cut the wait when the model's provider stops responding mid-reply (two to three minutes per failed attempt)", sev: "P2", status: "Verified", ref: "P4.11", t: "" },
     { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Fixed", ref: "P4.6", t: "4", fixed: "2026-09-23", ver: "Next release" },
     { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Fixed", ref: "P4.7", t: "2", fixed: "2026-09-24", ver: "Next release" },
