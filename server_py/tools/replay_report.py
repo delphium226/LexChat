@@ -6892,6 +6892,191 @@ def cmd_drgaps(args) -> int:
     return 0
 
 
+# --- P3.2: agreement openers -------------------------------------------------
+#
+# An answer that OPENS by agreeing with the lawyer ("You are absolutely
+# correct", "You make an excellent point") announces a resolution before any
+# reason for it has been given. P3.2 (B6) proposes removing them; this counts
+# them first. Only the answer's first sentence is read, and every first
+# sentence in the same vocabulary that is NOT counted is listed by `--drops`,
+# so the detector's reach can be read before any rate is quoted from it.
+#
+# Kinds, most specific first (the first that matches wins):
+#   scoped  - agrees with a stated proposition: "You are correct that X".
+#   bare    - agrees outright: "You are absolutely correct." / "...right to
+#             challenge this".
+#   praise  - praises the challenge: "You make an excellent point", "You have
+#             correctly identified", "You raise a very sharp point".
+#   affirm  - "Yes, exactly." / "That is correct."
+#   apology - "Apologies", "I apologise".
+#   thanks  - "Thank you for pressing this point".
+_OP_DEGREE = (r"(?:absolutely |entirely |completely |quite |exactly |perfectly "
+              r"|indeed |very |100% )?")
+OPENER_KINDS = [
+    ("scoped", re.compile(
+        r"^(?:yes[,.!]?\s+)?you(?:'re| are) " + _OP_DEGREE
+        + r"(?:correct|right) (?:that|in (?:your|noting|saying|pointing)|about|"
+          r"regarding|on|to (?:note|say|point out|observe))\b", re.I)),
+    ("bare", re.compile(
+        r"^(?:yes[,.!]?\s+)?you(?:'re| are) " + _OP_DEGREE
+        + r"(?:correct|right)\b(?:\s*[.,!;:—–-]|\s+(?:and|to)\b|\s*$)", re.I)),
+    ("praise", re.compile(
+        r"^you(?:'ve| have)? (?:make|made|raise|raised|hit on|highlight|highlighted|"
+        r"(?:correctly|rightly) (?:identified|pointed|noted|spotted|highlighted))\b",
+        re.I)),
+    ("affirm", re.compile(
+        r"^(?:yes[,.!]?\s+)?(?:exactly|precisely|that is (?:correct|right)|"
+        r"that's (?:correct|right)|correct)\b[.,!:]?", re.I)),
+    ("apology", re.compile(r"^(?:my )?apolog|^i apologi[sz]e|^sorry\b", re.I)),
+    ("thanks", re.compile(
+        r"^thank you for (?:pressing|pointing|flagging|challenging|raising|"
+        r"highlighting|the correction|catching|pushing)", re.I)),
+]
+# The vocabulary an opener is drawn from. A first sentence in it that no kind
+# matched is a drop, printed by `--drops` (the both-directions audit).
+OPENER_VOCAB = re.compile(
+    r"\b(?:correct|right|point|apolog|agree|excellent|thank|exactly|concede)",
+    re.I)
+_OP_LEAD = re.compile(r"^[\s#>*_\-\d.)]+")
+_OP_END = re.compile(r"(?<=[.!?:])\s|\n")
+
+
+def first_sentence(answer: str) -> str:
+    """The answer's first sentence, leading markdown stripped, max 300 chars."""
+    text = _OP_LEAD.sub("", _without_footer(answer or ""))
+    m = _OP_END.search(text)
+    return (text[:m.start()] if m else text)[:300].strip()
+
+
+def opener_kind(answer: str) -> str | None:
+    """The opener kind of an answer's first sentence, or None."""
+    s = first_sentence(answer)
+    for kind, rx in OPENER_KINDS:
+        if rx.search(s):
+            return kind
+    return None
+
+
+def opener_rows(doc: dict, dir_name: str) -> list:
+    """One row per answered turn of one run file."""
+    rows = []
+    for i, t in enumerate(doc.get("turns") or [], 1):
+        answer = t.get("answer") or ""
+        if not answer.strip():
+            continue
+        audit = t.get("audit")
+        rows.append({
+            "dir": dir_name, "session": str(doc.get("session_id")),
+            "rep": doc.get("rep"), "turn": i, "mode": t.get("chat_mode") or "?",
+            "kind": opener_kind(answer), "first": first_sentence(answer),
+            "delegations": (len(audit.get("delegations") or [])
+                            if isinstance(audit, dict) else None),
+        })
+    return rows
+
+
+def _opener_export_rows(rs) -> list:
+    """The same rows over every assistant answer in the transcript export
+    (the pre-pilot's own text). Turn = the count of user messages so far, as
+    `_dr_export_rows` pairs them; delegations are not recorded there."""
+    import csv  # noqa: PLC0415
+    import io  # noqa: PLC0415
+
+    grouped: dict = {}
+    for r in csv.DictReader(io.open(Path(rs.DEFAULT_CSV), encoding="utf-8-sig")):
+        grouped.setdefault(r["Session ID"], []).append(r)
+    rows = []
+    for sid, srows in sorted(grouped.items()):
+        n = 0
+        for r in sorted(srows, key=lambda r: int(r["Message #"] or 0)):
+            if r["Message role"] == "user":
+                n += 1
+                continue
+            content = r["Message content"] or ""
+            if r["Message role"] != "assistant" or not content.strip():
+                continue
+            rows.append({
+                "dir": "export", "session": sid, "rep": 0, "turn": n,
+                "mode": "?", "kind": opener_kind(content),
+                "first": first_sentence(content), "delegations": None,
+            })
+    return rows
+
+
+def cmd_openers(args) -> int:
+    """P3.2: answers that open by agreeing with the lawyer, by kind, per
+    directory (`--all-dirs`: every directory beside `--dir`, one line each),
+    and whether the turn delegated (a resolution announced with no
+    re-retrieval behind it is a turn with 0 delegations). `--export` adds the
+    pre-pilot's own answers. `--list` prints each counted opener's kind and
+    its first words; `--drops` every first sentence in the opener vocabulary
+    that was NOT counted. Both can echo a lawyer's terms: keep the output out
+    of the repo. Informational: exits 0."""
+    base = Path(args.dir)
+    dirs = ([d for d in sorted(base.parent.iterdir()) if d.is_dir()]
+            if args.all_dirs else [base])
+    groups: list = []
+    for d in dirs:
+        rows = []
+        for doc in load_runs(d):
+            if args.session and str(doc.get("session_id")) not in args.session:
+                continue
+            rows.extend(opener_rows(doc, d.name))
+        groups.append((d.name, rows))
+    if args.export:
+        rs = _replay_set_module()
+        if rs is None:
+            print("  export not read: replay_set unavailable")
+        else:
+            rows = _opener_export_rows(rs)
+            if args.session:
+                rows = [r for r in rows if r["session"] in args.session]
+            groups.append(("export (pre-pilot)", rows))
+
+    kinds = [k for k, _ in OPENER_KINDS]
+    print("P3.2 agreement openers (first sentence of each answered turn)")
+    print(f"  {'directory':<22} {'answered':>8} {'openers':>8}  "
+          + " ".join(f"{k:>7}" for k in kinds) + "  no-deleg")
+    tot = Counter()
+    pooled: list = []
+    for name, rows in groups:
+        c = Counter(r["kind"] for r in rows if r["kind"])
+        n_open = sum(c.values())
+        nodeleg = sum(1 for r in rows if r["kind"] and r["delegations"] == 0)
+        known = sum(1 for r in rows if r["kind"] and r["delegations"] is not None)
+        print(f"  {name:<22} {len(rows):>8} {n_open:>8}  "
+              + " ".join(f"{c[k]:>7}" for k in kinds)
+              + (f"  {nodeleg:>3} of {known}" if known else "       -"))
+        if name != "export (pre-pilot)":
+            tot["answered"] += len(rows)
+            tot["openers"] += n_open
+            tot.update(c)
+        pooled.extend(rows)
+    if len(groups) > 1:
+        print(f"  {'replay total':<22} {tot['answered']:>8} {tot['openers']:>8}  "
+              + " ".join(f"{tot[k]:>7}" for k in kinds))
+
+    by_session = Counter(r["session"] for r in pooled if r["kind"])
+    if by_session:
+        print("\n  sessions with openers (all groups pooled): " + ", ".join(
+            f"{s} {n}" for s, n in by_session.most_common()))
+
+    if args.list:
+        print("\n  counted openers:")
+        for r in pooled:
+            if r["kind"]:
+                print(f"    {r['dir']:<22} {r['session']} r{r['rep']} t{r['turn']:<3} "
+                      f"{r['kind']:<8} deleg={r['delegations']}  "
+                      f"{r['first'][:args.chars]!r}")
+    if args.drops:
+        print("\n  NOT counted, first sentence in the opener vocabulary:")
+        for r in pooled:
+            if not r["kind"] and OPENER_VOCAB.search(r["first"]):
+                print(f"    {r['dir']:<22} {r['session']} r{r['rep']} t{r['turn']:<3} "
+                      f"{r['first'][:args.chars]!r}")
+    return 0
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     _utf8_stdout()
     p = argparse.ArgumentParser(prog="replay_report")
@@ -7118,6 +7303,22 @@ def main(argv: Iterable[str] | None = None) -> int:
                     help="output price, USD per million tokens, for the cap bound "
                          "(default 12: google/gemini-3.1-pro-preview's list price "
                          "on OpenRouter's models endpoint, 2026-09-24)")
+    op = sub.add_parser("openers",
+                        help="P3.2: answers that open by agreeing with the lawyer "
+                             "('You are absolutely correct'), by kind, and whether "
+                             "the turn delegated")
+    op.add_argument("--all-dirs", action="store_true",
+                    help="every directory beside --dir, one line each")
+    op.add_argument("--export", action="store_true",
+                    help="also the transcript export's own answers")
+    op.add_argument("--session", nargs="+", default=None,
+                    help="restrict to these session ids")
+    op.add_argument("--list", action="store_true",
+                    help="print each counted opener (can echo a lawyer's terms)")
+    op.add_argument("--drops", action="store_true",
+                    help="print every first sentence in the opener vocabulary "
+                         "NOT counted (the both-directions audit)")
+    op.add_argument("--chars", type=int, default=90)
     sub.add_parser("corpus",
                    help="retrieval shape: raw volume, where an enabling power "
                         "can come from, and what the tool memo costs P2.2")
@@ -7146,6 +7347,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "lost": cmd_lost,
         "lostcost": cmd_lostcost,
         "siblings": cmd_siblings,
+        "openers": cmd_openers,
         "corpus": cmd_corpus,
     }[args.cmd](args)
 
