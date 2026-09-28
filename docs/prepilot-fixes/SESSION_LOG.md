@@ -6586,9 +6586,10 @@ measured options, with what the evidence says about each:
 **Open with the user:**
 - **P3.2's lever** (above), and whether to take P3.3 with it.
 - **The legal reading behind the rubric**: to be confirmed by a lawyer.
-- **The learning injection** (Surprises): book a row or a `docs/TODO.md`
-  item? Options are a flag defaulting OFF, off for drafting and consulted
-  peers, or removal; plus checking whether the target holds 6346's rating.
+- ~~**The learning injection** (Surprises): book a row or a `docs/TODO.md`
+  item?~~ **PARKED by the user (2026-09-28): `docs/TODO.md` D21**, with the
+  findings. The user also raised standing instructions per AILA user (a
+  "CLAUDE.md per user"): noted as D22, an idea, not scoped.
 - **Carried from Session 30:** push the release tags? deploy by tag (D19);
   whether P0.6, P4.6, P3.7, P4.7, P4.5, P4.10, P4.11 and P3.15 go in the next
   cut (v2026.09.3 in September, else v2026.10.1); deploy both cuts to the

@@ -1332,3 +1332,70 @@ Since P4.5 the `tool_end` progress event names each worker's outcome ("Step comp
 SystemChat developer page and an eval harness see it. The lawyer is told in the answer's own
 notice, so nothing is hidden; showing the outcome live is a client change and a
 `client/dist` rebuild, and was out of P4.5's scope. The user's call.
+
+### D21. The "learning" injection: PARKED (user decision, 2026-09-28, found in Session 31)
+
+Found while answering whether AILA's built-in learning could help P3.2 (it cannot; see
+`docs/prepilot-fixes/SESSION_LOG.md`, Session 31). Parked, not booked as a fix-plan row. What it
+is and what was found, so the next person does not re-derive it:
+
+- **The mechanism.** `agent/learning.py`, called from `process_user_request`
+  (`agent/agent_core.py`, the "Learning mechanism injection" block) on **every** Manager call,
+  from `/api/chat`, `/api/system/chat` and `/api/consult`, with **no feature flag**. It takes the
+  words over 3 characters from the lawyer's latest message, OR-matches them by full-text search
+  against **every user's** past questions, and appends to the Manager's system prompt up to 3
+  answers rated 4 or more ("SUCCESSFUL EXAMPLES ... Emulate their style and depth") and up to 3
+  comments on answers rated 3 or less ("CRITICAL FEEDBACK ... AVOID these mistakes"). Only the
+  Manager sees it; the Workers, the Deep Research planner and the synthesis do not.
+- **The lawyer's side.** Thumbs up (saves rating 5) and thumbs down (rating 1 plus a comment)
+  on each answer (`client/src/components/ChatMessage.jsx`), through `PUT` on the message rating
+  endpoint (`routers/chats.py`). The older 5-star "Rate & Feedback" box
+  (`client/src/components/CommentModal.jsx`) is orphaned: nothing imports it.
+  `routers/learning.py` holds three admin-only endpoints (feedback list, stats, a retrieval test).
+- **Usage in the pre-pilot:** 1 rating in 181 assistant answers, no comments.
+- **Problems found, none fixed:**
+  1. **The one pre-pilot rating is a 5 on 6346's dead-end refusal** (the B7 defect P4.1
+     fixed). If the target still holds it, a new question sharing a keyword with 6346's questions
+     gets that refusal injected as an example to emulate. Not checked on the target.
+  2. **The pairing is wrong.** The query joins each user message to ANY later assistant message
+     in the same chat (`m2.id > m1.id`), not to its own reply, so a question can be shown with
+     another turn's answer.
+  3. **Cross-user exposure.** Other lawyers' question text (300 characters) and answers
+     (2,000 characters) reach a different lawyer's prompt. That is the exposure the local prompt
+     cache was forced off for on the drafting bot, and there is **no drafting-mode exclusion**
+     here, nor one for a consulted peer.
+  4. **It treats an unverified comment as ground truth** ("AVOID these mistakes"), broadcast to
+     every user whose question shares a word. That runs against Invariant 1 and against B6's own
+     finding: the tool should check the text, not adopt the pushback.
+  5. **Unmeasured.** The dev database holds no ratings and replays do not save messages, so no
+     replay directory has ever exercised it: every sweep measured the product with this block
+     empty. The target may not be empty.
+- **Options when unparked:** a feature flag defaulting OFF (the house pattern, Developer tab);
+  off in drafting mode and for `/api/consult` at minimum; fix the pairing; or remove it. First,
+  a read-only check of the target's `messages` for rated rows. See also D22, which is the
+  per-user shape of the same idea without the cross-user half.
+
+### D22. Standing instructions per AILA user — a "CLAUDE.md per user" (idea, user, 2026-09-28)
+
+The user's idea: each lawyer keeps a short set of standing instructions that AILA reads on
+every request, as Claude Code reads a CLAUDE.md. Not scoped or decided; noted so it is not lost.
+
+- **Why it fits the evidence.** CambeulW's own feedback on 6370 asks for interpretive points
+  to be presented neutrally ("for aspects which require a legal analysis"); a lawyer who could
+  say that once, for all her sessions, would not have to push the bot turn by turn (B6, B11).
+  Other plausible content: default jurisdiction, citation style, "always give the section text",
+  "never suggest switching mode".
+- **What already exists.** A per-matter version: matter notes reach the Manager prompt through
+  `_matter_context` (`agent/agent_core.py`, beside the learning block). The user's saved
+  research type (`users.research_mode`) is a one-field per-user preference.
+- **Design questions, to answer before building:**
+  - Per user only, never shared across users (unlike D21), and never cached cross-user.
+  - What it may contain: preferences about FORM, not assertions about the LAW. A note saying
+    "section 12 does not apply to Y" would be D21's problem in a private form; the tool must still read the
+    text (Invariant 1).
+  - Where it is injected (Manager only, or Workers too) and how long it may be.
+  - Session 22's lesson: any text added to the Manager prompt can move its FIRST delegation
+    brief. Measure with the first-delegation drift probe (`seam_replay manager --first-round
+    --date recorded`) and compare links and citations before shipping.
+  - The drafting bot's data rules (its user input is unpublished text) and log redaction.
+  - A UI for writing and viewing it, and the admin's view of it.
