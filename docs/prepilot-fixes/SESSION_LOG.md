@@ -6684,3 +6684,14 @@ What the session knew that the entry and handover above did not say:
 9. **Fix Tracker updated to v26 at the user's request** (below): P3.2 stays
    Verified (open), with its note rewritten; D21 and D22 are TODO items, not
    tracker rows.
+10. **User decision (2026-09-28, after the addendum): take P3.2 and P3.3
+    TOGETHER** (the handover's recommendation (e)). Session 32 starts there,
+    measure-first: the lever is not chosen, and a combined acceptance is booked
+    and committed before any product code. **6338 has never been replayed in
+    the configuration its lawyer used** (Conversational, legislation and case
+    law): `baseline`, `wave1` and `wave2` sent Research mode and legislation
+    only, `wave0_conv` sent legislation only (before P0.6). 6370 (Conversational,
+    legislation and case law) and 6375 (turn 1 Conversational, turn 2 Deep
+    Research, legislation and case law) were replayed as recorded, at heads
+    `0884b29`-`2d9ae11` (6375 also at `8006db9`/`051472d`/`4890573`).
+
