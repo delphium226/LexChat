@@ -102,11 +102,38 @@ def test_concordance_only_defined_terms_and_never_a_nested_pair():
 
 
 class _FakeLex:
-    def __init__(self, titles):
+    def __init__(self, titles, provisions=None):
         self.titles = titles
+        self.provisions = provisions or {}
 
     def title_of(self, lid):
         return self.titles[lid]
+
+    def provisions_of(self, lid):
+        return self.provisions.get(lid)
+
+    def resolve_title(self, title, year):
+        return None
+
+
+def test_hint_block_hands_over_cut_text_and_never_the_wrong_part_of_a_long_annex():
+    long_annex = "ANNEX IX " + "petfood rules. " * 800 + "the chapter asked for"
+    lex = _FakeLex({"eur/2012/777": "Regulation 777/2012"}, {"eur/2012/777": [
+        {"uri": "http://www.legislation.gov.uk/id/eur/2012/777/article/4",
+         "text": "Article 4) **Rules**\n\n1) First.\n2) Second rule text.\n3) Third.\n"},
+        {"uri": "http://www.legislation.gov.uk/id/eur/2012/777/annex/IX", "text": long_annex},
+    ]})
+    block, meta = ph.hint_block("Article 4(2) of Regulation (EU) No 777/2012, and "
+                                "Chapter XI of Annex IX?", [], lex)
+    assert "2) Second rule text." in block and "3) Third" not in block
+    assert "petfood" not in block and "could not be cut out" in block
+    assert block.startswith("[PROVISIONS NAMED IN THE USER'S MESSAGE")
+    assert [r[0] for r in meta["refs"]] == ["article 4(2)", "Annex IX Ch XI"]
+
+
+def test_hint_block_is_empty_when_nothing_resolves():
+    block, meta = ph.hint_block("Is that right?", [], _FakeLex({}))
+    assert block == "" and meta["refs"] == []
 
 
 def test_nickname_breaks_a_tie_only_when_one_title_matches():

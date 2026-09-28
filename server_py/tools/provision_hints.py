@@ -514,6 +514,69 @@ def dry_run_turn(session: str, msg: int, text: str, context: list, lex: Lex) -> 
     return tr
 
 
+HINT_TOTAL_CAP = 16_000
+
+
+def hint_block(question: str, context: list, lex: "Lex") -> tuple:
+    """The block a product would prefix onto the lawyer's turn: the text of
+    every provision the message names that resolves to ONE instrument, then
+    the concordance of two quoted terms the instrument defines. ("" , meta)
+    when there is nothing to hand over. Prototype for the seam only
+    (`seam_replay manager --hint`); nothing in the product calls it."""
+    tr = dry_run_turn("-", 0, question, list(context), lex)
+    parts, used = [], 0
+    for label, lid, text in tr.shown:
+        if label.startswith("concordance"):
+            continue
+        title = lex.title_of(lid) or lid
+        if len(text) > PER_REF_CAP:
+            # The first N characters of a long Annex are some other chapter:
+            # say what is held rather than hand over the wrong text.
+            chunk = (f"{label} of {title} ({lid}): held, but the part named could not be "
+                     f"cut out of the text held ({len(text):,} characters), so it is not "
+                     "reproduced here; retrieve it before relying on it.")
+        else:
+            chunk = f"{label} of {title} ({lid}):\n{text.strip()}"
+        if used + len(chunk) > HINT_TOTAL_CAP:
+            break
+        parts.append(chunk)
+        used += len(chunk)
+    conc = [(lid, text) for label, lid, text in tr.shown if label.startswith("concordance")]
+    if conc and used < HINT_TOTAL_CAP:
+        lines = []
+        for uri, text in conc:
+            excerpt = re.sub(r"\s+", " ", text).strip()
+            line = f"- http://www.legislation.gov.uk/{uri}: ...{excerpt}..."
+            if used + len(line) > HINT_TOTAL_CAP:
+                break
+            lines.append(line)
+            used += len(line)
+        if lines:
+            terms = " and ".join(f"'{t}'" for t in tr.terms)
+            parts.append(f"Every passage where the instrument uses both {terms} together:\n"
+                         + "\n".join(lines))
+    meta = {"refs": tr.refs, "terms": tr.terms, "concordance_hits": tr.conc_hits,
+            "chars": used}
+    if not parts:
+        return "", meta
+    block = ("[PROVISIONS NAMED IN THE USER'S MESSAGE — the text below was retrieved "
+             "from the legislation index by code for this turn, verbatim, and has not "
+             "been summarised]\n\n" + "\n\n".join(parts)
+             + "\n[END OF PROVISIONS NAMED IN THE USER'S MESSAGE]")
+    return block, meta
+
+
+def context_from_history(messages: list) -> list:
+    """Instrument ids the conversation already carries: every one an earlier
+    message names or links, in order of first appearance."""
+    out: list = []
+    for m in messages:
+        for _, lid in instrument_mentions(m.get("content") or "", None):
+            if lid not in out:
+                out.append(lid)
+    return out
+
+
 def export_sessions(only=None) -> dict:
     import replay_set  # noqa: PLC0415
 

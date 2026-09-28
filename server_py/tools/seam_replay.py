@@ -867,8 +867,57 @@ def manager_cfg(doc: dict, turn: dict, messages: list) -> dict:
                                 chat_mode=body.chat_mode)
 
 
+def apply_hint(messages: list) -> list:
+    """P3.2 candidate lever (c), prototype: prefix the lawyer's turn with the
+    verbatim text of the provisions it names and the concordance of two quoted
+    defined terms, built by `tools/provision_hints.py` against LEX, with the
+    instruments the conversation already carries as context. Prints what it
+    handed over (ids and sizes only)."""
+    import tools.provision_hints as ph
+
+    users =[i for i, m in enumerate(messages) if m.get("role") == "user"]
+    if not users:
+        return messages
+    last = users[-1]
+    question = messages[last].get("content") or ""
+    ctx = ph.context_from_history(messages[1:last])
+    block, meta = ph.hint_block(question, ctx, ph.Lex())
+    refs = ", ".join(f"{label} {outcome}{' ' + lid if lid else ''}"
+                     for label, outcome, lid, _how, _n in meta["refs"]) or "none"
+    print(f"  hint: refs [{refs}]; concordance hits {meta['concordance_hits']}; "
+          f"{meta['chars']:,} chars handed over")
+    if not block:
+        return messages
+    out = list(messages)
+    out[last] = {**messages[last], "content": f"{block}\n\n{question}"}
+    return out
+
+
+def stance_line(doc: dict, turn: dict, text: str) -> str:
+    """P3.2: the draw's stance and opener under the gitignored rubric, when
+    the run's session has one and the turn is in its window; else ""."""
+    try:
+        rubrics = json.loads(Path(rr.DEFAULT_RUBRIC).read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    script = doc.get("script") or {}
+    base = str(script.get("base") or doc.get("session_id"))
+    rub = rubrics.get(base)
+    if not rub:
+        return ""
+    src = [t.get("from_turn") for t in (script.get("turns") or [])]
+    n = turn.get("turn")
+    b = src[n - 1] if src and n and n <= len(src) else n
+    lo, hi = rub.get("window") or [0, 10 ** 6]
+    stance = rr.stance_of(text, rub)[0] if lo <= b <= hi else "-"
+    contra = any(re.search(p, text, re.I) for p in rub.get("contradicted") or [])
+    return (f"export t{b}: stance {stance}, opener {rr.opener_kind(text)}"
+            f"{', CONTRADICTED claim' if contra else ''}")
+
+
 def manager_head(doc: dict, turn: dict, without_fix: bool = False,
-                 rev: str = PRE_P31_REV, on_date: Optional[date] = None) -> tuple:
+                 rev: str = PRE_P31_REV, on_date: Optional[date] = None,
+                 hint: bool = False) -> tuple:
     """The Manager's prompt and the conversation up to this turn's question,
     before any delegation: (messages, cfg). The start of `manager_messages`,
     and the whole of the Manager's first round (`--first-round`, P3.15).
@@ -900,6 +949,8 @@ def manager_head(doc: dict, turn: dict, without_fix: bool = False,
         system = system.replace(today, worker_date_line(on_date), 1)
     messages = [{"role": "system", "content": system}, *history]
     messages, _change = apply_mode_change_marker(messages, cfg)
+    if hint:
+        messages = apply_hint(messages)
     return messages, cfg
 
 
@@ -930,7 +981,8 @@ def _named_in(brief: str) -> list:
 
 
 def manager_messages(doc: dict, turn: dict, without_fix: bool = False,
-                     rev: str = PRE_P31_REV, apply_lost: bool = False) -> list:
+                     rev: str = PRE_P31_REV, apply_lost: bool = False,
+                     hint: bool = False) -> list:
     """The Manager's composition seam (P3.13): the conversation, then each
     recorded delegation as the `delegate_research` call it was and the
     `[Research Agent Result]` it returned, then the call that composes.
@@ -954,7 +1006,7 @@ def manager_messages(doc: dict, turn: dict, without_fix: bool = False,
            if dg.get("step") is None]
     if not dgs:
         raise SystemExit("this turn has no delegation to compose from")
-    messages, cfg = manager_head(doc, turn, without_fix, rev)
+    messages, cfg = manager_head(doc, turn, without_fix, rev, hint=hint)
     for i, dg in enumerate(dgs, 1):
         cid = f"call_{i:02d}"
         messages.append({"role": "assistant", "content": "", "tool_calls": [{
@@ -1126,7 +1178,8 @@ def _manager_first_round_command(args, doc: dict, turn: dict, sid: str) -> int:
     from src.agent.tools import get_manager_tools
 
     on_date = as_sent_date(args.date, doc)
-    messages, _cfg = manager_head(doc, turn, args.without_fix, args.rev, on_date)
+    messages, _cfg = manager_head(doc, turn, args.without_fix, args.rev, on_date,
+                                  hint=args.hint)
     messages = _strip_stamps(messages)
     tools = get_manager_tools("")
     recorded = [d for d in (turn.get("audit") or {}).get("delegations", [])
@@ -1164,6 +1217,9 @@ def _manager_first_round_command(args, doc: dict, turn: dict, sid: str) -> int:
             g = lookup_grade(doc, turn, text)
             print(f"  rep{rep}: ${cost:.4f}  ANSWERED FROM HISTORY: {len(text):,} chars  "
                   f"model={model}")
+            sl = stance_line(doc, turn, text)
+            if sl:
+                print(f"      {sl}")
             if g:
                 k = g["kinds"]
                 print(f"      lookup: {g['lid']} {g['verdict']}"
@@ -1174,7 +1230,7 @@ def _manager_first_round_command(args, doc: dict, turn: dict, sid: str) -> int:
             d = Path(args.out)
             d.mkdir(parents=True, exist_ok=True)
             (d / f"{sid}_t{args.turn}_manager_first{'_nofix' if args.without_fix else ''}"
-                 f"_rep{rep}.md").write_text(text, encoding="utf-8")
+                 f"{'_hint' if args.hint else ''}_rep{rep}.md").write_text(text, encoding="utf-8")
         if args.print:
             print(text)
     print(f"  total ${total:.4f}")
@@ -1249,6 +1305,11 @@ def main(argv: Optional[list] = None) -> int:
                         "upstream alone (e.g. google-vertex, google-ai-studio), with "
                         "no fallback; the product sends no routing field. Each draw "
                         "prints the provider that served it either way")
+    p.add_argument("--hint", action="store_true",
+                   help="manager seam only (P3.2 lever (c), prototype): prefix the "
+                        "lawyer's turn with the verbatim text of the provisions it "
+                        "names, and the concordance of two quoted defined terms "
+                        "(tools/provision_hints.py, live against LEX)")
     p.add_argument("--dry-run", action="store_true",
                    help="build the payload and print its shape; no model call")
     p.add_argument("--out", default=None, help="write each answer to this directory")
@@ -1257,6 +1318,8 @@ def main(argv: Optional[list] = None) -> int:
     run_path = Path(args.run)
     doc, turn = load_turn(run_path, args.turn)
     sid = str(doc.get("session_id"))
+    if args.hint and args.seam != "manager":
+        raise SystemExit("--hint is a manager seam option")
     if args.first_round:
         if args.at_rev or args.provider:
             # Not built for either first round: refuse rather than draw the
@@ -1291,6 +1354,8 @@ def main(argv: Optional[list] = None) -> int:
             raise SystemExit("--apply-lost is a synthesis or manager seam option")
     else:
         kwargs["apply_lost"] = args.apply_lost
+    if args.seam == "manager":
+        kwargs["hint"] = args.hint
     messages = build(doc, turn, **kwargs)
     # P4.5: what the answer seam does with a lost step, in code.
     lost_for_answer, any_completed = [], True
@@ -1367,6 +1432,10 @@ def main(argv: Optional[list] = None) -> int:
                 if restored:
                     print(f"      restored {restored} dropped sibling(s)")
         print(f"  rep{rep}: ${cost:.4f}  {len(clean):,} chars  model={model}")
+        if args.seam == "manager":
+            sl = stance_line(doc, turn, clean)
+            if sl:
+                print(f"      {sl}")
         if args.seam == "worker":
             print(f"      scripted negatives (P4.6): {_scripted_line(clean)}")
         grade = _grade(sid, clean)
@@ -1376,7 +1445,7 @@ def main(argv: Optional[list] = None) -> int:
             d = Path(args.out)
             d.mkdir(parents=True, exist_ok=True)
             suffix = ("_nofix" if args.without_fix else "") + (
-                "_lost" if args.apply_lost else "")
+                "_lost" if args.apply_lost else "") + ("_hint" if args.hint else "")
             (d / f"{sid}_t{args.turn}_{args.seam}{suffix}_rep{rep}.md").write_text(
                 clean, encoding="utf-8")
         if args.print:
