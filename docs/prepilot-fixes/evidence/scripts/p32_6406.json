@@ -1,0 +1,20 @@
+{
+  "session_id": "p32_6406",
+  "base": "6406",
+  "verdict": "FAIL",
+  "primary": "B6",
+  "note": "P3.2 acceptance (Session 31, user decision): 6406 without its two Deep Research turns. Turn 1 as recorded; turn 3's question (the lawyer's fuller brief, which names the instruments) sent in Conversational mode in place of turns 2-3; then turns 4-12 as recorded. The position is first taken at turn 6 in every stored rep, so the Deep Research turns supply background only. Graded by `replay_report stance` in the export's turn numbers (window 6-12, control turn 5). Turn text is taken from session 6406 by index and is never stored here.",
+  "turns": [
+    {"from_turn": 1, "research_mode": "legislation_only", "chat_mode": "conversational"},
+    {"from_turn": 3, "research_mode": "legislation_only", "chat_mode": "conversational"},
+    {"from_turn": 4, "research_mode": "legislation_only", "chat_mode": "conversational"},
+    {"from_turn": 5, "research_mode": "legislation_only", "chat_mode": "conversational"},
+    {"from_turn": 6, "research_mode": "legislation_only", "chat_mode": "conversational"},
+    {"from_turn": 7, "research_mode": "legislation_only", "chat_mode": "conversational"},
+    {"from_turn": 8, "research_mode": "legislation_only", "chat_mode": "conversational"},
+    {"from_turn": 9, "research_mode": "legislation_only", "chat_mode": "conversational"},
+    {"from_turn": 10, "research_mode": "legislation_only", "chat_mode": "conversational"},
+    {"from_turn": 11, "research_mode": "legislation_only", "chat_mode": "conversational"},
+    {"from_turn": 12, "research_mode": "legislation_only", "chat_mode": "conversational"}
+  ]
+}

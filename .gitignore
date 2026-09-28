@@ -108,6 +108,7 @@ frontend_update.zip
 # Regenerate from the Developer-tab transcript export; see docs/prepilot-fixes/FIX_PLAN.md.
 docs/prepilot-fixes/evidence/replay_set.json
 docs/prepilot-fixes/evidence/replay/
+docs/prepilot-fixes/evidence/rubrics/
 
 # Local state written by `python -m tools.replay pin` — records the dev box's
 # model and feature flags so `restore` can put them back. Per-machine, and it
