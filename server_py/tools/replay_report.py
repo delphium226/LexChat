@@ -7179,7 +7179,12 @@ def stance_grade(doc: dict, rubric: dict) -> dict:
     changes = []
     for prev, cur in zip(seq, seq[1:]):
         if cur["stance"] != prev["stance"]:
-            new = cur["provisions"] - prev["provisions"]
+            # Tightened at Session 32 (before the after-run): new against EVERY
+            # earlier answer in the window, not only the previous position's,
+            # so a change back to a provision cited two turns ago is not "new".
+            earlier = set().union(*(r["provisions"] for r in rows
+                                    if lo <= r["base"] < cur["base"]))
+            new = cur["provisions"] - earlier
             ok = bool(cur["deleg"]) and bool(new)
             changes.append((prev["base"], cur["base"], prev["stance"], cur["stance"], ok))
             if not ok:
@@ -7397,13 +7402,16 @@ def interpret_grade(doc: dict, rubric: dict) -> dict:
                     row[kind].append((it["id"], s.strip()))
             if not hit and any(r.search(plain) for r in topic):
                 row["drops"].append(s.strip())
-        prose_plain = _plain(_without_footer(ans))
+        # A `requires` statement may come from the code-emitted footer (user
+        # decision, Session 32: Invariant 2 prefers a line code writes); the
+        # trigger and every other check read the model's prose only.
+        full_plain = _plain(ans)
         for it in requires:
             if it.get("turns") and base not in it["turns"]:
                 continue
             fired = [s for s in sents if it["_if"].search(_plain(s))
                      and not STANCE_CONDITIONAL.match(_plain(s))]
-            if fired and not any(r.search(prose_plain) for r in it["_then"]):
+            if fired and not any(r.search(full_plain) for r in it["_then"]):
                 row.setdefault("unmet", []).append(it["id"])
                 findings.append(f"t{base} '{it['id']}' fired with no required statement")
         req = must.get(str(base))

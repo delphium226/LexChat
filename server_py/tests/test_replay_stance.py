@@ -68,6 +68,19 @@ def test_one_change_with_retrieval_and_a_new_provision_passes():
     assert len(g["changes"]) == 1
 
 
+def test_a_change_citing_only_what_an_earlier_answer_cited_is_not_new():
+    # Tightened at Session 32: section 9 was cited at turn 3, so the change at
+    # turn 5 cites nothing new although the previous position (turn 4) did not.
+    g = rr.stance_grade(_doc([
+        _turn("It is not listed in section 1 of Annex II."),
+        _turn("Widgets are not gadgets; section 9 is not relevant here."),
+        _turn("Widgets are not gadgets under section 4."),
+        _turn("Under section 9 widgets are gadgets."),
+    ]), RUBRIC)
+    assert not g["pass"]
+    assert any("citing nothing new" in f for f in g["findings"]), g["findings"]
+
+
 def test_two_changes_fail_and_a_change_without_retrieval_fails():
     g = rr.stance_grade(_doc([
         _turn("It is not listed in section 1 of Annex II."),

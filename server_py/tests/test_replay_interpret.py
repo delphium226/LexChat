@@ -105,6 +105,13 @@ def test_a_required_condition_fires_only_when_its_trigger_does():
     assert quiet["pass"], quiet["findings"]
 
 
+def test_a_required_statement_may_come_from_the_code_footer():
+    footer = "\n\n*Search scope: the gadget doctrine's status here has not been verified.*"
+    g = rr.interpret_grade(_doc("The Widget Order 1901 applies.", "Nothing here.",
+                                "The gadget doctrine applies here." + footer), RUBRIC)
+    assert g["pass"], g["findings"]
+
+
 def test_a_link_is_read_as_its_label():
     g = rr.interpret_grade(_doc("The [Widget Order 1901](http://example/1901/1) applies."), RUBRIC)
     assert g["pass"], g["findings"]
