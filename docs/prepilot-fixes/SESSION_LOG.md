@@ -6503,9 +6503,12 @@ What the session knew that the handover above did not say:
   held. LEX holds both, each Annex as ONE provision (89K and 28K characters).
   This is P3.12's shape (a part of a Schedule or Annex asked for by number),
   and it is evidence for that row.
-- **LEX's Annex text keeps some Chapter headings and drops others**
+- ~~**LEX's Annex text keeps some Chapter headings and drops others**
   (`CHAPTER V` survives in Annex XIV; Annex X and XIII Ch XI have none), so a
-  named Annex chapter cannot always be cut out in code.
+  named Annex chapter cannot always be cut out in code.~~ **RETRACTED in the
+  addendum below: every heading is there, run into its title (`CHAPTER
+  XIGeneral ...`); the cutter's word-boundary regex missed them.** An
+  instrument error, found by the handover audit.
 - **The grader under-reads, and the hand-read is load-bearing.** Its misses
   were fixed one pattern at a time, each from a sentence read by hand (bold
   markup, "process it into", conditionals, "cannot be classified as", "not
@@ -6601,3 +6604,83 @@ measured options, with what the evidence says about each:
   held-Act slot (Session 29) and P4.11's ungraded quick answers.
 - The Fix Tracker was not updated this session (P3.2 is still open, so no
   row would move). Update it only when asked.
+
+**Addendum to Session 31 (same day, at the user's request: "make sure we're
+not going to lose any pertinent information", then "update the tracker").**
+What the session knew that the entry and handover above did not say:
+
+1. **Correction: "P3.2 alone" was the session's default, not a user
+   decision.** Of the four decisions put to the user, three had a
+   recommendation (the re-scoped acceptance, the Conversational-only script,
+   the $15 stop); P3.2-alone-or-with-P3.3 did not. The user replied "go with
+   your suggestion", and the session filled the gap with P3.2 alone. The
+   handover's "(e) Take P3.2 and P3.3 together" is therefore still fully open.
+2. **The pre-pilot transcript itself, hand-read:** the same three changes in
+   turns 6-12 as the stored reps (deny at 6-7; the fat-derivative route
+   applied to the oil at 8; deny again at 9, opening "You have correctly
+   identified"; deny at 10-11; affirm at 12). Its final answer cites Annex X
+   Ch II s.3(B), the passage the text turns on.
+3. **Where the grader and the hand-read differ at HEAD** (`wave4_p32_pre`),
+   so the acceptance run's hand-read knows what to look for:
+   - r1 t8 and r2 t8 apply the Annex XIII Ch XI fat-derivative end point to
+     the oil without naming the category: an implicit affirm (r2 t8 also
+     denies: "both"). The grader reads both as none.
+   - r1 t9 agrees CONDITIONALLY ("if it cannot be classified as ...") and
+     keeps the denial: deny. Fixed in the rubric (a deny pattern for "cannot
+     be classified as"), not by the code.
+   - The false "not held" claims: r1 t10 (Annex X Ch II), r2 t5 (Annex XIV
+     Ch V), r3 t5 ("unable to retrieve" Annex XIV Ch V). LEX holds both
+     Annexes, each as one provision.
+4. **A known weakness in booked criterion (ii).** A change must cite "a
+   provision the previous position's answer did not"; the comparison is with
+   the IMMEDIATELY previous position's answer only. r1 t11 changes citing the
+   same Annex XIV table that t6 relied on, and counts as new against t9. Read
+   every change's citation by hand in the acceptance run; if the user wants
+   it, tighten the criterion to "not cited by any earlier answer in the
+   window" BEFORE the after-run, never after it.
+5. **Seam detail behind the lever (c) numbers** (answers were scratchpad
+   only): the hinted draws were near-identical within a side (temperature 0);
+   the hinted t6 draws added an unasked offer to search Scottish guidance;
+   r3's hinted t11 draws argued the exclusion backwards ("if fish oil were
+   merely a sub-category, the Regulation would not need to exclude it"), the
+   same inversion `wave2` t11 made. Cost $0.014 a draw.
+6. **Budget for the next 6406 run:** `p32_6406` reps took 8.7, 9.5 and 14.3
+   minutes and cost $1.51, $1.58 and $2.30; 6345 reps 4.0-6.8 minutes and
+   $0.53-0.86. So an n=3 after-column with its guard is about $7.50 and 45
+   minutes, run serially.
+7. **LEX facts learned** (also added to the `external-apis` skill, which is
+   not tracked in git):
+   - `/legislation/search` does not find EU measures by number and did not
+     return the Scotland Act 1998 by exact title in its top 50; pre-1963 Acts
+     have regnal-year ids, so a title-to-id resolver misses them.
+     `/legislation/lookup` with `legislation_type: "eur"` returns the title of
+     `eur/YEAR/NUMBER` (200) and is the reliable route.
+   - An Annex of an EU instrument is ONE provision (`.../annex/XIV`, 89K
+     characters for eur/2011/142), like a UK Schedule. **Its Chapter and
+     Section headings are all present but run into their titles**
+     (`CHAPTER XIGeneral ...`, `Section 3Specific requirements ...`; Annex
+     XIV's `CHAPTER V RULES` happens to have a space). **This corrects the
+     entry above, and the `ae0baab` commit message**, which said LEX drops
+     some Chapter headings: the cutter's `\bCHAPTER\s+XI\b` needed a word
+     boundary after the numeral and missed every run-together heading. Found
+     by this audit when the claim was re-checked against the fetched text
+     before being written into the skill. Fixed in `provision_hints`
+     (`_ROMAN_END`) with a test. The dry run now reports 2 chapter cuts (was
+     1) and 4 references over the cap (was 5); Annex XIII Ch XI (6406 msg 17)
+     cuts to 1,206 characters. The lever (c) A/B is unaffected: its turns 5,
+     6 and 11 cut no chapter. **The twentieth instrument trap, and the
+     same shape as the sixth (a regex tuned on one rendering).**
+   - Annex I definitions render as `‘term’ means ...;`, so a definitions cut
+     by quoted term is reliable.
+   - EU article uris are `/article/N` for eur/2009/1069 and eur/2011/142.
+8. **The rubric exists only on this machine** (`docs/prepilot-fixes/
+   evidence/rubrics/p32.json`, gitignored like `replay_set.json`). Without
+   it, `stance` exits 2 and the seam prints no stance. Its `_note` states the
+   proposition, the provisions it was verified against and the reading to be
+   confirmed. Every pattern in it was added from a sentence read by hand; if it
+   is lost, rebuild it from the stored runs with `--sentences`, and re-check
+   it against the counts above (stored reps 3, 3, 3, 3, 4; HEAD 1, 2, 0 by
+   command).
+9. **Fix Tracker updated to v26 at the user's request** (below): P3.2 stays
+   Verified (open), with its note rewritten; D21 and D22 are TODO items, not
+   tracker rows.

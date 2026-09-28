@@ -286,16 +286,22 @@ def _cut_numbered(text: str, sub: str) -> Optional[str]:
     return text[m.start(): m.end() + (nxt.start() if nxt else len(rest))]
 
 
+_ROMAN_END = r"(?=[^IVXL]|[IVXL][a-z]|$)"
+
+
 def _cut_annex(text: str, ref: Ref) -> tuple:
-    """(slice, how). Chapter headings survive in LEX's Annex text only
-    sometimes (`CHAPTER V RULES FOR ...` in Annex XIV; none in Annex X), so a
-    chapter is cut only on an upper-case heading; a section only where its
-    heading ('Section 3Specific ...') occurs once in the chapter span."""
+    """(slice, how). A chapter is cut on its upper-case heading; a section
+    only where its heading occurs once in the chapter span. LEX renders a
+    heading run into its title ('CHAPTER XIGeneral ...', 'Section 3Specific
+    ...'), so the numeral is ended by a non-numeral or by a capital followed
+    by a lower-case letter, never by a word boundary. (Session 31's first
+    version required a word boundary, missed every run-together heading and
+    reported the headings as missing from LEX's text: an instrument error.)"""
     span, how = text, "whole annex"
     if ref.chapter:
-        m = re.search(rf"\bCHAPTER\s+{ref.chapter}\b", text)
+        m = re.search(rf"\bCHAPTER\s*{ref.chapter}{_ROMAN_END}", text)
         if m:
-            nxt = re.search(r"\bCHAPTER\s+[IVXL]+\b", text[m.end():])
+            nxt = re.search(rf"\bCHAPTER\s*[IVXL]+{_ROMAN_END}", text[m.end():])
             span = text[m.start(): m.end() + (nxt.start() if nxt else len(text))]
             how = "chapter cut"
         else:

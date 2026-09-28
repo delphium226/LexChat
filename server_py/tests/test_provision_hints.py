@@ -83,6 +83,20 @@ def test_annex_chapter_cut_only_on_a_heading():
     assert how == "chapter heading absent"
 
 
+def test_annex_chapter_cut_on_a_heading_run_into_its_title():
+    # LEX renders "CHAPTER XI" + its title with no space; a word-boundary
+    # regex missed every such heading (Session 31's instrument error).
+    item = {"text": "ANNEX IX CHAPTER XGeneral rules ten CHAPTER XIFat rules eleven "
+                    "CHAPTER XIIOther rules twelve"}
+    cut, how = ph.slice_provision(item, _ref("Chapter XI of Annex IX"))
+    assert cut == "CHAPTER XIFat rules eleven " and how == "chapter cut"
+    cut, _ = ph.slice_provision(item, _ref("Chapter X of Annex IX"))
+    assert cut == "CHAPTER XGeneral rules ten "
+    item = {"text": "ANNEX IX CHAPTER IVImports four CHAPTER VRules five"}
+    cut, _ = ph.slice_provision(item, _ref("Chapter IV of Annex IX"))
+    assert cut == "CHAPTER IVImports four "
+
+
 def test_definitions_cut_for_quoted_terms():
     text = ("For this Regulation: ‘blood’ means whole blood;‘red fats’ means fats "
             "from processing;‘sea oil’ means oil from krill;‘guano’ means guano;")
