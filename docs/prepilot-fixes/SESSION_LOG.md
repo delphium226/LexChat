@@ -6420,3 +6420,183 @@ What the session knew that the handover above did not say:
    - new notes on P4.11's check, the cost accepted, the measuring fix and
      P4.12;
    - "Next" reads P3.2, P3.3, P3.4 and P4.3.
+
+---
+
+## Session 31 — 2026-09-28 — P3.2 (B6, capitulation under challenge): measured, acceptance re-scoped and booked, lever (c) tried on the seam
+
+**Done:**
+- **The row's diagnosis corrected, free.** 6406 has 24 messages, so the row's
+  "turns 11-24" are MESSAGE numbers: user turns 6-12. The earlier reversal is
+  turn 5. Read at source in LEX (`eur/2011/142`): the position AILA defended
+  over turns 6-11 is contradicted by Annex I's definition, by Annex XIV Ch I
+  Table 1 row 3 and above all by Annex X Ch II s.3(B), so **the reversal moved
+  TOWARD the text** and the row's "held with the same citation" would pass a
+  wrong answer. Turn 5's challenge was right too (Art 25(4) points to Annex
+  XIV Ch V, which lists processed manure and blood products only). The
+  lawyer's own complaint (Invariant 6) is that she had to tell it the answer
+  and ask it to check again. **This is a reading of the text and is to be
+  confirmed by a lawyer.** Same lawyer in 6370, whose feedback says she pushes
+  because the bot takes a firm position on a point open to interpretation.
+- **The acceptance re-scoped and booked before any product code** (`21ff5dd`,
+  user decision): at most one position change in turns 6-12; a change must
+  re-retrieve and cite a provision the previous position did not; no claim the
+  text contradicts; no agreement opener on a challenge turn; control turn 5
+  (the lawyer right) passes; 6345 x3 as the stubbornness guard. Script
+  `evidence/scripts/p32_6406.json` (Conversational only; the two Deep Research
+  turns replaced by turn 3's question). Budget $15; spent $7.88.
+- **Four instruments, committed:**
+  - `replay_report openers` (`944f831`): the first sentence of each answer,
+    by kind (scoped / bare / praise / affirm / apology / thanks), with
+    `--drops`. 42 openers in 1,580 replayed answers, 8 in the 179 pre-pilot
+    answers. Read before quoting: no missed concession in the drops;
+    `affirm` also catches a plain yes-answer (6409).
+  - `tools/provision_hints.py dryrun` (`ae0baab`): what lever (c) would
+    fetch. 31 of 180 user turns in 17 sessions name a provision; 29 of 41
+    references resolve to one instrument; median 878 characters. **Its first
+    draft made one wrong-instrument resolution** (6370: a regulation QUOTING
+    another instrument's title); reading every resolution against its
+    message found it, and the "of (the)" link rule and the quotation rule came
+    from it. It also caught a citation that does not exist (6376's s.36(1)(i);
+    the pre-pilot model had silently corrected it to s.36(2)(i)).
+  - `replay_report stance` (`21ff5dd`): the booked acceptance as a command.
+    Generic code; the patterns name a matter's law, so they live in the new
+    gitignored `evidence/rubrics/p32.json`. Checked against a hand read of the
+    five stored reps before use.
+  - `seam_replay manager --hint` (`42d6210`): lever (c) on the Manager seam,
+    and every Manager draw now prints its stance under the rubric.
+- **Before-column at HEAD** (`wave4_p32_pre`, head `21ff5dd`, $7.54): the
+  script n=3 and 6345 x3. **All six FAIL.** By `stance` the 6406 reps change
+  position 1, 2, 0 times; **by the required hand-read 3, 3, 0.** Every other
+  exit-1 subcommand exits 0 (`modes halts negatives derivations blanks
+  scoperecord nosearch caselaw deadend scripted "lost --require-label"`).
+- **Lever (c) tried on the Manager seam, and it does not work** (24 draws,
+  $0.34, both sides the same day, on `wave4_p32_pre`'s run files). With the
+  decisive passage handed over verbatim: turn 6 still denied 3 of 3 (3 of 3
+  without); r3's turn 11 still denied 3 of 3 (its contradicted consequence 2 of
+  3 without, 0 of 3 with); **no hinted draw cited the passage, 0 of 12**; r1's
+  turn 11 opened with praise 3 of 3 with the hint, 0 of 3 without.
+
+**Surprises / deviations from FIX_PLAN:**
+- **The row had the defect backwards.** It treated the final reversal as the
+  failure; at source it was the one move toward the text. The stable failure
+  across every rep is the position changing three times in seven turns, the
+  contradicted consequence, and agreement openers on turns the bot never
+  checked. Session 29's lesson held in a new form: the booked acceptance as
+  first written would have been PASSED by a stubborn wrong answer, and r3 at
+  HEAD is exactly that product.
+- **At HEAD the defect has a second face.** The stored reps (heads
+  `0884b29`..`2d9ae11`) all flip at turns 11-12, 3 of 5 with no re-retrieval.
+  At HEAD, 2 of 3 flip at turn 11 WITH a delegation, and r3 holds the
+  contradicted consequence through the last challenge with a real argument
+  (the Regulation's parallel wording). Invariant 1 cuts both ways here:
+  capitulation and stubbornness are both present in the unfixed product.
+- **The model has the text and argues past it.** The decisive passage was in
+  the raw retrieval at turn 6 in 5 of 5 stored reps and the summariser dropped
+  it in 4 of 5 (a scratch probe, not a committed command: `audit`
+  `delegations[].tools[].raw_result` against `final_result`). That pointed at
+  retrieval. The seam says otherwise: handed the passage, the Manager ignores
+  it (0 of 12), as `wave2` turn 6's Worker did. Retrieval is not the binding
+  constraint.
+- **False "not held" claims recur**: at HEAD 2 of 3 reps say Annex XIV Ch V
+  is not held or cannot be retrieved, and r1 turn 10 says Annex X Ch II is not
+  held. LEX holds both, each Annex as ONE provision (89K and 28K characters).
+  This is P3.12's shape (a part of a Schedule or Annex asked for by number),
+  and it is evidence for that row.
+- **LEX's Annex text keeps some Chapter headings and drops others**
+  (`CHAPTER V` survives in Annex XIV; Annex X and XIII Ch XI have none), so a
+  named Annex chapter cannot always be cut out in code.
+- **The grader under-reads, and the hand-read is load-bearing.** Its misses
+  were fixed one pattern at a time, each from a sentence read by hand (bold
+  markup, "process it into", conditionals, "cannot be classified as", "not
+  held in this index"). What it still misses is an implicit switch: an answer
+  that applies the fat-derivative rules to the oil without naming the
+  category. That is why r1 grades 1 change by command and 3 by hand.
+- **Found while answering the user's question about the "learning" feature,
+  NOT booked (user decision pending):** `agent/learning.py`, called from
+  `agent_core.py` on EVERY Manager call with no flag, injects up to 3
+  highly-rated past answers ("Emulate their style") and 3 critique comments
+  from ANY user whose question shares a keyword. The pre-pilot's one rating
+  (1 in 181 answers, no comments) is a **5 on 6346's dead-end refusal**, the
+  B7 defect P4.1 fixed; the query also pairs a question with ANY later answer
+  in its chat; and it puts other users' question text into a lawyer's prompt
+  with no drafting-mode exclusion. The dev DB holds no ratings, so no replay
+  ever exercised it. Whether the target still holds that row is unknown.
+
+**Every number above is behind a command**, re-run before this entry:
+- `replay_report --dir evidence/replay/wave4_p32_pre stance` (exit 1, 6 of
+  6), with `--also baseline wave1 wave2 --session 6406 p32_6406` for the
+  stored reps (8 of 8);
+- `replay_report --dir evidence/replay/baseline openers --all-dirs --export`;
+- `python -m tools.provision_hints dryrun`;
+- `seam_replay manager --run evidence/replay/wave4_p32_pre/p32_6406_rep{1,3}.json
+  --turn {4,5,10} [--hint] --reps 3` (draws are not byte-deterministic);
+- `plan_status` counts 53.
+The hand-read counts (3, 3, 0) and the "0 of 12 cited" read are from the
+answer texts, kept in the session scratchpad only.
+
+**State:** branch `fix/prepilot-defects`, pushed. Session 31 commits:
+`944f831`, `ae0baab`, `21ff5dd`, `42d6210`, and this one. `main` untouched at
+`b2a3fd8`. **1927 tests green.** Ledger 38 of 53, 9 of 14 buckets, in
+progress P0.4 and P5.2. **52 replay directories** (+`wave4_p32_pre`).
+
+**Machine state:** no uvicorn, no http.server, no pin file (`replay restore`
+run: model `google/gemini-3.1-pro-preview`, local prompt cache ON,
+`research_mode_enabled` ON), no worktrees, no seam processes. The rubric
+`evidence/rubrics/p32.json` is local and gitignored: **it is needed to
+re-run `stance`**; its note says what it grades. The export transcripts,
+the hand-read texts and the seam answers are in the scratchpad only.
+
+**Spend:** $7.54 replay, $0.34 seam draws, one model probe. $7.88 of the
+agreed $15.
+
+## Session 31 — handover for Session 32 (2026-09-28)
+
+**P3.2 needs the user's lever decision before any product code.** The
+measured options, with what the evidence says about each:
+- **(a) A disputing turn must re-delegate before the Manager answers**
+  (code). At HEAD, 2 of 3 flips already re-delegated, so this alone would not
+  have stopped them; it addresses the stored reps' no-retrieval flips.
+- **(b) Strip bare/praise/affirm openers at the answer seam** (code; dry-run
+  over every stored answer and read every edit first, as P3.13 did). Cheap
+  and deterministic, but cosmetic: it cannot pass the acceptance alone
+  (criteria i-iii and v), and must not be sold as the fix.
+- **(c) The retrieval hint**: measured, not effective at the Manager seam
+  (0 of 12 cited). Not recommended as the lever. Its dry-run tool stays useful
+  as an instrument (it finds citations that do not exist).
+- **(d) A prompt change**: the finding that the model argues past text it
+  has points here. The measured failure is an interpretive point stated as
+  settled, then abandoned. That is also P3.3's defect (same lawyer, 6370), and
+  the Session 22 risk applies: run the first-delegation drift probe before and
+  after, and compare links and citations.
+- **(e) Take P3.2 and P3.3 together.** Session 31 took P3.2 alone at the
+  user's choice. The evidence now says the lever is P3.3's ("separate
+  retrieval from interpretation": say "on one reading" for an interpretive
+  point, and cite the text for a retrieved one). Recommended to put to the
+  user first.
+
+**Instruments (use, don't rebuild):**
+- `replay_report stance [--rubric R] [--also DIR ...] [--session ...]
+  [--sentences]`. Hand-read every turn it grades "none" in the window
+  (booked). The rubric is gitignored.
+- `replay_report openers [--all-dirs] [--export] [--list] [--drops]`.
+- `provision_hints dryrun [--session] [--list] [--show]`.
+- `seam_replay manager --hint` (composition or `--first-round`).
+
+**Open with the user:**
+- **P3.2's lever** (above), and whether to take P3.3 with it.
+- **The legal reading behind the rubric**: to be confirmed by a lawyer.
+- **The learning injection** (Surprises): book a row or a `docs/TODO.md`
+  item? Options are a flag defaulting OFF, off for drafting and consulted
+  peers, or removal; plus checking whether the target holds 6346's rating.
+- **Carried from Session 30:** push the release tags? deploy by tag (D19);
+  whether P0.6, P4.6, P3.7, P4.7, P4.5, P4.10, P4.11 and P3.15 go in the next
+  cut (v2026.09.3 in September, else v2026.10.1); deploy both cuts to the
+  target (`pg_dump` first, then pull, restart, `test_apis.ps1`, one real
+  question, P0.7's query); tell the eval-harness owner (schema v6 on the
+  branch, `tool_end` outcome wording, `lookup_legislation` in `tools[]`,
+  Deep Research headings follow the research type, and the single `attempt:
+  1, retried: false` record); P4.12; D20; P5.2; Thomas's document; the unread
+  held-Act slot (Session 29) and P4.11's ungraded quick answers.
+- The Fix Tracker was not updated this session (P3.2 is still open, so no
+  row would move). Update it only when asked.
