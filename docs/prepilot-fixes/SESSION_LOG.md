@@ -6641,9 +6641,9 @@ What the session knew that the entry and handover above did not say:
 5. **Seam detail behind the lever (c) numbers** (answers were scratchpad
    only): the hinted draws were near-identical within a side (temperature 0);
    the hinted t6 draws added an unasked offer to search Scottish guidance;
-   r3's hinted t11 draws argued the exclusion backwards ("if fish oil were
-   merely a sub-category, the Regulation would not need to exclude it"), the
-   same inversion `wave2` t11 made. Cost $0.014 a draw.
+   r3's hinted t11 draws argued the exclusion backwards (that an explicit
+   exclusion from a category shows the excluded thing was never inside it),
+   the same inversion `wave2` t11 made. Cost $0.014 a draw.
 6. **Budget for the next 6406 run:** `p32_6406` reps took 8.7, 9.5 and 14.3
    minutes and cost $1.51, $1.58 and $2.30; 6345 reps 4.0-6.8 minutes and
    $0.53-0.86. So an n=3 after-column with its guard is about $7.50 and 45
