@@ -7243,6 +7243,294 @@ def cmd_stance(args) -> int:
     return 1 if failed else 0
 
 
+# --- P3.3: retrieval versus interpretation -----------------------------------
+#
+# The row (B11): an interpretive point stated as if the text said it, and a
+# doctrine asserted for a jurisdiction no retrieved source speaks for. The
+# counter-pressure is in the row too: these lawyers reward a grounded, plain
+# answer, so a hedge on a retrieval statement ("s.25 appears to provide") is a
+# regression, not caution. Two commands, one per direction:
+#   * `interpret` grades a rubric session per rep: a claim the text
+#     contradicts (`wrong`), a statement a turn must make (`must`), and an
+#     interpretive claim (`interpretive`) that must carry a hedge, from the
+#     generic INTERP_HEDGE or the item's own `hedge` patterns;
+#   * `hedges` counts, over any answers, retrieval statements carrying a
+#     hedge and blanket caveats: the decisiveness guard, read before/after.
+# Like `stance`, the patterns name a matter's law and live in the gitignored
+# `evidence/rubrics/p33.json`; this code is generic. A conditional and a
+# retraction assert nothing.
+INTERP_HEDGE = re.compile(
+    r"\bon\s+(?:one|a|another|that|this|the\s+(?:better|narrower|broader|wider|"
+    r"stricter|literal))\s+(?:reading|view|interpretation|construction)"
+    r"|\barguabl[ey]\b|\bit\s+is\s+arguable"
+    r"|\b(?:could|may|might|can)\s+(?:also\s+|equally\s+)?be\s+(?:read|argued|"
+    r"interpreted|construed|understood)"
+    r"|\bopen\s+to\s+(?:interpretation|argument|debate|question)"
+    r"|\bnot\s+(?:entirely\s+)?(?:settled|clear-cut|free\s+from\s+doubt)"
+    r"|\bunsettled\b|\bambigu(?:ous|ity|ities)\b"
+    r"|\b(?:a|one|the|an)\s+(?:(?:highly|more|most|equally|very)\s+)?(?:possible|"
+    r"plausible|reasonable|competing|alternative|stronger|better|narrow|narrower|broad|"
+    r"broader|wider|persuasive|arguable|tenable|defensible|credible)\s+(?:reading|"
+    r"interpretation|view|argument|construction)"
+    r"|\b(?:is|as)\s+a\s+matter\s+of\s+interpretation"
+    r"|\ba\s+court\s+(?:may|might|could|would\s+have\s+to)\b"
+    r"|\bdoes\s+not\s+(?:expressly|explicitly|itself)\s+(?:say|state|define|address|"
+    r"resolve|settle|decide)"
+    r"|\bnot\s+(?:been\s+)?(?:verified|checked|confirmed)\b"
+    r"|\b(?:suggests?|implies|appears?\s+to|seems?\s+to)\b",
+    re.I)
+# A hedge on a statement of what a provision SAYS. Narrower than
+# INTERP_HEDGE on purpose: "s.12 does not expressly state X" is a plain
+# retrieval statement about an absence, not a hedge.
+# Bound to a verb of what the text SAYS, so a hedged interpretation that
+# cites a section ("on one reading, s.3 covers X") is not counted here: that
+# hedge is the one the row asks for.
+RETRIEVAL_HEDGE = re.compile(
+    r"\b(?:appears?|seems?)\s+to\s+(?:provide|state|require|define|say|set\s+out|"
+    r"exempt|impose|confer|prohibit|list|contain|include|specify)"
+    r"|\barguabl[ey]\s+(?:provides?|states?|requires?|defines?|says?|lists?)"
+    # The modal needs the TEXT as its subject: "Ministers may require" is the
+    # statute's own modal, not a hedge on what it says.
+    r"|\b(?:it|this|that|the\s+(?:section|provision|regulation|article|Act|text|"
+    r"Schedule|Annex|Order|paragraph))\s+(?:may|might|could)\s+(?:provide|state|"
+    r"require|define|say|set\s+out|list|contain|specify)\b"
+    r"|\bprobably\s+(?:provides?|states?|requires?|defines?|lists?)"
+    r"|\bI\s+(?:believe|think|understand)\s+(?:that\s+)?(?:section|s\.|regulation|"
+    r"reg\.|article|annex|schedule)",
+    re.I)
+# A sentence that cites a provision by number: the denominator.
+RETRIEVAL_STMT = re.compile(
+    r"\b(?:section|s\.|ss\.|regulation|reg\.|regs?\.|article|art\.|schedule|sch\.|"
+    r"paragraph|para\.|rule|annex|chapter)\s*(?:\d+[A-Z]*|[IVXL]+)\b",
+    re.I)
+BLANKET_CAVEAT = re.compile(
+    r"\bnot\s+(?:constitute\s+|a\s+substitute\s+for\s+)?(?:formal\s+)?legal\s+advice"
+    r"|\bseek\s+(?:independent\s+|formal\s+|your\s+own\s+|specialist\s+)?legal\s+advice"
+    r"|\bconsult\s+(?:a|your|an)\s+(?:qualified\s+|independent\s+)?(?:lawyer|solicitor|"
+    r"legal\s+(?:adviser|advisor|professional))"
+    r"|\bshould\s+(?:independently\s+)?verify\s+(?:this|these|the\s+above)",
+    re.I)
+DEFAULT_P33_RUBRIC = DEFAULT_RUBRIC.with_name("p33.json")
+# A list item, or the bare "1." the sentence splitter leaves before one.
+_LIST_ITEM = re.compile(r"^\s*(?:[*\-•]|\d+[.)]|\(?[a-z]\))")
+
+
+_MD_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+
+
+def _plain(s: str) -> str:
+    """A sentence as prose: emphasis dropped, a markdown link read as its label."""
+    return _MD_LINK.sub(r"\1", (s or "").replace("*", ""))
+
+
+def _interp_sentences(answer: str) -> list:
+    return [s for s in _STANCE_SENT.split(_without_footer(answer or "")) if s.strip()]
+
+
+def _hedged(sents: list, i: int, extra: list | None = None) -> bool:
+    """Sentence i carries a hedge, or is an item under a lead-in line ending
+    ':' that does (a hedge does not carry across ordinary sentences: "The
+    text is silent. However, X applies." states X as settled)."""
+    pats = extra if extra else [INTERP_HEDGE]
+
+    def has(s):
+        return any(p.search(_plain(s)) for p in pats)
+
+    if has(sents[i]):
+        return True
+    j = i
+    while j > 0 and _LIST_ITEM.match(sents[j]):
+        j -= 1
+        if sents[j].strip().rstrip("*").endswith(":"):
+            return has(sents[j])
+    return False
+
+
+def interpret_grade(doc: dict, rubric: dict) -> dict:
+    """Grade one run file against its session's P3.3 rubric entry. Turn numbers
+    are the export's (a scripted run maps back through `from_turn`)."""
+    script = doc.get("script") or {}
+    src_turns = [t.get("from_turn") for t in (script.get("turns") or [])]
+    graded_turns = set(rubric.get("turns") or [])
+
+    def _items(key):
+        return [dict(it, _re=re.compile(it["pattern"], re.I),
+                     _unless=[re.compile(u, re.I) for u in it.get("unless") or []],
+                     _hedge=[re.compile(h, re.I) for h in it.get("hedge") or []])
+                for it in rubric.get(key) or []]
+
+    wrong, interp = _items("wrong"), _items("interpretive")
+    must = {str(k): [re.compile(p, re.I) for p in v]
+            for k, v in (rubric.get("must") or {}).items()}
+    topic = [re.compile(p, re.I) for p in rubric.get("topic") or []]
+    # A turn-level condition: if any sentence says `if`, the answer must say
+    # one of `then` somewhere (e.g. a doctrine applied to a jurisdiction must
+    # come with the statement that no source for that jurisdiction was read).
+    requires = [dict(it, _if=re.compile(it["if"], re.I),
+                     _then=[re.compile(p, re.I) for p in it["then"]])
+                for it in rubric.get("requires") or []]
+    rows, findings = [], []
+    for i, t in enumerate(doc.get("turns") or [], 1):
+        n = t.get("turn") or i
+        base = src_turns[n - 1] if src_turns and n <= len(src_turns) else n
+        if graded_turns and base not in graded_turns:
+            continue
+        ans = t.get("answer") or ""
+        sents = _interp_sentences(ans)
+        row = {"turn": n, "base": base, "answered": bool(ans.strip()),
+               "wrong": [], "asserted": [], "hedged": [], "drops": []}
+        for k, s in enumerate(sents):
+            plain = _plain(s)
+            if STANCE_RETRACTION.search(plain) or STANCE_CONDITIONAL.match(plain):
+                continue
+            hit = False
+            for it in wrong:
+                if (not it.get("turns") or base in it["turns"]) and it["_re"].search(plain) \
+                        and not any(u.search(plain) for u in it["_unless"]):
+                    row["wrong"].append((it["id"], s.strip()))
+                    hit = True
+            for it in interp:
+                if (not it.get("turns") or base in it["turns"]) and it["_re"].search(plain) \
+                        and not any(u.search(plain) for u in it["_unless"]):
+                    hit = True
+                    kind = "hedged" if _hedged(sents, k, it["_hedge"]) else "asserted"
+                    row[kind].append((it["id"], s.strip()))
+            if not hit and any(r.search(plain) for r in topic):
+                row["drops"].append(s.strip())
+        prose_plain = _plain(_without_footer(ans))
+        for it in requires:
+            if it.get("turns") and base not in it["turns"]:
+                continue
+            fired = [s for s in sents if it["_if"].search(_plain(s))
+                     and not STANCE_CONDITIONAL.match(_plain(s))]
+            if fired and not any(r.search(prose_plain) for r in it["_then"]):
+                row.setdefault("unmet", []).append(it["id"])
+                findings.append(f"t{base} '{it['id']}' fired with no required statement")
+        req = must.get(str(base))
+        if req is not None:
+            prose = _without_footer(ans)
+            row["must"] = any(r.search(_plain(prose)) for r in req)
+            if not row["must"]:
+                findings.append(f"t{base} required statement missing"
+                                + ("" if row["answered"] else " (no answer)"))
+        for iid, _ in row["wrong"]:
+            findings.append(f"t{base} asserts '{iid}', which the text contradicts")
+        for iid, _ in row["asserted"]:
+            findings.append(f"t{base} states '{iid}' as settled (no hedge)")
+        rows.append(row)
+    return {"rows": rows, "findings": findings, "pass": not findings}
+
+
+def cmd_interpret(args) -> int:
+    """P3.3 acceptance: per rep, per graded turn, claims the text contradicts,
+    required statements, and interpretive claims stated without a hedge.
+    `--sentences` prints every matched sentence and `--drops` every sentence
+    on the rubric's topic that NO pattern graded (both echo a matter's law:
+    keep the output out of the repo). Exits 1 if any graded rep fails."""
+    rpath = Path(args.rubric)
+    try:
+        rubrics = json.loads(rpath.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"  rubric not read ({rpath}): {e}")
+        return 2
+    dirs = [Path(args.dir)] + [Path(d) for d in (args.also or [])]
+    graded = failed = 0
+    print(f"P3.3 retrieval versus interpretation; rubric {rpath.name}")
+    for d in dirs:
+        for doc in load_runs(d):
+            script = doc.get("script") or {}
+            base = str(script.get("base") or doc.get("session_id"))
+            rub = rubrics.get(base)
+            if not rub or (args.session and base not in args.session
+                           and str(doc.get("session_id")) not in args.session):
+                continue
+            g = interpret_grade(doc, rub)
+            graded += 1
+            failed += 0 if g["pass"] else 1
+            seq = " ".join(
+                f"t{r['base']}:w{len(r['wrong'])}a{len(r['asserted'])}h{len(r['hedged'])}"
+                f"{'' if 'must' not in r else ('M' if r['must'] else 'm')}"
+                f"{'R' if r.get('unmet') else ''}"
+                f"{'' if r['answered'] else '-'}"
+                for r in g["rows"])
+            print(f"\n  {d.name} {doc.get('session_id')} r{doc.get('rep')}: "
+                  f"{'PASS' if g['pass'] else 'FAIL'}")
+            print(f"    {seq}")
+            for f in g["findings"]:
+                print(f"    [!] {f}")
+            for r in g["rows"]:
+                if args.sentences:
+                    for kind in ("wrong", "asserted", "hedged"):
+                        for iid, s in r[kind]:
+                            print(f"      t{r['base']} {kind:<8} {iid:<14} {s[:args.chars]!r}")
+                if args.drops:
+                    for s in r["drops"]:
+                        print(f"      t{r['base']} DROP     {s[:args.chars]!r}")
+    print("\n  key: t<export turn>:w<contradicted claims>a<interpretive, unhedged>"
+          "h<interpretive, hedged><M/m required statement made/missing>"
+          "<R a condition fired unmet><'-' no answer>")
+    print(f"  graded reps: {graded}, failing: {failed}")
+    return 1 if failed else 0
+
+
+def hedge_counts(answer: str) -> dict:
+    """Retrieval statements, those carrying a hedge, blanket caveats and
+    interpretive hedges in one answer, with the sentences behind the first
+    two non-plain counts."""
+    sents = _interp_sentences(answer)
+    ret = [s for s in sents if RETRIEVAL_STMT.search(_plain(s))]
+    hret = [s for s in ret if RETRIEVAL_HEDGE.search(_plain(s))]
+    cav = [s for s in sents if BLANKET_CAVEAT.search(_plain(s))]
+    words = len(_without_footer(answer or "").split())
+    return {"retrieval": len(ret), "hedged_retrieval": hret, "caveats": cav,
+            "interp_hedges": sum(1 for s in sents if INTERP_HEDGE.search(_plain(s))),
+            "words": words}
+
+
+def cmd_hedges(args) -> int:
+    """P3.3 decisiveness guard: over every answered turn in each directory
+    (optionally one chat mode, or some sessions), retrieval statements that
+    carry a hedge, blanket caveats, and interpretive hedges per 1,000 words.
+    A fix that separates retrieval from interpretation must not raise the
+    first two. `--list` prints the counted sentences (they can echo a
+    lawyer's matter). Always exits 0: it is read before and after."""
+    dirs = [Path(args.dir)] + [Path(d) for d in (args.also or [])]
+    print(f"P3.3 decisiveness guard{' (chat mode ' + args.chat_mode + ')' if args.chat_mode else ''}")
+    print(f"  {'dir':<24} {'answers':>7} {'ret.stmts':>9} {'hedged':>6} "
+          f"{'caveats':>7} {'interp/1k':>9}")
+    for d in dirs:
+        tot = {"answers": 0, "retrieval": 0, "hedged": 0, "caveats": 0,
+               "interp": 0, "words": 0}
+        listed = []
+        for doc in load_runs(d):
+            sid = str(doc.get("session_id"))
+            base = str((doc.get("script") or {}).get("base") or sid)
+            if args.session and sid not in args.session and base not in args.session:
+                continue
+            for t in doc.get("turns") or []:
+                ans = t.get("answer") or ""
+                if not ans.strip() or (args.chat_mode and t.get("chat_mode") != args.chat_mode):
+                    continue
+                c = hedge_counts(ans)
+                tot["answers"] += 1
+                tot["retrieval"] += c["retrieval"]
+                tot["hedged"] += len(c["hedged_retrieval"])
+                tot["caveats"] += len(c["caveats"])
+                tot["interp"] += c["interp_hedges"]
+                tot["words"] += c["words"]
+                for s in c["hedged_retrieval"]:
+                    listed.append((sid, doc.get("rep"), t.get("turn"), "hedged", s))
+                for s in c["caveats"]:
+                    listed.append((sid, doc.get("rep"), t.get("turn"), "caveat", s))
+        per_k = (1000 * tot["interp"] / tot["words"]) if tot["words"] else 0.0
+        print(f"  {d.name:<24} {tot['answers']:>7} {tot['retrieval']:>9} {tot['hedged']:>6} "
+              f"{tot['caveats']:>7} {per_k:>9.1f}")
+        if args.list:
+            for sid, rep, turn, kind, s in listed:
+                print(f"      {sid} r{rep} t{turn} {kind:<6} {s.strip()[:args.chars]!r}")
+    return 0
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     _utf8_stdout()
     p = argparse.ArgumentParser(prog="replay_report")
@@ -7496,6 +7784,28 @@ def main(argv: Iterable[str] | None = None) -> int:
     st.add_argument("--sentences", action="store_true",
                     help="print the sentences each stance rests on (scratchpad only)")
     st.add_argument("--chars", type=int, default=200)
+    ip = sub.add_parser("interpret",
+                        help="P3.3 acceptance: claims the text contradicts, required "
+                             "statements, and interpretive claims stated without a hedge")
+    ip.add_argument("--rubric", default=str(DEFAULT_P33_RUBRIC),
+                    help="the gitignored rubric JSON (patterns name a matter's law)")
+    ip.add_argument("--also", nargs="+", metavar="DIR", help="further dirs to grade")
+    ip.add_argument("--session", nargs="+", default=None)
+    ip.add_argument("--sentences", action="store_true",
+                    help="print every graded sentence (scratchpad only)")
+    ip.add_argument("--drops", action="store_true",
+                    help="print every on-topic sentence NO pattern graded")
+    ip.add_argument("--chars", type=int, default=220)
+    hg = sub.add_parser("hedges",
+                        help="P3.3 decisiveness guard: hedged retrieval statements, "
+                             "blanket caveats, interpretive hedges per 1k words")
+    hg.add_argument("--also", nargs="+", metavar="DIR", help="further dirs, one line each")
+    hg.add_argument("--session", nargs="+", default=None)
+    hg.add_argument("--chat-mode", default=None,
+                    help="only turns run in this chat mode (e.g. conversational)")
+    hg.add_argument("--list", action="store_true",
+                    help="print each counted sentence (can echo a lawyer's terms)")
+    hg.add_argument("--chars", type=int, default=200)
     sub.add_parser("corpus",
                    help="retrieval shape: raw volume, where an enabling power "
                         "can come from, and what the tool memo costs P2.2")
@@ -7526,6 +7836,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         "siblings": cmd_siblings,
         "openers": cmd_openers,
         "stance": cmd_stance,
+        "interpret": cmd_interpret,
+        "hedges": cmd_hedges,
         "corpus": cmd_corpus,
     }[args.cmd](args)
 
