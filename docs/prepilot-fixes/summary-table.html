@@ -445,8 +445,47 @@
         box (Settings, then About), so a problem report can say which release it was.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.</p>
-      <p><strong>P3.2</strong>, an answer that changes under pushback, has been measured but not
-        fixed. In the session it comes from, the system took a position on how two defined terms
+      <p><strong>P3.2 and P3.3, taken together, were built and measured, and neither is fixed
+        yet.</strong> P3.2 is an answer that changes under pushback; P3.3 is keeping what the law
+        says separate from a reading of it. Three sessions test P3.3. In one, the system applied
+        the wrong interpretation Act to a 2009 Act (checked against the Acts themselves: the right
+        one is the 1999 interpretation order). In another, it stated a disputed reading of a
+        regulation's scope as settled. In the third, it applied English doctrines to Scotland with
+        no Scottish source. The tests were set, and the current system re-run against them, before
+        anything was built: it failed all nine re-runs.</p>
+      <p><strong>What changed.</strong> Four things. The chat and its quick research step are now
+        told to state what the text says plainly, to give a point the text does not settle as a
+        reading, not as the law, and not to say a general rule applies unless they retrieved the
+        provision that applies it. The step that condenses long search results is told to add
+        nothing that is not in the text (below). A line under any answer that searched case law now
+        says that a rule taken from a court outside Scotland has not been checked against Scots
+        law. And an answer no longer opens with “You are absolutely right” or similar before
+        anything was checked.</p>
+      <p><strong>The largest finding.</strong> The wrong interpretation Act did not come from the
+        part of the system that answers the lawyer. It came from the step that condenses long
+        search results. Given the lawyer's question, it answered it from memory and wrote the Act
+        into a summary of text that never mentions it, and the answer then reported it as found.
+        With the new instruction, re-condensing the same stored results added it 0 times in 27,
+        against 26 in 27 without it, and in the live re-runs 0 times in 42.</p>
+      <p><strong>How it was measured.</strong> Everything moved the right way, not yet far enough
+        to pass. On the wrong-Act session, wrong claims fell from 9 to 3, one answer was fully
+        right, and the claim that two duties must run one after the other disappeared (3 of 3 to 0
+        of 3). On the disputed reading, statements given as settled fell from about 21 to about 7,
+        and readings given as readings rose from none to 6. On the Scottish doctrine, 2 of 3
+        re-runs now pass. Plain statements of the law gained no hedges and no blanket “seek legal
+        advice” caveats, which the lawyers told us they do not want. The pushback test (P3.2)
+        still fails in all three re-runs.</p>
+      <p><strong>What it found.</strong> The condensing step still adds its own glosses. In one
+        re-run it wrote “by definition” into a summary of a regulation, and the answer quoted it to
+        the lawyer as the regulation's text; those words are in neither regulation. That is the next
+        thing to fix. Six new rows record what is left: P3.16 (that gloss), P3.17 (fetching the
+        section that says where a rule applies, not only its definitions), P3.18 (the Deep Research
+        report still asserting that English doctrine applies in Scotland), P4.13 and P4.14 (two
+        small presentation defects) and P4.15 (a case-law “not found” without the line saying the
+        database is incomplete). Our readings of the law behind these tests are to be confirmed by
+        a lawyer. None of this has reached the server.</p>
+      <p><strong>Earlier, P3.2</strong>, an answer that changes under pushback, was measured before
+        anything was built. In the session it comes from, the system took a position on how two defined terms
         in an assimilated EU regulation relate, defended it, then reversed it when the lawyer
         pushed back. Read against the regulation itself, that last reversal moved towards what the
         text says. So the original test, “hold your position unless you cite something new”,
@@ -467,8 +506,7 @@
         provisions the lawyer had named, including the passage that decides the question. In 12
         tries it never cited that passage, and the position did not change once. The system has
         the text and argues past it. So the fix is about how it handles a point of interpretation,
-        which is also P3.3's problem, and choosing it is the next decision. Nothing a lawyer sees
-        has changed yet.</p>
+        which is also P3.3's problem, and the two were taken together (above).</p>
       <p><strong>One thing parked.</strong> A built-in “learning” feature adds other users'
         highly rated answers, and their comments, to every conversation. It has no switch, it
         shows one lawyer's questions in another lawyer's conversation, and the only pre-pilot
@@ -691,11 +729,12 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next.</strong> Choosing P3.2's fix, most likely together with
-        <strong>P3.3</strong> (separating retrieval from interpretation), since the evidence points
-        to the same cause. Then the other two open groups: <strong>P3.4</strong> (the Scottish
-        jurisdiction default) and <strong>P4.3</strong> (the sources list). <strong>P4.12</strong>
-        when we choose to measure it.</p>
+      <p><strong>Next.</strong> <strong>P3.16</strong>, the condensing step's glosses, measured
+        first, since it lies behind both P3.2 and P3.3. Then <strong>P3.17</strong> and
+        <strong>P3.18</strong>, the two small presentation fixes (<strong>P4.13</strong>,
+        <strong>P4.14</strong>) and a decision on <strong>P4.15</strong>. The other open groups
+        remain: <strong>P3.4</strong> (the Scottish jurisdiction default), <strong>P4.3</strong>
+        (the sources list) and <strong>P4.12</strong>.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
         and three items from <code>docs/TODO.md</code> D16 (the impossible year window, always
@@ -719,7 +758,7 @@
   // ver:    on a Fixed row only: the release that carries it ("2026.09.1", the git tag
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
-  const UPDATED = "28 September 2026, end of Session 31 (P3.2 measured, not fixed: its test re-set and the first idea for a fix dropped; next: choosing P3.2's fix, likely with P3.3)";
+  const UPDATED = "29 September 2026, end of Session 32 (P3.2 and P3.3 built and measured together, better but not yet passing; six new rows; next: P3.16)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23", ver: "Next release" },
@@ -755,6 +794,9 @@
     { src: "R", fix: "Stop the chat reply dropping a subsection the research step had already written", sev: "P2", status: "Fixed", ref: "P3.13", t: "", fixed: "2026-09-23", ver: "2026.09.2" },
     { src: "R", fix: "Tell the quick-lookup step which research filters are active", sev: "P3", status: "Verified", ref: "P3.14", t: "" },
     { src: "R", fix: "In a follow-up answered without new research, say the instrument itself is not held, not just its text", sev: "P3", status: "Fixed", ref: "P3.15", t: "", fixed: "2026-09-25", ver: "Next release" },
+    { src: "R", fix: "Stop the step that condenses search results adding its own interpretation (one reached a lawyer as a quotation)", sev: "P1", status: "Verified", ref: "P3.16", t: "" },
+    { src: "R", fix: "Fetch the section that says where a general rule applies, not only its definitions", sev: "P1", status: "Verified", ref: "P3.17", t: "" },
+    { src: "R", fix: "Stop the Deep Research report asserting that an English doctrine applies in Scotland without a Scottish source", sev: "P1", status: "Verified", ref: "P3.18", t: "" },
     { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", sev: "P1", status: "Fixed", ref: "P4.1", t: "9", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Show a change of mode or research type in the conversation itself", sev: "P3", status: "Verified", ref: "P4.9", t: "" },
     { src: "R", fix: "Never show a blank or lost reply", sev: "P1", status: "Fixed", ref: "P4.2", t: "", fixed: "2026-09-16", ver: "2026.09.1" },
@@ -765,6 +807,9 @@
     { src: "R", fix: "Cut the cost and the wait of a lost reply (about 63,000 reasoning tokens per failed attempt)", sev: "P2", status: "Fixed", ref: "P4.10", t: "", fixed: "2026-09-25", ver: "Next release" },
     { src: "R", fix: "Cut the wait when the model's provider stops responding mid-reply (two to three minutes per failed attempt)", sev: "P2", status: "Fixed", ref: "P4.11", t: "", fixed: "2026-09-25", ver: "Next release" },
     { src: "R", fix: "Recover a chat reply lost when the model's provider stops responding (no second research request is behind it)", sev: "P2", status: "Verified", ref: "P4.12", t: "" },
+    { src: "R", fix: "Remove every agreement opener, including one that thanks the lawyer for challenging an earlier answer", sev: "P3", status: "Verified", ref: "P4.13", t: "" },
+    { src: "R", fix: "Show one search-scope line, not two, when the model copies an earlier one", sev: "P3", status: "Verified", ref: "P4.14", t: "" },
+    { src: "R", fix: "Say that a case-law search finding nothing is not proof there is none, when no legislation search ran", sev: "P2", status: "Verified", ref: "P4.15", t: "" },
     { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Fixed", ref: "P4.6", t: "4", fixed: "2026-09-23", ver: "Next release" },
     { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Fixed", ref: "P4.7", t: "2", fixed: "2026-09-24", ver: "Next release" },
     { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", sev: "P3", status: "Verified", ref: "P4.8", t: "" },

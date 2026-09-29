@@ -6872,3 +6872,80 @@ under the requirements of Chapter XI". List what each change stops or starts cou
   cached summary becomes unreachable when this code reaches the target (intended: rows
   written before the source rule may carry additions and are shared across users).
 
+**Addendum to Session 32 (same day, at the user's request: "make sure we're not going to lose
+any pertinent information", then "update the tracker").** What the session knew that the entry
+and handover above do not say:
+
+1. **A number moved behind a command:** "the pre-pilot answers fail all three" came from a
+   scratch conversion of the export. `replay_report --dir <any> interpret --export` now grades
+   the export's own answers as pseudo-runs (rep 0) and reproduces it turn for turn (6338 t1-3
+   wrong 1/1/2; 6370 t3 the "explicitly state" claim; 6375 both turns unmet). Test added;
+   1982 tests.
+2. **The three summariser rule wordings, so a later session does not re-try the bad ones**
+   (the panel is 24 results from other sessions, 2 draws a side, seed 32; the "current" side is
+   the prompt without any rule, and its own numbers moved between runs, which is the band):
+   - A: "Use ONLY the legislation text below. Do not add anything that is not in it: no other
+     legislation, no definitions and no rules of interpretation from your own knowledge, even
+     where the research question asks for them. If the text does not answer part of the
+     question, say that it does not." 6338 additions 0 of 27 (0 of 216 at 24 draws a slot);
+     panel provisions 253 against 261, characters -7%, "does not contain" 46 against 7;
+     change-record summaries collapsed (one from 7 provisions to 0).
+   - B: "Summarise only what the text below contains. Do not add any legislation, definition
+     or rule of interpretation that is not in it, even where the research question asks for
+     one." 4 of 27; panel 321 against 270, -3%, 16 against 8.
+   - C (shipped, `SUMMARY_SOURCE_RULE`): B plus ": leave out any part of the question the text
+     does not cover, without commenting on it." 0 of 27 (26 of 27 without); panel 275 against
+     242, -13%, 11 against 7. `summary_probe redraw` / `panel` compare C against no rule; to
+     re-test A or B, edit `SUMMARY_SOURCE_RULE` in a scratch copy.
+3. **The Manager-seam A/B, slot by slot** (3 draws a slot, 84 draws, $2.40, same day). The
+   "before" side was drawn with `prompts.py` checked out at HEAD through the identical pipeline,
+   NOT with `--without-fix`: on the Manager seam `--without-fix` also hands the bare report
+   without P3.13's sibling linking, so it changes two things. Per slot, before -> after:
+   6370 r1 t3/t5/t6 unhedged 20 -> 7, hedged 1 -> 11, passing draws 0/9 -> 3/9; 6370 r3 t3/t4
+   9 -> 4, 0 -> 3, 0/6 -> 2/6; 6338 r1 t1-3 wrong 11 -> 12 (the report already asserts it),
+   r2 t3 wrong 6 -> 3 and the required statement 0/3 -> 3/3; 6406 (script turns 4, 5, 7, 10 =
+   export 5, 6, 8, 11) stances unchanged (r1 t6 deny 3/3, r3 t11 deny 3/3), control turn's
+   openers bare -> scoped; 6345 t4 openers bare/apology/apology -> none/bare/bare.
+4. **The drift probe, brief by brief** (`seam_replay manager --first-round --date recorded`,
+   8 slots x 3 x 2 sides): every after-side brief names the same instrument or subject as
+   before; 6348 names FOISA 3 of 3 (2 of 3 before); 6406 adds the implementing Regulation's
+   number to the controlling one's; 6375 adds the Scottish environmental regulations; 6345
+   drops the "concessionary travel" steer (its before-column went to that wrong Act).
+5. **Observations not booked:**
+   - 6345 `wave4_p33_post` r3 turn 4 asked the lawyer to name the Act after a scoped
+     negative, rather than naming s.38.
+   - 6370 after r2 turn 6 said it could not take a legal position on the interpretation. It
+     set out both readings first, so it is not the blanket caveat the guard counts, but it is
+     neutrality stated as a refusal; read whether lawyers want that before any row is written.
+   - Change-record summaries mis-expand ids: one summary gave the interpretation Act's title
+     to a different 2010 ASP number, and a `wave2` 6338 summary gave the inserting 2019 Act a
+     2024 year. Both are the summariser adding to what the raw text carried: evidence for
+     P3.16.
+   - 6375's two passes rest on the code line; the report bodies still discuss the doctrines
+     in the inter-governmental context. If the user wants the body itself neutral, that is a
+     tighter acceptance, to be booked before a re-run.
+   - The 6370 reading behind the rubric (the Regulations' reg 6(4), 6(6) and 7(5) point to
+     their applying to proposed development generally, not only to EIA development) is in
+     the gitignored rubric's `_note`, and is to be confirmed by a lawyer, like 6406's.
+6. **Hazards met this session:** the console is cp1252, so any script printing LEX or answer
+   text needs `PYTHONIOENCODING=utf-8`; psycopg2 is not installed (use asyncpg, as
+   `seam_replay` does); a Monitor watch expires after 30 minutes (re-arm, or rely on the
+   command's own completion notice); a sleeping machine stalls a replay mid-call (kill the
+   client and re-run the SAME command: it skips finished reps); `replay run --max-spend`
+   counts only the current invocation's spend; `seam_replay --out` is a DIRECTORY of
+   `<sid>_t<N>_manager[_first]_rep<k>.md`; `p32_6406` run files number turns by the script
+   (script turn k is export turn k+1 from k=3 on); the heredoc backslash trap hit three more
+   times (nothing corrupted reached a commit).
+7. **What the scratch scripts did, so they can be rebuilt** (the scratchpad goes with the
+   session): a seam grader (each `.md` draw through `interpret_grade` and `stance_of`, the
+   rubric's turn only); a slot table over two side directories; `panel.sh` / `drift.sh`
+   (the slots above through `xargs -P 4`); the opener dry run and the summariser probe,
+   both now committed (`openers --strip`, `tools/summary_probe`).
+8. **The local rubric `evidence/rubrics/p33.json`** now also carries `summary_adds` and
+   `self_ids` for 6338 (read by `summary_probe`). Every pattern in it came from a sentence read
+   by hand; if it is lost, rebuild it from `wave4_p33_pre` and `wave4_p33_post` with
+   `interpret --sentences --drops` and re-check the counts in the rows.
+9. **The `external-apis` skill** (not tracked in git) gained a section on the
+   explanatory-note endpoint and the two interpretation regimes the index holds.
+10. **Fix Tracker updated to v27 at the user's request** (below).
+

@@ -7470,6 +7470,35 @@ def interpret_grade(doc: dict, rubric: dict) -> dict:
     return {"rows": rows, "findings": findings, "pass": not findings}
 
 
+def _interpret_export_docs(sessions: set) -> list:
+    """The pre-pilot's own answers for the rubric's sessions, one pseudo-run
+    each (rep 0), turns numbered by the user messages before them, as
+    `_opener_export_rows` pairs them. [] if the export cannot be read."""
+    import csv  # noqa: PLC0415
+    import io  # noqa: PLC0415
+
+    rs = _replay_set_module()
+    if rs is None:
+        print("  export not read: replay_set unavailable")
+        return []
+    csv.field_size_limit(10 ** 9)
+    grouped: dict = {}
+    for r in csv.DictReader(io.open(Path(rs.DEFAULT_CSV), encoding="utf-8-sig")):
+        if r["Session ID"] in sessions:
+            grouped.setdefault(r["Session ID"], []).append(r)
+    docs = []
+    for sid, srows in sorted(grouped.items()):
+        turns, n = [], 0
+        for r in sorted(srows, key=lambda r: int(r["Message #"] or 0)):
+            if r["Message role"] == "user":
+                n += 1
+                turns.append({"turn": n, "answer": ""})
+            elif r["Message role"] == "assistant" and turns:
+                turns[-1]["answer"] = r["Message content"] or ""
+        docs.append({"session_id": sid, "rep": 0, "turns": turns})
+    return docs
+
+
 def cmd_interpret(args) -> int:
     """P3.3 acceptance: per rep, per graded turn, claims the text contradicts,
     required statements, and interpretive claims stated without a hedge.
@@ -7485,8 +7514,12 @@ def cmd_interpret(args) -> int:
     dirs = [Path(args.dir)] + [Path(d) for d in (args.also or [])]
     graded = failed = 0
     print(f"P3.3 retrieval versus interpretation; rubric {rpath.name}")
-    for d in dirs:
-        for doc in load_runs(d):
+    groups = [(d.name, load_runs(d)) for d in dirs]
+    if args.export:
+        groups.append(("export", _interpret_export_docs(set(rubrics))))
+    for name, docs in groups:
+        d = Path(name)
+        for doc in docs:
             script = doc.get("script") or {}
             base = str(script.get("base") or doc.get("session_id"))
             rub = rubrics.get(base)
@@ -7847,6 +7880,8 @@ def main(argv: Iterable[str] | None = None) -> int:
                     help="print every graded sentence (scratchpad only)")
     ip.add_argument("--drops", action="store_true",
                     help="print every on-topic sentence NO pattern graded")
+    ip.add_argument("--export", action="store_true",
+                    help="also grade the transcript export's own (pre-pilot) answers")
     ip.add_argument("--chars", type=int, default=220)
     hg = sub.add_parser("hedges",
                         help="P3.3 decisiveness guard: hedged retrieval statements, "

@@ -193,3 +193,26 @@ def test_hedges_command_always_exits_0(tmp_path, capsys):
     assert rr.main(["--dir", str(run), "hedges", "--chat-mode", "conversational", "--list"]) == 0
     out = capsys.readouterr().out
     assert "hedged" in out and "Section 4 appears" in out
+
+
+def test_the_export_answers_are_graded_as_pseudo_runs(tmp_path, monkeypatch):
+    import csv
+    import types
+    f = tmp_path / "export.csv"
+    cols = ["Session ID", "Message #", "Message role", "Message content"]
+    with open(f, "w", newline="", encoding="utf-8") as h:
+        w = csv.DictWriter(h, fieldnames=cols)
+        w.writeheader()
+        for i, (role, text) in enumerate([("user", "q1"), ("assistant", "Widgets include gadgets."),
+                                          ("user", "q2"), ("assistant", "More.")], 1):
+            w.writerow({"Session ID": "9999", "Message #": i, "Message role": role,
+                        "Message content": text})
+        w.writerow({"Session ID": "1111", "Message #": 1, "Message role": "user",
+                    "Message content": "not in the rubric"})
+    monkeypatch.setattr(rr, "_replay_set_module", lambda: types.SimpleNamespace(DEFAULT_CSV=str(f)))
+    docs = rr._interpret_export_docs({"9999"})
+    assert [d["session_id"] for d in docs] == ["9999"]
+    assert [(t["turn"], t["answer"]) for t in docs[0]["turns"]] == [
+        (1, "Widgets include gadgets."), (2, "More.")]
+    g = rr.interpret_grade(docs[0], dict(RUBRIC, turns=[1], must={}))
+    assert g["rows"][0]["asserted"]
