@@ -17,20 +17,58 @@ where each row carries its evidence and acceptance.
 
 ## Unreleased
 
-On `main`:
-- Release versioning: the `VERSION` file, the version in `/api/bot-info`, the
-  About box and the startup log, and this changelog.
+Nothing yet.
 
-Fixed on `fix/prepilot-defects` and waiting for the next cut (not yet on `main`):
+## 2026.09.3 — 2026-09-29
+
+Third cut of the pre-pilot defect fixes (merge `1e30774`), and the first
+release tagged when it was cut.
+
+Saying honestly what was and was not found:
 - Remove prompt wording that says the whole database lacks something (P4.6).
 - Test whether an instrument is held, by its number (P3.7).
 - Don't say "no case law found" when case law wasn't searched (P4.7).
 - Report a lost research step as lost, not "no results", and name each
   step's outcome in the progress events (P4.5).
-- The eval-harness audit event moves to **schema v6** (`delegations[].lost`,
-  P4.5).
-- Replay harness only, no product change: record, rather than assume, which
-  research filter twelve pre-pilot sessions used (P0.6).
+
+Reliability and cost:
+- Cap the length of a research step's reply, and re-run a step whose reply
+  came back empty after heavy reasoning instead of retrying it (P4.10).
+- Re-run a research step whose provider call timed out idle, instead of
+  retrying the same request (P4.11).
+
+Interpretation. P3.2 and P3.3 stay open: these changes improved their
+measurements but did not meet their acceptance.
+- Give an interpretive point as a reading, and don't say that a general rule
+  (an interpretation Act, a doctrine) applies unless the provision applying
+  it was retrieved (conversational answers and quick lookups; P3.3).
+- In Deep Research reports, the same rule, and name the courts the case law
+  comes from without saying it binds or persuades in another jurisdiction
+  (P3.18).
+- When case law was searched, say that a common-law rule taken from a court
+  outside Scotland has not been checked against Scots law (P3.3).
+- Stop the document summariser adding legislation, or conclusions of its own,
+  that the retrieved text does not contain (P3.3, P3.16; P3.16 stays open).
+- Remove an unscoped agreement opener ("You are absolutely right to challenge
+  this") from the start of an answer (P3.2, widened by P4.13).
+
+Presentation:
+- Show one search-scope line, not two, when the model copied the previous
+  turn's (P4.14).
+
+For the eval harness: the audit event is **schema v6** (`delegations[].lost`,
+P4.5).
+
+On deploy: the local prompt cache version is now **v3**, so no summary cached
+before this release is served again. That is intended (older summaries may
+carry text the source did not), and the cache hit rate will be low for a while.
+
+Also on `main` since 2026.09.2:
+- Release versioning: the `VERSION` file, the version in `/api/bot-info`, the
+  About box and the startup log, and this changelog.
+
+Replay harness and measuring tools only, no product change: P0.6, P3.15, and
+the graders and probes used to measure the rows above.
 
 ## 2026.09.2 — 2026-09-23
 
