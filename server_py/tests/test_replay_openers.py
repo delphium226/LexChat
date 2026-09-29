@@ -92,3 +92,16 @@ def test_cmd_openers_runs_and_lists_drops(tmp_path, capsys):
     assert "sweep" in out and "1 of 1" in out
     assert "'You are absolutely correct.'" in out
     assert "Thank you for providing the full title." in out.split("NOT counted")[1]
+
+
+def test_cmd_openers_strip_reports_the_product_edits(tmp_path, capsys):
+    d = tmp_path / "sweep"
+    d.mkdir()
+    (d / "9999_rep1.json").write_text(json.dumps(_doc(
+        ["You make a very precise point. The Order is silent.",
+         "Yes, exactly. The Order is silent."], [1, 1])), encoding="utf-8")
+    assert rr.main(["--dir", str(d), "openers", "--strip"]) == 0
+    out = capsys.readouterr().out
+    assert "EDIT praise" in out and "'The Order is silent.'" in out
+    assert "LEFT affirm" in out
+    assert "1 edited" in out and "1 counted opener(s) left as written" in out

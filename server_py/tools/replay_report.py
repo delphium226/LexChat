@@ -6971,6 +6971,7 @@ def opener_rows(doc: dict, dir_name: str) -> list:
             "kind": opener_kind(answer), "first": first_sentence(answer),
             "delegations": (len(audit.get("delegations") or [])
                             if isinstance(audit, dict) else None),
+            "answer": answer,
         })
     return rows
 
@@ -6999,6 +7000,7 @@ def _opener_export_rows(rs) -> list:
                 "dir": "export", "session": sid, "rep": 0, "turn": n,
                 "mode": "?", "kind": opener_kind(content),
                 "first": first_sentence(content), "delegations": None,
+                "answer": content,
             })
     return rows
 
@@ -7074,6 +7076,30 @@ def cmd_openers(args) -> int:
             if not r["kind"] and OPENER_VOCAB.search(r["first"]):
                 print(f"    {r['dir']:<22} {r['session']} r{r['rep']} t{r['turn']:<3} "
                       f"{r['first'][:args.chars]!r}")
+    if args.strip:
+        # P3.2 (Session 32): what the product's strip (`utils/openers.py`) does
+        # to these answers. Deep Research turns are skipped: the strip runs at
+        # the Manager's answer seam only. Every edit printed, to be read.
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from src.utils.openers import strip_agreement_opener  # noqa: PLC0415
+        edits: Counter = Counter()
+        left = 0
+        print("\n  the product strip over these answers:")
+        for r in pooled:
+            if r.get("mode") == "deep_research":
+                continue
+            new, kind = strip_agreement_opener(r.get("answer") or "")
+            if kind:
+                edits[kind] += 1
+                print(f"    EDIT {kind:<7} {r['dir']:<18} {r['session']} r{r['rep']} t{r['turn']:<3} "
+                      f"{r['first'][:args.chars]!r} -> {first_sentence(new)[:args.chars]!r}")
+            elif r["kind"] and r["kind"] != "scoped":
+                left += 1
+                print(f"    LEFT {r['kind']:<7} {r['dir']:<18} {r['session']} r{r['rep']} t{r['turn']:<3} "
+                      f"{r['first'][:args.chars]!r}")
+        answered = sum(1 for r in pooled if r.get("mode") != "deep_research")
+        print(f"  {answered} answers: {sum(edits.values())} edited {dict(edits)}; "
+              f"{left} counted opener(s) left as written")
     return 0
 
 
@@ -7795,6 +7821,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     op.add_argument("--drops", action="store_true",
                     help="print every first sentence in the opener vocabulary "
                          "NOT counted (the both-directions audit)")
+    op.add_argument("--strip", action="store_true",
+                    help="also run the product's opener strip over these answers and "
+                         "print every edit (P3.2, utils/openers.py)")
     op.add_argument("--chars", type=int, default=90)
     st = sub.add_parser("stance",
                         help="P3.2 acceptance: the position on a rubric's "

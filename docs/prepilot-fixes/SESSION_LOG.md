@@ -6735,3 +6735,140 @@ entry and the handover for Session 33 follow at the end of the session.**
 - **Machine state:** server stopped, `replay restore` run (local prompt cache ON,
   `research_mode_enabled` ON), no pin file.
 
+---
+
+## Session 32, continued — 2026-09-29 — the levers built and measured; neither row met; six residual rows
+
+**Done:**
+- **Lever chosen (user decision):** one prompt clause plus two code lines, seam-tested before
+  any paid replay. A fourth lever came out of the seam work and was added by user decision
+  (the summariser source rule). All four are on the branch (`42951b4`) and **stay there after
+  the after-column (user decision)**, with the residuals booked as rows.
+  1. **Prompt:** one clause in the first CRITICAL RULE of the conversational Manager and in
+     the quick-lookup Worker's MANDATE (not a new block: Sessions 14 and 22), plus a sentence
+     in the Manager's approach step on disputed turns.
+  2. **Summariser source rule** (`SUMMARY_SOURCE_RULE` in `summarise_prompt`) and the local
+     prompt cache version bumped to v2.
+  3. **Code, 6375:** `CASE_LAW_DOCTRINE_SENTENCE` after P2.4's coverage sentence.
+  4. **Code, P3.2's register:** `utils/openers.py`, an unscoped agreement formula removed at
+     the Manager's answer seam.
+- **Instruments, committed:** `replay_report interpret` reads a list item's hedge from its
+  lead-in line (`a4bef00`); `replay_report openers --strip` (the strip's dry run);
+  `tools/summary_probe` (`count` free, `redraw` and `panel` paid). Tests 1946 -> 1981.
+- **After-column** (`wave4_p33_post`, head `42951b4`, 15 reps, $17.17). **Neither row met.**
+  P3.3 7 of 9 fail (6338 0 of 3, 6370 0 of 3, 6375 2 of 3); P3.2 0 of 3 by hand; the 6345
+  guard holds; the decisiveness guard holds. Both rows carry the numbers. Six residual rows
+  booked: **P3.16** (summariser glosses), **P3.17** (a general rule's application provision),
+  **P3.18** (Deep Research synthesis), **P4.13** (opener strip coverage), **P4.14** (an
+  echoed footer ahead of P1.6's note), **P4.15** (a case-law-only negative). Ledger 38 of 59;
+  **B5 reopens as partial** (P4.15), so 8 of 14 buckets.
+
+**Surprises / deviations:**
+- **6338's wrong Act was written by the summariser, not by the Worker or the Manager.** The
+  Worker never searched for an interpretation Act; its section-search result, summarised by
+  the Flash model against the Worker's brief ("determine what interpretation legislation
+  applies"), came back with a note naming one. 34 stored summaries, all 6338, five
+  directories (`summary_probe count`). The Manager seam could not see it (it replays the
+  report), which is why the prompt clause moved 6338 by nothing there.
+- **A guard wording that stopped the additions multiplied false negatives.** The first rule
+  ("use only the text; if it does not answer, say so") took additions to 0 but "the text does
+  not contain" statements about sixfold and collapsed change-record summaries; a second
+  ("summarise only what it contains") left 4 of 27 additions; the third ("leave out, without
+  commenting") took 0 of 27 with no loss. Read as a band: the same prompt's own draws varied
+  by several points on every measure.
+- **The rule stopped Acts, not glosses, and a gloss reached the lawyer as a quotation.** In
+  `p32_6406` r1 the summary of a section search carried a parenthetical interpretation that is
+  in neither Regulation (checked in LEX over every provision), and the next answer told the
+  lawyer the Annex said it. That is P3.16, and it is Invariant 1's worst case.
+- **The Worker now retrieves the general rule, but by its definition.** Told not to say a
+  general rule applies without retrieving what applies it, it fetched the interpretation Act's
+  definitions schedule, not the section that says which Acts it covers. When it also fetched
+  the older Order (r1 turn 2) it got the answer fully right at source. P3.17.
+- **The hand-read overturned the command in both directions again.** `stance` passed
+  `p32_6406` r2, which states the contradicted consequence in wording the rubric does not
+  match, and read r1's explicit affirm at turn 7 as "none" (4 changes by hand, 3 by command).
+  `interpret` over-counted 6370: a reported judicial statement (the case name sits between
+  "Court" and the verb, so the exemption missed it), grounded retrieval with a citation, and
+  "under this reading" (a hedge the lexicon lacks). The grader was not changed mid-run; the
+  corrections are recorded by hand. Rule applied to both columns for 6370: a conclusion about
+  what the Regulations "apply" to (the undefined word) is interpretation; "reg N requires X"
+  is retrieval.
+- **Two regressions the booking did not predict, both small.** `caselaw` TWO_LINES 2: the
+  model echoed a footer, P1.6's link note was appended after it, and the trailing-only echo
+  strip missed it (P4.14; possible since P1.6). `modes` 1: a Conversational answer with report
+  headings (6375 r2 turn 1), n=1, not booked. `negatives` went from 3 to 5 turns (P4.15, plus
+  one `p32_6406` turn that does not name its search terms).
+- **The overnight stall.** The before-column's last rep hung in a summarisation call from
+  16:42 until the machine woke; the same command resumed and skipped the finished reps.
+- **Spend over the cap.** $6.71 before-column (plus the stalled attempt, unrecorded), about
+  $2.4 Manager-seam A/B (84 draws), about $0.4 drift probe (48 first-round draws), about $3.5
+  of summariser probes including **$1.80 spent by mistake** (a scratch script imported another
+  whose module body ran its paid probe at 24 draws a slot), $17.17 after-column. **About
+  $30.2 against the agreed $30**; the script's $6.94 against an estimated $5.40 was not
+  re-checked before it started.
+
+**Every number above is behind a command, except where marked:**
+- `replay_report --dir evidence/replay/wave4_p33_pre interpret` and `... wave4_p33_post
+  interpret [--sentences --drops]` (P3.3 grades); `... wave4_p33_post stance` (P3.2);
+  `... hedges` on both directories (the guard); the exit-1 set on both.
+- `python -m tools.summary_probe count` (34 before, 0 of 42 summarised 6338 results after);
+  `summary_probe redraw --dir evidence/replay/wave4_p33_pre --session 6338` and
+  `summary_probe panel` reproduce the rule's A/B (paid; the published figures are from the
+  session's scratch draws of the same prompts, and are a band).
+- `replay_report --dir evidence/replay/baseline openers --all-dirs --export --strip` (46 edits;
+  it now reads 1,708 answers with `wave4_p33_post` added, and 8 left as written, the eighth
+  being P4.13's gap).
+- **Scratch-derived:** the Manager-seam A/B tallies (0 of 15 to 5 of 15 passing draws for
+  6370) are `seam_replay manager` draws graded by `interpret_grade` in a scratch script; the
+  drift-probe reading is `seam_replay manager --first-round --date recorded` output read by
+  hand; the hand-read corrections are in the session scratchpad only (they name matters).
+- `plan_status` counts 59.
+
+**State:** branch `fix/prepilot-defects`, pushed; `main` untouched at `b2a3fd8`. Session 32
+commits: `ad38f2d`, `0bc4f2c`, `cefb2e2`, `a4bef00`, `42951b4`, and this one. 1981 tests.
+
+**Machine state:** server stopped, `replay restore` run (local prompt cache ON,
+`research_mode_enabled` ON), no pin file, no worktrees. **54 replay directories**
+(`wave4_p33_pre`, `wave4_p33_post`). Local and gitignored: `evidence/rubrics/p33.json` (now
+with `summary_adds` and `self_ids` for 6338), `p32.json`, `replay_set.json`.
+
+---
+
+## Session 32 — handover for Session 33 (2026-09-29)
+
+**Take next: P3.16, measure first.** It is upstream of both open rows: 6338's wrong Act and
+6406's fabricated quotation both began in a summary. Start free: a detector over every stored
+audit for text in `final_result` that is not in `raw_result` (parenthetical glosses, "by
+definition", "which means", a named instrument), every match read. Then iterate the rule with
+`summary_probe redraw`/`panel` (paid, about $1 a round), watching the "does not contain" count
+as closely as the additions. Remember the cache version when the prompt changes.
+
+**Then:** P3.17 (retrieve a general rule's application provision; drift probe if it is a
+prompt change), P3.18 (the same rule in the Deep Research synthesis; `seam_replay synthesis`
+first), P4.13 and P4.14 (small code, deterministic), and decide P4.15. Re-run P3.2 + P3.3's
+after-column only when those move the seams.
+
+**Instruments (use, don't rebuild):** `replay_report interpret` / `hedges` / `stance` /
+`openers --strip`; `tools/summary_probe count|redraw|panel`; `seam_replay manager` (and
+`--first-round --date recorded` for the drift probe). The rubrics are gitignored; `interpret`
+exits 2 without `p33.json`.
+
+**Known grader gaps, not fixed (to fix BEFORE the next after-column, never during):**
+`interpret`'s reported-statement exemption misses "the High Court in <case> confirmed";
+"under this reading" is not in `INTERP_HEDGE`; the 6370 rubric misses "becomes development to
+which"; `stance`'s rubric misses the contradicted consequence worded as "cannot be processed
+under the requirements of Chapter XI". List what each change stops or starts counting.
+
+**Open with the user:**
+- The legal readings behind both rubrics: to be confirmed by a lawyer.
+- The Fix Tracker was not updated (update only when asked); if asked, P3.2 and P3.3 stay open
+  and six rows are new.
+- Carried from Session 31: the release tags (D19); which rows go in the next cut
+  (v2026.10.1 now); deploying both cuts (`pg_dump` first); telling the eval-harness owner
+  (schema v6, `tool_end` wording, `lookup_legislation`, Deep Research headings, the
+  `retried: false` record); P4.12; D20; P5.2; Thomas's document; the unread held-Act slot and
+  P4.11's ungraded quick answers.
+- **New for the deploy:** the local prompt cache version is now v2 on the branch, so every
+  cached summary becomes unreachable when this code reaches the target (intended: rows
+  written before the source rule may carry additions and are shared across users).
+
