@@ -26,6 +26,9 @@ answers) was read before wiring (Session 32):
   * at most two passes, for a formula followed by another ("You are correct,
     and I apologise for the confusion.");
   * anything else is left as written.
+P4.13 widened the object of the bare and thanks formulas to the bot's own
+earlier answer ("You are correct to challenge my earlier statement."): one new
+edit over the 1,708 non-Deep-Research answers stored at the time, read.
 Fail-soft: any error returns the answer unchanged.
 """
 
@@ -38,14 +41,20 @@ _SCOPED = re.compile(
     r"^" + _YOU_ARE + r"\s+(?:that|in\s+(?:your|noting|saying|pointing)|about|regarding|on|"
     r"to\s+(?:note|say|point\s+out|observe))\b", re.I)
 
+# The bot's own earlier answer as the object of a challenge: "You are correct
+# to challenge my earlier statement" (P4.13). Only the bot's OWN answer, named
+# by one of these nouns, so a sentence naming anything else is left alone.
+_MY_EARLIER = (r"my\s+(?:earlier|previous|last|original)\s+"
+               r"(?:statement|answer|response|reply|position|assessment)")
+
 # The agreement formula at the start of an answer: (kind, whether what follows
 # the formula is content by itself, pattern). Each pattern matches the FORMULA
 # only; what follows it is the content test's business.
 _FORMULAS = (
     ("bare", False, re.compile(
         r"^" + _YOU_ARE + r"(?:\s+to\s+(?:challenge|question|query|push\s+back\s+on|"
-        r"press\s+(?:me\s+)?on|flag|raise|pick\s+up\s+on)\s+(?:this|that|me|the\s+point)"
-        r"(?:\s+point)?)?", re.I)),
+        r"press\s+(?:me\s+)?on|flag|raise|pick\s+up\s+on)\s+(?:this|that|me|the\s+point|"
+        + _MY_EARLIER + r")(?:\s+point)?)?", re.I)),
     ("praise", False, re.compile(
         r"^you(?:'ve|\s+have)?\s+(?:make|made|raise|raised|hit\s+on|highlight|highlighted)\s+"
         r"(?:a|an|the)\s+(?:(?:very|really|entirely|highly)\s+)?(?:\w+\s+){0,2}"
@@ -63,7 +72,8 @@ _FORMULAS = (
         r"reply))?))?", re.I)),
     ("thanks", False, re.compile(
         r"^thank\s+you\s+for\s+(?:pressing|pointing|flagging|challenging|raising|highlighting|"
-        r"catching|pushing)(?:\s+(?:me\s+)?(?:on\s+)?(?:this|that|it)(?:\s+out)?(?:\s+point)?)?",
+        r"catching|pushing)(?:\s+(?:me\s+)?(?:on\s+)?(?:this|that|it|" + _MY_EARLIER + r")"
+        r"(?:\s+out)?(?:\s+point)?)?",
         re.I)),
 )
 
