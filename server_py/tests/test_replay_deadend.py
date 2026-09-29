@@ -53,8 +53,11 @@ def test_turn_carries_a_research_mode_and_its_source():
 
 
 def test_the_export_stamps_every_turn_with_the_session_value_and_where_it_came_from(tmp_path):
-    """Until P0.6 the twelve blank sessions still get the default — but it is
-    now labelled `default` per turn, so the run file says so."""
+    """~~Until P0.6 the twelve blank sessions still get the default — but it is
+    now labelled `default` per turn, so the run file says so.~~ P0.6: a blank
+    session with no reviewer read is `unknown` — it still SENDS the default,
+    because the API needs a value, but the label no longer claims it is
+    evidence (`test_replay_research_reads.py` has the reads themselves)."""
     csv = tmp_path / "export.csv"
     cls = tmp_path / "classification.json"
     head = ["Session ID", "Message #", "Message role", "Message content",
@@ -71,9 +74,10 @@ def test_the_export_stamps_every_turn_with_the_session_value_and_where_it_came_f
         w.writerow(head)
         w.writerows(rows)
     cls.write_text(json.dumps({"1": {"verdict": "FAIL"}, "2": {"verdict": "DEFECT"}}), encoding="utf-8")
-    sessions = {s.session_id: s for s in rs.load_sessions(str(csv), str(cls))}
+    sessions = {s.session_id: s for s in rs.load_sessions(
+        str(csv), str(cls), str(tmp_path / "no_reads.json"))}
     t1 = sessions["1"].turns[0]
-    assert (t1.research_mode, t1.research_mode_source) == (rs.DEFAULT_RESEARCH_MODE, "default")
+    assert (t1.research_mode, t1.research_mode_source) == (rs.DEFAULT_RESEARCH_MODE, "unknown")
     t2 = sessions["2"].turns[0]
     assert (t2.research_mode, t2.research_mode_source) == ("legislation_and_case_law", "snapshot")
 
@@ -144,6 +148,13 @@ def test_the_committed_scripts_hold_no_question_text():
         script = rs.load_script(p)
         for t in script["turns"]:
             assert "from_turn" in t and "question" not in t, f"{p.name}: literal question text"
+    # P4.1's own scripts: the rest of this test is about THEIR shape. Other
+    # rows' scripts (P4.6's hold the research type fixed) share only the
+    # no-question-text rule above.
+    p41 = [p for p in paths if p.name.startswith("p41_")]
+    assert p41, "P4.1's scripts are gone"
+    for p in p41:
+        script = rs.load_script(p)
         assert script["base"] in ("6343", "6346")
         # A mode change is the point: at least one turn differs from the first.
         modes = [t["research_mode"] for t in script["turns"]]

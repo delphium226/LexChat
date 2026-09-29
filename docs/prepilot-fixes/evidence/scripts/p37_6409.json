@@ -1,0 +1,42 @@
+{
+ "session_id": "p37_6409",
+ "base": "6409",
+ "note": "P3.7 acceptance: session 6409's turns 1, 2 and 7-11, in Conversational chat mode under 'legislation_only' (the export's filter; turns 7-11 ran Conversational). Turn 6, the Deep Research turn, is left out: turns 7-11 depend only on which Act is in play, and it carries most of the session's cost. The graded slots are export turns 2 (a held Act named by number), 7 and 8 (the stub SSI 2025/119, by title and by number) and 9-11 (SSI 2025/377, not held). Turn text is taken from the export by index and is never stored here.",
+ "turns": [
+  {
+   "from_turn": 1,
+   "research_mode": "legislation_only",
+   "chat_mode": "conversational"
+  },
+  {
+   "from_turn": 2,
+   "research_mode": "legislation_only",
+   "chat_mode": "conversational"
+  },
+  {
+   "from_turn": 7,
+   "research_mode": "legislation_only",
+   "chat_mode": "conversational"
+  },
+  {
+   "from_turn": 8,
+   "research_mode": "legislation_only",
+   "chat_mode": "conversational"
+  },
+  {
+   "from_turn": 9,
+   "research_mode": "legislation_only",
+   "chat_mode": "conversational"
+  },
+  {
+   "from_turn": 10,
+   "research_mode": "legislation_only",
+   "chat_mode": "conversational"
+  },
+  {
+   "from_turn": 11,
+   "research_mode": "legislation_only",
+   "chat_mode": "conversational"
+  }
+ ]
+}

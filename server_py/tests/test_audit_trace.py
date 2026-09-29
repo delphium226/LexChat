@@ -173,7 +173,7 @@ def test_build_request_config_is_identical_for_all_three_bodies():
 def _chat_loop_calling_tools(tool_calls, final_content="THE REPORT"):
     """Fake provider chat_loop that invokes `tool_calls` then returns a report."""
     async def chat_loop(messages, model, cancel_event, num_ctx, tools, executor,
-                        on_chunk, emit_tool_details=False, timing_collector=None):
+                        on_chunk, emit_tool_details=False, timing_collector=None, worker_call=False):
         for name, args in tool_calls:
             await executor(name, args)
         return {"content": final_content, "sources": []}
@@ -189,7 +189,7 @@ async def test_audit_records_delegation_and_tools(monkeypatch):
     audit = AuditCollector("req123")
     set_audit_collector(audit)
 
-    async def fake_execute(name, args, on_chunk=None, timing_collector=None):
+    async def fake_execute(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         return json.dumps({"results": [{"title": "An Act"}]})
 
     monkeypatch.setattr("src.agent.agent_shared.execute_worker_tool", fake_execute)
@@ -215,7 +215,7 @@ async def test_audit_captures_api_calls_inside_the_owning_tool(monkeypatch):
     audit = AuditCollector("req123")
     set_audit_collector(audit)
 
-    async def fake_execute(name, args, on_chunk=None, timing_collector=None):
+    async def fake_execute(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         if on_chunk:
             await on_chunk({
                 "type": "api_call_start", "id": "c1",
@@ -274,7 +274,7 @@ async def test_sniffer_passes_through_a_sync_on_chunk(monkeypatch):
     def sync_on_chunk(data):  # precisely what system.py and ai.py hand over
         seen.append(data)
 
-    async def fake_execute(name, args, on_chunk=None, timing_collector=None):
+    async def fake_execute(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         if on_chunk:
             await on_chunk({
                 "type": "api_call_start", "id": "c1",
@@ -356,7 +356,7 @@ async def test_audit_records_raw_and_final_separately(monkeypatch):
 
     big = json.dumps({"text": "x" * 400_000})
 
-    async def fake_execute(name, args, on_chunk=None, timing_collector=None):
+    async def fake_execute(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         return big
 
     async def fake_summarise(text, query, model, **kw):
@@ -387,7 +387,7 @@ async def test_audit_marks_memo_hits(monkeypatch):
 
     calls = []
 
-    async def fake_execute(name, args, on_chunk=None, timing_collector=None):
+    async def fake_execute(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         calls.append(name)
         return json.dumps({"results": []})
 
@@ -425,7 +425,7 @@ async def test_audit_records_deep_research_step_metadata():
         return {"content": "findings", "sources": []}
 
     async def synthesis(messages, model, cancel_event, num_ctx, tools, executor,
-                        on_chunk, emit_tool_details=False, timing_collector=None):
+                        on_chunk, emit_tool_details=False, timing_collector=None, worker_call=False):
         return {"content": "INTEGRATED REPORT", "sources": []}
 
     plan = {
@@ -470,7 +470,7 @@ async def test_no_collector_means_no_overhead_and_no_behaviour_change(monkeypatc
     """/api/chat sets no collector — the recording sites must be inert."""
     set_audit_collector(None)
 
-    async def fake_execute(name, args, on_chunk=None, timing_collector=None):
+    async def fake_execute(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         return json.dumps({"results": []})
 
     monkeypatch.setattr("src.agent.agent_shared.execute_worker_tool", fake_execute)
@@ -498,7 +498,7 @@ def test_audit_event_shape():
     # asserting the literal here just makes the bump noisy without checking
     # that the event carries the version the module declares.
     assert event["schema_version"] == AUDIT_SCHEMA_VERSION
-    assert AUDIT_SCHEMA_VERSION == 5  # v5: mode_change (P4.1); v4: halted.written_up (P3.8); v3: empty_completions[] (P4.2)
+    assert AUDIT_SCHEMA_VERSION == 6  # v6: delegations[].lost (P4.5); v5: mode_change (P4.1); v4: halted.written_up (P3.8); v3: empty_completions[] (P4.2)
     assert "mode_change" in event and event["mode_change"] is None
     # Present and empty on a healthy request, which is the whole point: a
     # consumer can tell "no completion was lost" from "this trace predates the
@@ -517,6 +517,20 @@ def test_audit_event_shape():
     assert event["timings"]["total_ms"] == 1234
     # Must survive json.dumps — it goes down an SSE stream.
     assert json.loads(json.dumps(event))["request_id"] == "req123"
+
+
+def test_a_delegation_carries_lost_as_null_unless_its_reply_was_lost():
+    """Schema v6 (P4.5). Present and null on every delegation whose worker
+    answered, so a consumer can tell "answered" from "predates the field"."""
+    audit = AuditCollector("req123")
+    ok = audit.start_delegation("brief")
+    audit.end_delegation(ok, report="a report")
+    assert ok["lost"] is None
+    gone = audit.start_delegation("brief")
+    audit.end_delegation(gone, report="[label]",
+                         lost={"reason": "empty_completion", "sources_retrieved": 3})
+    assert gone["lost"] == {"reason": "empty_completion", "sources_retrieved": 3}
+    assert gone["halted"] is None  # a lost reply is not a halt
 
 
 def test_audit_field_truncation_is_marked():
@@ -545,7 +559,7 @@ async def test_system_chat_emits_audit_event_on_the_wire(client, auth_headers, m
     from src.utils.audit_trace import get_audit_collector
 
     async def fake_process(messages, model, on_chunk, cancel_event, num_ctx,
-                           db_session=None, emit_tool_details=False, timing_collector=None):
+                           db_session=None, emit_tool_details=False, timing_collector=None, worker_call=False):
         # Emulate one delegation's worth of work against the live collector.
         audit = get_audit_collector()
         assert audit is not None, "collector must reach the agent call chain"
@@ -623,7 +637,7 @@ async def test_system_chat_rejects_deep_research_without_a_plan(client, auth_hea
 @pytest.mark.asyncio
 async def test_system_chat_audit_can_be_disabled(client, auth_headers, monkeypatch):
     async def fake_process(messages, model, on_chunk, cancel_event, num_ctx,
-                           db_session=None, emit_tool_details=False, timing_collector=None):
+                           db_session=None, emit_tool_details=False, timing_collector=None, worker_call=False):
         return {"role": "assistant", "content": "the answer"}
 
     monkeypatch.setattr("src.agent.ollama_client.process_user_request", fake_process)

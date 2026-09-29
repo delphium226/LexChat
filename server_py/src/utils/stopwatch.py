@@ -26,6 +26,19 @@ _PHASE2_RETRIEVAL_TOOLS = frozenset({
 # counted in `worker_tool_calls` (so the work is visible) and still keyed for
 # redundancy (so a loop is still caught) — see `_worker_tool_key_arg`.
 #
+# lookup_legislation (P3.7) is unclassified too, and on the same ground. It asks
+# the index whether it holds ONE instrument by type, year and number: not a
+# ranked discovery search (it cannot find anything it is not told the number
+# of) and not a retrieval of text. It is counted in `worker_tool_calls`, so a
+# brief naming an instrument by number now costs one visible call, which code
+# makes before the Worker's first round (`run_worker_agent`). It is deliberately
+# NOT keyed for redundancy: its arguments carry no `legislation_id`, so
+# `_worker_tool_key_arg` returns None for it. A second delegation in one request
+# naming the same instrument repeats the code's lookup (served by the memo),
+# and keyed, that would score as a redundant call and, on the legislation
+# profile where `max_redundant_tool_calls` is 0, write a breach for code
+# behaving as designed.
+#
 # For the same reason it is absent from _LEGISLATION_RETRIEVAL_TOOLS below: a
 # change record is not the instrument, and counting it as a "distinct primary
 # resource retrieved" would overstate retrieval on the parliamentary profile's

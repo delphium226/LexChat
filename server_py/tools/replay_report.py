@@ -32,12 +32,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Optional
+
+# The gitignored evidence (replay directories, rubrics, replay_set.json). A git
+# worktree has none of it, so an agent working in one sets PREPILOT_EVIDENCE to
+# the main checkout's `docs/prepilot-fixes/evidence` (Session 32's parallel
+# batch). Unset, this is the path it always was.
+EVIDENCE_ROOT = Path(os.environ.get("PREPILOT_EVIDENCE") or (
+    Path(__file__).resolve().parents[2] / "docs" / "prepilot-fixes" / "evidence"))
 
 # --- Tool records ------------------------------------------------------------
 
@@ -2744,24 +2752,11 @@ def empty_completion_calls(probes: list) -> list:
     A call is recovered when its LAST record says `retried: true`, because the
     retry then succeeded and left no record. Records are grouped by what
     identifies the request (model, payload size, ReAct round) and split
-    wherever the attempt number does not continue.
+    wherever the attempt number does not continue
+    (`empty_completion_call_records`, which keeps the records).
     """
-    calls: list = []
-    open_calls: dict = {}
-    for pr in probes or []:
-        if not isinstance(pr, dict):
-            continue
-        key = (pr.get("model"), pr.get("sent_chars"), pr.get("react_turn"))
-        attempt = pr.get("attempt") or 1
-        call = open_calls.get(key)
-        if call is None or not call["last_retried"] or attempt <= call["last_attempt"]:
-            call = {"attempts": 0}
-            calls.append(call)
-            open_calls[key] = call
-        call["attempts"] += 1
-        call["last_attempt"] = attempt
-        call["last_retried"] = bool(pr.get("retried"))
-    return [(c["attempts"], c["last_retried"]) for c in calls]
+    return [(len(records), ok)
+            for records, ok in empty_completion_call_records(probes)]
 
 
 def cmd_blanks(args) -> int:
@@ -2852,6 +2847,702 @@ def cmd_blanks(args) -> int:
     else:
         print("Invariant holds: every billed turn returned a body.")
     return 0 if not bad else 1
+
+
+# --- P4.5: where a lost completion landed ------------------------------------
+
+# P4.2's fallback bodies, matched on their opening words so a later rewording
+# of the rest of the sentence still counts. Imported from the product where
+# possible; these literals are the fallback when `src` cannot be imported.
+_LOST_MANAGER_OPENERS = (
+    "The answering step returned no text",
+    "No answer was returned for this turn",
+)
+_LOST_SYNTHESIS_OPENERS = (
+    "The final synthesis step returned no text",
+    "No answer was returned for this turn",
+)
+
+
+def _lost_report_label() -> Optional[str]:
+    """P4.5's lost-report header, or None before it existed."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from src.utils.research_halt import LOST_REPORT_TAG  # noqa: PLC0415
+
+        return LOST_REPORT_TAG
+    except Exception:
+        return None
+
+
+def _report_shape(report: str, label: Optional[str]) -> str:
+    """How a worker report reads when its final completion may have been lost.
+
+    "labelled" — P4.5's lost-report header opens it;
+    "empty"    — nothing at all (a case-law-only step has no scope block);
+    "scope"    — the code-appended scope block and nothing above it, which
+                 reads as "searched, found nothing";
+    "body"     — the worker wrote something.
+    """
+    text = report or ""
+    if label and text.lstrip().startswith(label):
+        return "labelled"
+    if not text.strip():
+        return "empty"
+    if not _strip_scope(text).strip():
+        return "scope"
+    return "body"
+
+
+def lost_sites(turn: dict, label: Optional[str] = None) -> list:
+    """Every place in one stored turn where a completion's answer was lost.
+
+    Read off the OUTCOME, not off `audit.empty_completions`: those records
+    carry no delegation id and no timestamp, so a record cannot be tied to the
+    call it came from. The outcome can. A worker run that did not halt, did not
+    raise, and returned no body is a lost worker completion (`chat_loop`
+    returns `content: ""` when every attempt came back empty). A Manager or a
+    synthesis whose completion was lost shows P4.2's fallback, or, before
+    P4.2, a blank body. `cmd_lost` then checks, turn by turn, that the number
+    of sites equals the number of unrecovered calls the records show; where
+    they disagree the turn is listed, and no split is trusted over it.
+
+    Returns a list of `{"site", "step", "shape"}`, site one of "worker",
+    "step", "manager", "synthesis". A "worker" site also carries `redone`:
+    whether a later delegation in the same turn returned a body (the Manager
+    re-delegating), which is what decides whether the lawyer needs telling.
+    """
+    audit = turn.get("audit") or {}
+    delegations = audit.get("delegations") or []
+    sites: list = []
+    for i, dg in enumerate(delegations):
+        if dg.get("halted") or dg.get("error"):
+            continue
+        shape = _report_shape(dg.get("report") or "", label)
+        if shape == "body":
+            continue
+        site = {
+            "site": "step" if dg.get("kind") == "deep_research_step" else "worker",
+            "step": dg.get("step"),
+            "shape": shape,
+        }
+        if site["site"] == "worker":
+            # Did the Manager make it good? A later delegation in the same turn
+            # that returned a body (the Manager re-delegating).
+            site["redone"] = any(
+                not x.get("halted") and not x.get("error")
+                and _report_shape(x.get("report") or "", label) == "body"
+                for x in delegations[i + 1:])
+        sites.append(site)
+    answer = turn.get("answer") or ""
+    body = _without_footer(answer)
+    is_dr = (any(dg.get("kind") == "deep_research_step" for dg in delegations)
+             or (turn.get("chat_mode") == "deep_research" and bool(turn.get("plan"))))
+    openers = _LOST_SYNTHESIS_OPENERS if is_dr else _LOST_MANAGER_OPENERS
+    head = body.lstrip("*_ \n")[:200]
+    cost = float((turn.get("timing") or {}).get("total_cost_usd") or 0.0)
+    if any(head.startswith(o) for o in openers):
+        sites.append({"site": "synthesis" if is_dr else "manager", "step": None,
+                      "shape": "fallback"})
+    elif not body.strip() and cost > 0 and turn.get("status", "ok") == "ok":
+        sites.append({"site": "synthesis" if is_dr else "manager", "step": None,
+                      "shape": "blank"})
+    return sites
+
+
+def _wilson(k: int, n: int, z: float = 1.96) -> tuple:
+    if not n:
+        return 0.0, 0.0
+    p = k / n
+    den = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / den
+    half = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5) / den
+    return max(0.0, centre - half), min(1.0, centre + half)
+
+
+def cmd_lost(args) -> int:
+    """P4.5 pre-flight and acceptance aid: where each lost completion landed.
+
+    Per directory (`--all-dirs`: every directory beside `--dir`), counts the
+    answered turns, the provider calls that came back empty (from
+    `audit.empty_completions`, schema v3 on) and whether the retry recovered
+    them, and splits the UNRECOVERED ones by where the loss landed: a
+    research worker (`delegate_research`), a Deep Research step, the Manager,
+    or the synthesis. A recovered call landed nowhere, so it has no site.
+
+    Directories before schema v3 have no records; their lost-shaped outcomes
+    are counted separately as "mechanism unrecorded" (6363 in `baseline`).
+
+    `--list` prints one line per lost site (ids, modes and shapes only: no
+    question or answer text). `--require-label` exits 1 when a lost worker or
+    step report is not labelled as lost: that is P4.5's invariant, for a
+    directory recorded after the fix. Otherwise informational (exit 0).
+    """
+    base = Path(args.dir)
+    dirs = ([d for d in sorted(base.parent.iterdir()) if d.is_dir()]
+            if args.all_dirs else [base])
+    label = _lost_report_label()
+    pooled = Counter()
+    listing = []
+    mismatches = []
+    unlabelled = 0
+    workers_all = workers_redone = 0
+    print(f"P4.5: lost completions, by where they landed "
+          f"({len(dirs)} director{'y' if len(dirs) == 1 else 'ies'})")
+    print()
+    hdr = (f"{'directory':<22} {'turns':>5} {'v3':>4} {'calls':>5} {'recov':>5} "
+           f"{'unrec':>5} {'worker':>6} {'step':>4} {'mgr':>4} {'synth':>5} "
+           f"{'untied':>6} {'pre-v3':>6}")
+    print(hdr)
+    print("-" * len(hdr))
+    for d in dirs:
+        c = Counter()
+        for doc in sorted(load_runs(d), key=lambda x: (str(x.get("session_id")),
+                                                        x.get("rep", 1))):
+            for t in doc.get("turns") or []:
+                if not (t.get("answer") or "").strip() and not (t.get("audit") or {}):
+                    continue
+                c["turns"] += 1
+                audit = t.get("audit") or {}
+                v3 = "empty_completions" in audit
+                sites = lost_sites(t, label)
+                if v3:
+                    c["v3"] += 1
+                    calls = empty_completion_calls(audit.get("empty_completions") or [])
+                    rec = sum(1 for _, ok in calls if ok)
+                    unrec = sum(1 for _, ok in calls if not ok)
+                    c["calls"] += len(calls)
+                    c["recov"] += rec
+                    c["unrec"] += unrec
+                    if unrec == len(sites):
+                        for s in sites:
+                            c[s["site"]] += 1
+                    else:
+                        c["untied"] += unrec
+                        mismatches.append((d.name, doc.get("session_id"),
+                                           doc.get("rep", 1), t.get("turn"),
+                                           unrec, [s["site"] for s in sites]))
+                else:
+                    c["pre_v3"] += len(sites)
+                for s in sites:
+                    if s["site"] in ("worker", "step") and s["shape"] != "labelled":
+                        unlabelled += 1
+                    if s["site"] == "worker":
+                        workers_all += 1
+                        workers_redone += bool(s.get("redone"))
+                    redone = ("-" if s["site"] != "worker"
+                              else "yes" if s.get("redone") else "no")
+                    listing.append((d.name, doc.get("session_id"), doc.get("rep", 1),
+                                    t.get("turn"), s["site"], s["step"], s["shape"],
+                                    t.get("chat_mode") or "?",
+                                    audit.get("research_mode") or "?",
+                                    "v3" if v3 else "pre-v3", redone))
+        pooled.update(c)
+        print(f"{d.name:<22} {c['turns']:>5} {c['v3']:>4} {c['calls']:>5} "
+              f"{c['recov']:>5} {c['unrec']:>5} {c['worker']:>6} {c['step']:>4} "
+              f"{c['manager']:>4} {c['synthesis']:>5} {c['untied']:>6} "
+              f"{c['pre_v3']:>6}")
+    if len(dirs) > 1:
+        print("-" * len(hdr))
+        c = pooled
+        print(f"{'ALL':<22} {c['turns']:>5} {c['v3']:>4} {c['calls']:>5} "
+              f"{c['recov']:>5} {c['unrec']:>5} {c['worker']:>6} {c['step']:>4} "
+              f"{c['manager']:>4} {c['synthesis']:>5} {c['untied']:>6} "
+              f"{c['pre_v3']:>6}")
+    print()
+    c = pooled
+    lo, hi = _wilson(c["unrec"], c["v3"])
+    print(f"turns (with an answer or a trace) {c['turns']}, of which schema v3 "
+          f"(records kept) {c['v3']}")
+    print(f"provider calls that came back empty at least once: {c['calls']} "
+          f"(recovered by the retry {c['recov']}, NOT recovered {c['unrec']})")
+    if c["v3"]:
+        print(f"unrecovered calls per v3 turn: {c['unrec']}/{c['v3']} "
+              f"(95% Wilson {100 * lo:.1f}-{100 * hi:.1f}%)")
+    print(f"where the unrecovered ones landed: research worker {c['worker']}, "
+          f"Deep Research step {c['step']}, Manager {c['manager']}, "
+          f"synthesis {c['synthesis']}, untied {c['untied']}")
+    print(f"lost-shaped outcomes before schema v3 (mechanism unrecorded): "
+          f"{c['pre_v3']}")
+    print(f"lost research-worker reports, all directories: {workers_all}; a later "
+          f"delegation in the same turn returned a body in {workers_redone}, "
+          f"none did in {workers_all - workers_redone}")
+    if mismatches:
+        print()
+        print("Turns where the unrecovered calls and the lost sites disagree "
+              "(no split trusted there; read the turn):")
+        for dn, sid, rep, turn, unrec, sites in mismatches:
+            print(f"  {dn}/{sid} r{rep} t{turn}: {unrec} unrecovered call(s), "
+                  f"sites {sites or 'none'}")
+    if args.list and listing:
+        print()
+        print(f"{'directory':<22} {'session':>10} {'rep':>3} {'turn':>4} "
+              f"{'site':<9} {'step':>4} {'shape':<9} {'chat mode':<15} "
+              f"{'research type':<24} {'records':<7} redone")
+        for dn, sid, rep, turn, site, step, shape, cm, rm, v, redone in listing:
+            print(f"{dn:<22} {str(sid):>10} {rep:>3} {turn!s:>4} {site:<9} "
+                  f"{step if step is not None else '-':>4} {shape:<9} {cm:<15} "
+                  f"{rm:<24} {v:<7} {redone}")
+    if args.require_label:
+        print()
+        if unlabelled:
+            print(f"P4.5 INVARIANT BROKEN: {unlabelled} lost worker/step report(s) "
+                  "not labelled as lost.")
+            return 1
+        print("P4.5 invariant holds: every lost worker/step report is labelled.")
+    return 0
+
+
+# --- P4.10: what a lost completion costs --------------------------------------
+
+# An attempt that spent this many completion tokens (or this many reasoning
+# characters) and returned nothing is mechanism (a), whatever its finish reason.
+# The stored (a) attempts sit at 62,912-62,917 tokens and the (b) and (c) ones
+# at 0-310, so the threshold has three orders of magnitude of room either side.
+_HEAVY_TOKENS = 10_000
+_HEAVY_REASONING_CHARS = 20_000
+# A window of this many seconds with no tool running is a slow model call. A
+# healthy ReAct round is 5-40 s; one (b) attempt is about 130 s, one (a) about
+# 350 s.
+_SLOW_GAP_S = 60.0
+
+MECHANISMS = {
+    "a": "reasoned to nothing (heavy reasoning, no content)",
+    "b": "stream error (upstream idle timeout)",
+    "c": "clean stop, no reasoning, no content",
+    "d": "upstream rate limit",
+    "?": "unclassified",
+}
+
+
+def empty_mechanism(probe: dict) -> str:
+    """Which mechanism one `empty_completions` record shows.
+
+    (a) the model reasoned for tens of thousands of tokens and emitted no
+        content: `finish_reason=stop`/`native=STOP` at ~62,9xx tokens, or
+        `length`/`MAX_TOKENS` at the model's output ceiling. The cost problem.
+    (b) a mid-stream failure (`finish_reason=error`, typically "Upstream idle
+        timeout exceeded", ~130-310 tokens).
+    (c) a clean stop with no reasoning and no token count.
+    (d) an upstream rate limit, reported as a stream error with 0 tokens.
+
+    Heavy reasoning is tested first: it is what an attempt cost, whatever
+    ended it.
+    """
+    tokens = probe.get("completion_tokens") or 0
+    reasoning = probe.get("reasoning_chars") or 0
+    err = str(probe.get("stream_error") or "")
+    if tokens >= _HEAVY_TOKENS or reasoning >= _HEAVY_REASONING_CHARS:
+        return "a"
+    if "rate-limit" in err or "rate limit" in err:
+        return "d"
+    if probe.get("finish_reason") == "error" or err:
+        return "b"
+    if probe.get("finish_reason") in ("stop", None) and not reasoning:
+        return "c"
+    return "?"
+
+
+def _call_mechanism(mechs: str) -> str:
+    """One call's mechanism, from its attempts': the costliest one present."""
+    for m in "abcd":
+        if m in mechs:
+            return m
+    return "?"
+
+
+def empty_completion_call_records(probes: list) -> list:
+    """Group `audit.empty_completions` records into provider calls, keeping
+    each call's records. Returns one `(records, recovered)` pair per call; see
+    `empty_completion_calls` for the grouping rule."""
+    calls: list = []
+    open_calls: dict = {}
+    for pr in probes or []:
+        if not isinstance(pr, dict):
+            continue
+        key = (pr.get("model"), pr.get("sent_chars"), pr.get("react_turn"))
+        attempt = pr.get("attempt") or 1
+        call = open_calls.get(key)
+        if call is None or not call["last_retried"] or attempt <= call["last_attempt"]:
+            call = {"records": []}
+            calls.append(call)
+            open_calls[key] = call
+        call["records"].append(pr)
+        call["last_attempt"] = attempt
+        call["last_retried"] = bool(pr.get("retried"))
+    return [(c["records"], c["last_retried"]) for c in calls]
+
+
+def _uncovered_max(lo: float, hi: float, spans: list) -> float:
+    """The longest stretch of [lo, hi] that no span in `spans` covers."""
+    best, cursor = 0.0, lo
+    for s, e in sorted(spans):
+        if s > cursor:
+            best = max(best, min(s, hi) - cursor)
+        cursor = max(cursor, e)
+        if cursor >= hi:
+            break
+    return max(best, hi - cursor)
+
+
+def slow_call_location(turn: dict) -> tuple:
+    """Where the turn's slowest model call ran, read off the timeline.
+
+    Returns `(where, seconds)`: where is "inside" (within a worker or Deep
+    Research step, in a window no tool covered, i.e. a worker's model call) or
+    "outside" (between or after delegations, i.e. the Manager's or the
+    synthesis's model call), and seconds is the length of that window. Tool and
+    delegation `started_at` are seconds from the turn's start.
+
+    Used only to place a RECOVERED call, which left no outcome to read a site
+    from. `cmd_lostcost` checks it against the sites `lost_sites` ties to the
+    unrecovered calls before any inferred site is printed.
+    """
+    delegations = (turn.get("audit") or {}).get("delegations") or []
+    elapsed = float(turn.get("elapsed_s") or 0.0)
+    inside = longest_worker_window(delegations)
+    spans = [_span(dg) for dg in delegations]
+    outside = _uncovered_max(0.0, elapsed, spans) if elapsed else 0.0
+    return ("inside", inside) if inside >= outside else ("outside", outside)
+
+
+def _span(x: dict) -> tuple:
+    s = float(x.get("started_at") or 0.0)
+    return s, s + float(x.get("duration_s") or 0.0)
+
+
+def longest_worker_window(delegations: list) -> float:
+    """The longest stretch inside any delegation with no tool running: one
+    worker model round (summarisation runs inside a tool's own duration), so
+    an upper bound on the turn's longest worker model call."""
+    return max((_uncovered_max(*_span(dg), [_span(t) for t in dg.get("tools") or []])
+                for dg in delegations), default=0.0)
+
+
+def _slot_key(turn: dict) -> tuple:
+    """Turns that asked the same thing the same way: the question, the chat
+    mode and the research type. Hashed, so no question text is held or
+    printed."""
+    import hashlib  # noqa: PLC0415
+
+    q = hashlib.sha1((turn.get("question") or "").encode("utf-8")).hexdigest()
+    return (q, turn.get("chat_mode"), turn.get("research_mode"))
+
+
+def _fisher_upper(k: int, n: int, total_k: int, total_n: int) -> float:
+    """One-sided Fisher exact test: the chance that a group of `n` of
+    `total_n` runs holds `k` or more of the `total_k` events, if the events
+    fell on runs at random (hypergeometric upper tail)."""
+    from math import comb  # noqa: PLC0415
+
+    if not total_n or not total_k:
+        return 1.0
+    den = comb(total_n, total_k)
+    return sum(comb(n, j) * comb(total_n - n, total_k - j)
+               for j in range(k, min(n, total_k) + 1)) / den
+
+
+def _median(xs: list) -> Optional[float]:
+    xs = sorted(xs)
+    if not xs:
+        return None
+    m = len(xs) // 2
+    return xs[m] if len(xs) % 2 else (xs[m - 1] + xs[m]) / 2
+
+
+def cmd_lostcost(args) -> int:
+    """P4.10 pre-flight: what each empty-completion call cost, and why.
+
+    For every provider call that came back empty at least once (schema v3
+    records; `--all-dirs` pools every directory beside `--dir`): the
+    mechanism of each attempt ((a)-(d), `empty_mechanism`), whether the retry
+    recovered the call, where it landed, and the turn's cost and wall clock
+    against the median of CLEAN turns in the same slot (same question, chat
+    mode and research type) across every rep and directory loaded. The excess
+    is what the episode cost.
+
+    **Where it landed.** An unrecovered call takes the site `lost_sites` ties
+    to it (in order: records and sites are both chronological). A recovered
+    call left no outcome, so its site is inferred from the timeline
+    (`slow_call_location`) when it is the turn's only slow call (an (a) or (b)
+    attempt) and the turn has a window of `_SLOW_GAP_S` or more with no tool
+    running; otherwise "?". Inferred sites carry "~". The inference is checked
+    against every tied site it could have been applied to, and the agreement
+    printed.
+
+    **Excess is per TURN**, printed on the turn's first call; a turn with two
+    empty calls is not counted twice. A clean turn is one with a trace, no
+    empty-completion record and no lost site; a slot with no clean turn gets
+    no excess ("-").
+
+    Ids, modes and numbers only: no question or answer text. Exit 0.
+    """
+    base = Path(args.dir)
+    dirs = ([d for d in sorted(base.parent.iterdir()) if d.is_dir()]
+            if args.all_dirs else [base])
+    label = _lost_report_label()
+    # Every turn loaded, for the slot baselines.
+    all_turns = []
+    for d in dirs:
+        for doc in sorted(load_runs(d), key=lambda x: (str(x.get("session_id")),
+                                                        x.get("rep", 1))):
+            for t in doc.get("turns") or []:
+                if not (t.get("answer") or "").strip() and not (t.get("audit") or {}):
+                    continue
+                all_turns.append((d.name, doc, t))
+    clean: dict = {}
+    for dn, doc, t in all_turns:
+        audit = t.get("audit") or {}
+        if (audit and not audit.get("empty_completions") and not lost_sites(t, label)
+                and t.get("status", "ok") == "ok" and (t.get("answer") or "").strip()):
+            clean.setdefault(_slot_key(t), []).append(
+                (float((t.get("timing") or {}).get("total_cost_usd") or 0.0),
+                 float(t.get("elapsed_s") or 0.0)))
+
+    rows = []
+    attempts_by = Counter()
+    # What the retry bought: after an attempt of each mechanism that was
+    # retried, did the next attempt answer (no further record) or come back
+    # empty again (and how)?
+    retry_next: dict = {}
+    # The same, by the site the call landed in (P4.11: a lever that stops
+    # retrying on one site gives up that site's recoveries, not the pool's).
+    retry_by_site: dict = {}
+    redone = Counter()
+    v3_turns = Counter()
+    v3_workers = Counter()
+    v3_spend = 0.0
+    agree = checked = 0
+    for dn, doc, t in all_turns:
+        audit = t.get("audit") or {}
+        if "empty_completions" not in audit:
+            continue
+        mode = t.get("chat_mode") or "?"
+        v3_turns[mode] += 1
+        v3_workers[mode] += len(audit.get("delegations") or [])
+        cost = float((t.get("timing") or {}).get("total_cost_usd") or 0.0)
+        secs = float(t.get("elapsed_s") or 0.0)
+        v3_spend += cost
+        calls = empty_completion_call_records(audit.get("empty_completions") or [])
+        if not calls:
+            continue
+        sites = lost_sites(t, label)
+        unrec = [i for i, (_, ok) in enumerate(calls) if not ok]
+        tied = len(unrec) == len(sites)
+        where, gap = slow_call_location(t)
+        is_dr = any(dg.get("kind") == "deep_research_step"
+                    for dg in audit.get("delegations") or [])
+        inferred_site = (("step" if is_dr else "worker") if where == "inside"
+                         else ("synthesis" if is_dr else "manager"))
+        base_ = clean.get(_slot_key(t)) or []
+        med_c = _median([c for c, _ in base_])
+        med_s = _median([s for _, s in base_])
+        site_iter = iter(sites)
+        # One timeline window places one slow call. With two in the turn
+        # (wave2_p24_final/6385 r2 t3: a worker's and the Manager's, ~395 s
+        # each) it cannot say which is which, so nothing is inferred there.
+        n_slow = sum(any(empty_mechanism(r) in "ab" for r in recs)
+                     for recs, _ in calls)
+        can_infer = n_slow == 1 and gap >= _SLOW_GAP_S
+        for i, (records, ok) in enumerate(calls):
+            mechs = "".join(empty_mechanism(r) for r in records)
+            for m in mechs:
+                attempts_by[m] += 1
+            pairs = []
+            for j, r in enumerate(records):
+                if not r.get("retried"):
+                    continue
+                nxt = mechs[j + 1] if j + 1 < len(mechs) else "answered"
+                retry_next.setdefault(mechs[j], Counter())[nxt] += 1
+                pairs.append((mechs[j], nxt))
+            slow = any(m in "ab" for m in mechs)
+            if not ok:
+                s = next(site_iter, None) if tied else None
+                site = s["site"] if s else "untied"
+                if s and s["site"] == "worker":
+                    redone[(_call_mechanism(mechs), bool(s.get("redone")))] += 1
+                if s and slow and can_infer:
+                    checked += 1
+                    agree += inferred_site == site
+            elif slow and can_infer:
+                site = inferred_site + "~"
+            else:
+                site = "?"
+            for m, nxt in pairs:
+                c = retry_by_site.setdefault(site.rstrip("~"), {}).setdefault(m, Counter())
+                c[nxt] += 1
+                c["inferred"] += site.endswith("~")
+            first = i == 0
+            rows.append({
+                "dir": dn, "sid": doc.get("session_id"), "rep": doc.get("rep", 1),
+                "turn": t.get("turn"), "mode": mode, "site": site,
+                "recovered": ok, "mechs": mechs, "mech": _call_mechanism(mechs),
+                "tokens": max((r.get("completion_tokens") or 0) for r in records),
+                "first": first, "cost": cost, "secs": secs,
+                "med_c": med_c, "med_s": med_s, "n": len(base_),
+            })
+
+    def _f(x, spec):
+        return "-" if x is None else format(x, spec)
+
+    print(f"P4.10: what each empty-completion call cost "
+          f"({len(dirs)} director{'y' if len(dirs) == 1 else 'ies'})")
+    print()
+    hdr = (f"{'directory':<22} {'session':>14} {'rep':>3} {'turn':>4} "
+           f"{'chat mode':<15} {'site':<10} {'recov':<5} {'attempts':<8} "
+           f"{'max tok':>7} {'cost $':>7} {'slot $':>6} {'n':>3} {'excess $':>8} "
+           f"{'secs':>6} {'slot s':>6} {'excess s':>8}")
+    print(hdr)
+    print("-" * len(hdr))
+    for r in rows:
+        if r["first"]:
+            ex_c = None if r["med_c"] is None else r["cost"] - r["med_c"]
+            ex_s = None if r["med_s"] is None else r["secs"] - r["med_s"]
+            turn_cols = (f"{r['cost']:>7.2f} {_f(r['med_c'], '6.2f'):>6} {r['n']:>3} "
+                         f"{_f(ex_c, '8.2f'):>8} {r['secs']:>6.0f} "
+                         f"{_f(r['med_s'], '6.0f'):>6} {_f(ex_s, '8.0f'):>8}")
+        else:
+            turn_cols = f"{'(same turn)':>7}"
+        print(f"{r['dir']:<22} {str(r['sid']):>14} {r['rep']:>3} {r['turn']!s:>4} "
+              f"{r['mode']:<15} {r['site']:<10} {'yes' if r['recovered'] else 'no':<5} "
+              f"{r['mechs']:<8} {r['tokens']:>7} {turn_cols}")
+    print()
+    print("attempts by mechanism: " + ", ".join(
+        f"({m}) {attempts_by[m]}" for m in "abcd?" if attempts_by[m]))
+    for m in "abcd":
+        print(f"  ({m}) {MECHANISMS[m]}")
+    print()
+    print(f"{'calls, by costliest attempt':<34} {'calls':>5} {'recov':>5} "
+          f"{'unrec':>5}  sites")
+    for m in "abcd?":
+        cs = [r for r in rows if r["mech"] == m]
+        if not cs:
+            continue
+        where_ = Counter(r["site"] for r in cs)
+        print(f"  ({m}) {MECHANISMS[m][:28]:<28} {len(cs):>5} "
+              f"{sum(r['recovered'] for r in cs):>5} "
+              f"{sum(not r['recovered'] for r in cs):>5}  "
+              + ", ".join(f"{k} {v}" for k, v in sorted(where_.items())))
+    print(f"  {'all':<32} {len(rows):>5} {sum(r['recovered'] for r in rows):>5} "
+          f"{sum(not r['recovered'] for r in rows):>5}")
+    print()
+    # Per turn, by the costliest mechanism among its calls.
+    turns_by = {}
+    for r in rows:
+        k = (r["dir"], r["sid"], r["rep"], r["turn"])
+        prev = turns_by.get(k)
+        if prev is None:
+            turns_by[k] = dict(r)
+        elif "abcd?".index(r["mech"]) < "abcd?".index(prev["mech"]):
+            prev["mech"] = r["mech"]
+    print(f"{'turns, by costliest mechanism':<34} {'turns':>5} {'w/ base':>7} "
+          f"{'excess $':>9} {'median':>7} {'excess s':>9} {'median':>7}")
+    tot_c = 0.0
+    for m in "abcd?":
+        ts = [r for r in turns_by.values() if r["mech"] == m]
+        if not ts:
+            continue
+        based = [r for r in ts if r["med_c"] is not None]
+        exc = [r["cost"] - r["med_c"] for r in based]
+        exs = [r["secs"] - r["med_s"] for r in based]
+        tot_c += sum(exc)
+        print(f"  ({m}) {MECHANISMS[m][:28]:<28} {len(ts):>5} {len(based):>7} "
+              f"{sum(exc):>9.2f} {_f(_median(exc), '7.2f'):>7} "
+              f"{sum(exs):>9.0f} {_f(_median(exs), '7.0f'):>7}")
+    print(f"schema-v3 spend {v3_spend:.2f} USD over {sum(v3_turns.values())} turns; "
+          f"excess on turns with an empty call {tot_c:.2f} "
+          f"({100 * tot_c / v3_spend if v3_spend else 0:.1f}%)")
+    print()
+    print("(a) calls by chat mode, against schema-v3 turns and worker runs "
+          "(delegations and Deep Research steps) in that mode:")
+    a_by = Counter(r["mode"] for r in rows if r["mech"] == "a")
+    runs_all, a_all = sum(v3_workers.values()), sum(a_by.values())
+    for mode in sorted(v3_turns):
+        p = _fisher_upper(a_by[mode], v3_workers[mode], a_all, runs_all)
+        print(f"  {mode:<15} (a) calls {a_by[mode]:>3}   v3 turns {v3_turns[mode]:>4}"
+              f"   worker runs {v3_workers[mode]:>4}   P(this many or more by "
+              f"chance) {p:.4f}")
+    print()
+    print("what the retry bought, by the mechanism of the attempt it followed:")
+    for m in "abcd?":
+        nx = retry_next.get(m)
+        if not nx:
+            continue
+        print(f"  after ({m}): {sum(nx.values()):>3} retries; the next attempt "
+              f"answered {nx['answered']:>2}, came back empty "
+              + ", ".join(f"({k}) {v}" for k, v in sorted(nx.items()) if k != "answered"))
+    # A tied site belongs to an unrecovered call, so its retries never
+    # answered; a recovered call's site can only be inferred. Pooled, and the
+    # inferred share said, so neither half reads as the site's yield alone.
+    print("  by the site the call landed in (an unrecovered call's site is tied, "
+          "a recovered call's inferred):")
+    for site in sorted(retry_by_site):
+        for m in "abcd?":
+            nx = retry_by_site[site].get(m)
+            if nx:
+                n = sum(v for k, v in nx.items() if k != "inferred")
+                print(f"    {site:<10} after ({m}): {n:>3} retries; answered "
+                      f"{nx['answered']:>2}; {nx['inferred']} on an inferred site")
+    print("unrecovered calls that landed in a research worker, and whether a later "
+          "delegation in the same turn returned a body (the Manager redid it):")
+    for m in "abcd?":
+        y, n = redone[(m, True)], redone[(m, False)]
+        if y or n:
+            print(f"  ({m}): redone {y}, not redone {n}")
+    print()
+    print(f"site inference from the timeline (recovered calls, marked ~): agrees "
+          f"with the tied site on {agree} of {checked} unrecovered slow calls "
+          f"(turns with one slow call)")
+    print()
+    # How long does a HEALTHY worker model call run? A wall-clock ceiling below
+    # `longest_worker_window` would have cut that turn's longest call.
+    ceilings = (60, 120, 180, 300)
+    print("clean v3 turns whose longest worker model call (longest window inside "
+          "a delegation with no tool running) exceeded a ceiling:")
+    print(f"  {'chat mode':<15} {'turns':>5} {'median s':>8} {'max s':>6} "
+          + " ".join(f"{'>' + str(c) + 's':>6}" for c in ceilings))
+    by_mode_gap: dict = {}
+    for dn, doc, t in all_turns:
+        audit = t.get("audit") or {}
+        if "empty_completions" not in audit or audit.get("empty_completions"):
+            continue
+        if lost_sites(t, label) or not audit.get("delegations"):
+            continue
+        by_mode_gap.setdefault(t.get("chat_mode") or "?", []).append(
+            (longest_worker_window(audit["delegations"]),
+             f"{dn}/{doc.get('session_id')} r{doc.get('rep', 1)} t{t.get('turn')}"))
+    for mode, pairs in sorted(by_mode_gap.items()):
+        gaps = [g for g, _ in pairs]
+        top = max(pairs)
+        print(f"  {mode:<15} {len(gaps):>5} {_median(gaps):>8.0f} {top[0]:>6.0f} "
+              + " ".join(f"{sum(g > c for g in gaps):>6}" for c in ceilings)
+              + f"   longest: {top[1]}")
+    print()
+    # Could a per-call output cap bind on a HEALTHY turn? No healthy call
+    # records its tokens, but a turn's output tokens cannot exceed its cost
+    # over the output price, so a turn below the cap by that bound cannot have
+    # had any single call reach it. An upper bound: input tokens are billed
+    # too, so the true figure is lower.
+    price = args.out_price / 1e6
+    caps = (4_000, 8_000, 16_000, 32_000)
+    print(f"clean v3 turns where a per-call output cap CANNOT have bound "
+          f"(turn cost / ${args.out_price:g} per M output tokens < cap):")
+    print(f"  {'chat mode':<15} {'turns':>5} {'median bound':>12} "
+          + " ".join(f"{'<' + format(c, ','):>8}" for c in caps))
+    by_mode: dict = {}
+    for dn, doc, t in all_turns:
+        audit = t.get("audit") or {}
+        if "empty_completions" not in audit or audit.get("empty_completions"):
+            continue
+        if lost_sites(t, label):
+            continue
+        cost = float((t.get("timing") or {}).get("total_cost_usd") or 0.0)
+        by_mode.setdefault(t.get("chat_mode") or "?", []).append(cost / price)
+    for mode, bounds in sorted(by_mode.items()):
+        print(f"  {mode:<15} {len(bounds):>5} {_median(bounds):>12,.0f} "
+              + " ".join(f"{100 * sum(b < c for b in bounds) / len(bounds):>7.0f}%"
+                         for c in caps))
+    return 0
 
 
 _SCOPE_COUNT = re.compile(r"Searched the legislation index (\d+) time\(s\)")
@@ -2990,6 +3681,15 @@ def cmd_scoperecord(args) -> int:
 # its fixed opening clause. A fresh footer says the opposite, in these words.
 CARRIED_SCOPE = "no search of the legislation index was run for this reply"
 FRESH_SCOPE = "*Search scope: the legislation index was searched for"
+# P3.7's line for a turn that looked an instrument up and ran no ranked search
+# (`search_scope.lookup_scope_footer`). A scope statement the lawyer saw, so a
+# turn carrying it is not UNQUALIFIED. Missing from this grader at first, it
+# read five such turns in `wave4_p37` as carrying no statement at all.
+LOOKUP_SCOPE = "*Search scope: no ranked search of the legislation index was run for this reply"
+# Its form for a turn that also searched WITHIN an instrument, which claims
+# nothing about searching (a lookup line on such a turn first said "no ranked
+# search", which is false: 6373 r1 t3 in `wave4_p37`, graded MISATTRIBUTED).
+LOOKUP_IN_TURN = "*Search scope: for this reply,"
 _LEG_SEARCH_TOOLS = ("search_legislation", "search_legislation_sections")
 
 
@@ -3013,7 +3713,8 @@ def nosearch_rows(doc: dict) -> list:
     history the next turn is sent (`replay.py`). It is the audit-side mirror of
     the product's gate, which reads the fresh footer out of that history.
 
-    `line` is "carried", "fresh" or "none": the scope statement the lawyer saw.
+    `line` is "carried", "fresh", "lookup" (P3.7) or "none": the scope
+    statement the lawyer saw.
     """
     rows = []
     searched_before = False
@@ -3029,6 +3730,10 @@ def nosearch_rows(doc: dict) -> list:
                 line = "carried"
             elif FRESH_SCOPE in answer:
                 line = "fresh"
+            elif LOOKUP_SCOPE in answer:
+                line = "lookup"
+            elif LOOKUP_IN_TURN in answer and "looked up by" in answer:
+                line = "lookup_in_turn"
             else:
                 line = "none"
             rows.append({
@@ -3061,7 +3766,7 @@ def nosearch_verdict(row: dict) -> Optional[str]:
     there on purpose, because the peer's searches are not in this turn's record.
     """
     if row["searched_now"]:
-        return "MISATTRIBUTED" if row["line"] == "carried" else None
+        return "MISATTRIBUTED" if row["line"] in ("carried", "lookup") else None
     if row["line"] == "fresh":
         return "MISATTRIBUTED"
     if row["line"] == "carried" and not row["searched_before"]:
@@ -4933,10 +5638,21 @@ def _replay_set_module():
         return None
 
 
-def mode_rows(doc: dict, shape) -> list:
+def mode_rows(doc: dict, shape, reads: dict | None = None) -> list:
     """One row per replayed turn: the mode it ran in, where that mode came
     from, the shape of the answer it produced and the shape the pre-pilot
-    recorded for the same turn."""
+    recorded for the same turn.
+
+    P0.6: also the research type the turn SENT, what it rests on, and the
+    reviewer's read of the same turn where one exists (`reads`, keyed
+    (session id, turn)). A run file written before P4.1 has no per-turn type;
+    it sent the session's `filters.research_mode`, so that is what is
+    compared, and its source reads `unrecorded`. A scripted session's turn
+    indexes are the script's, not the export's, so it is never looked up.
+    """
+    reads = reads or {}
+    session_rm = (doc.get("filters") or {}).get("research_mode") or ""
+    scripted = bool(doc.get("script"))
     out = []
     for t in doc.get("turns", []):
         pre = t.get("prepilot") or {}
@@ -4961,8 +5677,26 @@ def mode_rows(doc: dict, shape) -> list:
             "source": t.get("chat_mode_source") or "?",
             "replay_shape": shape(t.get("answer") or "") or "no_answer",
             "prepilot_shape": pre_shape,
+            "research_mode": t.get("research_mode") or session_rm or "?",
+            "research_source": t.get("research_mode_source") or "unrecorded",
+            "research_read": None if scripted else (
+                reads.get((str(doc.get("session_id")), t.get("turn"))) or {}).get("value"),
         })
     return out
+
+
+def research_contradicts(sent: str, read: str | None) -> bool:
+    """Did the turn run under a tool set the reviewer's read rules out?
+
+    An exact read must match. `case_law_included` rules out only
+    legislation_only, the one type without the case-law tool. `unknown` and
+    no read rule out nothing — which is why they are named, not graded.
+    """
+    if read in ("legislation_only", "case_law_only", "legislation_and_case_law"):
+        return sent != read
+    if read == "case_law_included":
+        return sent == "legislation_only"
+    return False
 
 
 def mode_findings(rows: list) -> list:
@@ -4981,6 +5715,17 @@ def mode_findings(rows: list) -> list:
         if r["chat_mode"] == "conversational" and r["replay_shape"] == "research":
             out.append(f"{r['session']} r{r['rep']} t{r['turn']}: ran "
                        f"conversational, answer is research-shaped")
+        # P0.6. A labelled `unknown` is NOT a finding — it is named instead
+        # (`cmd_modes`), or every sweep containing the twelve would exit 1 on
+        # a gap that is stated. A `default` is a guess presented as a value,
+        # and a type the reviewer's read rules out is the wrong tool set.
+        if r.get("research_source") == "default":
+            out.append(f"{r['session']} r{r['rep']} t{r['turn']}: research_mode_source="
+                       f"default ({r['research_mode']}) - a harness default, not evidence")
+        if research_contradicts(r.get("research_mode", ""), r.get("research_read")):
+            out.append(f"{r['session']} r{r['rep']} t{r['turn']}: sent "
+                       f"{r['research_mode']}, the reviewer's read is "
+                       f"{r['research_read']} - the wrong tool set")
     return out
 
 
@@ -4998,8 +5743,11 @@ def cmd_modes(args) -> int:
     """
     rs = _replay_set_module()
     shape = rs.answer_shape if rs else (lambda _t: None)
+    reads = rs.load_research_reads() if rs else {}
+    if getattr(args, "all_dirs", False):
+        return _modes_census(Path(args.dir), shape, reads)
     docs = load_runs(Path(args.dir))
-    rows = [r for doc in docs for r in mode_rows(doc, shape)]
+    rows = [r for doc in docs for r in mode_rows(doc, shape, reads)]
     print(f"P0.5 chat mode over {args.dir}  ({len(docs)} run file(s), "
           f"{len(rows)} turn(s))")
     if not rows:
@@ -5035,6 +5783,7 @@ def cmd_modes(args) -> int:
             cells = [ct.get((mode, s), 0) for s in shapes]
             print(f"    {mode:<16}" + "".join(f"{c:>16}" for c in cells)
                   + f"{sum(cells):>8}")
+        _print_research_provenance(rows, shown)
 
     findings = mode_findings(rows)
     print()
@@ -5043,13 +5792,87 @@ def cmd_modes(args) -> int:
         for f in findings:
             print(f"    [!] {f}")
     else:
-        print("  no findings: every turn's mode is evidence, and no "
-              "conversational turn produced a research-shaped answer.")
+        print("  no findings: every turn's mode is evidence, no "
+              "conversational turn produced a research-shaped answer, and no "
+              "turn sent a default research type or one a reviewer's read rules out.")
 
     if rs is not None and not args.no_export:
         print()
         _print_export_modes(rs)
     return 1 if findings else 0
+
+
+def _modes_census(base: Path, shape, reads: dict) -> int:
+    """P0.6: every directory beside `base`, one line each — how many turns
+    sent a research type the reviewer's read rules out (all reps, and rep 1),
+    how many carry a `default` label, and whether `modes` would exit 1, split
+    into exits the P0.6 graders cause and exits already there on chat mode.
+    This is the command behind P0.6's cross-directory figures. Informational:
+    exits 0."""
+    dirs = [d for d in sorted(base.parent.iterdir()) if d.is_dir()]
+    print(f"P0.6 research-type census over {len(dirs)} director(ies) beside {base.name}")
+    print(f"    {'directory':<24} {'turns':>5} {'wrong':>5} {'rep1':>4} {'default':>7}  modes exit")
+    tot = Counter()
+    for d in dirs:
+        rows = [r for doc in load_runs(d) for r in mode_rows(doc, shape, reads)]
+        wrong = [r for r in rows if research_contradicts(r["research_mode"], r["research_read"])]
+        dflt = sum(1 for r in rows if r["research_source"] == "default")
+        findings = mode_findings(rows)
+        p06 = [f for f in findings if "research_mode_source=default" in f or "wrong tool set" in f]
+        why = ("-" if not findings else
+               "1 (P0.6 only)" if len(p06) == len(findings) else "1 (chat mode too)")
+        print(f"    {d.name:<24} {len(rows):>5} {len(wrong):>5} "
+              f"{sum(1 for r in wrong if r['rep'] == 1):>4} {dflt:>7}  {why}")
+        tot["dirs"] += 1
+        tot["with_wrong"] += bool(wrong)
+        tot["wrong"] += len(wrong)
+        tot["exit_p06_only"] += why == "1 (P0.6 only)"
+        tot["exit_already"] += why == "1 (chat mode too)"
+    print(f"\n  {tot['with_wrong']} of {tot['dirs']} directories hold a turn sent without a "
+          f"tool the reviewer's read says the lawyer had: {tot['wrong']} turn-runs.")
+    print(f"  modes exits 1 on {tot['exit_p06_only'] + tot['exit_already']}: "
+          f"{tot['exit_p06_only']} only because of P0.6, {tot['exit_already']} on chat mode as well.")
+    return 0
+
+
+_RESEARCH_SOURCE_MEANS = {
+    "snapshot": "the export",
+    "reviewer": "a reviewer's read",
+    "reviewer_partial": "a reviewer's read of case law only (sent legislation_and_case_law)",
+    "script": "a script",
+    "unknown": "nothing (labelled unknown)",
+    "default": "a harness default (a finding)",
+    "unrecorded": "not recorded (run file written before P4.1; the session's filter was sent)",
+}
+
+
+def _print_research_provenance(rows: list, shown: list) -> None:
+    """P0.6: the research type each turn sent, what it rests on, and the turns
+    whose tool set is not known — named, because counting them is what hid
+    the default for a month."""
+    print(f"\n  research type sent: {_count(rows, 'research_mode')}")
+    print("  research type rests on:")
+    for src, n in Counter(r["research_source"] for r in rows).most_common():
+        print(f"    {src:<17} {n:>4}  {_RESEARCH_SOURCE_MEANS.get(src, '?')}")
+    rep1 = {(r["session"], r["turn"]) for r in shown}
+
+    def _names(pred) -> str:
+        keys = sorted({(r["session"], r["turn"]) for r in rows if pred(r)},
+                      key=lambda k: (k[0], k[1] or 0))
+        return ", ".join(f"{s} t{t}" for s, t in keys if (s, t) in rep1) or "none"
+
+    print("  turns whose tool set is unknown (no export value, no reviewer read): "
+          + _names(lambda r: r["research_source"] == "unknown"
+                   or (r["research_source"] in ("default", "unrecorded")
+                       and r["research_read"] == "unknown")))
+    print("  turns where only the case-law half is known: "
+          + _names(lambda r: r["research_source"] == "reviewer_partial"
+                   or (r["research_source"] in ("default", "unrecorded")
+                       and r["research_read"] == "case_law_included")))
+    wrong = [r for r in rows if research_contradicts(r["research_mode"], r["research_read"])]
+    if wrong:
+        print(f"  turns sent a type the reviewer's read rules out: {len(wrong)} "
+              f"(all reps) - see FINDINGS")
 
 
 def _print_export_modes(rs) -> None:
@@ -5083,6 +5906,18 @@ def _print_export_modes(rs) -> None:
     dft = rep["default_source_turns"]
     print(f"    turns falling through to a default: {len(dft)}"
           + ("" if not dft else ": " + ", ".join(dft)))
+    # P0.6: the research type over the whole export, the replay set's turns
+    # told apart from the PASS sessions the harness never replays.
+    replayed = {s.session_id for s in sessions if s.verdict in ("FAIL", "DEFECT")}
+    print("    research type rests on: "
+          + ", ".join(f"{k} {v}" for k, v in sorted(rep["research_sources"].items())))
+    for key, label in (("research_unknown", "unknown"),
+                       ("research_partial", "case-law half only"),
+                       ("research_default", "a default")):
+        ids = rep[key]
+        inset = [i for i in ids if i.split(":")[0] in replayed]
+        print(f"    research type {label}: {len(ids)} turn(s), {len(inset)} in the replay set"
+              + ("" if not inset else ": " + ", ".join(inset)))
 
 
 # P1.6's demotion marker, counted by `corpus` as the measured cost of P3.5's
@@ -5164,7 +5999,65 @@ def cmd_siblings(args) -> int:
     if args.list:
         for row in dropped:
             print("  dropped, plain text:", *row)
+    if args.dry_run:
+        _siblings_dry_run(dirs, args.show)
     return 0
+
+
+def _siblings_dry_run(dirs: list, show: bool) -> None:
+    """What P3.13's two pieces of code would do to every stored run: how many
+    links `link_sibling_pinpoints` adds to non-Deep-Research worker reports,
+    and how many notes `restore_dropped_siblings` adds to conversational
+    answers (reports linked first, footer stripped, as the product runs it).
+    Behind a command because both counts are published on the P3.13 row, and
+    because a change to either function must be dry-run over every stored
+    report and its output READ before it ships (Session 22)."""
+    from src.utils.citation_links import (harvest_legislation_urls,
+                                          link_sibling_pinpoints,
+                                          restore_dropped_siblings)
+    from src.utils.search_scope import strip_answer_footer
+
+    reports: dict = {}
+    turns = fired = notes = 0
+    shown = []
+    for d in dirs:
+        for doc in load_runs(d):
+            for t in doc.get("turns") or []:
+                mode = t.get("chat_mode") or "?"
+                if mode == "deep_research":
+                    continue
+                handed = []
+                for dg in (t.get("audit") or {}).get("delegations") or []:
+                    if dg.get("step") is not None:
+                        continue
+                    urls: set = set()
+                    for tool in dg.get("tools") or []:
+                        harvest_legislation_urls(tool.get("raw_result"), urls)
+                    linked, n = link_sibling_pinpoints(dg.get("report") or "", urls)
+                    handed.append(linked)
+                    row = reports.setdefault(mode, [0, 0, 0])
+                    row[0] += 1
+                    row[1] += bool(n)
+                    row[2] += n
+                if mode != "conversational" or not t.get("answer") or not handed:
+                    continue
+                turns += 1
+                out, n = restore_dropped_siblings(strip_answer_footer(t["answer"]), handed)
+                if n:
+                    fired += 1
+                    notes += n
+                    if show:
+                        shown.append((d.name, doc.get("session_id"), doc.get("rep"), t.get("turn"),
+                                      [p for p in out.split("\n\n") if p.startswith("Also in ")]))
+    print("  --dry-run (P3.13's code over every stored run):")
+    for mode, (n, edited, links) in sorted(reports.items()):
+        print(f"    link_sibling_pinpoints  {mode:15} {links} links added to {edited} of {n} reports")
+    print(f"    restore_dropped_siblings conversational  {notes} notes on {fired} of {turns} "
+          f"answered turns with a delegation")
+    for name, sid, rep, turn, paras in shown:
+        print(f"    {name}/{sid} r{rep} t{turn}")
+        for p in paras:
+            print(f"      {p}")
 
 
 def _utf8_stdout() -> None:
@@ -5191,12 +6084,1573 @@ def _utf8_stdout() -> None:
             pass
 
 
+# --- P4.6: the negatives the Worker prompts scripted --------------------------
+#
+# Three research-Worker prompt lines told the model what to say when a search
+# fell short, and each says it about the whole database. The model says them
+# verbatim, so they are counted verbatim: in every Worker REPORT (where the
+# Worker composes them) and in the ANSWER (where the Manager may keep or drop
+# them). "before concluding nothing exists" is an instruction, not an output,
+# and is counted so that a model echoing it is seen. The case-law Worker's
+# PHASE 4 line is scoped to "this query" and is counted beside them, not as a
+# failure. `corpus` is the looser shape — any sentence saying a database or
+# index does not contain something — so a paraphrase is visible too.
+SCRIPTED_NEGATIVES = {
+    "database": re.compile(
+        r"available database does not contain information on this specific issue", re.I),
+    "nothing_exists": re.compile(r"before concluding nothing exists", re.I),
+    "caselaw": re.compile(
+        r"no reported case law directly addresses this specific issue in the "
+        r"national archives database", re.I),
+}
+SCRIPTED_INFORMATIONAL = {
+    "caselaw_p4": re.compile(
+        r"no directly relevant case law was found in the national archives find "
+        r"case law database for this query", re.I),
+    "corpus": re.compile(
+        r"\b(?:database|index)\b[^.]{0,60}\b(?:does|do) not (?:contain|hold|include)\b",
+        re.I),
+}
+
+
+def _strip_scope(text: str) -> str:
+    """The report with the code-appended scope blocks removed, via the
+    product's own stripper; the text unchanged if `src` cannot be imported."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from src.utils.search_scope import strip_scope_blocks  # noqa: PLC0415
+
+        return strip_scope_blocks(text or "")[0]
+    except Exception:  # pragma: no cover - the listing is a reading aid
+        return text or ""
+
+
+def _scripted_counts(text: str) -> Counter:
+    c = Counter()
+    for k, rx in {**SCRIPTED_NEGATIVES, **SCRIPTED_INFORMATIONAL}.items():
+        c[k] = len(rx.findall(text or ""))
+    return c
+
+
+def scripted_rows(doc: dict) -> list:
+    """One row per replayed turn: the scripted sentences in its Worker reports
+    and in its answer, and what Invariant 1 compares (links, `sources_kept`,
+    prose with the footer removed)."""
+    session_rm = (doc.get("filters") or {}).get("research_mode") or ""
+    rows = []
+    for t in doc.get("turns", []):
+        ans = t.get("answer") or ""
+        dgs = (t.get("audit") or {}).get("delegations") or []
+        reports = [dg.get("report") or "" for dg in dgs]
+        rep_c = Counter()
+        for r in reports:
+            rep_c.update(_scripted_counts(r))
+        rows.append({
+            "session": str(doc.get("session_id")),
+            "rep": doc.get("rep", 1),
+            "turn": t.get("turn"),
+            "chat_mode": t.get("chat_mode") or "?",
+            "research_mode": t.get("research_mode") or session_rm or "?",
+            "answered": bool(ans.strip()),
+            "delegations": len(dgs),
+            "worker_tools": sum(len(dg.get("tools") or []) for dg in dgs),
+            "report": rep_c,
+            "answer": _scripted_counts(ans),
+            "links": len(MD_LINK.findall(ans)),
+            "sources_kept": int((t.get("timing") or {}).get("sources_kept") or 0),
+            "prose": len(_without_footer(ans)),
+            "reports": reports,
+            "tools_per_report": [len(dg.get("tools") or []) for dg in dgs],
+        })
+    return rows
+
+
+def _scripted_failing(c: Counter) -> int:
+    return sum(c[k] for k in SCRIPTED_NEGATIVES)
+
+
+def scripted_findings(rows: list) -> list:
+    out = []
+    for r in rows:
+        for where in ("report", "answer"):
+            n = _scripted_failing(r[where])
+            if n:
+                kinds = ", ".join(k for k in SCRIPTED_NEGATIVES if r[where][k])
+                out.append(f"{r['session']} r{r['rep']} t{r['turn']}: {n} scripted "
+                           f"sentence(s) in the {where} ({kinds})")
+    return out
+
+
+def _scripted_slots(rows: list) -> dict:
+    """Means over reps per (session, turn) slot."""
+    acc = {}
+    for r in rows:
+        acc.setdefault((r["session"], r["turn"]), []).append(r)
+    out = {}
+    for slot, rs in acc.items():
+        n = len(rs)
+        out[slot] = {
+            "reps": n,
+            "report": sum(_scripted_failing(r["report"]) for r in rs) / n,
+            "answer": sum(_scripted_failing(r["answer"]) for r in rs) / n,
+            "links": sum(r["links"] for r in rs) / n,
+            "sources_kept": sum(r["sources_kept"] for r in rs) / n,
+            "prose": sum(r["prose"] for r in rs) / n,
+        }
+    return out
+
+
+def cmd_scripted(args) -> int:
+    """P4.6 acceptance: the prompt-scripted negatives, per turn, in the Worker
+    reports and the answers; `--before` for the Invariant 1 panel."""
+    docs = load_runs(Path(args.dir))
+    if args.session:
+        docs = [d for d in docs if str(d.get("session_id")) in set(args.session)]
+    rows = [r for doc in docs for r in scripted_rows(doc)]
+    print(f"P4.6 scripted negatives over {args.dir}  ({len(docs)} run file(s), "
+          f"{len(rows)} turn(s))")
+    print("  failing: " + ", ".join(f"{k}" for k in SCRIPTED_NEGATIVES)
+          + "; counted beside them: " + ", ".join(SCRIPTED_INFORMATIONAL))
+    print(f"\n    {'session':<10} {'r':>1} {'t':>2}  {'chat':<13} {'research type':<24} "
+          f"{'deleg':>5} {'tools':>5}  {'rpt':>3} {'ans':>3} {'corpus':>6} {'p4':>2}  "
+          f"{'links':>5} {'kept':>4} {'prose':>6}")
+    for r in sorted(rows, key=lambda r: (r["session"], r["rep"], r["turn"] or 0)):
+        corpus = r["report"]["corpus"] + r["answer"]["corpus"]
+        p4 = r["report"]["caselaw_p4"] + r["answer"]["caselaw_p4"]
+        print(f"    {r['session']:<10} {r['rep']:>1} {r['turn']:>2}  {r['chat_mode']:<13} "
+              f"{r['research_mode']:<24} {r['delegations']:>5} {r['worker_tools']:>5}  "
+              f"{_scripted_failing(r['report']):>3} {_scripted_failing(r['answer']):>3} "
+              f"{corpus:>6} {p4:>2}  {r['links']:>5} {r['sources_kept']:>4} {r['prose']:>6,}")
+        if args.reports:
+            for i, (rep, n_tools) in enumerate(zip(r["reports"], r["tools_per_report"]), 1):
+                # The hand read is of the Worker's own prose: the agent-facing
+                # scope block P2.2 appends in code is not what it wrote.
+                rep = _strip_scope(rep)
+                negs = [s for s in _sentences(rep)
+                        if NEG_ASSERTED.search(s) or _scripted_failing(_scripted_counts(s))
+                        or SCRIPTED_INFORMATIONAL["corpus"].search(s)]
+                print(f"        report {i} ({n_tools} tool call(s)): "
+                      f"{len(negs)} negative sentence(s)")
+                for s in negs:
+                    print(f"          - {s[:args.chars]}")
+
+    answered = [r for r in rows if r["answered"]]
+    tot = Counter()
+    for r in rows:
+        tot["report"] += _scripted_failing(r["report"])
+        tot["answer"] += _scripted_failing(r["answer"])
+    with_any = sum(1 for r in rows
+                   if _scripted_failing(r["report"]) or _scripted_failing(r["answer"]))
+    print(f"\n  {len(answered)} answered turn(s); {with_any} carry a scripted sentence "
+          f"(reports {tot['report']}, answers {tot['answer']}); "
+          f"delegations with no tool call: "
+          f"{sum(1 for r in rows for n in r['tools_per_report'] if n == 0)} of "
+          f"{sum(r['delegations'] for r in rows)}")
+
+    if args.before:
+        before_docs = load_runs(Path(args.before))
+        sessions = {str(d.get("session_id")) for d in docs}
+        before_rows = [r for d in before_docs if str(d.get("session_id")) in sessions
+                       for r in scripted_rows(d)]
+        b, a = _scripted_slots(before_rows), _scripted_slots(rows)
+        shared = sorted(set(b) & set(a), key=lambda s: (s[0], s[1] or 0))
+        print(f"\n  --before {Path(args.before).name}  (means per turn slot over reps, "
+              f"{len(shared)} shared slot(s)):")
+        keys = ("report", "answer", "links", "sources_kept", "prose")
+        fell = Counter()
+        for slot in shared:
+            x, y = b[slot], a[slot]
+            for k in ("links", "sources_kept", "prose"):
+                if y[k] < x[k]:
+                    fell[k] += 1
+            print(f"    {slot[0]} t{slot[1]}  (reps {x['reps']} -> {y['reps']})  "
+                  + "  ".join(f"{k} {x[k]:,.1f} -> {y[k]:,.1f}" for k in keys))
+        sums = {k: (sum(b[s][k] for s in shared), sum(a[s][k] for s in shared))
+                for k in keys}
+        print("    summed over the shared slots: "
+              + "  ".join(f"{k} {x:,.1f} -> {y:,.1f}" for k, (x, y) in sums.items()))
+        print("    slots that fell: "
+              + ", ".join(f"{k} {fell[k]}/{len(shared)}" for k in ("links", "sources_kept", "prose")))
+
+    findings = scripted_findings(rows)
+    print()
+    if findings:
+        print(f"  FINDINGS ({len(findings)}):")
+        for f in findings:
+            print(f"    [!] {f}")
+    else:
+        print("  no findings: no Worker report and no answer carries a scripted "
+              "negative.")
+    return 1 if findings else 0
+
+
+# --- P3.7: the held/absent test for an instrument named by number -------------
+#
+# The graded slots, keyed on the EXPORT's turn numbers (a scripted run maps its
+# turns back through `script.turns[i].from_turn`). The instrument each slot
+# names, and what LEX holds for it, checked live at Session 24's pre-flight and
+# re-checked by `lex_probe`: `ssi/2025/377` and `ssi/2026/170` are 404 on
+# `/legislation/lookup`; `ssi/2025/119` is a stub (200 on lookup, 404 on
+# `/legislation/section/lookup`); `asp/2025/2` is held with text. `mention`
+# picks the sentences about the instrument out of the prose, by its number
+# only, so no lawyer's words are needed here. `graded` False is reported and
+# never failed: 6373 t3 names the instrument too, but the row does not grade it.
+# `must_claim` marks the turns the row requires an answer on. Elsewhere a reply
+# that makes no statement about the instrument and delegated nothing is a
+# clarifying question (6409 t8 and t10 are a bare citation and a bare title,
+# and every stored rep asks what the lawyer wants to know), which is not a
+# failure. 6409 t7 names the stub by title, not number, and retrieves it.
+LOOKUP_TARGETS = {
+    "6409": {
+        2: ("asp/2025/2", "held", r"\basp\s*2\b|\basp/2025/2\b", True, False),
+        7: ("ssi/2025/119", "stub", r"\b119\b|\bNo\.\s*1\b", True, False),
+        8: ("ssi/2025/119", "stub", r"\b119\b", True, False),
+        9: ("ssi/2025/377", "absent", r"\b377\b", True, True),
+        10: ("ssi/2025/377", "absent", r"\b377\b", True, False),
+        11: ("ssi/2025/377", "absent", r"\b377\b", True, True),
+    },
+    "6373": {
+        2: ("ssi/2026/170", "absent", r"\b170\b", True, True),
+        3: ("ssi/2026/170", "absent", r"\b170\b", False, False),
+    },
+}
+# The lookup tool P3.7 adds, and the statuses it reports.
+LOOKUP_TOOL = "lookup_legislation"
+# Sentence shapes, applied to a sentence that mentions the instrument, in the
+# model's prose with the code-written footer removed (P2.2's lesson: the footer
+# must never grade the model).
+#   RECORD_ABSENT: the INSTRUMENT is not held / not in the index. Definite.
+#   HEDGED:       it could not be found. True of a search, not of the index.
+#   TEXT_ONLY:    its TEXT is not available. Right for a stub, and on an
+#                 absent instrument it reads as if the record were held.
+LK_TEXT_WORD = re.compile(r"\b(?:full |official )?(?:text|content|contents|wording|terms|body)\b",
+                          re.I)
+LK_NEGATION = re.compile(
+    r"\bnot (?:currently |yet )?(?:held|available|included|present|indexed|published|"
+    r"contained|in)\b|\bno record\b|\bdoes not (?:hold|contain|include|have)\b"
+    r"|\bhas no\b|\bunavailable\b|\bmissing\b|\babsent\b", re.I)
+LK_INDEX_WORD = re.compile(r"\b(?:index|database|corpus|collection|holdings?)\b", re.I)
+LK_HEDGED = re.compile(
+    r"\bcould not (?:be )?(?:find|found|locate|located|retrieve|retrieved|identify)"
+    r"|\b(?:not|never) (?:be )?(?:found|located|retrieved|identified)\b"
+    r"|\bunable to (?:find|locate|retrieve|identify)\b"
+    r"|\bdid not (?:return|appear|surface)\b|\bno (?:results?|matches?)\b", re.I)
+LK_BLAME = re.compile(
+    NEG_BLAMED_USER.pattern
+    + r"|\bmay (?:be|contain) (?:an? )?(?:error|typo|mistake)\b|\btypo\b"
+    r"|\bdid you mean\b|\b(?:may|might) be referring to\b|\bperhaps you meant\b",
+    re.I)
+# The clause P3.7's code writes into the lawyer's footer for a looked-up
+# instrument. Read from the footer only.
+LK_FOOTER = re.compile(r"looked up by (?:its |their )?numbers?", re.I)
+# **A sentence that refers BACK to the instrument is about it too.** Found on
+# `wave4_p37c`: three answers said "This index does not hold the instrument
+# itself" on turns asking only about SSI 2025/377, and the number-only
+# `mention` read them as saying nothing. Such a sentence is attributed to the
+# slot's instrument only when it names no instrument number of its own, so it
+# cannot be credited with a claim about a different one.
+LK_ANAPHOR = re.compile(
+    r"\b(?:the|this|that) (?:instrument|statutory instrument|SSI|regulations|order)\b"
+    r"|\bthese regulations\b|\bit is not held\b", re.I)
+LK_ANY_NUMBER = re.compile(r"\b\d{4}/\d{1,5}\b|\b\d{4} (?:asp|c\.) \d{1,4}\b", re.I)
+# An Act's number, cited or inside a legislation.gov.uk link. An anaphor above
+# names subordinate legislation, so an Act mention does not move its referent.
+LK_ACT_REF = re.compile(r"\b(?:ukpga|asp|anaw|asc|nia|mwa|ukla)/\d{4}/\d+"
+                        r"|\b\d{4} (?:asp|c\.) \d{1,4}\b", re.I)
+LK_PRIMARY_LID = re.compile(r"(?:ukpga|asp|anaw|asc|nia|mwa|ukla)/", re.I)
+
+
+def _lk_classify(sentence: str) -> str:
+    if LK_BLAME.search(sentence):
+        return "blame"
+    neg = LK_NEGATION.search(sentence)
+    if neg:
+        # A negation governing the text ("its full text is not available"),
+        # rather than the record, is TEXT_ONLY. Decided on the words before the
+        # negation, which is where the subject sits in every stored shape.
+        head = sentence[:neg.start()]
+        tail = sentence[neg.end():neg.end() + 30]
+        if LK_TEXT_WORD.search(head) or re.match(
+                r"\s*(?:the |its |any )?(?:full |official )?(?:text|content|wording|terms)\b",
+                tail, re.I):
+            return "text_only"
+        if LK_INDEX_WORD.search(sentence) or re.search(r"\bnot (?:currently )?held\b",
+                                                       sentence, re.I):
+            return "record_absent"
+    if LK_HEDGED.search(sentence):
+        return "hedged"
+    return ""
+
+
+def _lk_probes(turn: dict, lid: str) -> dict:
+    """By-number probes of `lid` in one turn's audit: P3.7's lookup (with its
+    status) and the de facto probe that predates it, `get_legislation_text` on
+    the id, which answers a missing instrument with a 404."""
+    out = {"lookup": [], "text404": 0, "text200": 0, "via_code": 0}
+    for dg in (turn.get("audit") or {}).get("delegations") or []:
+        for tl in dg.get("tools") or []:
+            name = tl.get("name")
+            args = tl.get("args") or {}
+            if name == LOOKUP_TOOL:
+                try:
+                    got = json.loads(tl.get("raw_result") or "{}")
+                except (TypeError, ValueError):
+                    got = {}
+                if not isinstance(got, dict) or got.get("legislation_id") != lid:
+                    continue
+                out["lookup"].append(got.get("status") or "?")
+                out["via_code"] += bool(got.get("routed_by_code"))
+            elif name == "get_legislation_text" and args.get("legislation_id") == lid:
+                raw = str(tl.get("raw_result") or "")
+                if "Legislation not found" in raw:
+                    out["text404"] += 1
+                else:
+                    out["text200"] += 1
+    return out
+
+
+def lookup_rows(doc: dict) -> list:
+    """One row per graded (session, turn) slot in a run file."""
+    script = doc.get("script") or {}
+    base = str(script.get("base") or doc.get("session_id"))
+    targets = LOOKUP_TARGETS.get(base)
+    if not targets:
+        return []
+    src_turns = [t.get("from_turn") for t in (script.get("turns") or [])]
+    rows = []
+    earlier_not_held: set = set()
+    for t in doc.get("turns") or []:
+        n = t.get("turn")
+        src = src_turns[n - 1] if script and n and n <= len(src_turns) else n
+        target = targets.get(src)
+        # What earlier turns of THIS run established by lookup, so a follow-up
+        # answered from history is graded against a fact the run really has.
+        probes_all = {}
+        for tl_lid in {v[0] for v in targets.values()}:
+            probes_all[tl_lid] = _lk_probes(t, tl_lid)
+        if target:
+            lid, state, mention, graded, must_claim = target
+            ans = t.get("answer") or ""
+            prose = _without_footer(ans)
+            footer = ans[len(prose):] if ans.startswith(prose) else ANSWER_FOOTER.search(ans or "")
+            footer = footer if isinstance(footer, str) else (footer.group(0) if footer else "")
+            mrx = re.compile(mention, re.I)
+            kinds = Counter()
+            sents = []
+            # Session 29 (`wave4_p315_pre`): an anaphor refers back to the
+            # instrument named LAST, not to the slot's. "SSI 2025/377 brings
+            # s.18 into force. This index does not hold this instrument" under
+            # a heading naming 2025 asp 2 was scored as the Act reported absent.
+            # The anaphors name subordinate legislation ("this instrument", "the
+            # regulations"), so one is never an Act slot's, and an Act's number
+            # (a citation, or inside a section link) does not change which
+            # instrument was named last.
+            anaphor_ok = not LK_PRIMARY_LID.match(lid)
+            last_is_slot = None
+            for s in _sentences(prose):
+                si_named = LK_ANY_NUMBER.search(LK_ACT_REF.sub(" ", s))
+                about = mrx.search(s) or (anaphor_ok and LK_ANAPHOR.search(s)
+                                          and not LK_ANY_NUMBER.search(s)
+                                          and last_is_slot is not False)
+                if mrx.search(s):
+                    last_is_slot = True
+                elif si_named:
+                    last_is_slot = False
+                k = _lk_classify(s) if about else ""
+                if k:
+                    kinds[k] += 1
+                    sents.append((k, s))
+            p = probes_all[lid]
+            rows.append({
+                "session": base, "run": str(doc.get("session_id")), "rep": doc.get("rep", 1),
+                "turn": n, "src_turn": src, "lid": lid, "state": state, "graded": graded,
+                "must_claim": must_claim,
+                "chat_mode": t.get("chat_mode") or "?",
+                "answered": bool(ans.strip()),
+                "delegations": len((t.get("audit") or {}).get("delegations") or []),
+                "probes": p,
+                "earlier_not_held": lid in earlier_not_held,
+                "kinds": kinds, "sentences": sents,
+                "footer_lookup": bool(LK_FOOTER.search(footer or "")),
+                "links": len(MD_LINK.findall(ans)),
+                "sources_kept": int((t.get("timing") or {}).get("sources_kept") or 0),
+                "prose": len(prose),
+            })
+        for tl_lid, p in probes_all.items():
+            if "not_held" in p["lookup"]:
+                earlier_not_held.add(tl_lid)
+    return rows
+
+
+def lookup_verdict(r: dict) -> tuple:
+    """(PASS/FAIL/n/a, reason) for one slot, per the acceptance on P3.7's row."""
+    k, p = r["kinds"], r["probes"]
+    if not r["answered"]:
+        return "FAIL", "no answer"
+    if not sum(k.values()) and not r["delegations"] and not r["must_claim"]:
+        return "NO CLAIM", "no statement about it and nothing researched"
+    if r["state"] == "absent":
+        if k["blame"]:
+            return "FAIL", "questions the citation"
+        earned = "not_held" in p["lookup"] or r["earlier_not_held"]
+        if not k["record_absent"]:
+            return "FAIL", "prose does not say it is not held"
+        if not earned:
+            return "FAIL", "not-held stated without a lookup saying so"
+        if "not_held" in p["lookup"] and not r["footer_lookup"]:
+            return "FAIL", "looked up, but the footer does not say so"
+        return "PASS", ""
+    # A held record reported as "could not be found" is a false negative too:
+    # `wave2_p22_final` r2 and r3 t7 say it of the stub they had just retrieved.
+    if r["state"] == "stub":
+        if k["record_absent"] or k["hedged"] or k["blame"]:
+            return "FAIL", "a held record reported as not held or not found"
+        return "PASS", ""
+    if r["state"] == "held":
+        if k["record_absent"] or k["hedged"] or k["blame"]:
+            return "FAIL", "a held instrument reported absent or not found"
+        return "PASS", ""
+    return "n/a", ""
+
+
+def _lk_probe_str(p: dict) -> str:
+    bits = []
+    if p["lookup"]:
+        bits.append("lookup:" + "/".join(p["lookup"])
+                    + (f" (code {p['via_code']})" if p["via_code"] else ""))
+    if p["text404"]:
+        bits.append(f"text404x{p['text404']}")
+    if p["text200"]:
+        bits.append(f"text200x{p['text200']}")
+    return ", ".join(bits) or "none"
+
+
+def _lookup_routing(dirs: list, live: bool) -> int:
+    """How far P3.7's routing reaches: over every Worker brief stored in `dirs`,
+    the instruments the product's own parser would look up before round 1.
+    Prints ids only, never brief text. `--live` also looks each distinct id up
+    against LEX (two small calls each, no model) and tallies the statuses."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from src.utils.instrument_lookup import extract_instrument_citations
+
+    briefs = routed = 0
+    per_session, ids = Counter(), Counter()
+    for d in dirs:
+        for doc in load_runs(d):
+            script = doc.get("script") or {}
+            base = str(script.get("base") or doc.get("session_id"))
+            for t in doc.get("turns") or []:
+                for dg in (t.get("audit") or {}).get("delegations") or []:
+                    briefs += 1
+                    refs = extract_instrument_citations(dg.get("brief") or "")
+                    if refs:
+                        routed += 1
+                        per_session[base] += 1
+                        for r in refs:
+                            ids["/".join(map(str, r))] += 1
+    print(f"  routing over {', '.join(p.name for p in dirs)}: {routed} of {briefs} "
+          f"delegation brief(s) name an instrument by number, in {len(per_session)} "
+          f"session(s); {len(ids)} distinct id(s)")
+    print("    by session: " + ", ".join(f"{s} {n}" for s, n in sorted(per_session.items())))
+    status = {}
+    if live:
+        import asyncio as _asyncio
+
+        from src.agent.tools.executor import execute_worker_tool
+        from src.utils.instrument_lookup import LOOKUP_TOOL, lookup_args
+
+        async def _one(lid):
+            t, y, n = lookup_args({"legislation_id": lid})
+            got = json.loads(await execute_worker_tool(
+                LOOKUP_TOOL, {"legislation_type": t, "year": y, "number": n}))
+            return lid, got.get("status")
+
+        async def _all():
+            return await _asyncio.gather(*(_one(lid) for lid in ids))
+
+        status = dict(_asyncio.run(_all()))
+        print("    statuses (live, distinct ids): "
+              + ", ".join(f"{k} {v}" for k, v in Counter(status.values()).most_common()))
+    for lid, n in ids.most_common():
+        print(f"    {lid:<16} {n:>4} brief(s)  {status.get(lid, '')}")
+    return 0
+
+
+def lookup_route_tally(rows: list) -> dict:
+    """P3.15: absent slots by route, {(route, graded): (passed, total)}.
+
+    A turn the Manager answered from its history ("from history", no
+    delegation) has no worker block to carry the lookup's wording, so P3.15's
+    residual lives there; the delegated turns are P3.7's own result.
+    """
+    out: dict = {}
+    for r in rows:
+        if r["state"] != "absent":
+            continue
+        key = ("delegated" if r["delegations"] else "from history", bool(r["graded"]))
+        p, n = out.get(key, (0, 0))
+        out[key] = (p + (lookup_verdict(r)[0] == "PASS"), n + 1)
+    return out
+
+
+def cmd_lookup(args) -> int:
+    """P3.7 acceptance: is an instrument named by number reported as held, held
+    without text, or not held, and is a not-held answer backed by a lookup?"""
+    if args.routing:
+        return _lookup_routing([Path(p) for p in args.routing], args.live)
+    docs = load_runs(Path(args.dir))
+    rows = [r for d in docs for r in lookup_rows(d)]
+    print(f"P3.7 held/absent over {args.dir}  ({len(docs)} run file(s), "
+          f"{len(rows)} graded slot(s))")
+    print("  kinds (model prose, footer removed, sentences naming the instrument): "
+          "record_absent, text_only, hedged, blame")
+    print(f"\n    {'session':<6} {'r':>1} {'t':>2}({'src':>3})  {'instrument':<13} {'state':<6} "
+          f"{'deleg':>5}  {'probes':<28} {'earlier':>7} {'rec':>3} {'txt':>3} {'hdg':>3} "
+          f"{'blm':>3} {'foot':>4} {'links':>5} {'kept':>4}  verdict")
+    fails = []
+    tally = Counter()
+    for r in sorted(rows, key=lambda r: (r["session"], r["rep"], r["turn"] or 0)):
+        v, why = lookup_verdict(r)
+        k = r["kinds"]
+        tag = v if r["graded"] else f"({v}, not graded)"
+        print(f"    {r['session']:<6} {r['rep']:>1} {r['turn']:>2}({r['src_turn']:>3})  "
+              f"{r['lid']:<13} {r['state']:<6} {r['delegations']:>5}  "
+              f"{_lk_probe_str(r['probes']):<28} {('yes' if r['earlier_not_held'] else ''):>7} "
+              f"{k['record_absent']:>3} {k['text_only']:>3} {k['hedged']:>3} {k['blame']:>3} "
+              f"{('yes' if r['footer_lookup'] else ''):>4} {r['links']:>5} "
+              f"{r['sources_kept']:>4}  {tag}{(': ' + why) if why else ''}")
+        if args.answers:
+            for kind, s in r["sentences"]:
+                print(f"          [{kind}] {s[:args.chars]}")
+        if r["graded"]:
+            tally[(r["state"], v)] += 1
+            if v == "FAIL":
+                fails.append(f"{r['session']} r{r['rep']} t{r['turn']} (export t{r['src_turn']}) "
+                             f"{r['lid']}: {why}")
+    print()
+    for state in ("absent", "stub", "held"):
+        n = sum(c for (s, _), c in tally.items() if s == state)
+        if n:
+            print(f"  {state:<6}: {tally[(state, 'PASS')]} of {n} graded slot(s) pass, "
+                  f"{tally[(state, 'NO CLAIM')]} made no claim")
+    routes = lookup_route_tally(rows)
+    if routes:
+        print("  absent, by route (P3.15):")
+        for graded in (True, False):
+            parts = [f"{route} {routes[(route, graded)][0]} of {routes[(route, graded)][1]}"
+                     for route in ("delegated", "from history") if (route, graded) in routes]
+            if parts:
+                print(f"    {'graded' if graded else 'not graded'}: " + ", ".join(parts)
+                      + " pass")
+    print()
+    if fails:
+        print(f"  FINDINGS ({len(fails)}):")
+        for f in fails:
+            print(f"    [!] {f}")
+        return 1
+    print("  no findings." if rows else "  no graded slot in this directory.")
+    return 0
+
+
+# --- P4.7: the Deep Research synthesis's gap sentences ---------------------
+#
+# The row's defect (D17): the synthesis prompt scripted "No reported case law
+# was found on X" for every research type, so a report run under 'Legislation
+# only' could present a source it never searched as searched and empty. The
+# pre-flight (end of Session 24) was a scratch read; this is that read behind a
+# command, over every directory, plus the export's own answers.
+#
+# Three regexes, read in order, on each sentence of the model's prose (the
+# code-written footer removed, as everywhere else in this module):
+#   DR_CASE_WORD    the broad net the scratch read used. It fires on
+#                   'final judgment' and 'judicial machinery', which is why
+#                   it only COUNTS turns;
+#   DR_CASE_SOURCE  case law as a SOURCE (the thing a search covers). Only a
+#                   sentence matching this one is classified;
+#   DR_ABSENT       the source reported as searched and empty;
+#   DR_EXCLUDED     the source reported as outside the research.
+# A sentence carrying both ABSENT and EXCLUDED is D17's own example ("No
+# reported case law was found ... (case law was excluded ...)") and is the
+# defect: it still presents the source as searched.
+#
+# **Corrected before first use (Session 26).** ABSENT first carried a bare
+# `no reported` alternative, and it flagged `wave2_p28_smoke`/6341 t7, whose
+# sentence says case law was "not searched or retrieved" under the
+# 'Legislation only' filter: an accurate exclusion. ABSENT now needs a
+# found-type verb, and "no ... was searched" reads as EXCLUDED.
+
+DR_CASE_WORD = re.compile(
+    r"\bcase[\s-]*law\b|\bjudge?ments?\b|\bprecedents?\b|\bjudicial\b"
+    r"|\breported\s+(?:cases?|decisions?)\b|\bcourt\s+decisions?\b", re.I)
+DR_CASE_SOURCE = re.compile(
+    r"\bcase[\s-]*law\b|\breported\s+(?:cases?|decisions?)\b|\bcourt\s+decisions?\b"
+    r"|\bjudicial\s+(?:decisions?|authorit(?:y|ies)|consideration|interpretation"
+    r"|treatment|guidance)\b|\bprecedents?\b|\bjudgments\b(?!\s+of\s+the\s+court\b)",
+    re.I)
+DR_ABSENT = re.compile(
+    r"\bno\b[^.;:]{0,80}?\b(?:was|were|has\s+been|have\s+been|could\s+be|is|are)\s+"
+    r"(?:found|identified|located|returned|retrieved|available)\b"
+    r"|\b(?:found|identified|located|returned|retrieved|revealed)\s+no\b"
+    r"|\bdid\s+not\s+(?:find|identify|locate|return|retrieve|reveal)\b"
+    r"|\bnone\s+(?:was|were)\s+(?:found|identified|located)\b"
+    r"|\bnot\s+(?:been\s+)?(?:found|identified|located)\b"
+    r"|\bno\s+(?:relevant\s+|reported\s+)?(?:case[\s-]*law|judgments?|cases?)\s+"
+    r"(?:directly\s+)?(?:address|addresses|exists?|considers?|on)\b", re.I)
+DR_EXCLUDED = re.compile(
+    r"\bexclu(?:de|ded|des|sion)\b|\bnot\s+(?:been\s+)?searched\b|\bdid\s+not\s+search\b"
+    r"|\bno\b[^.;:]{0,80}?\b(?:was|were)\s+searched\b"
+    r"|\bwas\s+not\s+(?:part|within|included)|\bout(?:side)?\s+(?:of\s+)?(?:the\s+)?"
+    r"(?:research\s+|approved\s+)?scope\b|\bnot\s+(?:with)?in\s+(?:the\s+)?"
+    r"(?:research\s+|approved\s+)?scope\b|\blegislation[\s-]+only\b|\bnot\s+included\b"
+    r"|\bnot\s+(?:researched|covered|examined|consulted)\b|\bbeyond\s+the\s+scope\b",
+    re.I)
+# The research types whose tool set holds no case-law tool: a case-law
+# 'not found' under one of these is the defect. A hybrid or case-law run
+# DID search case law, so the same sentence there is a true negative and is
+# listed as the detector's recall check, not as a finding.
+DR_NO_CASE_LAW = ("legislation_only", "parliamentary_records", "westminster_records")
+
+
+def dr_turn_kind(turn: dict) -> str:
+    """synthesis (the step findings reached the synthesis), planner (the
+    planner answered: a clarification, or P4.1's decline) or other."""
+    dgs = (turn.get("audit") or {}).get("delegations") or []
+    if turn.get("plan") and any(d.get("step") is not None for d in dgs):
+        return "synthesis"
+    if turn.get("plan_clarification") or not turn.get("plan"):
+        return "planner"
+    return "other"
+
+
+def dr_classify(text: str) -> list:
+    """[(kind, sentence)] for every sentence that names case law as a source.
+    kind: absent, absent_excluded (D17's mixed form), excluded, mention."""
+    out = []
+    for s in _sentences(_without_footer(text)):
+        if not DR_CASE_SOURCE.search(s):
+            continue
+        absent, excluded = bool(DR_ABSENT.search(s)), bool(DR_EXCLUDED.search(s))
+        kind = ("absent_excluded" if absent and excluded else "absent" if absent
+                else "excluded" if excluded else "mention")
+        out.append((kind, s))
+    return out
+
+
+def dr_rows(doc: dict) -> list:
+    """One row per answered Deep Research turn of a run file."""
+    session_rm = (doc.get("filters") or {}).get("research_mode") or ""
+    rows = []
+    for t in doc.get("turns") or []:
+        if t.get("chat_mode") != "deep_research":
+            continue
+        answer = t.get("answer") or ""
+        if not answer.strip():
+            continue
+        audit_rm = (t.get("audit") or {}).get("research_mode") or ""
+        rm = audit_rm or t.get("research_mode") or session_rm or "?"
+        sentences = dr_classify(answer)
+        kinds = Counter(k for k, _ in sentences)
+        rows.append({
+            "session": str(doc.get("session_id")), "rep": doc.get("rep", 1),
+            "turn": t.get("turn"), "research_mode": rm, "kind": dr_turn_kind(t),
+            "case_word": bool(DR_CASE_WORD.search(_without_footer(answer))),
+            "kinds": kinds, "sentences": sentences,
+        })
+    return rows
+
+
+def dr_defect(row: dict) -> bool:
+    """A case-law 'not found' in a report whose research never searched it."""
+    k = row["kinds"]
+    return row["research_mode"] in DR_NO_CASE_LAW and bool(
+        k["absent"] + k["absent_excluded"])
+
+
+def _dr_export_rows(rs, dr_only: bool = True) -> list:
+    """The same rows over the export's own Deep Research answers (the
+    pre-pilot's saved text, which never reached a run file). The research
+    type is the one `replay_set` resolves per turn (P0.6); the text is read
+    from the CSV in the order `load_sessions` pairs replies with turns.
+    `dr_only=False` reads every answer, for the recall check."""
+    import csv  # noqa: PLC0415
+    import io  # noqa: PLC0415
+
+    sessions = {s.session_id: s for s in rs.load_sessions()}
+    grouped: dict = {}
+    for r in csv.DictReader(io.open(Path(rs.DEFAULT_CSV), encoding="utf-8-sig")):
+        grouped.setdefault(r["Session ID"], []).append(r)
+    rows = []
+    for sid, srows in grouped.items():
+        s = sessions.get(sid)
+        if s is None:
+            continue
+        n = 0
+        for r in sorted(srows, key=lambda r: int(r["Message #"] or 0)):
+            if r["Message role"] == "user":
+                n += 1
+                continue
+            if r["Message role"] != "assistant" or not n:
+                continue
+            content = r["Message content"] or ""
+            if dr_only and not rs.DR_MARKER.search(content):
+                continue
+            t = s.turns[n - 1] if n <= len(s.turns) else None
+            rm = (t.research_mode if t else "") or s.research_mode or "?"
+            sentences = dr_classify(content)
+            rows.append({
+                "session": sid, "rep": 0, "turn": n, "research_mode": rm,
+                "kind": "synthesis",
+                "case_word": bool(DR_CASE_WORD.search(_without_footer(content))),
+                "kinds": Counter(k for k, _ in sentences), "sentences": sentences,
+            })
+    return rows
+
+
+def _dr_print(rows: list, label: str, args) -> list:
+    """Print one population's table; return its findings."""
+    by_rm = Counter(r["research_mode"] for r in rows)
+    print(f"\n  {label}: {len(rows)} answered Deep Research turn(s)  "
+          + ", ".join(f"{k} {v}" for k, v in sorted(by_rm.items())))
+    no_cl = [r for r in rows if r["research_mode"] in DR_NO_CASE_LAW]
+    kinds = Counter(r["kind"] for r in no_cl)
+    print(f"    under a type with no case-law tool ({', '.join(DR_NO_CASE_LAW)}): "
+          f"{len(no_cl)} turn(s); " + ", ".join(f"{k} {v}" for k, v in sorted(kinds.items())))
+    word = [r for r in no_cl if r["case_word"]]
+    src = [r for r in no_cl if r["sentences"]]
+    print(f"      matching a case-law word anywhere in the prose: {len(word)}")
+    src_kinds = Counter(r["kind"] for r in src)
+    print(f"      naming case law as a source: {len(src)}"
+          + (f"  ({', '.join(f'{k} {v}' for k, v in sorted(src_kinds.items()))})"
+             if src else ""))
+    tot = Counter()
+    for r in src:
+        tot.update(r["kinds"])
+    print(f"      their sentences: absent {tot['absent']}, absent+excluded "
+          f"{tot['absent_excluded']}, excluded {tot['excluded']}, mention {tot['mention']}")
+    listed = src if args.list else [r for r in src if dr_defect(r)]
+    for r in sorted(listed, key=lambda r: (r.get("dir", ""), r["session"], r["rep"], r["turn"] or 0)):
+        k = r["kinds"]
+        print(f"        {r.get('dir', 'export'):<22} {r['session']:<6} r{r['rep']} t{r['turn']:<2} "
+              f"{r['kind']:<9} absent {k['absent']} absent+excl {k['absent_excluded']} "
+              f"excluded {k['excluded']} mention {k['mention']}"
+              + ("   DEFECT" if dr_defect(r) else ""))
+        if args.sentences:
+            for kind, s in r["sentences"]:
+                print(f"            [{kind}] {s[:args.chars]}")
+    # Recall: the same classifier on the turns that DID search case law.
+    searched = [r for r in rows if r["research_mode"] not in DR_NO_CASE_LAW
+                and (r["kinds"]["absent"] + r["kinds"]["absent_excluded"])]
+    print(f"    recall check, types that searched case law: {len(searched)} turn(s) "
+          "carry a case-law 'not found' (true negatives there, not findings)"
+          + (": " + ", ".join(f"{r.get('dir', 'export')}/{r['session']} r{r['rep']} t{r['turn']}"
+                              for r in sorted(searched, key=lambda r: (r.get('dir', ''), r['session'], r['rep'], r['turn'] or 0)))
+             if searched and args.list else ""))
+    return [f"{r.get('dir', 'export')}/{r['session']} r{r['rep']} t{r['turn']} "
+            f"({r['research_mode']}): case law reported searched and not found"
+            for r in src if dr_defect(r)]
+
+
+def cmd_drgaps(args) -> int:
+    """P4.7: every answered Deep Research turn, by research type, and every
+    sentence naming case law as a source — searched and absent, excluded, or
+    a mention. Exits 1 if a report whose research type holds no case-law tool
+    says case law was not found (the defect), so it joins the exit-1 set for
+    a sweep that includes Deep Research turns."""
+    base = Path(args.dir)
+    dirs = ([d for d in sorted(base.parent.iterdir()) if d.is_dir()]
+            if args.all_dirs else [base])
+    rows = []
+    for d in dirs:
+        for doc in load_runs(d):
+            for r in dr_rows(doc):
+                r["dir"] = d.name
+                rows.append(r)
+    where = f"{len(dirs)} director(ies) beside {base.name}" if args.all_dirs else str(base)
+    print(f"P4.7 Deep Research gap sentences over {where}")
+    print("  prose only (the code-written footer removed); a sentence is classified "
+          "only when it names case law as a source")
+    findings = _dr_print(rows, "replay run files (all reps)", args)
+    if args.export:
+        rs = _replay_set_module()
+        if rs is None:
+            print("\n  export not read: replay_set unavailable")
+        else:
+            try:
+                findings += _dr_print(_dr_export_rows(rs), "the export's own answers", args)
+                # Recall over EVERY export answer, any chat mode: the explicit
+                # wording the pre-flight found (6338, 6370, 6407) must fire.
+                every = [r for r in _dr_export_rows(rs, dr_only=False)
+                         if r["kinds"]["absent"] + r["kinds"]["absent_excluded"]]
+                print(f"\n  recall check, every export answer (any chat mode): "
+                      f"{len(every)} answer(s) carry a case-law 'not found', in "
+                      f"session(s) {', '.join(sorted({r['session'] for r in every}))}; "
+                      "by research type: " + ", ".join(
+                          f"{k} {v}" for k, v in sorted(
+                              Counter(r['research_mode'] for r in every).items())))
+            except SystemExit as e:
+                print(f"\n  export not read: {e}")
+    print()
+    if findings:
+        print(f"  FINDINGS ({len(findings)}):")
+        for f in findings:
+            print(f"    [!] {f}")
+        return 1
+    print("  no findings: no report run under a type without case law says case "
+          "law was not found.")
+    return 0
+
+
+# --- P3.2: agreement openers -------------------------------------------------
+#
+# An answer that OPENS by agreeing with the lawyer ("You are absolutely
+# correct", "You make an excellent point") announces a resolution before any
+# reason for it has been given. P3.2 (B6) proposes removing them; this counts
+# them first. Only the answer's first sentence is read, and every first
+# sentence in the same vocabulary that is NOT counted is listed by `--drops`,
+# so the detector's reach can be read before any rate is quoted from it.
+#
+# Kinds, most specific first (the first that matches wins):
+#   scoped  - agrees with a stated proposition: "You are correct that X".
+#   bare    - agrees outright: "You are absolutely correct." / "...right to
+#             challenge this".
+#   praise  - praises the challenge: "You make an excellent point", "You have
+#             correctly identified", "You raise a very sharp point".
+#   affirm  - "Yes, exactly." / "That is correct."
+#   apology - "Apologies", "I apologise".
+#   thanks  - "Thank you for pressing this point".
+_OP_DEGREE = (r"(?:absolutely |entirely |completely |quite |exactly |perfectly "
+              r"|indeed |very |100% )?")
+OPENER_KINDS = [
+    ("scoped", re.compile(
+        r"^(?:yes[,.!]?\s+)?you(?:'re| are) " + _OP_DEGREE
+        + r"(?:correct|right) (?:that|in (?:your|noting|saying|pointing)|about|"
+          r"regarding|on|to (?:note|say|point out|observe))\b", re.I)),
+    ("bare", re.compile(
+        r"^(?:yes[,.!]?\s+)?you(?:'re| are) " + _OP_DEGREE
+        + r"(?:correct|right)\b(?:\s*[.,!;:—–-]|\s+(?:and|to)\b|\s*$)", re.I)),
+    ("praise", re.compile(
+        r"^you(?:'ve| have)? (?:make|made|raise|raised|hit on|highlight|highlighted|"
+        r"(?:correctly|rightly) (?:identified|pointed|noted|spotted|highlighted))\b",
+        re.I)),
+    ("affirm", re.compile(
+        r"^(?:yes[,.!]?\s+)?(?:exactly|precisely|that is (?:correct|right)|"
+        r"that's (?:correct|right)|correct)\b[.,!:]?", re.I)),
+    ("apology", re.compile(r"^(?:my )?apolog|^i apologi[sz]e|^sorry\b", re.I)),
+    ("thanks", re.compile(
+        r"^thank you for (?:pressing|pointing|flagging|challenging|raising|"
+        r"highlighting|the correction|catching|pushing)", re.I)),
+]
+# The vocabulary an opener is drawn from. A first sentence in it that no kind
+# matched is a drop, printed by `--drops` (the both-directions audit).
+OPENER_VOCAB = re.compile(
+    r"\b(?:correct|right|point|apolog|agree|excellent|thank|exactly|concede)",
+    re.I)
+_OP_LEAD = re.compile(r"^[\s#>*_\-\d.)]+")
+_OP_END = re.compile(r"(?<=[.!?:])\s|\n")
+
+
+def first_sentence(answer: str) -> str:
+    """The answer's first sentence, leading markdown stripped, max 300 chars."""
+    text = _OP_LEAD.sub("", _without_footer(answer or ""))
+    m = _OP_END.search(text)
+    return (text[:m.start()] if m else text)[:300].strip()
+
+
+def opener_kind(answer: str) -> str | None:
+    """The opener kind of an answer's first sentence, or None."""
+    s = first_sentence(answer)
+    for kind, rx in OPENER_KINDS:
+        if rx.search(s):
+            return kind
+    return None
+
+
+def opener_rows(doc: dict, dir_name: str) -> list:
+    """One row per answered turn of one run file."""
+    rows = []
+    for i, t in enumerate(doc.get("turns") or [], 1):
+        answer = t.get("answer") or ""
+        if not answer.strip():
+            continue
+        audit = t.get("audit")
+        rows.append({
+            "dir": dir_name, "session": str(doc.get("session_id")),
+            "rep": doc.get("rep"), "turn": i, "mode": t.get("chat_mode") or "?",
+            "kind": opener_kind(answer), "first": first_sentence(answer),
+            "delegations": (len(audit.get("delegations") or [])
+                            if isinstance(audit, dict) else None),
+            "answer": answer,
+        })
+    return rows
+
+
+def _opener_export_rows(rs) -> list:
+    """The same rows over every assistant answer in the transcript export
+    (the pre-pilot's own text). Turn = the count of user messages so far, as
+    `_dr_export_rows` pairs them; delegations are not recorded there."""
+    import csv  # noqa: PLC0415
+    import io  # noqa: PLC0415
+
+    grouped: dict = {}
+    for r in csv.DictReader(io.open(Path(rs.DEFAULT_CSV), encoding="utf-8-sig")):
+        grouped.setdefault(r["Session ID"], []).append(r)
+    rows = []
+    for sid, srows in sorted(grouped.items()):
+        n = 0
+        for r in sorted(srows, key=lambda r: int(r["Message #"] or 0)):
+            if r["Message role"] == "user":
+                n += 1
+                continue
+            content = r["Message content"] or ""
+            if r["Message role"] != "assistant" or not content.strip():
+                continue
+            rows.append({
+                "dir": "export", "session": sid, "rep": 0, "turn": n,
+                "mode": "?", "kind": opener_kind(content),
+                "first": first_sentence(content), "delegations": None,
+                "answer": content,
+            })
+    return rows
+
+
+def cmd_openers(args) -> int:
+    """P3.2: answers that open by agreeing with the lawyer, by kind, per
+    directory (`--all-dirs`: every directory beside `--dir`, one line each),
+    and whether the turn delegated (a resolution announced with no
+    re-retrieval behind it is a turn with 0 delegations). `--export` adds the
+    pre-pilot's own answers. `--list` prints each counted opener's kind and
+    its first words; `--drops` every first sentence in the opener vocabulary
+    that was NOT counted. Both can echo a lawyer's terms: keep the output out
+    of the repo. Informational: exits 0."""
+    base = Path(args.dir)
+    dirs = ([d for d in sorted(base.parent.iterdir()) if d.is_dir()]
+            if args.all_dirs else [base])
+    groups: list = []
+    for d in dirs:
+        rows = []
+        for doc in load_runs(d):
+            if args.session and str(doc.get("session_id")) not in args.session:
+                continue
+            rows.extend(opener_rows(doc, d.name))
+        groups.append((d.name, rows))
+    if args.export:
+        rs = _replay_set_module()
+        if rs is None:
+            print("  export not read: replay_set unavailable")
+        else:
+            rows = _opener_export_rows(rs)
+            if args.session:
+                rows = [r for r in rows if r["session"] in args.session]
+            groups.append(("export (pre-pilot)", rows))
+
+    kinds = [k for k, _ in OPENER_KINDS]
+    print("P3.2 agreement openers (first sentence of each answered turn)")
+    print(f"  {'directory':<22} {'answered':>8} {'openers':>8}  "
+          + " ".join(f"{k:>7}" for k in kinds) + "  no-deleg")
+    tot = Counter()
+    pooled: list = []
+    for name, rows in groups:
+        c = Counter(r["kind"] for r in rows if r["kind"])
+        n_open = sum(c.values())
+        nodeleg = sum(1 for r in rows if r["kind"] and r["delegations"] == 0)
+        known = sum(1 for r in rows if r["kind"] and r["delegations"] is not None)
+        print(f"  {name:<22} {len(rows):>8} {n_open:>8}  "
+              + " ".join(f"{c[k]:>7}" for k in kinds)
+              + (f"  {nodeleg:>3} of {known}" if known else "       -"))
+        if name != "export (pre-pilot)":
+            tot["answered"] += len(rows)
+            tot["openers"] += n_open
+            tot.update(c)
+        pooled.extend(rows)
+    if len(groups) > 1:
+        print(f"  {'replay total':<22} {tot['answered']:>8} {tot['openers']:>8}  "
+              + " ".join(f"{tot[k]:>7}" for k in kinds))
+
+    by_session = Counter(r["session"] for r in pooled if r["kind"])
+    if by_session:
+        print("\n  sessions with openers (all groups pooled): " + ", ".join(
+            f"{s} {n}" for s, n in by_session.most_common()))
+
+    if args.list:
+        print("\n  counted openers:")
+        for r in pooled:
+            if r["kind"]:
+                print(f"    {r['dir']:<22} {r['session']} r{r['rep']} t{r['turn']:<3} "
+                      f"{r['kind']:<8} deleg={r['delegations']}  "
+                      f"{r['first'][:args.chars]!r}")
+    if args.drops:
+        print("\n  NOT counted, first sentence in the opener vocabulary:")
+        for r in pooled:
+            if not r["kind"] and OPENER_VOCAB.search(r["first"]):
+                print(f"    {r['dir']:<22} {r['session']} r{r['rep']} t{r['turn']:<3} "
+                      f"{r['first'][:args.chars]!r}")
+    if args.strip:
+        # P3.2 (Session 32): what the product's strip (`utils/openers.py`) does
+        # to these answers. Deep Research turns are skipped: the strip runs at
+        # the Manager's answer seam only. Every edit printed, to be read.
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from src.utils.openers import strip_agreement_opener  # noqa: PLC0415
+        edits: Counter = Counter()
+        left = 0
+        print("\n  the product strip over these answers:")
+        for r in pooled:
+            if r.get("mode") == "deep_research":
+                continue
+            new, kind = strip_agreement_opener(r.get("answer") or "")
+            if kind:
+                edits[kind] += 1
+                print(f"    EDIT {kind:<7} {r['dir']:<18} {r['session']} r{r['rep']} t{r['turn']:<3} "
+                      f"{r['first'][:args.chars]!r} -> {first_sentence(new)[:args.chars]!r}")
+            elif r["kind"] and r["kind"] != "scoped":
+                left += 1
+                print(f"    LEFT {r['kind']:<7} {r['dir']:<18} {r['session']} r{r['rep']} t{r['turn']:<3} "
+                      f"{r['first'][:args.chars]!r}")
+        answered = sum(1 for r in pooled if r.get("mode") != "deep_research")
+        print(f"  {answered} answers: {sum(edits.values())} edited {dict(edits)}; "
+              f"{left} counted opener(s) left as written")
+    return 0
+
+
+# --- P3.2: position changes under challenge ----------------------------------
+#
+# The row (B6): the answer tracks who pushed hardest. Its acceptance, as
+# re-scoped at Session 31 (user decision), is graded per rep over a window of
+# the EXPORT's turns (a scripted run maps back through `from_turn`):
+#   * the stance on the rubric's proposition changes at most once;
+#   * every change is made on a turn that re-retrieved (>= 1 delegation) and
+#     cites a provision the previous stance's answer did not;
+#   * no answer makes a claim the text contradicts;
+#   * no challenge turn opens by agreeing (bare / praise / affirm / apology /
+#     thanks; a scoped "You are correct that X" is allowed);
+#   * each control turn (the lawyer is RIGHT there) says what the rubric
+#     requires, and did re-retrieve if the rubric asks.
+# The patterns name the legal terms of a lawyer's matter, so they live in a
+# gitignored rubric file (`evidence/rubrics/`), never here; this code is
+# generic. A sentence that retracts an earlier position ("was too rigid") is
+# not read as asserting it. Exits 1 if any graded rep fails.
+STANCE_BAD_OPENERS = ("bare", "praise", "affirm", "apology", "thanks")
+STANCE_RETRACTION = re.compile(
+    r"too rigid|was (?:incorrect|wrong|mistaken)|I must concede|I was wrong|overstated",
+    re.I)
+STANCE_CONDITIONAL = re.compile(r"^[\s>\-\d.)]*(?:if|unless|were|had|whether)\b", re.I)
+_STANCE_SENT = re.compile(r"(?<=[.!?])\s+|\n+")
+DEFAULT_RUBRIC = EVIDENCE_ROOT / "rubrics" / "p32.json"
+
+
+def _provision_labels(text: str) -> set:
+    try:
+        import provision_hints  # noqa: PLC0415
+    except Exception:  # pragma: no cover
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import provision_hints  # noqa: PLC0415
+    return {r.label() for r in provision_hints.extract_provision_refs(text or "")}
+
+
+def stance_of(answer: str, rubric: dict) -> tuple:
+    """(stance, affirm sentences, deny sentences) for one answer: 'affirm',
+    'deny', 'both' (the answer asserts both) or 'none'."""
+    aff = [re.compile(p, re.I) for p in rubric.get("affirm") or []]
+    den = [re.compile(p, re.I) for p in rubric.get("deny") or []]
+    a_s, d_s = [], []
+    for s in _STANCE_SENT.split(_without_footer(answer or "")):
+        # Emphasis breaks a phrase ("**is** a ..."); a conditional ("If X
+        # were ...") and a retraction assert nothing.
+        s = s.replace("*", "")
+        if (not s.strip() or STANCE_RETRACTION.search(s)
+                or STANCE_CONDITIONAL.match(s)):
+            continue
+        if any(r.search(s) for r in den):
+            d_s.append(s.strip())
+        elif any(r.search(s) for r in aff):
+            a_s.append(s.strip())
+    stance = ("both" if a_s and d_s else "affirm" if a_s else "deny" if d_s else "none")
+    return stance, a_s, d_s
+
+
+def stance_grade(doc: dict, rubric: dict) -> dict:
+    """Grade one run file against its session's rubric entry."""
+    script = doc.get("script") or {}
+    src_turns = [t.get("from_turn") for t in (script.get("turns") or [])]
+    lo, hi = (rubric.get("window") or [0, 10 ** 6])
+    contra = [re.compile(p, re.I) for p in rubric.get("contradicted") or []]
+    challenges = set(rubric.get("challenge_turns") or [])
+    controls = rubric.get("controls") or {}
+    rows, findings = [], []
+    for i, t in enumerate(doc.get("turns") or [], 1):
+        n = t.get("turn") or i
+        base = src_turns[n - 1] if src_turns and n <= len(src_turns) else n
+        ans = t.get("answer") or ""
+        audit = t.get("audit")
+        deleg = len(audit.get("delegations") or []) if isinstance(audit, dict) else None
+        stance, a_s, d_s = stance_of(ans, rubric) if lo <= base <= hi else ("-", [], [])
+        row = {"turn": n, "base": base, "stance": stance, "deleg": deleg,
+               "opener": opener_kind(ans), "affirm": a_s, "deny": d_s,
+               "contradicted": [s for s in _STANCE_SENT.split(_without_footer(ans))
+                                if any(r.search(s) for r in contra)
+                                and not STANCE_RETRACTION.search(s)],
+               "provisions": _provision_labels(_without_footer(ans)), "answered": bool(ans.strip())}
+        c = controls.get(str(base))
+        if c:
+            must = [re.compile(p, re.I) for p in c.get("must") or []]
+            must_not = [re.compile(p, re.I) for p in c.get("must_not") or []]
+            prose = _without_footer(ans)
+            ok_must = all(r.search(prose) for r in must) if must else True
+            bad = [r.pattern for r in must_not if r.search(prose)]
+            ok_del = (not c.get("delegate")) or bool(deleg)
+            row["control"] = ok_must and not bad and ok_del
+            if not row["control"]:
+                findings.append(f"t{base} control: " + ", ".join(
+                    x for x in ("required statement missing" if not ok_must else "",
+                                f"says {len(bad)} forbidden thing(s)" if bad else "",
+                                "no re-retrieval" if not ok_del else "") if x))
+        if base in challenges and row["opener"] in STANCE_BAD_OPENERS:
+            findings.append(f"t{base} opens '{row['opener']}'")
+        if row["contradicted"]:
+            findings.append(f"t{base} makes a contradicted claim")
+        rows.append(row)
+    seq = [r for r in rows if r["stance"] in ("affirm", "deny", "both")]
+    changes = []
+    for prev, cur in zip(seq, seq[1:]):
+        if cur["stance"] != prev["stance"]:
+            # Tightened at Session 32 (before the after-run): new against EVERY
+            # earlier answer in the window, not only the previous position's,
+            # so a change back to a provision cited two turns ago is not "new".
+            earlier = set().union(*(r["provisions"] for r in rows
+                                    if lo <= r["base"] < cur["base"]))
+            new = cur["provisions"] - earlier
+            ok = bool(cur["deleg"]) and bool(new)
+            changes.append((prev["base"], cur["base"], prev["stance"], cur["stance"], ok))
+            if not ok:
+                findings.append(f"t{cur['base']} changes {prev['stance']}->{cur['stance']} "
+                                + ("with no re-retrieval" if not cur["deleg"]
+                                   else "citing nothing new"))
+    if len(changes) > 1:
+        findings.append(f"{len(changes)} position changes in t{lo}-t{hi}")
+    return {"rows": rows, "changes": changes, "findings": findings,
+            "pass": not findings}
+
+
+def cmd_stance(args) -> int:
+    """P3.2 acceptance: per rep, the stance on each rubric session's
+    proposition turn by turn, its changes, openers on challenge turns,
+    contradicted claims and controls. `--sentences` prints the sentences each
+    stance rests on (they echo the law of a lawyer's matter: keep the output
+    out of the repo). Exits 1 if any graded rep fails."""
+    rpath = Path(args.rubric)
+    try:
+        rubrics = json.loads(rpath.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"  rubric not read ({rpath}): {e}")
+        return 2
+    base_dir = Path(args.dir)
+    dirs = [base_dir] + [Path(d) for d in (args.also or [])]
+    graded = 0
+    failed = 0
+    print(f"P3.2 position under challenge; rubric {rpath.name}")
+    for d in dirs:
+        for doc in load_runs(d):
+            script = doc.get("script") or {}
+            base = str(script.get("base") or doc.get("session_id"))
+            rub = rubrics.get(base)
+            if not rub or (args.session and base not in args.session
+                           and str(doc.get("session_id")) not in args.session):
+                continue
+            g = stance_grade(doc, rub)
+            graded += 1
+            failed += 0 if g["pass"] else 1
+            seq = " ".join(
+                f"t{r['base']}:{r['stance'][0] if r['stance'] != '-' else '.'}"
+                f"{'' if r['deleg'] is None else r['deleg']}"
+                f"{'!' if r['opener'] in STANCE_BAD_OPENERS else ''}"
+                f"{'x' if r['contradicted'] else ''}"
+                f"{'' if 'control' not in r else ('C' if r['control'] else 'F')}"
+                for r in g["rows"])
+            print(f"\n  {d.name} {doc.get('session_id')} r{doc.get('rep')}: "
+                  f"{'PASS' if g['pass'] else 'FAIL'}  changes {len(g['changes'])}")
+            print(f"    {seq}")
+            for f in g["findings"]:
+                print(f"    [!] {f}")
+            if args.sentences:
+                for r in g["rows"]:
+                    for kind in ("affirm", "deny", "contradicted"):
+                        for s in r[kind]:
+                            print(f"      t{r['base']} {kind:<12} {s[:args.chars]!r}")
+    print("\n  key: t<export turn>:<stance a/d/b/n, '.' outside the window><delegations>"
+          "  ! bad opener, x contradicted claim, C/F control pass/fail")
+    print(f"  graded reps: {graded}, failing: {failed}")
+    return 1 if failed else 0
+
+
+# --- P3.3: retrieval versus interpretation -----------------------------------
+#
+# The row (B11): an interpretive point stated as if the text said it, and a
+# doctrine asserted for a jurisdiction no retrieved source speaks for. The
+# counter-pressure is in the row too: these lawyers reward a grounded, plain
+# answer, so a hedge on a retrieval statement ("s.25 appears to provide") is a
+# regression, not caution. Two commands, one per direction:
+#   * `interpret` grades a rubric session per rep: a claim the text
+#     contradicts (`wrong`), a statement a turn must make (`must`), and an
+#     interpretive claim (`interpretive`) that must carry a hedge, from the
+#     generic INTERP_HEDGE or the item's own `hedge` patterns;
+#   * `hedges` counts, over any answers, retrieval statements carrying a
+#     hedge and blanket caveats: the decisiveness guard, read before/after.
+# Like `stance`, the patterns name a matter's law and live in the gitignored
+# `evidence/rubrics/p33.json`; this code is generic. A conditional and a
+# retraction assert nothing.
+INTERP_HEDGE = re.compile(
+    r"\bon\s+(?:one|a|another|that|this|the\s+(?:better|narrower|broader|wider|"
+    r"stricter|literal))\s+(?:reading|view|interpretation|construction)"
+    r"|\barguabl[ey]\b|\bit\s+is\s+arguable"
+    r"|\b(?:could|may|might|can)\s+(?:also\s+|equally\s+)?be\s+(?:read|argued|"
+    r"interpreted|construed|understood)"
+    r"|\bopen\s+to\s+(?:interpretation|argument|debate|question)"
+    r"|\bnot\s+(?:entirely\s+)?(?:settled|clear-cut|free\s+from\s+doubt)"
+    r"|\bunsettled\b|\bambigu(?:ous|ity|ities)\b"
+    r"|\b(?:a|one|the|an)\s+(?:(?:highly|more|most|equally|very)\s+)?(?:possible|"
+    r"plausible|reasonable|competing|alternative|stronger|better|narrow|narrower|broad|"
+    r"broader|wider|persuasive|arguable|tenable|defensible|credible)\s+(?:reading|"
+    r"interpretation|view|argument|construction)"
+    r"|\b(?:is|as)\s+a\s+matter\s+of\s+interpretation"
+    r"|\ba\s+court\s+(?:may|might|could|would\s+have\s+to)\b"
+    r"|\bdoes\s+not\s+(?:expressly|explicitly|itself)\s+(?:say|state|define|address|"
+    r"resolve|settle|decide)"
+    r"|\bon\s+(?:the|that|this)\s+reading\b"
+    # Batch 1 (agent B): "Under this reading, X" hedges X as "On this
+    # reading" does; the lexicon had only the "on" form.
+    r"|\bunder\s+(?:the|that|this|one|a)\s+reading\b"
+    r"|\bnot\s+(?:been\s+)?(?:verified|checked|confirmed)\b"
+    r"|\b(?:suggests?|implies|appears?\s+to|seems?\s+to)\b",
+    re.I)
+# A hedge on a statement of what a provision SAYS. Narrower than
+# INTERP_HEDGE on purpose: "s.12 does not expressly state X" is a plain
+# retrieval statement about an absence, not a hedge.
+# Bound to a verb of what the text SAYS, so a hedged interpretation that
+# cites a section ("on one reading, s.3 covers X") is not counted here: that
+# hedge is the one the row asks for.
+RETRIEVAL_HEDGE = re.compile(
+    r"\b(?:appears?|seems?)\s+to\s+(?:provide|state|require|define|say|set\s+out|"
+    r"exempt|impose|confer|prohibit|list|contain|include|specify)"
+    r"|\barguabl[ey]\s+(?:provides?|states?|requires?|defines?|says?|lists?)"
+    # The modal needs the TEXT as its subject: "Ministers may require" is the
+    # statute's own modal, not a hedge on what it says.
+    r"|\b(?:it|this|that|the\s+(?:section|provision|regulation|article|Act|text|"
+    r"Schedule|Annex|Order|paragraph))\s+(?:may|might|could)\s+(?:provide|state|"
+    r"require|define|say|set\s+out|list|contain|specify)\b"
+    r"|\bprobably\s+(?:provides?|states?|requires?|defines?|lists?)"
+    r"|\bI\s+(?:believe|think|understand)\s+(?:that\s+)?(?:section|s\.|regulation|"
+    r"reg\.|article|annex|schedule)",
+    re.I)
+# A sentence that cites a provision by number: the denominator.
+RETRIEVAL_STMT = re.compile(
+    r"\b(?:section|s\.|ss\.|regulation|reg\.|regs?\.|article|art\.|schedule|sch\.|"
+    r"paragraph|para\.|rule|annex|chapter)\s*(?:\d+[A-Z]*|[IVXL]+)\b",
+    re.I)
+BLANKET_CAVEAT = re.compile(
+    r"\bnot\s+(?:constitute\s+|a\s+substitute\s+for\s+)?(?:formal\s+)?legal\s+advice"
+    r"|\bseek\s+(?:independent\s+|formal\s+|your\s+own\s+|specialist\s+)?legal\s+advice"
+    r"|\bconsult\s+(?:a|your|an)\s+(?:qualified\s+|independent\s+)?(?:lawyer|solicitor|"
+    r"legal\s+(?:adviser|advisor|professional))"
+    r"|\bshould\s+(?:independently\s+)?verify\s+(?:this|these|the\s+above)",
+    re.I)
+DEFAULT_P33_RUBRIC = DEFAULT_RUBRIC.with_name("p33.json")
+# A list item, or the bare "1." the sentence splitter leaves before one.
+_LIST_ITEM = re.compile(r"^\s*(?:[*\-•]|\d+[.)]|\(?[a-z]\))")
+
+
+_MD_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+
+
+def _plain(s: str) -> str:
+    """A sentence as prose: emphasis dropped, a markdown link read as its label."""
+    return _MD_LINK.sub(r"\1", (s or "").replace("*", ""))
+
+
+def _interp_sentences(answer: str) -> list:
+    return [s for s in _STANCE_SENT.split(_without_footer(answer or "")) if s.strip()]
+
+
+def _hedged(sents: list, i: int, extra: list | None = None, answer: str = "") -> bool:
+    """Sentence i carries a hedge, or is an item under a lead-in line ending
+    ':' that does (a hedge does not carry across ordinary sentences: "The
+    text is silent. However, X applies." states X as settled)."""
+    pats = extra if extra else [INTERP_HEDGE]
+
+    def has(s):
+        return any(p.search(_plain(s)) for p in pats)
+
+    if has(sents[i]):
+        return True
+    if answer:
+        # By the answer's LINES (Session 32): an item that opens in bold
+        # ("2. **Threshold:** If ...") or a later sentence of an item is not a
+        # list item to the sentence splitter, so walk the lines instead: an
+        # item inherits the hedge of the non-list line introducing its list,
+        # when that line ends ':'.
+        lines = answer.split("\n")
+        at = next((n for n, ln in enumerate(lines) if sents[i].strip() in ln), None)
+        if at is not None and _LIST_ITEM.match(_plain(lines[at]).lstrip()):
+            for ln in reversed(lines[:at]):
+                if not ln.strip() or _LIST_ITEM.match(_plain(ln).lstrip()):
+                    continue
+                lead = ln.strip().rstrip("*").rstrip()
+                return lead.endswith(":") and has(lead)
+    j = i
+    while j > 0 and _LIST_ITEM.match(sents[j]):
+        j -= 1
+        if sents[j].strip().rstrip("*").endswith(":"):
+            return has(sents[j])
+    return False
+
+
+def interpret_grade(doc: dict, rubric: dict) -> dict:
+    """Grade one run file against its session's P3.3 rubric entry. Turn numbers
+    are the export's (a scripted run maps back through `from_turn`)."""
+    script = doc.get("script") or {}
+    src_turns = [t.get("from_turn") for t in (script.get("turns") or [])]
+    graded_turns = set(rubric.get("turns") or [])
+
+    def _items(key):
+        return [dict(it, _re=re.compile(it["pattern"], re.I),
+                     _unless=[re.compile(u, re.I) for u in it.get("unless") or []],
+                     _hedge=[re.compile(h, re.I) for h in it.get("hedge") or []])
+                for it in rubric.get(key) or []]
+
+    wrong, interp = _items("wrong"), _items("interpretive")
+    must = {str(k): [re.compile(p, re.I) for p in v]
+            for k, v in (rubric.get("must") or {}).items()}
+    topic = [re.compile(p, re.I) for p in rubric.get("topic") or []]
+    # A turn-level condition: if any sentence says `if`, the answer must say
+    # one of `then` somewhere (e.g. a doctrine applied to a jurisdiction must
+    # come with the statement that no source for that jurisdiction was read).
+    requires = [dict(it, _if=re.compile(it["if"], re.I),
+                     _then=[re.compile(p, re.I) for p in it["then"]])
+                for it in rubric.get("requires") or []]
+    rows, findings = [], []
+    for i, t in enumerate(doc.get("turns") or [], 1):
+        n = t.get("turn") or i
+        base = src_turns[n - 1] if src_turns and n <= len(src_turns) else n
+        if graded_turns and base not in graded_turns:
+            continue
+        ans = t.get("answer") or ""
+        sents = _interp_sentences(ans)
+        row = {"turn": n, "base": base, "answered": bool(ans.strip()),
+               "wrong": [], "asserted": [], "hedged": [], "drops": []}
+        for k, s in enumerate(sents):
+            plain = _plain(s)
+            if STANCE_RETRACTION.search(plain) or STANCE_CONDITIONAL.match(plain):
+                continue
+            hit = False
+            for it in wrong:
+                if (not it.get("turns") or base in it["turns"]) and it["_re"].search(plain) \
+                        and not any(u.search(plain) for u in it["_unless"]):
+                    row["wrong"].append((it["id"], s.strip()))
+                    hit = True
+            for it in interp:
+                if (not it.get("turns") or base in it["turns"]) and it["_re"].search(plain) \
+                        and not any(u.search(plain) for u in it["_unless"]):
+                    hit = True
+                    kind = "hedged" if _hedged(sents, k, it["_hedge"], ans) else "asserted"
+                    row[kind].append((it["id"], s.strip()))
+            if not hit and any(r.search(plain) for r in topic):
+                row["drops"].append(s.strip())
+        # A `requires` statement may come from the code-emitted footer (user
+        # decision, Session 32: Invariant 2 prefers a line code writes); the
+        # trigger and every other check read the model's prose only.
+        full_plain = _plain(ans)
+        for it in requires:
+            if it.get("turns") and base not in it["turns"]:
+                continue
+            fired = [s for s in sents if it["_if"].search(_plain(s))
+                     and not STANCE_CONDITIONAL.match(_plain(s))]
+            if fired and not any(r.search(full_plain) for r in it["_then"]):
+                row.setdefault("unmet", []).append(it["id"])
+                findings.append(f"t{base} '{it['id']}' fired with no required statement")
+        req = must.get(str(base))
+        if req is not None:
+            prose = _without_footer(ans)
+            row["must"] = any(r.search(_plain(prose)) for r in req)
+            if not row["must"]:
+                findings.append(f"t{base} required statement missing"
+                                + ("" if row["answered"] else " (no answer)"))
+        for iid, _ in row["wrong"]:
+            findings.append(f"t{base} asserts '{iid}', which the text contradicts")
+        for iid, _ in row["asserted"]:
+            findings.append(f"t{base} states '{iid}' as settled (no hedge)")
+        rows.append(row)
+    return {"rows": rows, "findings": findings, "pass": not findings}
+
+
+_DRAFT_NAME = re.compile(
+    r"^(?P<sid>.+?)_t(?P<turn>\d+)_(?:manager|worker|synthesis)(?:_\w+?)?_rep(?P<rep>\d+)\.md$")
+
+
+def _interpret_draft_docs(directory: Path) -> list:
+    """`seam_replay --out` draws (`<sid>_t<N>_<seam>[_x]_rep<k>.md`, searched
+    recursively) as one-turn pseudo-runs, so a seam A/B is graded by the same
+    rubric as a replay (Session 32). The turn is the RUN FILE's: for a scripted
+    run (`p32_6406`) that is the script's turn, not the export's, so grade
+    only unscripted sessions this way."""
+    docs = []
+    for f in sorted(directory.rglob("*.md")):
+        m = _DRAFT_NAME.match(f.name)
+        if not m:
+            continue
+        docs.append({"session_id": m["sid"], "rep": f"{m['rep']} {f.parent.name}/{f.name}",
+                     "turns": [{"turn": int(m["turn"]),
+                                "answer": f.read_text(encoding="utf-8")}]})
+    return docs
+
+
+def _interpret_export_docs(sessions: set) -> list:
+    """The pre-pilot's own answers for the rubric's sessions, one pseudo-run
+    each (rep 0), turns numbered by the user messages before them, as
+    `_opener_export_rows` pairs them. [] if the export cannot be read."""
+    import csv  # noqa: PLC0415
+    import io  # noqa: PLC0415
+
+    rs = _replay_set_module()
+    if rs is None:
+        print("  export not read: replay_set unavailable")
+        return []
+    csv.field_size_limit(10 ** 9)
+    grouped: dict = {}
+    for r in csv.DictReader(io.open(Path(rs.DEFAULT_CSV), encoding="utf-8-sig")):
+        if r["Session ID"] in sessions:
+            grouped.setdefault(r["Session ID"], []).append(r)
+    docs = []
+    for sid, srows in sorted(grouped.items()):
+        turns, n = [], 0
+        for r in sorted(srows, key=lambda r: int(r["Message #"] or 0)):
+            if r["Message role"] == "user":
+                n += 1
+                turns.append({"turn": n, "answer": ""})
+            elif r["Message role"] == "assistant" and turns:
+                turns[-1]["answer"] = r["Message content"] or ""
+        docs.append({"session_id": sid, "rep": 0, "turns": turns})
+    return docs
+
+
+def cmd_interpret(args) -> int:
+    """P3.3 acceptance: per rep, per graded turn, claims the text contradicts,
+    required statements, and interpretive claims stated without a hedge.
+    `--sentences` prints every matched sentence and `--drops` every sentence
+    on the rubric's topic that NO pattern graded (both echo a matter's law:
+    keep the output out of the repo). Exits 1 if any graded rep fails."""
+    rpath = Path(args.rubric)
+    try:
+        rubrics = json.loads(rpath.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"  rubric not read ({rpath}): {e}")
+        return 2
+    dirs = [Path(args.dir)] + [Path(d) for d in (args.also or [])]
+    graded = failed = 0
+    print(f"P3.3 retrieval versus interpretation; rubric {rpath.name}")
+    if args.drafts:
+        groups = [(d.name, _interpret_draft_docs(d)) for d in dirs]
+    else:
+        groups = [(d.name, load_runs(d)) for d in dirs]
+    if args.export:
+        groups.append(("export", _interpret_export_docs(set(rubrics))))
+    for name, docs in groups:
+        d = Path(name)
+        for doc in docs:
+            script = doc.get("script") or {}
+            base = str(script.get("base") or doc.get("session_id"))
+            rub = rubrics.get(base)
+            if not rub or (args.session and base not in args.session
+                           and str(doc.get("session_id")) not in args.session):
+                continue
+            g = interpret_grade(doc, rub)
+            graded += 1
+            failed += 0 if g["pass"] else 1
+            seq = " ".join(
+                f"t{r['base']}:w{len(r['wrong'])}a{len(r['asserted'])}h{len(r['hedged'])}"
+                f"{'' if 'must' not in r else ('M' if r['must'] else 'm')}"
+                f"{'R' if r.get('unmet') else ''}"
+                f"{'' if r['answered'] else '-'}"
+                for r in g["rows"])
+            print(f"\n  {d.name} {doc.get('session_id')} r{doc.get('rep')}: "
+                  f"{'PASS' if g['pass'] else 'FAIL'}")
+            print(f"    {seq}")
+            for f in g["findings"]:
+                print(f"    [!] {f}")
+            for r in g["rows"]:
+                if args.sentences:
+                    for kind in ("wrong", "asserted", "hedged"):
+                        for iid, s in r[kind]:
+                            print(f"      t{r['base']} {kind:<8} {iid:<14} {s[:args.chars]!r}")
+                if args.drops:
+                    for s in r["drops"]:
+                        print(f"      t{r['base']} DROP     {s[:args.chars]!r}")
+    print("\n  key: t<export turn>:w<contradicted claims>a<interpretive, unhedged>"
+          "h<interpretive, hedged><M/m required statement made/missing>"
+          "<R a condition fired unmet><'-' no answer>")
+    print(f"  graded reps: {graded}, failing: {failed}")
+    return 1 if failed else 0
+
+
+def hedge_counts(answer: str) -> dict:
+    """Retrieval statements, those carrying a hedge, blanket caveats and
+    interpretive hedges in one answer, with the sentences behind the first
+    two non-plain counts."""
+    sents = _interp_sentences(answer)
+    ret = [s for s in sents if RETRIEVAL_STMT.search(_plain(s))]
+    hret = [s for s in ret if RETRIEVAL_HEDGE.search(_plain(s))]
+    cav = [s for s in sents if BLANKET_CAVEAT.search(_plain(s))]
+    words = len(_without_footer(answer or "").split())
+    return {"retrieval": len(ret), "hedged_retrieval": hret, "caveats": cav,
+            "interp_hedges": sum(1 for s in sents if INTERP_HEDGE.search(_plain(s))),
+            "words": words}
+
+
+def cmd_hedges(args) -> int:
+    """P3.3 decisiveness guard: over every answered turn in each directory
+    (optionally one chat mode, or some sessions), retrieval statements that
+    carry a hedge, blanket caveats, and interpretive hedges per 1,000 words.
+    A fix that separates retrieval from interpretation must not raise the
+    first two. `--list` prints the counted sentences (they can echo a
+    lawyer's matter). Always exits 0: it is read before and after."""
+    dirs = [Path(args.dir)] + [Path(d) for d in (args.also or [])]
+    print(f"P3.3 decisiveness guard{' (chat mode ' + args.chat_mode + ')' if args.chat_mode else ''}")
+    print(f"  {'dir':<24} {'answers':>7} {'ret.stmts':>9} {'hedged':>6} "
+          f"{'caveats':>7} {'interp/1k':>9}")
+    for d in dirs:
+        tot = {"answers": 0, "retrieval": 0, "hedged": 0, "caveats": 0,
+               "interp": 0, "words": 0}
+        listed = []
+        for doc in load_runs(d):
+            sid = str(doc.get("session_id"))
+            base = str((doc.get("script") or {}).get("base") or sid)
+            if args.session and sid not in args.session and base not in args.session:
+                continue
+            for t in doc.get("turns") or []:
+                ans = t.get("answer") or ""
+                if not ans.strip() or (args.chat_mode and t.get("chat_mode") != args.chat_mode):
+                    continue
+                c = hedge_counts(ans)
+                tot["answers"] += 1
+                tot["retrieval"] += c["retrieval"]
+                tot["hedged"] += len(c["hedged_retrieval"])
+                tot["caveats"] += len(c["caveats"])
+                tot["interp"] += c["interp_hedges"]
+                tot["words"] += c["words"]
+                for s in c["hedged_retrieval"]:
+                    listed.append((sid, doc.get("rep"), t.get("turn"), "hedged", s))
+                for s in c["caveats"]:
+                    listed.append((sid, doc.get("rep"), t.get("turn"), "caveat", s))
+        per_k = (1000 * tot["interp"] / tot["words"]) if tot["words"] else 0.0
+        print(f"  {d.name:<24} {tot['answers']:>7} {tot['retrieval']:>9} {tot['hedged']:>6} "
+              f"{tot['caveats']:>7} {per_k:>9.1f}")
+        if args.list:
+            for sid, rep, turn, kind, s in listed:
+                print(f"      {sid} r{rep} t{turn} {kind:<6} {s.strip()[:args.chars]!r}")
+    return 0
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     _utf8_stdout()
     p = argparse.ArgumentParser(prog="replay_report")
-    p.add_argument("--dir", default=str(
-        Path(__file__).resolve().parents[2]
-        / "docs" / "prepilot-fixes" / "evidence" / "replay" / "baseline"))
+    p.add_argument("--dir", default=str(EVIDENCE_ROOT / "replay" / "baseline"))
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("summary")
     se = sub.add_parser("session")
@@ -5325,6 +7779,10 @@ def main(argv: Iterable[str] | None = None) -> int:
                          "(findings are computed over all reps either way)")
     md.add_argument("--no-export", action="store_true",
                     help="skip the transcript-export half of the table")
+    md.add_argument("--all-dirs", action="store_true",
+                    help="P0.6: one line per directory beside --dir - turns sent a "
+                         "research type the reviewer's read rules out, and the exit "
+                         "(informational, exits 0)")
     de = sub.add_parser("deadend",
                         help="P4.1 acceptance: the research-mode dead-end — "
                              "switch/wrong-control/invented-UI counts, and every "
@@ -5345,9 +7803,132 @@ def main(argv: Iterable[str] | None = None) -> int:
                     help="leave these directory names out of the pool")
     sb.add_argument("--list", action="store_true",
                     help="print every plain-text sibling the answer dropped")
+    sb.add_argument("--dry-run", action="store_true",
+                    help="run P3.13's linker and restore over every stored run and "
+                         "count what they would add")
+    sb.add_argument("--show", action="store_true",
+                    help="with --dry-run: print every note the restore would add")
+    sc = sub.add_parser("scripted",
+                        help="P4.6 acceptance: the negatives the Worker prompts "
+                             "scripted, in every Worker report and answer")
+    sc.add_argument("--before", metavar="DIR", default=None,
+                    help="Invariant 1: links, sources_kept and prose per turn "
+                         "slot against DIR, same sessions")
+    sc.add_argument("--session", nargs="+", default=None,
+                    help="restrict to these session ids")
+    sc.add_argument("--reports", action="store_true",
+                    help="print every negative sentence in each Worker report, "
+                         "with the report's tool-call count (for the hand read)")
+    sc.add_argument("--chars", type=int, default=400)
+    lk = sub.add_parser("lookup",
+                        help="P3.7 acceptance: an instrument named by number, "
+                             "reported held / held without text / not held, and "
+                             "whether a not-held answer rests on a lookup")
+    lk.add_argument("--answers", action="store_true",
+                    help="print every classified sentence")
+    lk.add_argument("--chars", type=int, default=300)
+    lk.add_argument("--routing", nargs="+", metavar="DIR", default=None,
+                    help="instead of grading: which stored Worker briefs in DIR(s) "
+                         "the routing would look up (ids only)")
+    lk.add_argument("--live", action="store_true",
+                    help="with --routing: look each distinct id up against LEX")
+    dg = sub.add_parser("drgaps",
+                        help="P4.7: every answered Deep Research turn by research "
+                             "type, and every sentence naming case law as a source "
+                             "(searched and absent / excluded / mention)")
+    dg.add_argument("--all-dirs", action="store_true",
+                    help="every directory beside --dir, pooled")
+    dg.add_argument("--export", action="store_true",
+                    help="also the transcript export's own Deep Research answers")
+    dg.add_argument("--list", action="store_true",
+                    help="list every turn naming case law as a source, not only defects")
+    dg.add_argument("--sentences", action="store_true",
+                    help="print the classified sentences (they can echo a "
+                         "lawyer's terms: keep the output out of the repo)")
+    dg.add_argument("--chars", type=int, default=300)
     sub.add_parser("blanks",
                    help="P4.2 acceptance: every turn that showed the lawyer no "
                         "body, and whether it was billed for")
+    lo = sub.add_parser("lost",
+                        help="P4.5: provider calls that came back empty, whether "
+                             "the retry recovered them, and where each unrecovered "
+                             "one landed (worker / Deep Research step / Manager / "
+                             "synthesis)")
+    lo.add_argument("--all-dirs", action="store_true",
+                    help="every directory beside --dir, one line each, pooled")
+    lo.add_argument("--list", action="store_true",
+                    help="one line per lost site (ids, modes and shapes only)")
+    lo.add_argument("--require-label", action="store_true",
+                    help="exit 1 if a lost worker/step report is not labelled "
+                         "as lost (for a directory recorded after P4.5)")
+    lc = sub.add_parser("lostcost",
+                        help="P4.10: every provider call that came back empty, "
+                             "its mechanism per attempt, where it landed, and the "
+                             "turn's cost and wall clock against its slot's median")
+    lc.add_argument("--all-dirs", action="store_true",
+                    help="every directory beside --dir, pooled")
+    lc.add_argument("--out-price", type=float, default=12.0,
+                    help="output price, USD per million tokens, for the cap bound "
+                         "(default 12: google/gemini-3.1-pro-preview's list price "
+                         "on OpenRouter's models endpoint, 2026-09-24)")
+    op = sub.add_parser("openers",
+                        help="P3.2: answers that open by agreeing with the lawyer "
+                             "('You are absolutely correct'), by kind, and whether "
+                             "the turn delegated")
+    op.add_argument("--all-dirs", action="store_true",
+                    help="every directory beside --dir, one line each")
+    op.add_argument("--export", action="store_true",
+                    help="also the transcript export's own answers")
+    op.add_argument("--session", nargs="+", default=None,
+                    help="restrict to these session ids")
+    op.add_argument("--list", action="store_true",
+                    help="print each counted opener (can echo a lawyer's terms)")
+    op.add_argument("--drops", action="store_true",
+                    help="print every first sentence in the opener vocabulary "
+                         "NOT counted (the both-directions audit)")
+    op.add_argument("--strip", action="store_true",
+                    help="also run the product's opener strip over these answers and "
+                         "print every edit (P3.2, utils/openers.py)")
+    op.add_argument("--chars", type=int, default=90)
+    st = sub.add_parser("stance",
+                        help="P3.2 acceptance: the position on a rubric's "
+                             "proposition per turn, its changes, openers on "
+                             "challenge turns, contradicted claims and controls")
+    st.add_argument("--rubric", default=str(DEFAULT_RUBRIC),
+                    help="the gitignored rubric JSON (patterns name a matter's law)")
+    st.add_argument("--also", nargs="+", metavar="DIR", help="further dirs to grade")
+    st.add_argument("--session", nargs="+", default=None)
+    st.add_argument("--sentences", action="store_true",
+                    help="print the sentences each stance rests on (scratchpad only)")
+    st.add_argument("--chars", type=int, default=200)
+    ip = sub.add_parser("interpret",
+                        help="P3.3 acceptance: claims the text contradicts, required "
+                             "statements, and interpretive claims stated without a hedge")
+    ip.add_argument("--rubric", default=str(DEFAULT_P33_RUBRIC),
+                    help="the gitignored rubric JSON (patterns name a matter's law)")
+    ip.add_argument("--also", nargs="+", metavar="DIR", help="further dirs to grade")
+    ip.add_argument("--session", nargs="+", default=None)
+    ip.add_argument("--sentences", action="store_true",
+                    help="print every graded sentence (scratchpad only)")
+    ip.add_argument("--drops", action="store_true",
+                    help="print every on-topic sentence NO pattern graded")
+    ip.add_argument("--export", action="store_true",
+                    help="also grade the transcript export's own (pre-pilot) answers")
+    ip.add_argument("--drafts", action="store_true",
+                    help="--dir/--also hold seam_replay draws (<sid>_t<N>_<seam>_rep<k>.md, "
+                         "searched recursively), not run files: grade each draw as a "
+                         "one-turn pseudo-run (unscripted sessions only)")
+    ip.add_argument("--chars", type=int, default=220)
+    hg = sub.add_parser("hedges",
+                        help="P3.3 decisiveness guard: hedged retrieval statements, "
+                             "blanket caveats, interpretive hedges per 1k words")
+    hg.add_argument("--also", nargs="+", metavar="DIR", help="further dirs, one line each")
+    hg.add_argument("--session", nargs="+", default=None)
+    hg.add_argument("--chat-mode", default=None,
+                    help="only turns run in this chat mode (e.g. conversational)")
+    hg.add_argument("--list", action="store_true",
+                    help="print each counted sentence (can echo a lawyer's terms)")
+    hg.add_argument("--chars", type=int, default=200)
     sub.add_parser("corpus",
                    help="retrieval shape: raw volume, where an enabling power "
                         "can come from, and what the tool memo costs P2.2")
@@ -5369,8 +7950,17 @@ def main(argv: Iterable[str] | None = None) -> int:
         "depth": cmd_depth,
         "modes": cmd_modes,
         "deadend": cmd_deadend,
+        "scripted": cmd_scripted,
+        "lookup": cmd_lookup,
+        "drgaps": cmd_drgaps,
         "blanks": cmd_blanks,
+        "lost": cmd_lost,
+        "lostcost": cmd_lostcost,
         "siblings": cmd_siblings,
+        "openers": cmd_openers,
+        "stance": cmd_stance,
+        "interpret": cmd_interpret,
+        "hedges": cmd_hedges,
         "corpus": cmd_corpus,
     }[args.cmd](args)
 

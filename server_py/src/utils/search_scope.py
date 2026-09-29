@@ -77,6 +77,15 @@ import json
 import re
 from typing import Any, Optional
 
+from .instrument_lookup import (
+    DEFINITE_STATUSES,
+    HELD,
+    HELD_WITHOUT_TEXT,
+    LOOKUP_TOOL,
+    NOT_HELD,
+    parse_lookup_result,
+)
+
 __all__ = [
     "LEX_COVERAGE_SENTENCE",
     "legislation_search_note",
@@ -95,11 +104,14 @@ __all__ = [
     "strip_answer_footer",
     "incomplete_steps_note",
     "CASE_LAW_COVERAGE_SENTENCE",
+    "CASE_LAW_DOCTRINE_SENTENCE",
     "record_case_law_search",
     "case_law_scope_clause",
     "case_law_scope_footer",
     "not_held_note",
     "record_not_held",
+    "record_lookup",
+    "lookup_scope_footer",
 ]
 
 # Measured with `python -m tools.lex_probe --coverage`, which also runs the
@@ -1301,7 +1313,8 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
     return lead
 
 
-def incomplete_steps_note(halts: list, steps_total: int = 0) -> str:
+def incomplete_steps_note(halts: list, steps_total: int = 0,
+                          lost: Optional[list] = None) -> str:
     """Instruction to the Deep Research synthesis when a plan step was cut short.
 
     P2.1 made the halt visible to the lawyer; it does not stop the *synthesis*
@@ -1318,7 +1331,47 @@ def incomplete_steps_note(halts: list, steps_total: int = 0) -> str:
     a tool result and not a system rule: an instruction naming *these* steps, in
     the material being composed from, is per-occurrence and cannot be diluted by
     the rest of a long standing prompt.
+
+    P4.5: `lost` names the steps whose final reply came back empty on every
+    attempt. They get their own paragraph, because the halt's ("stopped by an
+    internal limit on tool-call rounds") would be false for them. 6375 r3 t2 is
+    why: a case-law step retrieved 4, 43 and 31 judgments, its reply was lost,
+    and the synthesis told the lawyer "Step 1 found no results".
     """
+    note = _halted_steps_note(halts, steps_total)
+    note += _lost_steps_note(lost, steps_total)
+    return note
+
+
+def _lost_steps_note(lost: Optional[list], steps_total: int = 0) -> str:
+    steps = [x for x in (lost or []) if x.get("step")]
+    if not steps:
+        return ""
+    labels = []
+    for x in sorted(steps, key=lambda y: y["step"]):
+        title = (x.get("title") or "").strip()
+        labels.append(f"step {x['step']}" + (f" ({title})" if title else ""))
+    plural = len(labels) > 1
+    named = (", ".join(labels[:-1]) + f" and {labels[-1]}") if plural else labels[0]
+    scale = f" ({len(labels)} of {steps_total} steps)" if steps_total else ""
+    those = "those steps" if plural else "that step"
+    return (
+        "\n\nLOST STEPS — READ BEFORE WRITING THE BLUF:\n"
+        f"{named} did not return findings{scale}: the model's reply to "
+        f"{'them' if plural else 'it'} came back empty on every attempt. Nothing "
+        f"{'they' if plural else 'it'} retrieved reached you, so anything "
+        f"{those} covered is missing because the reply was lost, NOT because the "
+        "material was searched for and not found. Any search record under "
+        f"{those} lists work done, not findings.\n"
+        f"You MUST NOT write, in the BLUF or anywhere else, that anything covered "
+        f"by {those} does not exist, was not made, or could not be found. State "
+        "instead that the point was not established because that part of the "
+        "research did not return its findings. Answer fully from the steps that "
+        "DID return findings, and be specific about which question remains open."
+    )
+
+
+def _halted_steps_note(halts: list, steps_total: int = 0) -> str:
     steps = [h for h in (halts or []) if h.get("step")]
     if not steps:
         return ""
@@ -1751,14 +1804,29 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     _not_held = _not_held_limb(log)
     if _not_held:
         lines.append(_not_held)
-    lines.append(
-        "NONE of this can establish that something does not exist. If any part "
-        "of the answer you write reports something as not found, it MUST quote "
-        "the search terms above (two or three are enough), state these filters "
-        "or say plainly that none were applied, and attribute the miss to the "
-        "search or the index — never to the user's citation. Do not say a "
-        f"search \"confirms\" an absence; it cannot. {LEX_COVERAGE_SENTENCE}"
-    )
+    # P3.7. The Manager and the synthesis write "not held" or "not found";
+    # only the Worker saw which the lookup said.
+    _lookup = _lookup_limb(log)
+    if _lookup:
+        lines.append(_lookup)
+    if _lookup and not searches and not sections:
+        # P3.7: a step that only looked instruments up has no search terms, so
+        # the rule below would demand quoting terms that are not there (P2.9's
+        # defect in a new place). Every other shape keeps it byte for byte.
+        lines.append(
+            "No ranked search was run in this step. A lookup establishes only what "
+            "this index holds, never that an instrument does not exist in law. "
+            f"{LEX_COVERAGE_SENTENCE}"
+        )
+    else:
+        lines.append(
+            "NONE of this can establish that something does not exist. If any part "
+            "of the answer you write reports something as not found, it MUST quote "
+            "the search terms above (two or three are enough), state these filters "
+            "or say plainly that none were applied, and attribute the miss to the "
+            "search or the index — never to the user's citation. Do not say a "
+            f"search \"confirms\" an absence; it cannot. {LEX_COVERAGE_SENTENCE}"
+        )
     lines.append(_WORKER_BLOCK_CLOSE)
     return "\n".join(lines)
 
@@ -1974,6 +2042,22 @@ CASE_LAW_COVERAGE_SENTENCE = (
     "Scotland."
 )
 
+# P3.3 (B11), Session 32: the doctrine half of 6375, stated by code. The
+# coverage sentence above says where the judgments come from; it does not say
+# what follows for a RULE taken from them, and 6375's reports applied English
+# common-interest privilege to the Scottish Government in 15 of 15 stored runs
+# and 3 of 3 at `0bc4f2c` with no Scottish source and no word on its Scots-law
+# status. Same gate as the coverage sentence (this turn's case-law search ran),
+# never a reading of the question or the answer, and true on every turn: the
+# product never checks a rule against Scots law, and a UK Supreme Court appeal
+# from Scotland is not "a court outside Scotland", so it is not swept in.
+# Worded like the coverage sentence to trip no negative detector (pinned by
+# `test_case_law_gap.py`).
+CASE_LAW_DOCTRINE_SENTENCE = (
+    "Where a rule of common law is taken from a judgment of a court outside "
+    "Scotland, whether it also forms part of Scots law has not been checked."
+)
+
 
 def record_case_law_search(log: Optional[list], name: str, args: dict, data: Any) -> None:
     """Record one case-law search for the lawyer-facing footer. Never raises.
@@ -2013,7 +2097,10 @@ def _case_law_body(entries: Optional[list]) -> str:
         head = (f"a search of {_CASE_LAW_DATABASE} was attempted"
                 + (f" for {listed}" if terms else "")
                 + " and returned an error")
-    return f"{head}. {CASE_LAW_COVERAGE_SENTENCE}"
+    # The doctrine sentence only when a search ran: an errored one returned no
+    # judgment for a rule to be taken from.
+    tail = f" {CASE_LAW_DOCTRINE_SENTENCE}" if done else ""
+    return f"{head}. {CASE_LAW_COVERAGE_SENTENCE}{tail}"
 
 
 def case_law_scope_clause(entries: Optional[list]) -> str:
@@ -2129,8 +2216,11 @@ def record_not_held(log: Optional[list], name: str, args: dict, data: Any) -> No
 
 def _not_held_limb(log: Optional[list]) -> str:
     """The worker-block line naming what the index did not hold. "" if nothing."""
+    # P3.7: an id a lookup has already reported is stated by `_lookup_limb`,
+    # which says more (held, stub or absent), so it is not repeated here.
+    looked_up = {e.get("legislation_id") for e in (log or []) if e.get("tool") == LOOKUP_ENTRY}
     ids = [e.get("legislation_id") for e in (log or []) if e.get("tool") == "not_held"]
-    ids = [x for x in dict.fromkeys(ids) if x]
+    ids = [x for x in dict.fromkeys(ids) if x and x not in looked_up]
     if not ids:
         return ""
     return (
@@ -2138,6 +2228,205 @@ def _not_held_limb(log: Optional[list]) -> str:
         f"{', '.join(ids[:8])}. That is the index's gap, not an error in the "
         "user's citation: do not ask the user to check, verify or confirm it, "
         "and do not suggest they meant a different year or number."
+    )
+
+
+# ---------------------------------------------------------------------------
+# P3.7 (B5): the held/absent test, carried to the agent that writes the answer
+# and, in code, to the lawyer
+# ---------------------------------------------------------------------------
+#
+# P2.4 above states a not-held fact when a retrieval by id happens to 404. P3.7
+# makes the test deliberate (`lookup_legislation`, `utils/instrument_lookup.py`)
+# and gives it the two seams P2.2 needed: the worker's block, because the
+# Manager and the Deep Research synthesis never see a tool result, and one
+# clause of the lawyer's footer, because telling the agent got P2.2 52% and
+# code gets 100%. The clause is gated on the STRUCTURAL fact that a lookup
+# answered, never on the answer's prose.
+#
+# Only the two states a lawyer needs told are stated in the footer: not held,
+# and held without its text. A held instrument is what a lawyer expects, and a
+# clause saying so on every answer that named one would be clutter.
+
+LOOKUP_ENTRY = "lookup"
+
+
+def record_lookup(log: Optional[list], name: str, args: dict, data: Any) -> None:
+    """Record a definite lookup outcome for the worker's block and the
+    lawyer's footer. `lookup_failed` and `invalid` are not recorded: they say
+    nothing about the index. Never raises."""
+    if log is None or name != LOOKUP_TOOL:
+        return
+    try:
+        got = parse_lookup_result(data)
+        if not got or got.get("status") not in DEFINITE_STATUSES:
+            return
+        log.append({
+            "tool": LOOKUP_ENTRY,
+            "legislation_id": got.get("legislation_id") or "",
+            "label": got.get("label") or got.get("legislation_id") or "",
+            "status": got.get("status"),
+        })
+    except Exception:
+        pass
+
+
+def _lookups(entries: Optional[list]) -> list:
+    """One entry per instrument, the last outcome winning (a repeat is a memo
+    hit and says the same)."""
+    out = {}
+    for e in entries or []:
+        if e.get("tool") == LOOKUP_ENTRY and e.get("legislation_id"):
+            out[e["legislation_id"]] = e
+    return list(out.values())
+
+
+def _lookup_limb(log: Optional[list]) -> str:
+    """The worker-block line stating what the lookups established. "" if none."""
+    rows = _lookups(log)
+    if not rows:
+        return ""
+    words = {NOT_HELD: "NOT HELD (no record in the index)",
+             HELD_WITHOUT_TEXT: "HELD WITHOUT TEXT (the record is held, its text is not)",
+             HELD: "held"}
+    listed = "; ".join(f"{e['label']} {words.get(e['status'], e['status'])}"
+                       for e in rows[:8])
+    # "The instrument itself" is the acceptance's lesson (`wave4_p37`): in 4 of
+    # 12 slots the Worker wrote "is not held in this index" and the
+    # conversational Manager narrowed it to "does not hold the TEXT of", which
+    # reads as if the record were held.
+    return (
+        f"Looked up by number (an exact test of the index, not a search): {listed}. "
+        "For a NOT HELD instrument, say that this index does not hold the instrument "
+        "itself: not merely that its text is unavailable, which reads as if its record "
+        "were held, and not that a search did not find it. Never suggest an error in "
+        "the user's citation. Report one held without text as held with no text "
+        "available here, never as not found."
+    )
+
+
+def _lookup_footer_clause(entries: Optional[list]) -> str:
+    """The lawyer-facing half: one clause per instrument a lookup showed to be
+    not held, or held without its text. "" otherwise.
+
+    Worded clear of `NEG_ASSERTED` ("not held in THIS index", never "in the")
+    and of `LK_FOOTER`'s sibling detectors, and pinned by
+    `test_footer_trips_no_detector`.
+    """
+    rows = [e for e in _lookups(entries) if e.get("status") in (NOT_HELD, HELD_WITHOUT_TEXT)]
+    if not rows:
+        return ""
+    absent = [e["label"] for e in rows if e["status"] == NOT_HELD]
+    stub = [e["label"] for e in rows if e["status"] == HELD_WITHOUT_TEXT]
+    bits = []
+    if absent:
+        bits.append(
+            f" {_and_join(absent)} {'was' if len(absent) == 1 else 'were'} looked up by "
+            f"{'its number' if len(absent) == 1 else 'their numbers'} and "
+            f"{'is' if len(absent) == 1 else 'are'} not held in this index; that is a gap "
+            "in the index, not a sign that the citation is wrong."
+        )
+    if stub:
+        bits.append(
+            f" {_and_join(stub)} {'was' if len(stub) == 1 else 'were'} looked up by "
+            f"{'its number' if len(stub) == 1 else 'their numbers'}: this index holds "
+            f"{'its record' if len(stub) == 1 else 'their records'} but not "
+            f"{'its' if len(stub) == 1 else 'their'} text."
+        )
+    return "".join(bits)
+
+
+# The labels `citation_label` writes, and the two clauses above, read back out
+# of an earlier answer's footer, so a follow-up answered from the history can
+# restate what an earlier lookup established. The acceptance's lesson
+# (`wave4_p37b` 6409 r1 export t11): a follow-up the Manager answered from
+# history narrowed "not held" to "its text", and P2.8's carried line, which
+# restates earlier SEARCHES, said nothing of the earlier LOOKUP. Coupled to
+# `_lookup_footer_clause` by `test_instrument_lookup.py`, which round-trips it;
+# if the wording drifts the parse goes silent, it does not go wrong.
+_LABEL = r"(?:SSI|SI|WSI|SR) \d{4}/\d{1,5}|\d{4} (?:asp|c\.|anaw|asc) \d{1,5}|[a-z]+/\d{4}/\d{1,5}"
+_LABELS = rf"((?:{_LABEL})(?:(?:, | and )(?:{_LABEL}))*)"
+_EARLIER_LOOKUP = re.compile(
+    _LABELS + r" (?:was|were) looked up by (?:its number|their numbers)"
+    r"(?P<absent> and (?:is|are) not held in this index)?"
+    r"(?P<stub>: this index holds (?:its record|their records) but not)?"
+)
+
+
+def _earlier_lookups(messages: Optional[list]) -> list:
+    """The not-held and held-without-text outcomes earlier answers' footers
+    stated, as lookup entries keyed on the label. Only assistant messages, and
+    only their trailing footer block, which is what code appended."""
+    out = []
+    for m in messages or []:
+        if not isinstance(m, dict) or m.get("role") != "assistant":
+            continue
+        content = m.get("content")
+        if not isinstance(content, str) or "looked up by" not in content:
+            continue
+        tail = _ECHOED_FOOTER.search(content)
+        if not tail:
+            continue
+        for found in _EARLIER_LOOKUP.finditer(tail.group(0)):
+            status = NOT_HELD if found.group("absent") else (
+                HELD_WITHOUT_TEXT if found.group("stub") else None)
+            if not status:
+                continue
+            for label in re.split(r", | and ", found.group(1)):
+                out.append({"tool": LOOKUP_ENTRY, "legislation_id": label,
+                            "label": label, "status": status})
+    return _lookups(out)
+
+
+def _earlier_lookup_clause(messages: Optional[list], entries: Optional[list]) -> str:
+    """" Earlier in this conversation, <the clause>" for instruments an earlier
+    answer's footer reported and this turn did not look up again. Never raises."""
+    try:
+        now = {e.get("label") for e in _lookups(entries)}
+        earlier = [e for e in _earlier_lookups(messages) if e["label"] not in now]
+        clause = _lookup_footer_clause(earlier)
+        return f" Earlier in this conversation,{clause}" if clause else ""
+    except Exception:
+        return ""
+
+
+def _and_join(items: list) -> str:
+    items = list(items)
+    if len(items) <= 1:
+        return "".join(items)
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def lookup_scope_footer(entries: Optional[list], messages: Optional[list] = None) -> str:
+    """The footer for a turn that looked an instrument up but ran no ranked
+    search, where `answer_scope_footer` (gated on a search) says nothing.
+
+    Opens by saying no ranked search was run, so it cannot be read as the
+    searched-for line, and it is in the single-line `*Search scope: …*` shape
+    that `_ECHOED_FOOTER` strips when a model copies it back. `_FRESH_FOOTER`
+    does not parse it, so P2.8 never carries it forward: a lookup is a fact
+    about one instrument, and the earlier answer that stated it stays visible
+    above. "" when no lookup reported anything a lawyer needs told.
+    """
+    clause = _lookup_footer_clause(entries)
+    # A search WITHIN an instrument is a search (P2.8 keeps such a turn silent
+    # for the same reason), so "no ranked search … was run" would be false
+    # there. Found by `replay_report nosearch` on `wave4_p37` (6373 r1 t3,
+    # MISATTRIBUTED). The opener then says nothing about searching, and an
+    # earlier lookup is not restated: that turn is P2.8's silent case.
+    if any(e.get("tool") in _SEARCH_TOOLS for e in entries or []):
+        if not clause:
+            return ""
+        return f"\n\n*Search scope: for this reply,{clause}{case_law_scope_clause(entries)}*"
+    # `messages` (the history) on the Manager path only: an unsearched
+    # follow-up after a turn that only looked up has no fresh footer for P2.8
+    # to carry, so this is where the earlier lookup is restated.
+    clause += _earlier_lookup_clause(messages, entries)
+    if not clause:
+        return ""
+    return (
+        "\n\n*Search scope: no ranked search of the legislation index was run for this "
+        f"reply.{clause}{case_law_scope_clause(entries)}*"
     )
 
 
@@ -2194,6 +2483,7 @@ def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) ->
         f"{_enabling_footer_clause(all_entries)}"
         f"{_relations_footer_clause(all_entries)}"
         f"{_currency_footer_clause(all_entries)}"
+        f"{_lookup_footer_clause(all_entries)}"
         f"{case_law_scope_clause(all_entries)}*"
     )
 
@@ -2334,6 +2624,11 @@ def carried_scope_footer(
             f"the same as being absent from the law.{_enabling_footer_clause(entries)}"
             f"{_relations_footer_clause(entries)}"
             f"{_currency_footer_clause(entries)}"
+            # P3.7: a follow-up that looked an instrument up, which is not a
+            # search, so "no search … was run" stays true beside it; and what
+            # an earlier lookup established, restated like the earlier terms.
+            f"{_lookup_footer_clause(entries)}"
+            f"{_earlier_lookup_clause(messages, entries)}"
             # P2.4 (B12): a hybrid follow-up that searched only case law. This
             # clause is about THIS reply's own search, so it is true here too.
             f"{case_law_scope_clause(entries)}*"

@@ -1,0 +1,22 @@
+{
+ "session_id": "p37_6373",
+ "base": "6373",
+ "note": "P3.7 acceptance: every turn of session 6373, in Conversational chat mode under 'legislation_only' (the export's filters). Turn 2 names SSI 2026/170, which the index does not hold. Turn text is taken from the export by index and is never stored here.",
+ "turns": [
+  {
+   "from_turn": 1,
+   "research_mode": "legislation_only",
+   "chat_mode": "conversational"
+  },
+  {
+   "from_turn": 2,
+   "research_mode": "legislation_only",
+   "chat_mode": "conversational"
+  },
+  {
+   "from_turn": 3,
+   "research_mode": "legislation_only",
+   "chat_mode": "conversational"
+  }
+ ]
+}

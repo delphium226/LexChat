@@ -29,14 +29,26 @@ Usage (from `server_py/`, with the pinned model — `tools.replay pin`):
     python -m tools.seam_replay manager --run <run.json> --turn 1 [--without-fix] [--no-tools]
 
 `--without-fix` rebuilds the seam as it was at a given commit (default the
-commit before P3.1's product code): the synthesis prompt from that revision,
-and no pinpoint block. That is how this tool was validated — see
-`tests/test_seam_replay.py` and SESSION_LOG Session 17.
+commit before P3.1's product code): the synthesis prompt from that revision
+for the turn's research type, and the pinpoint block only if that revision
+added one (P4.7: it used to be stripped whatever the revision, so an A/B at a
+post-P3.1 commit changed two things). Pass `--rev` explicitly. That is how
+this tool was validated — see `tests/test_seam_replay.py` and SESSION_LOG
+Session 17.
 
 `--from-raw` (Worker seam, P3.11) rebuilds the blocks the product appends after
 a SUMMARISED result from each tool's recorded `raw_result`, through the
 product's own builder — so a block built since the run was recorded reaches
 the seam. The recorded payload is the before-column; `--from-raw` the after.
+
+`--apply-lost` (synthesis and Manager seams, P4.5) rebuilds every recorded
+report whose worker's final reply was lost (no halt, no error, and a report
+that is empty or the scope block alone) as the product now builds it: the
+label from `lost_worker_report`, with the source count the product would have
+had (re-extracted from the recorded raw results by the product's own
+extractor), then the recorded report. The synthesis is also handed the lost
+steps (`incomplete_steps_note`), and the draw is put through the answer seam's
+`apply_lost_disclosure`. Without it the recorded payload is the before-column.
 """
 
 from __future__ import annotations
@@ -47,6 +59,8 @@ import json
 import re
 import subprocess
 import sys
+from collections import Counter
+from datetime import date
 from pathlib import Path
 from typing import Optional
 
@@ -61,7 +75,11 @@ from src.utils.citation_links import (  # noqa: E402
     provision_url_block,
     restore_dropped_siblings,
 )
-from src.utils.research_halt import halt_writeup_instruction  # noqa: E402
+from src.utils.research_halt import (  # noqa: E402
+    apply_lost_disclosure,
+    halt_writeup_instruction,
+    lost_worker_report,
+)
 from src.utils.search_scope import strip_scope_blocks  # noqa: E402
 from src.utils.stopwatch import TimingCollector  # noqa: E402
 from src.utils.suggestions import extract_suggestions  # noqa: E402
@@ -86,11 +104,62 @@ def load_turn(run_path: Path, turn: int) -> tuple:
     )
 
 
-def step_findings_from(turn: dict) -> list:
+def is_lost_shaped(dg: dict) -> bool:
+    """A recorded delegation whose worker's final reply was lost, before
+    P4.5 labelled it: it did not halt or raise, and its report is empty or
+    the scope block alone (`replay_report.lost_sites`' reading)."""
+    if dg.get("halted") or dg.get("error") or dg.get("lost"):
+        return False
+    return rr._report_shape(dg.get("report") or "", None) in ("empty", "scope")
+
+
+def sources_retrieved(dg: dict) -> int:
+    """The sources the product's accumulator would have held for this worker
+    run, re-extracted from the recorded raw results by the product's own
+    extractor, so the label's count is the one the product would state."""
+    from src.agent.agent_shared import _extract_sources_from_tool
+
+    acc: list = []
+    for t in dg.get("tools") or []:
+        try:
+            _extract_sources_from_tool(t.get("name") or "", t.get("args") or {},
+                                       t.get("raw_result") or "", acc)
+        except Exception:  # noqa: BLE001 — a count, not a gate
+            pass
+    return len(acc)
+
+
+def lost_report_for(dg: dict) -> str:
+    """The recorded report as the product now builds it for a lost reply:
+    the label, then what the step recorded (its scope block, or nothing)."""
+    return lost_worker_report(sources_retrieved(dg)) + (dg.get("report") or "")
+
+
+def lost_from(turn: dict, apply_lost: bool = False) -> list:
+    """The lost plan steps, in the shape `incomplete_steps_note` expects:
+    recorded as `lost` (schema v6), or lost-shaped when `apply_lost`."""
+    out = []
+    for dg in (turn.get("audit") or {}).get("delegations", []):
+        if dg.get("step") is None:
+            continue
+        if dg.get("lost"):
+            rec = dict(dg["lost"])
+        elif apply_lost and is_lost_shaped(dg):
+            rec = {"reason": "empty_completion", "sources_retrieved": sources_retrieved(dg)}
+        else:
+            continue
+        out.append({**rec, "scope": "step", "step": dg.get("step"),
+                    "title": dg.get("title") or ""})
+    return out
+
+
+def step_findings_from(turn: dict, apply_lost: bool = False) -> list:
     """The Deep Research step findings, as `run_deep_research` assembled them.
 
     The stored report is what the step handed the synthesis, scope block and
     all, so it is used verbatim. `plan` gives each step its title and detail.
+    With `apply_lost` (P4.5), a lost-shaped report is rebuilt by
+    `lost_report_for`.
     """
     plan_steps = ((turn.get("plan") or {}).get("steps")) or []
     by_step = {}
@@ -104,7 +173,8 @@ def step_findings_from(turn: dict) -> list:
         findings.append({
             "title": step.get("title") or f"Step {i}",
             "detail": step.get("detail") or "",
-            "content": dg.get("report") or "",
+            "content": (lost_report_for(dg) if apply_lost and dg and is_lost_shaped(dg)
+                        else dg.get("report") or ""),
         })
     return findings
 
@@ -141,27 +211,92 @@ def _prompt_constant_at(rev: str, name: str) -> str:
 # --- the seams --------------------------------------------------------------
 
 
+def _file_at(rev: str, path: str) -> str:
+    """One tracked file's text at a git revision ("" if it is not there)."""
+    proc = subprocess.run(
+        ["git", "show", f"{rev}:{path}"], capture_output=True,
+        cwd=str(Path(__file__).resolve().parents[2]),
+    )
+    return proc.stdout.decode("utf-8") if proc.returncode == 0 else ""
+
+
+def rev_has_pinpoint_block(rev: str) -> bool:
+    """Did the synthesis builder at `rev` append P3.1's pinpoint block?
+
+    **Read from the revision, not assumed (P4.7, Session 26).** `--without-fix`
+    used to strip the block whatever `--rev` was, because the only A/B it had
+    served was P3.1's own, whose before-side predates the block. A P4.7
+    before-side at a post-P3.1 commit then differed from the after-side in the
+    prompt AND in the block, so the A/B measured two changes as one. P4.6
+    found the same class of bug in the Worker seam."""
+    return "pinpoint_block(" in _file_at(rev, "server_py/src/agent/agent_core.py")
+
+
+def _synthesis_prompt_at(rev: str, research_mode: str) -> str:
+    """The synthesis system prompt as the code at `rev` built it for this
+    research type.
+
+    Before P4.7 it was one literal, `DEEP_RESEARCH_SYNTHESIS_PROMPT`, the same
+    for every type, read with `_prompt_constant_at`. From P4.7 it is built per
+    type by `get_deep_research_synthesis_prompt`, which a regex cannot
+    recover, so that revision's `prompts.py` is executed in isolation, its
+    relative imports resolving against the working tree's `src` package (the
+    constants it imports are UI strings), and the function is called."""
+    blob = _file_at(rev, "server_py/src/prompts.py")
+    if not blob:
+        raise SystemExit(f"server_py/src/prompts.py not found at {rev}")
+    if "def get_deep_research_synthesis_prompt" not in blob:
+        return _prompt_constant_at(rev, "DEEP_RESEARCH_SYNTHESIS_PROMPT")
+    mod = _module_at(rev, "server_py/src/prompts.py", "src")
+    return mod.get_deep_research_synthesis_prompt(research_mode)
+
+
+def _module_at(rev: str, path: str, package: str):
+    """A tracked module as it was at `rev`, executed in isolation, its relative
+    imports resolving against the working tree's `package` (see
+    `_synthesis_prompt_at`)."""
+    import types
+
+    blob = _file_at(rev, path)
+    if not blob:
+        raise SystemExit(f"{path} not found at {rev}")
+    mod = types.ModuleType(f"{package}._at_{rev}_{Path(path).stem}")
+    mod.__package__ = package
+    exec(compile(blob, f"{rev}:{path}", "exec"), mod.__dict__)  # noqa: S102
+    return mod
+
+
+def strip_pinpoint_block(body: str) -> str:
+    start = body.find("\n\n[PINPOINTS TO KEEP")
+    if start < 0:
+        return body
+    end = body.find("[/PINPOINTS TO KEEP]", start)
+    return body[:start] + (body[end + len("[/PINPOINTS TO KEEP]"):] if end >= 0 else "")
+
+
 def synthesis_messages(doc: dict, turn: dict, without_fix: bool = False,
-                       rev: str = PRE_P31_REV) -> list:
-    """The Deep Research synthesis seam, via the product's own builder."""
-    findings = step_findings_from(turn)
+                       rev: str = PRE_P31_REV, apply_lost: bool = False) -> list:
+    """The Deep Research synthesis seam, via the product's own builder.
+
+    `--without-fix` rebuilds it as the code at `rev` did: that revision's
+    prompt for the turn's research type, and the pinpoint block only if that
+    revision's builder added one. Nothing else in the payload changes.
+    `--apply-lost` (P4.5): lost-shaped step reports are labelled and the lost
+    steps are named in the note."""
+    findings = step_findings_from(turn, apply_lost)
     if not any(f["content"] for f in findings):
         raise SystemExit("this turn has no Deep Research step findings "
                          "(is it a `plan` turn?)")
+    research_mode = _cfg_for(doc, turn)["_research_mode"]
     messages = agent_core.build_synthesis_messages(
         turn.get("question") or "", turn.get("plan") or {}, findings,
-        halts_from(turn), len(findings),
+        halts_from(turn), len(findings), research_mode=research_mode,
+        lost=lost_from(turn, apply_lost),
     )
     if without_fix:
-        messages[0]["content"] = _prompt_constant_at(
-            rev, "DEEP_RESEARCH_SYNTHESIS_PROMPT")
-        body = messages[1]["content"]
-        start = body.find("\n\n[PINPOINTS TO KEEP")
-        if start >= 0:
-            end = body.find("[/PINPOINTS TO KEEP]", start)
-            body = body[:start] + (body[end + len("[/PINPOINTS TO KEEP]"):]
-                                   if end >= 0 else "")
-        messages[1]["content"] = body
+        messages[0]["content"] = _synthesis_prompt_at(rev, research_mode)
+        if not rev_has_pinpoint_block(rev):
+            messages[1]["content"] = strip_pinpoint_block(messages[1]["content"])
     return messages
 
 
@@ -196,6 +331,56 @@ def rebuilt_result(tool: dict) -> str:
         return final.replace(old, new, 1)
     cut = final.find("\n\n[SEARCH SCOPE")
     return final[:cut] + new + final[cut:] if cut >= 0 else final + new
+
+
+def _prompt_constant_in_tree(name: str) -> str:
+    """The same constant as `_prompt_constant_at`, read from the working tree."""
+    text = (Path(__file__).resolve().parents[1] / "src" / "prompts.py").read_text(
+        encoding="utf-8")
+    m = re.search(rf'(?ms)^{re.escape(name)}\s*=\s*"""(.*?)"""', text)
+    if not m:
+        raise SystemExit(f"{name} not found in the working tree's prompts.py")
+    return m.group(1)
+
+
+def worker_constant_name(cfg: dict) -> str:
+    """The Worker prompt constant `get_worker_system_prompt` builds on for this
+    request: the chat mode first (the quick-lookup Worker), then the research
+    type. P4.6: this used to be conversational-or-`WORKER_SYSTEM_PROMPT`, so an
+    A/B on a case-law-only or hybrid turn swapped in the wrong Worker."""
+    rm = cfg.get("_research_mode") or "legislation_only"
+    if (cfg.get("_chat_mode") == "conversational"
+            and rm not in ("parliamentary_records", "westminster_records")):
+        return "WORKER_SYSTEM_PROMPT_CONVERSATIONAL"
+    return {
+        "case_law_only": "WORKER_SYSTEM_PROMPT_CASE_LAW",
+        "legislation_and_case_law": "WORKER_SYSTEM_PROMPT_HYBRID",
+        "parliamentary_records": "PARLIAMENT_WORKER_SYSTEM_PROMPT",
+        "westminster_records": "WESTMINSTER_WORKER_SYSTEM_PROMPT",
+    }.get(rm, "WORKER_SYSTEM_PROMPT")
+
+
+def _swap_worker_constant(system: str, cfg: dict, rev: str) -> str:
+    """The live Worker prompt with its constant's literal replaced by the one
+    at `rev`, so the A/B differs in that literal alone.
+
+    The live prompt is the date line, the literal, the rules appended to it
+    and the filter block; the constant at `rev` is the literal alone. Before
+    P4.6 the whole prompt was replaced by that bare literal, which dropped the
+    date line, the rules and the filter block from the "without" side as well
+    as the change being tested. If the working tree's literal is not in the
+    live prompt (the constant is no longer one literal), the bare literal is
+    used, as before.
+    """
+    name = worker_constant_name(cfg)
+    old = _prompt_constant_at(rev, name)
+    try:
+        current = _prompt_constant_in_tree(name)
+    except SystemExit:
+        current = ""
+    if current and current in system:
+        return system.replace(current, old, 1)
+    return old
 
 
 def worker_messages(doc: dict, turn: dict, delegation: int = 1,
@@ -237,9 +422,7 @@ def worker_messages(doc: dict, turn: dict, delegation: int = 1,
     cfg = _cfg_for(doc, turn)
     system = get_worker_system_prompt(cfg.get("_research_mode") or "legislation_only", cfg)
     if without_fix:
-        name = ("WORKER_SYSTEM_PROMPT_CONVERSATIONAL"
-                if cfg.get("_chat_mode") == "conversational" else "WORKER_SYSTEM_PROMPT")
-        system = _prompt_constant_at(rev, name)
+        system = _swap_worker_constant(system, cfg, rev)
     calls, results = [], []
     for i, t in enumerate(tools, 1):
         cid = f"call_{i:02d}"
@@ -258,6 +441,380 @@ def worker_messages(doc: dict, turn: dict, delegation: int = 1,
         *results,
         {"role": "user", "content": closing},
     ]
+
+
+def worker_first_round_messages(doc: dict, turn: dict, delegation: int = 1,
+                                without_fix: bool = False,
+                                rev: str = PRE_P31_REV) -> list:
+    """The Worker's FIRST round (P4.6): its prompt and the brief, nothing else.
+
+    **Why.** The composition seam above needs recorded tool results, and in
+    the stored sweeps most of P4.6's scripted sentences came from a Worker
+    that made NO tool call: a case-law question sent to the legislation
+    Worker, which has no case-law tool and wrote its report at once. The
+    first round is therefore the seam for that shape, and it is also the
+    probe Session 22 asked for before any prompt change: does the edit move
+    what the Worker decides to search? `run_first_round` offers the Worker its
+    real tools and stops at the first call it makes.
+    """
+    dgs = (turn.get("audit") or {}).get("delegations", [])
+    if not dgs:
+        raise SystemExit("this turn has no delegation to take a brief from")
+    dg = dgs[min(max(delegation, 1), len(dgs)) - 1]
+    cfg = _cfg_for(doc, turn)
+    system = get_worker_system_prompt(cfg.get("_research_mode") or "legislation_only", cfg)
+    if without_fix:
+        system = _swap_worker_constant(system, cfg, rev)
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": dg.get("brief") or turn.get("question") or ""},
+    ]
+
+
+def tool_rounds(tools: list, tolerance_s: float = 1.0) -> list:
+    """Group a delegation's recorded tool calls into the ReAct rounds that
+    issued them (P4.10).
+
+    The audit records no round index, but a round's tools are started together
+    and the next round cannot start until the model has answered the last, so a
+    tool that starts after every tool of the current round has finished (plus
+    `tolerance_s`, which absorbs a memo hit's zero duration) opens a new round.
+    Checked against the recorded `react_turn` of every stored (a) call before
+    it was used.
+    """
+    rounds: list = []
+    end = 0.0
+    for t in sorted(tools, key=lambda x: float(x.get("started_at") or 0.0)):
+        s = float(t.get("started_at") or 0.0)
+        e = s + float(t.get("duration_s") or 0.0)
+        if rounds and s <= end + tolerance_s:
+            rounds[-1].append(t)
+            end = max(end, e)
+        else:
+            rounds.append([t])
+            end = e
+    return rounds
+
+
+def worker_date_line(d: date) -> str:
+    """The Worker prompt's first line, as `get_worker_system_prompt` writes it."""
+    return f"Today's date is {d.strftime('%d %B %Y')}."
+
+
+def as_sent_date(value: Optional[str], doc: dict) -> Optional[date]:
+    """`--date`: None (today, as the prompt builder writes it), "recorded" (the
+    day the run started, `started_at`), or an ISO date.
+
+    P4.10: at temperature 0 the pinned model draws much the same completion
+    for the same bytes, so the date line alone decided whether a stored (a)
+    payload ran away. Today's date is not the payload that was sent.
+    """
+    if not value:
+        return None
+    raw = (doc.get("started_at") or "")[:10] if value == "recorded" else value
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        raise SystemExit(f"--date: {value!r} is neither 'recorded' nor YYYY-MM-DD"
+                         + (" (the run has no started_at)" if value == "recorded" else ""))
+
+
+def as_sent_rev(value: Optional[str], doc: dict) -> Optional[str]:
+    """`--at-rev`: None (the working tree), "recorded" (the head the run was
+    recorded at, `runtime_state.git_head`), or a revision.
+
+    P4.11: the Worker prompt changed under most stored (b) payloads, so
+    today's code rebuilt 1 of the 8 Worker payloads drawn to its recorded
+    `sent_chars`; the recorded head's own builder rebuilt all 8."""
+    if not value:
+        return None
+    if value != "recorded":
+        return value
+    rev = (doc.get("runtime_state") or {}).get("git_head") or ""
+    if not rev:
+        raise SystemExit("--at-rev recorded: the run has no runtime_state.git_head")
+    return rev
+
+
+def worker_prompt_and_tools_at(rev: str, cfg: dict) -> tuple:
+    """The Worker's system prompt and tool list as the code at `rev` built
+    them for this request. The tools are sent too, and `sent_chars` does not
+    count them: every stored (b) head predates `lookup_legislation` (P3.7)."""
+    rm = cfg.get("_research_mode") or "legislation_only"
+    prompts = _module_at(rev, "server_py/src/prompts.py", "src")
+    schemas = _module_at(rev, "server_py/src/agent/tools/schemas.py", "src.agent.tools")
+    return prompts.get_worker_system_prompt(rm, cfg), schemas.get_worker_tools(rm)
+
+
+def worker_as_sent_messages(doc: dict, turn: dict, delegation: int = 1,
+                            upto_round: Optional[int] = None,
+                            on_date: Optional[date] = None,
+                            at_rev: Optional[str] = None) -> list:
+    """A Worker's model call rebuilt as `chat_loop` sent it (P4.10).
+
+    `worker_messages` is a composition seam: every result in one round, no
+    tools offered, and a closing "compose" message. That is not the call that
+    reasoned to nothing. This one is: the system prompt, the brief, then each
+    recorded round as an assistant tool-call message followed by its results,
+    cut after `upto_round` rounds (the probe's `react_turn`; default: every
+    round). No closing message; the caller offers the Worker's real tools.
+
+    Faithful only where the recorded brief is what was sent. Since P3.7 code
+    appends an instrument-lookup block to the brief that the audit does not
+    record, so the command prints the payload's size the way `chat_loop`
+    counts it (`sent_chars`) beside the recorded probes'.
+
+    `on_date` replaces the prompt's date line (see `as_sent_date`). The line
+    is the same length on any date of the same month-name length.
+
+    `at_rev` builds the system prompt with that revision's code (see
+    `as_sent_rev`); the caller offers that revision's tools.
+    """
+    dgs = (turn.get("audit") or {}).get("delegations", [])
+    if not dgs:
+        raise SystemExit("this turn has no delegation to rebuild")
+    dg = dgs[min(max(delegation, 1), len(dgs)) - 1]
+    rounds = tool_rounds(dg.get("tools") or [])
+    if upto_round is not None:
+        rounds = rounds[:upto_round]
+    cfg = _cfg_for(doc, turn)
+    if at_rev:
+        system, _tools = worker_prompt_and_tools_at(at_rev, cfg)
+    else:
+        system = get_worker_system_prompt(cfg.get("_research_mode") or "legislation_only", cfg)
+    if on_date is not None:
+        today = worker_date_line(date.today())
+        if today not in system:
+            raise SystemExit("the Worker prompt's date line has changed shape; "
+                             "--date cannot pin it")
+        system = system.replace(today, worker_date_line(on_date), 1)
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": dg.get("brief") or turn.get("question") or ""},
+    ]
+    n = 0
+    for rnd in rounds:
+        calls, results = [], []
+        for t in rnd:
+            n += 1
+            cid = f"call_{n:02d}"
+            calls.append({"id": cid, "type": "function", "function": {
+                "name": t.get("name") or "", "arguments": json.dumps(t.get("args") or {})}})
+            results.append({"role": "tool", "tool_call_id": cid,
+                            "name": t.get("name") or "",
+                            "content": t.get("final_result") or ""})
+        messages.append({"role": "assistant", "content": "", "tool_calls": calls})
+        messages.extend(results)
+    return messages
+
+
+def sent_chars(messages: list) -> int:
+    """A payload's size as `chat_loop` logs and probes it."""
+    return sum(len(str(m.get("content", "") or "")) for m in messages)
+
+
+async def run_as_sent(messages: list, cfg: dict, tools: list,
+                      extra: Optional[dict] = None) -> dict:
+    """ONE streamed attempt of `messages`, with the product's payload shape
+    (model, messages, stream, temperature, tools, tool_choice) plus `extra`
+    (a lever under test: `reasoning`, `max_tokens`). No retry, so one draw is
+    one attempt and an (a) draw costs one attempt, not three.
+
+    Returns what an `empty_completions` record would hold, and the attempt's
+    seconds and cost, which no record holds.
+    """
+    import time
+
+    import httpx
+
+    from src.agent import openrouter_client as oc
+
+    set_request_provider_config(cfg)
+    payload = {
+        "model": cfg["model"],
+        "messages": oc._convert_messages_to_openai(messages),
+        "stream": True,
+        "temperature": cfg.get("temperature", 0),
+    }
+    if tools:
+        payload["tools"] = oc._convert_tools_to_openai(tools)
+        payload["tool_choice"] = "auto"
+    payload.update(extra or {})
+    out = {"content_chars": 0, "tool_calls": [], "finish_reason": None,
+           "native_finish_reason": None, "reasoning_chars": 0,
+           "completion_tokens": None, "reasoning_tokens": None, "cost": 0.0,
+           "stream_error": None, "seconds": 0.0, "content": "", "provider": None}
+    names: dict = {}
+    t0 = time.perf_counter()
+    timeout = httpx.Timeout(None, connect=30.0, read=180.0)  # as chat_loop's
+    try:
+        async with httpx.AsyncClient(timeout=timeout, verify=False) as client:
+            async with client.stream("POST", f"{oc._base_url()}/chat/completions",
+                                     json=payload, headers=oc._get_headers()) as r:
+                r.raise_for_status()
+                async for line in r.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    raw = line[6:].strip()
+                    if raw == "[DONE]":
+                        break
+                    try:
+                        data = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    if data.get("provider"):
+                        # which upstream OpenRouter routed the attempt to (P4.11)
+                        out["provider"] = data["provider"]
+                    if data.get("usage"):
+                        u = data["usage"]
+                        out["completion_tokens"] = u.get("completion_tokens")
+                        out["reasoning_tokens"] = (u.get("completion_tokens_details")
+                                                   or {}).get("reasoning_tokens")
+                        out["cost"] = float(u.get("cost") or 0.0)
+                    if data.get("error"):
+                        out["stream_error"] = (data["error"].get("message")
+                                               if isinstance(data["error"], dict)
+                                               else str(data["error"]))
+                    for ch in data.get("choices") or []:
+                        if ch.get("finish_reason"):
+                            out["finish_reason"] = ch["finish_reason"]
+                        if ch.get("native_finish_reason"):
+                            out["native_finish_reason"] = ch["native_finish_reason"]
+                        d = ch.get("delta") or {}
+                        out["reasoning_chars"] += len(d.get("reasoning")
+                                                      or d.get("reasoning_content") or "")
+                        out["content"] += d.get("content") or ""
+                        out["content_chars"] += len(d.get("content") or "")
+                        for tc in d.get("tool_calls") or []:
+                            f = (tc.get("function") or {}).get("name")
+                            if f:
+                                names[tc.get("index", 0)] = f
+    except httpx.TimeoutException as e:
+        out["stream_error"] = f"{type(e).__name__} (client read timeout)"
+    out["tool_calls"] = [names[k] for k in sorted(names)]
+    out["seconds"] = time.perf_counter() - t0
+    return out
+
+
+def as_sent_outcome(r: dict) -> str:
+    """"answered", "tool call", or the empty-completion mechanism ((a)-(d)).
+
+    Empty is the product's test (`is_empty_completion`): whitespace alone is
+    empty. A capped runaway ended in a lone newline (P4.10, Session 29), which
+    `chat_loop` treats as empty and this used to call "answered".
+    """
+    text = r["content"] if "content" in r else ("x" if r.get("content_chars") else "")
+    if (text or "").strip():
+        return "answered"
+    if r["tool_calls"]:
+        return "tool call"
+    return "empty (" + rr.empty_mechanism(r) + ")"
+
+
+def _as_sent_command(args, doc: dict, turn: dict, sid: str) -> int:
+    """`worker --as-sent`: redraw a recorded Worker call as it was sent."""
+    from src.agent.tools import get_worker_tools
+
+    on_date = as_sent_date(args.date, doc)
+    rev = as_sent_rev(args.at_rev, doc)
+    messages = worker_as_sent_messages(doc, turn, args.delegation, args.round, on_date,
+                                       at_rev=rev)
+    cfg0 = _cfg_for(doc, turn)
+    if rev:
+        _system, tools = worker_prompt_and_tools_at(rev, cfg0)
+    else:
+        tools = get_worker_tools(cfg0.get("_research_mode") or "legislation_only")
+    probes = (turn.get("audit") or {}).get("empty_completions") or []
+    dgs = (turn.get("audit") or {}).get("delegations", [])
+    dg = dgs[min(max(args.delegation, 1), len(dgs)) - 1] if dgs else {}
+    rounds = tool_rounds(dg.get("tools") or [])
+    extra = {}
+    if args.reasoning_effort:
+        extra["reasoning"] = {"effort": args.reasoning_effort}
+    if args.max_tokens:
+        extra["max_tokens"] = args.max_tokens
+    if args.provider:
+        # OpenRouter's routing field: this upstream only, no fallback, so a
+        # draw is that route's outcome (P4.11). The product sends none.
+        extra["provider"] = {"order": [args.provider], "allow_fallbacks": False}
+    print(f"seam=worker --as-sent  session={sid} turn={args.turn} "
+          f"delegation={args.delegation}")
+    print(f"  recorded rounds: {len(rounds)}; sent here: "
+          f"{args.round if args.round is not None else len(rounds)}")
+    print(f"  payload: {len(messages)} message(s), sent_chars {sent_chars(messages):,}")
+    for sc, rt in sorted({(p.get('sent_chars'), p.get('react_turn')) for p in probes},
+                         key=lambda x: (x[1] or 0)):
+        print(f"  recorded empty-completion call: sent_chars {sc:,}, react_turn {rt}")
+    print(f"  date line: {(on_date or date.today()).strftime('%d %B %Y')} "
+          f"({'pinned by --date' if on_date else 'today'})")
+    print(f"  code: {rev + ' (--at-rev)' if rev else 'the working tree'}; tools offered: "
+          + ", ".join(t["function"]["name"] for t in tools))
+    print(f"  lever: {json.dumps(extra) if extra else 'none (the pre-P4.10 payload)'}")
+    if args.dry_run:
+        return 0
+    cfg = asyncio.run(_provider_cfg(cfg0))
+    total = 0.0
+    for rep in range(1, args.reps + 1):
+        r = asyncio.run(run_as_sent(messages, cfg, tools, extra))
+        total += r["cost"]
+        print(f"  rep{rep}: {as_sent_outcome(r):<12} ${r['cost']:.4f} {r['seconds']:6.0f}s "
+              f"completion_tokens={r['completion_tokens']} "
+              f"reasoning_tokens={r['reasoning_tokens']} "
+              f"reasoning_chars={r['reasoning_chars']} content_chars={r['content_chars']} "
+              f"tools={','.join(r['tool_calls']) or '-'} "
+              f"finish={r['finish_reason']}/{r['native_finish_reason']} "
+              f"provider={r.get('provider') or '-'}"
+              + (f" error={r['stream_error'][:60]!r}" if r["stream_error"] else ""))
+        text = r.get("content") or ""
+        if text.strip():
+            # What a lever costs in answer quality: links, and the depth grader
+            # where the session has a ground truth (6348: s.36(2)).
+            grade = _grade(sid, text)
+            print(f"      links: {text.count('](http')}"
+                  + (f"  depth: {grade}" if grade else ""))
+        if args.out:
+            d = Path(args.out)
+            d.mkdir(parents=True, exist_ok=True)
+            lever = "_".join(f"{k}-{v}" for k, v in (
+                ("effort", args.reasoning_effort), ("max", args.max_tokens),
+                ("date", on_date), ("rev", rev), ("provider", args.provider)) if v)
+            (d / f"{sid}_t{args.turn}_d{args.delegation}_as_sent"
+                 f"{'_' + lever if lever else ''}_rep{rep}.md").write_text(
+                text, encoding="utf-8")
+    print(f"  total ${total:.4f}")
+    return 0
+
+
+class _FirstRoundDone(BaseException):
+    """Raised by the probe's tool executor to end the loop at the first call.
+    A BaseException, so no `except Exception` on the way out swallows it."""
+
+
+async def run_first_round(messages: list, cfg: dict, tools: list) -> tuple:
+    """One Worker round with its real tools offered. Returns (content, calls,
+    cost, model): the report it wrote if it called no tool, else the calls."""
+    set_request_provider_config(cfg)
+    tc = TimingCollector("seam")
+    calls: list = []
+
+    async def _seen(event: dict) -> None:
+        # `chat_loop` emits the round's whole batch before executing any of it.
+        if event.get("type") == "tool_call":
+            for c in event.get("tool_calls") or []:
+                fn = c.get("function") or {}
+                calls.append((fn.get("name") or "", fn.get("arguments") or ""))
+
+    async def _stop(name: str, args: dict) -> str:
+        raise _FirstRoundDone()
+
+    try:
+        out = await chat_loop(messages, cfg["model"], None, 0, tools, _stop,
+                              on_chunk=_seen, emit_tool_details=True,
+                              timing_collector=tc)
+        content = (out or {}).get("content") or ""
+    except _FirstRoundDone:
+        content = ""
+    return content, calls, tc.total_cost_usd, cfg["model"]
 
 
 def manager_history(doc: dict, turn_no: int) -> list:
@@ -310,8 +867,122 @@ def manager_cfg(doc: dict, turn: dict, messages: list) -> dict:
                                 chat_mode=body.chat_mode)
 
 
+def apply_hint(messages: list) -> list:
+    """P3.2 candidate lever (c), prototype: prefix the lawyer's turn with the
+    verbatim text of the provisions it names and the concordance of two quoted
+    defined terms, built by `tools/provision_hints.py` against LEX, with the
+    instruments the conversation already carries as context. Prints what it
+    handed over (ids and sizes only)."""
+    import tools.provision_hints as ph
+
+    users =[i for i, m in enumerate(messages) if m.get("role") == "user"]
+    if not users:
+        return messages
+    last = users[-1]
+    question = messages[last].get("content") or ""
+    ctx = ph.context_from_history(messages[1:last])
+    block, meta = ph.hint_block(question, ctx, ph.Lex())
+    refs = ", ".join(f"{label} {outcome}{' ' + lid if lid else ''}"
+                     for label, outcome, lid, _how, _n in meta["refs"]) or "none"
+    print(f"  hint: refs [{refs}]; concordance hits {meta['concordance_hits']}; "
+          f"{meta['chars']:,} chars handed over")
+    if not block:
+        return messages
+    out = list(messages)
+    out[last] = {**messages[last], "content": f"{block}\n\n{question}"}
+    return out
+
+
+def stance_line(doc: dict, turn: dict, text: str) -> str:
+    """P3.2: the draw's stance and opener under the gitignored rubric, when
+    the run's session has one and the turn is in its window; else ""."""
+    try:
+        rubrics = json.loads(Path(rr.DEFAULT_RUBRIC).read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    script = doc.get("script") or {}
+    base = str(script.get("base") or doc.get("session_id"))
+    rub = rubrics.get(base)
+    if not rub:
+        return ""
+    src = [t.get("from_turn") for t in (script.get("turns") or [])]
+    n = turn.get("turn")
+    b = src[n - 1] if src and n and n <= len(src) else n
+    lo, hi = rub.get("window") or [0, 10 ** 6]
+    stance = rr.stance_of(text, rub)[0] if lo <= b <= hi else "-"
+    contra = any(re.search(p, text, re.I) for p in rub.get("contradicted") or [])
+    return (f"export t{b}: stance {stance}, opener {rr.opener_kind(text)}"
+            f"{', CONTRADICTED claim' if contra else ''}")
+
+
+def manager_head(doc: dict, turn: dict, without_fix: bool = False,
+                 rev: str = PRE_P31_REV, on_date: Optional[date] = None,
+                 hint: bool = False) -> tuple:
+    """The Manager's prompt and the conversation up to this turn's question,
+    before any delegation: (messages, cfg). The start of `manager_messages`,
+    and the whole of the Manager's first round (`--first-round`, P3.15).
+    `without_fix` swaps the conversational Manager body for the one at `rev`.
+    `on_date` replaces the prompt's date line, as `--as-sent --date` does for
+    the Worker (P4.10: that line alone decided what a stored payload drew).
+    Messages keep the client's mode stamps; callers strip them."""
+    from src.prompts import get_manager_system_prompt
+    from src.utils.mode_change import apply_mode_change_marker
+
+    history = manager_history(doc, turn.get("turn"))
+    cfg = manager_cfg(doc, turn, history)
+    system = get_manager_system_prompt(cfg["_research_mode"], cfg)
+    if without_fix:
+        # The constant at `rev` is the triple-quoted literal alone; the live
+        # body is that literal plus the research-mode hint appended to it.
+        import src.prompts as prompts
+        live = prompts._MANAGER_CONV_BODY
+        hint = prompts.RESEARCH_MODE_HINT_ON
+        literal = live[:-len(hint)] if live.endswith(hint) else live
+        if literal not in system:
+            raise SystemExit("--without-fix: the live conversational body is not in the prompt")
+        system = system.replace(literal, _prompt_constant_at(rev, "_MANAGER_CONV_BODY"), 1)
+    if on_date is not None:
+        today = worker_date_line(date.today())
+        if today not in system:
+            raise SystemExit("the Manager prompt's date line has changed shape; "
+                             "--date cannot pin it")
+        system = system.replace(today, worker_date_line(on_date), 1)
+    messages = [{"role": "system", "content": system}, *history]
+    messages, _change = apply_mode_change_marker(messages, cfg)
+    if hint:
+        messages = apply_hint(messages)
+    return messages, cfg
+
+
+def _strip_stamps(messages: list) -> list:
+    """The client-side mode stamps are not provider fields."""
+    return [{k: v for k, v in m.items() if k not in ("research_mode", "chat_mode")}
+            for m in messages]
+
+
+def lookup_grade(doc: dict, turn: dict, text: str) -> Optional[dict]:
+    """`replay_report lookup`'s verdict on `text` as this turn's answer given
+    from history (no delegation), where the run file grades a slot here
+    (P3.15). None where it does not."""
+    t2 = {**turn, "answer": text,
+          "audit": {**(turn.get("audit") or {}), "delegations": []}}
+    doc2 = {**doc, "turns": [t2 if t.get("turn") == turn.get("turn") else t
+                             for t in doc.get("turns") or []]}
+    rows = [r for r in rr.lookup_rows(doc2) if r["turn"] == turn.get("turn")]
+    if not rows:
+        return None
+    verdict, why = rr.lookup_verdict(rows[0])
+    return {**rows[0], "verdict": verdict, "why": why}
+
+
+def _named_in(brief: str) -> list:
+    """Instrument numbers a delegation brief names (the drift probe's read)."""
+    return sorted(set(rr.LK_ANY_NUMBER.findall(brief or "")))
+
+
 def manager_messages(doc: dict, turn: dict, without_fix: bool = False,
-                     rev: str = PRE_P31_REV) -> list:
+                     rev: str = PRE_P31_REV, apply_lost: bool = False,
+                     hint: bool = False) -> list:
     """The Manager's composition seam (P3.13): the conversation, then each
     recorded delegation as the `delegate_research` call it was and the
     `[Research Agent Result]` it returned, then the call that composes.
@@ -328,46 +999,29 @@ def manager_messages(doc: dict, turn: dict, without_fix: bool = False,
     (`wave3_p313` rep 1 turn 1), and with the tools offered it reproduced the
     miss in 3 of 3. `--no-tools` is the tool-free draw. `--without-fix`
     swaps the conversational Manager body for the one at `rev` and hands over
-    the bare report.
+    the bare report. `--apply-lost` (P4.5) hands over a lost-shaped report as
+    the product now builds it (`lost_report_for`).
     """
-    from src.prompts import get_manager_system_prompt
-    from src.utils.mode_change import apply_mode_change_marker
-
     dgs = [dg for dg in (turn.get("audit") or {}).get("delegations", [])
            if dg.get("step") is None]
     if not dgs:
         raise SystemExit("this turn has no delegation to compose from")
-    history = manager_history(doc, turn.get("turn"))
-    cfg = manager_cfg(doc, turn, history)
-    system = get_manager_system_prompt(cfg["_research_mode"], cfg)
-    if without_fix:
-        # The constant at `rev` is the triple-quoted literal alone; the live
-        # body is that literal plus the research-mode hint appended to it.
-        import src.prompts as prompts
-        live = prompts._MANAGER_CONV_BODY
-        hint = prompts.RESEARCH_MODE_HINT_ON
-        literal = live[:-len(hint)] if live.endswith(hint) else live
-        if literal not in system:
-            raise SystemExit("--without-fix: the live conversational body is not in the prompt")
-        system = system.replace(literal, _prompt_constant_at(rev, "_MANAGER_CONV_BODY"), 1)
-    messages = [{"role": "system", "content": system}, *history]
-    messages, _change = apply_mode_change_marker(messages, cfg)
+    messages, cfg = manager_head(doc, turn, without_fix, rev, hint=hint)
     for i, dg in enumerate(dgs, 1):
         cid = f"call_{i:02d}"
         messages.append({"role": "assistant", "content": "", "tool_calls": [{
             "id": cid, "type": "function", "function": {
                 "name": "delegate_research",
                 "arguments": json.dumps({"query": dg.get("brief") or ""})}}]})
-        report = dg.get("report") or ""
+        report = (lost_report_for(dg) if apply_lost and is_lost_shaped(dg)
+                  else dg.get("report") or "")
         # The product's own builder (P3.13's sibling links included); the
         # pre-fix result is the bare report under the same prefix.
         messages.append({"role": "tool", "tool_call_id": cid,
                          "name": "delegate_research",
                          "content": f"[Research Agent Result]\n{report}" if without_fix
                          else agent_core.worker_result_for_manager(report, cfg)})
-    # Strip the client-side stamps: they are not provider fields.
-    return [{k: v for k, v in m.items() if k not in ("research_mode", "chat_mode")}
-            for m in messages]
+    return _strip_stamps(messages)
 
 
 def _cfg_for(doc: dict, turn: dict) -> dict:
@@ -375,7 +1029,13 @@ def _cfg_for(doc: dict, turn: dict) -> dict:
     f = doc.get("filters") or {}
     return {
         "_provider": "openrouter",
-        "_research_mode": f.get("research_mode") or "legislation_only",
+        # The TURN's type, as the request sent it (P4.1); then, for a run file
+        # written before turns carried it, the type the product recorded on
+        # the turn's audit trace (P4.7); the session filter is only the
+        # export's value, and is None where the export was blank (P0.6).
+        "_research_mode": (turn.get("research_mode")
+                           or (turn.get("audit") or {}).get("research_mode")
+                           or f.get("research_mode") or "legislation_only"),
         "_chat_mode": turn.get("chat_mode") or doc.get("filter_snapshot_chat_mode") or "",
         "_jurisdiction": f.get("jurisdiction"),
         "_legislation_type": f.get("legislation_type"),
@@ -439,6 +1099,144 @@ def _grade(session_id: str, text: str) -> str:
     return verdict + "\n      " + "\n      ".join(bits)
 
 
+def _scripted_line(text: str) -> str:
+    """P4.6's counts for one draw: the failing lines, then the counted ones."""
+    c = rr._scripted_counts(text)
+    fail = ", ".join(f"{k} {c[k]}" for k in rr.SCRIPTED_NEGATIVES)
+    info = ", ".join(f"{k} {c[k]}" for k in rr.SCRIPTED_INFORMATIONAL)
+    return f"{rr._scripted_failing(c)} failing ({fail}); counted: {info}"
+
+
+def _first_round_command(args, doc: dict, turn: dict, sid: str) -> int:
+    from src.agent.tools import get_worker_tools
+
+    messages = worker_first_round_messages(doc, turn, args.delegation,
+                                           args.without_fix, args.rev)
+    cfg_turn = _cfg_for(doc, turn)
+    rm = cfg_turn.get("_research_mode") or "legislation_only"
+    tools = get_worker_tools(rm)
+    # P3.7: the product looks up every instrument the brief names by number
+    # before the Worker's first round and appends the outcome to the brief.
+    # Rebuilt here by the product's own routing, against live LEX (two cheap
+    # calls per instrument, no model). `--without-lookup` is the before side:
+    # neither the block nor the tool.
+    from src.utils.instrument_lookup import LOOKUP_TOOL, routed_lookup_block
+
+    if args.without_lookup:
+        tools = [t for t in tools if t["function"]["name"] != LOOKUP_TOOL]
+    else:
+        from src.agent.tools.executor import execute_worker_tool
+
+        block = asyncio.run(routed_lookup_block(
+            messages[1]["content"], [t["function"]["name"] for t in tools],
+            execute_worker_tool))
+        messages[1]["content"] += block
+    recorded = (turn.get("audit") or {}).get("delegations", [])
+    dg = recorded[min(max(args.delegation, 1), len(recorded)) - 1] if recorded else {}
+    print(f"seam=worker FIRST ROUND  session={sid} turn={args.turn} "
+          f"delegation={args.delegation}  research type={rm}  "
+          f"{'WITHOUT fix (' + args.rev + ')' if args.without_fix else 'current code'}"
+          f"{'; WITHOUT the P3.7 lookup' if args.without_lookup else ''}")
+    print(f"  prompt: {len(messages[0]['content']):,} chars; brief {len(messages[1]['content']):,} "
+          f"chars; tools offered: {len(tools)}; recorded run made "
+          f"{len(dg.get('tools') or [])} tool call(s)")
+    if args.dry_run:
+        return 0
+    cfg = asyncio.run(_provider_cfg(cfg_turn))
+    total = 0.0
+    for rep in range(1, args.reps + 1):
+        content, calls, cost, model = asyncio.run(run_first_round(messages, cfg, tools))
+        total += cost
+        if calls:
+            names = Counter(n for n, _ in calls)
+            print(f"  rep{rep}: ${cost:.4f}  SEARCHED: {len(calls)} call(s) "
+                  + ", ".join(f"{n} x{k}" for n, k in names.items()) + f"  model={model}")
+        else:
+            print(f"  rep{rep}: ${cost:.4f}  WROTE WITHOUT SEARCHING: {len(content):,} chars  "
+                  f"model={model}")
+            print(f"      scripted negatives (P4.6): {_scripted_line(content)}")
+        if args.out and content:
+            d = Path(args.out)
+            d.mkdir(parents=True, exist_ok=True)
+            suffix = ("_nofix" if args.without_fix else "") + (
+                "_nolookup" if args.without_lookup else "")
+            (d / f"{sid}_t{args.turn}_first{suffix}_rep{rep}.md").write_text(
+                content, encoding="utf-8")
+        if args.print:
+            print(content if content else "\n".join(f"      {n}({a})" for n, a in calls))
+    print(f"  total ${total:.4f}")
+    return 0
+
+
+def _manager_first_round_command(args, doc: dict, turn: dict, sid: str) -> int:
+    """`manager --first-round` (P3.15): the Manager's first round of a turn,
+    its tools offered, stopped at the first call. A turn it answers from its
+    history is graded by `replay_report lookup` for the turn's slot; a turn it
+    delegates prints the instrument numbers the brief names, which is the
+    first-delegation drift probe (Session 22: a Manager prompt edit moved the
+    first brief to another Act)."""
+    from src.agent.tools import get_manager_tools
+
+    on_date = as_sent_date(args.date, doc)
+    messages, _cfg = manager_head(doc, turn, args.without_fix, args.rev, on_date,
+                                  hint=args.hint)
+    messages = _strip_stamps(messages)
+    tools = get_manager_tools("")
+    recorded = [d for d in (turn.get("audit") or {}).get("delegations", [])
+                if d.get("step") is None]
+    print(f"seam=manager FIRST ROUND  session={sid} turn={args.turn}  "
+          f"{'WITHOUT fix (' + args.rev + ')' if args.without_fix else 'current code'}  "
+          f"date line: {(on_date or date.today()).strftime('%d %B %Y')}")
+    print(f"  payload: {len(messages)} message(s), "
+          f"{sum(len(m.get('content') or '') for m in messages):,} chars; "
+          f"the recorded turn delegated {len(recorded)} time(s)"
+          + (f"; its first brief named {', '.join(_named_in(recorded[0].get('brief'))) or 'no number'}"
+             if recorded else ""))
+    if args.dry_run:
+        return 0
+    cfg = asyncio.run(_provider_cfg(_cfg_for(doc, turn)))
+    total = 0.0
+    for rep in range(1, args.reps + 1):
+        content, calls, cost, model = asyncio.run(run_first_round(messages, cfg, tools))
+        total += cost
+        text = ""
+        if calls:
+            print(f"  rep{rep}: ${cost:.4f}  DELEGATED: "
+                  + ", ".join(n for n, _ in calls) + f"  model={model}")
+            for name, raw in calls:
+                try:
+                    brief = (json.loads(raw or "{}") or {}).get("query") or ""
+                except ValueError:
+                    brief = raw or ""
+                if name == "delegate_research":
+                    print(f"      brief names: {', '.join(_named_in(brief)) or 'no number'}"
+                          f"  ({len(brief):,} chars)")
+                    text += brief + "\n"
+        else:
+            text, _s = extract_suggestions(content)
+            g = lookup_grade(doc, turn, text)
+            print(f"  rep{rep}: ${cost:.4f}  ANSWERED FROM HISTORY: {len(text):,} chars  "
+                  f"model={model}")
+            sl = stance_line(doc, turn, text)
+            if sl:
+                print(f"      {sl}")
+            if g:
+                k = g["kinds"]
+                print(f"      lookup: {g['lid']} {g['verdict']}"
+                      f"{' (not graded)' if not g['graded'] else ''}"
+                      f"{': ' + g['why'] if g['why'] else ''}  (rec {k['record_absent']}, "
+                      f"txt {k['text_only']}, hdg {k['hedged']}, blm {k['blame']})")
+        if args.out and text:
+            d = Path(args.out)
+            d.mkdir(parents=True, exist_ok=True)
+            (d / f"{sid}_t{args.turn}_manager_first{'_nofix' if args.without_fix else ''}"
+                 f"{'_hint' if args.hint else ''}_rep{rep}.md").write_text(text, encoding="utf-8")
+        if args.print:
+            print(text)
+    print(f"  total ${total:.4f}")
+    return 0
+
+
 def main(argv: Optional[list] = None) -> int:
     rr._utf8_stdout()
     p = argparse.ArgumentParser(prog="seam_replay")
@@ -454,12 +1252,64 @@ def main(argv: Optional[list] = None) -> int:
                    help="worker seam only: rebuild each summarised result's "
                         "appended blocks from its recorded raw_result through "
                         "the product's builder (P3.11's outline reaches the seam)")
+    p.add_argument("--apply-lost", action="store_true",
+                   help="synthesis and manager seams (P4.5): rebuild each lost-shaped "
+                        "recorded report (no halt, no error, empty or scope block "
+                        "alone) through the product's lost-report builder, and put "
+                        "the draw through the answer seam's lost disclosure")
     p.add_argument("--print", action="store_true", help="print the answer")
     p.add_argument("--no-tools", action="store_true",
                    help="manager seam only: make the call tool-free. By default "
                         "the Manager is offered its tools, as the live call is "
                         "(a call it makes is refused), because tool-free it "
                         "delivered a payload the live Manager flattened (P3.13)")
+    p.add_argument("--first-round", action="store_true",
+                   help="worker seam (P4.6): the Worker's first round - its "
+                        "prompt and the brief, with its real tools offered, "
+                        "stopped at the first call. Prints the calls it chose, or "
+                        "the report it wrote without searching. Manager seam "
+                        "(P3.15): the Manager's first round of the turn - an "
+                        "answer from history, graded by `replay_report lookup`, "
+                        "or the delegation, with the numbers its brief names")
+    p.add_argument("--without-lookup", action="store_true",
+                   help="--first-round only (P3.7): leave out the instrument-lookup "
+                        "block code appends to the brief, and the lookup tool")
+    p.add_argument("--as-sent", action="store_true",
+                   help="worker seam only (P4.10): the Worker's model call rebuilt "
+                        "as chat_loop sent it (recorded rounds, tools offered, no "
+                        "closing message), ONE attempt per rep, and the attempt's "
+                        "outcome, tokens, seconds and cost")
+    p.add_argument("--round", type=int, default=None,
+                   help="--as-sent only: send the first N recorded rounds (the "
+                        "empty-completion record's react_turn); default all")
+    p.add_argument("--reasoning-effort", choices=["low", "medium", "high"],
+                   help="--as-sent only: add reasoning.effort to the payload "
+                        "(a lever under test; the product sends none)")
+    p.add_argument("--max-tokens", type=int, default=None,
+                   help="--as-sent only: add max_tokens to the payload. Since P4.10 "
+                        "the product's Worker call sends 32000; without this flag "
+                        "the seam sends none, i.e. the pre-P4.10 payload")
+    p.add_argument("--date", default=None,
+                   help="--as-sent, or manager --first-round: the prompt's date line: 'recorded' "
+                        "(the run's started_at) or YYYY-MM-DD; default today. The "
+                        "date line alone decided whether a stored (a) payload ran "
+                        "away (P4.10, Session 29)")
+    p.add_argument("--at-rev", default=None,
+                   help="--as-sent only (P4.11): build the Worker prompt and its "
+                        "tools with the code at this revision: 'recorded' (the "
+                        "run's runtime_state.git_head) or a sha; default the "
+                        "working tree. Today's code rebuilt 1 of the 8 stored "
+                        "(b) Worker payloads to its recorded sent_chars")
+    p.add_argument("--provider", default=None,
+                   help="--as-sent only (P4.11): route the draw to this OpenRouter "
+                        "upstream alone (e.g. google-vertex, google-ai-studio), with "
+                        "no fallback; the product sends no routing field. Each draw "
+                        "prints the provider that served it either way")
+    p.add_argument("--hint", action="store_true",
+                   help="manager seam only (P3.2 lever (c), prototype): prefix the "
+                        "lawyer's turn with the verbatim text of the provisions it "
+                        "names, and the concordance of two quoted defined terms "
+                        "(tools/provision_hints.py, live against LEX)")
     p.add_argument("--dry-run", action="store_true",
                    help="build the payload and print its shape; no model call")
     p.add_argument("--out", default=None, help="write each answer to this directory")
@@ -468,18 +1318,74 @@ def main(argv: Optional[list] = None) -> int:
     run_path = Path(args.run)
     doc, turn = load_turn(run_path, args.turn)
     sid = str(doc.get("session_id"))
-    build = {"synthesis": synthesis_messages, "worker": worker_messages,
+    if args.hint and args.seam != "manager":
+        raise SystemExit("--hint is a manager seam option")
+    if args.first_round:
+        if args.at_rev or args.provider:
+            # Not built for either first round: refuse rather than draw the
+            # working tree's prompt, or the default route, under a flag that
+            # says otherwise.
+            raise SystemExit("--at-rev and --provider are worker --as-sent options")
+        if args.seam == "manager":
+            return _manager_first_round_command(args, doc, turn, sid)
+        if args.seam != "worker":
+            raise SystemExit("--first-round is a worker or manager seam option")
+        if args.date:
+            # Not pinned here yet: refuse rather than draw today's date line
+            # under a flag that says otherwise (Session 29).
+            raise SystemExit("--date is not supported on worker --first-round; "
+                             "it draws with today's date line")
+        return _first_round_command(args, doc, turn, sid)
+    if args.as_sent:
+        if args.seam != "worker":
+            raise SystemExit("--as-sent is a worker seam option")
+        return _as_sent_command(args, doc, turn, sid)
+    if (args.round is not None or args.reasoning_effort or args.max_tokens or args.date
+            or args.at_rev or args.provider):
+        raise SystemExit("--round, --reasoning-effort, --max-tokens, --date, --at-rev "
+                         "and --provider need --as-sent")
+    build ={"synthesis": synthesis_messages, "worker": worker_messages,
              "manager": manager_messages}[args.seam]
     kwargs = {"without_fix": args.without_fix, "rev": args.rev}
     if args.seam == "worker":
         kwargs["delegation"] = args.delegation
         kwargs["from_raw"] = args.from_raw
+        if args.apply_lost:
+            raise SystemExit("--apply-lost is a synthesis or manager seam option")
+    else:
+        kwargs["apply_lost"] = args.apply_lost
+    if args.seam == "manager":
+        kwargs["hint"] = args.hint
     messages = build(doc, turn, **kwargs)
+    # P4.5: what the answer seam does with a lost step, in code.
+    lost_for_answer, any_completed = [], True
+    _dgs = (turn.get("audit") or {}).get("delegations", [])
+    if args.seam == "synthesis":
+        lost_for_answer = lost_from(turn, args.apply_lost)
+        any_completed = any(not (d.get("lost") or d.get("halted") or d.get("error")
+                                 or (args.apply_lost and is_lost_shaped(d)))
+                            for d in _dgs if d.get("step") is not None)
+    elif args.seam == "manager":
+        mgr = [d for d in _dgs if d.get("step") is None]
+        is_lost = [bool(d.get("lost") or (args.apply_lost and is_lost_shaped(d)))
+                   for d in mgr]
+        done = [not is_lost[i] and not d.get("halted") and not d.get("error")
+                for i, d in enumerate(mgr)]
+        lost_for_answer = [{"reason": "empty_completion"}
+                           for i in range(len(mgr)) if is_lost[i] and not any(done[i + 1:])]
+        any_completed = any(done)
 
     chars = sum(len(m.get("content") or "") for m in messages)
     print(f"seam={args.seam}  session={sid} turn={args.turn}  "
           f"{'WITHOUT fix (' + args.rev + ')' if args.without_fix else 'current code'}")
     print(f"  payload: {len(messages)} message(s), {chars:,} chars")
+    if args.seam in ("synthesis", "manager"):
+        labelled = sum(1 for m in messages
+                       if "[Research Incomplete — answer lost]" in (m.get("content") or ""))
+        print(f"  lost-report labels in the payload: {labelled}"
+              f"{'  (--apply-lost)' if args.apply_lost else '  (as recorded)'}; "
+              f"lawyer notice at the answer seam: "
+              f"{'yes' if lost_for_answer else 'no'}")
     if args.seam == "manager":
         reports = [m for m in messages if m.get("role") == "tool"]
         print(f"  delegations: {len(reports)}")
@@ -488,8 +1394,11 @@ def main(argv: Optional[list] = None) -> int:
             if grade:
                 print(f"  report {i} depth: {grade}")
     elif args.seam == "synthesis":
+        print(f"  research type: {_cfg_for(doc, turn)['_research_mode']}")
         print(f"  pinpoint block: "
-              f"{'present' if 'PINPOINTS TO KEEP' in messages[1]['content'] else 'absent'}")
+              f"{'present' if 'PINPOINTS TO KEEP' in messages[1]['content'] else 'absent'}"
+              + (f" ({args.rev} {'has' if rev_has_pinpoint_block(args.rev) else 'predates'}"
+                 " P3.1's block)" if args.without_fix else ""))
     else:
         tool_msgs = [m for m in messages if m.get("role") == "tool"]
         with_outline = sum(1 for m in tool_msgs if "[SECTION OUTLINE" in (m.get("content") or ""))
@@ -508,6 +1417,8 @@ def main(argv: Optional[list] = None) -> int:
         content, cost, model = asyncio.run(run_seam(messages, cfg, tools))
         total += cost
         clean, _ = strip_scope_blocks(content)
+        if args.seam in ("synthesis", "manager"):
+            clean, _ = apply_lost_disclosure(clean, lost_for_answer, any_completed)
         if args.seam == "manager":
             # What the product does to the Manager's text before the lawyer sees
             # it, in the order `process_user_request` does it.
@@ -521,13 +1432,20 @@ def main(argv: Optional[list] = None) -> int:
                 if restored:
                     print(f"      restored {restored} dropped sibling(s)")
         print(f"  rep{rep}: ${cost:.4f}  {len(clean):,} chars  model={model}")
+        if args.seam == "manager":
+            sl = stance_line(doc, turn, clean)
+            if sl:
+                print(f"      {sl}")
+        if args.seam == "worker":
+            print(f"      scripted negatives (P4.6): {_scripted_line(clean)}")
         grade = _grade(sid, clean)
         if grade:
             print(f"      depth: {grade}")
         if args.out:
             d = Path(args.out)
             d.mkdir(parents=True, exist_ok=True)
-            suffix = "_nofix" if args.without_fix else ""
+            suffix = ("_nofix" if args.without_fix else "") + (
+                "_lost" if args.apply_lost else "") + ("_hint" if args.hint else "")
             (d / f"{sid}_t{args.turn}_{args.seam}{suffix}_rep{rep}.md").write_text(
                 clean, encoding="utf-8")
         if args.print:

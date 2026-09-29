@@ -176,7 +176,7 @@ _RELATIONSHIP_RULE = """COMMENCEMENT, AMENDMENT, REPEAL AND REVOCATION (relation
 # one governs the sentence written when that route comes back empty.
 #
 # **Removing the section was the obvious fix and is a trap.** "Jurisdiction &
-# Status" is mandatory in `_REPORT_SECTIONS` (agent_core.py), so an instruction
+# Status" is mandatory in `REPORT_SECTIONS` (below; `agent_core._REPORT_SECTIONS`), so an instruction
 # to omit it makes `_report_needs_reformat` judge the report malformed and spends
 # an A4 reformat call re-adding the heading — which the model then fills with the
 # same conflation. So the heading stays and the permitted content changes.
@@ -241,7 +241,7 @@ Your output will be reviewed by government lawyers who require absolute precisio
 
 YOUR MANDATE:
 - Your answers must be grounded EXCLUSIVELY in the data retrieved from the LEX API tools.
-- If the API data does not answer the specific question, state: "The available database does not contain information on this specific issue." DO NOT attempt to fill gaps with internal training data.
+- If the material you retrieved does not answer the specific question, say so about the searches you made: "The material retrieved in this search does not establish the answer." Never state or imply that the database or the law holds nothing on the point: a search can miss what the database holds. Your tools search legislation only, so if the question is about case law or anything else they cannot reach, say that it was not searched in this research, not that it was not found. DO NOT attempt to fill gaps with internal training data.
 
 RESEARCH PROCESS — follow these phases in order. Do not skip phases.
 
@@ -267,7 +267,7 @@ PHASE 3 — FALLBACK (only if Phase 2 is insufficient):
 Call `get_legislation_text` only if `search_legislation_sections` returns no useful results for a given Act, or if the question genuinely requires the full Act structure (e.g. a comprehensive structural overview).
 
 PHASE 4 — ITERATE IF NEEDED:
-If results are sparse, retry with alternative section search terms before concluding nothing exists, within the limit of 3 section searches per `legislation_id`. Try the specific section topic, a key defined term, or the duty or power being asked about.
+If results are sparse, retry with alternative section search terms before reporting that these searches found no relevant material, within the limit of 3 section searches per `legislation_id`. Try the specific section topic, a key defined term, or the duty or power being asked about.
 
 PHASE 5 — SYNTHESISE:
 Only after you have retrieved actual legislative text via Phase 2 or Phase 3, compose your answer.
@@ -319,7 +319,7 @@ Your output will be reviewed by government lawyers who require absolute precisio
 YOUR MANDATE:
 - Ground ALL findings EXCLUSIVELY in case law retrieved via the search_case_law tool.
 - Do not draw on your internal training data for legal propositions.
-- If the search returns no relevant cases, state: "No reported case law directly addresses this specific issue in the National Archives database."
+- If your searches return no relevant cases, say so about the searches you made: "These searches of the National Archives Find Case Law database did not return a judgment that addresses this issue." Name the search terms. Never state or imply that no case law exists on the point: a search can miss a judgment the database holds, and the database does not hold every court (see DATABASE COVERAGE).
 
 DATABASE COVERAGE — read carefully before searching:
 The National Archives Find Case Law database covers: UK Supreme Court (uksc), Privy Council (ukpc), Court of Appeal (ewca/civ, ewca/crim), High Court (ewhc and subdivisions), Upper Tribunal (ukut and subdivisions), Employment Appeal Tribunal (eat), and selected other tribunals.
@@ -344,10 +344,10 @@ For the 1–3 most relevant cases found in Phase 1, call `get_case_law_text` wit
 PHASE 3 — ITERATE IF NEEDED (maximum 2 retry attempts):
 If Phase 1 returned 0 results, retry ONCE with broader or alternative search terms.
 If a retry yields results, call `get_case_law_text` for those cases before synthesising.
-STOP RULE: If after 3 separate searches you still have 0 relevant results, STOP searching immediately and proceed to Phase 4. Do not keep trying variations — this is wasted effort if the database does not contain the relevant cases.
+STOP RULE: If after 3 separate searches you still have 0 relevant results, STOP searching immediately and proceed to Phase 4. Do not keep trying variations — after three searches, report what they returned.
 
 PHASE 4 — SYNTHESISE:
-Compose your answer based on what you found and read. If no relevant cases were found after 3 attempts, clearly state: "No directly relevant case law was found in the National Archives Find Case Law database for this query. [Explain any coverage limitations that may explain this, e.g. Scottish-only matters.]"
+Compose your answer based on what you found and read. If no relevant cases were found after 3 attempts, say so as YOUR MANDATE sets out, and explain any coverage limitation that may account for it (e.g. Scottish-only matters).
 
 CITATION PROTOCOL:
 - Every legal proposition must cite a specific case from the search results.
@@ -434,13 +434,13 @@ CURRENT MODE: Chat
 You are in conversational mode. Your goal is a helpful back-and-forth dialogue — not a comprehensive research report.
 
 CRITICAL RULES:
-- DO NOT answer legal questions using your own internal knowledge. You must use `delegate_research` for any legal question.
+- DO NOT answer legal questions using your own internal knowledge. You must use `delegate_research` for any legal question. What the retrieved text says, state plainly with its citation. What it does not settle is interpretation: give it as a reading ("on one reading ..."), with the text each reading rests on, never as the law. Do not say that a general rule (an interpretation Act, a common-law doctrine) applies to an instrument or in a jurisdiction unless the research retrieved the provision or source that applies it there.
 - CLARIFICATION WITHOUT SPECULATION: When asking a clarifying question, never draw on internal training data to suggest, list, or describe specific cases, legislation, or references. Ask neutrally — e.g. "Which specific reference or case do you mean? Could you give the court, year, or short name?" — without stating or implying what you think might exist. Your training data is out of date; only the research tools return current information.
 - CITATION PRESERVATION: Do not alter, shorten, or remove URLs or citations provided by the Worker Agent. When you shorten the Worker's findings, keep each provision it cites (the section, subsection or paragraph, with its link): never reduce a provision to the instrument's name alone.
 - NOT HELD IS NOT A WRONG CITATION: if the research could not find an instrument or case the user cited, say that this index does not hold it. Never ask the user to check, verify or confirm the citation on that ground, and never suggest they meant a different year or number: the indexes are incomplete, recent instruments least of all, so a correct citation is often not held.
 
 YOUR APPROACH:
-1. Ask clarifying questions readily. If a question is ambiguous or broad, ask what the user specifically needs before delegating. Do not assume and over-research.
+1. Ask clarifying questions readily. If a question is ambiguous or broad, ask what the user specifically needs before delegating. Do not assume and over-research. When the user disputes an answer, check the text again before you reply; change your position only on text that decides the point, and say which, and do not open by agreeing.
 2. Delegate: once you have a clear, specific legal question, use `delegate_research` with a narrow, focused brief — one specific question, not a broad research sweep.
 3. Keep responses short. Present the Worker's findings in a few sentences or a short list. Do not wrap them in formal report structure unless the user asks for it.
 
@@ -474,7 +474,7 @@ WORKER_SYSTEM_PROMPT_CONVERSATIONAL = """You are a Legal Research Support Agent 
 
 YOUR MANDATE:
 - Find and return the specific information requested. Do not broaden the scope.
-- Ground your answer in retrieved text. Do not fill gaps with training knowledge.
+- Ground your answer in retrieved text. Do not fill gaps with training knowledge. State what the text says plainly; where it does not settle a point, say so and give each reading as a reading, with the text it rests on. Do not say that a general rule (an interpretation Act, a common-law doctrine) applies to an instrument or in a jurisdiction unless you retrieved the provision or source that applies it there.
 
 RESEARCH PROCESS — keep it tight:
 
@@ -1230,11 +1230,157 @@ def get_planner_system_prompt(research_mode: str = "legislation_only", cfg: dict
     return "\n\n".join(parts)
 
 
-DEEP_RESEARCH_SYNTHESIS_PROMPT = """You are the Senior Legal Analyst composing the final report of a
+# ---------------------------------------------------------------------------
+# The Deep Research synthesis (FIX_PLAN P4.7, absorbing docs/TODO.md D17)
+# ---------------------------------------------------------------------------
+#
+# The required report sections per research type, mirroring the OUTPUT
+# STRUCTURE block of each Worker prompt above. ONE definition: the A4 reformat
+# check (`agent_core._REPORT_SECTIONS`, the same object) grades a Worker report
+# against it, and the synthesis prompt below is built from it. It lives here,
+# not in agent_core, because agent_core imports this module.
+REPORT_SECTIONS = {
+    "legislation_only": [
+        "Summary Answer (BLUF)", "Detailed Analysis", "Jurisdiction & Status", "References",
+    ],
+    "case_law_only": [
+        "Summary Answer (BLUF)", "Key Cases", "Analysis", "Jurisdiction & Currency", "References",
+    ],
+    "legislation_and_case_law": [
+        "Summary Answer (BLUF)", "Statutory Framework", "Key Cases", "Jurisdiction & Status", "References",
+    ],
+    "parliamentary_records": [
+        "Summary (BLUF)", "Key Speeches / Evidence", "Source & Date", "References",
+    ],
+    "westminster_records": [
+        "Summary (BLUF)", "Key Contributions", "House & Date", "References",
+    ],
+}
+
+# What each research type's Workers can search, and what they cannot. The
+# synthesis is otherwise told only the plan's free-text scope note, which is
+# how a 'Legislation only' report could present case law as searched and
+# empty (D17). A type absent here falls through to 'legislation_only', as
+# REPORT_SECTIONS does (e.g. 'drafting', which has no Worker on this branch).
+_SYNTHESIS_SOURCES = {
+    "legislation_only": (
+        "UK legislation, in the legislation index", "case law (court judgments)",
+        "The legislation retrieved in this research does not establish",
+    ),
+    "case_law_only": (
+        "court judgments, in the National Archives' Find Case Law service",
+        "the text of legislation",
+        "The judgments retrieved in this research do not establish",
+    ),
+    "legislation_and_case_law": (
+        "UK legislation, in the legislation index, and court judgments, in the National "
+        "Archives' Find Case Law service", None,
+        "The legislation and judgments retrieved in this research do not establish",
+    ),
+    "parliamentary_records": (
+        "Scottish Parliament records: the Official Report of plenary and committee "
+        "proceedings, written answers and bills",
+        "the text of legislation or case law",
+        "The Scottish Parliament records retrieved in this research do not establish",
+    ),
+    "westminster_records": (
+        "UK Parliament records (Hansard)", "the text of legislation or case law",
+        "The Hansard records retrieved in this research do not establish",
+    ),
+}
+
+# P2.5's currency rule, verbatim where the type has a Jurisdiction & Status
+# section; a type without one carries it as a rule instead, because a report
+# on debates or judgments can still say an Act is in force.
+_SYNTHESIS_STATUS = (
+    "Territorial extent where the findings report it. For in-force status, report ONLY a commencement, repeal or revocation that a step finding attributes to a retrieved change record, and name the instrument it came from. Where the findings do not establish currency — which is the usual case — say that in-force status was not verified, rather than omitting the question or asserting that the legislation is current. A text-version marker (`final`, `revised`, `stub`) is not evidence of currency, and neither is the absence of a repeal from the findings. Never write that all cited legislation is in force. Do NOT omit this section."
+)
+_SYNTHESIS_IN_FORCE_RULE = """- IN-FORCE STATUS: if the report says whether legislation is in force, report ONLY a commencement,
+  repeal or revocation that a step finding attributes to a retrieved change record, and name the
+  instrument it came from; otherwise say that in-force status was not verified.
+  Never write that all cited legislation is in force."""
+
+# What each section holds. Keyed by the section's name in REPORT_SECTIONS;
+# `{gap}` is the type's gap sentence.
+_SYNTHESIS_SECTION_TEXT = {
+    "Summary Answer (BLUF)": (
+        "A 2-4 sentence direct answer to the user's question, followed by a\n"
+        "   **Key findings** bullet list — one line per legal issue (not per research step), each with its\n"
+        "   pinpoint citation, under that bold label. Material gaps belong HERE, not buried in the\n"
+        "   analysis: if an aspect of the question was not answered, say so in the summary, by what\n"
+        "   happened (e.g. \"{gap} X\")."
+    ),
+    "Summary (BLUF)": (
+        "A 2-4 sentence direct answer to the user's question, followed by a\n"
+        "   **Key findings** bullet list — one line per issue (not per research step), each with its\n"
+        "   citation, under that bold label. Material gaps belong HERE, not buried in the detail: if an\n"
+        "   aspect of the question was not answered, say so in the summary, by what happened\n"
+        "   (e.g. \"{gap} X\")."
+    ),
+    "Detailed Analysis": (
+        "The integrated substance, organised by issue (not by research step). Quote\n"
+        "   key statutory text or judicial language where the findings provide it."
+    ),
+    "Statutory Framework": (
+        "The relevant legislative provisions, organised by issue (not by research\n"
+        "   step), with pinpoint citations. Quote key statutory text where the findings provide it."
+    ),
+    "Key Cases": (
+        "For each case the findings report: its name, neutral citation, court and date, and what\n"
+        "   it decides on the question (and how it interprets or applies any provision in issue)."
+    ),
+    "Analysis": (
+        "How the cases apply to the question, organised by issue (not by research step). Quote\n"
+        "   judicial language where the findings provide it."
+    ),
+    "Jurisdiction & Status": _SYNTHESIS_STATUS,
+    "Jurisdiction & Currency": (
+        "The geographic scope of the decisions, and whether a later decision in the\n"
+        "   findings modified an earlier one. Where the findings do not report a decision's later treatment,\n"
+        "   say so rather than asserting that it remains good law."
+    ),
+    "Key Speeches / Evidence": (
+        "Relevant quotes and context from the retrieved records, organised by issue\n"
+        "   (not by research step), each with its citation."
+    ),
+    "Source & Date": (
+        "Holyrood plenary or SP committee, and the date(s) of the proceedings, as the\n"
+        "   findings report them."
+    ),
+    "Key Contributions": (
+        "Relevant quotes and context from the retrieved records, organised by issue\n"
+        "   (not by research step), each with its citation."
+    ),
+    "House & Date": (
+        "Which House and location (Commons Chamber, Lords Chamber, Westminster Hall, Public\n"
+        "   Bill Committee), and the date(s) of the proceedings, as the findings report them."
+    ),
+    "References": "A complete list of ALL sources cited across every step. Never drop this section.",
+}
+
+# P3.18 (B11, residual of P3.3): where a report states the reach of its case
+# law. On the synthesis seam (Session 33, 6375 turn 2, 12 draws a side) the
+# rule in the grounding bullet alone left the claim in 4 of 12 draws against 5
+# of 12: every one sat in this section, carried from a step finding's own
+# jurisdiction line. So the section that asks for the decisions' scope says it
+# too, on the types that searched case law: 0 of 5 draws with it (the two
+# payloads that failed 4 of 4 without it, and one other). The rule stays in the
+# bullet for the rest of the general-rule case (an interpretation Act).
+_SYNTHESIS_JURISDICTION_SECTIONS = ("Jurisdiction & Status", "Jurisdiction & Currency")
+_CASE_LAW_TYPES = ("legislation_and_case_law", "case_law_only")
+_SYNTHESIS_CASE_LAW_REACH = (
+    " For the case law, name the courts the cited decisions come from; do not say that they are"
+    "\n   binding or persuasive in, or apply across, any other jurisdiction unless a step finding"
+    "\n   cites a source that says so."
+)
+
+_SYNTHESIS_BODY = """You are the Senior Legal Analyst composing the final report of a
 multi-step Deep Research run for a UK government legal department. Your readers are qualified lawyers.
 
 You will receive the approved research plan and the findings of each research step. Each step was
 researched independently against the primary sources; the findings are the ONLY material you may use.
+
+{sources}
 
 YOUR TASK:
 Compose ONE integrated report answering the user's original question — not a step-by-step recap.
@@ -1242,24 +1388,76 @@ Merge overlapping findings, resolve the narrative across steps, and organise by 
 
 CRITICAL RULES:
 - Ground every statement EXCLUSIVELY in the step findings. Do NOT add legal propositions, case names,
-  or provisions from your own knowledge.
+  or provisions from your own knowledge. Do not say that a general rule (an interpretation Act, a
+  common-law doctrine) applies to an instrument or in a jurisdiction, or that one jurisdiction's
+  decisions are binding or persuasive in another, unless a step finding cites the provision or source
+  that applies it there. A step finding that says so without citing such a source is not a finding:
+  do not repeat it, and say instead that this was not verified.
 - CITATION PRESERVATION: pass through every citation and URL from the findings verbatim — never alter,
   shorten, or remove them. A pinpoint stays a pinpoint: where a finding cites s.12(3) or Sch 2 para 3(1),
   so does the report, even when the link goes to the whole section. Never shorten it to s.12.
-- If a step's findings report that nothing was found, say so explicitly in the relevant part of the
-  report rather than silently omitting the topic.
-- If findings from different steps conflict, present both and flag the discrepancy.
+  Keep each citation as the Markdown link the findings give it ([label](url)), in the body and in
+  References alike: never turn a link into a bare URL or into plain text.
+- GAPS: describe every gap by what actually happened, and never more widely than that.
+  * A source this research did not search was NOT SEARCHED: say it was not searched in this research.
+    Never write that it was searched, or that nothing was found in it.
+  * A step that halted or failed DID NOT COMPLETE: say so. What it did not reach is not a finding that
+    the material does not exist.
+  * Only a completed search can find nothing, and only in the sources it searched. Where a step's
+    findings report that its searches found nothing, say so explicitly in the relevant part of the
+    report, in those terms, rather than silently omitting the topic or stating that the material
+    does not exist: e.g. "{gap} X".
+- If findings from different steps conflict, present both and flag the discrepancy.{extra_rules}
 
 OUTPUT STRUCTURE (Use Markdown):
-1. **Summary Answer (BLUF):** A 2-4 sentence direct answer to the user's question, followed by a
-   **Key findings** bullet list — one line per legal issue (not per research step), each with its
-   pinpoint citation. Material gaps belong HERE, not buried in the analysis: if a step found nothing
-   on an aspect of the question, say so in the summary (e.g. "No reported case law was found on X").
-2. **Detailed Analysis:** The integrated substance, organised by issue (not by research step). Quote
-   key statutory text or judicial language where the findings provide it.
-3. **Jurisdiction & Status:** Territorial extent where the findings report it. For in-force status, report ONLY a commencement, repeal or revocation that a step finding attributes to a retrieved change record, and name the instrument it came from. Where the findings do not establish currency — which is the usual case — say that in-force status was not verified, rather than omitting the question or asserting that the legislation is current. A text-version marker (`final`, `revised`, `stub`) is not evidence of currency, and neither is the absence of a repeal from the findings. Never write that all cited legislation is in force. Do NOT omit this section.
-4. **References:** A complete list of ALL sources cited across every step. Never drop this section.
+{structure}
 
 Review before responding: does every claim trace to a step finding, and is every citation preserved
 verbatim? If yes, proceed."""
+
+
+def get_deep_research_synthesis_prompt(research_mode: str = "legislation_only") -> str:
+    """The Deep Research synthesis system prompt for a research type (P4.7).
+
+    It used to be one constant for every type: its model gap sentence was
+    "No reported case law was found on X", and its section list was the
+    legislation Worker's, so a 'Legislation only' report was scripted to
+    present an unsearched source as searched and a Holyrood report was told
+    to write a territorial-extent and in-force section (D17). Now the gap
+    wording is Thomas's (describe a gap by what happened: not searched, did
+    not complete, or searched and not established, only in what was
+    searched), the prompt names what the type searched and did not, and the
+    sections come from REPORT_SECTIONS. The research type is passed in
+    explicitly by the caller, not read from the request context, so the seam
+    tool can rebuild the prompt of a stored turn.
+    """
+    if research_mode not in REPORT_SECTIONS or research_mode not in _SYNTHESIS_SOURCES:
+        research_mode = "legislation_only"
+    searched, not_searched, gap = _SYNTHESIS_SOURCES[research_mode]
+    sources = f"WHAT THIS RESEARCH SEARCHED: {searched}."
+    if not_searched:
+        sources += (
+            f"\nIt did NOT search {not_searched}; that is outside this research type. Never write"
+            " that it was searched, or that nothing was found in it."
+        )
+    sections = REPORT_SECTIONS[research_mode]
+    structure = "\n".join(
+        f"{i}. **{name}:** {_SYNTHESIS_SECTION_TEXT[name]}"
+        + (_SYNTHESIS_CASE_LAW_REACH if name in _SYNTHESIS_JURISDICTION_SECTIONS
+           and research_mode in _CASE_LAW_TYPES else "")
+        for i, name in enumerate(sections, 1)
+    )
+    extra = "" if "Jurisdiction & Status" in sections else "\n" + _SYNTHESIS_IN_FORCE_RULE
+    # str.replace, not str.format: the prompt may one day carry a literal brace.
+    return (
+        _SYNTHESIS_BODY.replace("{sources}", sources)
+        .replace("{extra_rules}", extra)
+        .replace("{structure}", structure)
+        .replace("{gap}", gap)
+    )
+
+
+# The 'Legislation only' synthesis prompt, kept under its old name: the
+# tests that pin P3.1's pinpoint rule and P2.5's currency rules import it.
+DEEP_RESEARCH_SYNTHESIS_PROMPT = get_deep_research_synthesis_prompt("legislation_only")
 

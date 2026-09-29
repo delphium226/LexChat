@@ -1227,7 +1227,7 @@ be attributed to either side. Before quoting accuracy numbers: get a lawyer thro
 ---
 
 ### D17. Deep Research synthesis prompt is mode-blind — MOVED to the pre-pilot fix plan as P4.7
-**MOVED 2026-09-18 to `docs/prepilot-fixes/FIX_PLAN.md` row P4.7**, together with the same point from Thomas's external review (action 2). It had not been carried into that plan when D16 was. Track it there; the analysis below is kept for reference. ~~**Status: PARKED by user decision, 2026-08-19**, to be taken up with D16 as one piece of
+**DONE 2026-09-24 as P4.7** on `fix/prepilot-defects` (`get_deep_research_synthesis_prompt(research_mode)`; sections from `REPORT_SECTIONS`, now in `prompts.py`; not yet on `main`). **MOVED 2026-09-18 to `docs/prepilot-fixes/FIX_PLAN.md` row P4.7**, together with the same point from Thomas's external review (action 2). It had not been carried into that plan when D16 was. Track it there; the analysis below is kept for reference. ~~**Status: PARKED by user decision, 2026-08-19**, to be taken up with D16 as one piece of
 work once the further feedback lands.~~ Raised by an external colleague reviewing the Deep
 Research ReAct loop; verified against the code the same day (their line numbers were off —
 corrected below).
@@ -1296,3 +1296,106 @@ P2.7's **8 search rounds** and P3.1's **3 section-search rounds per instrument**
 
 Not a fix-plan row; do it after the plan concludes, or sooner only if a model change makes a
 limit live.
+
+### D19. Release versioning follow-ups (added 2026-09-24, after calendar versions were adopted)
+
+Calendar versions (`vYYYY.MM.N`) were adopted on 2026-09-24 (user decision) and set up on
+`main` in `b2a3fd8`: `VERSION`, `server_py/src/version.py`, the version in `/api/bot-info`,
+the About box and the startup log, `CHANGELOG.md`, and a *Releases* section in CLAUDE.md
+(on `main` only until the next cut). `v2026.09.1` (`d8fd73b`) and `v2026.09.2` (`c77e779`)
+are tagged retroactively. Four things were left open deliberately:
+
+- **Push the two tags.** They exist only in the dev machine's repo until
+  `git push origin v2026.09.1 v2026.09.2` (the user confirms first: pushing publishes them).
+  Until then `git describe` on the target falls back to a bare hash, and `/api/bot-info`
+  shows `build` without a release name.
+- **Deploy by tag, not by the head of `main`** (proposed, not adopted). Unrelated work
+  commits straight to `main`, so its head can sit past the last release. Deploying
+  `git fetch --tags` then `git checkout vYYYY.MM.N` makes each deploy and rollback an
+  explicit version. It changes CLAUDE.md's *Deployment Workflow*, so it is the user's call.
+- **Stamp the version on the audit event, `request_timings` and replay run files.** Deferred
+  until after the next cut, because `main`'s audit schema is v5 and the fix branch's is v6:
+  bumping on `main` now would create two different v6s. When done: a top-level `app_version`
+  (and `build`) on the audit event (schema v7, `AUDIT_TRACE.md`, harness owner told), an
+  additive `request_timings.app_version` column, and `runtime_state.app_version` in replay
+  run files beside `git_head`.
+- **A lint error that predates this work:** `client/src/hooks/useBotIdentity.js:64`, a plain
+  helper named `useSvgLogo` trips `react-hooks/rules-of-hooks`. Renaming it (for example
+  `loadSvgLogo`) clears it; it does not affect the build.
+
+### D20. Show a research step's outcome in the chat UI (added 2026-09-24, from P4.5)
+
+Since P4.5 the `tool_end` progress event names each worker's outcome ("Step complete",
+"Step incomplete: stopped at the step limit", "Step incomplete: no reply returned", and
+"Research …" for a Manager delegation). The chat UI ignores the field
+(`client/src/hooks/useChat.js`, about line 213, shows "Analysing findings…"), so only the
+SystemChat developer page and an eval harness see it. The lawyer is told in the answer's own
+notice, so nothing is hidden; showing the outcome live is a client change and a
+`client/dist` rebuild, and was out of P4.5's scope. The user's call.
+
+### D21. The "learning" injection: PARKED (user decision, 2026-09-28, found in Session 31)
+
+Found while answering whether AILA's built-in learning could help P3.2 (it cannot; see
+`docs/prepilot-fixes/SESSION_LOG.md`, Session 31). Parked, not booked as a fix-plan row. What it
+is and what was found, so the next person does not re-derive it:
+
+- **The mechanism.** `agent/learning.py`, called from `process_user_request`
+  (`agent/agent_core.py`, the "Learning mechanism injection" block) on **every** Manager call,
+  from `/api/chat`, `/api/system/chat` and `/api/consult`, with **no feature flag**. It takes the
+  words over 3 characters from the lawyer's latest message, OR-matches them by full-text search
+  against **every user's** past questions, and appends to the Manager's system prompt up to 3
+  answers rated 4 or more ("SUCCESSFUL EXAMPLES ... Emulate their style and depth") and up to 3
+  comments on answers rated 3 or less ("CRITICAL FEEDBACK ... AVOID these mistakes"). Only the
+  Manager sees it; the Workers, the Deep Research planner and the synthesis do not.
+- **The lawyer's side.** Thumbs up (saves rating 5) and thumbs down (rating 1 plus a comment)
+  on each answer (`client/src/components/ChatMessage.jsx`), through `PUT` on the message rating
+  endpoint (`routers/chats.py`). The older 5-star "Rate & Feedback" box
+  (`client/src/components/CommentModal.jsx`) is orphaned: nothing imports it.
+  `routers/learning.py` holds three admin-only endpoints (feedback list, stats, a retrieval test).
+- **Usage in the pre-pilot:** 1 rating in 181 assistant answers, no comments.
+- **Problems found, none fixed:**
+  1. **The one pre-pilot rating is a 5 on 6346's dead-end refusal** (the B7 defect P4.1
+     fixed). If the target still holds it, a new question sharing a keyword with 6346's questions
+     gets that refusal injected as an example to emulate. Not checked on the target.
+  2. **The pairing is wrong.** The query joins each user message to ANY later assistant message
+     in the same chat (`m2.id > m1.id`), not to its own reply, so a question can be shown with
+     another turn's answer.
+  3. **Cross-user exposure.** Other lawyers' question text (300 characters) and answers
+     (2,000 characters) reach a different lawyer's prompt. That is the exposure the local prompt
+     cache was forced off for on the drafting bot, and there is **no drafting-mode exclusion**
+     here, nor one for a consulted peer.
+  4. **It treats an unverified comment as ground truth** ("AVOID these mistakes"), broadcast to
+     every user whose question shares a word. That runs against Invariant 1 and against B6's own
+     finding: the tool should check the text, not adopt the pushback.
+  5. **Unmeasured.** The dev database holds no ratings and replays do not save messages, so no
+     replay directory has ever exercised it: every sweep measured the product with this block
+     empty. The target may not be empty.
+- **Options when unparked:** a feature flag defaulting OFF (the house pattern, Developer tab);
+  off in drafting mode and for `/api/consult` at minimum; fix the pairing; or remove it. First,
+  a read-only check of the target's `messages` for rated rows. See also D22, which is the
+  per-user shape of the same idea without the cross-user half.
+
+### D22. Standing instructions per AILA user — a "CLAUDE.md per user" (idea, user, 2026-09-28)
+
+The user's idea: each lawyer keeps a short set of standing instructions that AILA reads on
+every request, as Claude Code reads a CLAUDE.md. Not scoped or decided; noted so it is not lost.
+
+- **Why it fits the evidence.** CambeulW's own feedback on 6370 asks for interpretive points
+  to be presented neutrally ("for aspects which require a legal analysis"); a lawyer who could
+  say that once, for all her sessions, would not have to push the bot turn by turn (B6, B11).
+  Other plausible content: default jurisdiction, citation style, "always give the section text",
+  "never suggest switching mode".
+- **What already exists.** A per-matter version: matter notes reach the Manager prompt through
+  `_matter_context` (`agent/agent_core.py`, beside the learning block). The user's saved
+  research type (`users.research_mode`) is a one-field per-user preference.
+- **Design questions, to answer before building:**
+  - Per user only, never shared across users (unlike D21), and never cached cross-user.
+  - What it may contain: preferences about FORM, not assertions about the LAW. A note saying
+    "section 12 does not apply to Y" would be D21's problem in a private form; the tool must still read the
+    text (Invariant 1).
+  - Where it is injected (Manager only, or Workers too) and how long it may be.
+  - Session 22's lesson: any text added to the Manager prompt can move its FIRST delegation
+    brief. Measure with the first-delegation drift probe (`seam_replay manager --first-round
+    --date recorded`) and compare links and citations before shipping.
+  - The drafting bot's data rules (its user input is unpublished text) and log redaction.
+  - A UI for writing and viewing it, and the admin's view of it.

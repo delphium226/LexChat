@@ -4477,3 +4477,2676 @@ of seam draws.
 **Rollback on the target:** `git checkout pre-prepilot-fixes-2026-09-23` and
 a restart returns it to the first cut; `pre-prepilot-fixes-2026-09-22`
 returns it to before both.
+
+---
+
+## Session 22 — handover for Session 23 (2026-09-23)
+
+Written at the user's request before a new session starts, so nothing learned
+here depends on this session's context. Everything below is also on the rows
+it concerns.
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. `main` is at `c77e779`, the second
+  cut (user decision). Rollback tags: `pre-prepilot-fixes-2026-09-23` (first
+  cut only) and `pre-prepilot-fixes-2026-09-22` (before both).
+- **1578 tests green.**
+- Ledger **30 of 48 rows, 8 of 14 buckets closed.** Partial: B5 (waiting on
+  P3.7, P4.6, P4.7) and B12 (waiting on P5.2).
+- Run `python -m tools.plan_status` rather than trusting these figures.
+
+**Next work:** **P0.6** (read its row IN FULL: the research-mode field is
+blank for the same twelve sessions and is NOT derivable from the answers; the
+fix is to record `unknown` plus a human read), then **P4.6**'s re-baseline.
+Consider raising **P4.5**:
+- two episodes cost $4.89 of `wave3_p313`'s $5.65;
+- each empty completion is about 62,912 reasoning tokens;
+- a bodiless worker report made the Manager write a research-report heading
+  into a conversational answer.
+
+**Machine state:**
+- no uvicorn running; no pin file; no worktrees;
+- dev box on its normal settings: model `google/gemini-3.1-pro-preview`,
+  summarisation `google/gemini-3-flash-preview`, local prompt cache ON,
+  `research_mode_enabled` ON;
+- **39 replay directories** (gitignored), this session's being `wave3_p313`
+  (link + clause, 1 of 3), `wave3_p313b` (+ restore, 2 of 3) and
+  `wave3_p313c` (the acceptance, 3 of 3).
+- Transcript export (never in the repo):
+  `C:/Temp/aila-prepilot/pre-pilot sessions/session-transcripts-all-time-2026-09-14.csv`.
+- Fix Tracker: <https://claude.ai/artifact/JtrwLwRZnRihfe8kHj3EaJ> (source
+  `docs/prepilot-fixes/summary-table.html`; update only when asked).
+
+**Instruments added this session:**
+- `python -m tools.seam_replay manager --run <run.json> --turn N [--without-fix --rev <sha>] [--no-tools]`:
+  the Manager's composition from a run file. It offers the Manager its tools
+  by default, because the tool-free form passed a payload the live Manager
+  failed.
+- `python -m tools.replay_report --dir <D> siblings [--also DIR… | --all-dirs] [--exclude NAME…] [--list] [--dry-run [--show]]`:
+  how often the Manager keeps a sibling written as a link against plain text,
+  plus a dry-run of P3.13's code over every stored run.
+
+**Hazards met this session (add to the ones already in the brief):**
+- **Python inside a bash heredoc still mangles backslashes**, three more times
+  here. Every such failure asserted before writing, so nothing was corrupted.
+  For any edit containing `\s`, `\(` or `\n`, use the Edit tool, or write
+  the script to a file with the Write tool and run it.
+- **`git merge -F -` is not supported**: the message must be in a file.
+- **Scratch-copy revert checks:** `test_the_prompt_reader_finds_a_real_constant`
+  and `test_the_manager_body_reader_finds_the_constant` fail in any copy that
+  is not a git checkout (they call `git show`). That is an artefact, not a
+  signal.
+- **Seam draws at temperature 0 are not byte-deterministic** on the pinned
+  model (1,466 vs 1,488 chars for one payload), so count payloads, and
+  expect a close outcome to flip between draws.
+
+**Open with the user (unchanged unless they say otherwise):**
+- On the target: the first cut (`d8fd73b`) has never been confirmed pulled,
+  and no `pg_dump` has ever been taken there. Deploy both cuts with a
+  `pg_dump`, `git pull`, `stop_native.cmd` / `start_native.cmd`,
+  `server_py\test_apis.ps1`, and one real question.
+- Tell whoever runs the eval harness that the audit event is schema v5. This
+  session did not change the schema.
+- P5.2 (B12, external).
+- Whether Thomas's review document should be committed.
+
+---
+
+## Session 23 — 2026-09-23 — P0.6 (the research-type default)
+
+**Done:**
+- **P0.6 is DONE, deterministic, $0, no replay.** Ledger 30 → **31 of 49
+  rows** (one new row, P0.7); buckets unchanged at 8 of 14, because P0.6 is
+  measurement.
+- **The human read.** I read all 50 turns of the twelve from the export in
+  the scratchpad (the export never entered the repo). The read is committed as
+  `docs/prepilot-fixes/evidence/research_mode_reads.json`: one entry per
+  turn, with value, `source: reviewer`, basis (`answer`, `lawyer`,
+  `bracketed`) and a neutral note. Totals: **26 `legislation_only`, 10
+  `legislation_and_case_law`, 6 `case_law_included`, 8 `unknown`**.
+  `classification.json` is untouched.
+- **Two pre-pilot facts made a read possible. Neither was on the row, and
+  both were checked in code at `f8fe9ec`, the last `main` commit before the
+  first of the twelve.**
+  (1) The research type was **one saved preference per user**
+  (`users.research_mode`, default `legislation_only`), written only when the
+  Research filters modal was applied, and restored on every chat and login. A
+  change is therefore an event, and a lawyer's turns between two equal reads
+  are bracketed.
+  (2) Each type left behaviour in the answers. The legislation-only Manager
+  declined every case-law question in these sessions. The hybrid Manager note
+  told the Worker to ALSO search case law, so hybrid answers report case-law
+  results nobody asked for (6338 three times out of three), in the
+  `search_case_law` description's own coverage wording (6340, 6341 t4). The
+  case-law-only Manager was told to say so when asked about legislation.
+- **The harness** (`replay_set._resolve_research_modes`) sends `snapshot`,
+  `reviewer` and `reviewer_partial` (`case_law_included`, sent as
+  `legislation_and_case_law`) values, or else `unknown`. It never writes
+  `default`. `Session.research_mode` is None where the export is blank. The
+  worker and synthesis seams in `seam_replay` now use the turn's type.
+- **`replay_report modes`** prints the research type each turn sent and what
+  that rests on. It names the unknown turns and the case-law-only turns, and
+  it exits 1 on a `default` label or on a type that the read rules out. The
+  export half prints the same provenance over all 62 sessions: snapshot 130,
+  reviewer 36, reviewer_partial 6, unknown 24 (16 of these in PASS sessions
+  that are never replayed).
+- **Tests 1578 → 1603**, all green (`pytest -q` redirected to a file, exit
+  code checked). On scratch copies:
+  - with the three tool files at HEAD, all 25 new tests and the amended
+    deadend test fail;
+  - with the resolver stubbed back to the default, 7 fail;
+  - without the `modes` graders, 4 fail;
+  - with the seam back on the session filter, 1 fails.
+  The two `git show` tests were not in the files run.
+
+**Surprises / deviations from FIX_PLAN:**
+- **The default was not just unlabelled; it was wrong on 16 of the 50
+  turns.** Those are 6335 t6–7, 6338 t1–3, 6340 t1, 6341 t1–5, 6347 t2–4 and
+  6350 t3–4, and every sweep sent them without the case-law tool the lawyer
+  had. Over the 39 directories that is 14 directories and 153 turn-runs; rep
+  1 of `baseline`, `wave1`, `wave2` and `wave0_conv` carries 16 each. The
+  brief expected the P4.6 counts on these sessions to be artefacts of the
+  chat mode; they are artefacts of the research type too.
+- **P4.6's acceptance needs re-choosing before it is built.** Its sessions
+  6340 and 6341 t1–5 ran hybrid, and `WORKER_SYSTEM_PROMPT_HYBRID` carries
+  none of P4.6's three scripted lines (checked in the prompt text). The
+  acceptance as written ("6340 and 6341 carry none of the scripted
+  sentences") would now pass whatever the fix did. This is recorded on the
+  row.
+- **Design point (a) went against the brief's recommendation.** An `unknown`
+  turn sends the nearest read in its own session, not `legislation_only`.
+  The global default would have introduced a type change nobody made:
+  6341 t6–8 would drop case law after t5, and P4.1's marker would fire on
+  it. The label is `unknown` either way, and 6348 sends exactly what it sent
+  before. Point (b) follows the brief: `unknown` is named and does not fail.
+- **`modes` now exits 1 on older directories.** The exit is new on exactly
+  four: `wave0_conv`, `wave3_p313b`, `wave3_p313c` and `wave4_p41_conv`. The
+  other 18 that exit 1 already did so on chat mode. P4.1's acceptance
+  directory still exits 0. Earlier statements that every exit-1 subcommand
+  was 0 on those four were true of the instrument at the time.
+- **The data-handling test caught my own notes twice.** Two notes named
+  judgments the lawyer had typed into a question in 6350, and the five-word
+  check tripped on the case names. The rule applies to public case names
+  too, so the notes now use neutral citations.
+- **The row's trap was worth recording, and it has a companion.** A neutral
+  citation alone is not evidence, and neither is a case-law negative alone:
+  P4.1's handover item (5) has a legislation-only replay claiming case-law
+  results. The reads use three things instead: the negative arriving
+  unprompted and repeatedly, the coverage wording that only the case-law tool
+  carried, and 2026 judgments.
+- **A chat-mode question I did not act on.** The 6335 lawyer's feedback says
+  that after being pointed to "research mode" at t3 they switched to it.
+  t4–t5 have no saved reply, and P0.5 reads their chat mode from a neighbour
+  as conversational. The Research flag was off, so this may have been Deep
+  Research. P0.7's timing rows would settle it, because an errored request
+  still writes one.
+
+**How this session worked, for whoever repeats it.**
+- The transcript dump and every script that read the export stayed in the
+  scratchpad. Notes were written from the dump, and the leak test checked
+  them against the export.
+- Every published figure was re-derived by one throwaway script over all 39
+  directories, using the `replay_report` functions. It is also behind
+  `modes` and pinned by `test_replay_research_reads.py`. ~~To get the
+  directory table, run `modes` per directory.~~ Added at the handover:
+  `modes --all-dirs` prints that table and its totals.
+
+**State of the branch:** `fix/prepilot-defects`, pushed with this commit.
+1603 tests green. Ledger **31 of 49 rows, 8 of 14 buckets**, partial B5
+(P3.7, P4.6, P4.7) and B12 (P5.2). `main` is untouched at `c77e779`.
+
+**Machine state:** no uvicorn, no pin file, no worktrees, dev box on its
+normal settings (no replay was run). The local gitignored `replay_set.json`
+was re-frozen with the reads.
+
+**Spend:** $0.
+
+**Next action:** **P4.6**. Re-choose its acceptance from Research-mode turns
+whose type is `legislation_only`, taken from the export or a reviewer's read,
+then build Thomas's wording. Raise **P4.5** with the user. **P0.7** needs the
+target and can go with the deploy.
+
+**Open with the user:** deploy both cuts to the target: `pg_dump` first, then
+`git pull`, `stop_native.cmd` / `start_native.cmd`, `test_apis.ps1` and one
+real question. P0.7's read-only `request_timings` query can go with that
+deploy. Tell the eval-harness owner the audit event is schema v5. P5.2.
+Whether Thomas's review document should be committed.
+
+---
+
+## Session 23 — handover for Session 24 (2026-09-23)
+
+Written at the user's request before a new session starts, so nothing learned
+here depends on this session's context. Everything below is also on the rows
+it concerns.
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. `main` is untouched at `c77e779`,
+  the second cut. Rollback tags: `pre-prepilot-fixes-2026-09-23` (first cut
+  only) and `pre-prepilot-fixes-2026-09-22` (before both). Cuts go to `main`
+  only when the user asks.
+- **1604 tests green.**
+- Ledger **31 of 49 rows, 8 of 14 buckets closed.** Partial: B5 (waiting on
+  P3.7, P4.6, P4.7) and B12 (waiting on P5.2). Run `python -m
+  tools.plan_status` rather than trusting these figures.
+- P0.6 is a harness-only change: no product code moved. It needs no
+  deployment, and it is the one Fixed row not on `main`.
+
+**Next work: P4.6.** Read its row in full, including the P0.6 caveat at the
+end. **Re-choose its acceptance before building anything.** Its evidence
+sessions 6340 t1 and 6341 t1–5 ran as `legislation_and_case_law`.
+`WORKER_SYSTEM_PROMPT_HYBRID` carries none of P4.6's three scripted lines,
+which are in `WORKER_SYSTEM_PROMPT` (the sentence and the retry line) and in
+`WORKER_SYSTEM_PROMPT_CASE_LAW` (the case-law line). The acceptance as written
+would therefore pass whatever the fix did. Take the replacement from
+Research-mode turns whose type is `legislation_only`, by the export or a
+reviewer's read (`replay_report modes` shows which), and use `case_law_only`
+turns for the third line. The replay harness now sends the reviewer's reads,
+so 6340 and 6341 replay as hybrid. Remember that the Research flag was OFF on
+the target, so P4.6 is a forward-looking fix: 0 of 179 pre-pilot answers
+carry its sentence. Session 14's lesson applies: compare link and
+`sources_kept` counts as well as the row's metric.
+
+**Also:**
+- **P0.7 (new) needs the target.** It is one read-only `SELECT` of
+  `request_timings` for 11–22 August (the query is on the row), exported to
+  CSV and joined to the export on `created_at` + `total_cost_usd`. That
+  would replace P0.6's human read with the recorded research type and chat
+  mode, and would settle 6335 t4–5's chat mode. It can go with the deploy.
+- **Raise P4.5 with the user.** It cost $4.89 of `wave3_p313`'s $5.65, each
+  empty completion is about 62,912 reasoning tokens, and a bodiless report
+  made the Manager write a report heading into a conversational answer.
+
+**What this session established (all on rows; listed so none is lost):**
+- **The export's `Filter:` columns are blank for the twelve because the
+  feedback form began recording the filters in force only at `e008985`**
+  (13 August, 13:24), and the target had not pulled it by 6350 (14:24).
+- **At the pre-pilot the research type was one saved preference per user**
+  (`users.research_mode`, default `legislation_only`). It was set only
+  through the Research filters modal and restored on every chat and login.
+  So a change is an event, and turns between two equal reads of one lawyer
+  are bracketed.
+- **Until `bab9642` (13 August, 15:24) the research-type pill was hidden in
+  Conversational mode**, although the type was in force and editable. All
+  twelve sessions ran with it invisible on screen. This is on P4.9 and is
+  context for B7's user guidance.
+- **Behavioural signatures of each type in the pre-pilot answers** (prompts
+  at `f8fe9ec`):
+  - legislation-only Manager: declines every case-law question;
+  - hybrid Manager: briefs the Worker to ALSO search case law, so answers
+    volunteer case-law negatives in the `search_case_law` description's
+    coverage wording;
+  - case-law-only Manager: told to say so when asked about legislation;
+  - a 2026 judgment can only have come from the tool;
+  - a neutral citation alone is not evidence, and nor is a single case-law
+    negative.
+- **The default was wrong on 16 of the twelve's 50 turns** (list on P0.6).
+  14 of 39 directories are affected, 153 turn-runs; rep 1 of `baseline`,
+  `wave1`, `wave2` and `wave0_conv` carries 16 each.
+- **The target's `request_timings` records `research_mode` and `chat_mode`
+  per chat request** (since `9e69e4c`). An errored request still writes its
+  row. The planner endpoint wrote none at the pre-pilot.
+
+**Instruments added this session:**
+- `python -m tools.replay_report --dir <D> modes`: now also prints the
+  research type each turn sent, what it rests on (export / reviewer /
+  reviewer_partial / script / unknown / default / unrecorded), and names the
+  unknown and case-law-only turns. It exits 1 on a `default` label or a type
+  the reviewer's read rules out. It is still in the exit-1 set.
+- `modes --all-dirs`: the census over every directory beside `--dir`
+  (informational, exits 0).
+- `replay_set.load_research_reads` / `evidence/research_mode_reads.json`:
+  the reviewer's reads, validated. `test_replay_research_reads.py` fails if
+  a note repeats five words of a session's questions.
+
+**Expect these, and do not treat them as regressions:**
+- `modes` exits 1 on every pre-P0.6 directory holding an affected turn or a
+  `default` label: 22 in all, of which 4 are new (`wave0_conv`,
+  `wave3_p313b`, `wave3_p313c`, `wave4_p41_conv`).
+- A FRESH sweep of the twelve sends the reviewer's reads. It is no longer
+  like-for-like with any earlier directory on the 16 turns: they now carry
+  the case-law tool, so expect case-law searches, cost and `caselaw` /
+  scope-line output on them. Before comparing against an old directory, use
+  `--session`, or name the turns.
+
+**Hazards (carried forward, still live):**
+- Line endings: tracked files are CRLF. Check bytes with Python, not
+  `grep $'\r'`. The Write tool writes LF, so normalise before committing.
+- A Python script inside a bash heredoc mangles backslashes. Use the Edit
+  tool, or write the script to a file.
+- `git commit -F -` / `git merge -F -`: put the message in a file.
+- Ledger rows stay on ONE line with an even `**` count. Many ticked rows
+  have no closing ` |`, so an append helper must handle both shapes.
+- The data-handling test covers public case names too, where they are
+  written the way a lawyer typed them.
+- Scratch-copy revert checks: `test_the_prompt_reader_finds_a_real_constant`
+  and `test_the_manager_body_reader_finds_the_constant` fail in any non-git
+  copy.
+- Seam draws at temperature 0 are not byte-deterministic.
+
+**Machine state:**
+- no uvicorn running, no pin file, no worktrees;
+- dev box on its normal settings: model `google/gemini-3.1-pro-preview`,
+  summarisation `google/gemini-3-flash-preview`, local prompt cache ON,
+  `research_mode_enabled` ON;
+- 39 replay directories; none added this session;
+- the local gitignored `replay_set.json` was re-frozen with the reads;
+- transcript export (never in the repo):
+  `C:/Temp/aila-prepilot/pre-pilot sessions/session-transcripts-all-time-2026-09-14.csv`;
+- Fix Tracker: <https://claude.ai/artifact/JtrwLwRZnRihfe8kHj3EaJ> (source
+  `docs/prepilot-fixes/summary-table.html`; update only when asked;
+  updated at the end of this session).
+
+**Open with the user (unchanged unless they say otherwise):**
+- Deploy both cuts to the target: `pg_dump` first (no backup has ever run
+  there), then `git pull`, `stop_native.cmd` / `start_native.cmd`,
+  `server_py\test_apis.ps1` and one real question. It is still not
+  confirmed that the first cut (`d8fd73b`) was ever pulled. P0.7's query can
+  go with this.
+- Tell whoever runs the lexchat-eval harness that the audit event is schema
+  v5. This session did not change the schema.
+- P5.2 (B12, external).
+- Whether Thomas's review document should be committed.
+
+---
+
+## Session 24 — 2026-09-23 — P4.6 (the scripted negatives)
+
+**Done:**
+- **P4.6 is DONE.** Ledger 31 → **32 of 49 rows**; buckets unchanged at 8
+  of 14. **B5 stays partial, now waiting on P3.7 and P4.7.**
+- **The acceptance was re-chosen first and committed before any build**
+  (`d860675`): scripted Research-mode turns under the research type the export
+  or the reviewer's read gives. That was `legislation_only` for 6335 t1-4,
+  6343, 6346, 6347 t1 and 6350 t1-2, and `case_law_only` for 6385 as the
+  case-law line's smoke. It had four pass conditions and a contingency in case
+  the before-column came back empty.
+- **The fix** (`9ba8ee8`). Thomas's wording is in `WORKER_SYSTEM_PROMPT` (both
+  lines), and the legislation Worker is told its tools search legislation only,
+  so a question outside them is "not searched", never "not found". The
+  case-law Worker's MANDATE line gets the same treatment, and so do its PHASE 4
+  and STOP RULE, which restated the verdict. The hybrid and quick-lookup
+  Workers never carried the lines and are untouched. It is pinned by
+  `test_worker_scripted_negatives.py`.
+- **Results** (all on the row and in `BASELINE.md`, *The scripted
+  negatives*):
+  - The before-column at HEAD is empty (0 in 49 turns).
+  - The seam A/B over 37 stored payloads went from **32 of 32 reports to 0 of
+    31**.
+  - The replay after-column exits 0 on every grader. `negatives` went from 1
+    to 0.
+  - Links fell in 0 of 21 slots, and `sources_kept` in 1 (n=1, explained on
+    the row).
+- **Tests 1604 → 1641**, all green. On a scratch copy with `prompts.py` at
+  HEAD, 8 of the pin test's 24 fail; with the tools at HEAD, 10 fail (2 of them
+  the known git artefacts).
+- **Instruments:**
+  - `replay_report scripted [--before] [--reports]`.
+  - `seam_replay worker --first-round`: the Worker's first round with its real
+    tools offered, stopped at the first call. It is the only seam for a Worker
+    that writes without searching.
+  - `tools/seam_sweep.py`: the Worker seam over every stored delegation that
+    showed a defect, both sides from one command.
+  - `seam_replay worker --without-fix` now swaps the constant of the turn's own
+    research type, in place.
+
+**Surprises / deviations from FIX_PLAN:**
+- **The before-column was empty, and P4.1 is why.** In every stored sweep the
+  sentence came mostly from the Research-mode Manager delegating a case-law
+  question to the legislation Worker, which then wrote it, often without a
+  single tool call. Since P4.1 that Manager declines the question itself and
+  delegates nothing. In the scripts, 39 of 49 turns delegated nothing. So the
+  sentence can no longer reach a lawyer on the shape that produced most of it,
+  and the replay could not discriminate. The seam carried the A/B, as booked.
+- **The seam tool was wrong for this row in two ways, and one was mine to
+  find.**
+  - `--without-fix` always swapped `WORKER_SYSTEM_PROMPT` (the wrong Worker on
+    a case-law turn), as the handover said.
+  - It also replaced the WHOLE prompt with the bare literal, so the "without"
+    side had lost the date line, the rules and the filter block as well as the
+    change. The swap is now in place.
+- **A scratch draw overstated a behaviour change, and the committed command
+  corrected it.** My first scratch A/B had the fix making 6 no-search payloads
+  search first against 0 before. Re-run through `seam_sweep`, the before side
+  searched first on 5. It is draw noise at temperature 0 on this model
+  (Session 22's hazard), not the fix. The published figures are the command's.
+- **I miscounted once:** I wrote 15 zero-tool payloads, and the listing says
+  16. Corrected before commit.
+
+**Watch item (on the row, not a new row):** on a case-law brief, the
+legislation Worker searches legislation first in about 1 payload in 6, on both
+sides. What it then writes is not observable at the seam. At HEAD the Manager
+declines those questions before delegating.
+
+**State of the branch:** `fix/prepilot-defects`, pushed with this commit.
+`main` is untouched at `c77e779`. **P4.6 is product code** (`prompts.py`
+only). Unlike P0.6, it would need a cut to reach the target, and cuts go when
+the user asks.
+
+**Machine state:**
+- no uvicorn running, no pin file, no worktrees; `tools.replay restore` was
+  run;
+- the dev box is on its normal settings;
+- 41 replay directories (new: `wave4_p46_pre`, `wave4_p46`).
+
+**Spend: $8.33.**
+- Replays: $4.98 ($2.89 before, $2.09 after).
+- Committed seam A/B: $1.56.
+- Scratch seam A/B and probes: $1.79.
+
+**Next action:** **P4.7** (the Deep Research synthesis's gap sentence, this
+row's twin, which iterates on `seam_replay synthesis`), or **P3.7**.
+
+**Open with the user (unchanged):**
+- Deploy both cuts to the target: `pg_dump` first, then `git pull`,
+  `stop_native.cmd` / `start_native.cmd`, `test_apis.ps1` and one real
+  question. P0.7's query can go with it.
+- Tell the eval-harness owner the audit event is schema v5. This session did
+  not change it.
+- Raise P4.5. This session's 6385 t4 before-run took 435 s and $0.91 with no
+  empty completion recorded, so that was not a P4.5 episode.
+- P5.2.
+- Whether Thomas's review document should be committed.
+- Whether P4.6 should go in the next cut.
+
+---
+
+## Session 24 — handover for Session 25 (2026-09-23)
+
+Written at the user's request before a new session starts, so nothing learned
+here depends on this session's context. Everything below is also on the rows
+it concerns, or in `BASELINE.md`, *The scripted negatives*.
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. Session 24 commits:
+  - `d860675`: the acceptance, booked before any build;
+  - `9ba8ee8`: the fix and the instruments;
+  - `9f2a448`: the docs;
+  - this handover.
+- `main` is untouched at `c77e779`, the second cut. Rollback tags:
+  `pre-prepilot-fixes-2026-09-23` and `pre-prepilot-fixes-2026-09-22`.
+- **1641 tests green.**
+- Ledger **32 of 49 rows, 8 of 14 buckets.** Partial: B5 (waiting on P3.7
+  and P4.7) and B12 (waiting on P5.2). Run `python -m tools.plan_status`
+  rather than trusting these figures.
+- **Two Fixed rows are not on `main`:** P0.6 (harness only, needs no
+  deployment) and **P4.6, which is product code** (`src/prompts.py` only: no
+  config, schema, client or whitelist change). It reaches the target only in
+  a cut, and cuts go when the user asks.
+
+**Next work: P4.7 or P3.7** (the user's choice). Both close B5 with the other.
+
+- **P4.7** is P4.6's Deep Research twin. `DEEP_RESEARCH_SYNTHESIS_PROMPT`
+  (`prompts.py:1233`, the gap example at `:1257`) scripts *"No reported case
+  law was found on X"* for every research type. Read its row in full; its
+  evidence is thin and it says to measure first. Three things from this
+  session carry over:
+  1. **Book the acceptance on the row before building, and plan for an empty
+     before-column.** P4.6's replay at HEAD reproduced nothing, because P4.1
+     changed the path that produced the defect. Check the same for P4.7: does
+     the Deep Research planner or synthesis still reach "case law not found"
+     under 'Legislation only' since P4.1?
+  2. **The synthesis seam is the cheap instrument** (`seam_replay synthesis`,
+     about $0.11 a draw). Its `--without-fix` swaps the whole prompt for the
+     constant at `--rev`; the default rev is `2d9ae11` (pre-P3.1), so pass
+     `--rev` explicitly.
+  3. **Scripts can set `chat_mode: "deep_research"` per turn.**
+     `p41_6346_dr.json` is an example. Only the no-question-text rule applies
+     to non-`p41_` scripts now.
+- **P3.7** is deterministic (`/legislation/lookup`, the held/absent test).
+  Read the `external-apis` skill and `/openapi.json` first.
+
+**Instruments added this session (use them, don't rebuild):**
+- `python -m tools.replay_report --dir <D> scripted [--before <D>]
+  [--reports] [--session …]`
+  - counts P4.6's three scripted lines in every Worker REPORT and every
+    answer;
+  - prints links, `sources_kept` and prose per turn, with the Invariant 1
+    panel under `--before`;
+  - exits 1 on any scripted line.
+  - **It exits 1 on `baseline`, `wave1` and `wave2`**, which predate the fix
+    and replayed the twelve in Research mode. That is the before-state, not a
+    regression; it exits 0 on `wave0_conv`, `wave4_p41` and `wave3_p313`.
+  - **Add it to the exit-1 set for any new sweep:** modes halts negatives
+    derivations blanks scoperecord nosearch caselaw deadend **scripted**.
+- `python -m tools.seam_replay worker --run <f> --turn N --first-round`:
+  - replays the Worker's FIRST round with its real tools offered, stopping at
+    the first call;
+  - prints the calls it chose, or the report it wrote without searching.
+  - It is the only seam for a Worker that writes without searching, and it is
+    the probe Session 22's lesson asks for before any Worker prompt change.
+- `python -m tools.seam_sweep --dirs … --turns SID:T1,T2 …
+  [--without-fix --rev <sha>] [--out DIR] [--list]`:
+  - the Worker seam over every stored rep-1 delegation whose report matched a
+    defect, both sides from one command;
+  - a zero-tool delegation is drawn at the first round.
+  - Its `--report-matches` choices are `p46` and `any`; add a pattern for a
+    new row.
+- `seam_replay worker --without-fix` now swaps the constant of the turn's own
+  research type, in place. It used to swap `WORKER_SYSTEM_PROMPT` always and
+  replace the whole prompt with the bare literal.
+
+**What this session established (all on rows; listed so none is lost):**
+- **Since P4.1, the Research-mode Manager declines a case-law question under
+  'Legislation only' itself and delegates nothing.** In the p46 scripts, 39 of
+  49 turns delegated nothing. Every pre-P4.1 count of a Worker-written
+  negative on these sessions measured a path that no longer runs.
+- **Before P4.1, most of P4.6's sentences came from a legislation Worker given
+  a case-law brief, often with no tool call at all.** In `wave2`, 10 of 22
+  delegations over those five sessions made none.
+- **With the fix, the legislation Worker says a source it cannot search was
+  "not searched in this research".** That is true in 31 of 31 seam reports;
+  the two remaining "database does not contain" sentences are true (the
+  legislation index holds no judgments).
+- **On a case-law brief, the legislation Worker searches legislation first in
+  about 1 payload in 6, with or without the fix.** What it then writes is not
+  observable at a seam. Watch item, not a row.
+- **Seam draws at temperature 0 vary enough to fake an effect.** A scratch
+  A/B showed the fix making 6 payloads search first against 0 before; the
+  committed command's before side gave 5. Publish from a committed command,
+  never from a scratch run.
+- **6385 t4's before-run took 435 s and $0.91 with no empty completion.** It
+  was a long case-law Worker run (7 tool calls, 11 LLM calls), not a P4.5
+  episode. Do not count it for P4.5.
+- **6346 t2 is not a question** (the lawyer's acknowledgement). Every replay
+  answers it by asking for one, so do not grade it as a decline.
+- **The case-law Worker read 3 judgments where it had read 4** (6385 t4, n=1),
+  which is within its prompt's 1–3. It is the only `sources_kept` slot that
+  fell.
+
+**Hazards (carried forward, still live):**
+- Line endings: tracked files are CRLF. Check bytes with Python. The Write
+  tool writes LF, so normalise before committing (this session did so for
+  `seam_sweep.py` and the two new test files).
+- A Python script inside a bash heredoc mangles backslashes.
+- Commit messages: put them in a file and use `-F <file>`.
+- Ledger rows stay on ONE line with an even `**` count. An append helper must
+  assert the row is found exactly once.
+- Scratch-copy revert checks: the two `git show` tests fail in any non-git
+  copy.
+- **Seam and probe output can contain a lawyer's search terms** (the Worker
+  echoes them as queries). Keep that output in the scratchpad. Before
+  committing, grep the diff for the terms you saw.
+- The API runs any chat mode it is sent. `replay pin` turns
+  `research_mode_enabled` OFF.
+
+**Machine state:**
+- no uvicorn running, no pin file, no worktrees; `tools.replay restore` was
+  run;
+- dev box on its normal settings: model `google/gemini-3.1-pro-preview`,
+  summarisation `google/gemini-3-flash-preview`, local prompt cache ON,
+  `research_mode_enabled` ON;
+- 41 replay directories; new: `wave4_p46_pre` (`d860675`) and `wave4_p46`
+  (`9ba8ee8`);
+- transcript export (never in the repo):
+  `C:/Temp/aila-prepilot/pre-pilot sessions/session-transcripts-all-time-2026-09-14.csv`;
+- Fix Tracker: <https://claude.ai/artifact/JtrwLwRZnRihfe8kHj3EaJ>, updated
+  to **version 15** at the end of this session (P4.6 Fixed, and noted as not
+  yet deployed). Source `docs/prepilot-fixes/summary-table.html`; update only
+  when asked.
+
+**Spend this session: $8.33.**
+
+**Open with the user (unchanged unless they say otherwise):**
+- Whether P4.6 goes in the next cut to `main`.
+- Deploy both cuts to the target: `pg_dump` first (no backup has ever run
+  there), then `git pull`, `stop_native.cmd` / `start_native.cmd`,
+  `server_py\test_apis.ps1` and one real question. It is still not confirmed
+  that the first cut was ever pulled. P0.7's query can go with this.
+- Tell whoever runs the lexchat-eval harness that the audit event is schema
+  v5. This session did not change the schema.
+- Raise P4.5: $4.89 of `wave3_p313`'s $5.65; about 62,912 reasoning tokens
+  per empty completion.
+- P5.2 (B12, external).
+- Whether Thomas's review document should be committed.
+
+**Addendum to the Session 25 handover (same day, after it was written): pre-flight for the next row.**
+Both candidates were checked before writing the kick-off prompt, and the
+results are on their rows:
+- **P4.7** has no measured instance of its case-law half. That covers 149
+  stored `legislation_only` Deep Research turns, and the pre-pilot answers of
+  6365, 6405 and 6408 in the export. It needs re-scoping with the user.
+- **P3.7**'s instruments are still 404 in LEX today, and so is the stub's
+  section lookup. Its acceptance premise has moved since P2.4, so the
+  before-column is to be measured at HEAD.
+
+**Recommended next row: P3.7.** P4.7 is the alternative only after the user
+decides its scope.
+
+---
+
+## Session 25 — 2026-09-24 — P3.7 (the held/absent test), and P4.7's scope decided
+
+**Done:**
+- **P4.7's scope was put to the user first, and decided: option (a).** Build
+  the per-mode synthesis prompt as defence in depth, with a seam-only
+  acceptance, as P4.6 was. It is recorded on the row and was not started.
+- **P3.7 is DONE** (user decision on the result, on P3.1/P3.11's precedent).
+  Ledger 32 → **33 of 50 rows**; buckets unchanged at 8 of 14. **B5 stays
+  partial, now waiting on P3.15 (new) and P4.7.**
+- **The acceptance was re-chosen and committed before any build**
+  (`b694fac`), around definiteness. It comes with a new grader
+  (`replay_report lookup`) and two scripts (`p37_6409`, `p37_6373`). The
+  grader was checked against eight stored directories and corrected twice
+  before its first use.
+- **The fix** (`475ef57`, `0c91fb6`, `782a9e8`):
+  - `lookup_legislation` reports held / held without text / not held.
+  - Code runs it on every instrument a Worker's brief names by number,
+    before the Worker's first round.
+  - The outcome reaches the Manager in the worker block, and the lawyer in a
+    code-written footer clause, which P2.8's carried line now restates on
+    follow-ups.
+  - No prompt changed.
+- **Results** (all on the row and in `BASELINE.md`, *The held/absent test*):
+  - Absent slots went from 0 of 12 to **11 of 12** in both runs on the fixed
+    code. Delegated slots pass 21 of 21, and the misses are from-history
+    follow-ups (P3.15).
+  - Stub 6 of 6 throughout; the held Act was never reported absent; zero
+    sentences questioning a citation in any run.
+  - The exit-1 set exits 0 on both fixed runs.
+- **Tests 1641 → 1698**, all green. That is 57 new: 48 product, 9 grader.
+  Reverting one product file at a time on a scratch copy fails 12 / 2 / 1 / 2
+  tests (executor / schemas / agent_core / agent_shared).
+- **Instruments:**
+  - `replay_report lookup [--answers] [--routing DIR… --live]`.
+  - `seam_replay worker --first-round` now applies the routing to a stored
+    brief; `--without-lookup` is the before side.
+  - `nosearch` reads P3.7's two lookup lines.
+
+**Surprises / deviations from FIX_PLAN:**
+- **The before-column was not empty, but the defect had changed.** Nothing
+  questions the citation any more (P2.2/P2.4). But 6373 t2 already said "does
+  not hold" in 3 of 3 reps with no by-number probe behind it: the right
+  words, unearned. And 6409 t9-11 mostly said only that the TEXT is not held.
+- **At HEAD the Worker already probed the SSI by id.** It called
+  `get_legislation_text` on an id it had guessed from a change record, and
+  got a 404 that P2.4 annotates. So a lookup existed by accident, only on
+  turns where the model thought of it.
+- **The index holds a change record BY an instrument it does not hold.**
+  `/amendment/search` returns 1 relation made by `ssi/2025/377` and 46 made
+  by `ssi/2026/170`. The not-held sentence now names that call.
+  - A first draft instead said "do not search for it again". On the
+    first-round probe the Worker then wrote at once on 4 of 5 stored briefs,
+    losing 6409's s.18 commencement.
+  - The probe caught it for $0.13, before any replay.
+- **A held instrument with the same number as the one asked about is a live
+  hazard.** `uksi/2026/170` is held and is an unrelated planning instrument.
+  - The routing looks it up when a Manager brief names it, and the survey
+    found three such briefs in the corpus.
+  - The block for a held instrument therefore names its title and says to
+    check it is the one asked about. "Use it directly" was cut before any
+    run.
+  - In `wave4_p37` that held: the answer described it as unrelated.
+- **The first acceptance run found three product defects, not one.**
+  1. The Manager narrowed "not held" to "its text".
+  2. The lookup-only footer said "no ranked search" on a turn that had
+     searched within an instrument.
+  3. That line pre-empted P2.8's carried search terms.
+
+  Each was fixed and tested before the re-run.
+- **The measuring instrument was wrong twice and the product right both
+  times.**
+  - `nosearch` did not know the lookup line.
+  - `lookup` read "This index does not hold the instrument itself" as silence
+    because the sentence names no number. That moved `wave4_p37c` from 8 to
+    11 of 12.
+  - After each fix every stored directory was re-graded and every changed
+    row read. No verdict flipped anywhere else.
+- **A commit made mid-run changed three run files' recorded head.**
+  `wave4_p37_reach`'s 6360, 6378 and 6410 record `782a9e8` but ran against
+  the `0c91fb6` server. The difference is footer-only, and the row says so.
+  New hazard: do not commit while a replay whose head matters is running.
+- **The `external-apis` skill is not tracked in git.** `.claude` is ignored.
+  The skill was updated on this machine only (6 of 13 endpoints; the lookup
+  facts).
+- **My product commit message says "11" executor failures on revert.** That
+  was measured before the memo-path test existed; it is 12 on the committed
+  code. The row carries 12.
+
+**State of the branch:** `fix/prepilot-defects`, pushed with this commit.
+`main` is untouched at `c77e779`.
+- **P3.7 is product code:** `agent_core`, `agent_shared`, the executor, the
+  schema and `search_scope`, plus the new `utils/instrument_lookup.py`.
+- No config, schema, client or whitelist change. The LEX base URL is
+  unchanged: the two endpoints are on the same host.
+- It reaches the target only in a cut, when the user asks.
+
+**Machine state:**
+- no uvicorn running, no pin file, no worktrees; `tools.replay restore` was
+  run;
+- the dev box is on its normal settings;
+- 47 replay directories. New: `wave4_p37_pre`, `wave4_p37`, `wave4_p37b`,
+  `wave4_p37c`, `wave4_p37_reach`, `wave4_p37_reach_pre`.
+
+**Spend: $10.01.** Replays $9.18, committed seam $0.22, scratch seam probes
+$0.47, scratch Manager A/B $0.14.
+
+---
+
+## Session 25 — handover for Session 26 (2026-09-24)
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. Session 25 commits:
+  - `b694fac`: the acceptance;
+  - `475ef57`: the fix;
+  - `0c91fb6`: three defects from the first run;
+  - `782a9e8`: the carried lookup;
+  - this docs commit.
+- `main` is untouched at `c77e779`. Rollback tags:
+  `pre-prepilot-fixes-2026-09-23` and `pre-prepilot-fixes-2026-09-22`.
+- **1698 tests green.**
+- Ledger **33 of 50 rows, 8 of 14 buckets.** Partial: B5 (waiting on P3.15
+  and P4.7) and B12 (waiting on P5.2). Run `python -m tools.plan_status`.
+- **Three Fixed rows are not on `main`:**
+  - P0.6 (harness only);
+  - P4.6 (`prompts.py`);
+  - P3.7 (code, listed above).
+
+**Next work: P4.7, option (a)** (the user's decision this session).
+- Put the pre-flight counts behind a command first, as its row says.
+- Then iterate on `seam_replay synthesis`, passing `--rev` explicitly.
+- P3.15 is measure-first and small.
+
+**Instruments added this session (use them, don't rebuild):**
+- `python -m tools.replay_report --dir <D> lookup [--answers]`:
+  - grades P3.7's slots;
+  - exits 1 on any failing graded slot. **It exits 1 on `wave4_p37b` and
+    `wave4_p37c` because of the P3.15 residual: expected.**
+- `lookup --routing DIR… [--live]`: which stored briefs the routing reaches,
+  printing ids only.
+- `seam_replay worker --first-round [--without-lookup]`.
+- Add `lookup` to the exit-1 set for any sweep that replays 6409 or 6373.
+
+**Hazards (carried forward, plus one new):**
+- **New: do not commit while a replay is running.** The run files record the
+  repo's head at write time, not the server's.
+- Line endings, heredoc backslashes, `-F <file>`, one-line ledger rows: as
+  before. Python in a bash heredoc bit twice this session. Both times it
+  stopped at an assert before writing anything.
+- Seam and probe output echoes the Worker's queries, and some graders echo
+  the question. Keep that output in the scratchpad.
+
+**Open with the user (unchanged unless they say otherwise):**
+- Whether P4.6 and P3.7 go in the next cut to `main`.
+- Deploy both cuts to the target: `pg_dump` first (no backup has ever run
+  there), then `git pull`, `stop_native.cmd` / `start_native.cmd`,
+  `server_py\test_apis.ps1` and one real question.
+  - It is still not confirmed that the first cut was ever pulled.
+  - P0.7's query can go with the deploy.
+  - **P3.7 calls two more LEX endpoints on the same host**, so the whitelist
+    does not change.
+- Tell whoever runs the lexchat-eval harness that the audit event is still
+  schema v5. A new tool name, `lookup_legislation`, now appears in
+  `delegations[].tools[]`, usually first; `AUDIT_TRACE.md` documents it.
+- Raise P4.5: $4.89 of `wave3_p313`'s $5.65; about 62,912 reasoning tokens
+  per empty completion.
+- P5.2 (B12, external).
+- Whether Thomas's review document should be committed.
+
+**Addendum to Session 25 (same day, after the handover was written, at the user's request).**
+
+**Recorded here so they are not lost:**
+- **Watch item from the reach check (n=1, `wave4_p37_reach` against
+  `wave4_p37_reach_pre`).** Links fell in 3 of 12 slots: 6378 t1 3 → 0,
+  6378 t2 1 → 0, 6383 t1 2 → 1. None of those turns ran the lookup.
+  - 6378 t1's brief named no instrument by number.
+  - 6378 t2 answered from history with no delegation.
+  - The only difference on 6378 t1 is that `lookup_legislation` is now in
+    the tool list, offered and not called. n=1 cannot separate that from
+    draw noise. If a later sweep shows links falling on turns that did NOT
+    route, suspect the offered tool (Session 14 saw a context change move
+    the quick-lookup Worker's format).
+  - On the acceptance slots, 6409 export t10's links went 0.7 → 0.0
+    (`wave4_p37c`, n=3).
+- **The lookup-only footer line is gated on `scope_unknown`** (`782a9e8`),
+  like P2.8's carried line. After a failed delegation or a peer consult the
+  turn's searches are unknown, so "no ranked search was run" could be false.
+  It was in a commit message only.
+- **Where the unused scratch evidence went.** The first-round probe outputs
+  and the scratch Manager A/B echo the Worker's and the lawyers' own search
+  terms, so they were left in the session scratchpad and not committed.
+  - Every number quoted from them is on P3.7's row, from the committed
+    `seam_replay` command.
+  - The scratch Manager A/B ($0.14) only guided the limb wording and is not
+    quoted.
+
+**Fix Tracker v16** (published to the same URL at the user's request):
+- New **Fixed date** column: the first commit in which `FIX_PLAN.md` shows
+  the row ticked `[x]`, from `git log --reverse --
+  docs/prepilot-fixes/FIX_PLAN.md`.
+  - It was checked against this log's session dates and agrees for every
+    row.
+  - It is the date a fix was accepted, not deployed, and the page says so.
+  - Rows carry it as `fixed: "YYYY-MM-DD"`.
+- P3.7 → Fixed (24 Sep 2026). P3.15 added (Verified, P3). The prose now
+  covers P3.7 and "next: P4.7 (a)".
+- The tracker's `fixed` values, 27 rows on 26 refs (P3.1 appears twice):
+  - P1.1-P1.4: 14 Sep.
+  - P1.6, P2.1, P2.2, P2.6, P4.4: 15 Sep.
+  - P2.3, P2.5, P2.9, P3.5, P4.2: 16 Sep.
+  - P2.4, P2.7, P2.8: 17 Sep.
+  - P3.1: 18 Sep.
+  - P3.8: 21 Sep.
+  - P0.5, P3.11, P4.1: 22 Sep.
+  - P0.6, P3.13, P4.6: 23 Sep.
+  - P3.7: 24 Sep.
+- **When a row is next ticked, add `fixed:` with that commit's date.** The
+  page does not compute it.
+
+**Fix Tracker v17 and v18** (same day, both at the user's request, same URL):
+- **v17** (`5e77dea`): the table is ordered by **severity** (P1 first), then
+  **status** (Fixed first), then **fixed date** (oldest first). Undated rows
+  and ties keep plan order. It was status then severity. The divider rules
+  fall between severity/status bands.
+- **v18** (`89b7b3d`): the progress panel has a **By severity** group, one
+  stacked bar each for P1/P2/P3 split by status, above a **By source** group.
+  - It is computed from `ROWS`, so it needs no editing when rows change.
+  - It reuses the page's validated status fills and order (no new colours),
+    so the palette validation noted in the page's CSS still covers it.
+  - At v18: P1 10 fixed of 13; P2 12 of 22; P3 5 of 15.
+- Both were checked by rendering the page in a browser, light, dark and at
+  390px.
+  - The Playwright tool blocks `file:` URLs, so serve the directory first:
+    `python -m http.server 8765 --bind 127.0.0.1` from
+    `docs/prepilot-fixes/`, then stop it.
+  - The quotes show as mojibake there only because that server sends no
+    charset; the artifact host serves UTF-8.
+
+**New hazard: `sed -i` in Git Bash rewrote the tracker's CRLF line endings to
+LF.** It was caught by the byte check and normalised before commit. Edit
+tracked files with the Edit tool or a Python byte script, not `sed -i`.
+
+---
+
+## Session 26 — 2026-09-24 — P4.7 (the Deep Research synthesis, per research type)
+
+**Done:**
+- **P4.7 is DONE** (option (a), the user's decision in Session 25). Ledger
+  33 → **34 of 50 rows**; buckets unchanged at 8 of 14. **B5 stays partial,
+  now waiting on P3.15 alone.**
+- **The pre-flight went behind a command first**:
+  `replay_report drgaps [--all-dirs] [--export] [--list] [--sentences]`
+  (`09fb1ed`). It reproduces the scratch read (149 `legislation_only`
+  syntheses, 20 turns matching a case-law word, 5 synthesis reports naming
+  case law, all as excluded) and finds 0 case-law 'not found'. Its recall was
+  checked on the export (6338, 6370 and 6407 fire, as the pre-flight said).
+- **The seam's `--without-fix` confound was fixed before any A/B**
+  (`09fb1ed`). The pinpoint block is now stripped only if `--rev` predates
+  P3.1's builder. The prompt is built for the turn's research type, including
+  at a revision whose prompt is per-type (that revision's `prompts.py` is
+  executed in isolation). `_cfg_for` falls back to the audit's research type.
+  `seam_sweep --synthesis p47 [--grade]` is the synthesis sweep.
+- **The acceptance was re-chosen and committed before any product code**
+  (`9cacde8`): seam-only, with four pass conditions and the empty-before
+  contingency written down.
+- **The fix** (`d304652`, then `158841d`):
+  `get_deep_research_synthesis_prompt(research_mode)`.
+  - It names what the type searched and did not, and carries Thomas's gap
+    wording for every type.
+  - Its sections come from `REPORT_SECTIONS`, moved to `prompts.py` as the one
+    definition.
+  - P2.5's rules and P3.1's pinpoint rule are kept for every type.
+  - `research_mode` is passed explicitly from `run_deep_research` and by the
+    seam tool.
+- **Results** (all on the row and in `BASELINE.md`, *The Deep Research
+  synthesis, per research type*):
+  - `legislation_only` case-law 'not found' 1 → 0 (D17's own sentence, 6341
+    t7).
+  - All 6 hybrid true negatives survive; hybrid sections 0 → 8 of 8.
+  - Links 594 → 691 and 182 → 208; pinpoints 24 → 24 and 15 → 17; Key
+    findings 20/20 and 8/8.
+  - Smoke `wave4_p47b`: every grader exits 0, depth DELIVERED.
+- **Tests 1698 → 1795**, all green.
+
+**Surprises / deviations from FIX_PLAN:**
+- **The before column was NOT empty.** The replays hold no instance (0 in
+  165 `legislation_only` Deep Research turns), but the seam at `9cacde8`
+  wrote D17's sentence on 6341 t7 in 2 of 4 draws. Its stored report says
+  the accurate thing, so the sentence is live in the prompt and the replay
+  had simply not drawn it. The contingency was not needed.
+- **The first wording failed Invariant 1 on the seam, and the committed
+  command caught it.**
+  - 6408 wrote bare-URL references (2 of 4 after-draws against 0 of 4).
+  - 6407 dropped the **Key findings** label (2 of 4 against 0 of 4).
+  - Three redraws a side confirmed each.
+  - Two lines, for every type, fixed both. The after column was then
+    redrawn in full at the new commit, and only that column is published.
+- **The instrument was wrong four times, the product right each time:**
+  - `drgaps` flagged an accurate exclusion before first use;
+  - the sweep compared pinpoint spellings literally;
+  - it read a did-not-complete gap as silence;
+  - it could not see a judgment link with a bracketed year.
+  Each changed row was re-read after re-grading. The last is a defect in
+  `replay_report.MD_LINK` itself, left unchanged: **every grader that counts
+  links with it undercounts judgment links.** That is a watch item.
+- **My own slip, caught before it reached a number:** I first put
+  `wave4_p41`/p41_6346_dr t2 in the `legislation_only` payload set from a
+  4-character slice of its type. It ran hybrid. It was removed before any
+  draw.
+- **One observation the row did not ask for:** on a hybrid payload whose
+  step 1 returned nothing, the before-draw said step 1 "found no" case law.
+  That is a negative from a search that never completed, and the after-draw
+  says the step "did not return findings". This is Thomas's second limb, and
+  it is the only place this session saw it tested.
+
+**State of the branch:** `fix/prepilot-defects`, pushed with this commit.
+`main` is untouched at `c77e779`. **P4.7 is product code** (`prompts.py`,
+`agent_core.py`): no config, schema, client or whitelist change. It reaches
+the target only in a cut, when the user asks.
+
+**Machine state:**
+- no uvicorn running, no pin file, no worktrees; `tools.replay restore` was
+  run;
+- the dev box is on its normal settings;
+- 49 replay directories. New: `wave4_p47` (6365 at `d304652`, the first
+  wording) and `wave4_p47b` (6365 at `ac7878e`, whose product code is
+  `158841d`'s).
+- The seam draws are in the session scratchpad, not the repo (they echo
+  lawyers' terms).
+
+**Spend: $14.49 (seam sweeps $8.54, committed redraws $3.16, scratch probe $0.71, replays $2.08).**
+
+---
+
+## Session 26 — handover for Session 27 (2026-09-24)
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. Session 26 commits:
+  - `09fb1ed`: the instruments (`drgaps`, the seam confound, the synthesis
+    sweep);
+  - `9cacde8`: the acceptance;
+  - `d304652`: the fix;
+  - `158841d`: the link and label lines;
+  - `ac7878e`: the grader corrections;
+  - this docs commit.
+- `main` is untouched at `c77e779`. Rollback tags:
+  `pre-prepilot-fixes-2026-09-23` and `pre-prepilot-fixes-2026-09-22`.
+- **1795 tests green.**
+- Ledger **34 of 50 rows, 8 of 14 buckets.** Partial: B5 (waiting on P3.15)
+  and B12 (waiting on P5.2). Run `python -m tools.plan_status`.
+- **Four Fixed rows are not on `main`:**
+  - P0.6 (harness only);
+  - P4.6 (`prompts.py`);
+  - P3.7 (code);
+  - P4.7 (`prompts.py`, `agent_core.py`).
+
+**Next work: P3.15**, the last row B5 waits on. It is measure-first: count
+the from-history absent slots over any sweep that replays 6409 or 6373 past
+their lookup turn before building. Its lever is the conversational Manager's
+NOT HELD rule, so Session 22's first-round probe applies. Otherwise the
+unblocked Wave 3/4 rows stand as the recommended-order line lists them.
+
+**Instruments added this session (use them, don't rebuild):**
+- `python -m tools.replay_report --dir <D> drgaps [--all-dirs] [--export]
+  [--list] [--sentences]`:
+  - every answered Deep Research turn by research type;
+  - exits 1 on a case-law 'not found' under a type with no case-law tool;
+  - `--sentences` prints text, so keep that output in the scratchpad.
+  - **It joins the exit-1 set for any sweep with Deep Research turns.**
+- `python -m tools.seam_sweep --synthesis p47[_legislation or _hybrid] --out
+  DIR [--without-fix --rev SHA]`, then `--grade DIR`:
+  - the synthesis seam over fixed payloads;
+  - `--rev` is required on the without side.
+- `seam_replay synthesis --without-fix`:
+  - the pinpoint block is stripped only if `--rev` predates it;
+  - the prompt is built per type at a per-type revision.
+- **Watch item:** `replay_report.MD_LINK` misses `[… [2011] EWCA Civ
+  1089](url)`. Any link count it produces undercounts judgments.
+  `seam_sweep.MD_LINK_NESTED` does not.
+
+**Hazards (carried forward):** line endings (and `sed -i`), heredoc
+backslashes, `-F <file>`, one-line ledger rows, not committing during a
+replay, keeping seam output (which echoes lawyers' terms) in the scratchpad.
+**New:**
+- a background job started with a trailing `&` inside one Bash call dies
+  with that shell; use the tool's background mode;
+- never read a research type from a truncated string.
+
+**Open with the user (unchanged unless they say otherwise):**
+- Whether P4.6, P3.7 and P4.7 go in the next cut to `main`.
+- Deploy both cuts to the target: `pg_dump` first (no backup has ever run
+  there), then `git pull`, `stop_native.cmd` / `start_native.cmd`,
+  `server_py\test_apis.ps1` and one real question.
+  - It is still not confirmed that the first cut was ever pulled.
+  - P0.7's query can go with the deploy.
+- Tell whoever runs the lexchat-eval harness:
+  - the audit event is still schema v5;
+  - `lookup_legislation` now appears in `delegations[].tools[]`;
+  - a Deep Research report's section headings now follow its research type
+    (a hybrid report has Statutory Framework and Key Cases).
+- Raise P4.5: $4.89 of `wave3_p313`'s $5.65; about 62,912 reasoning tokens
+  per empty completion. P4.7's prompt now reads an empty step as one that
+  did not complete (on the seam, P4.5's own 6375 instance). The labelled
+  lost-step report P4.5 proposes is still not built: note on its row.
+- P5.2 (B12, external).
+- Whether Thomas's review document should be committed.
+- **The Fix Tracker has not been updated this session** (update only when
+  asked). When it is, P4.7 becomes Fixed with `fixed: "2026-09-24"`.
+
+**Addendum to Session 26 (same day, after the handover was written, at the user's request).**
+
+**Fix Tracker v19** (published to the same URL at the user's request):
+- P4.7 → Fixed, `fixed: "2026-09-24"`. It is added to the fixes waiting for
+  the next release (P4.6, P3.7, P4.7).
+- A plain-language note on P4.7 and how it was tested; the P3.7 note is now
+  headed "Earlier". "Next" names P3.15 and keeps P4.5.
+- The render was checked in a browser (served over `http.server`, as before):
+  28 of 50 fixed. By severity: P1 11 of 13, P2 12 of 22, P3 5 of 15.
+
+**Recorded here so they are not lost (the seam draws were in the session
+scratchpad, which the next session cannot read):**
+- **6357 t3's pinpoint loss at the first wording was draw noise.** The
+  after-draw kept 0 of 3 pinpoints, and three redraws a side from
+  `seam_replay` gave 0 of 3 in 2 of 3 draws on BOTH sides. At `158841d`,
+  that payload's sweep draw keeps 3 of 3.
+- **How the redraws were made.** From the committed command, three draws per
+  payload per side, output to a scratch directory:
+  `python -m tools.seam_replay synthesis --run <run.json> --turn N --reps 3
+  --out <scratch> [--without-fix --rev 9cacde8]`.
+  - Payloads: `wave2`/6408 t2, `wave2`/6407 t3, `wave4_p41_pre`/p41_6346_dr
+    t2, `wave2`/6357 t3, `wave2_p28_smoke`/6341 t7, `wave2_p24_pre`/6375 r1 t2.
+  - Grade the files with `seam_sweep.synthesis_grade` (or re-run the sweep).
+  - Draws at temperature 0 are not byte-reproducible, so a re-run gives
+    counts of the same order, not the same bytes.
+- **The per-payload hybrid claim** ("all 6 payloads whose before-draw stated
+  a case-law gap still state one") is read from `seam_sweep --synthesis p47
+  --grade`: it prints each payload's before and after line with `cl-gap`.
+  The command prints no pair table.
+- **6375 r1's judgments were never lost.** The grade of the second wording
+  (`158841d`) first showed that payload losing 6 judgment links. They were there all
+  along, written `[... [2011] EWCA Civ 1](url)`, which `MD_LINK` cannot see.
+  That is how the watch item was found.
+- **Where each after column lives:** the first wording's in the sweep output
+  graded at `ac7878e`, and the published one at `158841d`. The before column
+  (`9cacde8`) is shared by both.
+
+**Machine state (unchanged):** no uvicorn, no `http.server`, no pin file, no
+worktrees; the dev box is on its normal settings; 49 replay directories.
+
+**Addendum, continued: the next row decided (user decision, 2026-09-24).**
+- **P4.5 next, as option (c).** Three options were put: (a) labelling only;
+  (b) labelling plus the cost; (c) labelling now, with the cost booked as a
+  new row. The user chose (c).
+  - P4.5 is the LABELLING half: a lost worker or Deep Research step is
+    reported as lost, in code, and the progress event stops saying "Step
+    complete".
+  - Its acceptance is deterministic. Scope and pre-flight are on its row.
+- **New row P4.10:** the cost of a lost completion (about 63,000 reasoning
+  tokens per empty attempt; turns of $2.40 and about 20 minutes).
+  Measure-first; depends on P4.5. Candidate levers are listed on the row, and
+  none is chosen.
+  - Ledger: **51 rows**, still 34 done.
+  - Recommended-order line added. The Fix Tracker does not list P4.10 yet
+    (update it only when asked).
+- **Start Session 27 from P4.5's row** (its USER DECISION paragraph), then
+  its pre-flight: recount the lost-completion episodes over all 49
+  directories with `replay_report blanks`.
+
+**Fix Tracker v20** (same URL, at the user's request, after the P4.5 decision):
+- P4.10 added: "Cut the cost and the wait of a lost reply", Verified, **P2**.
+  - The severity is a first-pass judgement: the answer is still correct but
+    the lawyer waits nearly 20 minutes. It is not a P1, because P4.5 carries
+    the wrong-answer half.
+- "Next" now says P4.5 (labelling), then P4.10 (cost, measure-first), then
+  P3.15.
+- Render-checked: 28 of 51 fixed; by severity P1 11 of 13, P2 12 of 23, P3 5
+  of 15.
+- No `fixed` dates changed.
+
+**Nothing else is outstanding for Session 27.** It starts from P4.5's row
+(the USER DECISION paragraph) and its pre-flight.
+
+---
+
+## Session 27 — 2026-09-24 — P4.5 (the lost step, labelled)
+
+**Done:**
+- **P4.5 is DONE** (option (c), the labelling half, the user's decision at
+  the end of Session 26). Ledger 34 → **35 of 51 rows**; buckets unchanged
+  at 8 of 14 (P4.5 is in no bucket's closure list).
+- **The pre-flight went behind a command first** (`e25e678`):
+  `replay_report --dir <D> lost [--all-dirs] [--list] [--require-label]`.
+  - An `empty_completions` record has no delegation id, so the site is read
+    off the outcome. Each turn is checked (unrecovered calls = lost sites);
+    **0 untied** over all 49 directories.
+  - It found every stored instance on P4.5's row with the right site and
+    shape before any number was quoted.
+  - **16 unrecovered calls in 929 schema-v3 turns (1.7%, Wilson 1.1-2.8%)**:
+    research worker 11, Deep Research step 2, Manager 3, synthesis 0. This
+    replaces Session 18's 8 in 342.
+  - After **15 of 18** lost research-worker reports, a later delegation in
+    the same turn returned findings (`637a882` added that count).
+- **The acceptance was booked and committed before any product code**
+  (`637a882`), with the audit decision: option (i), `delegations[].lost`,
+  schema v6.
+- **The fix** (`4dfce68`, then `ba04d7c`):
+  - `run_worker_agent` labels a lost reply, ahead of the scope block, in
+    every chat mode (`lost_worker_report`, a closed
+    `[Research Incomplete — answer lost]` block);
+  - the Manager path strips the block, keeps it out of P4.2's fallback, and
+    prepends a lawyer notice only when no later delegation made the loss
+    good;
+  - Deep Research names a lost step in `incomplete_steps_note` (its own
+    LOST STEPS paragraph) and always in the notice;
+  - `progress_result` names each run's outcome on `tool_end`;
+  - `seam_replay --apply-lost` rebuilds a recorded lost report through the
+    product's builder.
+- **Results** (on the row and in `BASELINE.md`, *The lost step, labelled*):
+  - acceptance (a): 29 tests in `tests/test_lost_step.py`, each seam failing
+    with its file reverted on a scratch copy;
+  - acceptance (b): `lost --require-label` exits 1 on exactly the 15 stored
+    directories holding a lost report, 0 on the other 34;
+  - seam: 6373 r1 t3 (the lost step nothing made good) went from 4 of 4
+    restating "not held" to 3 of 3 disclosing the loss; no payload drew a
+    negative from a lost step on the after side;
+  - smoke `wave4_p45` (6365, n=1): 13 checks exit 0, depth DELIVERED,
+    schema 6.
+- **Tests 1795 → 1839**, all green.
+
+**Surprises / deviations from FIX_PLAN:**
+- **The label must not forbid re-delegation, unlike the halt's.** The
+  Manager already recovers that way (15 of 18), so the label permits one
+  more call and the Manager-path notice is kept for a loss nothing made
+  good. Emitting it always would have warned the lawyer on answers that
+  rest on completed research.
+- **The label must not deny a timeout.** 6409's failed attempts ended
+  "Upstream idle timeout exceeded", so "NOT a timeout" (the halt's line)
+  would have been false. The lost-step text never mentions a timeout.
+- **The first wording failed on the seam.** All 4 after-draws on 6373 said
+  the cause was "a lost reply from the database". `ba04d7c` names the
+  model's reply and denies a database fault; 3 of 3 redraws then say so.
+  The after column was redrawn in full at that commit.
+- **The seam cannot reproduce the Jurisdiction & Status heading**
+  (`wave3_p313` rep 2 t1: 0 heading on both sides, as in Session 22), so
+  that finding is covered only by the label being applied in conversational
+  mode, which a test pins.
+- **My own slips, caught before they reached a number:** two Python edits
+  run from bash heredocs mangled backslashes (both failed at an assertion or
+  at import and were redone from files written with the Write tool); a
+  multi-line replacement first failed on CRLF and wrote nothing.
+
+**State of the branch:** `fix/prepilot-defects`, pushed with this commit.
+`main` is untouched at `c77e779`. **P4.5 is product code**
+(`agent_core.py`, `research_halt.py`, `search_scope.py`, `audit_trace.py`):
+no config, DB schema, client or whitelist change, but an **audit schema
+change (v6)** the eval harness owner must be told about. It reaches the
+target only in a cut, when the user asks.
+
+**Machine state:**
+- no uvicorn running (stopped by PID), no pin file (`tools.replay restore`
+  run), no worktrees; the dev box is on its normal settings;
+- **50 replay directories**; new: `wave4_p45` (6365 at `ba04d7c`).
+- The seam draws are in the session scratchpad, not the repo (they echo
+  lawyers' terms).
+
+**Spend: $1.91 (seam $0.88, smoke replay $1.03), plus about $0.002 of
+model probes.**
+
+---
+
+## Session 27 — handover for Session 28 (2026-09-24)
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. Session 27 commits:
+  - `e25e678`: the instrument (`replay_report lost`);
+  - `637a882`: the acceptance, and `lost`'s re-delegation count;
+  - `4dfce68`: the fix;
+  - `ba04d7c`: the label's wording (whose reply was lost);
+  - this docs commit.
+- `main` is untouched at `c77e779`. Rollback tags:
+  `pre-prepilot-fixes-2026-09-23` and `pre-prepilot-fixes-2026-09-22`.
+- **1839 tests green.**
+- Ledger **35 of 51 rows, 8 of 14 buckets.** Partial: B5 (waiting on P3.15)
+  and B12 (waiting on P5.2). Run `python -m tools.plan_status`.
+- **Five Fixed rows are not on `main`:**
+  - P0.6 (harness only);
+  - P4.6 (`prompts.py`);
+  - P3.7 (code);
+  - P4.7 (`prompts.py`, `agent_core.py`);
+  - P4.5 (code, audit schema v6).
+
+**Next work: P4.10** (the cost of a lost completion). It is measure-first
+and now unblocked. `replay_report lost --list` names every episode; P4.10's
+row asks for cost and wall clock per episode, which `lost` does not print
+yet. Check whether the provider honours a reasoning cap on this model before
+designing around one. **Then P3.15**, which B5 waits on alone.
+
+**Instruments added this session (use them, don't rebuild):**
+- `python -m tools.replay_report --dir <D> lost [--all-dirs] [--list]
+  [--require-label]`:
+  - provider calls empty at least once, recovered or not, and where each
+    unrecovered one landed (worker / Deep Research step / Manager /
+    synthesis), tied turn by turn;
+  - `--list` prints ids, modes, shapes and whether the Manager redid it,
+    and no text;
+  - **`lost --require-label` joins the exit-1 set for every new
+    directory.**
+- `python -m tools.seam_replay synthesis|manager --run <f> --turn N
+  --apply-lost`: a recorded lost report rebuilt through the product's
+  builder, with the product's own source count, and the draw put through
+  the answer seam's disclosure.
+
+**Hazards (carried forward):** line endings (and `sed -i`), heredoc
+backslashes (twice more this session), `-F <file>`, one-line ledger rows,
+not committing during a replay, keeping seam output (which echoes lawyers'
+terms) in the scratchpad, never reading an enum from a truncated string.
+**New:** a Python replacement script must normalise CRLF to LF before
+matching multi-line text, and restore CRLF on write.
+
+**Open with the user (unchanged unless they say otherwise):**
+- Whether P4.6, P3.7, P4.7 and P4.5 go in the next cut to `main`.
+- Deploy both cuts to the target: `pg_dump` first (no backup has ever run
+  there), then `git pull`, `stop_native.cmd` / `start_native.cmd`,
+  `server_py\test_apis.ps1` and one real question.
+  - It is still not confirmed that the first cut was ever pulled.
+  - P0.7's query can go with the deploy.
+- Tell whoever runs the lexchat-eval harness:
+  - **the audit event is now schema v6**: `delegations[].lost` (null, or
+    `{reason: "empty_completion", sources_retrieved}`); a delegation with it
+    set is a lost reply, not a negative;
+  - the `tool_end` event's `result` now names each worker's outcome;
+  - `lookup_legislation` appears in `delegations[].tools[]`;
+  - a Deep Research report's section headings follow its research type.
+- Whether the chat UI should show a step's outcome (the progress event now
+  carries it; showing it is a client change and a `client/dist` rebuild).
+- P4.10 next or later; P3.15 after. P5.2 (external). Whether Thomas's
+  review document should be committed.
+- **The Fix Tracker has not been updated this session** (update only when
+  asked). When it is, P4.5 becomes Fixed with `fixed: "2026-09-24"`.
+
+**Addendum to Session 27 (same day, after the handover was written, at the user's request).**
+
+**Release versioning (user decision: calendar versions, `vYYYY.MM.N`).**
+- Built on **`main`** as `b2a3fd8`, pushed. This branch does not carry it until the next cut.
+  - `VERSION` (repo root, `2026.09.2`): the last release the code contains.
+  - `server_py/src/version.py`: `APP_VERSION` from `VERSION`; `APP_BUILD` from
+    `git describe --tags --match "v[0-9]*"` (exact on a release, `-N-g<sha>` past one,
+    `None` without git).
+  - `/api/bot-info` returns `version` and `build`; the About box shows them; FastAPI's
+    version is `VERSION`; the first log line is `[Startup] AILA <version> (build <build>)`.
+    Live-checked on the dev box and in the browser.
+  - `CHANGELOG.md`: 2026.09.1, 2026.09.2, and *Unreleased* (what is queued on this branch).
+  - CLAUDE.md on `main` gains *Releases* and a deploy step 6 (confirm the version).
+  - `tests/test_version.py`: fails if the nearest release tag is not `v` + `VERSION`
+    (checked: a wrong `VERSION` fails 2 tests). 1583 tests green on `main`.
+- **Tags, created locally and NOT pushed** (awaiting the user's go-ahead):
+  `v2026.09.1` → `d8fd73b`, `v2026.09.2` → `c77e779`, annotated, dated to each merge.
+- **The next cut must follow the release procedure** (in CLAUDE.md on `main`, and in
+  FIX_PLAN's deployment note): merge; one commit on `main` bumping `VERSION` and moving the
+  CHANGELOG's *Unreleased* into a dated section; `git tag -a`; push the tag explicitly.
+- Open (in `docs/TODO.md` D19): push the tags; deploy by tag rather than the head of
+  `main`; stamp the version on the audit event, `request_timings` and replay run files
+  (after the next cut: `main` is audit v5, this branch v6); a pre-existing lint error in
+  `useBotIdentity.js`. D20: whether the chat UI should show a step's outcome.
+
+**Fix Tracker v21** (published to the same URL at the user's request):
+- **New Version column**: the release each Fixed row is part of, `2026.09.1`, `2026.09.2`,
+  or "Next release". Derived mechanically: a row belongs to the first release tag whose
+  FIX_PLAN shows it `[x]`. 23 rows in 2026.09.1, 1 in 2026.09.2 (P3.13), and 6 queued (P0.6,
+  P3.7, P4.6, P4.7, and both P4.5 rows). Data field `ver`, documented in the ROWS comment.
+- P4.5's two rows → Fixed, `fixed: "2026-09-24"` (first ticked in `6bda956`).
+- A plain-language P4.5 note; P4.7's becomes "Earlier"; "Next" names P4.10, then P3.15.
+- `<meta charset="utf-8">` added: without it, `python -m http.server` served the page as
+  Windows-1252 and every curly quote rendered as mojibake in the local render check. The
+  file itself was clean UTF-8 and the published page was never affected.
+- Render-checked: 30 of 51 fixed; by severity P1 12 of 13, P2 12 of 23, P3 6 of 15.
+
+**Hazards met again:** Python run from a bash heredoc turned a regex's `\n` into a real
+newline twice more (both failed before writing anything). Playwright may only write
+screenshots under the repo (`.playwright-mcp/`, gitignored), not the scratchpad.
+
+**Machine state:** no uvicorn, no `http.server`, no pin file, no worktrees; the dev box is on
+its normal settings; the checkout is back on `fix/prepilot-defects`.
+
+## Session 28 — 2026-09-24/25 — P4.10 (the cost of a lost completion)
+
+**Measure first.** P4.10 had no lever chosen, and every candidate touched every
+Worker call. So the session measured, probed and put the levers to the user
+before booking anything.
+
+**1. The instrument: `replay_report lostcost [--all-dirs]`** (`23ac8e4`).
+- Classifies every empty-completion attempt by mechanism:
+  - (a) reasoned to nothing, 10,000+ tokens;
+  - (b) stream error or upstream idle timeout;
+  - (c) clean stop with no reasoning;
+  - (d) upstream rate limit, a mechanism nobody had separated before.
+- Ties each call to where it landed:
+  - an unrecovered call takes the site `lost_sites` gives it;
+  - a recovered call is placed from the timeline when it is the turn's only
+    slow call. That inference agrees with the tied site on 10 of 10 calls. The
+    first version agreed on 13 of 14: it cannot split a turn with two slow
+    calls, so it now refuses there.
+- Prices each turn against the median of clean turns in its slot (same
+  question hash, chat mode and research type).
+- Also prints:
+  - what the retry bought after each mechanism;
+  - whether the Manager redid an unrecovered worker call;
+  - (a) per chat mode, with a Fisher tail;
+  - how long healthy worker calls run;
+  - a cost-derived bound on whether an output cap could bind a healthy turn.
+- Checked against every episode on the row before any number was quoted:
+  - 6348 rep 2 t1: $2.40 and 1,133 s against a median of $0.07 and 34 s;
+  - p313: $2.48 and $2.40;
+  - 6383: $1.62, 768 s;
+  - 6409: `bab`, $0.86;
+  - 6346: 456 s and 233 s.
+- The totals match `lost`: 34 calls, 18 recovered, 16 not, and 930 v3 turns
+  now that `wave4_p45` is included.
+
+**2. What it found** (the table is in BASELINE.md, "The cost of a lost
+completion").
+- (a) is 8 calls, and they carry all the cost: $12.38 and 7,073 s over the slot
+  medians, against $156.55 for all v3 turns.
+- Every (a) call was in the **conversational quick-lookup Worker**: 8 of 478
+  runs there, 0 of 522 elsewhere (Fisher 0.0026). But 4 of the 8 are 6348, so
+  5 sessions.
+- The retry after (a) answered 2 times in 12. The Manager made good 6 of 6.
+- (b) is a latency cost (median 371 s per turn), not a spend one.
+- (d) the retry fixes (13 of 14).
+
+**3. The probes.**
+- `reasoning_probe`, committed: the output ceiling is 65,536 tokens. With no
+  `reasoning` field the model reasons in the `high` range.
+  `reasoning.max_tokens` lands on an effort level. A top-level `max_tokens`
+  binds.
+  - The first, scratch run had "default = high" byte for byte; the committed
+    re-run did not (8,709 against 7,861). The docstring and the ledger say
+    "the high range".
+- `seam_replay worker --as-sent` is new. The old worker seam was a composition
+  seam (one round, no tools, a "compose" message), which is not the call that
+  failed.
+  - The rebuild regroups rounds from tool timing and reproduces every stored
+    (a) call's `react_turn`.
+  - Both `wave3_p313` payloads rebuild to exactly their recorded
+    `sent_chars`.
+- Both p313 payloads ran away on 2026-09-24:
+  - one empty, 370 s, $0.77;
+  - one answered after 62,916 reasoning tokens, 310 s, $0.77. The cost is the
+    runaway, and "empty" is how some runaways end.
+- `max_tokens=16000`: empty at 15,360 tokens (96% of the cap), 93 s, $0.20.
+  The cap bounds the failure; it does not cure it.
+- Effort `medium` or `low` did not bound it: 3 of 4 empty on r2 t1.
+- Spend on the pre-flight: $4.35.
+
+**4. User decision:** lever (ii) plus a 32,000-token cap on Worker calls,
+evidenced by a seam A/B plus unit tests, with no replay. Booked in `484f32f`
+before any product code.
+
+**5. The build** (`df95c09`):
+- `worker_call` on both clients' `chat_loop`, forwarded through the recursion
+  and P3.8's write-up;
+- `run_worker_agent` passes it on its research loop only;
+- OpenRouter adds `max_tokens: 32000` to a Worker call's payload;
+- both clients skip the retry for a Worker call's heavy empty, which falls into
+  P4.5's label;
+- Ollama gets no cap;
+- a length-cut report with content is logged.
+- No audit shape change. `AUDIT_TRACE.md` notes that a single
+  `attempt: 1, retried: false` record is now possible, and CLAUDE.md's
+  stream-retry note says why Worker calls differ.
+
+**6. Acceptance.**
+- (a) PASSED: 16 tests, and each product file reverted alone fails them.
+  - 49 test fakes across 10 files had no `**kwargs`. Two of them sat behind
+    the halt write-up's fail-soft path, which turned the `TypeError` into a
+    silent "no write-up" (`assert 0 == 1`), not a crash.
+- (c) PASSED: the cap changed nothing where it could not bind. One flagged
+  payload (p46_6385) proved to have two stable answers that both sides draw.
+- **(b) NOT EVALUABLE:** on 2026-09-25 no draw ran away, 0 in 16 across all
+  eight stored (a) payloads, lever-on or off. **User decision: keep P4.10
+  `[~]` and redraw later.**
+- Spend on the acceptance: $0.80. **Session total: $5.15.**
+
+**Hazards met.**
+- A fake `chat_loop` without `**kwargs` breaks the moment a real keyword is
+  added. The halt write-up hides it (fail-soft).
+- A seam's lever-off side must be drawn on the same day as its lever-on side:
+  the failure's rate varies by day.
+- The `Write` tool wrote LF into a new test file (299 bare LFs). It was
+  normalised before the commit.
+
+## Session 28 — handover for Session 29 (2026-09-25)
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. Session 28 commits:
+  - `23ac8e4`: the instruments (`lostcost`, `--as-sent`);
+  - `484f32f`: the acceptance, `reasoning_probe`, the BASELINE pre-flight;
+  - `df95c09`: the fix;
+  - this docs commit.
+- `main` is untouched at `b2a3fd8`.
+- **1872 tests green.**
+- Ledger **35 of 52 rows** (P4.11 booked in the addendum below), **8 of 14
+  buckets**, with **3 in progress**: P0.4, P5.2 and now **P4.10**.
+- **Six Fixed-or-built rows are not on `main`:** P0.6, P4.6, P3.7, P4.7 and
+  P4.5, plus P4.10 (built, not accepted).
+
+**Next work.**
+1. **Close P4.10's (b).** Redraw `wave3_p313`/6348 r2 t1 and r3 t3 at
+   lever-off (`python -m tools.seam_replay worker --run <f> --turn N
+   --as-sent`) until one runs away (about $0.02 a healthy draw, $0.77 a
+   runaway). Then make three lever-on draws with `--max-tokens 32000` on that
+   payload and apply (b) as booked on the row.
+   - Draw both sides on the same day.
+   - If the runaway never comes back, say so and put it to the user; do not
+     re-scope on your own.
+2. **Then P3.15**, which B5 waits on alone.
+
+**Instruments added this session (use them, don't rebuild):**
+- `python -m tools.replay_report --dir <D> lostcost [--all-dirs]
+  [--out-price 12]`;
+- `python -m tools.seam_replay worker --run <f> --turn N [--delegation N]
+  --as-sent [--round N] [--max-tokens N] [--reasoning-effort E] [--reps N]
+  [--out D]`: one attempt per rep, no retry, graded;
+- `python -m tools.reasoning_probe [--limits] [CONFIG ...]`.
+
+**Open with the user (carried forward, plus one):**
+- Push the two release tags? Deploy by tag? (docs/TODO.md D19)
+- Whether P0.6, P4.6, P3.7, P4.7, P4.5 (and P4.10 once accepted) go in the
+  next cut: v2026.09.3, or v2026.10.1 in October.
+- Deploy both cuts to the target: `pg_dump` first, then pull, restart,
+  `test_apis.ps1`, one real question; P0.7's query with it.
+- **Tell the lexchat-eval harness owner:**
+  - schema v6 on the branch (`delegations[].lost`);
+  - `tool_end`'s outcome wording;
+  - `lookup_legislation` in `tools[]`;
+  - Deep Research headings follow the research type;
+  - **new:** a Worker's heavy empty now leaves one `attempt: 1,
+    retried: false` record.
+- D20 (show a step's outcome in the UI); P5.2 (external); Thomas's review
+  document.
+- ~~**The Fix Tracker has not been updated this session**~~ **Updated at the
+  user's request, twice** (see the addenda below): v22 and v23.
+
+**Machine state:** no uvicorn, no pin file, no worktrees, no replay run. The
+dev box is on its normal settings (the seam and probe calls read
+`app_settings` and change nothing). The seam draws' answers are in the
+scratchpad only.
+
+**Addendum to Session 28 (same day, before the session closed, at the user's
+request: "make sure we're not going to lose anything").** Four things the
+session knew that the handover did not say:
+
+1. **P4.11 booked** as P4.10's residual: mechanism (b), the upstream idle
+   timeout, is a latency cost that P4.10's lever does not touch.
+   - The figures: 11 calls; +371 s median per affected turn; the retry
+     answered 3 of 22.
+   - Not retrying (b) on Worker calls was offered and not chosen.
+   - The ledger is now **35 of 52 rows**. Order: the P4.10 redraw, then P3.15,
+     then P4.11.
+2. **A runaway can end in an answer, and then it is invisible** (a watch item,
+   now on P4.10's row).
+   - The r3 t3 draw on 2026-09-24 reasoned 62,916 tokens, then answered.
+   - Such a call leaves no `empty_completions` record, so `lost` and
+     `lostcost` cannot count it.
+   - The 32,000-token cap turns it into a lost reply that the Manager
+     re-delegates. That is the one quality consequence of the cap to read for
+     when (b) is finally drawn on a runaway.
+3. **Per-attempt durations**, from the delegation timelines and the seam
+   draws:
+   - an (a) attempt takes about 310-390 s;
+   - a (b) attempt takes about 130-190 s. That is the upstream's own idle
+     limit, which our 180 s read timeout cannot shorten.
+4. **An unproven hypothesis, not evidence:** why (a) is confined to the
+   quick-lookup Worker.
+   - Its prompt packs several duties into "2-5 sentences": report the change
+     relations first, add a clause on the sibling subsections, say what was
+     searched.
+   - A model that cannot satisfy all of them in that length may deliberate
+     without end.
+   - Nothing tests this. The counter-evidence is that effort `medium` and
+     `low` still ran away on r2 t1. Do not act on it without a seam test.
+
+**Kept out of the repo on purpose:** the seam draws' answer texts (they echo a
+lawyer's terms) stayed in the session scratchpad and are gone with it. Every
+number from them is in BASELINE.md, and the commands re-draw them.
+
+**Second addendum to Session 28 (2026-09-25, at the user's request): the Fix
+Tracker.**
+- **v22** (`5e4d11b`): P4.10 went Verified to In progress, P4.11 was added
+  (Verified, P2, a first-pass grade), with a plain-language P4.10 note, P4.5's
+  note moved to "Earlier", and a new "Next" paragraph. It read 30 of 52 fixed.
+- **v23** (`35c1dc8`): a **new status, Partial**, meaning a fix was attempted
+  and deferred, to be revisited later (the user's definition).
+  - It sits between In progress and Verified in the bar, legend, filters and
+    sort order.
+  - **P4.10 is Partial** (user decision): built, with its last check deferred.
+  - **Only the user moves a row to Partial.** The ledger has no marker for it,
+    so P4.10 stays `[~]` in FIX_PLAN. Step 7 of "How to use this file" now
+    records the status mapping.
+  - Its fill, validated with the dataviz skill's `validate_palette.js`: mauve
+    `#c975b0` (light) and `#c65a9a` (dark), dark count ink `#0a1020`.
+    - A violet of the same weight failed: it collapses into the navy Verified
+      under protanopia (ΔE 5.4).
+    - `#0f1830` ink gave 4.47:1, under the 4.5 floor.
+    - The worst adjacent pair is unchanged (green/brown: 16.1 light, 9.2
+      dark).
+- Both versions were render-checked in light and dark before publishing, at the
+  same URL: 30 of 52 fixed, 1 in progress, 1 partial.
+
+## Session 29 — 2026-09-25 — P4.10's (b), closed; the date line
+
+**Asked the user two questions before drawing.**
+- **The comparison.** The booked (b) compares medians of three draws a side.
+  That can pass only if two of the three lever-off draws run away; at Session
+  28's rate both medians are healthy draws and tie. **User decision:**
+  alternate lever-off and lever-on draws on one day until each side has a
+  runaway, compare the runaways, and require healthy draws to match across
+  sides.
+- **The stop budget:** about $3 all-in.
+
+**1. Why Session 28 drew nothing: the date line.**
+- The first lever-off draw of r2 t1 reproduced Session 28's first draw byte
+  for byte: 270 tokens, $0.0221, 4 s.
+- `--as-sent` built the Worker prompt with `date.today()`. The recorded calls
+  carried 23 September (the runs' `started_at`); the pre-flight's draws
+  carried 24 September; Session 28's carried 25 September.
+- With the date pinned back (a scratch wrapper at first, then the committed
+  `--date`), the same payloads ran away again on the same day:
+  - 25 September line: 11 of 11 draws answered, no reasoning (Session 28's
+    ten, plus one);
+  - 23 or 24 September line: 12 draws gave 4 runaways, 6 (b) and 2 answers.
+- The r3 t3 runaway on the 24 September line reproduced the pre-flight's
+  63,111 completion tokens exactly.
+- The draws are not fully deterministic: r3 t3 on the 23 September line
+  answered twice and timed out once.
+
+**2. The instrument** (`d94867a`):
+- `seam_replay worker --as-sent --date recorded` (or `--date YYYY-MM-DD`)
+  replaces the date line and nothing else, and prints it. Its payloads are
+  byte-identical to the wrapper's for all three payload/date pairs drawn.
+- `as_sent_outcome` now uses the product's emptiness test: a capped runaway
+  ended in a lone newline, which `chat_loop` counts as a heavy empty and the
+  seam had called "answered". An empty draw is no longer graded.
+- The help text says the lever-off side is the pre-P4.10 payload, since the
+  product's Worker call now carries the cap.
+- 3 tests new, 2 extended; each new one fails against the previous
+  `seam_replay.py` on a scratch copy. **1875 pass.**
+
+**3. (b) PASSED; P4.10 ticked `[x]`.**
+- r2 t1 (23 September line): off 63,168 tokens, 338 s, $0.777, answered
+  (2 links, MISSED); on 30,719 tokens, 163 s, $0.381, empty.
+- r3 t3 (24 September line): off 63,111 tokens, 342 s, $0.764, answered
+  (1 link, DELIVERED); on 30,720 tokens, 167 s, $0.382, empty (a).
+- Healthy draws matched across sides on both payloads.
+- **The watch item:** both uncapped runaways answered, and both capped ones
+  came back empty. In the product that is one attempt, P4.5's label and a
+  re-delegation. The two answers lost were one DELIVERED, one MISSED.
+- The tracker still shows P4.10 as Partial. Moving it is the user's call.
+
+**4. A P4.11 hint, written on its row.** (b) came only on the date lines that
+could run away (6 of 12 against 0 of 11), each at 125-133 s. It may share
+(a)'s cause. Not a measurement.
+
+**Spend: $2.40** on 13 seam draws.
+
+**Surprises.**
+- The "rate varies by day" was the date line: a two-digit change in a
+  25,000-character payload flips a stored payload between answering in 4 s and
+  reasoning for six minutes.
+- A capped runaway can emit one newline and `finish=stop`, not `length`, so
+  P4.10's length-cut warning does not fire for it (correctly: it is empty).
+
+**Hazards met.**
+- `date.today()` inside a replayed prompt makes a "faithful" payload
+  unfaithful the next day. Any seam that rebuilds a dated prompt has the same
+  trap. Only `--as-sent` pins it so far.
+- A draw that ends (b) costs $0 but about two minutes. Budget time, not
+  money, for them.
+
+## Session 29, continued — 2026-09-25 — P3.15 (NOT HELD from history), closed on the measurement
+
+**The sweep the row asked for first** (user go-ahead: n=3, stop at ~$3).
+- `wave4_p315_pre`: p37_6409 and p37_6373, n=3, at `2cb77e3`. $1.83, 30 of
+  30 turns ok. Pin, fresh uvicorn, restore and server stop all done.
+- The exit-1 set exits 0 on it. `lookup` exited 1 on one finding: a held Act
+  "reported absent".
+
+**1. That finding was the grader's** (`d37b517`).
+- The answer was right. "This index does not hold this instrument" followed a
+  bullet naming SSI 2025/377, under a heading naming the Act. The anaphor rule
+  credited it to the slot's instrument, the Act.
+- **First cut:** attribute the anaphor to the instrument named last. That
+  dropped true anaphors that came after a link to the Act's sections (found by
+  listing every sentence the change stopped counting).
+- **Second cut:** only subordinate instruments move the referent, and an
+  anaphor is never credited to an Act. Regraded over all 51 directories, only
+  that verdict moved.
+- Also new: `lookup` prints the absent slots by route (delegated / from
+  history), the count the row asks for.
+
+**2. The measurement.**
+- This sweep: graded from-history slots 2 of 2, so the unfixed product met the
+  booked acceptance.
+- Pooled over three sweeps: from history 3 of 5, delegated 31 of 31.
+- **User decision:** rebook as a seam A/B first.
+
+**3. The seam could not reproduce the miss** (`8aed49c`).
+- A from-history turn has no delegation, so the composition seam cannot draw
+  it. `manager --first-round` draws the Manager's first round, its tools
+  offered:
+  - an answer is graded by `lookup`;
+  - a delegation prints the numbers its brief names (the drift probe);
+  - `--date` pins the Manager's date line too.
+- Four miss payloads at 3 draws each, four passes at 1 each, current code,
+  recorded date: **0 misses in 16**. The two graded 6409 misses delegated 6
+  of 6 times; the 6373 ones answered and passed. $0.26.
+- **User decision: close P3.15 on the measurement, with no product change**
+  (the P3.1/P3.11 precedent). The code-written footer already states the
+  definite line, and the miss narrows a true negative and never invents one.
+  **B5 closes: 9 of 14 buckets, 37 of 52 rows.**
+
+**Spend, Session 29: $4.49** ($2.40 P4.10 draws, $1.83 replay, $0.26 Manager
+seam).
+
+**Surprises.**
+- A booked acceptance can be met by the unfixed product. It happened twice in
+  one session (P4.10's medians, P3.15's n=3). A defect with a low base rate
+  needs its acceptance checked against a pre-fix draw before the build.
+- The live Manager answered two follow-ups from history that the seam, on the
+  same bytes and date, delegated 6 of 6 times. The seam leaves out the
+  learning-examples injection; whether that is the difference is not shown.
+
+**Hazards met.**
+- Python in a bash heredoc ate a backslash again (`split('\')`). Use `Path.name`.
+- An anaphor rule has to be checked by listing the sentences it stops
+  counting, not only the verdicts that move: the first cut moved one verdict
+  correctly and silently stopped counting five true sentences.
+
+## Session 29 — handover for Session 30 (2026-09-25)
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. Session 29 commits:
+  - `d94867a`: `--as-sent --date`, whitespace is empty;
+  - `2cb77e3`: P4.10 accepted (docs);
+  - `d37b517`: the `lookup` anaphor fix and the by-route tally;
+  - `8aed49c`: `manager --first-round`, with `--date`;
+  - this docs commit (P3.15 closed, the handover).
+- `main` is untouched at `b2a3fd8`.
+- **1881 tests green.**
+- Ledger **37 of 52 rows**, **9 of 14 buckets** (B5 closed). In progress:
+  P0.4 and P5.2.
+- **Not on `main`:** P0.6, P4.6, P3.7, P4.7, P4.5, P4.10 and P3.15 (P3.15
+  has no product change: only tooling and docs).
+
+**Next work.**
+1. **P4.11** (measure-first). Its row carries this session's hint that (b)
+   may be (a)'s deliberation with the upstream going idle. Test that first
+   with `seam_replay worker --as-sent --date recorded` on the stored (b)
+   Worker payloads (`replay_report lostcost --all-dirs` lists them).
+2. Then the rows the open buckets wait on: P3.2 (B6), P3.3 (B11), P3.4 (B9)
+   and P4.3 (B8). Read each row in full first.
+
+**Instruments added this session (use them, don't rebuild):**
+- `seam_replay worker --as-sent --date recorded|YYYY-MM-DD`: **always pass
+  `--date recorded`** when redrawing a stored payload;
+- `seam_replay manager --first-round [--date recorded] [--without-fix --rev R]`;
+- `replay_report lookup` prints absent slots by route.
+
+**Open with the user (carried forward):**
+- **The Fix Tracker has not been updated this session.** P4.10 is `[x]` in
+  the ledger but Partial on the tracker (the user's call); P3.15 would become
+  Fixed (`fixed: "2026-09-25"`, `ver: "Next release"`) when the user asks.
+- Push the two release tags? Deploy by tag? (docs/TODO.md D19)
+- Whether P0.6, P4.6, P3.7, P4.7, P4.5, P4.10 and P3.15 go in the next cut:
+  v2026.09.3, or v2026.10.1 in October.
+- Deploy both cuts to the target: `pg_dump` first, then pull, restart,
+  `test_apis.ps1`, one real question; P0.7's query with it.
+- Tell the lexchat-eval harness owner:
+  - schema v6 on the branch (`delegations[].lost`);
+  - `tool_end`'s outcome wording;
+  - `lookup_legislation` in `tools[]`;
+  - Deep Research headings follow the research type;
+  - a Worker's heavy empty leaves one `attempt: 1, retried: false` record.
+- D20 (show a step's outcome in the UI); P5.2 (external); Thomas's review
+  document.
+
+**Machine state:** no uvicorn (stopped by PID), no pin file (restored), no
+worktrees. The dev box is on its normal settings. The seam draws' texts and
+the scratch wrapper are in the session scratchpad only; every number from
+them is in BASELINE.md, and the commands re-draw them.
+
+**Addendum to Session 29 (same day, at the user's request: "make sure we're
+not going to lose any pertinent information", then "update the tracker").**
+What the session knew that the handover above did not say:
+
+1. **Which seams pin the date line, and what that means for earlier seam
+   work.**
+   - `worker --as-sent` and `manager --first-round` take `--date`.
+   - `worker --first-round` silently ignored `--date` (its branch returns
+     before the flag check). It now refuses it (this commit, with a test).
+   - The composition seams (synthesis, worker, manager) already refused it,
+     and draw with today's date line.
+   - The seam A/Bs of P3.11, P3.13, P4.6 and P4.7 drew both sides on one day,
+     so they are not confounded by it.
+   - But a seam check of whether a recorded miss *reproduces*, drawn with
+     today's date, is not a faithful redraw. The seam-against-live gaps of
+     Sessions 19 and 22 may partly be this; that is untested.
+   - P3.15's non-reproduction used `--date recorded`, so it is not this.
+   - This supersedes "Only `--as-sent` pins it so far" in the first Session 29
+     section.
+2. **P3.15's drift probe, as far as it went.** Every delegation drawn on the
+   before side named only the instrument its recorded turn was about
+   (2025/377 on 6409, 2026/170 on 6373). No after side was drawn, because no
+   product change was made.
+3. **An unread observation, not a finding.** The held-Act slot (6409 export
+   t2, 2025 asp 2 named by number) made no claim in 5 of 9 reps across
+   `wave4_p37b`, `wave4_p37c` and `wave4_p315_pre` (1, 2 and 2): the Manager
+   answered without delegating and said nothing about whether the Act is held.
+   The grader allows it (`must_claim` is False for that slot). Nobody has read
+   whether those answers were otherwise right.
+4. **Machine state.**
+   - 51 gitignored replay directories (`wave4_p315_pre` is new).
+   - The scratch date wrapper and draw loops are superseded by `--date` and
+     are gone with the scratchpad.
+   - No uvicorn, no http.server, no pin file.
+5. **Fix Tracker v24** was published at the user's request, to the same URL:
+   - P4.10 moved from Partial to Fixed (user decision);
+   - P3.15 Fixed;
+   - both `fixed: "2026-09-25"`, `ver: "Next release"`;
+   - 32 of 52 fixed, none Partial;
+   - new notes on P4.10's check, the date line and the cost the cap trades;
+     on P3.15's closure; and on the grader fix;
+   - "Next" reads: P4.11, then P3.2, P3.3, P3.4 and P4.3;
+   - render-checked once, in light, before publishing.
+
+## Session 30 — 2026-09-25 — P4.11 (the latency of an upstream idle timeout)
+
+**Free checks before any draw.**
+- The records already mix (a) and (b) on identical bytes: 6369 `abb`, 6409
+  `bab`, 6348 (`wave3_p311_conv`) `abb`.
+- `worker --as-sent` rebuilt the Worker prompt with today's code. Of the 8
+  Worker payloads to draw, it rebuilt 1 (6410) to its recorded `sent_chars`.
+  The rest were off by 44-570 characters: the prompt changed under them.
+- The recorded head's own `get_worker_system_prompt` rebuilt all 8, and
+  P4.10's two. Every stored head predates `lookup_legislation`, so the tool
+  list differed too.
+- None of the 5 Manager (b) calls rebuilds on an existing seam (rounds 1, 1,
+  2, 3 and 5).
+- OpenRouter serves the model from Vertex and AI Studio (its public
+  `/endpoints` listing).
+
+**Asked the user before spending** (all four answered with the
+recommendation): build `--at-rev recorded`; leave the Manager calls out; stop
+at about $5; test the route only if (b) recurred.
+
+**1. Tooling, each committed before its draws.**
+- `1de4419`: `worker --as-sent --at-rev recorded|SHA`, which builds the prompt
+  and tools with that revision's modules, as `_synthesis_prompt_at` already
+  did. It is refused off `--as-sent` and on both first rounds.
+- `866a2b3`: `lostcost` splits the retry yield by site, pooled over tied and
+  inferred sites with the inferred share said. After a (b): Worker 1 in 14,
+  Manager 2 in 8.
+- `400d486`: `--provider SLUG` (OpenRouter's `provider.order`, no fallback).
+  Every draw now prints the provider that served it.
+- 9 tests. Each failed against the previous file on a scratch copy, or, for a
+  refusal, with that refusal removed.
+
+**2. Step 1: 32 draws, $1.67** (8 payloads, 3 on the recorded date line and 1
+on today's).
+- Recorded line: 19 (b), 2 (a) and 3 answers in 24. Every payload drew (b) at
+  least once, at 123-149 s and $0.
+- After a (b), the same bytes drew (b) again 11 times in 11.
+- Today's line: 7 of 8 answered or called a tool in 3-8 s.
+- The (a) draws came from 6369 and 6409, whose records mixed the two. 6409's
+  was the recorded attempt's 62,915 tokens exactly.
+
+**3. Step 2: the route, $1.53.**
+- AI Studio drew (b) on both case-law payloads.
+- On both steady-(b) legislation payloads (6373 and 6348), AI Studio ran away
+  to 62,913 tokens and about 360 s. Vertex timed out at about 125 s on the
+  same bytes.
+- A draw with no routing field was served by "Google", i.e. Vertex.
+- I stopped the driver when its remaining AI Studio draws (likely runaways)
+  would have gone past $5. The four draws it cut were redrawn cheaply: 5
+  draws, all (b), $0.
+
+**4. User decision: lever (i).** Booked before any code (`d34c48e`):
+deterministic unit tests at each seam, no replay and no seam draw, since no
+payload changes.
+
+**5. Built and accepted** (this commit).
+- `is_idle_timeout` joins `is_heavy_empty` in `should_retry_empty`'s
+  Worker-only exception.
+- `tests/test_idle_timeout.py`: 9 tests. With `empty_completion.py` reverted,
+  6 fail; with only the rule reverted, 5. The 3 guards each fail against an
+  over-broad variant.
+- P4.10's `[b_idle]` case is reversed; its old form fails against the fix.
+- 1898 pass.
+- `AUDIT_TRACE.md` and CLAUDE.md say so. No shape change.
+- The "1 of 7" in `1de4419`'s help text and test comment corrected to "1 of
+  8".
+
+**6. P4.12 booked** (the residual; measure-first): the Manager's (b), and
+whether a retry with changed bytes recovers.
+
+**Spend, Session 30: $3.20.** The ~$2 more the user allowed was not used.
+
+**Surprises.**
+- (b) is not a flaky upstream: a stored (b) payload came back (b) again 11
+  times in 11. One changed prompt line cured 7 of 8.
+- The other route did not avoid (b). It turned (b) into (a) on the same bytes,
+  which is the best evidence so far that on those payloads (b) is (a)'s
+  deliberation, cut short by Vertex's idle limit.
+- A stored payload older than the latest prompt change is not redrawn by
+  `--as-sent` alone.
+
+**Hazards met.**
+- A background driver with a spend guard still overshoots by the draws in
+  flight. A runaway-prone payload on a new route is about $0.77 a draw, so
+  check the plan against the budget after each surprising draw, not only
+  after the run.
+- Stopping the driver's task killed its in-flight draws with it. No orphaned
+  processes were left, but their outcomes and costs were lost, so they were
+  redrawn.
+
+## Session 30 — handover for Session 31 (2026-09-25)
+
+**State.**
+- Branch `fix/prepilot-defects`, pushed. Session 30 commits:
+  - `1de4419`: `--at-rev`;
+  - `866a2b3`: `lostcost` by site;
+  - `400d486`: `--provider`;
+  - `d34c48e`: the pre-flight and the booked acceptance;
+  - this commit: P4.11 built and accepted, P4.12 booked, this log.
+- `main` is untouched at `b2a3fd8`.
+- **1898 tests green.**
+- Ledger **38 of 53 rows** (P4.11 ticked, P4.12 new), **9 of 14 buckets**. In
+  progress: P0.4 and P5.2.
+- **Not on `main`:** P0.6, P4.6, P3.7, P4.7, P4.5, P4.10, P4.11 (product
+  changes) and P3.15 (tooling and docs only).
+
+**Next work.**
+1. The rows the four open buckets wait on: P3.2 (B6), P3.3 (B11), P3.4 (B9)
+   and P4.3 (B8). Read each row in full first.
+2. P4.12, when the user wants it. Start with the Worker half: a seam lever
+   for a benign change of bytes on `worker --as-sent`, drawn with `--at-rev
+   recorded --date recorded` on the stored (b) payloads. Mind the runaway risk
+   (6369, 6409), about $0.77 a draw.
+
+**Instruments added this session (use them, don't rebuild):**
+- `seam_replay worker --as-sent --at-rev recorded` (with `--date recorded`).
+  **Check the dry run's `sent_chars` against the record before drawing.**
+  It cannot restore P3.7's instrument-lookup block, which code appends to
+  the brief and the audit does not record: a Worker payload from a head at
+  or after `475ef57` whose brief named an instrument by number is not
+  faithful even at its head (possibly why `wave4_p37_reach`/p37r_6374 r1 t2
+  did not rebuild).
+- `seam_replay worker --as-sent --provider google-vertex|google-ai-studio`.
+- `replay_report lostcost`: the retry yield by site.
+
+**Open with the user (carried forward):**
+- The Fix Tracker has not been updated this session. P4.11 would become
+  Fixed (`fixed: "2026-09-25"`, `ver: "Next release"`), and P4.12 is a new
+  row. Update it only when asked.
+- Push the two release tags? Deploy by tag? (docs/TODO.md D19)
+- Whether P0.6, P4.6, P3.7, P4.7, P4.5, P4.10, P4.11 and P3.15 go in the next
+  cut: v2026.09.3, or v2026.10.1 in October.
+- Deploy both cuts to the target: `pg_dump` first, then pull, restart,
+  `test_apis.ps1`, one real question; P0.7's query with it.
+- Tell the lexchat-eval harness owner:
+  - schema v6 on the branch (`delegations[].lost`);
+  - `tool_end`'s outcome wording;
+  - `lookup_legislation` in `tools[]`;
+  - Deep Research headings follow the research type;
+  - a Worker's heavy empty, **and now its upstream idle timeout**, leaves one
+    `attempt: 1, retried: false` record.
+- D20 (show a step's outcome in the UI); P5.2 (external); Thomas's review
+  document.
+- Session 29's unread observation (the held-Act slot made no claim in 5 of 9
+  reps) is still unread.
+
+**Machine state:** no uvicorn, no http.server, no pin file, no worktrees, no
+seam processes. The dev box is on its normal settings. The draw drivers, their
+logs and the answer texts are in the session scratchpad only. Every number
+from them is in BASELINE.md, and the seam commands there re-draw them.
+
+**Addendum to Session 30 (same day, at the user's request: "make sure we're
+not going to lose any pertinent information", then "update the tracker").**
+What the session knew that the handover above did not say:
+
+1. **The Manager seam's numbers** (now also on P4.12's row).
+   `manager --first-round --date recorded` rebuilt the two round-1 (b)
+   payloads to:
+   - 9,832 characters against a recorded 9,243 (`wave2`/6343 r1 t2);
+   - 7,923 against 11,870 (`wave4_p37_reach`/p37r_6374 r1 t2).
+
+   At their heads, as Worker calls, they rebuild to 12,744 (6343) and to
+   9,004 with the brief alone or 12,791 with one round (p37r_6374). So
+   neither call is placed by a seam.
+2. **How far the Worker prompt drifted, per recorded head** (today's code
+   against the record):
+   - +393 characters at `2d9ae11` and `051472d`;
+   - +44 at `8006db9`;
+   - +570 at `2545184`;
+   - +69 at `8dbae59`;
+   - 0 at `b694fac` and `778d30a`.
+
+   **`--without-fix --rev`'s literal swap (`_swap_worker_constant`) closed
+   the gap on 6 of the 8 payloads, but not on the two at `8006db9`** (526 short):
+   there, P2.4's not-held rule was appended outside the constant. So a
+   `--without-fix` A/B whose before-side changed text outside the constant
+   compares a partial prompt. `--at-rev` builds the whole prompt.
+3. **Per-draw detail behind the BASELINE tables.**
+   - Reproductions to the token: 6409's (a) at 62,915 (the recorded attempt
+     2); 6410's (b) at 164 (the recorded (b)); 6385 `p24`'s second draw at
+     141 (its recorded attempt 1). 6410 answered twice at 537 tokens, then
+     timed out.
+   - **The 29 (b) draws streamed 265-1,013 reasoning characters, but usage
+     billed 0 reasoning tokens** (completion 68-257, `finish=error/None`).
+     The 4 (a) draws billed every token as reasoning (57,812-76,656
+     characters, `stop/STOP`). So "deliberation cut short" rests on the
+     route contrast, not on the usage fields.
+   - No rate limit in 43 draws run four at a time.
+4. **Unread, not findings.** The quick answers on today's date line (links
+   0-1) and 6410's recorded-line answers (2 links) were never graded for
+   correctness. Their texts were in the scratchpad only.
+5. **The draw driver**, in the scratchpad only; P4.12 will want one:
+   - four lanes of two payloads, sequential within a payload;
+   - one `seam_replay` subprocess per draw, its output parsed into one
+     JSON line;
+   - a spend guard checked before each draw, which cannot stop draws
+     already in flight;
+   - stopping the driver's task kills its in-flight subprocesses, and their
+     results are lost.
+6. **OpenRouter's routes** are now in the `external-apis` skill (not
+   tracked: `.claude/` is ignored):
+   - six endpoints: Vertex and AI Studio, each standard, flex and
+     priority;
+   - Vertex is the default;
+   - the tiers are untested.
+7. **Fix Tracker v25**, published at the user's request to the same URL:
+   - P4.11 Verified to Fixed (`fixed: "2026-09-25"`, `ver: "Next release"`);
+   - P4.12 added (Verified, P2);
+   - new notes on P4.11's check, the cost accepted, the measuring fix and
+     P4.12;
+   - "Next" reads P3.2, P3.3, P3.4 and P4.3.
+
+---
+
+## Session 31 — 2026-09-28 — P3.2 (B6, capitulation under challenge): measured, acceptance re-scoped and booked, lever (c) tried on the seam
+
+**Done:**
+- **The row's diagnosis corrected, free.** 6406 has 24 messages, so the row's
+  "turns 11-24" are MESSAGE numbers: user turns 6-12. The earlier reversal is
+  turn 5. Read at source in LEX (`eur/2011/142`): the position AILA defended
+  over turns 6-11 is contradicted by Annex I's definition, by Annex XIV Ch I
+  Table 1 row 3 and above all by Annex X Ch II s.3(B), so **the reversal moved
+  TOWARD the text** and the row's "held with the same citation" would pass a
+  wrong answer. Turn 5's challenge was right too (Art 25(4) points to Annex
+  XIV Ch V, which lists processed manure and blood products only). The
+  lawyer's own complaint (Invariant 6) is that she had to tell it the answer
+  and ask it to check again. **This is a reading of the text and is to be
+  confirmed by a lawyer.** Same lawyer in 6370, whose feedback says she pushes
+  because the bot takes a firm position on a point open to interpretation.
+- **The acceptance re-scoped and booked before any product code** (`21ff5dd`,
+  user decision): at most one position change in turns 6-12; a change must
+  re-retrieve and cite a provision the previous position did not; no claim the
+  text contradicts; no agreement opener on a challenge turn; control turn 5
+  (the lawyer right) passes; 6345 x3 as the stubbornness guard. Script
+  `evidence/scripts/p32_6406.json` (Conversational only; the two Deep Research
+  turns replaced by turn 3's question). Budget $15; spent $7.88.
+- **Four instruments, committed:**
+  - `replay_report openers` (`944f831`): the first sentence of each answer,
+    by kind (scoped / bare / praise / affirm / apology / thanks), with
+    `--drops`. 42 openers in 1,580 replayed answers, 8 in the 179 pre-pilot
+    answers. Read before quoting: no missed concession in the drops;
+    `affirm` also catches a plain yes-answer (6409).
+  - `tools/provision_hints.py dryrun` (`ae0baab`): what lever (c) would
+    fetch. 31 of 180 user turns in 17 sessions name a provision; 29 of 41
+    references resolve to one instrument; median 878 characters. **Its first
+    draft made one wrong-instrument resolution** (6370: a regulation QUOTING
+    another instrument's title); reading every resolution against its
+    message found it, and the "of (the)" link rule and the quotation rule came
+    from it. It also caught a citation that does not exist (6376's s.36(1)(i);
+    the pre-pilot model had silently corrected it to s.36(2)(i)).
+  - `replay_report stance` (`21ff5dd`): the booked acceptance as a command.
+    Generic code; the patterns name a matter's law, so they live in the new
+    gitignored `evidence/rubrics/p32.json`. Checked against a hand read of the
+    five stored reps before use.
+  - `seam_replay manager --hint` (`42d6210`): lever (c) on the Manager seam,
+    and every Manager draw now prints its stance under the rubric.
+- **Before-column at HEAD** (`wave4_p32_pre`, head `21ff5dd`, $7.54): the
+  script n=3 and 6345 x3. **All six FAIL.** By `stance` the 6406 reps change
+  position 1, 2, 0 times; **by the required hand-read 3, 3, 0.** Every other
+  exit-1 subcommand exits 0 (`modes halts negatives derivations blanks
+  scoperecord nosearch caselaw deadend scripted "lost --require-label"`).
+- **Lever (c) tried on the Manager seam, and it does not work** (24 draws,
+  $0.34, both sides the same day, on `wave4_p32_pre`'s run files). With the
+  decisive passage handed over verbatim: turn 6 still denied 3 of 3 (3 of 3
+  without); r3's turn 11 still denied 3 of 3 (its contradicted consequence 2 of
+  3 without, 0 of 3 with); **no hinted draw cited the passage, 0 of 12**; r1's
+  turn 11 opened with praise 3 of 3 with the hint, 0 of 3 without.
+
+**Surprises / deviations from FIX_PLAN:**
+- **The row had the defect backwards.** It treated the final reversal as the
+  failure; at source it was the one move toward the text. The stable failure
+  across every rep is the position changing three times in seven turns, the
+  contradicted consequence, and agreement openers on turns the bot never
+  checked. Session 29's lesson held in a new form: the booked acceptance as
+  first written would have been PASSED by a stubborn wrong answer, and r3 at
+  HEAD is exactly that product.
+- **At HEAD the defect has a second face.** The stored reps (heads
+  `0884b29`..`2d9ae11`) all flip at turns 11-12, 3 of 5 with no re-retrieval.
+  At HEAD, 2 of 3 flip at turn 11 WITH a delegation, and r3 holds the
+  contradicted consequence through the last challenge with a real argument
+  (the Regulation's parallel wording). Invariant 1 cuts both ways here:
+  capitulation and stubbornness are both present in the unfixed product.
+- **The model has the text and argues past it.** The decisive passage was in
+  the raw retrieval at turn 6 in 5 of 5 stored reps and the summariser dropped
+  it in 4 of 5 (a scratch probe, not a committed command: `audit`
+  `delegations[].tools[].raw_result` against `final_result`). That pointed at
+  retrieval. The seam says otherwise: handed the passage, the Manager ignores
+  it (0 of 12), as `wave2` turn 6's Worker did. Retrieval is not the binding
+  constraint.
+- **False "not held" claims recur**: at HEAD 2 of 3 reps say Annex XIV Ch V
+  is not held or cannot be retrieved, and r1 turn 10 says Annex X Ch II is not
+  held. LEX holds both, each Annex as ONE provision (89K and 28K characters).
+  This is P3.12's shape (a part of a Schedule or Annex asked for by number),
+  and it is evidence for that row.
+- ~~**LEX's Annex text keeps some Chapter headings and drops others**
+  (`CHAPTER V` survives in Annex XIV; Annex X and XIII Ch XI have none), so a
+  named Annex chapter cannot always be cut out in code.~~ **RETRACTED in the
+  addendum below: every heading is there, run into its title (`CHAPTER
+  XIGeneral ...`); the cutter's word-boundary regex missed them.** An
+  instrument error, found by the handover audit.
+- **The grader under-reads, and the hand-read is load-bearing.** Its misses
+  were fixed one pattern at a time, each from a sentence read by hand (bold
+  markup, "process it into", conditionals, "cannot be classified as", "not
+  held in this index"). What it still misses is an implicit switch: an answer
+  that applies the fat-derivative rules to the oil without naming the
+  category. That is why r1 grades 1 change by command and 3 by hand.
+- **Found while answering the user's question about the "learning" feature,
+  NOT booked (user decision pending):** `agent/learning.py`, called from
+  `agent_core.py` on EVERY Manager call with no flag, injects up to 3
+  highly-rated past answers ("Emulate their style") and 3 critique comments
+  from ANY user whose question shares a keyword. The pre-pilot's one rating
+  (1 in 181 answers, no comments) is a **5 on 6346's dead-end refusal**, the
+  B7 defect P4.1 fixed; the query also pairs a question with ANY later answer
+  in its chat; and it puts other users' question text into a lawyer's prompt
+  with no drafting-mode exclusion. The dev DB holds no ratings, so no replay
+  ever exercised it. Whether the target still holds that row is unknown.
+
+**Every number above is behind a command**, re-run before this entry:
+- `replay_report --dir evidence/replay/wave4_p32_pre stance` (exit 1, 6 of
+  6), with `--also baseline wave1 wave2 --session 6406 p32_6406` for the
+  stored reps (8 of 8);
+- `replay_report --dir evidence/replay/baseline openers --all-dirs --export`;
+- `python -m tools.provision_hints dryrun`;
+- `seam_replay manager --run evidence/replay/wave4_p32_pre/p32_6406_rep{1,3}.json
+  --turn {4,5,10} [--hint] --reps 3` (draws are not byte-deterministic);
+- `plan_status` counts 53.
+The hand-read counts (3, 3, 0) and the "0 of 12 cited" read are from the
+answer texts, kept in the session scratchpad only.
+
+**State:** branch `fix/prepilot-defects`, pushed. Session 31 commits:
+`944f831`, `ae0baab`, `21ff5dd`, `42d6210`, and this one. `main` untouched at
+`b2a3fd8`. **1927 tests green.** Ledger 38 of 53, 9 of 14 buckets, in
+progress P0.4 and P5.2. **52 replay directories** (+`wave4_p32_pre`).
+
+**Machine state:** no uvicorn, no http.server, no pin file (`replay restore`
+run: model `google/gemini-3.1-pro-preview`, local prompt cache ON,
+`research_mode_enabled` ON), no worktrees, no seam processes. The rubric
+`evidence/rubrics/p32.json` is local and gitignored: **it is needed to
+re-run `stance`**; its note says what it grades. The export transcripts,
+the hand-read texts and the seam answers are in the scratchpad only.
+
+**Spend:** $7.54 replay, $0.34 seam draws, one model probe. $7.88 of the
+agreed $15.
+
+## Session 31 — handover for Session 32 (2026-09-28)
+
+**P3.2 needs the user's lever decision before any product code.** The
+measured options, with what the evidence says about each:
+- **(a) A disputing turn must re-delegate before the Manager answers**
+  (code). At HEAD, 2 of 3 flips already re-delegated, so this alone would not
+  have stopped them; it addresses the stored reps' no-retrieval flips.
+- **(b) Strip bare/praise/affirm openers at the answer seam** (code; dry-run
+  over every stored answer and read every edit first, as P3.13 did). Cheap
+  and deterministic, but cosmetic: it cannot pass the acceptance alone
+  (criteria i-iii and v), and must not be sold as the fix.
+- **(c) The retrieval hint**: measured, not effective at the Manager seam
+  (0 of 12 cited). Not recommended as the lever. Its dry-run tool stays useful
+  as an instrument (it finds citations that do not exist).
+- **(d) A prompt change**: the finding that the model argues past text it
+  has points here. The measured failure is an interpretive point stated as
+  settled, then abandoned. That is also P3.3's defect (same lawyer, 6370), and
+  the Session 22 risk applies: run the first-delegation drift probe before and
+  after, and compare links and citations.
+- **(e) Take P3.2 and P3.3 together.** Session 31 took P3.2 alone at the
+  user's choice. The evidence now says the lever is P3.3's ("separate
+  retrieval from interpretation": say "on one reading" for an interpretive
+  point, and cite the text for a retrieved one). Recommended to put to the
+  user first.
+
+**Instruments (use, don't rebuild):**
+- `replay_report stance [--rubric R] [--also DIR ...] [--session ...]
+  [--sentences]`. Hand-read every turn it grades "none" in the window
+  (booked). The rubric is gitignored.
+- `replay_report openers [--all-dirs] [--export] [--list] [--drops]`.
+- `provision_hints dryrun [--session] [--list] [--show]`.
+- `seam_replay manager --hint` (composition or `--first-round`).
+
+**Open with the user:**
+- **P3.2's lever** (above), and whether to take P3.3 with it.
+- **The legal reading behind the rubric**: to be confirmed by a lawyer.
+- ~~**The learning injection** (Surprises): book a row or a `docs/TODO.md`
+  item?~~ **PARKED by the user (2026-09-28): `docs/TODO.md` D21**, with the
+  findings. The user also raised standing instructions per AILA user (a
+  "CLAUDE.md per user"): noted as D22, an idea, not scoped.
+- **Carried from Session 30:** push the release tags? deploy by tag (D19);
+  whether P0.6, P4.6, P3.7, P4.7, P4.5, P4.10, P4.11 and P3.15 go in the next
+  cut (v2026.09.3 in September, else v2026.10.1); deploy both cuts to the
+  target (`pg_dump` first, then pull, restart, `test_apis.ps1`, one real
+  question, P0.7's query); tell the eval-harness owner (schema v6 on the
+  branch, `tool_end` outcome wording, `lookup_legislation` in `tools[]`,
+  Deep Research headings follow the research type, and the single `attempt:
+  1, retried: false` record); P4.12; D20; P5.2; Thomas's document; the unread
+  held-Act slot (Session 29) and P4.11's ungraded quick answers.
+- The Fix Tracker was not updated this session (P3.2 is still open, so no
+  row would move). Update it only when asked.
+
+**Addendum to Session 31 (same day, at the user's request: "make sure we're
+not going to lose any pertinent information", then "update the tracker").**
+What the session knew that the entry and handover above did not say:
+
+1. **Correction: "P3.2 alone" was the session's default, not a user
+   decision.** Of the four decisions put to the user, three had a
+   recommendation (the re-scoped acceptance, the Conversational-only script,
+   the $15 stop); P3.2-alone-or-with-P3.3 did not. The user replied "go with
+   your suggestion", and the session filled the gap with P3.2 alone. The
+   handover's "(e) Take P3.2 and P3.3 together" is therefore still fully open.
+2. **The pre-pilot transcript itself, hand-read:** the same three changes in
+   turns 6-12 as the stored reps (deny at 6-7; the fat-derivative route
+   applied to the oil at 8; deny again at 9, opening "You have correctly
+   identified"; deny at 10-11; affirm at 12). Its final answer cites Annex X
+   Ch II s.3(B), the passage the text turns on.
+3. **Where the grader and the hand-read differ at HEAD** (`wave4_p32_pre`),
+   so the acceptance run's hand-read knows what to look for:
+   - r1 t8 and r2 t8 apply the Annex XIII Ch XI fat-derivative end point to
+     the oil without naming the category: an implicit affirm (r2 t8 also
+     denies: "both"). The grader reads both as none.
+   - r1 t9 agrees CONDITIONALLY ("if it cannot be classified as ...") and
+     keeps the denial: deny. Fixed in the rubric (a deny pattern for "cannot
+     be classified as"), not by the code.
+   - The false "not held" claims: r1 t10 (Annex X Ch II), r2 t5 (Annex XIV
+     Ch V), r3 t5 ("unable to retrieve" Annex XIV Ch V). LEX holds both
+     Annexes, each as one provision.
+4. **A known weakness in booked criterion (ii).** A change must cite "a
+   provision the previous position's answer did not"; the comparison is with
+   the IMMEDIATELY previous position's answer only. r1 t11 changes citing the
+   same Annex XIV table that t6 relied on, and counts as new against t9. Read
+   every change's citation by hand in the acceptance run; if the user wants
+   it, tighten the criterion to "not cited by any earlier answer in the
+   window" BEFORE the after-run, never after it.
+5. **Seam detail behind the lever (c) numbers** (answers were scratchpad
+   only): the hinted draws were near-identical within a side (temperature 0);
+   the hinted t6 draws added an unasked offer to search Scottish guidance;
+   r3's hinted t11 draws argued the exclusion backwards (that an explicit
+   exclusion from a category shows the excluded thing was never inside it),
+   the same inversion `wave2` t11 made. Cost $0.014 a draw.
+6. **Budget for the next 6406 run:** `p32_6406` reps took 8.7, 9.5 and 14.3
+   minutes and cost $1.51, $1.58 and $2.30; 6345 reps 4.0-6.8 minutes and
+   $0.53-0.86. So an n=3 after-column with its guard is about $7.50 and 45
+   minutes, run serially.
+7. **LEX facts learned** (also added to the `external-apis` skill, which is
+   not tracked in git):
+   - `/legislation/search` does not find EU measures by number and did not
+     return the Scotland Act 1998 by exact title in its top 50; pre-1963 Acts
+     have regnal-year ids, so a title-to-id resolver misses them.
+     `/legislation/lookup` with `legislation_type: "eur"` returns the title of
+     `eur/YEAR/NUMBER` (200) and is the reliable route.
+   - An Annex of an EU instrument is ONE provision (`.../annex/XIV`, 89K
+     characters for eur/2011/142), like a UK Schedule. **Its Chapter and
+     Section headings are all present but run into their titles**
+     (`CHAPTER XIGeneral ...`, `Section 3Specific requirements ...`; Annex
+     XIV's `CHAPTER V RULES` happens to have a space). **This corrects the
+     entry above, and the `ae0baab` commit message**, which said LEX drops
+     some Chapter headings: the cutter's `\bCHAPTER\s+XI\b` needed a word
+     boundary after the numeral and missed every run-together heading. Found
+     by this audit when the claim was re-checked against the fetched text
+     before being written into the skill. Fixed in `provision_hints`
+     (`_ROMAN_END`) with a test. The dry run now reports 2 chapter cuts (was
+     1) and 4 references over the cap (was 5); Annex XIII Ch XI (6406 msg 17)
+     cuts to 1,206 characters. The lever (c) A/B is unaffected: its turns 5,
+     6 and 11 cut no chapter. **The twentieth instrument trap, and the
+     same shape as the sixth (a regex tuned on one rendering).**
+   - Annex I definitions render as `‘term’ means ...;`, so a definitions cut
+     by quoted term is reliable.
+   - EU article uris are `/article/N` for eur/2009/1069 and eur/2011/142.
+8. **The rubric exists only on this machine** (`docs/prepilot-fixes/
+   evidence/rubrics/p32.json`, gitignored like `replay_set.json`). Without
+   it, `stance` exits 2 and the seam prints no stance. Its `_note` states the
+   proposition, the provisions it was verified against and the reading to be
+   confirmed. Every pattern in it was added from a sentence read by hand; if it
+   is lost, rebuild it from the stored runs with `--sentences`, and re-check
+   it against the counts above (stored reps 3, 3, 3, 3, 4; HEAD 1, 2, 0 by
+   command).
+9. **Fix Tracker updated to v26 at the user's request** (below): P3.2 stays
+   Verified (open), with its note rewritten; D21 and D22 are TODO items, not
+   tracker rows.
+10. **User decision (2026-09-28, after the addendum): take P3.2 and P3.3
+    TOGETHER** (the handover's recommendation (e)). Session 32 starts there,
+    measure-first: the lever is not chosen, and a combined acceptance is booked
+    and committed before any product code. **6338 has never been replayed in
+    the configuration its lawyer used** (Conversational, legislation and case
+    law): `baseline`, `wave1` and `wave2` sent Research mode and legislation
+    only, `wave0_conv` sent legislation only (before P0.6). 6370 (Conversational,
+    legislation and case law) and 6375 (turn 1 Conversational, turn 2 Deep
+    Research, legislation and case law) were replayed as recorded, at heads
+    `0884b29`-`2d9ae11` (6375 also at `8006db9`/`051472d`/`4890573`).
+
+---
+
+## Session 32 — 2026-09-28/29 — P3.2 and P3.3 together: measured, the combined acceptance booked (interim entry)
+
+**Interim, written before the lever work so the state survives an interruption; the full
+entry and the handover for Session 33 follow at the end of the session.**
+
+- **Decisions (2026-09-28).** The user took P3.2 and P3.3 together, measure-first. At the
+  spend gate the user said "go with your suggestions". Two of the four points put to them
+  carried a recommendation (the before-column spend: about $6, stop $9, session stop $30;
+  6370 at n=3). **Two did not**, and the session filled them with its own recommendation,
+  recorded here as the session's, accepted by the user's blanket approval, not as the
+  user's own choice (Session 31 addendum item 1): P3.2's criterion (ii) tightened to "a
+  provision no earlier answer in the window cited", and a code-emitted line counting
+  toward 6375's Scots-law status requirement.
+- **Law verified at source, free**: see the P3.3 row. The one new source is ILRA's
+  explanatory note (para 10), fetched from LEX's explanatory-note endpoint, which the
+  product does not call.
+- **Instruments**: `replay_report interpret` and `hedges` (`ad38f2d`); the two decisions
+  above (`0bc4f2c`). Tests 1928 -> 1946.
+- **Before-column** (`wave4_p33_pre`, head `0bc4f2c`): 9 of 9 FAIL, $6.71 recorded. The
+  run stalled overnight in 6375 rep 3's Deep Research turn (last server line 16:42, a
+  summarisation call; the machine probably slept, nothing was logged after it). The
+  replay process was killed the next morning and the same command resumed, skipping the
+  8 finished reps. The stalled attempt's spend (turn 1 about $0.14, part of a Deep
+  Research turn) is in no run file.
+- **The rubric was extended while the before-column came in**, every change from a
+  sentence read by hand, each re-checked against every stored rep and the pre-pilot
+  answers (no stored or export grade moved). What changed: wrong-claim phrasings for
+  6338 ("provided by", "defined by Schedule 1 to", the 1978 Act), sequencing
+  conclusions (including a hedged "must be"), two over-broad exemptions narrowed (a
+  "not explicitly" and a "whether" that suppressed real claims), and three 6370
+  exemptions (statements about what the text does not say, a restatement of the
+  Agriculture Regulations' reg 3(1), and reported judicial statements).
+- **Found, not booked:** `negatives` fails 3 turns in 6370, a case-law-only negative with
+  no index attribution (P3.7's lookup path runs no `search_legislation`, so only P2.4's
+  case-law clause is in the footer). It exits 0 on every other HEAD directory.
+- **Machine state:** server stopped, `replay restore` run (local prompt cache ON,
+  `research_mode_enabled` ON), no pin file.
+
+---
+
+## Session 32, continued — 2026-09-29 — the levers built and measured; neither row met; six residual rows
+
+**Done:**
+- **Lever chosen (user decision):** one prompt clause plus two code lines, seam-tested before
+  any paid replay. A fourth lever came out of the seam work and was added by user decision
+  (the summariser source rule). All four are on the branch (`42951b4`) and **stay there after
+  the after-column (user decision)**, with the residuals booked as rows.
+  1. **Prompt:** one clause in the first CRITICAL RULE of the conversational Manager and in
+     the quick-lookup Worker's MANDATE (not a new block: Sessions 14 and 22), plus a sentence
+     in the Manager's approach step on disputed turns.
+  2. **Summariser source rule** (`SUMMARY_SOURCE_RULE` in `summarise_prompt`) and the local
+     prompt cache version bumped to v2.
+  3. **Code, 6375:** `CASE_LAW_DOCTRINE_SENTENCE` after P2.4's coverage sentence.
+  4. **Code, P3.2's register:** `utils/openers.py`, an unscoped agreement formula removed at
+     the Manager's answer seam.
+- **Instruments, committed:** `replay_report interpret` reads a list item's hedge from its
+  lead-in line (`a4bef00`); `replay_report openers --strip` (the strip's dry run);
+  `tools/summary_probe` (`count` free, `redraw` and `panel` paid). Tests 1946 -> 1981.
+- **After-column** (`wave4_p33_post`, head `42951b4`, 15 reps, $17.17). **Neither row met.**
+  P3.3 7 of 9 fail (6338 0 of 3, 6370 0 of 3, 6375 2 of 3); P3.2 0 of 3 by hand; the 6345
+  guard holds; the decisiveness guard holds. Both rows carry the numbers. Six residual rows
+  booked: **P3.16** (summariser glosses), **P3.17** (a general rule's application provision),
+  **P3.18** (Deep Research synthesis), **P4.13** (opener strip coverage), **P4.14** (an
+  echoed footer ahead of P1.6's note), **P4.15** (a case-law-only negative). Ledger 38 of 59;
+  **B5 reopens as partial** (P4.15), so 8 of 14 buckets.
+
+**Surprises / deviations:**
+- **6338's wrong Act was written by the summariser, not by the Worker or the Manager.** The
+  Worker never searched for an interpretation Act; its section-search result, summarised by
+  the Flash model against the Worker's brief ("determine what interpretation legislation
+  applies"), came back with a note naming one. 34 stored summaries, all 6338, five
+  directories (`summary_probe count`). The Manager seam could not see it (it replays the
+  report), which is why the prompt clause moved 6338 by nothing there.
+- **A guard wording that stopped the additions multiplied false negatives.** The first rule
+  ("use only the text; if it does not answer, say so") took additions to 0 but "the text does
+  not contain" statements about sixfold and collapsed change-record summaries; a second
+  ("summarise only what it contains") left 4 of 27 additions; the third ("leave out, without
+  commenting") took 0 of 27 with no loss. Read as a band: the same prompt's own draws varied
+  by several points on every measure.
+- **The rule stopped Acts, not glosses, and a gloss reached the lawyer as a quotation.** In
+  `p32_6406` r1 the summary of a section search carried a parenthetical interpretation that is
+  in neither Regulation (checked in LEX over every provision), and that turn's answer (run-file turn 6, export turn
+  7) told the lawyer the Annex said it. That is P3.16, and it is Invariant 1's worst case.
+- **The Worker now retrieves the general rule, but by its definition.** Told not to say a
+  general rule applies without retrieving what applies it, it fetched the interpretation Act's
+  definitions schedule, not the section that says which Acts it covers. When it also fetched
+  the older Order (r1 turn 2) it got the answer fully right at source. P3.17.
+- **The hand-read overturned the command in both directions again.** `stance` passed
+  `p32_6406` r2, which states the contradicted consequence in wording the rubric does not
+  match, and read r1's explicit affirm at turn 7 as "none" (4 changes by hand, 3 by command).
+  `interpret` over-counted 6370: a reported judicial statement (the case name sits between
+  "Court" and the verb, so the exemption missed it), grounded retrieval with a citation, and
+  "under this reading" (a hedge the lexicon lacks). The grader was not changed mid-run; the
+  corrections are recorded by hand. Rule applied to both columns for 6370: a conclusion about
+  what the Regulations "apply" to (the undefined word) is interpretation; "reg N requires X"
+  is retrieval.
+- **Two regressions the booking did not predict, both small.** `caselaw` TWO_LINES 2: the
+  model echoed a footer, P1.6's link note was appended after it, and the trailing-only echo
+  strip missed it (P4.14; possible since P1.6). `modes` 1: a Conversational answer with report
+  headings (6375 r2 turn 1), n=1, not booked. `negatives` went from 3 to 5 turns (P4.15, plus
+  one `p32_6406` turn that does not name its search terms).
+- **The overnight stall.** The before-column's last rep hung in a summarisation call from
+  16:42 until the machine woke; the same command resumed and skipped the finished reps.
+- **Spend over the cap.** $6.71 before-column (plus the stalled attempt, unrecorded), about
+  $2.4 Manager-seam A/B (84 draws), about $0.4 drift probe (48 first-round draws), about $3.5
+  of summariser probes including **$1.80 spent by mistake** (a scratch script imported another
+  whose module body ran its paid probe at 24 draws a slot), $17.17 after-column. **About
+  $30.2 against the agreed $30**; the script's $6.94 against an estimated $5.40 was not
+  re-checked before it started.
+
+**Every number above is behind a command, except where marked:**
+- `replay_report --dir evidence/replay/wave4_p33_pre interpret` and `... wave4_p33_post
+  interpret [--sentences --drops]` (P3.3 grades); `... wave4_p33_post stance` (P3.2);
+  `... hedges` on both directories (the guard); the exit-1 set on both.
+- `python -m tools.summary_probe count` (34 before, 0 of 42 summarised 6338 results after);
+  `summary_probe redraw --dir evidence/replay/wave4_p33_pre --session 6338` and
+  `summary_probe panel` reproduce the rule's A/B (paid; the published figures are from the
+  session's scratch draws of the same prompts, and are a band).
+- `replay_report --dir evidence/replay/baseline openers --all-dirs --export --strip` (46 edits;
+  it now reads 1,708 answers with `wave4_p33_post` added, and 8 left as written, the eighth
+  being P4.13's gap).
+- **Scratch-derived:** the Manager-seam A/B tallies (0 of 15 to 5 of 15 passing draws for
+  6370) are `seam_replay manager` draws graded by `interpret_grade` in a scratch script; the
+  drift-probe reading is `seam_replay manager --first-round --date recorded` output read by
+  hand; the hand-read corrections are in the session scratchpad only (they name matters).
+- `plan_status` counts 59.
+
+**State:** branch `fix/prepilot-defects`, pushed; `main` untouched at `b2a3fd8`. Session 32
+commits: `ad38f2d`, `0bc4f2c`, `cefb2e2`, `a4bef00`, `42951b4`, and this one. 1981 tests.
+
+**Machine state:** server stopped, `replay restore` run (local prompt cache ON,
+`research_mode_enabled` ON), no pin file, no worktrees. **54 replay directories**
+(`wave4_p33_pre`, `wave4_p33_post`). Local and gitignored: `evidence/rubrics/p33.json` (now
+with `summary_adds` and `self_ids` for 6338), `p32.json`, `replay_set.json`.
+
+---
+
+## Session 32 — handover for Session 33 (2026-09-29)
+
+**Take next: P3.16, measure first.** It is upstream of both open rows: 6338's wrong Act and
+6406's fabricated quotation both began in a summary. Start free: a detector over every stored
+audit for text in `final_result` that is not in `raw_result` (parenthetical glosses, "by
+definition", "which means", a named instrument), every match read. Then iterate the rule with
+`summary_probe redraw`/`panel` (paid, about $1 a round), watching the "does not contain" count
+as closely as the additions. Remember the cache version when the prompt changes.
+
+**Then:** P3.17 (retrieve a general rule's application provision; drift probe if it is a
+prompt change), P3.18 (the same rule in the Deep Research synthesis; `seam_replay synthesis`
+first), P4.13 and P4.14 (small code, deterministic), and decide P4.15. Re-run P3.2 + P3.3's
+after-column only when those move the seams.
+
+**Instruments (use, don't rebuild):** `replay_report interpret` / `hedges` / `stance` /
+`openers --strip`; `tools/summary_probe count|redraw|panel`; `seam_replay manager` (and
+`--first-round --date recorded` for the drift probe). The rubrics are gitignored; `interpret`
+exits 2 without `p33.json`.
+
+**Known grader gaps, not fixed (to fix BEFORE the next after-column, never during):**
+`interpret`'s reported-statement exemption misses "the High Court in <case> confirmed";
+"under this reading" is not in `INTERP_HEDGE`; the 6370 rubric misses "becomes development to
+which"; `stance`'s rubric misses the contradicted consequence worded as "cannot be processed
+under the requirements of Chapter XI". List what each change stops or starts counting.
+
+**Open with the user:**
+- The legal readings behind both rubrics: to be confirmed by a lawyer.
+- The Fix Tracker was not updated (update only when asked); if asked, P3.2 and P3.3 stay open
+  and six rows are new.
+- Carried from Session 31: the release tags (D19); which rows go in the next cut
+  (v2026.10.1 now); deploying both cuts (`pg_dump` first); telling the eval-harness owner
+  (schema v6, `tool_end` wording, `lookup_legislation`, Deep Research headings, the
+  `retried: false` record); P4.12; D20; P5.2; Thomas's document; the unread held-Act slot and
+  P4.11's ungraded quick answers.
+- **New for the deploy:** the local prompt cache version is now v2 on the branch, so every
+  cached summary becomes unreachable when this code reaches the target (intended: rows
+  written before the source rule may carry additions and are shared across users).
+
+**Addendum to Session 32 (same day, at the user's request: "make sure we're not going to lose
+any pertinent information", then "update the tracker").** What the session knew that the entry
+and handover above do not say:
+
+1. **A number moved behind a command:** "the pre-pilot answers fail all three" came from a
+   scratch conversion of the export. `replay_report --dir <any> interpret --export` now grades
+   the export's own answers as pseudo-runs (rep 0) and reproduces it turn for turn (6338 t1-3
+   wrong 1/1/2; 6370 t3 the "explicitly state" claim; 6375 both turns unmet). Test added;
+   1982 tests.
+2. **The three summariser rule wordings, so a later session does not re-try the bad ones**
+   (the panel is 24 results from other sessions, 2 draws a side, seed 32; the "current" side is
+   the prompt without any rule, and its own numbers moved between runs, which is the band):
+   - A: "Use ONLY the legislation text below. Do not add anything that is not in it: no other
+     legislation, no definitions and no rules of interpretation from your own knowledge, even
+     where the research question asks for them. If the text does not answer part of the
+     question, say that it does not." 6338 additions 0 of 27 (0 of 216 at 24 draws a slot);
+     panel provisions 253 against 261, characters -7%, "does not contain" 46 against 7;
+     change-record summaries collapsed (one from 7 provisions to 0).
+   - B: "Summarise only what the text below contains. Do not add any legislation, definition
+     or rule of interpretation that is not in it, even where the research question asks for
+     one." 4 of 27; panel 321 against 270, -3%, 16 against 8.
+   - C (shipped, `SUMMARY_SOURCE_RULE`): B plus ": leave out any part of the question the text
+     does not cover, without commenting on it." 0 of 27 (26 of 27 without); panel 275 against
+     242, -13%, 11 against 7. `summary_probe redraw` / `panel` compare C against no rule; to
+     re-test A or B, edit `SUMMARY_SOURCE_RULE` in a scratch copy.
+3. **The Manager-seam A/B, slot by slot** (3 draws a slot, 84 draws, $2.40, same day). The
+   "before" side was drawn with `prompts.py` checked out at HEAD through the identical pipeline,
+   NOT with `--without-fix`: on the Manager seam `--without-fix` also hands the bare report
+   without P3.13's sibling linking, so it changes two things. Per slot, before -> after:
+   6370 r1 t3/t5/t6 unhedged 20 -> 7, hedged 1 -> 11, passing draws 0/9 -> 3/9; 6370 r3 t3/t4
+   9 -> 4, 0 -> 3, 0/6 -> 2/6; 6338 r1 t1-3 wrong 11 -> 12 (the report already asserts it),
+   r2 t3 wrong 6 -> 3 and the required statement 0/3 -> 3/3; 6406 (script turns 4, 5, 7, 10 =
+   export 5, 6, 8, 11) stances unchanged (r1 t6 deny 3/3, r3 t11 deny 3/3), control turn's
+   openers bare -> scoped; 6345 t4 openers bare/apology/apology -> none/bare/bare.
+4. **The drift probe, brief by brief** (`seam_replay manager --first-round --date recorded`,
+   8 slots x 3 x 2 sides): every after-side brief names the same instrument or subject as
+   before; 6348 names FOISA 3 of 3 (2 of 3 before); 6406 adds the implementing Regulation's
+   number to the controlling one's; 6375 adds the Scottish environmental regulations; 6345
+   drops the "concessionary travel" steer (its before-column went to that wrong Act).
+5. **Observations not booked:**
+   - 6345 `wave4_p33_post` r3 turn 4 asked the lawyer to name the Act after a scoped
+     negative, rather than naming s.38.
+   - 6370 after r2 turn 6 said it could not take a legal position on the interpretation. It
+     set out both readings first, so it is not the blanket caveat the guard counts, but it is
+     neutrality stated as a refusal; read whether lawyers want that before any row is written.
+   - Change-record summaries mis-expand ids: one summary gave the interpretation Act's title
+     to a different 2010 ASP number, and a `wave2` 6338 summary gave the inserting 2019 Act a
+     2024 year. Both are the summariser adding to what the raw text carried: evidence for
+     P3.16.
+   - 6375's two passes rest on the code line; the report bodies still discuss the doctrines
+     in the inter-governmental context. If the user wants the body itself neutral, that is a
+     tighter acceptance, to be booked before a re-run.
+   - The 6370 reading behind the rubric (the Regulations' reg 6(4), 6(6) and 7(5) point to
+     their applying to proposed development generally, not only to EIA development) is in
+     the gitignored rubric's `_note`, and is to be confirmed by a lawyer, like 6406's.
+6. **Hazards met this session:** the console is cp1252, so any script printing LEX or answer
+   text needs `PYTHONIOENCODING=utf-8`; psycopg2 is not installed (use asyncpg, as
+   `seam_replay` does); a Monitor watch expires after 30 minutes (re-arm, or rely on the
+   command's own completion notice); a sleeping machine stalls a replay mid-call (kill the
+   client and re-run the SAME command: it skips finished reps); `replay run --max-spend`
+   counts only the current invocation's spend; `seam_replay --out` is a DIRECTORY of
+   `<sid>_t<N>_manager[_first]_rep<k>.md`; `p32_6406` run files number turns by the script
+   (script turn k is export turn k+1 from k=3 on); the heredoc backslash trap hit three more
+   times (nothing corrupted reached a commit).
+7. **What the scratch scripts did, so they can be rebuilt** (the scratchpad goes with the
+   session): a seam grader (each `.md` draw through `interpret_grade` and `stance_of`, the
+   rubric's turn only); a slot table over two side directories; `panel.sh` / `drift.sh`
+   (the slots above through `xargs -P 4`); the opener dry run and the summariser probe,
+   both now committed (`openers --strip`, `tools/summary_probe`).
+8. **The local rubric `evidence/rubrics/p33.json`** now also carries `summary_adds` and
+   `self_ids` for 6338 (read by `summary_probe`). Every pattern in it came from a sentence read
+   by hand; if it is lost, rebuild it from `wave4_p33_pre` and `wave4_p33_post` with
+   `interpret --sentences --drops` and re-check the counts in the rows.
+9. **The `external-apis` skill** (not tracked in git) gained a section on the
+   explanatory-note endpoint and the two interpretation regimes the index holds.
+10. **Fix Tracker updated to v27 at the user's request** (below).
+
+**Second addendum to Session 32 (2026-09-29, at the user's request: set up the next piece of
+work to run as parallel agents in a new session).** **Session 33 runs
+`docs/prepilot-fixes/PARALLEL_BATCH_1.md`**, which supersedes "Take next: P3.16" in the handover
+above: four agents in git worktrees (A: P4.13 + P4.14; B: the grader gaps; C: P3.16; D: P3.18),
+the main session as integrator, one combined after-column put to the user first. Prepared and
+verified this session:
+- **Four test databases** `lexchat_test_a` .. `_d` (owner `lexuser`); two full suites ran
+  concurrently on `_a` and `_b` and passed (1983). `TEST_DATABASE_URL` takes plain
+  `postgresql://` (with `+asyncpg` every test errors).
+- **`PREPILOT_EVIDENCE`**, honoured by `replay_report`, `seam_sweep`, `summary_probe` and
+  `replay_set`, points a worktree at the main checkout's gitignored evidence. Proven from a
+  scratch worktree with no `.env`: the graders reproduced the after-column, `summary_probe
+  count` found 34, the suite passed on `_c`, and synthesis and Manager seam dry runs built their
+  payloads. The worktree was removed; no directory junctions were used (a cleanup could delete
+  through one).
+- **`replay_report interpret --drafts`** grades `seam_replay` draw files against the rubric; it
+  reproduces the Session 32 Manager-seam A/B from the saved draws (6370 0 of 15 to 5 of 15).
+- **The Session 32 seam draws are kept** in the gitignored `evidence/seam/s32/` (`manager_ab/`,
+  `drift_probe/`; new `.gitignore` line), so they outlive the session scratchpad.
+- **Agent B's specifics** (they quote matters) are in the gitignored
+  `evidence/rubrics/batch1_B_rubric_gaps.md`.
+- **A correction:** the gloss in `wave4_p33_post` p32_6406 r1 and the answer quoting it are the
+  SAME turn (run-file turn 6, export turn 7); the entry above and the P3.2/P3.16 rows said
+  "turn 6's summary ... turn 7". Fixed in both files.
+
+
+---
+
+## Session 33 — 2026-09-29 — parallel batch 1: four agents merged (interim entry)
+
+**Done:**
+- **Ran `PARALLEL_BATCH_1.md` (user decision):** four background agents, each in a git worktree
+  with its own test database (`lexchat_test_a`..`_d`) and `PREPILOT_EVIDENCE` pointing at the
+  main checkout's evidence; this session integrated. Step 1's checks all held (head `01b66b0`,
+  `main` at `b2a3fd8`, 54 replay directories, both rubrics, four test databases, nothing
+  running; baseline suite 1983 on `lexchat_test`).
+- **Merged in the order B, A, C, D, each `--no-ff`**, the full suite on `lexchat_test` after each:
+  B `dc61bb7` (1984), A `445e655` (2004), C `2f32510` (2018), D `c4a5ded` (2029). For each, the
+  integrator read the note and the diff, grepped the diff for instrument ids and matter words
+  (the only hit: A's synthetic `uksi/1901/1` "Widget Order 1901" fixture), and re-ran its new
+  tests with the product file(s) put back to `01b66b0`: B 1 fails, A 11, C 3, D 8, as each note
+  claimed. The notes are committed at `docs/prepilot-fixes/notes/batch1_{A,B,C,D}.md`.
+- **Agent B (grader gaps, $0):** five of six closed (one in code, `INTERP_HEDGE` reads "under
+  a reading"; four patterns in the gitignored `p32.json`/`p33.json`, backed up first to
+  `evidence/rubrics/backup_batch1/`); the sixth left to the hand-read by instruction. The only
+  verdict that moved anywhere: `wave4_p33_post` p32_6406 r2, PASS to FAIL by `stance`, which is
+  what Session 32's hand-read found. Booked before-columns still fail.
+- **Agent A (P4.13 + P4.14, $0): both DONE, deterministic.** Numbers re-run by the integrator:
+  `openers --all-dirs --export --strip` 47 edits and 7 left as written (46 and 8 before);
+  `python -m tools.footer_echo --dir evidence/replay/wave4_p33_post` 2 two-line answers stored,
+  0 after.
+- **Agent C (P3.16, $2.905):** `summary_probe glosses`, a free detector: 221 glosses in 3,618
+  stored summaries of legislation, 205 real by hand (re-run by the integrator: `python -m
+  tools.summary_probe glosses`; `--dir wave4_p33_post --session 6406 6338` gives 2 in 81). A lever,
+  `SUMMARY_GLOSS_RULE`, and the local prompt cache to v3 (`9ba4e1e`, separable). Acceptance not
+  measured.
+- **Agent D (P3.18, $3.93):** the synthesis-prompt rule plus a case-law reach sentence in the
+  jurisdiction section; seam alignment assertions 5 of 12 to 0 of 5 (re-counted by the
+  integrator from the saved draws). Acceptance not measured.
+- **Ledger:** P4.13 and P4.14 ticked; P3.16 and P3.18 `[~]`; P3.2 and P3.3 annotated. 40 of 59
+  rows, 8 of 14 buckets (`plan_status`; B6 now waits on P3.2 only).
+
+**Surprises / deviations:**
+- **Every worktree was created from `main` (`b2a3fd8`), not from the integrator's HEAD**, despite
+  the brief. Each agent noticed and ran `git reset --hard 01b66b0` before any work; the
+  integrator confirmed all four contained `01b66b0` before reviewing. For a later batch, tell
+  each agent to check its base first.
+- **Agent B's first grader-test run went to the default `lexchat_test`** (32 tests, about 1s)
+  before it set `TEST_DATABASE_URL`; the integrator's baseline suite on the same database passed
+  regardless.
+- **The integrator's first revert check was a false pass:** `grep -v` with a regex that did not
+  match left the line in place, so the test passed "with the change reverted". Redone with a
+  byte-level script that counts the lines it removes (1), after which the test failed. Check that
+  a revert removed something before reading its result.
+- **The push after each merge was refused by the session's permission classifier**; the branch
+  is merged locally and not yet pushed (the user's decision).
+- **P4.14's defect is older than Session 32** (`wave0_conv` 6341 r1 t5, the same shape).
+- **P3.18's claim starts in the hybrid research Worker**, not the synthesis (11 of 24 stored step
+  reports); the synthesis rule filters it for Deep Research only.
+- **C's lever narrows some summaries** (6406 r2 t5 8 provisions to 0, panel 6345 t4 17 to 2)
+  while the panel's total rises (335 against 253): Invariant 1 is read at the after-column.
+
+**Decisions put to the user (not taken):** whether C's lever and D's lever go into the combined
+after-column; whether to book the Worker-side origin of P3.18 as a row; the 28 case-law summaries
+applying English authority to Scotland (P3.18 or a new row); the two change-record id
+mis-expansions; `wave2_p27` 6341 r2 t2 (a copied footer followed by the model's own paragraph);
+Session 32's second 6370 `interpret` over-count (a statement with a retrieved citation read as an
+unhedged reading), not in the gaps file.
+
+**Spend so far:** $6.835 (C $2.905, D $3.93; A and B $0). The combined after-column is not yet
+approved.
+
+---
+
+## Session 33, continued — 2026-09-29 — the combined after-column
+
+**Done:**
+- **Plan and figure put to the user before any spend** (user decision: carry both C's and D's
+  levers; about $17-20, cap $22). The branch was pushed first (`2271826`; the user allowed the
+  push after the classifier refused it). `main` untouched at `b2a3fd8`.
+- **After-column `wave4_b1_post`** at head `2271826`, same shape as `wave4_p33_post`:
+  `tools.replay run --session 6338 6370 6375 6345 --reps 3 --max-spend 14` ($9.90), then
+  `--script evidence/scripts/p32_6406.json --reps 3 --max-spend 12` ($6.13): **$16.03, 15 reps,
+  0 errored turns.** `replay check` first (the pinned model still served), `replay pin`, uvicorn
+  fresh (PID 2696), a keep-awake helper holding `ES_SYSTEM_REQUIRED` (no setting changed), no
+  commit while it ran; then `replay restore` (cache ON, `research_mode_enabled` ON, no pin file),
+  the server stopped by PID, the helper stopped.
+- **Graded, every match, drop and stance "none" hand-read** (results on the rows):
+  - **P3.18 DONE:** 6375 3 of 3 (no alignment assertion in any rep; the code line on every
+    turn; `drgaps` 0).
+  - **P3.3 NOT MET, 6 of 9 fail:** 6338 0 of 3, each rep failing only on turn 1's regime (turn 2
+    names the 1999 Order in 3 of 3, turn 3 right in 3 of 3, wrong-regime claims 1 against 3 and
+    9); 6370 0 of 3 (unhedged readings about 6 against about 7 and about 21); 6375 3 of 3.
+  - **P3.2 NOT MET, 0 of 3 by hand:** `stance` passed r1; the hand-read found the contradicted
+    consequence at export turn 9. Changes by hand 1, 1, 3; contradicted claim 3 of 3; control
+    fails 2 of 3; one bad opener. **6345's guard names s.38 for the first time** (1 of 3).
+  - **P3.16 met by hand, not by command:** 1 gloss match on 6406/6338 in 86 summaries, read as
+    a note, so 0 real; left `[~]` for the user.
+  - **Guards held:** `hedges` 0 hedged retrieval statements in 326, 0 caveats; `caselaw`
+    TWO_LINES 0 and `footer_echo` 0 as stored (P4.14 live); `sources_kept` per slot fell in 3 of
+    15 slots against the booked before-columns (6 of 15 in Session 32's after-column); exit-1 set
+    0 except `negatives` 2 (6370, P4.15; 5 in Session 32), `modes` 3 (6345 r2 turns 2-4, n=1)
+    and `commencements` (no graded session in the directory, as before).
+- **Ledger:** P3.18 ticked; 41 of 59 rows, 8 of 14 buckets (B11 now partial, waiting on P3.3,
+  P3.16, P3.17).
+
+**Surprises / deviations:**
+- **6375 moved from 2 of 3 to 3 of 3, and 6338's remaining failure is one turn.** In every 6338
+  rep turn 1 says the word is undefined and (r1, r3) points to the rules for Acts of that date
+  without naming the Order; turn 2 then names it. The booked criterion is not relaxed.
+- **`stance` passed a rep the hand-read fails again**, the other way from Session 32's r2: r1's
+  contradicted consequence is worded so no pattern matches. The grader gaps found in this run
+  (listed on P3.2 and P3.3) must be closed before the next after-column, never during.
+- **A new opener verb:** "You are correct to highlight this" is an unscoped formula the strip
+  does not list (P4.13 widened the object, not the verb).
+- **The gloss detector's note filter misses "does not contain X; therefore, it does not
+  provide Y"**, so its count on this directory is one higher than the hand-read.
+- **`summary_probe count --dir` needs a path**, not a directory name (it read 0 results given
+  `wave4_b1_post`; 581 given the path). `glosses --dir` takes either.
+- **Spend under the figure:** $16.03 against about $17-20. Session total **$22.87** (agents
+  $6.835, after-column $16.03) against about $27.
+
+**Every number above is behind a command:** `replay_report --dir evidence/replay/wave4_b1_post
+interpret [--session S --sentences --drops]`, `stance`, `hedges`, `openers`, `caselaw`, the
+exit-1 set (`halts negatives derivations commencements currency scoperecord nosearch caselaw modes
+deadend siblings scripted lookup drgaps blanks "lost --require-label"`); `replay_report --dir
+<after> discovery --before evidence/replay/wave4_p33_pre --only 6338 6370 6375` and `--before
+wave4_p32_pre --only 6345`; `summary_probe glosses --dir wave4_b1_post [--session 6406 6338]
+--list`; `summary_probe count --dir <path>`; `tools.footer_echo --dir <path>`. The hand-read
+corrections are in the session scratchpad only (they quote matters).
+
+**State:** branch `fix/prepilot-defects`, pushed; `main` untouched at `b2a3fd8`. Session 33
+commits: the four `--no-ff` merges (`dc61bb7`, `445e655`, `2f32510`, `c4a5ded`), `2271826`, and
+this one. 2029 tests.
+
+**Machine state:** server stopped, `replay restore` run, no pin file, keep-awake helper stopped.
+**55 replay directories** (`wave4_b1_post` new). The four agent worktrees were removed after
+their branches were merged (the branches `worktree-agent-*` remain locally).
+
+---
+
+## Session 33 — handover for Session 34 (2026-09-29)
+
+**Take next: the user's decision.** Candidates, cheapest first:
+1. **Close the grader gaps this run found** (free; before any further after-column): `stance`
+   misses the contradicted consequence in two new wordings (r1 export t9, r2 export t7 of
+   `wave4_b1_post` p32_6406); `interpret` reads a negated "do not explicitly state that they
+   apply only to" as the contradicted claim, lacks "On your reading" as a hedge, misses "It
+   returned decisions such as X, which notes" as a reported statement, and the 6338 rubric misses
+   two regimes named side by side; `summary_probe glosses`'s note filter misses "does not
+   contain X; therefore". Same method as agent B: before/after over every directory, the booked
+   before-columns must still fail.
+2. **P4.13's sibling:** add "highlight" (and read the other challenge verbs) to the opener strip;
+   dry run over every stored answer, read every new edit.
+3. **P3.17** (6338): turn 1 names no regime in 3 of 3; the lever is a retrieval of the general
+   rule's application provision (drift probe if it is a prompt change).
+4. **P3.2:** 0 of 3 through three sessions of levers. The model has the decisive text and argues
+   past it (Session 31); the contradicted consequence recurred in 3 of 3. Whether the next lever
+   is code (a disputing turn must re-delegate; a contradiction check against retrieved text) or a
+   re-scoped acceptance is the user's call.
+5. **P4.15**, a decision (unchanged).
+
+**Decisions open with the user (from the batch notes):** whether to tick P3.16 (met by hand, 1
+by command, the one match a note); whether to book the Worker-side origin of P3.18's claim (a
+Research-mode answer on a hybrid Worker report); the 28 case-law summaries applying English
+authority to Scotland; the two change-record id mis-expansions; `wave2_p27` 6341 r2 t2 (an echo
+followed by the model's own paragraph); Session 32's second 6370 over-count (retrieval with a
+citation read as a reading).
+
+**Hazards met this session:** every worktree the Agent tool made came up on `main`, not HEAD
+(each agent reset to `01b66b0`; tell agents to check first); a `grep -v` revert that removed
+nothing gave a false "fails with the change reverted" (count the lines a revert removes); the
+push is refused by the permission classifier unless the user allows it; `summary_probe count
+--dir` takes a path.
+
+**Carried, open with the user:** the legal readings behind the rubrics (a lawyer to confirm);
+release tags and deploy by tag (D19); which rows go in the next cut (v2026.10.1); deploying both
+cuts (`pg_dump` first; the local prompt cache is now **v3** on the branch, so every cached
+summary becomes unreachable when it reaches the target, intended); telling the eval-harness owner
+(schema v6 etc.); P4.12; D20; D21/D22; P5.2; Thomas's document. The Fix Tracker was not updated
+(update only when asked; if asked, P4.13, P4.14 and P3.18 are Fixed, P3.16 is the user's call).

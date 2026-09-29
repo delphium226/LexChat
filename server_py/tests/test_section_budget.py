@@ -77,7 +77,7 @@ def _round_and_config():
 def calls(monkeypatch):
     seen = []
 
-    async def fake_exec(name, args, on_chunk=None, timing_collector=None):
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         seen.append((name, dict(args)))
         if name == "search_legislation":
             return json.dumps({"results": [{"legislation_id": FOISA, "title": "FOISA",
@@ -376,7 +376,7 @@ async def _worker_run(rounds, research_mode="legislation_only"):
                                  "model": "test-model", "_tool_memo_enabled": False})
 
     async def loop(messages, model, cancel_event, num_ctx, tools, executor,
-                   on_chunk=None, emit_tool_details=False, timing_collector=None):
+                   on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False):
         for i, round_calls in enumerate(rounds):
             set_react_round(i)
             for name, args in round_calls:
@@ -443,7 +443,7 @@ async def test_the_manager_answer_carries_the_clause(monkeypatch, calls):
 
 @pytest.mark.asyncio
 async def test_the_parliamentary_budget_ignores_section_searches(monkeypatch):
-    async def fake_parl(name, args, on_chunk=None, timing_collector=None):
+    async def fake_parl(name, args, on_chunk=None, timing_collector=None, worker_call=False):
         return json.dumps({"results": [{"id": 1}]})
 
     monkeypatch.setattr(agent_shared, "execute_parliament_tool", fake_parl)

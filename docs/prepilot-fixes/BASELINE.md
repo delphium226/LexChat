@@ -3470,3 +3470,726 @@ cause a lost link. `wave3_p313b`: links fell in 0 of 4, `sources_kept` 0 of 4.
 
 **Spend for option (i):** $1.17 + $1.01 for the two sweeps, plus about 25 seam
 and probe draws at $0.007–0.04 each.
+
+**Behind a command (added at the handover):** the linker's 102 links on 63 of
+777 reports is
+`replay_report --dir <any> siblings --all-dirs --exclude wave3_p313 wave3_p313b wave3_p313c --dry-run`.
+The restore's 15 notes on 14 of 623 turns is the same with
+`--exclude wave3_p313b wave3_p313c`; add `--show` to print every note.
+
+## The research-type default (P0.6, 2026-09-23)
+
+`Filter: Research mode` is blank in the export for the twelve P0.5 sessions,
+and for 50 of their turns the harness sent `legislation_only`, labelled
+`default`. A human read of the transcripts, committed as
+`evidence/research_mode_reads.json`, says that was wrong on **16** of those
+turns. On each of them the lawyer had case law in the tool set, and the
+replay did not.
+
+| read (50 turns) | turns | sessions and turns |
+|---|---|---|
+| `legislation_only` | 26 | 6333, 6334, 6335 t1–4, 6343, 6345, 6346, 6347 t1, 6350 t1–2 |
+| `legislation_and_case_law` | 10 | 6335 t7, 6338 t1–3, 6340 t1, 6341 t1–5 |
+| `case_law_included` (legislation half not settled) | 6 | 6335 t6, 6347 t2–4, 6350 t3–4 |
+| `unknown` | 8 | 6335 t5, 6341 t6–8, 6348 t1–4 |
+
+**Why a read is possible at all.** At the pre-pilot the research type was one
+saved preference per user (`users.research_mode`, default `legislation_only`,
+set through the Research filters modal). It carried across chats and logins,
+so a change is an event, and a turn between two equal reads of the same lawyer
+is bracketed. Each type also left behaviour in the answers. The legislation-only
+Manager declined every case-law question in these sessions. The hybrid Manager
+briefed its Worker to ALSO search case law, so its answers report case-law
+results nobody asked for, in the case-law tool's own coverage wording. A 2026
+judgment can only have come from the tool. A neutral citation alone is not
+evidence, because a refusal quotes the case the lawyer named.
+
+**What the default did to the sweeps.**
+`python -m tools.replay_report --dir <D> modes` now grades every turn against
+the read:
+
+| directories | holding a turn sent without the case-law tool its lawyer had | turn-runs | rep 1 |
+|---|---|---|---|
+| 39 | 14 | 153 | 16 each in `baseline`, `wave1`, `wave2`, `wave0_conv` |
+
+The scripted P4.1 directories (`wave4_p41`, `wave4_p41_pre`,
+`wave4_p41_dr_v1`) are unaffected. The one row whose evidence moves is
+**P4.6**. Its acceptance sessions 6340 and 6341 t1–5 ran hybrid, and
+`WORKER_SYSTEM_PROMPT_HYBRID` carries none of its three scripted lines.
+
+**What sweeps send from now on.** The reviewer's read, labelled `reviewer`. A
+`case_law_included` read goes out as `legislation_and_case_law`, labelled
+`reviewer_partial`. A turn nothing settles is labelled `unknown` and sends the
+nearest read in its own session, or `legislation_only` in a session with none,
+so 6348 is unchanged. `modes` names the unknown turns and exits 1 only on a
+`default` label or a type the read rules out.
+
+**What would replace the read:** the target's `request_timings.research_mode`
+holds the resolved value of every pre-pilot chat request. It can be joined to
+the export on `created_at` and `total_cost_usd` (P0.7, needs the target).
+
+## The scripted negatives (P4.6, 2026-09-23)
+
+Three research-Worker prompt lines scripted a negative about the whole
+database. P0.6 showed the row's acceptance sessions ran under the hybrid
+Worker, which carries none of them, so the acceptance was re-chosen and
+booked on the row before any build (`d860675`): Research chat mode, the
+research type the export or the reviewer's read gives, scripted by turn index
+(`evidence/scripts/p46_*.json`).
+
+**The replay, before and after.** `python -m tools.replay_report --dir <D>
+scripted [--before <D>]` counts the lines in every Worker report and answer.
+
+| | `wave4_p46_pre` (`d860675`) | `wave4_p46` (`9ba8ee8`) |
+|---|---|---|
+| turns (FAIL n=3, DEFECT n=1, 6385 n=1) | 49 | 49 |
+| turns that delegated | 10 | 10 |
+| scripted sentences, reports / answers | 0 / 0 | 0 / 0 |
+| exit-1 subcommands exiting 1 | `negatives` (6385 t4) | none |
+| links, summed over 21 slots | 50.7 | 71.0 (fell in 0 slots) |
+| `sources_kept`, summed | 14 | 13 (fell in 1: 6385 t4, 4 → 3) |
+| spend | $2.89 | $2.09 |
+
+**Why the before-column is empty.** Every earlier count of this sentence
+(the handover's 6/6, 3/3 …) is from a sweep taken before P4.1. In those
+sweeps the Research-mode Manager delegated a case-law question to the
+legislation Worker, which has no case-law tool, and it often wrote the
+sentence without searching: over all turns of these five sessions in `wave2`,
+10 of 22 delegations made no tool call (`scripted --session 6335 6343 6346
+6347 6350` on `wave2`). Since P4.1 the Manager declines those questions itself,
+with `CASE_LAW_OUT_OF_SCOPE_RULE`'s answer, and delegates nothing. So the
+replay cannot discriminate, and the wording A/B moved to the seam, as the
+row had booked.
+
+**The seam.** Every stored rep-1 delegation of the same turns in `baseline`,
+`wave1` and `wave2` whose report carried the sentence: 37 payloads, 16 of
+them from a Worker that made no tool call, drawn at the Worker's first round
+with its real tools offered.
+
+```
+python -m tools.seam_sweep --dirs baseline wave1 wave2 \
+    --turns 6335:1,3,4 6346:1,2,3,5 6343:1,2,4,5 6347:1 6350:2 \
+    [--without-fix --rev d860675]
+```
+
+| | without the fix (`d860675`) | with it (`9ba8ee8`) |
+|---|---|---|
+| composed a report | 32 | 31 |
+| chose to search first (not observable further) | 5 | 6 |
+| reports carrying a scripted sentence | **32 of 32** | **0 of 31** |
+| reports with a "database does not contain"-style sentence | 32 | 2 (both true: the legislation index holds no judgments) |
+| reports saying what was not searched | 0 | 31 |
+| mean report length | 1,138 chars | 1,554 chars |
+| spend | $0.74 | $0.82 |
+
+**The first-round probe (Session 22's lesson).** On the 10 delegations in
+`wave4_p46_pre` that did search, the Worker's first round before and after
+the fix (`seam_replay worker --first-round`, $0.20) chose the same searches in
+8; in the other two the case-law Worker added one query variant or quoted a
+term.
+
+**Spend for the row: $8.33**, of which $0.74 + $0.85 + $0.20 was a scratch
+A/B and probe run before the command above existed; the published seam
+figures are the command's.
+
+## The held/absent test (P3.7, 2026-09-24)
+
+P3.7 adds `lookup_legislation` (`/legislation/lookup`, with
+`/legislation/section/lookup` as the text check) and runs it in code on every
+instrument a Worker's brief names by number. The acceptance was re-chosen and
+committed before any build (`b694fac`), around definiteness. An absent
+instrument is reported not held because a lookup said so. A stub is reported
+held without text. A held instrument is never reported absent. The scripts
+are `evidence/scripts/p37_6409.json` (export turns 1, 2 and 7-11,
+Conversational) and `p37_6373.json` (turns 1-3); both sessions are FAIL, so
+n=3.
+
+**The replay.** `python -m tools.replay_report --dir <D> lookup` reads the
+model's prose with the footer removed. It reads the sentences that name the
+instrument, or refer back to it without naming another. The table's `deleg`
+column separates a from-history follow-up (0) from a researched turn.
+
+| | `wave4_p37_pre` (`b694fac`) | `wave4_p37` (`475ef57`) | `wave4_p37b` (`0c91fb6`) | `wave4_p37c` (`782a9e8`) |
+|---|---|---|---|---|
+| absent slots passing (6409 t9-11, 6373 t2) | 0 of 12 | 8 of 12 | 11 of 12 | 11 of 12 |
+| of them delegated / from history | — | — | 11 of 11 / 0 of 1 | 10 of 10 / 1 of 2 |
+| stub slots (6409 t7, t8) | 6 of 6 | 6 of 6 | 6 of 6 | 6 of 6 |
+| held slot (6409 t2) | 1 of 3, 2 no claim | 1 of 3, 2 no claim | 2 of 3, 1 no claim | 1 of 3, 2 no claim |
+| sentences questioning the citation | 0 | 0 | 0 | 0 |
+| exit-1 subcommands exiting 1 | none | `nosearch` | none | none |
+| spend | $1.82 | $1.75 | $1.81 | $1.69 |
+
+The `wave4_p37` column is graded by the fixed instruments. On the day,
+`nosearch` also read five lookup-line turns as carrying no statement. The one
+it still flags (6373 r1 t3) is a real misattribution, fixed in `0c91fb6`.
+
+**Invariant 1** (`scripted --before wave4_p37_pre` on `wave4_p37c`, 10 slots):
+- links 6.3 → 8.7 summed, fell in 3 slots;
+- `sources_kept` 45.7 → 21.0, fell in 6;
+- prose 4,394 → 5,190 chars.
+
+The `sources_kept` fall is the ranked search for a number going away. On
+6409 export t8 and t11 the before-side kept 10 unrelated SIs and cited none;
+the after-side keeps the Act.
+
+**The first-round seam** (`seam_replay worker --first-round
+[--without-lookup]`, committed command, one draw each side, $0.22). It covers
+the stored briefs of the graded turns and the five other sessions the routing
+reaches in `wave2`.
+
+| payloads | without the lookup | with it |
+|---|---|---|
+| 5 briefs naming an unheld SSI (6409 t9 ×2, t11; 6373 t2 ×2) | `search_legislation` first, 5 of 5 | `get_legislation_changes` on the unheld id, direction 'by', 5 of 5 |
+| 1 brief naming the stub (6409 t8) | `search_legislation` | writes from its record (the description carries the commencement date) |
+| 5 briefs in 6360, 6374, 6378, 6383, 6410 | `search_legislation` first, 5 of 5 | 6360 unchanged; 6374, 6378, 6383 go straight to the held id's provisions; 6410 adds SSI 2025/388's change record |
+
+**Reach.** `lookup --routing wave2 --live` finds 12 of 189 stored Worker
+briefs naming an instrument by number, in 7 sessions: 9 ids, of which 5 are
+held, 3 not held and 1 a stub. `wave4_p37_reach` against
+`wave4_p37_reach_pre` (n=1, the five sessions outside the acceptance set,
+$1.05 + $1.06):
+- routed on 3 turns, with links unchanged there;
+- links 24 → 23 and `sources_kept` 24 → 25 over 12 slots;
+- the only exit is `derivations` on 6374 export t3, a turn that made no
+  lookup (P2.3's known 6374 exit);
+- `commencements` still OK on 6410.
+
+**Spend for the row: $10.01** (replays $9.18, seam $0.69, a scratch Manager
+A/B $0.14 that guided the limb wording and is not quoted).
+
+## The Deep Research synthesis, per research type (P4.7, 2026-09-24)
+
+`DEEP_RESEARCH_SYNTHESIS_PROMPT` was one constant for every research type.
+Its model gap sentence was "No reported case law was found on X", and its
+sections were the legislation Worker's. P4.7 option (a), the user's decision,
+builds it per type (`get_deep_research_synthesis_prompt`) as defence in depth,
+with a seam-only acceptance booked before any build (`9cacde8`).
+
+**The pre-flight, behind a command.** `python -m tools.replay_report --dir
+<any> drgaps --all-dirs --export` (`09fb1ed`) reads every answered Deep
+Research turn, and exits 1 on a case-law 'not found' under a type with no
+case-law tool.
+
+| | replay run files (47 directories) | the export |
+|---|---|---|
+| answered Deep Research turns | 198 | 27 |
+| under `legislation_only` | 165 (149 syntheses, 16 planner answers) | 21 |
+| of those, matching a case-law word | 20 | 0 |
+| naming case law as a source | 17 (12 planner, 5 synthesis) | 0 |
+| case-law 'not found' sentences | **0** | **0** |
+
+Recall: the classifier fires on 8 hybrid replay turns, and on 13 export
+answers of any chat mode (6337, 6338, 6340, 6341, 6370, 6407). Twelve of the
+13 are hybrid. The 13th, 6337 t1, is a Conversational answer whose research
+type P0.6 reads as `unknown`. It was corrected once before first use: a bare
+'no reported' alternative flagged an accurate exclusion (6341 t7, case law
+"not searched or retrieved").
+
+**The seam A/B.** One draw a payload a side. The two sides differ in the
+system prompt alone, because `09fb1ed` fixed `seam_replay`'s pinpoint-block
+confound.
+
+```
+python -m tools.seam_sweep --synthesis p47 --out <scratch> --without-fix --rev 9cacde8
+python -m tools.seam_sweep --synthesis p47 --out <scratch>
+python -m tools.seam_sweep --synthesis p47 --grade <scratch>     # graded at ac7878e
+```
+
+The after column is `158841d`, the second wording. The first (`d304652`)
+is below.
+
+| `p47_legislation` (20 payloads) | before (`9cacde8`) | after (`158841d`) |
+|---|---|---|
+| reports with a case-law 'not found' | **1** (6341 t7: D17's own sentence) | **0** |
+| links, summed | 594 | 691 |
+| distinct link targets, summed | 262 | 261 |
+| pinpoints kept, summed (of 29) | 24 | 24 |
+| reports carrying **Key findings** | 20 | 20 |
+| reports with every section of the type | 20 | 20 |
+| currency UNSUPPORTED (P2.5) | 0 | 0 |
+
+| `p47_hybrid` (8 payloads, each with a TRUE case-law negative stored) | before | after |
+|---|---|---|
+| reports stating a case-law gap | 6 | 7 (all 6 of the before's, plus 1) |
+| case-law 'not found' / gap sentences | 9 / 9 | 3 / 17 |
+| links, summed | 182 | 208 |
+| distinct link targets, summed | 67 | 70 |
+| pinpoints kept, summed (of 17) | 15 | 17 |
+| reports carrying **Key findings** | 8 | 8 |
+| reports with every section of the type | **0** | **8** |
+| currency UNSUPPORTED | 0 | 0 |
+
+Read by hand:
+- **The before column is not empty.** At `9cacde8` the seam wrote D17's own
+  sentence on 6341 t7 ("…restricted by a Legislation Only filter, no reported
+  case law was found…"). It did so in 2 of 4 before-draws (the sweep and
+  three redraws). The first wording wrote it in 0 of 4: three stated the
+  exclusion instead and one did not mention case law. `158841d`'s draw does
+  not mention case law either.
+- **A hybrid true negative is restated, not dropped.** "Not found" sentences
+  fall from 9 to 3 while gap sentences rise from 9 to 17: they become "the
+  legislation and judgments retrieved in this research do not establish…".
+- **The fix's second limb, observed.** Step 1 of `wave2_p24_pre`/6375 r3 t2
+  has empty findings. Before, the report said step 1 "found no" case law, a
+  negative a search never reached. After, it says step 1 "did not return
+  findings".
+- Links fell in 8 payloads, and none of them lost a distinct target: the
+  fall is repeated citations. One other payload, `wave1`/6408 t2, lost one
+  instrument's top-level link, and the instrument is still named 4 times.
+
+**The first wording failed two of Invariant 1's checks, and the seam caught
+both.** At `d304652`, with three redraws a side from `seam_replay synthesis`
+confirming each one:
+- `wave2`/6408 t2 wrote bare-URL references in 2 of 4 after-draws against 0
+  of 4 before (`legislation_only` links 594 → 575);
+- `wave2`/6407 t3 dropped the **Key findings** label in 2 of 4 against 0 of 4
+  (8 → 6 hybrid reports).
+
+`158841d` adds two lines, for every type: keep each citation as the findings'
+Markdown link, never a bare URL; and put the findings under that bold label.
+A scratch probe drew 6408 linked 3 of 3 and 6407 labelled 3 of 3, and then
+the committed after column above was drawn.
+
+**The grader was wrong three times at first use.** Each was found by reading
+a flagged payload, and each changed row was re-read after re-grading.
+- Pinpoints were compared literally (`s. 126(7)(a)` against `Section
+  126(7)(a)`).
+- A gap stated as "step 1 did not return findings" read as silence.
+- `replay_report.MD_LINK` does not see a link whose label holds a bracketed
+  year, `[… [2011] EWCA Civ 1089](url)`. So a hybrid draw that linked all six
+  of its judgments that way graded as dropping them.
+  - The sweep now uses a nested-bracket regex.
+  - **`MD_LINK` itself is unchanged, so every grader that counts links with
+    it undercounts judgment links.** That is a watch item, not measured here.
+
+**The smoke replay** (`wave4_p47b`, 6365 at `158841d`, n=1): all 12 subcommands (the exit-1 set, `drgaps` and `depth`) exit 0; depth DELIVERED; 58 links, 22 of 22 pinpoints, **Key findings** and all four sections, no case-law sentence; 5 plan steps, 41 tool calls, no empty completion, $1.05. The same session at the first wording (`wave4_p47`, `d304652`) also exited 0 on all of them and was DELIVERED ($1.03). Neither is a before: the planner and everything upstream draw afresh.
+
+**Deterministic half** (`tests/test_synthesis_prompt.py`, 57 tests):
+- every research type keeps CITATION PRESERVATION, the pinpoint rule, the
+  link rule, **Key findings** and P2.5's currency rules;
+- the Holyrood and Westminster prompts carry their own sections and no
+  extent or in-force section;
+- no type scripts a case-law negative;
+- an unknown type (`drafting`) falls through to `legislation_only`.
+
+Revert checks on scratch copies:
+- the builder returning the old literal fails 34 of the 57;
+- `agent_core.py` at `9cacde8` fails 8 of them and 9 seam tests;
+- each copy also fails the 4 tests that call `git show`.
+
+**D17 item 2 has no stored payload and no replay route** (the harness has
+never run the parliament bot). Its evidence is the deterministic half alone.
+
+**Spend for the row: $14.49: the seam sweeps $8.54 (before $2.57; after at the first wording $2.87 and at `158841d` $3.10), redraws from the committed `seam_replay` command $3.16, a scratch probe of the second wording $0.71, and the two smoke replays $2.08.**
+
+## The lost step, labelled (P4.5, 2026-09-24)
+
+When every attempt of `chat_loop`'s bounded retry (P4.2) comes back empty,
+`chat_loop` returns `content: ""` with no flag. Before this row, a worker in
+that state handed the Manager or the synthesis its scope block alone, which
+reads as a search that found nothing, or `""` for a case-law step. P4.5
+option (c), the user's decision, is the labelling half only; the cost of an
+empty attempt is P4.10.
+
+**The pre-flight, behind a command.** `python -m tools.replay_report --dir
+<any> lost --all-dirs [--list]` (`e25e678`, `637a882`). An
+`empty_completions` record carries no delegation id, so the command reads
+where a loss landed off the outcome, and checks every turn: its unrecovered
+calls must equal its lost sites.
+
+| over all 49 directories | |
+|---|---|
+| turns (with an answer or a trace) | 1,557 |
+| of them with schema-v3 records | 929 |
+| provider calls empty at least once | 34 |
+| recovered by the retry | 18 |
+| **not recovered** | **16** (1.7% of v3 turns, 95% Wilson 1.1-2.8%) |
+| landed in a research worker | 11 |
+| landed in a Deep Research step | 2 |
+| landed in the Manager (P4.2's fallback served) | 3 |
+| landed in the synthesis | 0 |
+| untied turns | **0** |
+| lost-shaped outcomes before schema v3 (mechanism unrecorded) | 22 |
+
+Every stored instance on P4.5's row is found with the right site and shape.
+Over the 18 lost research-worker reports in all directories, a later
+delegation in the same turn returned a body in **15**, and none did in 3
+(`baseline`/6340 r1 t1, `wave2`/6385 r1 t4, `wave2_p24`/6373 r1 t3). That
+decided two things: the label permits one more `delegate_research` (the
+halt's forbids it), and the lawyer notice on the Manager path is kept for a
+lost step nothing made good.
+
+**Acceptance (deterministic).** (a) `tests/test_lost_step.py`, 29 tests,
+each seam failing with its product file reverted on a scratch copy. (b)
+`replay_report lost --require-label` exits 1 on exactly the 15 directories
+holding a lost worker or step report, and 0 on the other 34.
+
+**Seam confirmation** (`seam_replay synthesis|manager --apply-lost`; before
+is the recorded payload, after is it rebuilt through the product's
+builder):
+
+| payload | before | after (`ba04d7c`) |
+|---|---|---|
+| `wave2_p24_pre`/6375 r3 t2 (synthesis; case-law step 1 lost) | step 1 "did not return findings" (P4.7's prompt); no negative | notice; the principles "not established … the reason was a lost reply from the language model"; no negative |
+| `wave2_p27_pre`/6374 r3 t4 (synthesis; step 2 scope-only) | silent on step 2; no negative | notice; the Orders list "may not be exhaustive" because of a lost reply; no negative |
+| `wave2_p28`/6409 r3 t11 (Manager; made good) | no negative from the lost step | the same; no notice (made good) |
+| `wave3_p313`/6348 r2 t1 (Manager; made good) | no heading, no negative | the same; no notice |
+| `wave2_p24`/6373 r1 t3 (Manager; **not** made good) | 4 of 4 restate "not held" with nothing saying the research was lost | 3 of 3 carry the notice and say the step did not return its findings, "a lost reply from the language model, rather than an issue with the database" |
+
+**The first wording failed on the seam, and the redraw caught it.** At
+`4dfce68`, all 4 after-draws on 6373 said the cause was "a lost reply from
+the database": false, and it points a lawyer at the index. `ba04d7c` says
+whose reply was lost, and the after column above was redrawn in full at that
+commit. 6374's sentence that a Schedule's text is missing from the database
+is on both sides: it comes from a completed step, not from the lost one.
+
+**Spend: $0.88 on the seam** (first pass $0.52, the 6373 redraws $0.08, the
+after column at `ba04d7c` $0.29), and $1.03 for the smoke replay
+(`wave4_p45`, 6365 at `ba04d7c`, n=1: the exit-1 set, `drgaps`, `depth` and
+`lost --require-label` all exit 0; depth DELIVERED; schema 6, `lost: null`
+on all 5 steps; no empty completion in the run). **$1.91 for the row.**
+
+
+## The cost of a lost completion (P4.10, 2026-09-25)
+
+P4.5 labelled a lost reply; P4.10 takes its cost. Measure-first: nothing below
+was built before the user chose a lever.
+
+**The pre-flight, behind a command.** `python -m tools.replay_report --dir
+<any> lostcost --all-dirs` (`23ac8e4`, and the booking commit). Each
+`empty_completions` record is classified by mechanism. Each call is tied to
+where it landed: an unrecovered call to the site `lost_sites` gives it, and a
+recovered call by the timeline, when it is the turn's only slow call. That
+inference agrees with the tied site on 10 of 10 calls where both exist. Each
+turn is then priced against the median of clean turns in the same slot (same
+question, chat mode and research type) across every rep and directory.
+
+| over 50 directories, 930 schema-v3 turns ($156.55) | calls (attempts) | recovered | excess over slot median, total (per-turn median) | where |
+|---|---|---|---|---|
+| (a) reasoned to nothing (10,000+ tokens, no content) | 8 (15) | 2 | **$12.38, 7,073 s** ($1.33, 902 s) | a research Worker, 8 of 8 |
+| (b) stream error, upstream idle timeout | 11 (32) | 3 | $0.29, 3,143 s ($0.01, 371 s) | Worker 6, Manager 5 |
+| (c) clean stop, no reasoning, no content | 2 (6) | 0 | none | Deep Research step 2 |
+| (d) upstream rate limit | 13 (15) | 13 | none | not placeable (fast) |
+
+| after an attempt of | retries | the next attempt answered |
+|---|---|---|
+| (a) | 12 | 2 |
+| (b) | 22 | 3 |
+| (c) | 4 | 0 |
+| (d) | 14 | 13 |
+
+Unrecovered calls in a research Worker that the Manager made good by
+re-delegating in the same turn: (a) 6 of 6, (b) 3 of 5.
+
+**Where (a) happens.** It happened 8 times in 478 conversational worker runs
+(the quick-lookup Worker), against 0 in 336 Deep Research steps and 0 in 186
+research-mode worker runs. The one-sided Fisher tail is 0.0026. But 4 of the 8
+are session 6348, so they come from 5 sessions, not 8 independent draws.
+
+**Healthy calls.** A turn's output tokens cannot exceed its cost over the output
+price ($12 per million). On that bound, a 32,000-token call cannot have occurred
+in 100% of 533 clean conversational turns or in 96% of 284 clean research turns.
+The bound says nothing for Deep Research, whose turns sum many calls. A clean
+turn's longest worker window (a stretch inside a delegation with no tool
+running, i.e. one model round) exceeded 180 s in 1 turn per mode (of 425, 83 and
+181).
+
+**The model** (`python -m tools.reasoning_probe --limits`, and one tiny call per
+configuration on an arithmetic puzzle):
+- Its output ceiling is 65,536 tokens, and reasoning is mandatory.
+- With no `reasoning` field it reasoned 8,709 tokens: the `high` range (7,861),
+  about twice `medium` (4,199).
+- `reasoning.max_tokens` lands token-for-token on an effort level (512 on `low`,
+  16000 on `high`). It is not a hard budget.
+- A top-level `max_tokens` binds: at 800 the model answered in 768 tokens, and
+  answered differently.
+
+**The seam** (`seam_replay worker --as-sent`: the Worker's call rebuilt as
+`chat_loop` sent it, one attempt per draw). Both `wave3_p313`/6348 payloads
+rebuild to exactly their recorded `sent_chars` (41,906 and 25,277), and the
+regrouped rounds equal every stored (a) call's `react_turn`.
+
+| payload | lever | draw | outcome | tokens | seconds | cost |
+|---|---|---|---|---|---|---|
+| r2 t1 | none (the product) | 1 | empty (a) | 62,916 | 370 | $0.77 |
+| r3 t3 | none (the product) | 1 | answered, after 62,916 reasoning tokens | 63,111 | 310 | $0.77 |
+| r3 t3 | `max_tokens` 16,000 | 1 | **empty (a)** | 15,360 | 93 | $0.20 |
+| r2 t1 | effort `medium` | 2 | empty (a); empty (b) | 62,913; 1,028 | 372; 188 | $0.77; $0 |
+| r2 t1 | effort `low` | 2 | answered (s.36(2) MISSED); empty (a) at `MAX_TOKENS` | 207; 65,544 | 3; 392 | $0.02; $0.81 |
+| r3 t3 | effort `medium` | 3 | answered 3 of 3 (graded: DELIVERED 2 of 2) | ~200 | 4-5 | ~$0.015 |
+| r3 t3 | effort `low` | 3 | answered 3 of 3 (graded: DELIVERED 2 of 2) | ~200 | 4-16 | ~$0.015 |
+
+What the draws say:
+- The model either answers with no reasoning or runs away to about 96% of
+  whatever output budget it has. That happens at every effort level.
+- A cap bounds the runaway in proportion to the cap, but does not turn it into
+  an answer.
+- Lowering the effort does not bound it.
+
+This decided the lever: **(ii) do not retry a heavy empty Worker completion,
+plus a 32,000-token cap on Worker calls** (user decision). The seam A/B
+acceptance is on P4.10's row.
+
+**Spend on the pre-flight: $4.35** ($0.93 on the tiny probe calls, including
+the committed re-run; $3.42 on the seam).
+
+**The acceptance draws (2026-09-25, `seam_replay worker --as-sent`, lever-on
+is `--max-tokens 32000`).** The product change is `df95c09`; the seam adds the
+same `max_tokens` a Worker call now carries.
+
+| payload | side | draws | outcome | tokens | seconds |
+|---|---|---|---|---|---|
+| `wave3_p313`/6348 r2 t1 (affected) | off | 2 (+ the pre-flight's runaway) | answered 2 of 2, s.36(2) MISSED | 270, 224 | 4, 3 |
+| | on | 3 | answered 3 of 3, MISSED | 270 each | 4 each |
+| `wave3_p313`/6348 r3 t3 (affected) | off | 2 (+ the pre-flight's runaway) | answered 2 of 2, DELIVERED | 206, 239 | 4, 3 |
+| | on | 3 | answered 3 of 3, DELIVERED | 206 each | 3 each |
+| the other six stored (a) payloads | off | 1 each | 3 answered, 3 called a tool; none ran away | 32-1,548 | 2-11 |
+| `wave0_conv_6348_pre`/6348 r2 t3 (unaffected) | off / on | 1 / 1 | identical: 3 links, DELIVERED | 1,079 | 9 |
+| `wave2`/6341 r1 t7, delegation 2 | off / on | 1 / 1 | identical: 11 links | 3,538 | 23 |
+| `wave3_p313`/6348 r1 t1 | off / on | 1 / 1 | identical: 4 links, DELIVERED | 968 | 8 |
+| `wave4_p46_pre`/p46_6385 r1 t4 | off / on | 4 / 4 | the same two answers on both sides: 8 links in 3 of 4 off and 2 of 4 on (in the three-a-side redraw, 2 of 3 each); otherwise 4 links | 1,957-2,370 | 16-18 |
+
+**No draw ran away on 2026-09-25: 0 in 16 across the eight stored (a)
+payloads**, against 2 in 2 product-payload draws of the two faithful ones the
+day before. The affected-turns half of P4.10's acceptance is therefore not
+yet evaluated. The unaffected half passes: where the cap cannot bind, it
+changes nothing. Spend on these draws: $0.80.
+
+**Why 2026-09-25 drew no runaway: the date line (Session 29).** The Worker
+prompt opens with "Today's date is ...", and `--as-sent` built it with the
+day of the draw. The recorded calls carried 23 September (the runs'
+`started_at`), the pre-flight's draws 24 September, and Session 28's draws 25
+September. Every other byte is the same, and the three lines are the same
+length. At temperature 0 the model draws much the same completion for the same
+bytes, so the date line decided which payload was being drawn. `seam_replay
+worker --as-sent --date recorded` (or `--date YYYY-MM-DD`) now pins the line
+(`d94867a`). Its payloads are byte-identical to those of the scratch wrapper
+that made the first twelve draws below.
+
+The two faithful payloads, all drawn on 2026-09-25:
+
+| date line | draws | ran away | (b) upstream idle timeout | answered, no runaway |
+|---|---|---|---|---|
+| 25 September (today; Session 28's ten, plus one) | 11 | 0 | 0 | 11 |
+| 23 September (recorded): r2 t1 3, r3 t3 3 | 6 | 2 | 2 | 2 |
+| 24 September (the pre-flight's): r3 t3 6 | 6 | 2 | 4 | 0 |
+
+On the 24 September line, the r3 t3 runaway reproduced the pre-flight's
+63,111 completion tokens exactly. The draws are still not fully deterministic:
+r3 t3 on the 23 September line answered twice (2,107 tokens both times) and
+timed out once. Every (b) ended at 125-133 s, and none came on the 25 September
+line. That is a hint for P4.11, not a measurement of (b).
+
+**The acceptance, completed: runaway against runaway (user decision).** The
+booked comparison was the medians of three draws a side. That can pass only if
+two of the three lever-off draws run away; otherwise both medians are healthy
+draws and tie. The user chose instead to alternate the sides on one day until
+each had a runaway, compare the runaways, and require the healthy draws to
+match.
+
+| payload (date line) | side | tokens | seconds | cost | outcome |
+|---|---|---|---|---|---|
+| r2 t1 (23 September) | off | 63,168 | 338 | $0.777 | answered: 2 links, s.36(2) MISSED |
+| | on (`--max-tokens 32000`) | 30,719 | 163 | $0.381 | empty (a lone newline) |
+| r3 t3 (24 September) | off | 63,111 | 342 | $0.764 | answered: 1 link, DELIVERED |
+| | on | 30,720 | 167 | $0.382 | empty (a) |
+| r3 t3 (23 September), healthy | off / on | 2,107 / 2,107 | 15 / 15 | $0.038 / $0.032 | identical: 3 links, DELIVERED |
+| r2 t1 (25 September), healthy | off (this session) / on (Session 28, 3 draws) | 270 / 270 each | 4 / 4 each | $0.022 / not recorded | identical |
+
+(b) passes: no capped draw exceeded 32,000 tokens (each ended at 96% of the
+cap, as uncapped runaways end at 96% of 65,536). Each capped runaway cost half
+and took half the time of its payload's uncapped one.
+
+**The watch item, read.** Both uncapped runaways ended in an answer, and both
+capped ones came back empty. The lone newline counts as empty in the product
+(`is_empty_completion`); the seam called it "answered" until `d94867a`. In the
+product each capped runaway is a heavy empty: one attempt, P4.5's label, and a
+re-delegation by the Manager, which made good 6 of 6 such calls in the replays.
+So on a runaway that would have answered, the cap trades an answer (about $0.77
+and 340 s) for a lost reply (about $0.38 and 165 s) plus the re-delegation,
+whose cost the seam cannot draw. The two answers lost this way were one
+DELIVERED and one MISSED.
+
+Spend on these draws: $2.40 (13 draws).
+
+## A NOT HELD answered from history (P3.15, 2026-09-25)
+
+P3.7's residual: a follow-up the Manager answers from its own history, with no
+delegation, could narrow a lookup's NOT HELD to "its text is not held". The row
+said to measure before building. Closed by user decision on the measurement,
+with no product change.
+
+**The sweep** (`wave4_p315_pre`: p37_6409 and p37_6373, n=3, at `2cb77e3`,
+$1.83; the exit-1 set exits 0). `python -m tools.replay_report --dir <D>
+lookup` now splits the absent slots by route (`d37b517`):
+
+| sweep (code) | graded, delegated | graded, from history | not graded (6373 t3) |
+|---|---|---|---|
+| `wave4_p37b` (`0c91fb6`, P3.7) | 11 of 11 | 0 of 1 | delegated 1 of 3 |
+| `wave4_p37c` (`782a9e8`, P3.7) | 10 of 10 | 1 of 2 | delegated 1 of 1, from history 0 of 2 |
+| `wave4_p315_pre` (`2cb77e3`) | 10 of 10 | 2 of 2 | delegated 1 of 2, from history 1 of 1 |
+| pooled | 31 of 31 | **3 of 5** | delegated 3 of 6, from history 1 of 3 |
+
+No commit between `782a9e8` and `2cb77e3` edits the conversational Manager's
+prompt. The unfixed product met P3.15's booked acceptance (every graded absent
+slot passes, n=3) on the third sweep, so that acceptance cannot tell a fix from
+none.
+
+**The seam** (`python -m tools.seam_replay manager --run <f> --turn N
+--first-round --date recorded`, `8aed49c`: the Manager's first round of the
+turn, its tools offered, stopped at the first call, graded by `lookup`). Current
+code, the recorded date line:
+
+| from-history payload (its live outcome) | draws | seam outcome |
+|---|---|---|
+| `wave4_p37b` 6409 r1 t7, export t11 (miss) | 3 | delegated 3 of 3 |
+| `wave4_p37c` 6409 r2 t6, export t10 (miss) | 3 | delegated 3 of 3 |
+| `wave4_p37c` 6373 r1 t3 (miss, not graded) | 3 | answered from history, PASS 3 of 3 |
+| `wave4_p37c` 6373 r3 t3 (miss, not graded) | 3 | delegated 1, answered and PASS 2 |
+| the four live passes | 1 each | PASS 2, delegated 2 |
+
+No miss in 16 draws, so a prompt lever had nothing to be measured against.
+$0.26.
+
+**The grader fix** (`d37b517`). The sweep drew one FAIL on a held Act
+(6409 r1, export t2). The answer was right: "This index does not hold this
+instrument" followed a bullet naming SSI 2025/377, under a heading that named
+the Act. An anaphor now belongs to the subordinate instrument named last. An
+Act's citation or section link does not move it, and it is never credited to
+an Act. Regraded over all 51 directories, only that verdict moved.
+
+## The latency of an upstream idle timeout (P4.11, 2026-09-25)
+
+P4.10's residual. Mechanism (b): a model call ends `finish_reason=error`,
+"Upstream idle timeout exceeded", after about 130-310 tokens. It costs about $0
+but two to three minutes an attempt. Measure-first: nothing below was built
+before the user chose a lever.
+
+**What was already measured** (`replay_report lostcost --all-dirs`, 51
+directories). There were 11 (b) calls (32 attempts), 3 of them recovered: 6 in
+a research Worker and 5 in the Manager. They cost $0.29 but 3,143 s over their
+slot medians. The retry after a (b) attempt answered 3 times in 22.
+
+**New, from the same command** (`866a2b3` splits the retry yield by the site
+the call landed in):
+
+| after a (b) attempt, on a call that landed in | retries | the next attempt answered |
+|---|---|---|
+| a research Worker | 14 | 1 (6410, whose site is inferred) |
+| the Manager | 8 | 2 (both on inferred sites) |
+
+A tied site belongs to an unrecovered call, whose retries never answered, and
+a recovered call's site can only be inferred. The two are pooled so that
+neither reads as the site's yield alone.
+
+The records also mix (a) and (b) on identical bytes. Three calls did it
+(6369 `abb`, 6409 `bab`, 6348 in `wave3_p311_conv` `abb`), and in the retry
+table 3 of 12 retries after an (a) came back (b), and 1 of 22 after a (b) came
+back (a).
+
+### A faithful redraw needs the recorded head's code
+
+`seam_replay worker --as-sent` built the Worker prompt with the working tree.
+The prompt changed under most stored (b) payloads. Of the 8 Worker payloads
+drawn below, today's code rebuilt 1 (6410) to its recorded `sent_chars`; the
+rest were off by 44 to 570 characters. `--at-rev recorded` (`1de4419`) builds
+the prompt with the run's `runtime_state.git_head` and offers that head's
+tools. With it, all 8 rebuild exactly, as do P4.10's two payloads (41,906 and
+25,277). Every stored head predates `lookup_legislation`, so the tool list is 4
+tools where today's is 5. `sent_chars` does not count tools, so only
+`--at-rev` makes the tool list faithful too.
+
+None of the 5 Manager (b) calls rebuilds on an existing seam. Their records
+sit at rounds 1, 1, 2, 3 and 5. Two of them (`wave2`/6343 r1 t2,
+`wave4_p37_reach`/p37r_6374 r1 t2, both recovered) do not rebuild as a Worker
+call either, so their site stays the timeline's inference. **User decision:
+leave the Manager calls out** (lever (i) is Worker-only, and the Manager keeps
+its retry).
+
+### Step 1: the eight Worker payloads, as sent
+
+`python -m tools.seam_replay worker --run <f> --turn N --delegation 1
+--as-sent --at-rev recorded --round <react_turn> [--date recorded]`, one
+attempt a draw. Three draws on the recorded date line, then one on today's (25
+September), all drawn on 2026-09-25 through the default route. The payloads,
+by run file: `wave2_p24_final`/6385_rep2 t3 r2, `wave3_p311_conv`/6348_rep3 t2
+r3, `wave2`/6369_rep1 t5 r7, `wave2_p28`/6409_rep3 t11 r3,
+`wave4_p37_reach_pre`/6410_rep1 t2 r2, `wave2_p24`/6373_rep1 t3 r2,
+`wave2_p24`/6385_rep2 t3 r2 and `wave2`/6385_rep1 t4 r2. The three 6385
+payloads are the case-law Worker.
+
+| payload (`sent_chars`) | recorded call | recorded date line: 3 draws | today's line: 1 draw |
+|---|---|---|---|
+| 6385 `p24_final` (12,929) | bbb | b b b | b |
+| 6348 p311 (24,424) | abb | b b b | answered, 4 s |
+| 6369 (54,534) | abb, bbb | **(a)** b b | tool call, 8 s |
+| 6409 (16,724) | bab | **(a)** b b | answered, 4 s |
+| 6410 (15,627) | b, then answered | answered answered b | answered, 5 s |
+| 6373 (16,952) | bbb | b b b | answered, 3 s |
+| 6385 `p24` (11,822) | bbd | answered b b | answered, 3 s |
+| 6385 `wave2` (13,393) | bbb | b b b | answered, 5 s |
+
+- **On the recorded line, 19 of 24 draws were (b), 2 were (a) and 3 answered.**
+  Every payload drew (b) at least once. Each (b) ended at 123-149 s and 68-257
+  tokens, for $0. The (a) draws were 62,912 and 62,915 tokens (318 and 328 s,
+  $0.78 and $0.76); 62,915 is the recorded 6409 attempt's count to the token.
+- **After a (b) draw, the next draw of the same bytes was (b) 11 times in 11.**
+  A retry that resends identical bytes does not escape it, as the recorded
+  Worker retries (1 in 14) say.
+- **Today's date line turned 7 of 8 payloads into an answer or a tool call in
+  3-8 s.** 6385 `p24_final` stayed (b).
+- **(a) and (b) come from the same payloads**, and the same one-line change
+  cures both. So (b) is, like (a), a property of the payload's bytes, not an
+  independent upstream fault.
+
+Spend: $1.67 (32 draws).
+
+### Step 2: the other upstream route
+
+OpenRouter serves the model from Google (Vertex) and Google AI Studio (its
+`/models/google/gemini-3.1-pro-preview/endpoints` listing, each with standard,
+flex and priority tiers). `--provider SLUG` (`400d486`) routes a draw to one of
+them with no fallback, and every draw now prints the provider that served it.
+All drawn on the recorded date line:
+
+| payload | Vertex (the default route) | AI Studio |
+|---|---|---|
+| 6373 | (b) 1 (step 1: 3) | **(a) runaway**: 62,913 tokens, 356 s, $0.76 |
+| 6348 p311 | (b) 1 (step 1: 3) | **(a) runaway**: 62,913 tokens, 360 s, $0.77 |
+| 6385 `wave2` (case law) | (b) 2, one of them with no routing field (step 1: 3) | (b) 2 |
+| 6385 `p24_final` (case law) | (b) 1 (step 1: 3) | (b) 2 |
+
+- **The product's default route is Vertex:** a draw with no routing field was
+  served by "Google".
+- **No route avoids it.** AI Studio drew the same (b) on the case-law payloads.
+  On the two legislation payloads it turned a (b) at $0 and 125 s into a
+  runaway at $0.77 and six minutes, which P4.10's cap would still end at about
+  $0.38 and 165 s.
+- **On those two payloads, (b) looks like the (a) deliberation cut short.** On
+  the same bytes, AI Studio streamed the runaway to its end, where Vertex went
+  idle after about 150 tokens and was dropped at about 125 s. That is the
+  row's Session 29 hint, now seen on (b)'s own payloads. It is not shown for
+  the case-law Worker, where both routes timed out.
+
+Spend: $1.53 on 6 completed draws. Four more draws, cut when the plan was
+reduced to stay in budget, left no record: a Vertex control on 6373 and 6348
+and a second AI Studio draw on each case-law payload. They were redrawn: 5
+draws, all (b), $0.
+
+**Spend on P4.11's measurement: $3.20.**
+
+### What it decided
+
+**User decision: lever (i).** A research Worker's idle-timeout empty is not
+retried. It falls into P4.5's lost-report label, and the Manager re-delegates:
+it redid 3 of the 5 unrecovered Worker (b) calls, and a re-delegation sends a
+new brief, i.e. different bytes. Rate limits ((d): the retry answered 13 of
+14) and every non-Worker call keep their retry. The price is the Worker retry's
+1 in 14.
+
+What it removes, from the recorded attempts: an unrecovered Worker (b) call
+made 3 attempts at about 125-190 s each. It now makes 1. Over the 51
+directories that is 10 attempts removed from the 5 unrecovered Worker (b)
+calls (6369 `bbb`, 6385 `wave2`, 6373, 6385 `p24` `bbd`, 6385 `p24_final`),
+about 1,250-1,900 s. It also removes 6409's `bab` second attempt: after P4.10 a
+Worker's heavy empty ends the call, so `bab` becomes `b`.

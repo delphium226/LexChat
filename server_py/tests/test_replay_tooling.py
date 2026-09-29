@@ -1360,6 +1360,277 @@ def test_missing_timing_does_not_raise():
 
 
 # ---------------------------------------------------------------------------
+# lost_sites — P4.5's pre-flight: where a lost completion landed
+# ---------------------------------------------------------------------------
+#
+# Read off the outcome, because an `empty_completions` record carries no
+# delegation id. Checked against every stored instance on P4.5's row before any
+# number was quoted: 6409 r3 t11 (worker, scope only), 6375 r3 t2 (step, empty),
+# 6374 r3 t4 (step, scope only), 6373 r1 t3 (worker, scope only),
+# wave3_p313 rep 2 t1 (worker, scope only), wave3_p38/6374 r1 t1 (Manager
+# fallback) and baseline/6363 r1 t5 (two empty steps, pre-v3).
+
+_SCOPE_ONLY = (
+    "\n\n[SEARCH SCOPE — what this research step actually did]\n"
+    "Searched the legislation index 2 time(s) for: \"x\".\n[/SEARCH SCOPE]"
+)
+
+
+def _ldg(report="", kind="delegation", **kw):
+    d = {"kind": kind, "report": report, "halted": None, "error": None}
+    d.update(kw)
+    return d
+
+
+def _lturn(delegations, answer="An answer.", cost=0.1, chat_mode="research", **kw):
+    t = {"turn": 1, "answer": answer, "chat_mode": chat_mode,
+         "timing": {"total_cost_usd": cost},
+         "audit": {"delegations": delegations, "empty_completions": []}}
+    t.update(kw)
+    return t
+
+
+def test_a_scope_block_alone_is_a_lost_worker():
+    """6409 r3 t11: the report is the code-appended scope block and nothing
+    else, which reads to the Manager as searched-and-found-nothing."""
+    sites = rr.lost_sites(_lturn([_ldg(_SCOPE_ONLY), _ldg("A real report.")]))
+    assert sites == [{"site": "worker", "step": None, "shape": "scope",
+                      "redone": True}]
+    # the Manager did not re-delegate (6373 r1 t3's shape)
+    assert rr.lost_sites(_lturn([_ldg(_SCOPE_ONLY)]))[0]["redone"] is False
+
+
+def test_an_empty_case_law_step_is_a_lost_step():
+    """6375 r3 t2: a case-law step has no scope block, so the report is ''."""
+    t = _lturn([_ldg("", kind="deep_research_step", step=1),
+                _ldg("Findings.", kind="deep_research_step", step=2)],
+               chat_mode="deep_research")
+    assert rr.lost_sites(t) == [{"site": "step", "step": 1, "shape": "empty"}]
+
+
+def test_a_halted_or_failed_worker_is_not_a_lost_one():
+    """A halt has its own label (P2.1) and a raised worker its own error
+    string; neither is the lost-completion shape."""
+    t = _lturn([_ldg("", halted={"reason": "step_cap"}), _ldg("", error="boom")])
+    assert rr.lost_sites(t) == []
+
+
+def test_the_managers_fallback_is_a_lost_manager_completion():
+    """wave3_p38/6374 r1 t1: P4.2's labelled fallback served."""
+    t = _lturn([_ldg("Report.")],
+               answer="**The answering step returned no text, so this is not a "
+                      "composed answer.** The research completed ...")
+    assert rr.lost_sites(t) == [{"site": "manager", "step": None, "shape": "fallback"}]
+
+
+def test_the_synthesis_fallback_is_a_lost_synthesis():
+    t = _lturn([_ldg("F.", kind="deep_research_step", step=1)],
+               answer="**The final synthesis step returned no text, so this "
+                      "report is not an integrated answer.** ...",
+               chat_mode="deep_research")
+    assert rr.lost_sites(t)[0]["site"] == "synthesis"
+
+
+def test_a_blank_billed_answer_before_p42_is_a_lost_manager():
+    assert rr.lost_sites(_lturn([], answer="", cost=0.2)) == [
+        {"site": "manager", "step": None, "shape": "blank"}]
+    # free and blank: nothing ran, nothing was lost (P4.2's exclusion)
+    assert rr.lost_sites(_lturn([], answer="", cost=0.0)) == []
+
+
+def test_a_labelled_lost_report_is_recognised():
+    label = "[Research Incomplete — answer lost]"
+    sites = rr.lost_sites(_lturn([_ldg(label + "\nThe step ..." + _SCOPE_ONLY)]),
+                          label=label)
+    assert sites == [{"site": "worker", "step": None, "shape": "labelled",
+                      "redone": False}]
+
+
+def test_cmd_lost_ties_unrecovered_calls_to_sites(tmp_path, capsys):
+    """One unrecovered call (three failed attempts) and one lost worker: tied,
+    so the split is trusted. A second turn with an unrecovered call and no
+    site is listed as a disagreement rather than guessed at."""
+    probes = [{"model": "m", "sent_chars": 10, "react_turn": 3, "attempt": a,
+               "retried": a < 3} for a in (1, 2, 3)]
+    t1 = _lturn([_ldg(_SCOPE_ONLY)])
+    t1["audit"]["empty_completions"] = probes
+    t2 = _lturn([_ldg("Report.")])
+    t2["turn"] = 2
+    t2["audit"]["empty_completions"] = [dict(p, sent_chars=99) for p in probes]
+    d = tmp_path / "dir"
+    d.mkdir()
+    (d / "1_rep1.json").write_text(
+        json.dumps({"session_id": "1", "rep": 1, "turns": [t1, t2]}), encoding="utf-8")
+    args = type("A", (), {"dir": str(d), "all_dirs": False, "list": False,
+                          "require_label": True})()
+    assert rr.cmd_lost(args) == 1  # the lost worker is not labelled
+    out = capsys.readouterr().out
+    assert "research worker 1" in out and "untied 1" in out
+    assert "none did in 1" in out
+    assert "dir/1 r1 t2: 1 unrecovered call(s), sites none" in out
+
+
+# ---------------------------------------------------------------------------
+# lostcost — P4.10's pre-flight: what each empty-completion call cost
+# ---------------------------------------------------------------------------
+#
+# Every fixture is a stored record's shape: (a) wave3_p313/6348 r2 t1 and
+# wave2_p27_pre/6374 r3 t1 (the one MAX_TOKENS attempt), (b) wave2_p24/6373
+# r1 t3, (c) wave2_p24_pre/6375 r3 t2, (d) wave4_p46/6343 r3 t1.
+
+def _probe(**kw):
+    p = {"model": "m", "sent_chars": 100, "react_turn": 3, "attempt": 1,
+         "retried": False, "finish_reason": "stop", "native_finish_reason": "STOP",
+         "reasoning_chars": 0, "completion_tokens": None, "stream_error": None}
+    p.update(kw)
+    return p
+
+
+def test_each_stored_empty_completion_shape_gets_its_mechanism():
+    assert rr.empty_mechanism(_probe(reasoning_chars=98394, completion_tokens=62912)) == "a"
+    assert rr.empty_mechanism(_probe(finish_reason="length", native_finish_reason="MAX_TOKENS",
+                                     reasoning_chars=55239, completion_tokens=65556)) == "a"
+    assert rr.empty_mechanism(_probe(finish_reason="error", native_finish_reason=None,
+                                     reasoning_chars=695, completion_tokens=176,
+                                     stream_error="Upstream idle timeout exceeded")) == "b"
+    assert rr.empty_mechanism(_probe()) == "c"
+    assert rr.empty_mechanism(_probe(
+        finish_reason="error", reasoning_chars=791, completion_tokens=0,
+        stream_error="google/gemini-3.1-pro-preview is temporarily rate-limited "
+                     "upstream. Please retry shortly")) == "d"
+    # a call is named after its costliest attempt (6409 r3 t11: b, a, b)
+    assert rr._call_mechanism("bab") == "a"
+
+
+def test_call_records_group_exactly_as_the_call_counter_does():
+    probes = [_probe(attempt=a, retried=a < 3) for a in (1, 2, 3)]
+    probes += [_probe(attempt=1, retried=True, sent_chars=7)]
+    recs = rr.empty_completion_call_records(probes)
+    assert [(len(r), ok) for r, ok in recs] == rr.empty_completion_calls(probes)
+    assert [(len(r), ok) for r, ok in recs] == [(3, False), (1, True)]
+
+
+def test_the_slow_call_is_placed_inside_a_worker_or_outside_it():
+    """wave3_p313/6348 r2 t1: the worker's last tool ends at ~48 s and the
+    delegation runs to ~1,136 s, so the slow window is inside it."""
+    inside = {"elapsed_s": 1171.0, "audit": {"delegations": [
+        {"started_at": 5.0, "duration_s": 1131.0,
+         "tools": [{"started_at": 9.0, "duration_s": 1.0},
+                   {"started_at": 42.0, "duration_s": 6.0}]},
+        {"started_at": 1142.0, "duration_s": 24.0, "tools": []}]}}
+    where, gap = rr.slow_call_location(inside)
+    assert where == "inside" and gap == pytest.approx(1088.0)
+    # wave4_p41_pre/6346 r2 t2: short delegations, then ~384 s after them
+    outside = {"elapsed_s": 456.0, "audit": {"delegations": [
+        {"started_at": 5.0, "duration_s": 31.0,
+         "tools": [{"started_at": 6.0, "duration_s": 29.0}]},
+        {"started_at": 59.0, "duration_s": 13.0,
+         "tools": [{"started_at": 60.0, "duration_s": 11.0}]}]}}
+    assert rr.slow_call_location(outside)[0] == "outside"
+
+
+def _cost_turn(question, cost, secs, probes=(), report="A report.", tools_end=10.0):
+    return {"turn": 1, "question": question, "chat_mode": "conversational",
+            "research_mode": "legislation_only", "answer": "An answer.",
+            "status": "ok", "elapsed_s": secs,
+            "timing": {"total_cost_usd": cost},
+            "audit": {"empty_completions": list(probes), "delegations": [
+                {"kind": "delegation", "report": report, "halted": None,
+                 "error": None, "started_at": 1.0, "duration_s": secs - 2.0,
+                 "tools": [{"started_at": 2.0, "duration_s": tools_end - 2.0}]}]}}
+
+
+def _write_runs(d, turns_by_rep):
+    d.mkdir(parents=True, exist_ok=True)
+    for rep, turns in turns_by_rep.items():
+        (d / f"1_rep{rep}.json").write_text(
+            json.dumps({"session_id": "1", "rep": rep, "turns": turns}), encoding="utf-8")
+
+
+def test_lostcost_prices_an_episode_against_its_slot_median(tmp_path, capsys):
+    """Three clean reps of one question at $0.06-0.08 and ~30 s, and one rep
+    whose worker reasoned to nothing twice and recovered on the third
+    attempt: the excess is the episode's turn less the slot's median, the
+    recovered call's site is inferred from the timeline, and the other
+    question's clean turn is not in the slot."""
+    heavy = [_probe(attempt=a, retried=True, reasoning_chars=58000,
+                    completion_tokens=62917) for a in (1, 2)]
+    d = tmp_path / "dir"
+    _write_runs(d, {
+        1: [_cost_turn("Q", 0.06, 30.0)],
+        2: [_cost_turn("Q", 0.08, 34.0)],
+        3: [_cost_turn("Q", 0.07, 32.0)],
+        4: [_cost_turn("Q", 1.62, 768.0, heavy)],
+        5: [_cost_turn("other", 9.0, 900.0)],
+    })
+    args = type("A", (), {"dir": str(d), "all_dirs": False, "out_price": 12.0})()
+    assert rr.cmd_lostcost(args) == 0
+    out = capsys.readouterr().out
+    row = [ln for ln in out.splitlines() if ln.startswith("dir ")][0]
+    assert "worker~" in row and " yes " in row and " aa " in row
+    assert "1.62" in row and "0.07" in row and "1.55" in row  # excess $
+    assert " 736" in row  # 768 s less the 32 s median
+    assert "(a) calls   1" in out
+
+
+def test_lostcost_infers_no_site_when_a_turn_has_two_slow_calls(tmp_path, capsys):
+    """wave2_p24_final/6385 r2 t3: a worker's and the Manager's call each
+    stalled ~395 s. One timeline window cannot say which was which."""
+    idle = [_probe(finish_reason="error", completion_tokens=140, reasoning_chars=551,
+                   stream_error="Upstream idle timeout exceeded", attempt=1,
+                   retried=True)]
+    t = _cost_turn("Q", 0.05, 810.0, idle + [dict(idle[0], sent_chars=7)])
+    d = tmp_path / "dir"
+    _write_runs(d, {1: [t], 2: [_cost_turn("Q", 0.04, 31.0)]})
+    args = type("A", (), {"dir": str(d), "all_dirs": False, "out_price": 12.0})()
+    rr.cmd_lostcost(args)
+    rows = [ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("dir ")]
+    assert len(rows) == 2 and all(" ? " in r for r in rows)
+
+def test_lostcost_splits_the_retry_yield_by_site(tmp_path, capsys):
+    """P4.11: a lever that stops retrying on one site gives up that site's
+    recoveries. A recovered (b) call inside a worker (site inferred) and an
+    unrecovered one that no lost site ties: pooled by site, the inferred share
+    said."""
+    def idle(attempt, retried):
+        return _probe(finish_reason="error", completion_tokens=140, reasoning_chars=551,
+                      stream_error="Upstream idle timeout exceeded", attempt=attempt,
+                      retried=retried)
+    d = tmp_path / "dir"
+    _write_runs(d, {
+        1: [_cost_turn("Q", 0.05, 400.0, [idle(1, True)])],
+        2: [_cost_turn("Q", 0.05, 400.0, [idle(1, True), idle(2, True), idle(3, False)])],
+        3: [_cost_turn("Q", 0.04, 31.0)],
+    })
+    args = type("A", (), {"dir": str(d), "all_dirs": False, "out_price": 12.0})()
+    rr.cmd_lostcost(args)
+    out = capsys.readouterr().out
+    assert "  after (b):   3 retries; the next attempt answered  1" in out
+    assert "    worker     after (b):   1 retries; answered  1; 1 on an inferred site" in out
+    assert "    untied     after (b):   2 retries; answered  0; 0 on an inferred site" in out
+
+
+def test_the_fisher_tail_is_the_hypergeometric_upper_tail():
+    # all 2 events in a group of 2 of 4 runs: C(2,2)C(2,0)/C(4,2) = 1/6
+    assert rr._fisher_upper(2, 2, 2, 4) == pytest.approx(1 / 6)
+    assert rr._fisher_upper(0, 2, 2, 4) == pytest.approx(1.0)
+    assert rr._fisher_upper(1, 2, 2, 4) == pytest.approx(5 / 6)
+
+
+def test_the_cap_bound_is_cost_over_the_output_price(tmp_path, capsys):
+    d = tmp_path / "dir"
+    # $0.06 at $12/M bounds the turn's output at 5,000 tokens: under 8,000 but
+    # not under 4,000.
+    _write_runs(d, {1: [_cost_turn("Q", 0.06, 30.0)]})
+    args = type("A", (), {"dir": str(d), "all_dirs": False, "out_price": 12.0})()
+    rr.cmd_lostcost(args)
+    line = [ln for ln in capsys.readouterr().out.splitlines()
+            if ln.strip().startswith("conversational") and "%" in ln][0]
+    assert line.split()[2] == "5,000"
+    assert line.split()[3:] == ["0%", "100%", "100%", "100%"]
+
+
+# ---------------------------------------------------------------------------
 # scope_record_gap — P2.9's acceptance detector (bucket B5)
 # ---------------------------------------------------------------------------
 #

@@ -377,7 +377,7 @@ def _loop_returning(content, written_up=True):
     state = {"calls": 0}
 
     async def chat_loop(messages, model, cancel_event, num_ctx, tools, tool_executor,
-                        on_chunk=None, emit_tool_details=False, timing_collector=None):
+                        on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False):
         state["calls"] += 1
         return {"role": "assistant", "content": content,
                 "halted": {**HALT, "written_up": written_up}}
@@ -474,7 +474,7 @@ async def test_a_written_up_step_reaches_the_synthesis_as_partial_findings(_cfg)
     payload = {}
 
     async def synthesis(messages, model, cancel_event, num_ctx, tools, executor,
-                        on_chunk, emit_tool_details=False, timing_collector=None):
+                        on_chunk, emit_tool_details=False, timing_collector=None, worker_call=False):
         payload["user"] = messages[1]["content"]
         return {"content": "INTEGRATED REPORT."}
 
