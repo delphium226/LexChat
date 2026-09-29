@@ -7150,3 +7150,48 @@ cuts (`pg_dump` first; the local prompt cache is now **v3** on the branch, so ev
 summary becomes unreachable when it reaches the target, intended); telling the eval-harness owner
 (schema v6 etc.); P4.12; D20; D21/D22; P5.2; Thomas's document. The Fix Tracker was not updated
 (update only when asked; if asked, P4.13, P4.14 and P3.18 are Fixed, P3.16 is the user's call).
+
+**Addendum to Session 33 (same day, at the user's request: the release, then "make sure we're not
+going to lose any pertinent information", then "update the tracker").** What happened after the
+handover above, and what it changes in it:
+
+1. **Third cut = release `v2026.09.3` (user request).** `fix/prepilot-defects` merged to `main`
+   (`1e30774`, `--no-ff`, clean, 2035 tests), then the release commit `a6b4a76` (`VERSION`
+   2026.09.3, CHANGELOG *Unreleased* moved into a dated section written for this cut, the cut
+   noted in CLAUDE.md), annotated tag `v2026.09.3`, `main` and the tag pushed. The two
+   retroactive tags `v2026.09.1` and `v2026.09.2` were pushed too (user confirmed; D19's first
+   item closed; `0b9f73b`). **Everything through Session 33 is on `main`**; nothing is "not on
+   main" any more. The branch was fast-forwarded to `main` and now carries `VERSION`,
+   `CHANGELOG.md` and CLAUDE.md's *Releases* section; FIX_PLAN's deployment note records the
+   cut (`1b85ba6`). No client, dependency, config or whitelist change. **Replaces the handover's
+   "which rows go in the next cut (v2026.10.1)":** the next cut is `v2026.10.1` (or
+   `v2026.09.4` if cut in September) and holds only what is built after `a6b4a76`. **Deploying
+   `v2026.09.3` to the target is the user's** (`pg_dump` first, pull, restart, `test_apis.ps1`);
+   the local prompt cache moves to v3 there, and the eval-harness owner should be told of
+   schema v6. D19's "stamp the version on the audit event" is now unblocked (both lines are v6).
+2. **Test count on the branch is 2035** (the branch's 2029 plus `main`'s six versioning tests),
+   not the 2029 the entry above gives.
+3. **Preserved before the scratchpad goes (all gitignored, main checkout only):**
+   - `evidence/rubrics/handread_wave4_b1_post.md`: the integrator's hand-read of the
+     after-column, rep by rep and turn by turn, with the sentences that decided each verdict and
+     the seven grader gaps. **Start the grader-gap work from its last section.**
+   - `evidence/seam/batch1/scratchpad_s33/` (9.4 MB): the whole session scratchpad, including
+     agent C's hand codes for the 440 unfiltered gloss matches (`list1.txt` with `codes1-4.txt`,
+     the evidence behind "205 real of 221"), agent D's `grade.py`/`origin.py`/`intact.py` and
+     `grade_final.txt`, agent B's rubric-edit and revert-proof scripts (`b/`), agent A's opener and
+     footer scans, and the integrator's helpers: `keep_awake.py` (holds
+     `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` every 60 s; changes no
+     setting; stop it by its task), `revert_line.py` (removes marked lines at byte level and
+     prints how many it removed: the fix for the false revert check), `turn_lines.py` (per turn:
+     doctrine line, scope lines, links), `show_turns.py` (prints chosen run-file turns).
+   - Agent draws: `evidence/seam/batch1/{C,D}/`; rubric backups:
+     `evidence/rubrics/backup_batch1/`. 55 replay directories.
+4. **Fix Tracker v28 published at the user's request** (same URL; source
+   `docs/prepilot-fixes/summary-table.html`, byte-identical to the live body before the edit):
+   P3.18, P4.13, P4.14 Fixed (`fixed: "2026-09-29"`, `ver: "2026.09.3"`); every former "Next
+   release" row now `2026.09.3`; P3.16 In progress (the user's decision on ticking is still
+   open); P3.2 and P3.3 stay Verified; a plain-language Session 33 note for Thomas naming no
+   lawyer's topic. 36 of 59 fixed, 2 in progress, 17 verified, 4 to be verified. Render-checked
+   once (`.playwright-mcp/tracker_v28.png`).
+5. **Machine state unchanged:** no server, no pin file, no worktrees (the four
+   `worktree-agent-*` branches remain locally; all merged, safe to delete).
