@@ -35,14 +35,19 @@ day, and read the counts as a band, not a point.
 import argparse
 import asyncio
 import json
+import os
 import random
 import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-REPLAY = ROOT / "docs" / "prepilot-fixes" / "evidence" / "replay"
-RUBRIC = ROOT / "docs" / "prepilot-fixes" / "evidence" / "rubrics" / "p33.json"
+# The gitignored evidence; PREPILOT_EVIDENCE points a git worktree at the main
+# checkout's copy (Session 32's parallel batch).
+EVIDENCE = Path(os.environ.get("PREPILOT_EVIDENCE")
+                or ROOT / "docs" / "prepilot-fixes" / "evidence")
+REPLAY = EVIDENCE / "replay"
+RUBRIC = EVIDENCE / "rubrics" / "p33.json"
 sys.path.insert(0, str(ROOT / "server_py"))
 
 PROVISION = re.compile(

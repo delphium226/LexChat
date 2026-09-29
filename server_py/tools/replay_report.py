@@ -32,12 +32,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Optional
+
+# The gitignored evidence (replay directories, rubrics, replay_set.json). A git
+# worktree has none of it, so an agent working in one sets PREPILOT_EVIDENCE to
+# the main checkout's `docs/prepilot-fixes/evidence` (Session 32's parallel
+# batch). Unset, this is the path it always was.
+EVIDENCE_ROOT = Path(os.environ.get("PREPILOT_EVIDENCE") or (
+    Path(__file__).resolve().parents[2] / "docs" / "prepilot-fixes" / "evidence"))
 
 # --- Tool records ------------------------------------------------------------
 
@@ -7126,8 +7134,7 @@ STANCE_RETRACTION = re.compile(
     re.I)
 STANCE_CONDITIONAL = re.compile(r"^[\s>\-\d.)]*(?:if|unless|were|had|whether)\b", re.I)
 _STANCE_SENT = re.compile(r"(?<=[.!?])\s+|\n+")
-DEFAULT_RUBRIC = (Path(__file__).resolve().parents[2] / "docs" / "prepilot-fixes"
-                  / "evidence" / "rubrics" / "p32.json")
+DEFAULT_RUBRIC = EVIDENCE_ROOT / "rubrics" / "p32.json"
 
 
 def _provision_labels(text: str) -> set:
@@ -7470,6 +7477,27 @@ def interpret_grade(doc: dict, rubric: dict) -> dict:
     return {"rows": rows, "findings": findings, "pass": not findings}
 
 
+_DRAFT_NAME = re.compile(
+    r"^(?P<sid>.+?)_t(?P<turn>\d+)_(?:manager|worker|synthesis)(?:_\w+?)?_rep(?P<rep>\d+)\.md$")
+
+
+def _interpret_draft_docs(directory: Path) -> list:
+    """`seam_replay --out` draws (`<sid>_t<N>_<seam>[_x]_rep<k>.md`, searched
+    recursively) as one-turn pseudo-runs, so a seam A/B is graded by the same
+    rubric as a replay (Session 32). The turn is the RUN FILE's: for a scripted
+    run (`p32_6406`) that is the script's turn, not the export's, so grade
+    only unscripted sessions this way."""
+    docs = []
+    for f in sorted(directory.rglob("*.md")):
+        m = _DRAFT_NAME.match(f.name)
+        if not m:
+            continue
+        docs.append({"session_id": m["sid"], "rep": f"{m['rep']} {f.parent.name}/{f.name}",
+                     "turns": [{"turn": int(m["turn"]),
+                                "answer": f.read_text(encoding="utf-8")}]})
+    return docs
+
+
 def _interpret_export_docs(sessions: set) -> list:
     """The pre-pilot's own answers for the rubric's sessions, one pseudo-run
     each (rep 0), turns numbered by the user messages before them, as
@@ -7514,7 +7542,10 @@ def cmd_interpret(args) -> int:
     dirs = [Path(args.dir)] + [Path(d) for d in (args.also or [])]
     graded = failed = 0
     print(f"P3.3 retrieval versus interpretation; rubric {rpath.name}")
-    groups = [(d.name, load_runs(d)) for d in dirs]
+    if args.drafts:
+        groups = [(d.name, _interpret_draft_docs(d)) for d in dirs]
+    else:
+        groups = [(d.name, load_runs(d)) for d in dirs]
     if args.export:
         groups.append(("export", _interpret_export_docs(set(rubrics))))
     for name, docs in groups:
@@ -7616,9 +7647,7 @@ def cmd_hedges(args) -> int:
 def main(argv: Iterable[str] | None = None) -> int:
     _utf8_stdout()
     p = argparse.ArgumentParser(prog="replay_report")
-    p.add_argument("--dir", default=str(
-        Path(__file__).resolve().parents[2]
-        / "docs" / "prepilot-fixes" / "evidence" / "replay" / "baseline"))
+    p.add_argument("--dir", default=str(EVIDENCE_ROOT / "replay" / "baseline"))
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("summary")
     se = sub.add_parser("session")
@@ -7882,6 +7911,10 @@ def main(argv: Iterable[str] | None = None) -> int:
                     help="print every on-topic sentence NO pattern graded")
     ip.add_argument("--export", action="store_true",
                     help="also grade the transcript export's own (pre-pilot) answers")
+    ip.add_argument("--drafts", action="store_true",
+                    help="--dir/--also hold seam_replay draws (<sid>_t<N>_<seam>_rep<k>.md, "
+                         "searched recursively), not run files: grade each draw as a "
+                         "one-turn pseudo-run (unscripted sessions only)")
     ip.add_argument("--chars", type=int, default=220)
     hg = sub.add_parser("hedges",
                         help="P3.3 decisiveness guard: hedged retrieval statements, "

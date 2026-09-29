@@ -216,3 +216,18 @@ def test_the_export_answers_are_graded_as_pseudo_runs(tmp_path, monkeypatch):
         (1, "Widgets include gadgets."), (2, "More.")]
     g = rr.interpret_grade(docs[0], dict(RUBRIC, turns=[1], must={}))
     assert g["rows"][0]["asserted"]
+
+
+def test_seam_draws_are_graded_with_drafts(tmp_path, capsys):
+    side = tmp_path / "after" / "slot"
+    side.mkdir(parents=True)
+    (side / "9999_t2_manager_rep1.md").write_text("Widgets include gadgets.", encoding="utf-8")
+    (side / "9999_t2_synthesis_nofix_rep2.md").write_text("On one reading, widgets include gadgets.",
+                                                          encoding="utf-8")
+    (side / "9999_t2_first_rep1.md").write_text("not a composition draw", encoding="utf-8")
+    rub = tmp_path / "r.json"
+    rub.write_text(json.dumps({"9999": dict(RUBRIC, must={})}), encoding="utf-8")
+    assert rr.main(["--dir", str(tmp_path / "after"), "interpret", "--drafts",
+                    "--rubric", str(rub)]) == 1
+    out = capsys.readouterr().out
+    assert "graded reps: 2, failing: 1" in out

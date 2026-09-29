@@ -186,8 +186,12 @@ DEFAULT_CSV = os.environ.get(
 DEFAULT_CLASSIFICATION = (
     REPO_ROOT / "docs" / "prepilot-fixes" / "evidence" / "classification.json"
 )
+# Gitignored, so a git worktree has none: PREPILOT_EVIDENCE points it at the
+# main checkout's evidence (Session 32's parallel batch).
 DEFAULT_REPLAY_SET = (
-    REPO_ROOT / "docs" / "prepilot-fixes" / "evidence" / "replay_set.json"
+    Path(os.environ["PREPILOT_EVIDENCE"]) / "replay_set.json"
+    if os.environ.get("PREPILOT_EVIDENCE")
+    else REPO_ROOT / "docs" / "prepilot-fixes" / "evidence" / "replay_set.json"
 )
 
 # ~~`ChatRequest.chat_mode` default, and the frontend's.~~ **P0.5, 2026-09-22:

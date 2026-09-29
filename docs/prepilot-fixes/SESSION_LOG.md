@@ -6778,8 +6778,8 @@ entry and the handover for Session 33 follow at the end of the session.**
   by several points on every measure.
 - **The rule stopped Acts, not glosses, and a gloss reached the lawyer as a quotation.** In
   `p32_6406` r1 the summary of a section search carried a parenthetical interpretation that is
-  in neither Regulation (checked in LEX over every provision), and the next answer told the
-  lawyer the Annex said it. That is P3.16, and it is Invariant 1's worst case.
+  in neither Regulation (checked in LEX over every provision), and that turn's answer (run-file turn 6, export turn
+  7) told the lawyer the Annex said it. That is P3.16, and it is Invariant 1's worst case.
 - **The Worker now retrieves the general rule, but by its definition.** Told not to say a
   general rule applies without retrieving what applies it, it fetched the interpretation Act's
   definitions schedule, not the section that says which Acts it covers. When it also fetched
@@ -6948,4 +6948,29 @@ and handover above do not say:
 9. **The `external-apis` skill** (not tracked in git) gained a section on the
    explanatory-note endpoint and the two interpretation regimes the index holds.
 10. **Fix Tracker updated to v27 at the user's request** (below).
+
+**Second addendum to Session 32 (2026-09-29, at the user's request: set up the next piece of
+work to run as parallel agents in a new session).** **Session 33 runs
+`docs/prepilot-fixes/PARALLEL_BATCH_1.md`**, which supersedes "Take next: P3.16" in the handover
+above: four agents in git worktrees (A: P4.13 + P4.14; B: the grader gaps; C: P3.16; D: P3.18),
+the main session as integrator, one combined after-column put to the user first. Prepared and
+verified this session:
+- **Four test databases** `lexchat_test_a` .. `_d` (owner `lexuser`); two full suites ran
+  concurrently on `_a` and `_b` and passed (1983). `TEST_DATABASE_URL` takes plain
+  `postgresql://` (with `+asyncpg` every test errors).
+- **`PREPILOT_EVIDENCE`**, honoured by `replay_report`, `seam_sweep`, `summary_probe` and
+  `replay_set`, points a worktree at the main checkout's gitignored evidence. Proven from a
+  scratch worktree with no `.env`: the graders reproduced the after-column, `summary_probe
+  count` found 34, the suite passed on `_c`, and synthesis and Manager seam dry runs built their
+  payloads. The worktree was removed; no directory junctions were used (a cleanup could delete
+  through one).
+- **`replay_report interpret --drafts`** grades `seam_replay` draw files against the rubric; it
+  reproduces the Session 32 Manager-seam A/B from the saved draws (6370 0 of 15 to 5 of 15).
+- **The Session 32 seam draws are kept** in the gitignored `evidence/seam/s32/` (`manager_ab/`,
+  `drift_probe/`; new `.gitignore` line), so they outlive the session scratchpad.
+- **Agent B's specifics** (they quote matters) are in the gitignored
+  `evidence/rubrics/batch1_B_rubric_gaps.md`.
+- **A correction:** the gloss in `wave4_p33_post` p32_6406 r1 and the answer quoting it are the
+  SAME turn (run-file turn 6, export turn 7); the entry above and the P3.2/P3.16 rows said
+  "turn 6's summary ... turn 7". Fixed in both files.
 

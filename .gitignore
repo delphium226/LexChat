@@ -109,6 +109,8 @@ frontend_update.zip
 docs/prepilot-fixes/evidence/replay_set.json
 docs/prepilot-fixes/evidence/replay/
 docs/prepilot-fixes/evidence/rubrics/
+# seam_replay draws kept as evidence (model answers naming lawyers' matters): never commit
+docs/prepilot-fixes/evidence/seam/
 
 # Local state written by `python -m tools.replay pin` — records the dev box's
 # model and feature flags so `restore` can put them back. Per-machine, and it

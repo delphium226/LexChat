@@ -41,7 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import tools.replay_report as rr  # noqa: E402
 import tools.seam_replay as sr  # noqa: E402
 
-REPLAY = Path(__file__).resolve().parents[2] / "docs" / "prepilot-fixes" / "evidence" / "replay"
+REPLAY = rr.EVIDENCE_ROOT / "replay"  # PREPILOT_EVIDENCE honoured (a worktree has none)
 
 # Which delegations to draw: those whose recorded report matches.
 REPORT_MATCHES = {
