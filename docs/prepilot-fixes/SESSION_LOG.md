@@ -6695,3 +6695,43 @@ What the session knew that the entry and handover above did not say:
     Research, legislation and case law) were replayed as recorded, at heads
     `0884b29`-`2d9ae11` (6375 also at `8006db9`/`051472d`/`4890573`).
 
+---
+
+## Session 32 — 2026-09-28/29 — P3.2 and P3.3 together: measured, the combined acceptance booked (interim entry)
+
+**Interim, written before the lever work so the state survives an interruption; the full
+entry and the handover for Session 33 follow at the end of the session.**
+
+- **Decisions (2026-09-28).** The user took P3.2 and P3.3 together, measure-first. At the
+  spend gate the user said "go with your suggestions". Two of the four points put to them
+  carried a recommendation (the before-column spend: about $6, stop $9, session stop $30;
+  6370 at n=3). **Two did not**, and the session filled them with its own recommendation,
+  recorded here as the session's, accepted by the user's blanket approval, not as the
+  user's own choice (Session 31 addendum item 1): P3.2's criterion (ii) tightened to "a
+  provision no earlier answer in the window cited", and a code-emitted line counting
+  toward 6375's Scots-law status requirement.
+- **Law verified at source, free**: see the P3.3 row. The one new source is ILRA's
+  explanatory note (para 10), fetched from LEX's explanatory-note endpoint, which the
+  product does not call.
+- **Instruments**: `replay_report interpret` and `hedges` (`ad38f2d`); the two decisions
+  above (`0bc4f2c`). Tests 1928 -> 1946.
+- **Before-column** (`wave4_p33_pre`, head `0bc4f2c`): 9 of 9 FAIL, $6.71 recorded. The
+  run stalled overnight in 6375 rep 3's Deep Research turn (last server line 16:42, a
+  summarisation call; the machine probably slept, nothing was logged after it). The
+  replay process was killed the next morning and the same command resumed, skipping the
+  8 finished reps. The stalled attempt's spend (turn 1 about $0.14, part of a Deep
+  Research turn) is in no run file.
+- **The rubric was extended while the before-column came in**, every change from a
+  sentence read by hand, each re-checked against every stored rep and the pre-pilot
+  answers (no stored or export grade moved). What changed: wrong-claim phrasings for
+  6338 ("provided by", "defined by Schedule 1 to", the 1978 Act), sequencing
+  conclusions (including a hedged "must be"), two over-broad exemptions narrowed (a
+  "not explicitly" and a "whether" that suppressed real claims), and three 6370
+  exemptions (statements about what the text does not say, a restatement of the
+  Agriculture Regulations' reg 3(1), and reported judicial statements).
+- **Found, not booked:** `negatives` fails 3 turns in 6370, a case-law-only negative with
+  no index attribution (P3.7's lookup path runs no `search_legislation`, so only P2.4's
+  case-law clause is in the footer). It exits 0 on every other HEAD directory.
+- **Machine state:** server stopped, `replay restore` run (local prompt cache ON,
+  `research_mode_enabled` ON), no pin file.
+
