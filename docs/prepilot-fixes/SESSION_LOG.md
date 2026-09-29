@@ -7040,3 +7040,113 @@ unhedged reading), not in the gaps file.
 
 **Spend so far:** $6.835 (C $2.905, D $3.93; A and B $0). The combined after-column is not yet
 approved.
+
+---
+
+## Session 33, continued — 2026-09-29 — the combined after-column
+
+**Done:**
+- **Plan and figure put to the user before any spend** (user decision: carry both C's and D's
+  levers; about $17-20, cap $22). The branch was pushed first (`2271826`; the user allowed the
+  push after the classifier refused it). `main` untouched at `b2a3fd8`.
+- **After-column `wave4_b1_post`** at head `2271826`, same shape as `wave4_p33_post`:
+  `tools.replay run --session 6338 6370 6375 6345 --reps 3 --max-spend 14` ($9.90), then
+  `--script evidence/scripts/p32_6406.json --reps 3 --max-spend 12` ($6.13): **$16.03, 15 reps,
+  0 errored turns.** `replay check` first (the pinned model still served), `replay pin`, uvicorn
+  fresh (PID 2696), a keep-awake helper holding `ES_SYSTEM_REQUIRED` (no setting changed), no
+  commit while it ran; then `replay restore` (cache ON, `research_mode_enabled` ON, no pin file),
+  the server stopped by PID, the helper stopped.
+- **Graded, every match, drop and stance "none" hand-read** (results on the rows):
+  - **P3.18 DONE:** 6375 3 of 3 (no alignment assertion in any rep; the code line on every
+    turn; `drgaps` 0).
+  - **P3.3 NOT MET, 6 of 9 fail:** 6338 0 of 3, each rep failing only on turn 1's regime (turn 2
+    names the 1999 Order in 3 of 3, turn 3 right in 3 of 3, wrong-regime claims 1 against 3 and
+    9); 6370 0 of 3 (unhedged readings about 6 against about 7 and about 21); 6375 3 of 3.
+  - **P3.2 NOT MET, 0 of 3 by hand:** `stance` passed r1; the hand-read found the contradicted
+    consequence at export turn 9. Changes by hand 1, 1, 3; contradicted claim 3 of 3; control
+    fails 2 of 3; one bad opener. **6345's guard names s.38 for the first time** (1 of 3).
+  - **P3.16 met by hand, not by command:** 1 gloss match on 6406/6338 in 86 summaries, read as
+    a note, so 0 real; left `[~]` for the user.
+  - **Guards held:** `hedges` 0 hedged retrieval statements in 326, 0 caveats; `caselaw`
+    TWO_LINES 0 and `footer_echo` 0 as stored (P4.14 live); `sources_kept` per slot fell in 3 of
+    15 slots against the booked before-columns (6 of 15 in Session 32's after-column); exit-1 set
+    0 except `negatives` 2 (6370, P4.15; 5 in Session 32), `modes` 3 (6345 r2 turns 2-4, n=1)
+    and `commencements` (no graded session in the directory, as before).
+- **Ledger:** P3.18 ticked; 41 of 59 rows, 8 of 14 buckets (B11 now partial, waiting on P3.3,
+  P3.16, P3.17).
+
+**Surprises / deviations:**
+- **6375 moved from 2 of 3 to 3 of 3, and 6338's remaining failure is one turn.** In every 6338
+  rep turn 1 says the word is undefined and (r1, r3) points to the rules for Acts of that date
+  without naming the Order; turn 2 then names it. The booked criterion is not relaxed.
+- **`stance` passed a rep the hand-read fails again**, the other way from Session 32's r2: r1's
+  contradicted consequence is worded so no pattern matches. The grader gaps found in this run
+  (listed on P3.2 and P3.3) must be closed before the next after-column, never during.
+- **A new opener verb:** "You are correct to highlight this" is an unscoped formula the strip
+  does not list (P4.13 widened the object, not the verb).
+- **The gloss detector's note filter misses "does not contain X; therefore, it does not
+  provide Y"**, so its count on this directory is one higher than the hand-read.
+- **`summary_probe count --dir` needs a path**, not a directory name (it read 0 results given
+  `wave4_b1_post`; 581 given the path). `glosses --dir` takes either.
+- **Spend under the figure:** $16.03 against about $17-20. Session total **$22.87** (agents
+  $6.835, after-column $16.03) against about $27.
+
+**Every number above is behind a command:** `replay_report --dir evidence/replay/wave4_b1_post
+interpret [--session S --sentences --drops]`, `stance`, `hedges`, `openers`, `caselaw`, the
+exit-1 set (`halts negatives derivations commencements currency scoperecord nosearch caselaw modes
+deadend siblings scripted lookup drgaps blanks "lost --require-label"`); `replay_report --dir
+<after> discovery --before evidence/replay/wave4_p33_pre --only 6338 6370 6375` and `--before
+wave4_p32_pre --only 6345`; `summary_probe glosses --dir wave4_b1_post [--session 6406 6338]
+--list`; `summary_probe count --dir <path>`; `tools.footer_echo --dir <path>`. The hand-read
+corrections are in the session scratchpad only (they quote matters).
+
+**State:** branch `fix/prepilot-defects`, pushed; `main` untouched at `b2a3fd8`. Session 33
+commits: the four `--no-ff` merges (`dc61bb7`, `445e655`, `2f32510`, `c4a5ded`), `2271826`, and
+this one. 2029 tests.
+
+**Machine state:** server stopped, `replay restore` run, no pin file, keep-awake helper stopped.
+**55 replay directories** (`wave4_b1_post` new). The four agent worktrees were removed after
+their branches were merged (the branches `worktree-agent-*` remain locally).
+
+---
+
+## Session 33 — handover for Session 34 (2026-09-29)
+
+**Take next: the user's decision.** Candidates, cheapest first:
+1. **Close the grader gaps this run found** (free; before any further after-column): `stance`
+   misses the contradicted consequence in two new wordings (r1 export t9, r2 export t7 of
+   `wave4_b1_post` p32_6406); `interpret` reads a negated "do not explicitly state that they
+   apply only to" as the contradicted claim, lacks "On your reading" as a hedge, misses "It
+   returned decisions such as X, which notes" as a reported statement, and the 6338 rubric misses
+   two regimes named side by side; `summary_probe glosses`'s note filter misses "does not
+   contain X; therefore". Same method as agent B: before/after over every directory, the booked
+   before-columns must still fail.
+2. **P4.13's sibling:** add "highlight" (and read the other challenge verbs) to the opener strip;
+   dry run over every stored answer, read every new edit.
+3. **P3.17** (6338): turn 1 names no regime in 3 of 3; the lever is a retrieval of the general
+   rule's application provision (drift probe if it is a prompt change).
+4. **P3.2:** 0 of 3 through three sessions of levers. The model has the decisive text and argues
+   past it (Session 31); the contradicted consequence recurred in 3 of 3. Whether the next lever
+   is code (a disputing turn must re-delegate; a contradiction check against retrieved text) or a
+   re-scoped acceptance is the user's call.
+5. **P4.15**, a decision (unchanged).
+
+**Decisions open with the user (from the batch notes):** whether to tick P3.16 (met by hand, 1
+by command, the one match a note); whether to book the Worker-side origin of P3.18's claim (a
+Research-mode answer on a hybrid Worker report); the 28 case-law summaries applying English
+authority to Scotland; the two change-record id mis-expansions; `wave2_p27` 6341 r2 t2 (an echo
+followed by the model's own paragraph); Session 32's second 6370 over-count (retrieval with a
+citation read as a reading).
+
+**Hazards met this session:** every worktree the Agent tool made came up on `main`, not HEAD
+(each agent reset to `01b66b0`; tell agents to check first); a `grep -v` revert that removed
+nothing gave a false "fails with the change reverted" (count the lines a revert removes); the
+push is refused by the permission classifier unless the user allows it; `summary_probe count
+--dir` takes a path.
+
+**Carried, open with the user:** the legal readings behind the rubrics (a lawyer to confirm);
+release tags and deploy by tag (D19); which rows go in the next cut (v2026.10.1); deploying both
+cuts (`pg_dump` first; the local prompt cache is now **v3** on the branch, so every cached
+summary becomes unreachable when it reaches the target, intended); telling the eval-harness owner
+(schema v6 etc.); P4.12; D20; D21/D22; P5.2; Thomas's document. The Fix Tracker was not updated
+(update only when asked; if asked, P4.13, P4.14 and P3.18 are Fixed, P3.16 is the user's call).
