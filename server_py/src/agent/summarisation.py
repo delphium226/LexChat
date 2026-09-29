@@ -53,6 +53,23 @@ SUMMARY_SOURCE_RULE = (
     "leave out any part of the question the text does not cover, without commenting on it."
 )
 
+# P3.16 (B11), Session 33. The source rule stopped the summariser adding an Act,
+# not adding its own reading: over every stored audit, 205 summaries of
+# legislation carried the summariser's inference as if it were the text's
+# ("... and therefore do not fall under the definition", "(including X by
+# definition)", "effectively allowing ..."), and one reached a lawyer as a
+# quotation of the instrument (`tools/summary_probe glosses`). Re-drawn the same day
+# on the two post-rule results where it recurred: without this line 3 of 6
+# draws glossed (the recorded gloss itself in 2 of 3), with it 0 of 6; on 24
+# other sessions' results, provisions kept 335 against 253 and "does not
+# contain" 12 against 13. Worded, like the source rule, as what to leave out:
+# a first wording ("State what each provision says; do not add your own
+# reading ...") returned an empty summary for a filter-style brief, 2 of 2.
+SUMMARY_GLOSS_RULE = (
+    "Do not add conclusions of your own either: where the text does not itself say that a "
+    "provision includes, excludes or leads to something, leave that out rather than inferring it."
+)
+
 
 def summarise_prompt(text: str, query: str) -> str:
     return (
@@ -62,6 +79,7 @@ def summarise_prompt(text: str, query: str) -> str:
         "definitions, and legal thresholds directly relevant to the research question. "
         "Preserve exact section numbers, citations, and statutory references. "
         f"{SUMMARY_SOURCE_RULE} "
+        f"{SUMMARY_GLOSS_RULE} "
         "Discard preamble, unrelated schedules, and provisions that do not bear on the question.\n\n"
         f"Legislation text:\n{text}\n\nSummary:"
     )

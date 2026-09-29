@@ -93,7 +93,9 @@ _PRUNE_SAMPLE_RATE = 0.02
 # v2 (P3.3, Session 32): the summariser was adding law from its own training to
 # summaries (6338); rows written before the source rule may carry such
 # additions and are shared across users, so they must stop being served.
-_CANON_VERSION = "v2"
+# v3 (P3.16, Session 33): the gloss rule (`SUMMARY_GLOSS_RULE`); rows written
+# before it may carry the summariser's own reading presented as the text's.
+_CANON_VERSION = "v3"
 
 
 def canonicalise_query(query: str) -> str:
