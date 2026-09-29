@@ -1305,17 +1305,17 @@ the About box and the startup log, `CHANGELOG.md`, and a *Releases* section in C
 (on `main` only until the next cut). `v2026.09.1` (`d8fd73b`) and `v2026.09.2` (`c77e779`)
 are tagged retroactively. Four things were left open deliberately:
 
-- **Push the two tags.** They exist only in the dev machine's repo until
-  `git push origin v2026.09.1 v2026.09.2` (the user confirms first: pushing publishes them).
-  Until then `git describe` on the target falls back to a bare hash, and `/api/bot-info`
-  shows `build` without a release name.
+- ~~**Push the two tags.**~~ **DONE 2026-09-29 (user confirmed):** `v2026.09.1` and
+  `v2026.09.2` pushed, together with the third cut's `v2026.09.3` (`a6b4a76`, the first
+  release tagged at cut time).
 - **Deploy by tag, not by the head of `main`** (proposed, not adopted). Unrelated work
   commits straight to `main`, so its head can sit past the last release. Deploying
   `git fetch --tags` then `git checkout vYYYY.MM.N` makes each deploy and rollback an
   explicit version. It changes CLAUDE.md's *Deployment Workflow*, so it is the user's call.
 - **Stamp the version on the audit event, `request_timings` and replay run files.** Deferred
   until after the next cut, because `main`'s audit schema is v5 and the fix branch's is v6:
-  bumping on `main` now would create two different v6s. When done: a top-level `app_version`
+  bumping on `main` now would create two different v6s. **Unblocked 2026-09-29:** the third
+  cut (`v2026.09.3`) put schema v6 on `main`, so both lines now agree. When done: a top-level `app_version`
   (and `build`) on the audit event (schema v7, `AUDIT_TRACE.md`, harness owner told), an
   additive `request_timings.app_version` column, and `runtime_state.app_version` in replay
   run files beside `git_head`.
