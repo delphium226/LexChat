@@ -943,6 +943,13 @@ async def process_user_request(
     # would render as raw markup in the answer.
     suggestions_enabled = _cfg.get("_suggested_questions_enabled", True)
     clean, suggestions = extract_suggestions(final.get("content") or "")
+    # P4.14: a scope footer the model copied out of the history is removed
+    # HERE, while it is still the end of the model's text. The strip below,
+    # before the real footer goes on, removes a trailing echo only, and P1.6's
+    # link note is appended after the model's text, so an echo followed by
+    # that note survived it and the lawyer read two scope lines
+    # (`wave4_p33_post`, 2 turns). The later strip stays for anything else.
+    clean = strip_answer_footer(clean)
     # P3.2 (B6): an unscoped agreement formula at the start of the answer ("You
     # are absolutely right to challenge this") announces a concession before
     # anything was checked. Removed in code, formula only; cosmetic, and not
@@ -1330,6 +1337,10 @@ async def run_deep_research(
     # (the synthesis prompt never asks for a block), but this guarantees a stray
     # tag can never reach a report. Normally a no-op.
     final["content"] = extract_suggestions(final.get("content") or "")[0]
+    # P4.14: same as the Manager path. A footer the synthesis copied is removed
+    # before P1.6's link note can be appended after it, which would leave it
+    # out of reach of the trailing-only strip before the real footer.
+    final["content"] = strip_answer_footer(final["content"])
 
     # P1.6 (B14). The synthesis call composes its own prose from the step
     # reports, so a provision link the steps never carried can appear here for
