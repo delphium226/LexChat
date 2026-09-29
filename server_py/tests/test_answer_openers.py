@@ -47,6 +47,43 @@ def test_the_formula_goes_and_the_content_stays(answer, expected, kind):
     assert strip_agreement_opener(answer) == (expected, kind)
 
 
+@pytest.mark.parametrize("answer, expected, kind", [
+    # P4.13: the object is the bot's own earlier answer. Each adjective and
+    # noun of the widened object list, in both formulas that take an object.
+    ("You are correct to challenge my earlier statement. The Order defines a widget.",
+     "The Order defines a widget.", "bare"),
+    ("You are right to question my previous answer, and the Order is silent.",
+     "The Order is silent.", "bare"),
+    ("You are absolutely right to push back on my last response. However, the Order "
+     "is silent.", "The Order is silent.", "bare"),
+    ("You're right to query my original position: the Order says widget.",
+     "The Order says widget.", "bare"),
+    ("You are correct to challenge my earlier reply. The Order is silent.",
+     "The Order is silent.", "bare"),
+    ("You are right to challenge my previous assessment. The Order is silent.",
+     "The Order is silent.", "bare"),
+    ("Thank you for challenging my earlier answer. The Order defines a widget.",
+     "The Order defines a widget.", "thanks"),
+    ("Thank you for pressing me on my previous statement. The Order is silent.",
+     "The Order is silent.", "thanks"),
+])
+def test_a_challenge_to_my_earlier_answer_goes(answer, expected, kind):
+    assert strip_agreement_opener(answer) == (expected, kind)
+
+
+@pytest.mark.parametrize("answer", [
+    # P4.13's object is the bot's OWN earlier answer, named by the listed
+    # nouns; anything else, or a clause saying what was challenged, stays.
+    "You are right to challenge my earlier statement that section 4 applies. It does not.",
+    "You are right to challenge my earlier reading of section 4. It is narrower.",
+    "You are right to challenge the earlier statement. The Order is silent.",
+    "Thank you for challenging my earlier analysis. The Order is silent.",
+    "You are correct that my earlier answer was wrong. The Order is silent.",
+])
+def test_a_challenge_to_something_else_is_left(answer):
+    assert strip_agreement_opener(answer) == (answer, None)
+
+
 @pytest.mark.parametrize("answer", [
     # Scoped: it says what is agreed, and the acceptance allows it.
     "You are correct that section 4 applies. More follows.",
