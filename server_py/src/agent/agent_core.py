@@ -30,6 +30,7 @@ from ..utils.citation_links import (
 from ..utils.discovery_budget import new_search_budget
 from ..utils.instrument_lookup import routed_lookup_block
 from ..utils.mode_change import apply_mode_change_marker, mode_change_for
+from ..utils.openers import strip_agreement_opener
 from ..utils.empty_completion import (
     LOST_ANSWER_NOTICE,
     fallback_from_reports,
@@ -942,6 +943,14 @@ async def process_user_request(
     # would render as raw markup in the answer.
     suggestions_enabled = _cfg.get("_suggested_questions_enabled", True)
     clean, suggestions = extract_suggestions(final.get("content") or "")
+    # P3.2 (B6): an unscoped agreement formula at the start of the answer ("You
+    # are absolutely right to challenge this") announces a concession before
+    # anything was checked. Removed in code, formula only; cosmetic, and not
+    # the fix for B6 (see utils/openers.py).
+    if not final.get("answer_failed"):
+        clean, _opener = strip_agreement_opener(clean)
+        if _opener:
+            logger.info("[Manager] Removed a '%s' agreement opener", _opener)
     # P3.13 (B10): the conversational Manager still drops a sibling subsection
     # its Worker wrote, at a rate, with the sibling linked and a prompt rule in
     # place. Where it did, the report's own words go back under the citation.

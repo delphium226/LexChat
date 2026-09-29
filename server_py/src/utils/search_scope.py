@@ -104,6 +104,7 @@ __all__ = [
     "strip_answer_footer",
     "incomplete_steps_note",
     "CASE_LAW_COVERAGE_SENTENCE",
+    "CASE_LAW_DOCTRINE_SENTENCE",
     "record_case_law_search",
     "case_law_scope_clause",
     "case_law_scope_footer",
@@ -2041,6 +2042,22 @@ CASE_LAW_COVERAGE_SENTENCE = (
     "Scotland."
 )
 
+# P3.3 (B11), Session 32: the doctrine half of 6375, stated by code. The
+# coverage sentence above says where the judgments come from; it does not say
+# what follows for a RULE taken from them, and 6375's reports applied English
+# common-interest privilege to the Scottish Government in 15 of 15 stored runs
+# and 3 of 3 at `0bc4f2c` with no Scottish source and no word on its Scots-law
+# status. Same gate as the coverage sentence (this turn's case-law search ran),
+# never a reading of the question or the answer, and true on every turn: the
+# product never checks a rule against Scots law, and a UK Supreme Court appeal
+# from Scotland is not "a court outside Scotland", so it is not swept in.
+# Worded like the coverage sentence to trip no negative detector (pinned by
+# `test_case_law_gap.py`).
+CASE_LAW_DOCTRINE_SENTENCE = (
+    "Where a rule of common law is taken from a judgment of a court outside "
+    "Scotland, whether it also forms part of Scots law has not been checked."
+)
+
 
 def record_case_law_search(log: Optional[list], name: str, args: dict, data: Any) -> None:
     """Record one case-law search for the lawyer-facing footer. Never raises.
@@ -2080,7 +2097,10 @@ def _case_law_body(entries: Optional[list]) -> str:
         head = (f"a search of {_CASE_LAW_DATABASE} was attempted"
                 + (f" for {listed}" if terms else "")
                 + " and returned an error")
-    return f"{head}. {CASE_LAW_COVERAGE_SENTENCE}"
+    # The doctrine sentence only when a search ran: an errored one returned no
+    # judgment for a rule to be taken from.
+    tail = f" {CASE_LAW_DOCTRINE_SENTENCE}" if done else ""
+    return f"{head}. {CASE_LAW_COVERAGE_SENTENCE}{tail}"
 
 
 def case_law_scope_clause(entries: Optional[list]) -> str:

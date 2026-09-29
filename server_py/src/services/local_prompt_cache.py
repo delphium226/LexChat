@@ -88,7 +88,12 @@ _PRUNE_SAMPLE_RATE = 0.02
 # Bump this on ANY change to canonicalise_query or _STOPWORDS — it is baked
 # into every stored query_hash, so bumping is an explicit full-cache
 # invalidation (old rows become unreachable and age out via the prune).
-_CANON_VERSION = "v1"
+# ALSO bump it on a change to the summariser's prompt (`summarise_prompt`): a
+# stored row IS that prompt's output, and neither key half sees the prompt.
+# v2 (P3.3, Session 32): the summariser was adding law from its own training to
+# summaries (6338); rows written before the source rule may carry such
+# additions and are shared across users, so they must stop being served.
+_CANON_VERSION = "v2"
 
 
 def canonicalise_query(query: str) -> str:

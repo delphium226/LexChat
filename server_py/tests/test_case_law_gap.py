@@ -41,6 +41,7 @@ from src.agent.provider_factory import set_request_provider_config  # noqa: E402
 from src.utils import search_scope  # noqa: E402
 from src.utils.search_scope import (  # noqa: E402
     CASE_LAW_COVERAGE_SENTENCE,
+    CASE_LAW_DOCTRINE_SENTENCE,
     _earlier_footers,
     _lawyer_filters_phrase,
     answer_scope_footer,
@@ -183,6 +184,28 @@ def test_an_errored_search_is_recorded_as_not_ok(data):
     assert len(log) == 1 and log[0]["ok"] is False
 
 
+def test_a_rule_taken_from_the_judgments_is_not_vouched_for_as_scots_law():
+    """P3.3 (6375): a turn whose case-law search ran says, in code, that a
+    common-law rule taken from a court outside Scotland was not checked
+    against Scots law; in the clause and in the standalone line alike."""
+    for line in (case_law_scope_clause(_cl("q")), case_law_scope_footer(_cl("q")),
+                 case_law_scope_footer(_cl("ran") + _cl("failed", ok=False))):
+        assert CASE_LAW_DOCTRINE_SENTENCE in line
+        assert line.index(CASE_LAW_COVERAGE_SENTENCE) < line.index(CASE_LAW_DOCTRINE_SENTENCE)
+    assert "Scots law" in CASE_LAW_DOCTRINE_SENTENCE
+
+
+def test_a_search_that_only_errored_carries_no_doctrine_sentence():
+    # No judgment came back, so there is no rule to disclaim.
+    assert CASE_LAW_DOCTRINE_SENTENCE not in case_law_scope_footer(_cl("q", ok=False))
+    assert CASE_LAW_DOCTRINE_SENTENCE not in case_law_scope_clause(_cl("q", ok=False))
+
+
+def test_no_case_law_search_no_doctrine_sentence():
+    assert case_law_scope_clause(_leg("a")) == ""
+    assert CASE_LAW_DOCTRINE_SENTENCE not in answer_scope_footer(_leg("a"), {})
+
+
 def test_a_failed_search_is_never_described_as_run():
     line = case_law_scope_footer(_cl("q", ok=False))
     assert "was attempted" in line and "returned an error" in line
@@ -231,7 +254,7 @@ def test_a_turn_that_searched_both_gets_one_line_with_the_clause_last():
     assert line.startswith("\n\n*Search scope: the legislation index was searched for")
     assert line.count("*Search scope:") == 1
     assert "\n" not in line.strip()
-    assert line.endswith("courts outside Scotland.*")
+    assert line.endswith(CASE_LAW_DOCTRINE_SENTENCE + "*")
     assert line.index("absent from the law.") < line.index("case-law database")
     # The legislation part is exactly what it was without case law.
     assert line.startswith(answer_scope_footer(_leg("FOISA section 36"), {})[:-1])
@@ -445,7 +468,7 @@ async def test_hybrid_turn_that_searched_both_gets_one_merged_line(monkeypatch):
     assert content.count("*Search scope:") == 1
     assert '"FOISA section 36"' in content
     assert '"common interest privilege Scotland"' in content
-    assert content.endswith("courts outside Scotland.*")
+    assert content.endswith(CASE_LAW_DOCTRINE_SENTENCE + "*")
 
 
 @pytest.mark.asyncio
@@ -489,7 +512,7 @@ async def test_a_hybrid_follow_up_carries_the_earlier_scope_with_the_clause(monk
     assert content.count("*Search scope:") == 1
     assert "no search of the legislation index was run for this reply" in content
     assert '"earlier search"' in content
-    assert content.endswith("courts outside Scotland.*")
+    assert content.endswith(CASE_LAW_DOCTRINE_SENTENCE + "*")
 
 
 @pytest.mark.asyncio
@@ -550,7 +573,7 @@ async def test_deep_research_carries_the_case_law_record_across_steps():
     assert content.count("*Search scope:") == 1
     assert '"FOISA"' in content
     assert '"c0", "c1" (18 further queries not listed)' in content
-    assert content.endswith("courts outside Scotland.*")
+    assert content.endswith(CASE_LAW_DOCTRINE_SENTENCE + "*")
 
 
 @pytest.mark.asyncio

@@ -36,6 +36,24 @@ async def call_chunk(on_chunk: Callable, data: dict) -> None:
         await result
 
 
+# P3.3 (B11), Session 32. The research question handed to the summariser is the
+# Worker's brief, and a brief that asks "what interpretation legislation
+# applies" was answered from the summariser's training: 6338's summaries added
+# an interpretation Act that does not apply to the Act in question, to
+# section-search results that never mention it. The
+# Worker then reported it as "the retrieved text establishes". Re-drawn on the
+# recorded raw results: 25-26 of 27 without this line, 0 of 27 with it; on 24
+# other sessions' results it kept at least as many provisions. An earlier
+# wording that also said "if the text does not answer, say so" stopped the
+# additions too but multiplied "the text does not contain" statements about
+# sixfold, a false-negative risk (Invariant 1), hence "leave out".
+SUMMARY_SOURCE_RULE = (
+    "Summarise only what the text below contains. Do not add any legislation, definition or "
+    "rule of interpretation that is not in it, even where the research question asks for one: "
+    "leave out any part of the question the text does not cover, without commenting on it."
+)
+
+
 def summarise_prompt(text: str, query: str) -> str:
     return (
         "You are summarising a piece of UK legislation to assist with a legal research question.\n\n"
@@ -43,6 +61,7 @@ def summarise_prompt(text: str, query: str) -> str:
         "Summarise the legislation text below. Retain only the sections, provisions, "
         "definitions, and legal thresholds directly relevant to the research question. "
         "Preserve exact section numbers, citations, and statutory references. "
+        f"{SUMMARY_SOURCE_RULE} "
         "Discard preamble, unrelated schedules, and provisions that do not bear on the question.\n\n"
         f"Legislation text:\n{text}\n\nSummary:"
     )
