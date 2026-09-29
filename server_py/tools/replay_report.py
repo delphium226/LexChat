@@ -7281,6 +7281,7 @@ INTERP_HEDGE = re.compile(
     r"|\ba\s+court\s+(?:may|might|could|would\s+have\s+to)\b"
     r"|\bdoes\s+not\s+(?:expressly|explicitly|itself)\s+(?:say|state|define|address|"
     r"resolve|settle|decide)"
+    r"|\bon\s+(?:the|that|this)\s+reading\b"
     r"|\bnot\s+(?:been\s+)?(?:verified|checked|confirmed)\b"
     r"|\b(?:suggests?|implies|appears?\s+to|seems?\s+to)\b",
     re.I)
@@ -7332,7 +7333,7 @@ def _interp_sentences(answer: str) -> list:
     return [s for s in _STANCE_SENT.split(_without_footer(answer or "")) if s.strip()]
 
 
-def _hedged(sents: list, i: int, extra: list | None = None) -> bool:
+def _hedged(sents: list, i: int, extra: list | None = None, answer: str = "") -> bool:
     """Sentence i carries a hedge, or is an item under a lead-in line ending
     ':' that does (a hedge does not carry across ordinary sentences: "The
     text is silent. However, X applies." states X as settled)."""
@@ -7343,6 +7344,20 @@ def _hedged(sents: list, i: int, extra: list | None = None) -> bool:
 
     if has(sents[i]):
         return True
+    if answer:
+        # By the answer's LINES (Session 32): an item that opens in bold
+        # ("2. **Threshold:** If ...") or a later sentence of an item is not a
+        # list item to the sentence splitter, so walk the lines instead: an
+        # item inherits the hedge of the non-list line introducing its list,
+        # when that line ends ':'.
+        lines = answer.split("\n")
+        at = next((n for n, ln in enumerate(lines) if sents[i].strip() in ln), None)
+        if at is not None and _LIST_ITEM.match(_plain(lines[at]).lstrip()):
+            for ln in reversed(lines[:at]):
+                if not ln.strip() or _LIST_ITEM.match(_plain(ln).lstrip()):
+                    continue
+                lead = ln.strip().rstrip("*").rstrip()
+                return lead.endswith(":") and has(lead)
     j = i
     while j > 0 and _LIST_ITEM.match(sents[j]):
         j -= 1
@@ -7398,7 +7413,7 @@ def interpret_grade(doc: dict, rubric: dict) -> dict:
                 if (not it.get("turns") or base in it["turns"]) and it["_re"].search(plain) \
                         and not any(u.search(plain) for u in it["_unless"]):
                     hit = True
-                    kind = "hedged" if _hedged(sents, k, it["_hedge"]) else "asserted"
+                    kind = "hedged" if _hedged(sents, k, it["_hedge"], ans) else "asserted"
                     row[kind].append((it["id"], s.strip()))
             if not hit and any(r.search(plain) for r in topic):
                 row["drops"].append(s.strip())

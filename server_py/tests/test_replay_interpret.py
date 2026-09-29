@@ -88,6 +88,24 @@ def test_a_hedge_on_a_list_lead_in_covers_its_items():
     assert g["rows"][1]["hedged"] and not g["rows"][1]["asserted"], g["rows"][1]
 
 
+def test_an_item_opening_in_bold_inherits_its_lead_in_hedge():
+    # The sentence splitter leaves "2." apart from "**Scope:** ...", so the
+    # walk is by the answer's lines (Session 32).
+    g = rr.interpret_grade(_doc("The Widget Order 1901 applies.",
+                                "On one reading of the two schemes:\n\n"
+                                "1.  **Scope:** Widgets include gadgets.\n"
+                                "2.  **More:** Nothing else."),
+                           RUBRIC)
+    assert g["rows"][1]["hedged"] and not g["rows"][1]["asserted"], g["rows"][1]
+
+
+def test_an_item_under_an_unhedged_lead_in_is_asserted():
+    g = rr.interpret_grade(_doc("The Widget Order 1901 applies.",
+                                "The position is as follows:\n\n1.  **Scope:** Widgets include gadgets."),
+                           RUBRIC)
+    assert g["rows"][1]["asserted"], g["rows"][1]
+
+
 def test_a_conditional_and_a_retraction_assert_nothing():
     g = rr.interpret_grade(_doc("The Widget Order 1901 applies.",
                                 "If widgets include gadgets, more follows. "
