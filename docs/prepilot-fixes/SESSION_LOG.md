@@ -6974,3 +6974,69 @@ verified this session:
   SAME turn (run-file turn 6, export turn 7); the entry above and the P3.2/P3.16 rows said
   "turn 6's summary ... turn 7". Fixed in both files.
 
+
+---
+
+## Session 33 — 2026-09-29 — parallel batch 1: four agents merged (interim entry)
+
+**Done:**
+- **Ran `PARALLEL_BATCH_1.md` (user decision):** four background agents, each in a git worktree
+  with its own test database (`lexchat_test_a`..`_d`) and `PREPILOT_EVIDENCE` pointing at the
+  main checkout's evidence; this session integrated. Step 1's checks all held (head `01b66b0`,
+  `main` at `b2a3fd8`, 54 replay directories, both rubrics, four test databases, nothing
+  running; baseline suite 1983 on `lexchat_test`).
+- **Merged in the order B, A, C, D, each `--no-ff`**, the full suite on `lexchat_test` after each:
+  B `dc61bb7` (1984), A `445e655` (2004), C `2f32510` (2018), D `c4a5ded` (2029). For each, the
+  integrator read the note and the diff, grepped the diff for instrument ids and matter words
+  (the only hit: A's synthetic `uksi/1901/1` "Widget Order 1901" fixture), and re-ran its new
+  tests with the product file(s) put back to `01b66b0`: B 1 fails, A 11, C 3, D 8, as each note
+  claimed. The notes are committed at `docs/prepilot-fixes/notes/batch1_{A,B,C,D}.md`.
+- **Agent B (grader gaps, $0):** five of six closed (one in code, `INTERP_HEDGE` reads "under
+  a reading"; four patterns in the gitignored `p32.json`/`p33.json`, backed up first to
+  `evidence/rubrics/backup_batch1/`); the sixth left to the hand-read by instruction. The only
+  verdict that moved anywhere: `wave4_p33_post` p32_6406 r2, PASS to FAIL by `stance`, which is
+  what Session 32's hand-read found. Booked before-columns still fail.
+- **Agent A (P4.13 + P4.14, $0): both DONE, deterministic.** Numbers re-run by the integrator:
+  `openers --all-dirs --export --strip` 47 edits and 7 left as written (46 and 8 before);
+  `python -m tools.footer_echo --dir evidence/replay/wave4_p33_post` 2 two-line answers stored,
+  0 after.
+- **Agent C (P3.16, $2.905):** `summary_probe glosses`, a free detector: 221 glosses in 3,618
+  stored summaries of legislation, 205 real by hand (re-run by the integrator: `python -m
+  tools.summary_probe glosses`; `--dir wave4_p33_post --session 6406 6338` gives 2 in 81). A lever,
+  `SUMMARY_GLOSS_RULE`, and the local prompt cache to v3 (`9ba4e1e`, separable). Acceptance not
+  measured.
+- **Agent D (P3.18, $3.93):** the synthesis-prompt rule plus a case-law reach sentence in the
+  jurisdiction section; seam alignment assertions 5 of 12 to 0 of 5 (re-counted by the
+  integrator from the saved draws). Acceptance not measured.
+- **Ledger:** P4.13 and P4.14 ticked; P3.16 and P3.18 `[~]`; P3.2 and P3.3 annotated. 40 of 59
+  rows, 8 of 14 buckets (`plan_status`; B6 now waits on P3.2 only).
+
+**Surprises / deviations:**
+- **Every worktree was created from `main` (`b2a3fd8`), not from the integrator's HEAD**, despite
+  the brief. Each agent noticed and ran `git reset --hard 01b66b0` before any work; the
+  integrator confirmed all four contained `01b66b0` before reviewing. For a later batch, tell
+  each agent to check its base first.
+- **Agent B's first grader-test run went to the default `lexchat_test`** (32 tests, about 1s)
+  before it set `TEST_DATABASE_URL`; the integrator's baseline suite on the same database passed
+  regardless.
+- **The integrator's first revert check was a false pass:** `grep -v` with a regex that did not
+  match left the line in place, so the test passed "with the change reverted". Redone with a
+  byte-level script that counts the lines it removes (1), after which the test failed. Check that
+  a revert removed something before reading its result.
+- **The push after each merge was refused by the session's permission classifier**; the branch
+  is merged locally and not yet pushed (the user's decision).
+- **P4.14's defect is older than Session 32** (`wave0_conv` 6341 r1 t5, the same shape).
+- **P3.18's claim starts in the hybrid research Worker**, not the synthesis (11 of 24 stored step
+  reports); the synthesis rule filters it for Deep Research only.
+- **C's lever narrows some summaries** (6406 r2 t5 8 provisions to 0, panel 6345 t4 17 to 2)
+  while the panel's total rises (335 against 253): Invariant 1 is read at the after-column.
+
+**Decisions put to the user (not taken):** whether C's lever and D's lever go into the combined
+after-column; whether to book the Worker-side origin of P3.18 as a row; the 28 case-law summaries
+applying English authority to Scotland (P3.18 or a new row); the two change-record id
+mis-expansions; `wave2_p27` 6341 r2 t2 (a copied footer followed by the model's own paragraph);
+Session 32's second 6370 `interpret` over-count (a statement with a retrieved citation read as an
+unhedged reading), not in the gaps file.
+
+**Spend so far:** $6.835 (C $2.905, D $3.93; A and B $0). The combined after-column is not yet
+approved.
