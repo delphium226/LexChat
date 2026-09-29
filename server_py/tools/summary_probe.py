@@ -36,6 +36,22 @@ both `raw_result` and `final_result`):
         title of a different year (`--ids` lists them). By directory and
         session; `--list` prints every match for reading (it quotes summary
         text, so it goes to the console, never to a committed file).
+        Counted only in summaries of legislation; case-law summaries are
+        listed as CASE, not counted.
+
+    Options added for P3.16 to `redraw` and `panel` (both still PAID):
+        --rule source|gloss   the rule the "without rule" side drops (default source)
+        --side both|with|without   draw one side only, to set against the other
+                              side drawn the same day
+        --dry-run             list the slots and an estimated cost; draw nothing
+        --out D               save every draw as D/NN_<slot>__<side>__<k>.md for
+                              reading (the gitignored evidence, never the repo)
+    and to `redraw` only:
+        --glosses [--max-raw N]   slots are the stored summaries `glosses` flags
+                              (--dir and --session take lists), drawn per chunk
+                              as the product does, not the rubric's additions
+    Both now report glosses, provisions kept, characters and "does not
+    contain" statements per side.
 
 The patterns name a matter's law, so they live in the gitignored rubric
 (`evidence/rubrics/p33.json`, key `summary_adds` per session); this code is
@@ -114,7 +130,8 @@ GLOSS_TOOLS = ("search_legislation_sections", "get_legislation_text", "get_legis
 _ABOUT_SUMMARY = re.compile(
     r"summar|\bthis (?:excerpt|response|material)\b|\bno provisions\b"
     r"|\b(?:does|did|do)\s+not\s+(?:explicitly\s+)?(?:contain|include|outline|confirm)"
-    r"|\bnot\s+(?:included|reflected|represented)\b|\bnot possible to confirm"
+    r"|\bnot\s+(?:included|reflected|represented|present|extracted)\b|\bnot possible to confirm"
+    r"|\bavailable in the (?:provided |source )?(?:text|material)"
     r"|\bcannot\s+be\s+(?:confirmed|identified|determined|extracted)|\bcould not be\b", re.I)
 _STATUTORY_SUGGESTS = re.compile(r"\b(?:information|evidence)\s+$", re.I)
 _MANNER_BEFORE = re.compile(r"(?:\b(?:and|as|be|been|or)\s+|[\"'“‘])$", re.I)
@@ -432,13 +449,35 @@ async def _key_and_model() -> tuple:
     return p["api_key"], p.get("summarisation_model") or "google/gemini-3-flash-preview"
 
 
-def _prompts():
+def _prompts(rule: str = "source"):
+    """The product prompt, and the same prompt minus one rule (`source`, P3.3's
+    SUMMARY_SOURCE_RULE, or `gloss`, P3.16's SUMMARY_GLOSS_RULE)."""
     from src.agent import summarisation as s  # noqa: PLC0415
+    name = {"source": "SUMMARY_SOURCE_RULE", "gloss": "SUMMARY_GLOSS_RULE"}[rule]
+    const = getattr(s, name, None)
+    if const is None:
+        raise SystemExit(f"this checkout's summarise_prompt has no {name}")
 
     def without_rule(text, query):
-        return s.summarise_prompt(text, query).replace(f"{s.SUMMARY_SOURCE_RULE} ", "", 1)
+        return s.summarise_prompt(text, query).replace(f"{const} ", "", 1)
 
     return s, {"with rule": s.summarise_prompt, "without rule": without_rule}
+
+
+def _sides(args) -> tuple:
+    """`--side with|without` draws one side only, to set against the other side
+    drawn the same day (a second wording costs half)."""
+    s, sides = _prompts(args.rule)
+    pick = getattr(args, "side", "both")
+    if pick != "both":
+        sides = {k: v for k, v in sides.items() if k == f"{pick} rule"}
+    return s, sides
+
+
+# For `--dry-run` only: approximate prices of the summarisation model per token
+# and a typical summary's length. Every paid run prints the cost the responses
+# report, which is the figure to book.
+_PRICE_IN, _PRICE_OUT, _OUT_TOKENS = 0.5e-6, 3.0e-6, 1500
 
 
 async def _draw(client, key, model, prompt) -> tuple:
@@ -450,34 +489,107 @@ async def _draw(client, key, model, prompt) -> tuple:
     return (j["choices"][0]["message"]["content"] or ""), float((j.get("usage") or {}).get("cost") or 0)
 
 
+def _chunks(s, raw: str) -> list:
+    n = s.SUMMARISE_CHUNK_CHARS
+    return [raw[i:i + n] for i in range(0, len(raw), n)] or [raw]
+
+
+async def _summarise(client, key, model, fn, s, raw, brief) -> tuple:
+    """One summary as `summarise_for_query` makes it: each chunk summarised with
+    the prompt, the partials joined. (Its consolidation pass, run only when the
+    joined partials exceed a chunk, is not reproduced.)"""
+    res = await asyncio.gather(*[_draw(client, key, model, fn(c, brief)) for c in _chunks(s, raw)])
+    return "\n\n---\n\n".join(o for o, _c in res), sum(c for _o, c in res)
+
+
+def _estimate(s, raws: list, reps: int, sides: int = 2) -> tuple:
+    calls = sum(len(_chunks(s, r)) for r in raws) * reps * sides
+    chars = sum(len(r) for r in raws) * reps * sides
+    return calls, chars / 4 * _PRICE_IN + calls * _OUT_TOKENS * _PRICE_OUT
+
+
+def _measure(raw: str, text: str, name: str) -> dict:
+    return {"glosses": len(glosses_in(raw, text)) if name in GLOSS_TOOLS else 0,
+            "prov": len(_provisions(text) & _provisions(raw)), "chars": len(text),
+            "neg": len(NEGATIVE.findall(text))}
+
+
+def _gloss_slots(args) -> list:
+    """(label, tool, raw, brief) for every summary of legislation whose stored
+    summary carries a gloss, in --dir and --session."""
+    slots, seen = [], set()
+    for d in _dirs(args.dir):
+        for f in sorted(d.glob("*.json")):
+            doc = json.loads(f.read_text(encoding="utf-8"))
+            if args.session and _base(doc) not in args.session:
+                continue
+            for t, dg, tl in _tools(doc):
+                raw, brief = tl.get("raw_result") or "", dg.get("brief") or ""
+                if (_is_summary(tl) and tl.get("name") in GLOSS_TOOLS
+                        and (not args.max_raw or len(raw) <= args.max_raw)
+                        and (raw, brief) not in seen
+                        and glosses_in(raw, tl["final_result"])):
+                    seen.add((raw, brief))
+                    slots.append((f"{d.name} {f.stem} t{t.get('turn')}", tl.get("name"), raw, brief))
+    return slots
+
+
 async def _redraw(args) -> int:
     import httpx  # noqa: PLC0415
-    rub = _rubric(Path(args.rubric)).get(args.session) or {}
-    if not rub.get("summary_adds"):
-        print(f"  the rubric has no summary_adds for {args.session}")
-        return 2
-    pats = [re.compile(p, re.I) for p in rub["summary_adds"]]
-    s, sides = _prompts()
-    slots = []
-    for f in sorted(Path(args.dir).glob(f"{args.session}_rep*.json")):
-        doc = json.loads(f.read_text(encoding="utf-8"))
-        for t, dg, tl in added_slots(doc, rub["summary_adds"], rub.get("self_ids") or []):
-            if len(tl["raw_result"]) <= s.SUMMARISE_CHUNK_CHARS:
-                slots.append((f.stem, t.get("turn"), tl.get("name"), tl["raw_result"], dg.get("brief") or ""))
+    s, sides = _sides(args)
+    pats = []
+    if args.glosses:
+        slots = _gloss_slots(args)
+    else:
+        session = (args.session or [None])[0]
+        rub = _rubric(Path(args.rubric)).get(session) or {}
+        if not rub.get("summary_adds"):
+            print(f"  the rubric has no summary_adds for {session}")
+            return 2
+        pats = [re.compile(p, re.I) for p in rub["summary_adds"]]
+        slots = []
+        for d in _dirs(args.dir):
+            for f in sorted(d.glob(f"{session}_rep*.json")):
+                doc = json.loads(f.read_text(encoding="utf-8"))
+                for t, dg, tl in added_slots(doc, rub["summary_adds"], rub.get("self_ids") or []):
+                    if len(tl["raw_result"]) <= s.SUMMARISE_CHUNK_CHARS:
+                        slots.append((f"{d.name} {f.stem} t{t.get('turn')}", tl.get("name"),
+                                      tl["raw_result"], dg.get("brief") or ""))
+    calls, est = _estimate(s, [raw for _l, _n, raw, _b in slots], args.reps, len(sides))
+    print(f"{len(slots)} slot(s), {args.reps} draw(s) a side, rule '{args.rule}': "
+          f"{calls} calls, estimated ${est:.2f}")
+    if args.dry_run:
+        for label, name, raw, _b in slots:
+            print(f"  {label} {name} raw {len(raw)} chars, {len(_chunks(s, raw))} chunk(s)")
+        return 0
     key, model = await _key_and_model()
-    print(f"{len(slots)} slot(s), {args.reps} draw(s) a side, model {model}")
-    tally, cost = {k: [0, 0] for k in sides}, 0.0
+    print(f"model {model}")
+    keys = ("glosses", "prov", "chars", "neg")
+    tally = {k: dict.fromkeys(keys + ("adds", "n"), 0) for k in sides}
+    cost = 0.0
     async with httpx.AsyncClient() as client:
-        for stem, turn, name, raw, brief in slots:
+        for i, (label, name, raw, brief) in enumerate(slots, 1):
+            row = []
             for side, fn in sides.items():
-                res = await asyncio.gather(*[_draw(client, key, model, fn(raw, brief))
+                res = await asyncio.gather(*[_summarise(client, key, model, fn, s, raw, brief)
                                              for _ in range(args.reps)])
-                n = sum(1 for out, _c in res if any(p.search(out) for p in pats))
                 cost += sum(c for _o, c in res)
-                tally[side][0] += n
-                tally[side][1] += args.reps
-                print(f"  {stem} t{turn} {name:<28} {side:<13} adds {n}/{args.reps}")
-    print("TOTAL " + ", ".join(f"{k} {a}/{b}" for k, (a, b) in tally.items()) + f"; cost ${cost:.3f}")
+                _save(args, f"{i:02d} {label} {name}", side, [o for o, _c in res])
+                ms = [_measure(raw, o, name) for o, _c in res]
+                adds = sum(1 for o, _c in res if any(p.search(o) for p in pats))
+                for k in keys:
+                    tally[side][k] += sum(m[k] for m in ms)
+                tally[side]["adds"] += adds
+                tally[side]["n"] += args.reps
+                row.append(f"{side}: glosses {sum(m['glosses'] for m in ms)} prov "
+                           f"{sum(m['prov'] for m in ms)} neg {sum(m['neg'] for m in ms)}"
+                           + (f" adds {adds}/{args.reps}" if pats else ""))
+            print(f"  {label} {name:<28} " + " | ".join(row), flush=True)
+    for side, t in tally.items():
+        print(f"TOTAL {side}: {t['n']} summaries, glosses {t['glosses']}, provisions {t['prov']}, "
+              f"chars {t['chars']}, 'does not contain' {t['neg']}"
+              + (f", adds {t['adds']}/{t['n']}" if pats else ""))
+    print(f"cost ${cost:.3f}")
     return 0
 
 
@@ -485,9 +597,22 @@ def _provisions(s: str) -> set:
     return {m.group(1).lower() for m in PROVISION.finditer(s)}
 
 
+def _save(args, label: str, side: str, texts: list) -> None:
+    """With --out D: every draw as D/<label>__<side>__<k>.md, for reading (the
+    drawn text quotes the law, so D belongs in the gitignored evidence)."""
+    if not getattr(args, "out", None):
+        return
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    # The label leads with the slot's index: two results of one turn share the rest.
+    stem = re.sub(r"[^\w.-]+", "_", label).strip("_")
+    for k, text in enumerate(texts, 1):
+        (out / f"{stem}__{side.replace(' ', '_')}__{k}.md").write_text(text, encoding="utf-8")
+
+
 async def _panel(args) -> int:
     import httpx  # noqa: PLC0415
-    s, sides = _prompts()
+    s, sides = _sides(args)
     pool = []
     for d in PANEL_DIRS:
         for f in sorted((REPLAY / d).glob("*.json")):
@@ -501,28 +626,34 @@ async def _panel(args) -> int:
                                  tl["raw_result"], dg.get("brief") or ""))
     random.seed(args.seed)
     slots = random.sample(pool, min(args.n, len(pool)))
+    calls, est = _estimate(s, [x[4] for x in slots], args.reps, len(sides))
+    print(f"{len(slots)} of {len(pool)} eligible results; {args.reps} draw(s) a side; seed {args.seed}; "
+          f"rule '{args.rule}': {calls} calls, estimated ${est:.2f}")
+    if args.dry_run:
+        for d, sid, turn, name, raw, _b in slots:
+            print(f"  {d:<14} {sid} t{turn} {name:<28} raw {len(raw)} chars")
+        return 0
     key, model = await _key_and_model()
-    print(f"{len(slots)} of {len(pool)} eligible results; {args.reps} draw(s) a side; seed {args.seed}")
-    agg, cost = {k: [0, 0, 0] for k in sides}, 0.0
+    keys = ("prov", "chars", "neg", "glosses")
+    agg, cost = {k: dict.fromkeys(keys, 0) for k in sides}, 0.0
     async with httpx.AsyncClient() as client:
-        for d, sid, turn, name, raw, brief in slots:
-            raw_p = _provisions(raw)
+        for i, (d, sid, turn, name, raw, brief) in enumerate(slots, 1):
             row = []
             for side, fn in sides.items():
                 res = await asyncio.gather(*[_draw(client, key, model, fn(raw, brief))
                                              for _ in range(args.reps)])
                 cost += sum(c for _o, c in res)
-                texts = [o for o, _c in res]
-                kept = sum(len(_provisions(x) & raw_p) for x in texts)
-                chars = sum(len(x) for x in texts)
-                neg = sum(len(NEGATIVE.findall(x)) for x in texts)
-                agg[side][0] += kept
-                agg[side][1] += chars
-                agg[side][2] += neg
-                row.append(f"{side}: prov {kept} chars {chars // args.reps} neg {neg}")
-            print(f"  {d:<14} {sid} t{turn} {name:<28} " + " | ".join(row))
-    print("TOTAL " + " | ".join(f"{k}: provisions {a}, chars {b}, 'does not contain' {c}"
-                                for k, (a, b, c) in agg.items()) + f"; cost ${cost:.3f}")
+                _save(args, f"{i:02d} {d} {sid} t{turn} {name}", side, [o for o, _c in res])
+                ms = [_measure(raw, o, name) for o, _c in res]
+                for k in keys:
+                    agg[side][k] += sum(m[k] for m in ms)
+                row.append(f"{side}: prov {sum(m['prov'] for m in ms)} chars "
+                           f"{sum(m['chars'] for m in ms) // args.reps} neg {sum(m['neg'] for m in ms)} "
+                           f"glosses {sum(m['glosses'] for m in ms)}")
+            print(f"  {d:<14} {sid} t{turn} {name:<28} " + " | ".join(row), flush=True)
+    print("TOTAL " + " | ".join(f"{k}: provisions {a['prov']}, chars {a['chars']}, "
+                                f"'does not contain' {a['neg']}, glosses {a['glosses']}"
+                                for k, a in agg.items()) + f"; cost ${cost:.3f}")
     return 0
 
 
@@ -536,15 +667,27 @@ def main(argv=None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("count", help="free: summaries adding what the raw text lacks")
     c.add_argument("--dir", nargs="+", default=None)
-    r = sub.add_parser("redraw", help="paid: re-summarise with and without the source rule")
-    r.add_argument("--dir", required=True)
-    r.add_argument("--session", required=True)
+    r = sub.add_parser("redraw", help="paid: re-summarise with and without a rule")
+    r.add_argument("--dir", nargs="+", required=True)
+    r.add_argument("--session", nargs="+", required=True)
     r.add_argument("--reps", type=int, default=3)
+    r.add_argument("--rule", choices=("source", "gloss"), default="source",
+                   help="the rule the 'without rule' side drops")
+    r.add_argument("--glosses", action="store_true",
+                   help="slots are the stored summaries `glosses` flags, not the rubric's additions")
+    r.add_argument("--max-raw", type=int, default=0, help="with --glosses: skip raw results longer than this")
+    r.add_argument("--dry-run", action="store_true", help="list the slots and the estimated cost; draw nothing")
+    r.add_argument("--out", default=None, help="save every draw here (use the gitignored evidence)")
+    r.add_argument("--side", choices=("both", "with", "without"), default="both")
     pn = sub.add_parser("panel", help="paid: the no-loss check on other sessions")
     pn.add_argument("--n", type=int, default=24)
     pn.add_argument("--reps", type=int, default=2)
     pn.add_argument("--seed", type=int, default=32)
     pn.add_argument("--exclude", nargs="*", default=["6338"])
+    pn.add_argument("--rule", choices=("source", "gloss"), default="source")
+    pn.add_argument("--dry-run", action="store_true")
+    pn.add_argument("--out", default=None, help="save every draw here (use the gitignored evidence)")
+    pn.add_argument("--side", choices=("both", "with", "without"), default="both")
     g = sub.add_parser("glosses", help="free: interpretation a summary adds that its raw text lacks")
     g.add_argument("--dir", nargs="+", default=None,
                    help="replay directories (a name under the evidence replay/ or a path); default all")

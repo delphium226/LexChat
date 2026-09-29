@@ -122,6 +122,33 @@ def test_an_id_given_a_title_of_another_year_is_found():
         == ["1902"]
 
 
+def test_a_long_raw_result_is_drawn_in_the_product_s_chunks():
+    s, _sides = sp._prompts("source")
+    n = s.SUMMARISE_CHUNK_CHARS
+    assert [len(c) for c in sp._chunks(s, "a" * (n + 5))] == [n, 5]
+    assert sp._chunks(s, "short") == ["short"]
+
+
+def test_redraw_glosses_dry_run_lists_gloss_slots_and_draws_nothing(tmp_path, capsys):
+    d = tmp_path / "runs"
+    d.mkdir()
+    (d / "9999_rep1.json").write_text(json.dumps(_doc(
+        _gloss_tool("Widgets (including sprockets by definition) must be marked."),
+        _gloss_tool("Section 5 requires every widget to be marked."))), encoding="utf-8")
+    assert sp.main(["redraw", "--glosses", "--rule", "source", "--dir", str(d), "--session", "9999",
+                    "--side", "with", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("1 slot(s), 3 draw(s) a side, rule 'source': 3 calls, estimated $")
+
+
+def test_saved_draws_of_two_results_with_one_label_do_not_overwrite(tmp_path):
+    import types
+    args = types.SimpleNamespace(out=str(tmp_path))
+    sp._save(args, "01 runs 9999_rep1 t1 search", "with rule", ["first"])
+    sp._save(args, "02 runs 9999_rep1 t1 search", "with rule", ["second"])
+    assert sorted(p.read_text() for p in tmp_path.glob("*.md")) == ["first", "second"]
+
+
 def test_glosses_counts_legislation_and_only_lists_case_law(tmp_path, capsys):
     d = tmp_path / "runs"
     d.mkdir()
