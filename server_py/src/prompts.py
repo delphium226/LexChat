@@ -1358,6 +1358,22 @@ _SYNTHESIS_SECTION_TEXT = {
     "References": "A complete list of ALL sources cited across every step. Never drop this section.",
 }
 
+# P3.18 (B11, residual of P3.3): where a report states the reach of its case
+# law. On the synthesis seam (Session 33, 6375 turn 2, 12 draws a side) the
+# rule in the grounding bullet alone left the claim in 4 of 12 draws against 5
+# of 12: every one sat in this section, carried from a step finding's own
+# jurisdiction line. So the section that asks for the decisions' scope says it
+# too, on the types that searched case law: 0 of 5 draws with it (the two
+# payloads that failed 4 of 4 without it, and one other). The rule stays in the
+# bullet for the rest of the general-rule case (an interpretation Act).
+_SYNTHESIS_JURISDICTION_SECTIONS = ("Jurisdiction & Status", "Jurisdiction & Currency")
+_CASE_LAW_TYPES = ("legislation_and_case_law", "case_law_only")
+_SYNTHESIS_CASE_LAW_REACH = (
+    " For the case law, name the courts the cited decisions come from; do not say that they are"
+    "\n   binding or persuasive in, or apply across, any other jurisdiction unless a step finding"
+    "\n   cites a source that says so."
+)
+
 _SYNTHESIS_BODY = """You are the Senior Legal Analyst composing the final report of a
 multi-step Deep Research run for a UK government legal department. Your readers are qualified lawyers.
 
@@ -1372,7 +1388,11 @@ Merge overlapping findings, resolve the narrative across steps, and organise by 
 
 CRITICAL RULES:
 - Ground every statement EXCLUSIVELY in the step findings. Do NOT add legal propositions, case names,
-  or provisions from your own knowledge.
+  or provisions from your own knowledge. Do not say that a general rule (an interpretation Act, a
+  common-law doctrine) applies to an instrument or in a jurisdiction, or that one jurisdiction's
+  decisions are binding or persuasive in another, unless a step finding cites the provision or source
+  that applies it there. A step finding that says so without citing such a source is not a finding:
+  do not repeat it, and say instead that this was not verified.
 - CITATION PRESERVATION: pass through every citation and URL from the findings verbatim — never alter,
   shorten, or remove them. A pinpoint stays a pinpoint: where a finding cites s.12(3) or Sch 2 para 3(1),
   so does the report, even when the link goes to the whole section. Never shorten it to s.12.
@@ -1423,6 +1443,8 @@ def get_deep_research_synthesis_prompt(research_mode: str = "legislation_only") 
     sections = REPORT_SECTIONS[research_mode]
     structure = "\n".join(
         f"{i}. **{name}:** {_SYNTHESIS_SECTION_TEXT[name]}"
+        + (_SYNTHESIS_CASE_LAW_REACH if name in _SYNTHESIS_JURISDICTION_SECTIONS
+           and research_mode in _CASE_LAW_TYPES else "")
         for i, name in enumerate(sections, 1)
     )
     extra = "" if "Jurisdiction & Status" in sections else "\n" + _SYNTHESIS_IN_FORCE_RULE

@@ -102,6 +102,56 @@ def test_every_type_keeps_links_as_links(rm):
 
 
 @pytest.mark.parametrize("rm", TYPES)
+def test_every_type_refuses_a_general_rule_no_source_applies(rm):
+    """P3.18 (B11, residual of P3.3): Session 32 put this rule into the
+    conversational Manager and the quick-lookup Worker only, and a Deep
+    Research report went on asserting a doctrine for a jurisdiction no
+    retrieved source spoke for. The step findings it is built from already
+    carry such claims, so "ground every statement in the findings" passes them
+    through: the rule has to say that an unsourced one is not a finding. Kept
+    inside the grounding bullet (not a new block), on every type."""
+    p = " ".join(synth(rm).split())
+    bullet = next(b for b in p.split(" - ") if b.startswith("Ground every statement"))
+    assert ("a general rule (an interpretation Act, a common-law doctrine) applies to an "
+            "instrument or in a jurisdiction") in bullet
+    assert "decisions are binding or persuasive in another" in bullet
+    assert "unless a step finding cites the provision or source that applies it there" in bullet
+    assert "A step finding that says so without citing such a source is not a finding" in bullet
+    assert "say instead that this was not verified" in bullet
+
+
+@pytest.mark.parametrize("rm, section", [
+    ("legislation_and_case_law", "Jurisdiction & Status"),
+    ("case_law_only", "Jurisdiction & Currency"),
+])
+def test_a_case_law_type_bounds_its_decisions_reach_in_the_jurisdiction_section(rm, section):
+    """P3.18, on the seam: with the grounding-bullet clause alone, every draw
+    that still asserted the reach of one jurisdiction's decisions in another did it here,
+    copied from a step finding's jurisdiction line. So the section says it."""
+    p = synth(rm)
+    start = p.index(f"**{section}:**")
+    text = " ".join(p[start:p.index("**References:**", start)].split())
+    assert "name the courts the cited decisions come from" in text
+    assert ("do not say that they are binding or persuasive in, or apply across, any other "
+            "jurisdiction unless a step finding cites a source that says so") in text
+
+
+@pytest.mark.parametrize("rm", ["legislation_only", *PARLIAMENTARY])
+def test_a_type_without_case_law_has_no_case_law_reach_sentence(rm):
+    """Guard: the sentence is about cited decisions, so a type that searched
+    no case law is left exactly as it was."""
+    assert "name the courts the cited decisions come from" not in synth(rm)
+
+
+def test_the_general_rule_clause_reaches_the_synthesis_call():
+    msgs = build_synthesis_messages("q", {}, [{"title": "t", "detail": "d", "content": "c"}],
+                                    research_mode="legislation_and_case_law")
+    # Not "is not a finding" alone: the halted-step gap rule already says that.
+    system = " ".join(msgs[0]["content"].split())
+    assert "says so without citing such a source is not a finding" in system
+
+
+@pytest.mark.parametrize("rm", TYPES)
 def test_every_type_carries_the_deep_research_fingerprint(rm):
     """`replay_set` reads '**Key findings' as the Deep Research marker, and the
     P0.5 mode evidence rests on it. The label is named as a label because the
