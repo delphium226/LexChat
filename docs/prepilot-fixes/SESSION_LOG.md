@@ -7436,3 +7436,24 @@ note updated, a plain-language Session 34 note for Thomas naming no lawyer's top
 "Next" paragraph rewritten. 38 of 61 fixed, 1 in progress, 18 verified, 4 to be verified.
 Render-checked once (`.playwright-mcp/tracker_v29.png`; the only console error is a local
 favicon 404).
+
+**Second addendum to Session 34 (2026-10-01, at the user's request: a prompt to start the next
+piece of work as a safe multi-agent batch).** **Session 35 runs
+`docs/prepilot-fixes/PARALLEL_BATCH_3.md`**, which turns the addendum above into a brief:
+- four $0 agents in git worktrees:
+  - A, P4.15's grader correction (c);
+  - B, P4.15's footer sentence (a), with the couplings it must keep (the detector-list test, P2.8's
+    carried-line round trip, `test_echoed_footer.py:126`, P4.14's echo strip, `CASE_LAW_CODE`);
+  - C, P4.17 measured with options;
+  - D, a confirmation pack for a lawyer on the readings behind the P3.2 and P3.3 rubrics (gitignored);
+- merge order A, B, C, D;
+- then the after-column `wave4_b2_post` (about $17, cap $22, `--max-spend 12` then `10`), with
+  the figure confirmed with the user first.
+
+Found while writing it: the `ATTR` default in agent D's `p415_dryrun.py` is an earlier wording
+that tripped `NEG_LIMITS` and `NEG_TERMS`. The final sentence reaches the script only through
+`P415_ATTR`, so the brief has the build pass it from the built constant. Also recorded there:
+P3.3 cannot be ticked even if its three sessions pass, because its booked acceptance includes
+P3.2's, which is parked; that goes to the user. New lesson in the brief: agents write scratch
+only under `evidence/seam/batch3/<letter>/`, never to the shared session scratchpad, and no agent
+edits a rubric in this batch.
