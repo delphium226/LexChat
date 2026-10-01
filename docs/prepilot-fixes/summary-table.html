@@ -358,8 +358,8 @@
       its row in the fix plan and its action number in Thomas's review of 10 September 2026.
       <strong>“Fixed” means built and accepted on the fix branch. The Version column says which
       release carries each fix: 2026.09.1 (22 September), 2026.09.2 (23 September) or 2026.09.3
-      (29 September), all merged for deployment to the server. Two rows fixed since then, P3.16
-      and P4.16, are marked “Next release”. The fixed date is the day a fix was accepted, not the
+      (29 September), all merged for deployment to the server. Three rows fixed since then, P3.16,
+      P4.16 and P4.15, are marked “Next release”. The fixed date is the day a fix was accepted, not the
       day it reached the server.</strong></p>
   </header>
 
@@ -444,6 +444,33 @@
         box (Settings, then About), so a problem report can say which release it was.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.</p>
+      <p><strong>1 October, later: one more fix, and a combined re-run.</strong> Four more pieces
+        of work were built side by side at no cost, then the affected sessions were re-run once
+        (15 re-runs, $17). <strong>P4.15</strong> is fixed: the line under any answer that searched
+        case law now also says that a search can miss a judgment the database holds, so one
+        missing from its results may still exist. In the re-run, no “not found” in the session it
+        came from was left without that explanation (none of 15), and each one explained only by
+        the line was read by hand. Our check of such sentences now also credits the system's own
+        “a search of the database returned no results”.</p>
+      <p><strong>P3.17, re-run, not yet fixed.</strong> In the wrong-Act session, the first answer
+        now names the right interpretation order in all three re-runs, where none did before. But
+        two re-runs now say, as one possible reading, that the consultation must come before the
+        draft plan is laid, which the Act does not say, and one offers the newer interpretation Act
+        as a possible reading. So one of three passes. The extra research makes each re-run of
+        that session cost about 50 cents rather than 34.</p>
+      <p><strong>P3.2 and P3.3, re-checked, still not fixed.</strong> The disputed-reading session
+        still states readings as settled in every re-run (about 15, against about 6 last time). One
+        Deep Research report in the Scottish doctrine session again said English doctrine is highly
+        persuasive across the UK (two of three pass, against three of three). The pushback test
+        still fails in all three re-runs. Plain statements of the law gained no hedges and no
+        blanket caveats. Our automatic checks again missed some wordings in both directions; they
+        will be corrected before the next re-run.</p>
+      <p><strong>Questions for a lawyer.</strong> A short set of yes/no questions now asks a lawyer
+        to confirm the four readings of the law our P3.2 and P3.3 tests use. One point from the
+        re-run will be added before it is sent: which Act inserted the section in the wrong-Act
+        session. Nothing more will be built on P3.2 until the readings are confirmed.
+        <strong>P4.17</strong> was measured: a line saying which sections were searched is
+        recommended, and is still to be decided.</p>
       <p><strong>1 October: two more fixes, one built and waiting for its re-run, and our checks
         corrected.</strong> Four pieces of work were again built side by side, checked and
         combined. No re-run of sessions was paid for this time; the work cost $2.50 in all.
@@ -795,12 +822,11 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next.</strong> Build <strong>P4.15</strong>'s line, then one re-run of the
-        affected sessions (about $17) to test <strong>P3.17</strong> and P4.15 and re-check
-        <strong>P3.2</strong> and <strong>P3.3</strong>. P3.2 waits on a lawyer confirming our
-        reading of the regulation. The other open groups remain: <strong>P3.4</strong> (the
-        Scottish jurisdiction default), <strong>P4.3</strong> (the sources list),
-        <strong>P4.12</strong> and <strong>P4.17</strong>.</p>
+      <p><strong>Next.</strong> Correct the wordings our checks missed, then decide
+        <strong>P4.17</strong>'s line and <strong>P3.17</strong>'s next step. <strong>P3.2</strong>
+        waits on a lawyer confirming our reading of the regulation, and <strong>P3.3</strong> with
+        it. The other open groups remain: <strong>P3.4</strong> (the Scottish jurisdiction
+        default), <strong>P4.3</strong> (the sources list) and <strong>P4.12</strong>.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
         and three items from <code>docs/TODO.md</code> D16 (the impossible year window, always
@@ -824,7 +850,7 @@
   // ver:    on a Fixed row only: the release that carries it ("2026.09.1", the git tag
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
-  const UPDATED = "1 October 2026, end of Session 34 (P3.16 and P4.16 fixed; P3.17 built, its re-run next; P4.15 decided; P3.2 waits on a lawyer's reading; P4.17 added)";
+  const UPDATED = "1 October 2026, end of Session 35 (P4.15 fixed; P3.17 re-run, not yet fixed; P3.2 and P3.3 re-checked; questions for a lawyer prepared; P4.17 measured)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23", ver: "2026.09.3" },
@@ -875,7 +901,7 @@
     { src: "R", fix: "Recover a chat reply lost when the model's provider stops responding (no second research request is behind it)", sev: "P2", status: "Verified", ref: "P4.12", t: "" },
     { src: "R", fix: "Remove every agreement opener, including one that thanks the lawyer for challenging an earlier answer", sev: "P3", status: "Fixed", ref: "P4.13", t: "", fixed: "2026-09-29", ver: "2026.09.3" },
     { src: "R", fix: "Show one search-scope line, not two, when the model copies an earlier one", sev: "P3", status: "Fixed", ref: "P4.14", t: "", fixed: "2026-09-29", ver: "2026.09.3" },
-    { src: "R", fix: "Say that a case-law search finding nothing is not proof there is none, when no legislation search ran", sev: "P2", status: "Verified", ref: "P4.15", t: "" },
+    { src: "R", fix: "Say that a case-law search finding nothing is not proof there is none", sev: "P2", status: "Fixed", ref: "P4.15", t: "", fixed: "2026-10-01", ver: "Next release" },
     { src: "R", fix: "Remove an opening “You are correct to highlight this”, which the opener check missed", sev: "P3", status: "Fixed", ref: "P4.16", t: "", fixed: "2026-10-01", ver: "Next release" },
     { src: "R", fix: "Say what was searched under an answer whose research used only section searches (it gets no search-scope line)", sev: "P2", status: "Verified", ref: "P4.17", t: "" },
     { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Fixed", ref: "P4.6", t: "4", fixed: "2026-09-23", ver: "2026.09.3" },

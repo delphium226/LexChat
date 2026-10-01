@@ -51,7 +51,7 @@ gitignored files named below.
   sections 1.1-1.7 are the P4.15 evidence and wording; section 1.5 is P4.17's origin; part 2 is
   P3.2's evidence.
 - **Test databases** `lexchat_test_a` to `lexchat_test_d` exist, one per agent.
-- **Machine:** no uvicorn, no pin file (`server_py/.replay_pin_state.json` absent), no
+- **Machine:** no uvicorn, no pin file (~~`server_py/.replay_pin_state.json`~~ `server_py/tools/.replay_pin_state.json` absent; path corrected in Session 35, `STATE_PATH` in `tools/replay.py`), no
   worktrees. The dev box is on its normal settings. Eight merged `worktree-agent-*` branches
   remain locally (batches 1 and 2) and can be deleted.
 - **Read before anything else:**

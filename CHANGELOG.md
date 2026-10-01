@@ -17,7 +17,27 @@ where each row carries its evidence and acceptance.
 
 ## Unreleased
 
-Nothing yet.
+On `fix/prepilot-defects` since 2026.09.3, waiting for the next cut.
+
+Saying honestly what was and was not found:
+- When case law was searched, say that a search can miss a judgment the
+  database holds, so one missing from its results may still exist: that is not
+  proof of absence (P4.15).
+
+Interpretation. P3.17 and P3.3 stay open: P3.17's change fixed the turn it
+aimed at but has not met its acceptance.
+- In quick lookups, when an Act does not define a word, look for the general
+  interpretation legislation and retrieve the provision saying which Acts it
+  applies to before saying it applies (P3.17).
+- Also remove the unscoped agreement opener "You are correct to highlight
+  this" (P4.16).
+
+Already in 2026.09.3, ticked since: the summariser rule against adding its own
+conclusions (P3.16).
+
+Replay harness and measuring tools only, no product change: the negatives
+grader reads "a search of the database ... returned no results" as attributing
+the miss to the search (P4.15).
 
 ## 2026.09.3 — 2026-09-29
 

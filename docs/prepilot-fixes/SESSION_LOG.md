@@ -7639,3 +7639,26 @@ replay running, no worktrees (twelve merged `worktree-agent-*` branches and `bat
 locally). Test databases `lexchat_test_a` to `_d` remain. 56 replay directories, the latest
 `wave4_b2_post`. The session scratchpad is copied to the gitignored
 `evidence/seam/batch3/scratchpad_s35/`.
+**Addendum to Session 35 (2026-10-01, at the user's request: "make sure we're not going to lose
+any pertinent information", then "update the tracker").**
+- **CHANGELOG.md's *Unreleased* section filled in.** It still said "Nothing yet" although three
+  product changes have landed on the branch since `v2026.09.3` (`git log a6b4a76..HEAD --
+  server_py/src client/src`: P4.16 `faf7521`, P3.17's PHASE 2c `6b110f1`, P4.15 (a) `88ca517`);
+  Session 34 had not recorded P4.16 either. Now listed, with P3.16's tick (its code is already in
+  `v2026.09.3`) and P4.15 (c) as tooling, so the next cut moves them into its dated section.
+- **`PARALLEL_BATCH_3.md`'s pin path corrected in place** (`server_py/tools/.replay_pin_state.json`),
+  so the next batch brief copied from it does not repeat the wrong check.
+- **Fix Tracker v30** published at the user's request (same URL; the repo source was
+  byte-identical to the live body before the edit: Artifact read, then a Read of all 1106 lines of
+  the saved file): P4.15 Fixed (`fixed: "2026-10-01"`, `ver: "Next release"`, its label no longer
+  limited to turns with no legislation search, since the sentence is on every case-law line); the
+  lede names three rows waiting for the next release (P3.16, P4.16, P4.15); four plain-language
+  Session 35 paragraphs for Thomas naming no lawyer's topic (P4.15 fixed; P3.17 re-run, not yet
+  fixed; P3.2 and P3.3 re-checked; questions for a lawyer prepared, P4.17 measured); "Next"
+  rewritten. 39 of 61 fixed. Render-checked once (`.playwright-mcp/tracker_v30.png`; the only
+  console error is the local favicon 404).
+- Preserved: the session scratchpad re-copied to `evidence/seam/batch3/scratchpad_s35/` after this
+  addendum (grading outputs in its `grade/`, the run logs, uvicorn logs, the fold, revert, pack
+  verification and tracker scripts). Agent notes are committed; agent scratch is in
+  `evidence/seam/batch3/{A,B,C,D}/`; the hand-read is `evidence/rubrics/handread_wave4_b2_post.md`;
+  the pack is `evidence/lawyer_pack/confirmation_pack.md`.
