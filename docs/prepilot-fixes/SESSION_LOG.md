@@ -7268,3 +7268,106 @@ handover above, and what it changes in it:
 **State:** branch `fix/prepilot-defects`, local head after this commit, **not pushed** (the
 classifier); `main` untouched at `a6b4a76`. 2077 tests. No replay yet: the after-column is put to
 the user with a figure first.
+
+---
+
+## Session 34, continued — 2026-10-01 — the decisions put to the user; the drift probe
+
+**Done:**
+- **Step 6 put to the user with a figure before any spend.** The after-column for P3.17's lever
+  must carry the whole P3.3 and P3.2 set, because C edited a Worker prompt: 6338, 6370, 6375 and
+  6345 x3 plus the `p32_6406` script x3, into a new `wave4_b2_post`, about $17 (`wave4_b1_post`
+  was $16.03, plus about $0.10-0.15 a 6338 rep for the lever's extra Worker calls), cap $22.
+  **User decisions:** not this session; P4.15 left undecided (neither (a) nor (c) built); draw the
+  Manager first-delegation drift probe for P3.17 rather than rest on byte-identity; keep the branch
+  local (no push).
+- **Manager first-delegation drift probe drawn ($0.3897).** `seam_replay manager --run <slot>
+  --turn 1 --first-round --date recorded --reps 3` over Session 32's 8 slots
+  (`evidence/seam/s32/drift_probe/after/slots.txt`), the before side from a temporary detached
+  worktree at `578718f` (removed after), the after side on the merged branch, both the same day.
+  A `--dry-run` on 6338 first: 6,341 characters on both sides. Result: the payload is the same size
+  on both sides in 8 of 8 slots; 48 of 48 draws delegated; the numbers each brief names are
+  identical on both sides (6406 the same instrument number 3 of 3, the other seven none); no brief
+  moved to another instrument. **Limit:** drawn without `--print`, so the brief text was not saved
+  and the comparison is by delegation and numbers named, not brief by brief as in Session 32.
+  Logs: gitignored `evidence/seam/batch2/integrator/drift/{before,after}/<session>.log`.
+- **Cleanup:** the four agent worktrees removed (each clean and merged; the `worktree-agent-*`
+  branches remain locally, as do batch 1's four). No server, no pin file, no replay this session.
+- **Ledger:** P3.17 annotated with the probe; the recommended-order line moved to "end of
+  Session 34" with the user's decisions. 43 of 60 rows, 8 of 14 buckets (`plan_status`).
+
+**Surprises / deviations:**
+- **No after-column, so no hand-read file** (`evidence/rubrics/handread_<dir>.md`) this session:
+  there was nothing new to hand-read. The graders were re-run over the stored directories instead
+  (interim entry above).
+- **Spend:** agents $2.11 (C), drift probe $0.3897; **session total $2.50**.
+
+**State:** branch `fix/prepilot-defects`, local head after this commit, **not pushed** (user
+decision, after the classifier refused it; Session 34's commits are the four `--no-ff` merges
+`2b1f7cb`, `c8a82e2`, `5b09ac8`, `5bb29d5` with their agents' commits, `afa2270` and this one);
+`origin/fix/prepilot-defects` is still at `578718f`. `main` untouched at `a6b4a76`. 2077 tests.
+The session scratchpad is copied to the gitignored `evidence/seam/batch2/scratchpad_s34/`.
+
+---
+
+## Session 34 — handover for Session 35 (2026-10-01)
+
+**First, check the push.** The branch was left local at the user's decision: if Session 35 needs
+it on origin, the user allows the push (branch only, never `main`).
+
+**Take next: the user's decision.** Candidates:
+1. **The after-column for P3.17's lever** (`wave4_b2_post`): 6338, 6370, 6375 and 6345 x3 with
+   `--max-spend 14`, then `--script evidence/scripts/p32_6406.json --reps 3 --max-spend 12`; about
+   $17, cap $22. Follow `PARALLEL_BATCH_1.md` step 6 (`replay check`, `replay pin`, uvicorn fresh,
+   keep-awake helper `evidence/seam/batch1/scratchpad_s33/keep_awake.py`, no commit while it runs,
+   re-run the SAME command if it stalls, `replay restore`, stop the server by its PID). Grade with
+   the batch 2 graders, which now agree with every recorded hand-read verdict; still hand-read every
+   `interpret` match and drop and every `stance` "none", and save it as
+   `evidence/rubrics/handread_wave4_b2_post.md`. Expect some 6338 turn-1 misses: the live Worker
+   named the right regime in 4 of 5 (`notes/batch2_C.md`). If P4.15's option is built first, the
+   same column measures it on 6370 at no extra cost.
+2. **P4.15:** (a) the footer sentence (recommended by D), (c) the grader correction, both, or
+   neither (`notes/batch2_D.md` 1.6-1.7; the wording and its dry run are there). If (a): tests at
+   `_case_law_body` proven to fail with the change reverted, and P2.8's round trip extended.
+3. **P3.2's lever**, from D's evidence (`notes/batch2_D.md` part 2): the decisive passage is lost
+   between retrieval and the answer at two seams (the summariser drops its words in 8 of 15
+   contradicted turns, the Worker in 6 of the 7 where the summary kept them); a must-re-delegate
+   rule would reach 0 of 15; a code check against retrieved text needs the raw result (median
+   about 250K characters) as its reference. No lever is recommended beyond what those numbers
+   support.
+
+**Decisions open with the user (new this session):**
+- whether to book D's 1.5 (in `legislation_only`, a turn that ran only section searches gets no
+  footer: 8 stored turns, one asserting a negative), which is P2.8's deliberate silence;
+- whether `wave4_p41_pre` 6346_dr r1 t2 (a negative about a decision's later history in a Deep
+  Research synthesis, unattributed) needs more than a footer;
+- A's `_plain` gap: a markdown link whose label carries `[...]` (a neutral citation's year) is not
+  unwrapped, so rubric gaps written as `[^.]` stop at the URL (fixing it moves sentences in every
+  grader);
+- C's options: a code lever beside PHASE 2c (a forced "application" section search when a
+  retrieved instrument's title marks it as interpretation legislation); the lever's cost (a
+  turn-1 Worker 11-15 tool calls, $0.13-0.19, against $0.06-0.14 for the whole recorded turn);
+  whether the research Workers get the phase too; the case-law-only conversational Worker also
+  carries it (one shared prompt).
+
+**Hazards met this session:** every worktree again came up on `main` (each agent checked and
+reset, as briefed); the branch push is refused by the classifier; a byte-level revert anchor
+written with LF matched nothing in a CRLF file (assert the anchor count before trusting a revert);
+FIX_PLAN.md's `**` count was already odd before this session (P0.2 carries a literal
+`` `**Key findings` ``), so check that edits ADD an even number rather than that the file total is
+even; batch agents share the session scratchpad (C removed and recreated a `revert/` directory
+there), so give each agent its own subdirectory next time; agent D's dry runs read `p33.json`
+while agent A was editing it (comparisons within one pass were unaffected).
+
+**Carried, open with the user (unchanged):** deploying `v2026.09.3` to the target (`pg_dump`
+first, pull, restart, `test_apis.ps1`; the local prompt cache moves to v3 there, intended);
+telling the eval-harness owner about schema v6; D19's remaining items (deploy by tag; stamp the
+version on the audit event); the legal readings behind the rubrics (a lawyer to confirm); P4.12,
+D20, D21/D22, P5.2, Thomas's document; from batch 1: the research Worker's jurisdiction line as a
+row, the 28 case-law summaries applying English authority to Scotland, the two change-record id
+mis-expansions, `wave2_p27` 6341 r2 t2. The Fix Tracker was not updated (update only when asked;
+if asked: P4.16 Fixed 2026-10-01, P3.16 Fixed 2026-10-01, both "Next release").
+
+**Machine state:** no server, no pin file, no replay run, no worktrees (eight merged
+`worktree-agent-*` branches remain locally: batch 1's four and batch 2's four). Test databases
+`lexchat_test_a` to `_d` remain.
