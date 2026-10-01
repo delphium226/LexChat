@@ -133,6 +133,17 @@ _ABOUT_SUMMARY = re.compile(
     r"|\bnot\s+(?:included|reflected|represented|present|extracted)\b|\bnot possible to confirm"
     r"|\bavailable in the (?:provided |source )?(?:text|material)"
     r"|\bcannot\s+be\s+(?:confirmed|identified|determined|extracted)|\bcould not be\b", re.I)
+# Batch 2 (agent A): the note can also say what the supplied text "does not
+# provide" ("The provided text does not contain X; therefore, it does not
+# provide Y"). Adding "provide" to the verbs above would drop a gloss from
+# absence ("...; therefore, these Regulations do not provide for appeals"), so
+# this shape is recognised by its two subjects instead: the supplied text
+# before the marker, and "it" (or the text itself) right after it.
+_NOTE_SUBJECT = re.compile(
+    r"\b(?:provided|supplied|retrieved|source)\s+(?:text|material|results?|excerpts?|sections?)\b"
+    r"|\btext\s+(?:provided|supplied)\b|\bthis\s+(?:text|excerpt)\b", re.I)
+_NOTE_PRONOUN = re.compile(
+    r"^\W*(?:it|the\s+(?:provided\s+|supplied\s+)?text|this\s+text)\s+(?:does|did)\s+not\b", re.I)
 _STATUTORY_SUGGESTS = re.compile(r"\b(?:information|evidence)\s+$", re.I)
 _MANNER_BEFORE = re.compile(r"(?:\b(?:and|as|be|been|or)\s+|[\"'“‘])$", re.I)
 _MANNER_AFTER = re.compile(r"^\s*(?:[)\].,;:\"'”’(]|$)")
@@ -245,6 +256,8 @@ def glosses_in(raw: str, final: str) -> list:
             continue
         lo, hi = _window(summ, m.start(), m.end())
         if _ABOUT_SUMMARY.search(summ[m.end():hi]):
+            continue
+        if _NOTE_SUBJECT.search(summ[lo:m.start()]) and _NOTE_PRONOUN.match(summ[m.end():hi]):
             continue
         pre = _WORD.findall(summ[lo:m.start()].lower())[-_BEFORE:]
         mark = _WORD.findall(m.group(1).lower())

@@ -7318,6 +7318,9 @@ INTERP_HEDGE = re.compile(
     # Batch 1 (agent B): "Under this reading, X" hedges X as "On this
     # reading" does; the lexicon had only the "on" form.
     r"|\bunder\s+(?:the|that|this|one|a)\s+reading\b"
+    # Batch 2 (agent A): "On your reading, X" gives X as the lawyer's
+    # reading, not the text's; one sentence in the whole corpus says it.
+    r"|\b(?:on|under)\s+your\s+(?:reading|interpretation|construction)\b"
     r"|\bnot\s+(?:been\s+)?(?:verified|checked|confirmed)\b"
     r"|\b(?:suggests?|implies|appears?\s+to|seems?\s+to)\b",
     re.I)
