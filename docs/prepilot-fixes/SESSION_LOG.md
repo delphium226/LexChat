@@ -7457,3 +7457,70 @@ P3.3 cannot be ticked even if its three sessions pass, because its booked accept
 P3.2's, which is parked; that goes to the user. New lesson in the brief: agents write scratch
 only under `evidence/seam/batch3/<letter>/`, never to the shared session scratchpad, and no agent
 edits a rubric in this batch.
+
+---
+
+## Session 35 — 2026-10-01 — parallel batch 3: four agents merged (interim entry)
+
+**Done:**
+- **Ran `PARALLEL_BATCH_3.md` (user decision: launch all four as set out).** Step 1's checks all
+  held: head `72dc84e`, equal to `origin/fix/prepilot-defects`, clean; `main` at `a6b4a76`;
+  `plan_status` 43 of 61; 55 replay directories, the latest `wave4_b1_post`; rubric sha1s
+  `e14b762…` (`p32.json`) and `dce6d2f…` (`p33.json`); test databases `lexchat_test_a` to `_d`;
+  no python process, no pin file, no worktrees; baseline suite **2077** on `lexchat_test`.
+- **Merged in the order A, B, C, D, each `--no-ff`**, the full suite on `lexchat_test` after each
+  and the branch pushed after each: A `8fcc2fc` (2090), B `b95de6e` (2093), C `25c8a69` (2093), D
+  `c2deeec` (2093). For each the integrator confirmed the branch contains `72dc84e`, read the note
+  and the diff, grepped the added lines for instrument ids and matter words (no hits; A's comment
+  names session 6370, as the file's other comments name sessions), re-ran the new tests with the
+  change reverted on a scratch worktree with a script asserting the anchor count (A: 15 lines
+  removed, `replay_report.py` then identical to `72dc84e`, 6 fail; B: the one `tail` line put back,
+  11 fail and 72 pass; C and D: notes only), and re-ran a headline number. Notes:
+  `docs/prepilot-fixes/notes/batch3_{A,B,C,D}.md`.
+- **Agent A (P4.15 (c), $0): MET.** `negatives` re-run with A's grader: `wave4_p33_pre` 0 failing
+  (model column 14), `wave4_p33_post` 1 (`p32_6406` r1 t4; model 21), `wave4_b1_post` 0 (model
+  19); `wave2_p22_final` byte-identical to the grader at `72dc84e`.
+- **Agent B (P4.15 (a), $0): MET.** D's dry run re-run through B's wrapper on B's branch: 204
+  answers patched, 6 outputs differ, all `negatives`, exactly 13 verdicts FAIL to PASS on `index`.
+- **Step 5, D's dry run on the built product with (a) and (c)** (`run_dryrun.py` from the merged
+  tree, `P415_ATTR` from the built constant, D's coverage sentence asserted equal to the
+  product's): against the stored grading at `72dc84e`, exactly **13** verdicts FAIL to PASS
+  (`wave4_p33_pre` 3, `wave4_p33_post` 4, `wave4_b1_post` 2, `wave2_p24_ab` 2, `wave4_p41_pre` 1,
+  `wave4_p46_pre` 1); `negatives` exits 1 to 0 on those directories but `wave4_p33_post`, which
+  stays at 1 (`p32_6406` r1 t4, P4.17's shape); the model column moves only in A's four
+  directories; against (c) alone, (a) moves only the 3 files holding the 4 turns outside the
+  shape. As D's note predicted.
+- **Agent C (P4.17, $0, a note only).** Re-run by the integrator (`p417_shape.py`): 88 turns ran a
+  lookup or section search and no `search_legislation`; 11 carry no footer, 8 since P3.7;
+  `negatives` FAIL on 2 of them. C recommends option (d), a scope line naming the turn's section
+  searches, built after (a), and proposes an acceptance; not booked (the user's decision). Found:
+  P2.5's currency clause contradicts P3.5's on 27 of 455 stored footers.
+- **Agent D (lawyer confirmation pack, $0).** `evidence/lawyer_pack/confirmation_pack.md`: four
+  readings, four yes/no questions, 18 links. Integrator checks: every link is a string inside a
+  stored tool's `api_calls` (18 of 18, 460 run files walked); the pack shares no 6-word run with
+  any lawyer-written field of the transcript export (1,507 user messages, rating comments and
+  feedback free text) except 17 instrument titles.
+- **Ledger:** P4.15, P4.17, P3.2 and P3.3 annotated (26 `**` added, even). 43 of 61 rows
+  (`plan_status`).
+
+**Surprises / deviations:**
+- **The pack's folder was not gitignored**, though the brief said it was (`.gitignore` covered
+  only `replay/`, `rubrics/`, `seam/` and `replay_set.json`). D left it untracked and reported
+  it; the integrator added `docs/prepilot-fixes/evidence/lawyer_pack/` (`b35035b`) before any
+  other commit.
+- **Agent A could not write outside its worktree** (the harness blocked it), so its scratch was in
+  the worktree's own gitignored `evidence/seam/batch3/A/`; the integrator copied it to the main
+  checkout before removing the worktree. C did the copy itself; 4 of C's files and 2 of D's were
+  still only in the worktrees and were copied too (D's second copy of the pack is byte-identical).
+- **Every worktree again came up on `main` (`a6b4a76`)**; every agent checked first, as briefed,
+  and reset to `72dc84e` (a `git worktree list` taken minutes after launch already showed them
+  there).
+- **The integrator's first revert anchor for A matched nothing** (a `$`-anchored grep on CRLF
+  lines returned no line numbers); the anchor-count assertion stopped it (it reported the empty
+  anchor's count) before any write, and it was redone by line number.
+- **A used `[^.\n]` gaps, not the brief's `[^.]`**: stricter (a gap also stops at a line break),
+  and the pattern D measured, so the moves are exactly D's.
+
+**State:** branch `fix/prepilot-defects`, pushed after each merge; `main` untouched at `a6b4a76`.
+2093 tests. No replay yet: the after-column `wave4_b2_post` is put to the user with a figure first.
+Agent worktrees removed; their branches remain locally (merged).
