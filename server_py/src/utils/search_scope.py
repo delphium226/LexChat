@@ -105,6 +105,7 @@ __all__ = [
     "incomplete_steps_note",
     "CASE_LAW_COVERAGE_SENTENCE",
     "CASE_LAW_DOCTRINE_SENTENCE",
+    "CASE_LAW_ABSENCE_SENTENCE",
     "record_case_law_search",
     "case_law_scope_clause",
     "case_law_scope_footer",
@@ -2058,6 +2059,27 @@ CASE_LAW_DOCTRINE_SENTENCE = (
     "Scotland, whether it also forms part of Scots law has not been checked."
 )
 
+# P4.15 (B5), Session 35: a case-law negative's attribution, stated by code.
+# The coverage sentence says which courts the database holds; it never said
+# that a search finding nothing is not proof that nothing exists. A turn that
+# reached its legislation by lookup and section search (P3.7) and ran no
+# `search_legislation` gets the case-law line alone, so its negatives (13
+# stored turns, all case law, one a Deep Research negative about a decision's
+# later history) reached the lawyer with no attribution in footer or prose.
+# Same gate as the doctrine sentence (this turn's case-law search ran), never a
+# reading of the answer, and true on every such turn. Placed after the coverage
+# sentence and before the doctrine sentence, so the line still ends with the
+# doctrine sentence. Worded so that the only detector it trips is
+# `NEG_BLAMED_INDEX`, by design (pinned by `test_case_law_gap.py`): two earlier
+# wordings ("a ranked keyword search", "a keyword search can miss") also
+# tripped `NEG_LIMITS` and `NEG_TERMS`, and "ranked" was unverified (the
+# product sends no `order` to the case-law feed).
+CASE_LAW_ABSENCE_SENTENCE = (
+    "A search can miss a judgment the database holds, so one missing from its "
+    "results may still exist, in this database or elsewhere: that is not proof "
+    "of absence."
+)
+
 
 def record_case_law_search(log: Optional[list], name: str, args: dict, data: Any) -> None:
     """Record one case-law search for the lawyer-facing footer. Never raises.
@@ -2097,9 +2119,10 @@ def _case_law_body(entries: Optional[list]) -> str:
         head = (f"a search of {_CASE_LAW_DATABASE} was attempted"
                 + (f" for {listed}" if terms else "")
                 + " and returned an error")
-    # The doctrine sentence only when a search ran: an errored one returned no
-    # judgment for a rule to be taken from.
-    tail = f" {CASE_LAW_DOCTRINE_SENTENCE}" if done else ""
+    # The absence and doctrine sentences only when a search ran: an errored one
+    # returned no results to be missing from, and no judgment for a rule to be
+    # taken from.
+    tail = f" {CASE_LAW_ABSENCE_SENTENCE} {CASE_LAW_DOCTRINE_SENTENCE}" if done else ""
     return f"{head}. {CASE_LAW_COVERAGE_SENTENCE}{tail}"
 
 

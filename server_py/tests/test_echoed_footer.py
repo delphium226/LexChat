@@ -22,14 +22,19 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import tools.replay_report as rr  # noqa: E402
 from src.agent.agent_core import run_deep_research, run_worker_agent  # noqa: E402
 from src.agent.provider_factory import set_request_provider_config  # noqa: E402
 from src.utils.citation_links import PROVISION_FOOTNOTE  # noqa: E402
 from src.utils.search_scope import (  # noqa: E402
+    CASE_LAW_ABSENCE_SENTENCE,
     CASE_LAW_DOCTRINE_SENTENCE,
     _earlier_footers,
     answer_scope_footer,
+    case_law_scope_footer,
+    strip_answer_footer,
 )
+from tools import footer_echo  # noqa: E402
 
 # A provision link no tool returned, so P1.6 marks it and appends its note.
 _UNRETURNED = "[art 4](http://www.legislation.gov.uk/uksi/1901/1/article/4)"
@@ -39,6 +44,11 @@ _PROSE = f"The Widget Order 1901 {_UNRETURNED} defines a widget."
 def _leg(*queries):
     return [{"tool": "search_legislation", "query": q, "legislation_id": "",
              "shown": 5, "matched": 141} for q in queries]
+
+
+def _cl(*queries):
+    return [{"tool": "search_case_law", "query": q, "shown": 1, "ok": True}
+            for q in queries]
 
 
 # What the model copies back: the previous turn's code-emitted line.
@@ -124,6 +134,42 @@ async def test_an_echo_ahead_of_the_link_note_is_stripped(monkeypatch, manager_t
     _assert_one_fresh_line(content, "widget definition")
     # The case-law clause stays last.
     assert content.endswith(CASE_LAW_DOCTRINE_SENTENCE + "*")
+    # P4.15: its absence sentence is in it, ahead of the doctrine sentence.
+    assert content.count(CASE_LAW_ABSENCE_SENTENCE) == 1
+    assert content.index(CASE_LAW_ABSENCE_SENTENCE) < content.index(CASE_LAW_DOCTRINE_SENTENCE)
+
+
+# P4.15 made the case-law line longer (the absence sentence). An earlier turn's
+# line, as the model copies it back: a fresh legislation line with the clause,
+# and the standalone case-law line.
+_LONG_ECHOES = [
+    answer_scope_footer(_leg("an earlier widget search")
+                        + _cl("an earlier widget case"), {}),
+    case_law_scope_footer(_cl("an earlier widget case")),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("echo", _LONG_ECHOES, ids=["fresh-with-clause", "standalone"])
+async def test_an_echo_of_the_longer_case_law_line_is_stripped(monkeypatch, echo):
+    """The longer one-line footer is still one line, so P4.14's strip, the
+    replay instruments' strip and `tools/footer_echo`'s split all still take
+    it whole, and the lawyer reads only this turn's line."""
+    assert CASE_LAW_ABSENCE_SENTENCE in echo
+    assert echo.count("*Search scope:") == 1 and "\n" not in echo.strip()
+    final = await _manager_turn(monkeypatch, _PROSE + echo, [_LEG_CALL, _CL_CALL])
+    content = final["content"]
+    _assert_one_fresh_line(content, "widget definition")
+    assert "an earlier widget case" not in content
+    assert content.count(CASE_LAW_ABSENCE_SENTENCE) == 1
+    assert content.endswith(CASE_LAW_DOCTRINE_SENTENCE + "*")
+    # The product strip, the replay instruments' strip and `footer_echo`'s split.
+    assert strip_answer_footer(_PROSE + echo) == _PROSE
+    assert rr._without_footer(_PROSE + echo) == _PROSE
+    body, had_note, footer = footer_echo.split_answer(_PROSE + echo)
+    assert (body, had_note, footer) == (_PROSE, False, echo)
+    rebuilt = footer_echo.rebuild(_PROSE + echo + echo, p414=True)
+    assert rebuilt == _PROSE + echo
 
 
 @pytest.mark.asyncio
