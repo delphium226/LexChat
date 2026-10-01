@@ -103,6 +103,21 @@ def test_under_a_reading_is_a_hedge_like_on_a_reading():
     assert rr.hedge_counts("Under this reading, section 6 covers both.")["interp_hedges"] == 1
 
 
+def test_your_reading_is_a_hedge():
+    # Batch 2 (agent A): "On your reading, X" gives X as the lawyer's reading,
+    # not as what the text says; the lexicon read X as settled.
+    for opener in ("On your reading", "Under your reading", "On your interpretation",
+                   "On your construction"):
+        g = rr.interpret_grade(_doc("The Widget Order 1901 applies.",
+                                    f"{opener}, widgets include gadgets."), RUBRIC)
+        assert g["rows"][1]["hedged"] and not g["rows"][1]["asserted"], (opener, g["rows"][1])
+    # "your" that names no reading is not a hedge.
+    g = rr.interpret_grade(_doc("The Widget Order 1901 applies.",
+                                "On your facts, widgets include gadgets."), RUBRIC)
+    assert g["rows"][1]["asserted"], g["rows"][1]
+    assert rr.hedge_counts("On your reading, section 6 covers both.")["interp_hedges"] == 1
+
+
 def test_an_item_opening_in_bold_inherits_its_lead_in_hedge():
     # The sentence splitter leaves "2." apart from "**Scope:** ...", so the
     # walk is by the answer's lines (Session 32).
