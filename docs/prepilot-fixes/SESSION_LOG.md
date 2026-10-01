@@ -7524,3 +7524,118 @@ edits a rubric in this batch.
 **State:** branch `fix/prepilot-defects`, pushed after each merge; `main` untouched at `a6b4a76`.
 2093 tests. No replay yet: the after-column `wave4_b2_post` is put to the user with a figure first.
 Agent worktrees removed; their branches remain locally (merged).
+
+---
+
+## Session 35, continued — 2026-10-01 — the after-column `wave4_b2_post`; P4.15 ticked
+
+**Done:**
+- **Step 6 put to the user with the figure before any spend** (about $17, cap $22). The user
+  asked for help deciding; the session recommended running now rather than holding for P4.17's
+  (d) (no saving: P3.3 needs another column once P3.2 un-parks, and (d) can ride on it; (d) is
+  the user's call on P2.8's trade and would add a third change to the column); the user chose to
+  run it.
+- **Procedure:** `replay check` (pinned `google/gemini-3.1-pro-preview` served, probe $0.0011),
+  `replay pin`, uvicorn started fresh from `server_py/` (PID 11228, build
+  `v2026.09.3-28-g0527c48`), the keep-awake helper (PID 6760); `replay run --session 6338 6370
+  6375 6345 --reps 3 --max-spend 12` **$11.29**, then `--script …/p32_6406.json --reps 3
+  --max-spend 10` **$5.70**: **$16.99 recorded**, 15 run files, no stall, no commit while either
+  ran. Then `replay restore` (model, summariser, local prompt cache and research mode back as
+  saved), both processes stopped by PID, no python process left, port 8000 free, no pin file.
+- **Graded**, every `interpret` match and drop and every `stance` "none" read by hand; saved to
+  the gitignored `evidence/rubrics/handread_wave4_b2_post.md`:
+  - **P4.15 MET and TICKED.** `negatives` 32 turns, 0 failing (6370 n=3: 15, 0, model column
+    12). The 3 footer-only credits are case-law misses the absence sentence fits; (c)'s 16 new
+    matches in the directory each report what a named search returned.
+  - **P3.17 NOT met: 1 of 3 by hand** (command 2 of 3). Turn 1 names the 1999 Order in 3 of 3
+    (0 of 3 in `wave4_b1_post`). r3 turn 2 offers the 2010 Act as a reading for the inserted
+    section; r2 and r3 turn 3 offer "on one reading, the consultation must precede the laying of
+    the draft plan", which the booked criterion fails and the rubric misses. 6338 cost $0.57,
+    $0.35, $0.59 a rep (mean $0.50) against $0.34.
+  - **P3.3 NOT met: 7 of 9 fail by hand** (6338 1 of 3; 6370 0 of 3, about 15 unhedged readings by
+    hand against about 6; 6375 2 of 3, r1's Deep Research synthesis states the doctrines are
+    highly persuasive across the UK jurisdictions). Not tickable in any case while P3.2 is parked.
+  - **P3.2 (parked, re-measured): 0 of 3 by hand**; changes 2, 3, 3; contradicted consequence 3 of
+    3; control fails 2 of 3. 6345 guard holds (re-retrieved 3 of 3, s.38 0 of 3).
+  - **Guards:** `hedges` 0 in 333, 0 caveats; exit-1 set 0 except `commencements` (no graded
+    session); `caselaw` TWO_LINES 0; `footer_echo` 0; `openers` 4, all scoped; `lost` 3, all
+    labelled; `summary_probe count` 0 in 656; `glosses` 0 in 108; `sources_kept` per slot fell in
+    3 of 11 (6370 t4-t6) against `wave4_p33_pre`, 0 of 4 for 6345 against `wave4_p32_pre`.
+- **Ledger:** P4.15 ticked; P3.17, P3.3, P3.2 and P4.17 annotated; B5's index line marks P4.15
+  done; the recommended-order line moved to "end of Session 35". **44 of 61 rows**, 8 of 14
+  buckets (`plan_status`). B5 now waits on P4.17 only.
+
+**Surprises / deviations:**
+- **The pin file is `server_py/tools/.replay_pin_state.json`** (`STATE_PATH` in
+  `tools/replay.py`), not `server_py/.replay_pin_state.json` as `PARALLEL_BATCH_3.md` and earlier
+  handovers say. Step 1's "no pin file" check looked in the wrong place; the pin's saved previous
+  state (local cache and research mode on) shows no stale pin was active. Check `tools/` next time.
+- **PHASE 2c moved turn 1 and opened a new failure at turn 3.** Turn 1 went from 0 of 3 to 3 of 3,
+  but a hedged "the consultation must precede" reading appeared in 2 of 3 turn-3 answers; no
+  earlier stored rep had it. n=3, so whether the phase caused it is not established.
+- **PHASE 2c cost more than estimated:** $0.16 a rep more than `wave4_b1_post` (estimate $0.10-0.15);
+  turn 1 alone up to $0.30.
+- **All three 6338 reps name a 2024 Act as inserting s.35ZA**, where the rubric's reading and the
+  lawyer pack say the 2019 Act; stored change records carry an insertion into s.35ZA by the 2024
+  Act. Not resolved; flagged for the pack.
+- **6375 r1 regressed** (2 of 3 against 3 of 3): a Deep Research synthesis repeating the
+  alignment claim P3.18 targeted.
+- **The graders were wrong in both directions again**: `interpret` passed two hedged sequence
+  readings and read an agreement as a hedge; `stance` read a negated sentence as affirm.
+
+**State:** branch `fix/prepilot-defects`, pushed (head after this commit); `main` untouched at
+`a6b4a76`. 2093 tests. Machine on its normal settings.
+
+---
+
+## Session 35 — handover for Session 36 (2026-10-01)
+
+**Take next: the user's decision.** Candidates, in the order the session would take them:
+1. **Close the four grader gaps** in `handread_wave4_b2_post.md` ("Grader gaps found"), $0, before
+   any further after-column: `interpret` 6338's hedged sequence reading and the "overlap" framing;
+   `interpret` 6370's "As you suggest" agreement and four firm readings in drops; `stance`'s
+   negated affirm and the two missed contradicted consequences. Judge each change by whether its
+   verdicts move toward this hand-read (6338 1 of 3, 6370 0 of 3, 6375 2 of 3, P3.2 changes 2, 3,
+   3), never by pass rate. A batch-style agent fits (rubric files are the user's to allow).
+2. **P4.17's (d)** (`notes/batch3_C.md` section 8): build after (a), which is now in; full clause
+   set or bare; instruments by id or citation label; whether to book C's (f4), P2.5's currency
+   clause contradicting P3.5's on 27 of 455 stored footers.
+3. **P3.17's next step**, from this column: turn 1 is now right 3 of 3; the failures moved to turn 2
+   (an alternative regime offered as a reading) and turn 3 (a hedged sequence reading). C's
+   deferred code lever and the research Workers' phase were waiting on this result; the cost is
+   $0.50 a 6338 rep.
+4. **The lawyer pack** (`evidence/lawyer_pack/confirmation_pack.md`): before it is sent, add the
+   s.35ZA insertion point as an unclear item (the answers and the change records name a 2024 Act;
+   the reading says 2019) and confirm the cover note's promise (D's item 7). Sending it is the
+   user's action, and P3.2 un-parks only on an answer.
+
+**Decisions open with the user (new this session):**
+- D's pack points: the 6406 animal by-product category (it may re-scope P3.2's contradicted
+  list); 6370's reg 2(10); 6375's classification against the rubric; the links' `/id/` form; the
+  older-source s.55 link; the cover note's promise.
+- C's (f4), P2.5's contradicting currency clause (27 stored footers).
+- Whether the hedged sequence reading at 6338 turn 3 (a reading offered beside the right one)
+  should fail, as booked, or be re-scoped once a lawyer confirms the reading (the pack asks it).
+
+**Hazards met this session:** the pin file is in `server_py/tools/`, not `server_py/`; a
+`$`-anchored grep on CRLF lines finds nothing (the revert script's anchor assertion caught it);
+the harness blocked agent A from writing outside its worktree (scratch copied out by the
+integrator before the worktree was removed: check each worktree's `evidence/seam/batch3/` before
+removing it); the lawyer pack's folder was not gitignored until `b35035b`; every worktree again
+came up on `main`.
+
+**Carried, open with the user (unchanged):** deploying `v2026.09.3` to the target (`pg_dump`
+first, pull, restart, `test_apis.ps1`; the local prompt cache moves to v3 there, intended);
+telling the eval-harness owner about schema v6; D19's remaining items (deploy by tag; stamp the
+version on the audit event); P4.12, D20, D21/D22, P5.2, Thomas's document; from batch 1: the
+research Worker's jurisdiction line as a row, the 28 case-law summaries applying English
+authority to Scotland, the two change-record id mis-expansions, `wave2_p27` 6341 r2 t2; which rows
+go in the next cut (`v2026.10.1`: P3.16, P4.16 and now P4.15 are fixed since `v2026.09.3`). The Fix
+Tracker was not updated (update only when asked; if asked: P4.15 Fixed 2026-10-01, "Next
+release").
+
+**Machine state:** no server, no pin file (`server_py/tools/.replay_pin_state.json` absent), no
+replay running, no worktrees (twelve merged `worktree-agent-*` branches and `batch3-B` remain
+locally). Test databases `lexchat_test_a` to `_d` remain. 56 replay directories, the latest
+`wave4_b2_post`. The session scratchpad is copied to the gitignored
+`evidence/seam/batch3/scratchpad_s35/`.
