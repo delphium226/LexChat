@@ -7371,3 +7371,68 @@ if asked: P4.16 Fixed 2026-10-01, P3.16 Fixed 2026-10-01, both "Next release").
 **Machine state:** no server, no pin file, no replay run, no worktrees (eight merged
 `worktree-agent-*` branches remain locally: batch 1's four and batch 2's four). Test databases
 `lexchat_test_a` to `_d` remain.
+
+**Addendum to Session 34 (same day, at the user's request: "help me decide", then "make sure we're
+not going to lose any pertinent information", then "update the tracker").** This supersedes
+"Take next: the user's decision" in the handover above. **Session 35 does, in this order:**
+
+1. **The branch is pushed** (user decision: the target pulls `main`, so a branch push puts nothing
+   on the production server, while leaving eleven commits on one machine risks losing them).
+   Check `git status` against `origin/fix/prepilot-defects` first.
+2. **Build P4.15's (a) and (c), $0, before any replay** (user decision). (a): the sentence in
+   `_case_law_body` as agent D worded it (`notes/batch2_D.md` 1.6: "A search can miss a judgment
+   the database holds, so one missing from its results may still exist, in this database or
+   elsewhere: that is not proof of absence."), after `CASE_LAW_COVERAGE_SENTENCE`, only when the
+   search ran (not on an errored one, as with the doctrine sentence); tests at `_case_law_body`
+   proven to fail with the change reverted; P2.8's round trip extended; check it still trips only
+   `NEG_BLAMED_INDEX` (`test_case_law_gap.py` pins the detector list). (c): one alternative in
+   `NEG_BLAMED_INDEX` for the model's own "a search of <the|this|our> ... <database|index|corpus|
+   collection> ... returned <no|zero> <results|judgments|matches|cases>"; D read all 64 sentences
+   it newly matches. Re-run D's dry run on the built product (`evidence/seam/batch2/D/
+   p415_dryrun.py`) and confirm the same 13 (a) and 9 (c) verdicts move and nothing else.
+   **Why both:** (a) is the only option that changes what a lawyer reads, and it covers the 4
+   turns outside the 6370 shape, one of them a Deep Research negative about a decision's later
+   history (Invariant 1 in its plainest form); (c) corrects the model column, which has under-read
+   that sentence form since P2.4, and graders are fixed before an after-column. Cost of (a): about
+   160 characters on every case-law footer (204 stored answers would carry it).
+3. **Then the after-column `wave4_b2_post`**, about $17, cap $22; **confirm the figure with the
+   user before spending** (Session 34's handover gives the commands and the procedure). It
+   measures P3.17 and P4.15 (6370 n=3) together and re-measures P3.3 and P3.2 (required: a Worker
+   prompt changed). Expect some 6338 turn-1 misses (the live Worker named the right regime 4 of 5).
+4. **P3.2 is PARKED** (user decision): no new lever until a lawyer confirms the rubric's reading
+   of the regulation. Why: three levers failed; D's numbers rule out the next obvious ones (a
+   must-re-delegate rule reaches 0 of 15 contradicted claims; the Manager handed the passage kept
+   its position 6 of 6 in Session 31; a check against retrieved text needs matter-specific
+   patterns to find the claim). Every lever tested the model's reading of a regulation whose
+   ground truth is still "to be confirmed by a lawyer"; if confirmed, the next step may be to
+   re-scope the acceptance rather than add plumbing. Asking a lawyer is the user's action, not a
+   session's.
+5. **P4.17 booked** (user decision, measure-first, not urgent): D's 1.5, a section-search-only
+   turn in `legislation_only` gets no footer (8 stored turns, one asserting a negative). 43 of 61
+   rows; B5 now waits on P4.15 and P4.17.
+
+**The smaller items, decided the same way:** no separate row for the `wave4_p41_pre` Deep Research
+turn ((a) covers it); `_plain`'s nested-bracket gap left alone (a rubric entry works round it, and
+fixing it moves sentences in every grader); C's code lever and giving the research Workers PHASE
+2c deferred until the after-column shows how often 6338 turn 1 still misses; the phase's 2-3x cost
+on such a turn (about $0.15) accepted.
+
+**Preserved before the session ends** (the check the user asked for): the four agent notes are
+committed (`notes/batch2_{A,B,C,D}.md`); agents A, C and D's scratch scripts and outputs are in
+the gitignored `evidence/seam/batch2/{A,C,D}/` (C's `scripts/` is the only copy of its draw
+scripts; D's dry-run scripts are there), and agent B's (`verb_scan.py`, `full_diff.py`,
+`show_edit.py`, `revert_plugin.py`) in the scratchpad copy below, with its before output in
+`evidence/seam/batch2/B/`; the drift-probe logs in
+`evidence/seam/batch2/integrator/drift/`; the whole session scratchpad (agent B's verb scan,
+the integrator's fold and revert scripts, the pre-batch grader outputs) re-copied to
+`evidence/seam/batch2/scratchpad_s34/` after this addendum; rubric backups in
+`evidence/rubrics/backup_batch2/`. The agents' transcripts are not kept; everything they found
+is in their notes. FIX_PLAN carries the decisions on P3.2, P3.17, P4.15 and the order line.
+
+**Fix Tracker v29** published at the user's request (same URL; the repo source was byte-identical
+to the live body before the edit): P3.16 Fixed and P4.16 added as Fixed (both `fixed:
+"2026-10-01"`, `ver: "Next release"`), P4.17 added (Verified, P2), the lede and the In-progress
+note updated, a plain-language Session 34 note for Thomas naming no lawyer's topic, and the
+"Next" paragraph rewritten. 38 of 61 fixed, 1 in progress, 18 verified, 4 to be verified.
+Render-checked once (`.playwright-mcp/tracker_v29.png`; the only console error is a local
+favicon 404).
