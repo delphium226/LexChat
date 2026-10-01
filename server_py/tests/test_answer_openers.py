@@ -84,6 +84,36 @@ def test_a_challenge_to_something_else_is_left(answer):
     assert strip_agreement_opener(answer) == (answer, None)
 
 
+@pytest.mark.parametrize("answer, expected, kind", [
+    # P4.16: "highlight" as the bare formula's verb, with each object and the
+    # drop, connector, colon and dangling-"However" shapes.
+    ("You are correct to highlight this. The Order defines a widget.",
+     "The Order defines a widget.", "bare"),
+    ("You're absolutely right to highlight that, and the Order is silent.",
+     "The Order is silent.", "bare"),
+    ("You are right to highlight my earlier statement. However, the Order is silent.",
+     "The Order is silent.", "bare"),
+    ("You are correct to highlight the point: the Order says widget.",
+     "The Order says widget.", "bare"),
+    ("You are right to highlight this point — the Order is silent.",
+     "The Order is silent.", "bare"),
+])
+def test_a_highlighting_formula_goes(answer, expected, kind):
+    assert strip_agreement_opener(answer) == (expected, kind)
+
+
+@pytest.mark.parametrize("answer", [
+    # P4.16 widens the verb only: a clause saying what was highlighted, an
+    # unlisted object, a qualifier, or nothing after the formula, all stay.
+    "You are correct to highlight that the Order is silent. More follows.",
+    "You are correct to highlight this distinction. The Order is silent.",
+    "You are right to highlight this in section 4. The Order is silent.",
+    "You are correct to highlight this.",
+])
+def test_a_highlight_with_content_is_left(answer):
+    assert strip_agreement_opener(answer) == (answer, None)
+
+
 @pytest.mark.parametrize("answer", [
     # Scoped: it says what is agreed, and the acceptance allows it.
     "You are correct that section 4 applies. More follows.",
