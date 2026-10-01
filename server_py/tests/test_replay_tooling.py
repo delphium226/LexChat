@@ -516,6 +516,97 @@ def test_the_index_condition_survives_a_long_instrument_title():
         "Provisions) Regulations 2025' in the legislation database.")
 
 
+# --- P4.15 (c): the model's own "a search of the database ... returned no
+# results" is an index attribution ---------------------------------------------
+#
+# The commonest way the model attributes a case-law miss, and none of the older
+# alternatives read it: they want "in the database" or "not ... database". It
+# held the model column at 0 on directories where most negatives were explained
+# (`notes/batch3_A.md`). All text below is synthetic.
+
+
+@pytest.mark.parametrize("sentence", [
+    'A search of the case law database for "widget licensing" returned no '
+    "judgments.",
+    'A search of the Find Case Law database using the keywords "Widget Order '
+    '1901", "scope" and "apply" returned no results.',
+    'Additionally, a search of this index for "gadget levy" returned zero '
+    "results.",
+    'Searches of our collection for "Widget Order 1901" returned no matches.',
+    'A search of the legislation index using terms such as "Widget Order 1901 '
+    'Commencement" returned no results for commencement instruments.',
+])
+def test_a_search_of_the_index_that_returned_nothing_is_an_index_attribution(
+        sentence):
+    """It reports what a named search returned, which is P2.2's `index`
+    condition ("the miss is attributed to the index or the search")."""
+    assert rr.NEG_BLAMED_INDEX.search(sentence), sentence
+
+
+@pytest.mark.parametrize("sentence", [
+    "No court has decided whether the Widget Order 1901 applies to gadgets.",
+    "There is no case law on the Widget Order 1901.",
+    "No judgment on the Widget Order 1901 exists.",
+    "The Widget Order 1901 has never been judicially considered.",
+])
+def test_a_negative_about_the_law_with_no_search_named_is_not_attributed(
+        sentence):
+    """The new alternative must not credit a bare negative about the law."""
+    assert not rr.NEG_BLAMED_INDEX.search(sentence), sentence
+
+
+@pytest.mark.parametrize("answer", [
+    # The search is named, and the conclusion is drawn about the law, not
+    # reported as what the search returned.
+    'A search of the case law database for "widget licensing" confirms that '
+    "no court has considered the Widget Order 1901.",
+    # The search in one sentence, the conclusion in the next: the gaps stop
+    # at a full stop, so the first sentence cannot lend its search to the
+    # second sentence's conclusion.
+    'A search of the case law database for "widget licensing" was carried '
+    "out. No judgment on the Widget Order 1901 exists, and it returned no "
+    "judgments of any court.",
+    # ... or at a line break.
+    'A search of the case law database for "widget licensing" was run\n'
+    "It returned no results, so the point has never been decided.",
+])
+def test_a_named_search_followed_by_a_conclusion_of_absence_is_not_attributed(
+        answer):
+    assert not rr.NEG_BLAMED_INDEX.search(answer), answer
+
+
+def test_negatives_credits_the_reported_search_and_fails_the_conclusion(
+        tmp_path, capsys):
+    """End to end through `replay_report negatives`, which is what moved: the
+    same named search, once reported as returning nothing (PASS) and once
+    followed by a conclusion that the thing does not exist (FAIL)."""
+    search = _tool("search_case_law", args={"query": "widget licensing"})
+    reported = ('A search of the case law database for "widget licensing" '
+                "returned no judgments.")
+    concluded = ('A search of the case law database for "widget licensing" '
+                 "was carried out. No judgment on the Widget Order 1901 "
+                 "exists.")
+    doc = _run(turns=[])
+    for n, answer in ((1, reported), (2, concluded)):
+        t = _run(answer=answer, tools=[search])["turns"][0]
+        t["turn"] = n
+        doc["turns"].append(t)
+    d = tmp_path / "dir"
+    d.mkdir()
+    (d / "9999_rep1.json").write_text(json.dumps(doc), encoding="utf-8")
+
+    rc = rr.main(["--dir", str(d), "negatives"])
+    out = capsys.readouterr().out
+    rows = {int(line.split()[2]): line.split()
+            for line in out.splitlines()
+            if line.strip().startswith("9999 ")}
+    assert set(rows) == {1, 2}, out
+    # columns: session rep turn queries terms limits index USER loose model verdict
+    assert rows[1][6] == "yes" and rows[1][-2] == "yes" and rows[1][-1] == "PASS"
+    assert rows[2][6] == "NO" and rows[2][-1] == "FAIL"
+    assert rc == 1
+
+
 # --- B8 / P4.3: cited vs consulted -------------------------------------------
 
 
