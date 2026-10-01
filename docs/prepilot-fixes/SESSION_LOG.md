@@ -7197,3 +7197,74 @@ handover above, and what it changes in it:
    `worktree-agent-*` branches remain locally; all merged, safe to delete).
 
 **Second addendum to Session 33 (2026-10-01, at the user's request: a prompt to start the next piece of work as a safe multi-agent batch).** **Session 34 runs `docs/prepilot-fixes/PARALLEL_BATCH_2.md`**, which supersedes "Take next: the user's decision" in the handover above. Four agents in git worktrees: A, the grader gaps (the last section of the gitignored `evidence/rubrics/handread_wave4_b1_post.md`); B, the opener strip's verb gap (P4.16, to be booked); C, P3.17 ($3); D, P4.15's options and evidence for P3.2, with no product code. Merge order A, B, C, D. The brief carries batch 1's lessons for every agent (check the worktree base first; set `TEST_DATABASE_URL` before any pytest; prove a revert removed lines). Verified for it on 2026-10-01: head `a449327`, 2035 tests, 41 of 59 rows, 55 replay directories, test databases `_a` to `_d` present, `openers --all-dirs --export --strip` 47 edited and 9 left as written over 1,783 answers.
+
+---
+
+## Session 34 — 2026-10-01 — parallel batch 2: four agents merged (interim entry)
+
+**Done:**
+- **Ran `PARALLEL_BATCH_2.md` (user decision, both step-2 questions answered: launch all four;
+  tick P3.16 once agent A's note-filter fix is merged).** Step 1's checks all held: head
+  `578718f`, pushed, clean; `main` at `a6b4a76`; `plan_status` 41 of 59; 55 replay directories,
+  both rubrics; test databases `lexchat_test_a` to `_d`; nothing running, no pin file, no
+  worktrees (the four batch-1 `worktree-agent-*` branches remain, merged); baseline suite **2035**
+  on `lexchat_test`.
+- **Merged in the order A, B, C, D, each `--no-ff`**, the full suite on `lexchat_test` after each:
+  A `2b1f7cb` (2037), B `c8a82e2` (2046), C `5b09ac8` (2077), D `5bb29d5` (2077). For each the
+  integrator confirmed the branch contains `578718f`, read the note and the diff, grepped the diff
+  for instrument ids and matter words (no hits: C's only match is its own test's list of id
+  prefixes that the phase must not name), re-ran the new tests with the change reverted, counting
+  the lines removed (A: 1 line, the hedge test fails; 2 lines, the gloss test fails; B: 1 line, 5
+  fail and 39 pass; C: `prompts.py` back to `578718f`, 18 lines removed and 2 restored, 7 fail and
+  24 guards pass; D: a note only), and re-ran a headline number. Notes:
+  `docs/prepilot-fixes/notes/batch2_{A,B,C,D}.md`.
+- **Agent A (grader gaps, $0): all seven items closed.** Two in code (`INTERP_HEDGE` reads
+  "on/under your reading"; the glosses note filter recognises the supplied text before the marker
+  and "it" after it), five in the gitignored rubrics (backed up first to
+  `evidence/rubrics/backup_batch2/`). The only verdict that moved anywhere: `wave4_b1_post`
+  p32_6406 r1, PASS to FAIL by `stance`, the hand-read's verdict. Re-run by the integrator on the
+  merged branch: `interpret` `wave4_b1_post` 6 of 9 FAIL (6338 0 of 3, 6370 0 of 3, 6375 3 of 3),
+  `wave4_p33_post` 7 of 9, `wave4_p33_pre` 9 of 9; `stance` `wave4_b1_post` p32_6406 0 of 3,
+  changes 1, 1, 3; `wave4_p33_post` changes 4, 1, 2; `wave4_p32_pre` 6 of 6 FAIL; `glosses --dir
+  wave4_b1_post --session 6406 6338` 0 in 86. **The command now agrees with every recorded
+  hand-read verdict on those directories.**
+- **Agent B (P4.16, $0): DONE, deterministic.** "highlight" added to the `bare` formula's verbs,
+  the only challenge verb missing from the stored first sentences. Re-run by the integrator:
+  `openers --all-dirs --export --strip` 48 edited and 8 left as written over 1,783 answers (47
+  and 9 before).
+- **Agent C (P3.17, $2.11 of $3): the seam located, a prompt lever built; acceptance not
+  measured.** At turn 1 the regime is never searched for (9 of 9 stored first delegations). PHASE
+  2c in the quick-lookup Worker prompt only; every Manager prompt byte-identical. Recounted by the
+  integrator from the saved live reports: turn 1 names the right regime 4 of 5, turn 2 2 of 2,
+  live turn-1 Worker costs $0.13-0.19 and 11-15 tool calls; `summary_probe count` over the three
+  6338 directories 10, all in `wave4_p33_pre`.
+- **Agent D (P4.15 options and P3.2 evidence, $0, a note only).** P4.15: 13 stored turns of the
+  shape, 9 failing `negatives` (re-run by the integrator: 3, 5 and 2 failing turns); option (a),
+  an attribution sentence in the case-law footer, recommended, not built. P3.2: the decisive
+  passage on the 15 contradicted turns was in the raw retrieval on 15, the summaries on 7, a
+  Worker report on 1; a must-re-delegate rule would have reached 0 of 15.
+- **Ledger:** P4.16 booked in Wave 4 and ticked; P3.16 ticked (user decision); P3.2, P3.3,
+  P3.17 and P4.15 annotated; B6's index line names P4.16. **43 of 60 rows, 8 of 14 buckets**
+  (`plan_status`).
+
+**Surprises / deviations:**
+- **Every worktree again came up on `main` (`a6b4a76`)**, not the integrator's HEAD; every agent
+  checked first, as briefed, and reset to `578718f`.
+- **The branch push is refused by the permission classifier** after each merge, as in batch 1;
+  the merges are local until the user allows the push.
+- **FIX_PLAN.md's `**` count was already odd (4161) before this session**: P0.2's row carries a
+  literal `` `**Key findings` `` in a code span. Left as it is; the fold script asserts its edits
+  add an even number (they add 52).
+- **Agent C found the turn-1 regime is never searched for**, not retrieved and dropped, so the
+  row's code candidate cannot fire at turn 1; a prompt lever was the only one with a trigger.
+- **Agent D corrected the P3.2 premise**: the decisive passage is in the summariser's input on
+  every contradicted turn, but in the answering Manager's context on 1 of 15.
+- **The integrator's first revert check matched nothing** (an LF anchor against a CRLF file); its
+  assertion stopped it before a false pass, and it was redone line by line.
+- **Agents A and D overlapped on the rubrics**: D's dry runs read `p33.json` while A edited it;
+  D's comparisons are within one pass, so none is affected. C removed and recreated a `revert/`
+  directory in the shared session scratchpad; no other file was lost.
+
+**State:** branch `fix/prepilot-defects`, local head after this commit, **not pushed** (the
+classifier); `main` untouched at `a6b4a76`. 2077 tests. No replay yet: the after-column is put to
+the user with a figure first.
