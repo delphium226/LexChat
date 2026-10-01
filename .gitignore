@@ -111,6 +111,8 @@ docs/prepilot-fixes/evidence/replay/
 docs/prepilot-fixes/evidence/rubrics/
 # seam_replay draws kept as evidence (model answers naming lawyers' matters): never commit
 docs/prepilot-fixes/evidence/seam/
+# The lawyer confirmation pack (batch 3 agent D): names the matters and the readings
+docs/prepilot-fixes/evidence/lawyer_pack/
 
 # Local state written by `python -m tools.replay pin` — records the dev box's
 # model and feature flags so `restore` can put them back. Per-machine, and it
