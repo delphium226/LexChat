@@ -292,7 +292,22 @@ NEG_BLAMED_INDEX = re.compile(
     r"include|index)|is incomplete|coverage|gap)"
     r"|\bnot held\b|\bcoverage (?:is|gap|of the)\b"
     r"|\bnot (?:evidence|proof) (?:of|that)\b[^.]{0,40}\b(?:absence|does not exist)"
-    r"|\babsence from the index\b",
+    r"|\babsence from the index\b"
+    # P4.15 (c): the model's own attribution, "a search of the case-law
+    # database for X returned no results". It reports what a named search
+    # returned, which is P2.2's `index` ("the miss is attributed to the index
+    # or the search"), but none of the alternatives above reads it: they want
+    # "in the database" or "not ... database". Measured before it was added
+    # (batch 2 agent D, re-run by batch 3 agent A): it newly matches 64
+    # sentences over every stored answer, all read, every one reporting what a
+    # named search returned and none concluding anything about the law; it
+    # moves 9 `negatives` verdicts, all 6370, and leaves the 4 negatives that
+    # do not say this failing. The gaps are `[^.\n]`, so the search, the
+    # corpus and the "returned no ..." must sit in ONE sentence: a later
+    # sentence concluding the thing does not exist is not credited by it.
+    r"|\bsearch(?:es)? of (?:the|this|our) [^.\n]{0,80}?\b(?:database|index|"
+    r"corpus|collection)\b[^.\n]{0,240}?\breturned (?:no|zero) "
+    r"(?:results?|judgments?|matches|cases?)\b",
     re.I,
 )
 # The failing direction: the lawyer's own citation questioned. 6373 and 6409.
