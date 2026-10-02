@@ -1547,7 +1547,8 @@ def test_a_turn_that_searched_gets_no_carried_line(tool):
     """A turn that ran a search is P2.2's, and the fresh footer is unchanged.
     **Both** search tools count. A turn that searched only within an instrument
     gets no fresh footer, but "no search was run for this reply" would be false
-    there, so it stays silent."""
+    there, so the carried line stays silent. That turn's scope is stated by
+    P4.17's `section_scope_footer` instead (`test_section_scope.py`)."""
     fresh = answer_scope_footer(_P28_LOG, {})
     searched = [{"tool": tool, "query": "q", "legislation_id": "asp/2025/2"}]
     assert carried_scope_footer(_p28_history(fresh), searched) == ""

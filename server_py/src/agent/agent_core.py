@@ -47,6 +47,7 @@ from ..utils.research_halt import (
 from ..utils.search_scope import (
     answer_scope_footer,
     carried_scope_footer,
+    section_scope_footer,
     lookup_scope_footer,
     case_law_scope_footer,
     strip_answer_footer,
@@ -1075,6 +1076,14 @@ async def process_user_request(
     # conversation, so it cannot restate an earlier turn's negative.
     if not _footer and not scope_unknown:
         _footer = carried_scope_footer(messages, all_searches)
+    # P4.17 (B5): a turn that searched only WITHIN instruments (section search,
+    # no `search_legislation`) gets neither line above. This one states the
+    # section searches it ran and carries the fresh footer's clauses, the
+    # lookup clause included, so the lookup line below does not also fire.
+    # Not suppressed by `scope_unknown`: like the fresh footer, it states only
+    # searches this turn recorded, and those ran.
+    if not _footer:
+        _footer = section_scope_footer(all_searches)
     # P3.7 (B5): a turn that looked an instrument up and ran no ranked search,
     # with no earlier search to carry. (The carried line above states the
     # lookup itself when there is one: placing this line first dropped the
@@ -1416,9 +1425,12 @@ async def run_deep_research(
     # P2.4 (B12): the case-law disclosure rides the same `searches` record
     # across steps, and joins the legislation line when there is one. 6375's
     # failing turn is this path: 18-30 case-law searches and no disclosure.
+    # P4.17 (B5): a report whose steps searched only within instruments gets
+    # the section line, straight after the fresh footer it stands in for.
     final["content"] = strip_answer_footer(
         final.get("content") or ""
     ) + (answer_scope_footer(all_searches, _get_cfg())
+         or section_scope_footer(all_searches)
          or lookup_scope_footer(all_searches)
          or case_law_scope_footer(all_searches))
 
