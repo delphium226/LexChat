@@ -7686,3 +7686,81 @@ $12), figure confirmed with the user first. New lessons carried into it: the pin
 the harness may block writes outside a worktree (copy scratch out before removing it); a dry run
 must import the built code; check a gitignored folder with `git check-ignore` before writing
 matter text into it. The FIX_PLAN recommended-order line's *Take next* now points at the brief.
+
+---
+
+## Session 36 — 2026-10-02 — parallel batch 4: four agents merged (interim entry)
+
+**Done:**
+- **Ran `PARALLEL_BATCH_4.md` (user decision: launch all four as set out; B names instruments by
+  id).** Step 1's checks all held: head `e5c31ba`, equal to `origin/fix/prepilot-defects`, clean;
+  `main` at `a6b4a76`; `plan_status` 44 of 62, 7 of 14 buckets; 56 replay directories, the latest
+  `wave4_b2_post`; rubric sha1s `e14b762…` (`p32.json`) and `dce6d2f…` (`p33.json`); test
+  databases `lexchat_test_a` to `_d`; no python process, port 8000 free, no pin file in
+  `server_py/tools/` (or `server_py/`), no worktrees; baseline suite **2093** on `lexchat_test`.
+- **Merged in the order A, C, B, D, each `--no-ff`**, the full suite on `lexchat_test` after each
+  and the branch pushed after each: A `308bfed` (2095), C `7b41ead` (2100), B `4002473` (2135), D
+  `482b6b1` (2135). For each the integrator confirmed the branch contains `e5c31ba`, read the
+  note and the diff, grepped the added lines for instrument ids and the matter words (no hits;
+  only synthetic `ssi/1901/*` and `uksi/1902/7`), re-ran the new tests with the change reverted on
+  a scratch worktree (anchors taken from the diff's hunks, each asserted once): A 17 lines, the
+  file then equal to `e5c31ba`, 2 fail; C 16 lines, equal but for the docstring, 4 fail; B the
+  wiring 12 lines (6 fail), the builder 84 lines net (all 35 fail at import), the grader 108 lines
+  (3 fail); D a note only. Each agent's full suite re-run on `lexchat_test` (A 2095, C 2098, B
+  2128). Notes: `docs/prepilot-fixes/notes/batch4_{A,B,C,D}.md`.
+- **Agent A (the four grader gaps, $0): MET.** Re-run by the integrator: `interpret` on
+  `wave4_b2_post` gives 6338 r1 PASS, r2 FAIL (t3), r3 FAIL (t2, t3), 6370 0 of 3, 6375 2 of 3;
+  `stance` gives `p32_6406` 0 of 3, changes 2, 3, 3, the contradicted consequence on r1 t9, r2 t8
+  and t9, r3 t8 and t9; `wave4_b1_post` 6 of 9, `wave4_p33_post` 7 of 9, `wave4_p33_pre` 9 of 9.
+  A's before/installed outputs differ in one verdict (6338 r2) and two change counts. Rubrics
+  backed up to `evidence/rubrics/backup_batch4/`; now `p32.json` `7927e64…`, `p33.json`
+  `7e3091e…`.
+- **Agent C (P4.18, $0): MET and TICKED.** Re-run on the merged tree
+  (`evidence/seam/batch4/integrator/c/p418_contra_after.py`, C's script with its worktree
+  assertion pointed at the main checkout): rebuilt contradictions 61 to 0, spliced stored footers
+  28 to 0, both must-be-0 lines 0. The count was 28 of 475, not the row's 27 of 455
+  (`wave4_b2_post` added one).
+- **Agent B (P4.17 (d), $0): items (1) and (2) MET; (3) waits for the after-column.** Re-run on
+  the merged tree (`seam/batch4/B/p417b_dryrun.py` into `dry_merged`): 37 edits on exactly the 37
+  turns of the shape; 23 of 484 outputs move, all in batch 3 C's 5.3 table or the new
+  `sectionscope` line; exits 17 better, 0 worse; downstream 0 outside the shape; couplings 37 of
+  37. `sectionscope` over all 56 stored directories: 37 MISSING, 0 MISATTRIBUTED. On the merged
+  tree no section line carries P4.18's contradiction (the one that did now has C's wording).
+- **Agent D (P3.17 measured, the s.35ZA point, $0 plus 16 read-only LEX requests): a note
+  only.** The turn-3 hedged sequence reading is added by the Manager (4 of 9 answers since P3.3's
+  clause; the Worker report neutral 9 of 9), always as "on one reading"; before the clause it was
+  an unhedged conclusion 3 of 3. Turn 2's alternative regime first appears in the Manager's
+  answer. Recommends option (1), waiting for the lawyer with one supplementary question, and
+  booking a new row for the change-record pinpoint loss (`_slim_amendment_results` drops the
+  pairing of changed and effecting provisions). **s.35ZA: the 2024 Act inserted the whole section
+  (its s.6(2)); the 2019 Act did not.** Re-checked by the integrator from D's recorded responses.
+  The pack edit (one 11-line note in Reading 2) applied to the gitignored pack (sha1 `2250272c…`
+  to `3fb21af4…`); `verify_pack_links.py` 20 URLs, 0 not found; `verify_pack_quotes.py` output
+  identical to the original pack's (17 runs, all instrument titles).
+- **Ledger:** P4.18 ticked; P4.17, P3.17, P3.3 and P3.2 annotated; B4's index line marks P4.18
+  done; the recommended-order line moved to "Session 36, interim" (26 `**` added, even). **45 of
+  62 rows, 8 of 14 buckets** (B4 closed again). CHANGELOG *Unreleased*: P4.17's line, P4.18's
+  wording, and A's and B's grader changes as tooling.
+
+**Surprises / deviations:**
+- **Every worktree again came up on `main` (`a6b4a76`)**; every agent checked first and reset to
+  `e5c31ba`.
+- **The harness blocked the Write tool outside every worktree** (all four agents). A and B copied
+  their scratch out with `cp`; C and D left it in the worktree; the integrator copied each to
+  `evidence/seam/batch4/<L>/` and compared file counts (A 162, B 2,047 plus `__pycache__`, C
+  1,940, D 43) before removing the worktrees. D's pack edit was applied by the integrator.
+- **C's dry-run module asserts it imports C's own worktree**, so its re-run on the merged tree
+  needed a copy with that constant repointed (in `seam/batch4/integrator/c/`); B's scripts import
+  from the working directory and ran unchanged.
+- **D's LEX requests were POSTs, not the brief's GETs**: the search and lookup endpoints take a
+  JSON body by POST (as the product calls them) and write nothing.
+- **The hedged sequence reading was not new in `wave4_b2_post`**: two earlier reps offered it and
+  their hand-reads graded it clean (no rep verdict moves). The Session 35 entry above, its handover
+  and the hand-read said otherwise; recorded on P3.17, and the hand-read file is annotated.
+- **The inserting Act was wrong in the record**: the rubric's `_note`, the pack's table and
+  question part (2), and the `external-apis` skill say 2019; the LEX change record and the 2024
+  Act's own text say 2024. Not corrected yet (the user's decision).
+
+**State:** branch `fix/prepilot-defects` at `482b6b1` plus this commit, pushed; `main` untouched
+at `a6b4a76`. 2135 tests. No replay yet: the after-column `wave4_b4_post` is put to the user with
+a figure first.

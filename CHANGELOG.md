@@ -23,6 +23,12 @@ Saying honestly what was and was not found:
 - When case law was searched, say that a search can miss a judgment the
   database holds, so one missing from its results may still exist: that is not
   proof of absence (P4.15).
+- When a reply searched only within instruments, say so in the scope line:
+  which instruments and terms were searched, and that a provision missing
+  from such a search may still be in the instrument and in the index
+  (P4.17; built, its live check still to run).
+- Don't say no change record was consulted when one was: say that the
+  records consulted list neither a commencement nor a repeal (P4.18).
 
 Interpretation. P3.17 and P3.3 stay open: P3.17's change fixed the turn it
 aimed at but has not met its acceptance.
@@ -37,7 +43,11 @@ conclusions (P3.16).
 
 Replay harness and measuring tools only, no product change: the negatives
 grader reads "a search of the database ... returned no results" as attributing
-the miss to the search (P4.15).
+the miss to the search (P4.15). The interpretation grader reads "As you
+suggest, ..." as agreement rather than a hedge (P3.3); the position grader
+reads a negated sentence as taking no position (P3.2); a new check reports
+whether the section-search scope line appears on exactly the replies that
+searched only within instruments (P4.17).
 
 ## 2026.09.3 — 2026-09-29
 
