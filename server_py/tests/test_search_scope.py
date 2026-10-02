@@ -1063,11 +1063,34 @@ def test_footer_trips_no_detector():
                     {"legislation_id": "asp/2025/2", "provisions_commenced": 8,
                      "commencement_orders_of_amendments": 0,
                      "repeal_or_revocation_relations": 0})
-    for log in (empty_log, sourced_log):
+    # P4.18, the third branch: a change record consulted that held no
+    # commencement or repeal relation. Its first draft ("list no commencement
+    # ...") tripped `NEG_ASSERTED`, which is what this test is for.
+    consulted_log = []
+    record_currency(consulted_log, "get_legislation_changes",
+                    {"legislation_id": "ssi/1901/1"},
+                    {"legislation_id": "ssi/1901/1", "provisions_commenced": 0,
+                     "commencement_orders_of_amendments": 0,
+                     "repeal_or_revocation_relations": 0})
+    from tools.replay_report import (
+        IN_FORCE_CLAIM, _CMC_CONTEXT, _CMC_DENIED, _CUR_DISCLOSED,
+        _currency_asserted, _sentences,
+    )
+    for log in (empty_log, sourced_log, consulted_log):
         clause = _currency_footer_clause(log)
         assert clause
         assert not NEG_ASSERTED.search(clause)
         assert derivation_claims(clause)[0] == []
+        # P3.5's commencement denial and P2.5's own `CURRENCY_ASSERTED`, per
+        # sentence, as `cmd_commencements` and `cmd_currency` read them.
+        for s in _sentences(clause):
+            assert not (_CMC_CONTEXT.search(s) and _CMC_DENIED.search(s)), s
+            assert not _currency_asserted(s), s
+        # No more "in force" adjacencies than the opening every branch shares,
+        # and no disclosure credit taken by the product's own footer.
+        assert len(IN_FORCE_CLAIM.findall(clause)) == 1
+        assert not _CUR_DISCLOSED.search(clause)
+    assert "no change record was consulted" not in _currency_footer_clause(consulted_log)
 
 
 def test_the_enabling_block_is_stripped_before_a_lawyer_sees_it():

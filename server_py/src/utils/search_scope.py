@@ -1274,6 +1274,13 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
     which is the thing 42 of 62 pre-pilot sessions could not have known, because
     the UI was telling them the opposite.
 
+    **P4.18: a third case sits between those two.** A change record that was
+    consulted and held no commencement or repeal relation is neither "checked"
+    nor "not consulted", and the second wording was false there, beside P3.5's
+    clause saying the record was consulted directly. That case now says the
+    record was consulted and does not establish in-force status; "no change
+    record was consulted" is kept for a turn that consulted none.
+
     **The title-marker limb was drafted here and removed after the smoke run.**
     The marker is recorded per SEARCH ROW, not per cited instrument, so the
     footer read *"the index's own title for uksi/2024/697 marks it as repealed"*
@@ -1293,9 +1300,10 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
     rows = [e for e in (entries or []) if e.get("tool") == "currency"]
     if not rows:
         return ""
-    sourced = []
+    sourced, consulted = [], False
     for e in rows:
         if e.get("kind") == "relations":
+            consulted = True
             lid = e.get("legislation_id") or ""
             if lid and (e.get("commenced") or e.get("repeals")) and lid not in sourced:
                 sourced.append(lid)
@@ -1308,6 +1316,21 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
             "; what was checked is the recorded changes for "
             f"{', '.join(sorted(sourced)[:3])}, which name the instruments "
             "involved provision by provision but carry no dates."
+        )
+    elif consulted:
+        # P4.18: a change record WAS consulted and held no commencement or
+        # repeal relation. "No change record was consulted" was false here,
+        # beside P3.5's clause on the same line ("which this research
+        # consulted directly"): 28 stored footers. The instruments are not
+        # named again because P3.5's clause, just before this one, names them.
+        # Screened against every detector in `replay_report`: "list no
+        # commencement" trips `NEG_ASSERTED`, "in-force status is not
+        # established" trips `_CUR_DISCLOSED`, "whether it is in force" adds an
+        # `IN_FORCE_CLAIM` match, and an instrument id adds lookup and
+        # derivation pattern hits. This wording adds none.
+        lead += (
+            "; the recorded changes consulted list neither a commencement nor a "
+            "repeal, so they do not answer that question either."
         )
     else:
         lead += " and no change record was consulted for this answer."
