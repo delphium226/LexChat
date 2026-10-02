@@ -8,8 +8,8 @@ endpoint traps for the APIs we call are in the `external-apis` skill
 
 > **Status as of 2026-10-02.** Fix status changes faster than this file. Where a row names a
 > FIX_PLAN row, [`prepilot-fixes/FIX_PLAN.md`](prepilot-fixes/FIX_PLAN.md) is authoritative.
-> "Potential sources" are leads. The only ones verified live are the LEX endpoints and the
-> SCTS judgments API (see §3). Every non-LEX, non-National-Archives source would also need
+> "Potential sources" are leads. The only ones verified live are the LEX endpoints, the
+> SCTS judgments API (§3) and the National Archives' published API (§4). Every non-LEX, non-National-Archives source would also need
 > adding to the internet-restricted target's whitelist
 > ([`NETWORK_AND_DEPENDENCIES.md`](NETWORK_AND_DEPENDENCIES.md)).
 
@@ -20,7 +20,7 @@ endpoint traps for the APIs we call are in the `external-apis` skill
 | Source | What it gives | Called by |
 |---|---|---|
 | **LEX API** (`lex.lab.i.ai.gov.uk`) | UK legislation: search, section search, full text, amendment/commencement/repeal relations (P3.5), held/absent lookup (P3.7). 6 of its 13 documented endpoints | `search_legislation`, `search_legislation_sections`, `get_legislation_text`, `get_legislation_changes`, `lookup_legislation` |
-| **The National Archives — Find Case Law** (`caselaw.nationalarchives.gov.uk`) | England & Wales and UK-wide judgments; Scottish appeals to the UK Supreme Court. 42 court codes, none Scottish or Northern Irish | `search_case_law`, `get_case_law_text` |
+| **The National Archives — Find Case Law** (`caselaw.nationalarchives.gov.uk`) | England & Wales and UK-wide judgments; Scottish appeals to the UK Supreme Court. 42 court codes, none Scottish or Northern Irish. **Licence question open (§4): TNA requires a free licence for AI/LLM products** | `search_case_law`, `get_case_law_text` |
 
 One older fix shaped every coverage number below. Until **P1.1** (2026-09-14) the
 jurisdiction filter dropped every legislation result whose territorial extent was stated, so
@@ -49,7 +49,8 @@ honest about a gap. Only the SCTS lead in §3 would actually fill one.
 | Gap | What it costs us | Recent work | Potential sources |
 |---|---|---|---|
 | **2026 secondary legislation** (about 2% of SSI and UK SI 2026 held; SSI 2025 about 87%) and **older Acts missing one by one** (e.g. Education (Scotland) Act 1962; about 60% of 1962 Acts held) | A "not found" is usually our gap, not absence in law; lawyers were asked to recheck correct citations (6409, 6373) | **Fixed for honesty, not coverage.** **P3.7** (24 Sep, `v2026.09.3`): `lookup_legislation` tells, in code, whether each instrument a brief names by number is held, held without text, or not held. **P2.2**: negative answers state what was searched and that 2026 coverage is under 5% | **legislation.gov.uk** new-legislation feeds and direct lookup. The LEX team: why is so little of 2026 held, and is the older patchiness inherited from legislation.gov.uk? If it is, legislation.gov.uk won't fill it |
-| **How far back National Archives case law goes is unmeasured** (feed caps at 50, no totals) | Session 6363's recency-bias complaint can be neither confirmed nor ruled out | None | **The National Archives Find Case Law team**: ask for a coverage statement. **BAILII** for older England & Wales material |
+| **Case-law searches return the 50 newest matches, with a false total** | We send no `order`, and the feed defaults to newest first, so the model sees the 50 most recent of what can be ~26,000 matches, not the 50 most relevant ("Evans": an unrelated 2026 case first; *Evans v Evans* under relevance). `total` is reported as the count shown. A plausible mechanism for 6363's recency-bias complaint | **Booked 2 Oct:** **P3.22** (relevance ordering with `per_page=50`; this resolves the item held from Thomas's review), **P3.23** (report the real total and the window). **P3.9** (open) fixes the date filter, which has never applied | **The National Archives' own feed**: `order=relevance`, `per_page`, and the `last` link (§4) |
+| **How far back National Archives case law goes is unmeasured** | Session 6363's recency-bias complaint can be neither confirmed nor ruled out | None. ~~Feed caps at 50, no totals~~: wrong. 50 is only the default page size and the `last` link gives the total, so this is **measurable** (§4), once P3.9's working date form is used | **Our own probe** of the feed (§4). **The National Archives Find Case Law team**: ask for a coverage statement. **BAILII** for older England & Wales material |
 | **Schedules and EU Annexes come back as one provision** | Can't fetch a schedule paragraph or Annex chapter by number. 6335 looped 18 times on Sch B1 para 43; an Annex chapter was called "not held" 2 times in 3 | **Open.** **P3.12** is booked (measure first). The P3.1 cap now stops the looping after 3 rounds. Cutting out Annex chapters works in dev tooling (`tools/provision_hints.py`) but isn't in the product. **P5.4** probes legislation.gov.uk's paragraph-level markup | **legislation.gov.uk XML** (paragraph-level markup). **Cutting locally**, building on `provision_hints.py` |
 
 ### 2.3 Data we could have but don't use
@@ -152,3 +153,39 @@ curl -s -H "Content-Type: application/json" \
   -d '{"query":"\"title to sue\"","filters":[{"field":"Court","value":"Court of Session"}],"page":1,"indexType":"Judgments","category":"","limit":5}' \
   https://api.pa.web.scotcourts.gov.uk/web/search
 ```
+
+---
+
+## 4. National Archives — the published API and licence, read 2026-10-02
+
+The Find Case Law API is documented at
+[`nationalarchives.github.io/ds-find-caselaw-docs/public`](https://nationalarchives.github.io/ds-find-caselaw-docs/public)
+(OpenAPI: `public_api.yml` in `nationalarchives/ds-find-caselaw-docs`). Our code sends
+`query`, `court` and two date parameters the feed ignores (P3.9). Probed live:
+
+| Finding | Detail | Row |
+|---|---|---|
+| **Default order is newest first** | `order` defaults to `-date`. `order=relevance` (the advanced search's sort, not in the spec's enum) ranks by relevance over the same matching set ("Evans": 520 pages under every ordering) | P3.22 |
+| **An explicit `order` resets the page size to 10** | Why Thomas saw relevance cut 50 → 10; `order=-date` does it too. Send `per_page` with `order` | P3.22 |
+| **`per_page` is not capped at 50** | 500 returned 500. `page` pages through the rest | — |
+| **The total is in the `last` link** | Final page number at the requested page size; the total to within one page. The last page can be empty ("Donoghue v Stevenson": page 12 held 0), so treat it as an upper bound | P3.23 |
+| **`party` and `judge`** | Match one full word of a party's or judge's name. A route to a case the lawyer names (6359's *Clark*, Thomas's *R v Evans (Graham)*); unused | — |
+| **Dates** | The spec documents no date parameter. The advanced search's `from_date_0/1/2` / `to_date_0/1/2` work; what we send is ignored | P3.9 |
+| **Rate limit** | 1,000 requests per rolling 5 minutes **per IP**, HTTP 429. The target is one IP for all users; our case-law calls bypass `_request_with_retry` | P4.19 |
+| **Document URIs** | `court/year/seq` until April 2025, `d-{UUID}` since. Not checked against `_court_rank`, which falls back to the URL for the court code | — |
+
+### The licence
+
+The Open Justice Licence permits reading, downloading, quoting and republishing judgments,
+including commercially. It does **not** permit "computational analysis", which TNA
+[defines](https://caselaw.nationalarchives.gov.uk/when-you-need-permission) as "using
+automated or algorithmic methods to process large numbers of judgments systematically —
+including using AI or large language models (LLMs)", and lists as including "building
+services or products using AI or large language models (LLMs)" and "natural language
+processing of judgment text". Reading individual judgments, downloading them one at a time
+and using the search function do not need permission.
+
+AILA searches the feed programmatically and processes judgment text with an LLM, so it reads
+as in scope. **The licence is free** (`caselawlicence@nationalarchives.gov.uk`). No record of
+an application exists in this repo. This is a decision for the user and the deploying
+organisation, not an engineering row.
