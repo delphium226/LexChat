@@ -358,8 +358,8 @@
       its row in the fix plan and its action number in Thomas's review of 10 September 2026.
       <strong>“Fixed” means built and accepted on the fix branch. The Version column says which
       release carries each fix: 2026.09.1 (22 September), 2026.09.2 (23 September) or 2026.09.3
-      (29 September), all merged for deployment to the server. Three rows fixed since then, P3.16,
-      P4.16 and P4.15, are marked “Next release”. The fixed date is the day a fix was accepted, not the
+      (29 September), all merged for deployment to the server. Five rows fixed since then, P3.16,
+      P4.16, P4.15, P4.18 and P4.17, are marked “Next release”. The fixed date is the day a fix was accepted, not the
       day it reached the server.</strong></p>
   </header>
 
@@ -444,6 +444,42 @@
         box (Settings, then About), so a problem report can say which release it was.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.</p>
+      <p><strong>2 October: two more fixes, and a re-run.</strong> Four more pieces of work were
+        built side by side at no cost, then two sessions were re-run (6 re-runs, $9.88).
+        <strong>P4.17</strong> is fixed: an answer whose research only searched inside particular
+        instruments now gets a line saying which instruments were searched and for what, and that a
+        provision missing from such a search may still be in the instrument. Tried on every stored
+        answer first, the line landed on exactly the 37 answers of that kind and on no other. In the
+        re-run it appeared on all 4 answers of that kind and on no other answer, and every “not
+        found” on them was read by hand. <strong>P4.18</strong> is fixed: the line under an answer
+        could say both that the record of changes to an Act was consulted and that it was not (28
+        stored answers). It now says what is true, and no stored answer carries both.</p>
+      <p><strong>P3.17, traced, not yet fixed.</strong> In the wrong-Act session, the reading that
+        the consultation must come first is added by the chat's own reply, not by the research, and
+        it comes from our own instruction to give a point the text does not settle as a reading. It
+        had also appeared in two earlier re-runs, which our checks had passed. So the questions for
+        a lawyer now also ask whether a reading like that is acceptable when the answer says plainly
+        that the Act sets no order. Nothing more will be built on it until a lawyer answers. Checking
+        the official record of changes also showed that the section in that session was inserted by
+        a 2024 Act, not by the 2019 Act our reading named; our reading and the questions are
+        corrected. The questions are ready to send.</p>
+      <p><strong>P3.2 and P3.3, re-checked.</strong> Our automatic checks were corrected first, and
+        now give the same result as the last reading by hand. In the disputed-reading session, one
+        re-run in three passed for the first time: it gave every reading as a reading and said the
+        text does not settle the point. Statements given as settled fell to about 4 in all, against
+        about 15 last time. The pushback test still fails in all three re-runs. The re-run found
+        three more wordings our checks misread, to be corrected before the next one.</p>
+      <p><strong>Seven new rows.</strong> <strong>P3.19</strong>: the tool that reads the record of
+        changes loses which provision made which change, so one answer cited the wrong subsection as
+        the one that inserted a section. A review of legal data sources added <strong>P3.20</strong>
+        (Scottish judgments, from the Scottish Courts and Tribunals Service's own judgments search),
+        <strong>P3.21</strong> (the date a provision came into force, not only the instrument that
+        commenced it) and <strong>P5.4</strong> (checking legislation.gov.uk for what our legislation
+        database lacks). A review of the National Archives case-law service added
+        <strong>P3.22</strong> (case-law results come back newest first, not most relevant: Thomas's
+        action 6, now confirmed), <strong>P3.23</strong> (the system is told it saw every case-law
+        match when it saw at most 50) and <strong>P4.19</strong> (a case-law request refused because
+        the service is busy is not tried again).</p>
       <p><strong>1 October, later: one more fix, and a combined re-run.</strong> Four more pieces
         of work were built side by side at no cost, then the affected sessions were re-run once
         (15 re-runs, $17). <strong>P4.15</strong> is fixed: the line under any answer that searched
@@ -822,11 +858,11 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next.</strong> Correct the wordings our checks missed, then decide
-        <strong>P4.17</strong>'s line and <strong>P3.17</strong>'s next step. <strong>P3.2</strong>
-        waits on a lawyer confirming our reading of the regulation, and <strong>P3.3</strong> with
-        it. The other open groups remain: <strong>P3.4</strong> (the Scottish jurisdiction
-        default), <strong>P4.3</strong> (the sources list) and <strong>P4.12</strong>.</p>
+      <p><strong>Next.</strong> Send the questions to a lawyer: <strong>P3.2</strong>,
+        <strong>P3.3</strong> and <strong>P3.17</strong> wait on the answers. <strong>P3.19</strong>
+        can be built at no cost. The other open groups remain: <strong>P3.4</strong> (the Scottish
+        jurisdiction default), <strong>P4.3</strong> (the sources list), <strong>P4.12</strong>,
+        and the new case-law rows (P3.20 to P3.23, P4.19).</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
         and three items from <code>docs/TODO.md</code> D16 (the impossible year window, always
@@ -850,7 +886,7 @@
   // ver:    on a Fixed row only: the release that carries it ("2026.09.1", the git tag
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
-  const UPDATED = "1 October 2026, end of Session 35 (P4.15 fixed; P3.17 re-run, not yet fixed; P3.2 and P3.3 re-checked; questions for a lawyer prepared; P4.17 measured)";
+  const UPDATED = "2 October 2026, end of Session 36 (P4.17 and P4.18 fixed; P3.17 traced; P3.2 and P3.3 re-checked; questions for a lawyer ready to send; seven rows added)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23", ver: "2026.09.3" },
@@ -889,6 +925,10 @@
     { src: "R", fix: "Stop the step that condenses search results adding its own interpretation (one reached a lawyer as a quotation)", sev: "P1", status: "Fixed", ref: "P3.16", t: "", fixed: "2026-10-01", ver: "Next release" },
     { src: "R", fix: "Fetch the section that says where a general rule applies, not only its definitions", sev: "P1", status: "Verified", ref: "P3.17", t: "" },
     { src: "R", fix: "Stop the Deep Research report asserting that an English doctrine applies in Scotland without a Scottish source", sev: "P1", status: "Fixed", ref: "P3.18", t: "", fixed: "2026-09-29", ver: "2026.09.3" },
+    { src: "R", fix: "Keep which provision made which change when reading the record of changes (a wrong inserting subsection reached an answer)", sev: "P1", status: "Verified", ref: "P3.19", t: "" },
+    { src: "R", fix: "Retrieve Scottish judgments from the Scottish Courts and Tribunals Service's judgments search", sev: "P2", status: "Verified", ref: "P3.20", t: "" },
+    { src: "R", fix: "Retrieve the date a provision came into force, not only the instrument that commenced it", sev: "P2", status: "Verified", ref: "P3.21", t: "" },
+    { src: "R", fix: "Tell the system how many case-law results there were, not how many it was shown (at most 50)", sev: "P2", status: "Verified", ref: "P3.23", t: "" },
     { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", sev: "P1", status: "Fixed", ref: "P4.1", t: "9", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Show a change of mode or research type in the conversation itself", sev: "P3", status: "Verified", ref: "P4.9", t: "" },
     { src: "R", fix: "Never show a blank or lost reply", sev: "P1", status: "Fixed", ref: "P4.2", t: "", fixed: "2026-09-16", ver: "2026.09.1" },
@@ -903,13 +943,16 @@
     { src: "R", fix: "Show one search-scope line, not two, when the model copies an earlier one", sev: "P3", status: "Fixed", ref: "P4.14", t: "", fixed: "2026-09-29", ver: "2026.09.3" },
     { src: "R", fix: "Say that a case-law search finding nothing is not proof there is none", sev: "P2", status: "Fixed", ref: "P4.15", t: "", fixed: "2026-10-01", ver: "Next release" },
     { src: "R", fix: "Remove an opening “You are correct to highlight this”, which the opener check missed", sev: "P3", status: "Fixed", ref: "P4.16", t: "", fixed: "2026-10-01", ver: "Next release" },
-    { src: "R", fix: "Say what was searched under an answer whose research used only section searches (it gets no search-scope line)", sev: "P2", status: "Verified", ref: "P4.17", t: "" },
+    { src: "R", fix: "Say what was searched under an answer whose research used only section searches (it gets no search-scope line)", sev: "P2", status: "Fixed", ref: "P4.17", t: "", fixed: "2026-10-02", ver: "Next release" },
+    { src: "R", fix: "Stop the line under an answer saying no record of changes was consulted when one was", sev: "P3", status: "Fixed", ref: "P4.18", t: "", fixed: "2026-10-02", ver: "Next release" },
+    { src: "R", fix: "Retry a case-law request refused because the service is busy, as legislation requests are", sev: "P2", status: "Verified", ref: "P4.19", t: "" },
     { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Fixed", ref: "P4.6", t: "4", fixed: "2026-09-23", ver: "2026.09.3" },
     { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Fixed", ref: "P4.7", t: "2", fixed: "2026-09-24", ver: "2026.09.3" },
     { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", sev: "P3", status: "Verified", ref: "P4.8", t: "" },
     { src: "R", fix: "Source Scottish case law (Court of Session, Sheriff Courts)", sev: "P2", status: "In progress", ref: "P5.2", t: "" },
+    { src: "R", fix: "Check legislation.gov.uk for what our legislation database lacks (enabling powers, past versions, dated changes)", sev: "P3", status: "Verified", ref: "P5.4", t: "" },
     { src: "T", fix: "Show provider errors (credit, rate limit) clearly when planning", sev: "P3", status: "Verified", ref: "TODO B6", t: "8" },
-    { src: "T", fix: "Order case-law results by relevance", sev: "P3", status: "To be verified", ref: "", t: "6" },
+    { src: "T", fix: "Order case-law results by relevance (they come back newest first)", sev: "P2", status: "Verified", ref: "P3.22", t: "6" },
     { src: "T", fix: "Reconcile summary counts with the answer's own list", sev: "P2", status: "To be verified", ref: "", t: "NH2" },
     { src: "T", fix: "Scan whole instruments for a literal “£”", sev: "P3", status: "To be verified", ref: "", t: "4" },
     { src: "T", fix: "Add an enabling-power rule to the synthesis prompt", sev: "P2", status: "To be verified", ref: "P2.3", t: "1" },

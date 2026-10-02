@@ -7884,3 +7884,23 @@ replay running, no worktrees (the four `worktree-agent-*` branches of batch 4 re
 merged). Test databases `lexchat_test_a` to `_d` remain. 57 replay directories, the latest
 `wave4_b4_post`. The session scratchpad is copied to the gitignored
 `evidence/seam/batch4/scratchpad_s36/`.
+**Addendum to Session 36 (2026-10-02, at the user's request: "make sure we're not going to lose
+any pertinent information", then "update the tracker").**
+- Checked: working tree clean and pushed; the session scratchpad's copy in
+  `evidence/seam/batch4/scratchpad_s36/` identical to the scratchpad (134 files).
+- Two gaps closed. **(1)** The two `/amendment/section/search` traps batch 4 D found (exact
+  provision URL only; a relation with a null `changed_provision_url` is unreachable from the
+  changed side) added to the `external-apis` skill's endpoint table (the skill is under the
+  gitignored `.claude/`, so the edit is local). **(2)** The handover above says the pack's sha1 is
+  in the hand-read; it was not. Now recorded there: `confirmation_pack.md` sha1 `10da6f9d…`
+  (15,341 bytes), with its earlier states.
+- **Fix Tracker v31** published at the user's request (same URL; the repo source was identical to
+  the live body before the edit: Artifact read, then a Read of all 1,132 lines of the saved file):
+  P4.17 and P4.18 Fixed (`fixed: "2026-10-02"`, `ver: "Next release"`; P4.18 is a new tracker row,
+  P3); seven rows added, all Verified: P3.19 (P1), P3.20, P3.21, P3.23 and P4.19 (P2), P5.4 (P3),
+  and Thomas's action-6 row "Order case-law results by relevance" is now P3.22 (To be verified to
+  Verified, P3 to P2, since the review found every case-law search returned the newest 50, not the
+  most relevant). The lede names five rows waiting for the next release; four plain-language
+  Session 36 paragraphs for Thomas naming no lawyer's topic; "Next" rewritten. 41 of 68 fixed.
+  Render-checked once over a local server (`.playwright-mcp/tracker_v31.png`; the only console
+  error is the local favicon 404).
