@@ -7150,6 +7150,20 @@ STANCE_RETRACTION = re.compile(
 STANCE_CONDITIONAL = re.compile(r"^[\s>\-\d.)]*(?:if|unless|were|had|whether)\b", re.I)
 _STANCE_SENT = re.compile(r"(?<=[.!?])\s+|\n+")
 DEFAULT_RUBRIC = EVIDENCE_ROOT / "rubrics" / "p32.json"
+# Batch 4 (agent A): an affirm pattern matched under a negation asserts
+# nothing ("X is not defined as a [category]" matched "as a [category]"). The
+# negation must sit in the same clause, at most two words before the match;
+# "not only/just/merely/simply" is not a negation. A denial is the rubric's
+# `deny` list to state; this only stops a negated sentence reading as affirm.
+_STANCE_NEG = re.compile(
+    r"(?:\bnot\b(?!\s+(?:only|just|merely|simply)\b)|\bnever\b|\bcannot\b|n[’']t\b)"
+    r"(?:\s+[\w’'-]+){0,2}\s*$", re.I)
+_STANCE_CLAUSE = re.compile(r"[,;:()—–]")
+
+
+def _negated_at(sentence: str, pos: int) -> bool:
+    """A negation closes the clause that runs up to `pos`."""
+    return bool(_STANCE_NEG.search(_STANCE_CLAUSE.split(sentence[:pos])[-1]))
 
 
 def _provision_labels(text: str) -> set:
@@ -7176,7 +7190,7 @@ def stance_of(answer: str, rubric: dict) -> tuple:
             continue
         if any(r.search(s) for r in den):
             d_s.append(s.strip())
-        elif any(r.search(s) for r in aff):
+        elif any(not _negated_at(s, m.start()) for r in aff for m in r.finditer(s)):
             a_s.append(s.strip())
     stance = ("both" if a_s and d_s else "affirm" if a_s else "deny" if d_s else "none")
     return stance, a_s, d_s
@@ -7337,7 +7351,10 @@ INTERP_HEDGE = re.compile(
     # reading, not the text's; one sentence in the whole corpus says it.
     r"|\b(?:on|under)\s+your\s+(?:reading|interpretation|construction)\b"
     r"|\bnot\s+(?:been\s+)?(?:verified|checked|confirmed)\b"
-    r"|\b(?:suggests?|implies|appears?\s+to|seems?\s+to)\b",
+    # Batch 4 (agent A): "As you suggest, X" agrees with the lawyer and
+    # states X firmly; the lawyer suggesting is not the text suggesting.
+    # "On the reading you suggest" stays a hedge through its "reading" form.
+    r"|\b(?:(?<!\byou\s)suggests?|implies|appears?\s+to|seems?\s+to)\b",
     re.I)
 # A hedge on a statement of what a provision SAYS. Narrower than
 # INTERP_HEDGE on purpose: "s.12 does not expressly state X" is a plain
