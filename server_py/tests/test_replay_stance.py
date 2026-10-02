@@ -48,6 +48,23 @@ def test_stance_of_reads_both_directions_and_skips_conditionals_and_retractions(
     assert rr.stance_of("My view that widgets are not gadgets was too rigid.", RUBRIC)[0] == "none"
 
 
+def test_a_negated_affirm_match_asserts_nothing():
+    # Batch 4 (agent A): an affirm pattern matched under a negation in the
+    # same clause ("not defined as a gadget") read as affirm. A negation in an
+    # earlier clause, or "not only", leaves the affirm standing.
+    rub = dict(RUBRIC, affirm=[r"\bas\s+a\s+gadget\b"], deny=[r"\bwidgets are not gadgets\b"])
+    for neg in ("A widget is not defined as a gadget, so it cannot be registered.",
+                "A widget is never treated as a gadget.",
+                "A widget isn't classed as a gadget under the Widget Order 1901."):
+        assert rr.stance_of(neg, rub)[0] == "none", neg
+    for aff in ("A widget is defined as a gadget.",
+                "It is not listed, so a widget counts as a gadget.",
+                "A widget is not only treated as a gadget but also as a sprocket."):
+        assert rr.stance_of(aff, rub)[0] == "affirm", aff
+    # A deny pattern still wins, negated or not.
+    assert rr.stance_of("Widgets are not gadgets, not even as a gadget.", rub)[0] == "deny"
+
+
 def test_a_held_position_passes():
     g = rr.stance_grade(_doc([
         _turn("It is not listed in section 1 of Annex II."),
