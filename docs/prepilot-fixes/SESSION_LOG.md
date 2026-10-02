@@ -7930,3 +7930,153 @@ multi-agent batch). This addendum supersedes the handover's "Take next".**
   FIX_PLAN recommended-order line's *Take next* now points at it.
 - **Fix Tracker v32** at the user's request: the "Next" paragraph and the stamp say the next step is
   a consistency review of the plan; no row changed.
+
+---
+
+## Session 37 — 2026-10-02 — parallel batch 5: the plan reviewed for consistency ($0)
+
+**Done:**
+- **Ran `PARALLEL_BATCH_5.md` (user decision at launch: A, B and C as set out, D included; batch 4
+  A's decisions (i) extend the 6338 turn-3 pattern to "should precede" / "would need to conclude
+  before", (ii) keep the `p32_6406` r2 export t7 implicit-affirm entry).** Step 1's checks all
+  held: head `dde8b41`, equal to `origin/fix/prepilot-defects`, clean; `main` at `a6b4a76`;
+  `plan_status` 46 of 69, 8 of 14; `plan_probe.py` reproduced the brief's findings exactly (16
+  done-mark mismatches, 21 unindexed rows, 3 dependency warnings, 17 order lines); rubric sha1s
+  `7927e64…` and `5e5769a…`, pack `10da6f9d…`; 57 replay directories; test databases `_a` to `_d`;
+  no pin file, no worktrees, port 8000 free; baseline suite **2135** on `lexchat_test`.
+- **Merged in the order A, D, B, C, each `--no-ff`**, the full suite on `lexchat_test` after each
+  and the branch pushed after each: A `4444c31` (2160), D `0cddbf0` (2162), B `0b92be6` (2162), C
+  `14498ba` (2162). For each the integrator confirmed the branch contains `dde8b41`, read the note
+  and the diff, and grepped the added lines for instrument ids and the matter words (session ids
+  only; the one instrument id is D's synthetic `ssi/1901/3`). Notes:
+  `docs/prepilot-fixes/notes/batch5_{A,B,C,D}.md`.
+- **Agent A (`tools/plan_lint`, $0): MET.** Seven checks, one function each (shape, index, done,
+  depends, order, bold, encoding), 25 tests; `plan_status` refactored to share its parsing (output
+  byte-identical). The integrator's own revert (`scratchpad_s37/a/revert_a.py`: each of the nine
+  check functions' bodies replaced by a no-op on a scratch worktree) fails 2, 3, 6, 4, 2, 2, 3, 4
+  and 3 tests, A's counts exactly. On the merged tree before any fold: 66 errors (shape 24, index
+  21, done 21), 6 warnings, exit 1. **New findings beyond the probe:** 5 done-marks the probe's
+  regex could not see (bare entries), and 24 ledger rows with more than three table cells (31
+  stray separators, 23 unescaped pipes in code spans), whose excess GitHub drops.
+- **Agent D (the `wave4_b4_post` grader gaps, $0): MET but for one byte.** `derivation_claims` no
+  longer reads an application made under a section as a derivation claim; `INTERP_HEDGE` reads a
+  numbered or contrasted reading as a hedge; the rest are rubric edits (backups in
+  `evidence/rubrics/backup_batch5/`; now `p32.json` `31379ecf…`, `p33.json` `0031831b…`).
+  Integrator's revert on a scratch worktree (three hunks from the diff, 20 lines): the file then
+  equals `dde8b41`'s and exactly the two new tests fail. **Re-run on the merged tree:**
+  `derivations` 0 of 51 on `wave4_b4_post`; 6370 r1 FAIL, r2 FAIL, r3 PASS (unhedged 1, 3, 0, the
+  hand-read's about 4); `p32_6406` 0 of 3, changes 1, 5, 1, contradicted at t9 in each. No rep
+  verdict moved on the other five named directories. **`hedges` is not byte-identical over the 57
+  directories:** `wave4_b4_post`'s interpretive hedges per 1,000 words reads 3.2 where it read 3.1
+  (the gap-2 fix); every guard column is identical. Decision (i) newly catches 2 sentences, both on
+  reps that already fail elsewhere.
+- **Agents B and C (semantic review of the 23 open rows and the cross-documents, $0): MET.** Three
+  premises spot-checked each against the code, all holding: B on P3.19 (`lex.py:540-557`, the
+  effecting list cut at 6 with no count), P3.14 (`get_worker_system_prompt` at `prompts.py:746`, the
+  early return at `:755`) and P3.6 (`lookup_legislation` returns `description[:600]`,
+  `executor.py:512`); C on P3.23 (`"total": len(entries)`), P4.19 (a bare `client.get` and
+  `caselaw.py`'s own `AsyncClient`, neither through `_request_with_retry`) and X4
+  (`AUDIT_SCHEMA_VERSION = 6` on `main` and the branch, against CLAUDE.md's "v5"). The integrator
+  also counted the LEX endpoints the code calls (six), confirming C's X2.
+- **Mechanical amendments** (`fold_mech_s37.py`, `2a870fb`): 28 of the 30 B and C proposed (B M1-M3,
+  M5-M8, M10-M13; C M1-M17), each anchor asserted once, 461 lines kept, 44 bold markers added; `plan_lint`
+  and `plan_status` unchanged. B's M4 and M9 add build requirements and were put to the user.
+- **Twenty-three decisions put to the user in six questions, every one taken as recommended:**
+  - A1 every ticked row carries a done mark; A2 a byte fold of the stray pipes; A3 P2.10 and P4.5
+    named as entries; A4 ticked-ahead reasons on P3.16, P3.18 and P4.13.
+  - B1 P3.3's 6338 turn-3 criterion held until the lawyer answers, with a second supplementary
+    question (turn 2's newer Act offered as one reading) added to the pack; on Yes to both, a $0
+    re-grade with a narrow "on one/another reading" rubric change (by command and by hand-read
+    `wave4_b2_post` 6338 goes 1 to 3 of 3, which meets P3.17's criteria; nothing else moves).
+  - B2 the lawyer-pack sentence above the Ledger and in the three rows' Depends on; B3 P0.4 dropped,
+    P0.7 widened to the 15 no-reply turns; B4 P3.12 a dependency of P3.2 (criterion (v)); B5 P3.4's
+    acceptance widened (a deterministic prompt test, a before-column, reach to the quick-lookup
+    Worker); B6 P3.21's measure-first and P5.4 (c)'s probe run together; B's M4 and M9 applied.
+  - C1 P5.2 decided (Scottish case law from SCTS, subject to its reply) and ticked; C2 one case-law
+    build (P4.19, P3.23, P3.9, then P3.22, with a ground truth booked first); C3 the National
+    Archives licence booked as `docs/TODO.md` D23, blocking nothing; C4 P3.22 on B12; C5 P4.8's strip
+    to be built now, acceptance "0 in every directory after the build"; C6 and C7 P3.10's and P4.3's
+    acceptances to be re-booked before any build; C8 C's placements; C9 CLAUDE.md fixed on the branch.
+  - D1 the `hedges` value accepted; D2 enrolling 6370's five hedged drops booked as a grader item
+    before the next after-column; D3 and D4 the two extra rubric entries kept.
+- **Applied** (`c845052`, `a243de3`): `decisions_s37.py` (27 edits, 42 bold markers added, one 2-line
+  paragraph); A's fold, repointed in a copy with the placements added (23 rows placed, 33 done marks,
+  66 bold markers); `shape_fold_s37.py` (24 rows, 31 separators to " · ", 23 code-span pipes escaped, the
+  row text otherwise unchanged, checked character by character); the top order line. **`plan_lint`
+  exits 0 with 0 warnings; `plan_status` 47 of 69 rows, 8 of 14 buckets** (P5.2 ticked; P0.4
+  `[-]`, still in the denominator). CLAUDE.md X1-X5, `docs/TODO.md` D19 and D23,
+  `docs/LEGAL_DATA_SOURCES.md` X10, and CHANGELOG *Unreleased* (plan_lint and D's grader changes, as
+  tooling). Suite 2162.
+- **Gitignored evidence:** the lawyer pack's second supplementary question (`10da6f9d…` to
+  `d26bb016…`, 15,941 bytes; `verify_pack_quotes.py` output identical to Session 36's, so it quotes
+  no lawyer's text; the before copy is in `seam/batch5/integrator/`); the hand-read's gap-2 line
+  corrected (D's item 5). Agents' scratch in `evidence/seam/batch5/{A,B,C,D}/` (41, 49, 22 and 572
+  files, each identical to its worktree's copy before removal).
+
+**Surprises / deviations:**
+- **Every worktree again came up on `main` (`a6b4a76`)**; every agent checked first and reset.
+- **The harness let every agent copy its scratch to the main checkout with `cp`** this time.
+- **`plan_status` reads the Bucket index, not only the ticks** (agent C): a B-line names the rows a
+  bucket waits on, so an open row placed on a closed bucket's line reopens it, and the `*(no
+  bucket)*` line is ignored. The brief's "it reads ticks, not the index" (`PARALLEL_BATCH_5.md`
+  "Where things stand") is half right; A's fold refuses a placement that moves a bucket.
+- **The plan's index named two rows only inside another entry's brackets** (P2.10, P4.5), and the
+  probe counted them indexed.
+- **SESSION_LOG Session 35 says P3.3 was "7 of 9 fail by hand" on `wave4_b2_post`; it was 6 of 9**
+  (its own counts, and `interpret` prints 6 failing of 9; agent B). Corrected on P3.3's row; the log
+  above is history and is not edited.
+- **History not edited:** `PARALLEL_BATCH_4.md`'s "Open with the user" says three rows wait for the
+  cut (five do) and two change-record id mis-expansions (one); recorded here only (agent C, X8, X9).
+- **C5's "build the strip now" was not built in this session**: the batch carries no product code.
+  It is the second item to take next.
+- **The Fix Tracker was not updated** (only when asked). If asked: P5.2 Fixed 2026-10-02 ("Next
+  release"; it is a decision, not a product change); P0.4 is not on the tracker; the page's
+  "Every Fixed row is merged to main" is false for the five "Next release" rows, and "P5.2 is
+  waiting on an external decision" is now stale (agent C, X6, X7).
+
+**State:** branch `fix/prepilot-defects`, pushed (head after this commit); `main` untouched at
+`a6b4a76`. 2162 tests. Session spend $0.
+
+---
+
+## Session 37 — handover for Session 38 (2026-10-02)
+
+**Take next, in this order:**
+1. **P3.19** ($0, deterministic; batch 5 B confirmed the premise and that it is buildable as booked):
+   make `_slim_amendment_results` keep each relation's changed/effecting pairing. Over every stored
+   change-record call (1,216 responses, 47 directories) 13,523 of 20,991 emitted groups lose the
+   pairing and 6,363 cut the effecting list with no count; median output 3,448 characters a call.
+   `tests/test_amendment_relations.py` pins today's shape and changes with it; B's
+   `evidence/seam/batch5/B/p319_scope.py` already walks the stored responses with the built slimmer.
+2. **P4.8's strip** ($0, deterministic, user decision C5): strip the result label at the Manager
+   return in `agent_core.py` (never a router), unit test failing with the change reverted; the bar
+   is 0 in every replay directory taken after the build.
+3. **Send the lawyer pack** (the user's action): `evidence/lawyer_pack/confirmation_pack.md`, sha1
+   `d26bb016…`, now with two supplementary questions on Reading 2. Confirm the cover note's promise
+   first (batch 3 D's item 7). On an answer: P3.2 un-parks; a Yes to both supplementaries is applied
+   as a $0 re-grade of the stored 6338 columns.
+4. Then the case-law build (P4.19, P3.23, P3.9; P3.22 measured last, its ground truth booked first),
+   or P3.21 with P5.4 (c)'s probe. Rows to re-book before any build: P3.10, P4.3; P3.4 has its new
+   acceptance.
+
+**Before the next after-column:** enrol 6370's five hedged readings in the `p33.json` rubric
+(decision D2), measured first over every directory.
+
+**Use `python -m tools.plan_lint` after every FIX_PLAN fold**: it exits 1 on a row missing from the
+index, a ticked row without a done mark, a stray table pipe, odd bold, or a non-UTF-8 byte. Its order
+check warns when the top line's counts lag `plan_status`.
+
+**Decisions open with the user (carried):** which rows go in the next cut (`v2026.10.1`: P3.16,
+P4.16, P4.15, P4.18, P4.17, and now P5.2); P4.17's line exposes a substitution on p37_6373 (book or
+not); the control turn's conflict on what Annex XIV Chapter V lists (the pack's Reading 1 part (2)
+answers it); deploying `v2026.09.3` to the target (`pg_dump` first, pull, restart, `test_apis.ps1`);
+telling the eval-harness owner about schema v6; D19 (deploy by tag; stamping the version, now
+unblocked); D23 (the National Archives licence); sending SCTS the note (P3.20's prerequisite);
+P4.12, D20, D21/D22, Thomas's document; from batch 1, the research Worker's jurisdiction line as a
+row, the 28 case-law summaries applying English authority to Scotland, `wave2_p27` 6341 r2 t2.
+
+**Machine state:** no server, no pin file, no replay running, no worktrees (the four batch 5
+`worktree-agent-*` branches remain locally, merged). Test databases `lexchat_test_a` to `_d`
+remain. 57 replay directories, the latest `wave4_b4_post`. Rubrics `p32.json` `31379ecf…`,
+`p33.json` `0031831b…`. The session scratchpad is copied to the gitignored
+`evidence/seam/batch5/scratchpad_s37/`.
