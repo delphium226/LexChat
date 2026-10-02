@@ -1494,6 +1494,19 @@ _DERIV_FINITE = re.compile(
 _DERIV_PARTICIPIAL = re.compile(
     r"\bmade\s+(?:under|pursuant to|by virtue of|in exercise of)\b"
     r"|\benabling\s+(?:power|authority)\s+(?:for|behind|of)\b", re.I)
+# A thing a PERSON makes under a section is not an instrument made under it:
+# "applications made under section N ... (regulation N(n))" lists a procedure
+# the Regulations cover, and claims nothing about what they were made under
+# (batch 5: one such sentence among 284 in this vocabulary over 57 replay
+# directories, enrolled through the regulation link's URL). So the
+# predicate is removed where its head is one of these nouns, and the rest of
+# the sentence is still read: a real claim beside it still counts.
+_DERIV_NOT_INSTRUMENT = re.compile(
+    r"\b((?:applications?|appeals?|requests?|proposals?|representations?"
+    r"|objections?|complaints?|claims?|payments?|requirements?|referrals?"
+    r"|notifications?|nominations?)\s+)"
+    r"(?:(?:is|are|was|were|has been|have been|had been)\s+)?"
+    r"made\s+(?:under|pursuant to|by virtue of|in exercise of)\b", re.I)
 _DERIV_SRC = re.compile(
     r"\b(?:section|sections|s\.|ss\.|subsection)\s*\d+"
     r"|\bthe\s+[A-Z][A-Za-z0-9'’()\-,. ]{4,120}?\bAct\s+\d{4}"
@@ -1573,9 +1586,10 @@ def derivation_claims(answer: str) -> tuple:
             continue
         specific = bool(_DERIV_TITLE.search(s) or _DERIV_NUMBERED.search(s)
                         or _DERIV_DEICTIC.search(s))
-        if _DERIV_FINITE.search(s):
+        pred = _DERIV_NOT_INSTRUMENT.sub(r"\1", s)
+        if _DERIV_FINITE.search(pred):
             ok = specific or bool(_DERIV_QUANTIFIED.search(s))
-        elif _DERIV_PARTICIPIAL.search(s):
+        elif _DERIV_PARTICIPIAL.search(pred):
             ok = specific or (bool(_DERIV_PRESENTED.search(s))
                               and bool(_DERIV_QUANTIFIED.search(s)))
         else:
@@ -7350,6 +7364,12 @@ INTERP_HEDGE = re.compile(
     # Batch 2 (agent A): "On your reading, X" gives X as the lawyer's
     # reading, not the text's; one sentence in the whole corpus says it.
     r"|\b(?:on|under)\s+your\s+(?:reading|interpretation|construction)\b"
+    # Batch 5 (agent D): a numbered or contrasted reading in a list of
+    # readings, "On a third reading, X", hedges X as "On another reading"
+    # does. ("On the alternative reading" was already a hedge, above.)
+    r"|\b(?:on|under)\s+(?:a|the|one)\s+(?:first|second|third|fourth|fifth|"
+    r"further|other|opposite|contrary|opposing|rival)\s+(?:reading|view|"
+    r"interpretation|construction)\b"
     r"|\bnot\s+(?:been\s+)?(?:verified|checked|confirmed)\b"
     # Batch 4 (agent A): "As you suggest, X" agrees with the lawyer and
     # states X firmly; the lawyer suggesting is not the text suggesting.

@@ -134,6 +134,18 @@ def test_agreeing_as_you_suggest_is_not_a_hedge():
     assert rr.hedge_counts("Section 6 suggests it covers both.")["interp_hedges"] == 1
 
 
+def test_a_numbered_or_contrasted_reading_is_a_hedge():
+    # Batch 5 (agent D): "On a third reading, X" in a list of readings hedges
+    # X as "On another reading" does; a Bill's third reading is no hedge.
+    for hedged in ("On a third reading, widgets include gadgets.",
+                   "On the other reading, widgets include gadgets.",
+                   "Under a second reading, widgets include gadgets."):
+        g = rr.interpret_grade(_doc("The Widget Order 1901 applies.", hedged), RUBRIC)
+        assert g["rows"][1]["hedged"] and not g["rows"][1]["asserted"], (hedged, g["rows"][1])
+    assert rr.hedge_counts("On a third reading, section 6 covers both.")["interp_hedges"] == 1
+    assert rr.hedge_counts("The Widget Bill passed its third reading.")["interp_hedges"] == 0
+
+
 def test_an_item_opening_in_bold_inherits_its_lead_in_hedge():
     # The sentence splitter leaves "2." apart from "**Scope:** ...", so the
     # walk is by the answer's lines (Session 32).
