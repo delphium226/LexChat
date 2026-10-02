@@ -2527,7 +2527,9 @@ _FRESH_FOOTER = re.compile(
 )
 # Both search tools, not just the one the fresh footer lists. A turn that only
 # searched WITHIN an instrument has run a search, so "no search of the index
-# was run for this reply" would be false there. That turn stays silent.
+# was run for this reply" would be false there. That turn gets no carried
+# line; since P4.17 it gets `section_scope_footer` instead, which states the
+# section searches that did run.
 _SEARCH_TOOLS = ("search_legislation", "search_legislation_sections")
 _MAX_CARRIED_TERMS = 2
 
@@ -2654,6 +2656,88 @@ def carried_scope_footer(
             f"{_earlier_lookup_clause(messages, entries)}"
             # P2.4 (B12): a hybrid follow-up that searched only case law. This
             # clause is about THIS reply's own search, so it is true here too.
+            f"{case_law_scope_clause(entries)}*"
+        )
+    except Exception:
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# P4.17 (B5): a turn that searched only WITHIN instruments
+# ---------------------------------------------------------------------------
+#
+# A turn that reached its legislation by lookup and section search, and ran no
+# `search_legislation`, got no fresh footer (it is gated on that tool), no
+# carried line (that line opens "no search ... was run for this reply", false
+# after a section search) and, unless a lookup found something not held, no
+# lookup line. So a negative on that turn reached the lawyer with no
+# attribution, and P2.3's, P2.5's and P3.5's clauses were dropped by the gate
+# (measured over every stored answer: 29 such turns, 11 with no footer at all,
+# `negatives` FAIL on the 2 of them it enrols; `notes/batch3_C.md`).
+#
+# This line states the section searches that did run, so P2.8's reason for
+# silence does not apply to it. Same structural gate as every other footer
+# here (the turn's own records, never the answer's prose), same single
+# `*Search scope: ...*` line, same clause set as the fresh footer, which is
+# why it carries the lookup clause itself and the lookup line does not fire
+# beside it. It opens "for this reply the text of", which `_FRESH_FOOTER`
+# does not match, so P2.8 never carries it forward: its not-in-the-results
+# statement is about a search within one instrument, and "not found in this
+# index" would be false of it (P3.12's case: the provision is held, it just
+# did not rank).
+#
+# Worded so that its new sentence trips `NEG_BLAMED_INDEX` and no other
+# detector (pinned by `test_search_scope.py`). Avoided: "did not return"
+# (`NEG_ASSERTED`'s "search ... did not return" limb), "ranked"
+# (`NEG_LIMITS`), and "not found in this index" (false here, see above).
+SECTION_SCOPE_SENTENCE = (
+    "A search within an instrument returns the provisions that best match its "
+    "terms, not the whole instrument, so a provision missing from its results "
+    "may still be in the instrument and in this index."
+)
+_SECTION_TOOL = "search_legislation_sections"
+_MAX_NAMED_INSTRUMENTS = 3
+
+
+def section_scope_footer(searches: Optional[list]) -> str:
+    """The scope line for a turn that searched within instruments and ran no
+    ranked search of the whole index. "" on every other turn. Never raises.
+
+    Fires if and only if this turn recorded a `search_legislation_sections`
+    and no `search_legislation`. Names the instruments by id (as P3.5's
+    clause does) and the terms in `_listed_terms`' form, then carries the
+    fresh footer's clauses in the fresh footer's order.
+
+    Not suppressed by `scope_unknown` on the Manager path, like the fresh
+    footer: it states only searches this turn recorded, and those ran.
+    """
+    try:
+        entries = list(searches or [])
+        if any(e.get("tool") == "search_legislation" for e in entries):
+            return ""
+        rows = [e for e in entries
+                if isinstance(e, dict) and e.get("tool") == _SECTION_TOOL]
+        if not rows:
+            return ""
+        ids = []
+        for e in rows:
+            lid = str(e.get("legislation_id") or "").strip()
+            if lid and lid not in ids:
+                ids.append(lid)
+        where = _and_join(ids[:_MAX_NAMED_INSTRUMENTS])
+        if len(ids) > _MAX_NAMED_INSTRUMENTS:
+            where += f" and {len(ids) - _MAX_NAMED_INSTRUMENTS} more"
+        terms, listed = _listed_terms(e.get("query") for e in rows)
+        head = (f"for this reply the text of {where or 'an instrument'} in the "
+                "legislation index was searched" + (f" for {listed}" if terms else ""))
+        return (
+            f"\n\n*Search scope: {head}. {SECTION_SCOPE_SENTENCE}"
+            f"{_budget_footer_clause(entries)}"
+            f"{_section_budget_footer_clause(entries)}"
+            f"{_enabling_footer_clause(entries)}"
+            f"{_relations_footer_clause(entries)}"
+            f"{_currency_footer_clause(entries)}"
+            f"{_lookup_footer_clause(entries)}"
             f"{case_law_scope_clause(entries)}*"
         )
     except Exception:

@@ -7665,6 +7665,107 @@ def cmd_hedges(args) -> int:
     return 0
 
 
+# --- P4.17 (B5): the section-search scope line --------------------------------
+#
+# `search_scope.section_scope_footer`: a turn that searched within instruments
+# (`search_legislation_sections`) and ran no `search_legislation` gets a scope
+# line naming those searches. Identified by its fixed opening words, which no
+# other line uses (P3.7's in-turn lookup line opens "for this reply," with a
+# comma; the standalone case-law line opens "for this reply the case-law").
+# `nosearch` cannot see this turn by construction (a section search counts as
+# searching there), so this is its own grader line.
+SECTION_SCOPE = "*Search scope: for this reply the text of"
+
+
+def sectionscope_rows(doc: dict) -> list:
+    """Every answered turn in one run: what ran, and whether the line is there.
+
+    `shape` is the line's gate, read from the audit: at least one section
+    search ran (a budget-refused call did not) and no `search_legislation`
+    ran. `line` is whether the answer carries the section line anywhere.
+    """
+    rows = []
+    for t in doc.get("turns", []):
+        answer = t.get("answer") or ""
+        if not answer.strip():
+            continue
+        audit = t.get("audit") or {}
+        ran = Counter(x.get("name") for dg in (audit.get("delegations") or [])
+                      for x in (dg.get("tools") or []) if _ran(x))
+        sections = ran.get("search_legislation_sections", 0)
+        ranked = ran.get("search_legislation", 0)
+        rows.append({
+            "turn": t.get("turn"),
+            "sections": sections,
+            "ranked": ranked,
+            "lookups": ran.get("lookup_legislation", 0),
+            "shape": bool(sections) and not ranked,
+            "line": SECTION_SCOPE in answer,
+            "mode": t.get("research_mode") or audit.get("research_mode") or "",
+        })
+    return rows
+
+
+def sectionscope_verdict(row: dict) -> Optional[str]:
+    """P4.17's grader line for one answered turn. None means nothing wrong.
+
+    "MISATTRIBUTED" — the line is on a turn that ran `search_legislation`, or
+                      ran no section search: it describes searches the turn
+                      did not run (or that the fresh footer already states).
+    "MISSING"       — the turn has the shape and the lawyer saw no section line.
+    """
+    if row["line"] and (row["ranked"] or not row["sections"]):
+        return "MISATTRIBUTED"
+    if row["shape"] and not row["line"]:
+        return "MISSING"
+    return None
+
+
+def cmd_sectionscope(args) -> int:
+    """P4.17 acceptance, live item: every turn of the shape carries the
+    section line and no other turn does. **Exits 1 on a finding.** Every
+    directory recorded before P4.17 reports each of its shape turns MISSING,
+    which is the before-column, not a regression."""
+    docs = load_runs(Path(args.dir))
+    if not docs:
+        print(f"No run files in {args.dir}")
+        return 1
+    print(f"P4.17 section-search scope line over {args.dir}")
+    print("  shape = a section search ran and no search_legislation ran")
+    print("  line  = the answer carries the section line")
+    print()
+    answered = shape = carrying = 0
+    bad, listed = [], []
+    for doc in sorted(docs, key=lambda d: (d["session_id"], d.get("rep", 1))):
+        for row in sectionscope_rows(doc):
+            answered += 1
+            shape += row["shape"]
+            carrying += row["line"]
+            verdict = sectionscope_verdict(row)
+            if verdict:
+                bad.append((doc, row, verdict))
+            if args.all or row["shape"] or row["line"] or verdict:
+                listed.append((doc, row, verdict))
+    if listed:
+        print(f"{'session':>8} {'rep':>3} {'turn':>4} {'sections':>8} {'ranked':>6} "
+              f"{'lookups':>7} {'line':>4}  {'mode':<26} verdict")
+        print("-" * 84)
+        for doc, row, verdict in listed:
+            print(f"{doc['session_id']:>8} {doc.get('rep', 1):>3} {row['turn']:>4} "
+                  f"{row['sections']:>8} {row['ranked']:>6} {row['lookups']:>7} "
+                  f"{('yes' if row['line'] else '-'):>4}  {row['mode']:<26} "
+                  f"{verdict or 'ok'}")
+        print()
+    mis = [b for b in bad if b[2] == "MISATTRIBUTED"]
+    miss = [b for b in bad if b[2] == "MISSING"]
+    print(f"answered turns                                 {answered}")
+    print(f"  of the shape                                 {shape}")
+    print(f"  carrying the section line                    {carrying}")
+    print(f"MISSING       shape turn without the line      {len(miss)}")
+    print(f"MISATTRIBUTED line on a turn not of the shape  {len(mis)}")
+    return 0 if not bad else 1
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     _utf8_stdout()
     p = argparse.ArgumentParser(prog="replay_report")
@@ -7950,6 +8051,12 @@ def main(argv: Iterable[str] | None = None) -> int:
     sub.add_parser("corpus",
                    help="retrieval shape: raw volume, where an enabling power "
                         "can come from, and what the tool memo costs P2.2")
+    ssc = sub.add_parser("sectionscope",
+                         help="P4.17 acceptance: turns that searched only within "
+                              "instruments carry the section scope line, and no "
+                              "other turn does (MISSING / MISATTRIBUTED)")
+    ssc.add_argument("--all", action="store_true",
+                     help="list every answered turn, not only the shape and findings")
     args = p.parse_args(list(argv) if argv is not None else None)
     return {
         "summary": cmd_summary,
@@ -7980,6 +8087,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "interpret": cmd_interpret,
         "hedges": cmd_hedges,
         "corpus": cmd_corpus,
+        "sectionscope": cmd_sectionscope,
     }[args.cmd](args)
 
 
