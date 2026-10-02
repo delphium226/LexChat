@@ -7662,3 +7662,27 @@ any pertinent information", then "update the tracker").**
   verification and tracker scripts). Agent notes are committed; agent scratch is in
   `evidence/seam/batch3/{A,B,C,D}/`; the hand-read is `evidence/rubrics/handread_wave4_b2_post.md`;
   the pack is `evidence/lawyer_pack/confirmation_pack.md`.
+**Second addendum to Session 35 (2026-10-02, at the user's request: a prompt to start the next
+piece of work as a safe multi-agent batch).** Four decisions put to the user first, all answered
+as recommended:
+1. **P4.17: build agent C's option (d) with the full clause set** (instruments by id, as C's
+   prototype and P3.5's clause; confirmable at launch). **Its acceptance is BOOKED** on the row,
+   from `notes/batch3_C.md` section 8.
+2. **P3.17: measure first, $0** (where the turn-2 alternative regime and the turn-3 hedged
+   sequence reading arise; options; nothing built).
+3. **The four grader gaps are fixed before any further after-column; one agent may edit the
+   gitignored rubrics, with backups first.**
+4. **P4.18 booked** (new row, Wave 4): P2.5's currency clause says no change record was consulted
+   on a footer whose P3.5 clause says one was (27 of 455 stored footers, `p417_contra.py`);
+   deterministic acceptance; fixed in the batch. **B4's index line gains it, so B4 reopens:
+   `plan_status` 44 of 62 rows, 7 of 14 buckets.**
+
+**`docs/prepilot-fixes/PARALLEL_BATCH_4.md` written** (the brief for Session 36): four $0 agents
+in worktrees (A, the four grader gaps with rubric edits; B, P4.17 (d) plus its grader line; C,
+P4.18; D, P3.17 measured with options plus the s.35ZA insertion point, with free read-only LEX
+GETs, added to the gitignored pack as an unclear point), merge A, C, B, D; then an after-column
+`wave4_b4_post` for P4.17's live item (6370 x3 plus the `p32_6406` script x3, about $8.50, cap
+$12), figure confirmed with the user first. New lessons carried into it: the pin file's real path;
+the harness may block writes outside a worktree (copy scratch out before removing it); a dry run
+must import the built code; check a gitignored folder with `git check-ignore` before writing
+matter text into it. The FIX_PLAN recommended-order line's *Take next* now points at the brief.
