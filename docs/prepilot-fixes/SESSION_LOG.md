@@ -7904,3 +7904,29 @@ any pertinent information", then "update the tracker").**
   Session 36 paragraphs for Thomas naming no lawyer's topic; "Next" rewritten. 41 of 68 fixed.
   Render-checked once over a local server (`.playwright-mcp/tracker_v31.png`; the only console
   error is the local favicon 404).
+**Second addendum to Session 36 (2026-10-02, at the user's request: "is it worth reviewing the plan
+to make sure it's still internally consistent", then a prompt for the next session as a safe
+multi-agent batch). This addendum supersedes the handover's "Take next".**
+- **A structural probe of FIX_PLAN.md** (read-only, $0; saved as the gitignored
+  `evidence/seam/batch4/scratchpad_s36/plan_probe.py`, run from the repo root) at `3ca9edb`: 69 rows,
+  46 ticked, and `plan_status`'s counts are right (it reads ticks). But **16 ticked rows are not
+  marked `**done**` in the Bucket index** (P1.2, P1.3, P1.6, P2.2, P2.5, P2.7, P3.8, P3.15, P3.16,
+  P3.18, P4.10, P4.11, P4.13, P4.14, P4.16, P5.1); **21 rows are named in no index line** (P0.1-P0.7,
+  P1.5, P2.6, P3.6, P3.12, P3.14, P3.21, P3.22, P3.23, P4.4, P4.8, P4.9, P4.19, P5.3, P5.4; some on
+  purpose); **3 ticked rows depend on open rows** (P3.16 and P3.18 on P3.3, P4.13 on P3.2); 17
+  recommended-order lines.
+- **Semantic inconsistencies, known from this session:** P3.3's booked 6338 turn-3 criterion fails
+  the hedged reading P3.3's own clause produces (batch 4 D), and P3.17 inherits it; P3.2, P3.3 and
+  P3.17 all wait on the lawyer pack, stated nowhere in one place; the six rows booked on 2026-10-02
+  overlap existing rows with no stated relationship (P3.20 and P5.2; P3.21 and P2.5/P4.18; P3.23 and
+  P1.3/P2.2; and P3.12 against P4.17).
+- **User decision: review the plan for consistency first, in Session 37, as a $0 parallel batch.**
+  `docs/prepilot-fixes/PARALLEL_BATCH_5.md` written: agent A `tools/plan_lint` (the probe as a
+  tested tool) and an unapplied mechanical fold; B and C a semantic pass over the 23 open rows
+  (split by theme) and the cross-documents (CLAUDE.md, CHANGELOG, the tracker's ROWS, TODO, the
+  batch-4 brief), proposing amendments as anchored text or numbered decisions; optional D the
+  `wave4_b4_post` grader gaps (the user decides at launch, with batch 4 A's two open decisions).
+  Merge A, D, B, C; the integrator applies only mechanical edits and what the user approves. The
+  FIX_PLAN recommended-order line's *Take next* now points at it.
+- **Fix Tracker v32** at the user's request: the "Next" paragraph and the stamp say the next step is
+  a consistency review of the plan; no row changed.

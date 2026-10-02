@@ -858,7 +858,11 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next.</strong> Send the questions to a lawyer: <strong>P3.2</strong>,
+      <p><strong>Next.</strong> First, a check that the fix plan is still consistent with itself,
+        now that many fixes have landed and seven rows were added in one day: every open row's
+        premise checked against the code, its test still achievable, and its links to other rows
+        stated. It costs nothing, changes nothing a lawyer sees, and any change it proposes to a
+        row's test is put to us before it is made. Then send the questions to a lawyer: <strong>P3.2</strong>,
         <strong>P3.3</strong> and <strong>P3.17</strong> wait on the answers. <strong>P3.19</strong>
         can be built at no cost. The other open groups remain: <strong>P3.4</strong> (the Scottish
         jurisdiction default), <strong>P4.3</strong> (the sources list), <strong>P4.12</strong>,
@@ -886,7 +890,7 @@
   // ver:    on a Fixed row only: the release that carries it ("2026.09.1", the git tag
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
-  const UPDATED = "2 October 2026, end of Session 36 (P4.17 and P4.18 fixed; P3.17 traced; P3.2 and P3.3 re-checked; questions for a lawyer ready to send; seven rows added)";
+  const UPDATED = "2 October 2026, end of Session 36 (P4.17 and P4.18 fixed; P3.17 traced; P3.2 and P3.3 re-checked; questions for a lawyer ready to send; seven rows added; next, a consistency check of the plan)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23", ver: "2026.09.3" },
