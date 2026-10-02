@@ -358,8 +358,8 @@
       its row in the fix plan and its action number in Thomas's review of 10 September 2026.
       <strong>“Fixed” means built and accepted on the fix branch. The Version column says which
       release carries each fix: 2026.09.1 (22 September), 2026.09.2 (23 September) or 2026.09.3
-      (29 September), all merged for deployment to the server. Five rows fixed since then, P3.16,
-      P4.16, P4.15, P4.18 and P4.17, are marked “Next release”. The fixed date is the day a fix was accepted, not the
+      (29 September), all merged for deployment to the server. Six rows fixed since then, P3.16,
+      P4.16, P4.15, P4.18, P4.17 and P5.2, are marked “Next release”. The fixed date is the day a fix was accepted, not the
       day it reached the server.</strong></p>
   </header>
 
@@ -418,8 +418,8 @@
     <div>
       <h2>Status</h2>
       <dl>
-        <dt>Fixed</dt><dd>Built and accepted on the fix branch. Every Fixed row is merged to <code>main</code> for deployment to the target: release 2026.09.1 on 22 September, 2026.09.2 (P3.13) on 23 September and 2026.09.3 (twelve rows) on 29 September. A row fixed after a release is marked “Next release” until the one after.</dd>
-        <dt>In progress</dt><dd>Under way. P5.2 is waiting on an external decision.</dd>
+        <dt>Fixed</dt><dd>Built and accepted on the fix branch. Every Fixed row with a release number is merged to <code>main</code> for deployment to the target: release 2026.09.1 on 22 September, 2026.09.2 (P3.13) on 23 September and 2026.09.3 (twelve rows) on 29 September. A row fixed after a release is marked “Next release” and is on the fix branch only, until the next release carries it. P5.2 is a decision, not a change to the system: it is fixed because the decision is made.</dd>
+        <dt>In progress</dt><dd>Under way. No fix is in progress now: P5.2 was, until the decision on 2 October about where Scottish case law will come from.</dd>
         <dt>Partial</dt><dd>A fix was attempted, and we decided to defer it and come back to it later. No fix is Partial now: P4.10 was, until its last check was run on 25 September.</dd>
         <dt>Verified</dt><dd>The problem is confirmed in our replays, the code or a live test, but no fix is built yet.</dd>
         <dt>To be verified</dt><dd>Proposed, not yet confirmed or agreed.</dd>
@@ -444,6 +444,36 @@
         box (Settings, then About), so a problem report can say which release it was.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.</p>
+      <p><strong>2 October, later: the plan checked against itself.</strong> Before building
+        anything more, we checked the fix plan for consistency, at no cost and with no re-run. Four
+        pieces of work ran side by side: a tool that checks the plan's structure (every row listed
+        once under its problem group, every fixed row marked as fixed, no table row broken in two),
+        a correction to our automatic checks for the wordings the last re-run showed they
+        misread, and two reviews of every open row against the code. The reviews checked each row's
+        premise, whether its test can still be met, and how it relates to other rows. They found
+        28 counts and references that had gone stale, now corrected, and a set of choices we have
+        now made.</p>
+      <p><strong>Decided.</strong> <strong>P5.2</strong> is decided: Scottish judgments are to come
+        from the Scottish Courts and Tribunals Service's own judgments search, subject to its
+        confirming that we may use it that way. Asking it is our next step, and <strong>P3.20</strong>
+        builds the connection. The four case-law rows will be built together, in this order: try a
+        busy service again (<strong>P4.19</strong>), tell the system how many results there really
+        were (<strong>P3.23</strong>), make the date filter work (<strong>P3.9</strong>), and last,
+        order results by relevance (<strong>P3.22</strong>), the one we will measure with a re-run.
+        The review also found that the National Archives' licence asks anyone using its judgments
+        with an AI system to apply for a free permission. None is on record, so applying is now on
+        our list; it does not hold up the work.</p>
+      <p><strong>A test that contradicted its own fix.</strong> In the wrong-Act session, our
+        instruction to the chat asks it to give a point the text does not settle as a reading, but
+        our test counted such a reading as wrong. Rather than change the test after seeing the
+        results, we will let a lawyer decide: the questions now carry a second extra question,
+        whether the newer interpretation Act may be offered as one possible reading. Changes to
+        three other tests are recorded before anything is built on them: <strong>P3.4</strong>'s
+        test now also checks the corrected filter note, and <strong>P3.10</strong> and
+        <strong>P4.3</strong> get new tests first. <strong>P4.8</strong>, the internal label
+        showing in answers, will now be built rather than waiting for a full re-run.
+        <strong>P0.4</strong>, a measurement row, is dropped: it could not reach the questions it
+        was meant for, and P0.7 now covers them.</p>
       <p><strong>2 October: two more fixes, and a re-run.</strong> Four more pieces of work were
         built side by side at no cost, then two sessions were re-run (6 re-runs, $9.88).
         <strong>P4.17</strong> is fixed: an answer whose research only searched inside particular
@@ -858,16 +888,15 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next.</strong> First, a check that the fix plan is still consistent with itself,
-        now that many fixes have landed and seven rows were added in one day: every open row's
-        premise checked against the code, its test still achievable, and its links to other rows
-        stated. It costs nothing, changes nothing a lawyer sees, and any change it proposes to a
-        row's test is put to us before it is made. Then send the questions to a lawyer: <strong>P3.2</strong>,
-        <strong>P3.3</strong> and <strong>P3.17</strong> wait on the answers. <strong>P3.19</strong>
-        can be built at no cost. The other open groups remain: <strong>P3.4</strong> (the Scottish
-        jurisdiction default), <strong>P4.3</strong> (the sources list), <strong>P4.12</strong>,
-        and the new case-law rows (P3.20 to P3.23, P4.19).</p>
-      <p>Not listed: the other measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
+      <p><strong>Next.</strong> <strong>P3.19</strong> (keeping which provision made which change),
+        then <strong>P4.8</strong>, both at no cost. Then send the questions to a lawyer:
+        <strong>P3.2</strong>, <strong>P3.3</strong> and <strong>P3.17</strong> wait on the answers,
+        and nothing else does. After that, the case-law rows as one piece of work, or the date a
+        provision came into force (<strong>P3.21</strong>) together with the legislation.gov.uk
+        check (<strong>P5.4</strong>). The other open groups remain: <strong>P3.4</strong> (the
+        Scottish jurisdiction default), <strong>P4.3</strong> (the sources list) and
+        <strong>P4.12</strong>.</p>
+      <p>Not listed: the other measurement and tooling rows (P0.1–P0.3, P0.4, dropped on 2 October, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
         and three items from <code>docs/TODO.md</code> D16 (the impossible year window, always
         over-fetching search results, checking a returned title against the Act named), which were
@@ -890,7 +919,7 @@
   // ver:    on a Fixed row only: the release that carries it ("2026.09.1", the git tag
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
-  const UPDATED = "2 October 2026, end of Session 36 (P4.17 and P4.18 fixed; P3.17 traced; P3.2 and P3.3 re-checked; questions for a lawyer ready to send; seven rows added; next, a consistency check of the plan)";
+  const UPDATED = "2 October 2026, end of Session 37 (the plan checked for consistency; P5.2 decided; P0.4 dropped; a second extra question for the lawyer; next, P3.19 and P4.8)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23", ver: "2026.09.3" },
@@ -953,7 +982,7 @@
     { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Fixed", ref: "P4.6", t: "4", fixed: "2026-09-23", ver: "2026.09.3" },
     { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Fixed", ref: "P4.7", t: "2", fixed: "2026-09-24", ver: "2026.09.3" },
     { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", sev: "P3", status: "Verified", ref: "P4.8", t: "" },
-    { src: "R", fix: "Source Scottish case law (Court of Session, Sheriff Courts)", sev: "P2", status: "In progress", ref: "P5.2", t: "" },
+    { src: "R", fix: "Decide where Scottish case law will come from (Court of Session, Sheriff Courts); the build is P3.20", sev: "P2", status: "Fixed", ref: "P5.2", t: "", fixed: "2026-10-02", ver: "Next release" },
     { src: "R", fix: "Check legislation.gov.uk for what our legislation database lacks (enabling powers, past versions, dated changes)", sev: "P3", status: "Verified", ref: "P5.4", t: "" },
     { src: "T", fix: "Show provider errors (credit, rate limit) clearly when planning", sev: "P3", status: "Verified", ref: "TODO B6", t: "8" },
     { src: "T", fix: "Order case-law results by relevance (they come back newest first)", sev: "P2", status: "Verified", ref: "P3.22", t: "6" },

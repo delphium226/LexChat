@@ -8080,3 +8080,21 @@ row, the 28 case-law summaries applying English authority to Scotland, `wave2_p2
 remain. 57 replay directories, the latest `wave4_b4_post`. Rubrics `p32.json` `31379ecf…`,
 `p33.json` `0031831b…`. The session scratchpad is copied to the gitignored
 `evidence/seam/batch5/scratchpad_s37/`.
+**Addendum to Session 37 (2026-10-02, at the user's request: "make sure we're not going to lose any
+pertinent information", then "update the tracker").**
+- Checked: working tree clean and pushed (`65f1bf3`); the session scratchpad's copy in
+  `evidence/seam/batch5/scratchpad_s37/` identical to the scratchpad (38 files).
+- Two gaps closed in the local-only skills (`.claude/` is gitignored, so these edits are not in
+  the repo). **repo-map:** `plan_status` and `plan_lint` added (what each reads, the index-membership
+  rule, "run it after every FIX_PLAN fold"), and `lex_probe`'s "(we call 3)" corrected to six of the
+  13 endpoints. **external-apis:** `/legislation/section/lookup` marked as called since P3.7 (it said
+  "we only ever query-search sections"), with the six-called, seven-unused count.
+- **Fix Tracker v33** published at the user's request (same URL; the repo source was identical to
+  the live body before the edit: Artifact read, then a Read of all 1,179 lines of the saved file).
+  P5.2 Fixed (`fixed: "2026-10-02"`, `ver: "Next release"`; its label now says it is the decision,
+  and that the build is P3.20); the lede names six rows waiting for the next release; the Fixed
+  status note no longer says every Fixed row is on `main` (C's X6) and the In-progress note no
+  longer says P5.2 waits on an external decision (X7; no row is in progress now); three
+  plain-language Session 37 paragraphs for Thomas naming no lawyer's topic; "Next" rewritten (P3.19,
+  P4.8, the lawyer pack); P0.4 recorded as dropped in the "Not listed" line; the stamp. 42 of 68
+  fixed. Script syntax-checked with Node; no render check (data and text only).
