@@ -7764,3 +7764,123 @@ matter text into it. The FIX_PLAN recommended-order line's *Take next* now point
 **State:** branch `fix/prepilot-defects` at `482b6b1` plus this commit, pushed; `main` untouched
 at `a6b4a76`. 2135 tests. No replay yet: the after-column `wave4_b4_post` is put to the user with
 a figure first.
+
+---
+
+## Session 36, continued — 2026-10-02 — the after-column `wave4_b4_post`; P4.17 ticked
+
+**Done:**
+- **Four decisions put to the user in one question, all answered as recommended:** run the
+  after-column (about $8.50, cap $12); correct the inserting Act to 2024 in all four places; book
+  the change-record pinpoint loss as **P3.19 (B3)**; add D's supplementary question to the pack.
+- **Procedure:** `replay check` (pinned `google/gemini-3.1-pro-preview` served, probe $0.0010),
+  `replay pin` (the pin file at `server_py/tools/.replay_pin_state.json`), uvicorn started fresh
+  with PowerShell `Start-Process -PassThru` (PID 17308, build `v2026.09.3-40-g10d7444`), the
+  keep-awake helper (PID 17628); `replay run --session 6370 --reps 3 --max-spend 4` **$2.38**, then
+  `--script …/p32_6406.json --reps 3 --max-spend 8` **$7.50** (rep 3 alone $3.68): **$9.88
+  recorded**, under the $10 stop point; 51 answered turns, no stall (a monitor watched for 15
+  minutes without log growth), no commit while either ran. Then `replay restore` (model,
+  summariser, local prompt cache and research mode back as saved), both processes stopped by PID;
+  no python process, port 8000 free, no pin file.
+- **Graded** (`grade_b4.sh` in the session scratchpad: the 16-subcommand exit-1 set, `interpret`,
+  `stance`, `hedges`, `openers`, `discovery`, `footer_echo`, `summary_probe count`, and the same
+  exit-1 set over `wave4_b2_post` with today's graders), every `interpret` match and drop, every
+  `stance` "none" and every negative on a turn of P4.17's shape read by hand; saved to the
+  gitignored `evidence/rubrics/handread_wave4_b4_post.md`:
+  - **P4.17 MET and TICKED.** `sectionscope`: 4 turns of the shape (all 6370), 4 of 4 carry the
+    line, 0 MISSING, 0 MISATTRIBUTED. Every negative there PASSES and is a case-law miss the
+    absence sentence attributes; the three "does not state / define / contain" claims match P3.3's
+    verified reading. Exit-1 set equal to the before-column except `derivations` 0 to 1, an
+    over-read ("applications made under section 33"). B5 closed.
+  - **P4.18 live:** 0 of 51 scope lines carry both statements; the new branch did not fire.
+  - **P3.3, 6370: 1 of 3 by hand** (r3 passes, the first 6370 rep to pass in any column; command
+    0 of 3); unhedged readings about 4 (command 13). Not tickable.
+  - **P3.2 (parked): 0 of 3**; changes by hand 1 (3), 5, 1; contradicted consequence 3 of 3;
+    control r3 a false "not held", r1 conflicting with r2 on what Annex XIV Chapter V lists.
+  - **Guards:** `hedges` 0 in 211, 0 caveats; `caselaw` TWO_LINES 0; `footer_echo` 0; `lost` all
+    labelled; `halts` 0; `summary_probe count` 0 in 234; `openers` 8 in 51 (5 scoped, an apology
+    on a control turn, one "bare" with a concession tail, one "Yes, exactly." with no delegation);
+    `discovery` against `wave4_b2_post`: `sources_kept` per slot fell in 4 of 6 (6370) and 6 of 11
+    (`p32_6406`) slots, per-rep totals flat.
+- **The inserting-Act corrections** (`fix_2024.py`, each anchor asserted once, each file backed
+  up first to `evidence/rubrics/backup_batch4/p33.after_batch4_A.json` and
+  `evidence/seam/batch4/integrator/`): the rubric `_note` (grading byte-identical on four
+  directories after it); the pack's summary, quoted reading, key, table row (now the 2024 Act's
+  s.6(2)) and question part (2), D's note rewritten as a correction note; the `external-apis`
+  skill's example. The pack's supplementary question added after Reading 2, and its cover's "How
+  to answer" says so. Pack checks: 19 URLs, 0 not found; quotes unchanged (17 titles).
+- **Ledger:** P4.17 ticked; P3.19 booked (B3 reopens); P3.3, P3.2 and P3.17 annotated; B5's line
+  marks P4.17 done; the recommended-order line moved to "end of Session 36". **46 of 69 rows, 8 of
+  14 buckets** (`plan_status`). CHANGELOG *Unreleased*: P4.17's line no longer says its live check
+  is to run.
+
+**Surprises / deviations:**
+- **Another session committed to this branch while the after-column ran** (four docs-only
+  commits, `0d72d7c` to `eeb87f0`, 10:24 to 11:09, pushed): a legal data sources map
+  (`docs/LEGAL_DATA_SOURCES.md`, a CLAUDE.md pointer), a fix for a cp1252 byte that had made
+  FIX_PLAN.md invalid UTF-8, and **six new rows** (P3.20 to P3.23, P4.19, P5.4). It left P3.19 to
+  this session's uncommitted booking. No product code changed, so the after-column measured
+  `10d7444` as intended. Found only because `plan_status` printed 69 rows where 63 were expected;
+  the order line was corrected before commit. Check `git log` before every fold.
+- **The after-column cost $9.88 against $8.50 estimated**: script rep 3 alone $3.68 (b2_post's
+  reps $1.44 to $2.38).
+- **6370 r3 is the first 6370 rep to pass P3.3's criterion in any column.**
+- **The graders were wrong in both directions again**, after agent A's fixes: `derivations` read
+  an application "made under section 33" as a derivation claim; `interpret` missed "a third
+  reading" and "the alternative reading" as hedges; `stance` missed two affirms and read three
+  denies as none.
+
+**State:** branch `fix/prepilot-defects`, pushed (head after this commit); `main` untouched at
+`a6b4a76`. 2135 tests. Machine on its normal settings.
+
+---
+
+## Session 36 — handover for Session 37 (2026-10-02)
+
+**Take next: the user's decision.** Candidates, in the order the session would take them:
+1. **P3.19** ($0, deterministic, a batch-sized row): make `_slim_amendment_results` keep each
+   relation's changed/effecting pair; measure first over every stored change-record result (how
+   many groups lose a pairing that matters; output size per call), as the row says.
+2. **Send the lawyer pack** (`evidence/lawyer_pack/confirmation_pack.md`, sha1 recorded in the
+   hand-read; four readings, a correction note on s.35ZA, a supplementary question on Reading 2).
+   Sending it is the user's action; P3.2 un-parks and P3.17's option (1) resolves only on an answer.
+   Confirm the cover note's promise first (batch 3 D's item 7).
+3. **The new grader gaps** in `handread_wave4_b4_post.md` before any further after-column:
+   `derivations` (an application made under a section); `INTERP_HEDGE` ("third", "alternative"
+   reading); 6370's restatement and "does not settle" over-counts (known since b2_post); `stance`'s
+   two missed affirms and three denies read as none. Agent A's two open decisions stand: the 6338
+   turn-3 pattern reads "must" only (extend to "should precede"?); keep the r2 export t7 implicit
+   affirm entry?
+4. The six rows another session booked today (P3.20 to P3.23, P4.19, P5.4; see their rows and
+   `docs/LEGAL_DATA_SOURCES.md`).
+
+**Decisions open with the user (new this session):**
+- Agent A's two grader decisions (above).
+- P4.17's line exposes a substitution on p37_6373 (a UK SI searched for the Scottish SI the lawyer
+  cited; batch 4 B's note section 4): book or not.
+- The control turn's conflict on what Annex XIV Chapter V lists (`wave4_b4_post` r1 against r2),
+  unresolved; it bears on P3.2's control criterion.
+- Which rows go in the next cut (`v2026.10.1`): P3.16, P4.16, P4.15, P4.18 and P4.17 are fixed
+  since `v2026.09.3`.
+
+**Hazards met this session:** the harness blocked the Write tool outside every worktree (copy each
+agent's `evidence/seam/batch4/<L>/` out before removing it); batch 4 C's dry-run module asserts its
+own worktree path (a repointed copy is in `seam/batch4/integrator/c/`); another session committed
+to the branch mid-session (`git log` before a fold; `plan_status` row count as a check); every
+worktree again came up on `main`.
+
+**Carried, open with the user (unchanged):** deploying `v2026.09.3` to the target (`pg_dump`
+first, pull, restart, `test_apis.ps1`; the local prompt cache moves to v3 there, intended);
+telling the eval-harness owner about schema v6; D19's remaining items (deploy by tag; stamp the
+version on the audit event); P4.12, D20, D21/D22, P5.2, Thomas's document; from batch 1: the
+research Worker's jurisdiction line as a row, the 28 case-law summaries applying English
+authority to Scotland, `wave2_p27` 6341 r2 t2; and one of the two "change-record id
+mis-expansions" carried from Session 33 is not one (batch 4 D: that summary gave the right year).
+The Fix Tracker was not updated (update only when asked; if asked: P4.18 and P4.17 Fixed
+2026-10-02, "Next release"; P3.19 and the six new rows added).
+
+**Machine state:** no server, no pin file (`server_py/tools/.replay_pin_state.json` absent), no
+replay running, no worktrees (the four `worktree-agent-*` branches of batch 4 remain locally,
+merged). Test databases `lexchat_test_a` to `_d` remain. 57 replay directories, the latest
+`wave4_b4_post`. The session scratchpad is copied to the gitignored
+`evidence/seam/batch4/scratchpad_s36/`.

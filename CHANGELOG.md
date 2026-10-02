@@ -26,7 +26,7 @@ Saying honestly what was and was not found:
 - When a reply searched only within instruments, say so in the scope line:
   which instruments and terms were searched, and that a provision missing
   from such a search may still be in the instrument and in the index
-  (P4.17; built, its live check still to run).
+  (P4.17).
 - Don't say no change record was consulted when one was: say that the
   records consulted list neither a commencement nor a repeal (P4.18).
 
