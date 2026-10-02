@@ -27,6 +27,7 @@ A second finding from that work is equally load-bearing, and it is about what we
 Loaded on demand, not every session:
 - **`repo-map` skill** — annotated index of which file does what, across backend and frontend.
 - **`external-apis` skill** — the seven external APIs, base URLs, auth, endpoints.
+- **`docs/LEGAL_DATA_SOURCES.md`** — legislation and case-law data: what we hold, each gap, recent fixes against it, and where it could be filled from (incl. the SCTS judgments API, the route to Scottish case law). Parliament-bot counterpart: `docs/parliament/PARLIAMENTARY_DATA.md`.
 - **`client/CLAUDE.md`** — frontend design-token rules; loads automatically when working under `client/`.
 - **`docs/frontend/design-system.md`** — full token and button/component class reference.
 - **`docs/drafting/BUILD_PLAN.md`** — the drafting-bot build spec and session ledger (plus `docs/drafting/SESSION_LOG.md` for what each session actually did).
