@@ -1302,7 +1302,8 @@ limit live.
 Calendar versions (`vYYYY.MM.N`) were adopted on 2026-09-24 (user decision) and set up on
 `main` in `b2a3fd8`: `VERSION`, `server_py/src/version.py`, the version in `/api/bot-info`,
 the About box and the startup log, `CHANGELOG.md`, and a *Releases* section in CLAUDE.md
-(on `main` only until the next cut). `v2026.09.1` (`d8fd73b`) and `v2026.09.2` (`c77e779`)
+(~~on `main` only until the next cut~~ on the fix branch too since the third cut's
+fast-forward, 2026-09-29). `v2026.09.1` (`d8fd73b`) and `v2026.09.2` (`c77e779`)
 are tagged retroactively. Four things were left open deliberately:
 
 - ~~**Push the two tags.**~~ **DONE 2026-09-29 (user confirmed):** `v2026.09.1` and
@@ -1399,3 +1400,18 @@ every request, as Claude Code reads a CLAUDE.md. Not scoped or decided; noted so
     --date recorded`) and compare links and citations before shipping.
   - The drafting bot's data rules (its user input is unpublished text) and log redaction.
   - A UI for writing and viewing it, and the admin's view of it.
+
+### D23. The National Archives case-law licence (booked 2026-10-02, user decision, Session 37)
+
+The Open Justice Licence that covers the National Archives' Find Case Law feed excludes
+"computational analysis", which TNA defines to include "building services or products using
+AI or large language models (LLMs)". AILA searches the feed programmatically and processes
+judgment text with an LLM, so it reads as in scope. **The licence is free**
+(`caselawlicence@nationalarchives.gov.uk`); no application is on record. Full reading:
+`docs/LEGAL_DATA_SOURCES.md` §4.
+
+- **Action: apply for the free licence.** The user's or the deploying organisation's action,
+  not an engineering row (found by the 2026-10-02 data-source review; recorded by batch 5
+  agent C, decision C3).
+- **It does not block** the four open rows that build further on the feed (FIX_PLAN P3.9,
+  P3.22, P3.23, P4.19); each row notes it.

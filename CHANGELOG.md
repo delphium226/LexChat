@@ -47,7 +47,16 @@ the miss to the search (P4.15). The interpretation grader reads "As you
 suggest, ..." as agreement rather than a hedge (P3.3); the position grader
 reads a negated sentence as taking no position (P3.2); a new check reports
 whether the section-search scope line appears on exactly the replies that
-searched only within instruments (P4.17).
+searched only within instruments (P4.17). The derivation grader no longer
+reads an application or appeal "made under section N" as a claim about what
+an instrument was made under, and the interpretation grader reads "on a third
+reading" (a numbered or contrasted reading) as a hedge (P3.3).
+
+Planning tools only, no product change: a new `python -m tools.plan_lint`
+checks the fix plan's structure (one table cell per column, every row in the
+bucket index once, done marks agreeing with the ticks, dependencies,
+the top progress line's counts, balanced bold, UTF-8); `plan_status` now
+shares its parsing.
 
 ## 2026.09.3 — 2026-09-29
 
