@@ -1358,6 +1358,25 @@ def test_abbreviation_dots_do_not_hide_a_claim(answer):
     assert rr.derivation_claims(answer)[0], answer
 
 
+def test_an_application_made_under_a_section_is_not_a_derivation_claim():
+    """Batch 5 (agent D): a thing a person makes under a section (an
+    application, an appeal) is not an instrument made under it, even when a
+    link in the sentence names an instrument by number. A real claim beside
+    it still counts."""
+    for answer in (
+            "* Applications made under section 7 of the Act for widgets already "
+            "supplied ([regulation 4(3)](http://www.legislation.gov.uk/id/"
+            "ssi/1901/3/regulation/4)).",
+            "Under SSI 1901/3, appeals are made under section 9 of the Act."):
+        assert rr.derivation_claims(answer)[0] == [], answer
+    asserted, _ = rr.derivation_claims(
+        "SSI 1901/3 was made under section 7 of the Act, and applications made "
+        "under section 9 go to the sheriff.")
+    assert len(asserted) == 1
+    assert rr.derivation_claims(
+        "The Widget Order 1901 (SSI 1901/3) was made under section 7 of the Act.")[0]
+
+
 def test_masking_abbreviations_does_not_merge_real_sentences():
     """The mask must not swallow a genuine sentence break, or two sentences
     become one and a negation in the first would suppress a claim in the
