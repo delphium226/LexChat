@@ -51,9 +51,14 @@ _BUCKET = re.compile(r"^\| (B\d+)([^|]*)\| ([^|]+)\|")
 _MARK = {"x": "done", " ": "open", "~": "wip", "-": "dropped"}
 
 
-def _rows() -> list:
+def _plan_text(text):
+    """The plan's text: `text` when given (plan_lint passes a string), else the file."""
+    return FIX_PLAN.read_text(encoding="utf-8") if text is None else text
+
+
+def _rows(text=None) -> list:
     wave, out = None, []
-    for line in FIX_PLAN.read_text(encoding="utf-8").split("\n"):
+    for line in _plan_text(text).split("\n"):
         m = _WAVE.match(line)
         if m:
             wave = m.group(1).replace("—", "-")
@@ -65,10 +70,10 @@ def _rows() -> list:
     return out
 
 
-def _buckets() -> dict:
+def _buckets(text=None) -> dict:
     """bucket id -> (label, [row ids it depends on])."""
     out = {}
-    for line in FIX_PLAN.read_text(encoding="utf-8").split("\n"):
+    for line in _plan_text(text).split("\n"):
         m = _BUCKET.match(line)
         if not m:
             continue
@@ -76,6 +81,13 @@ def _buckets() -> dict:
         if rows:
             out[m.group(1)] = (m.group(2).strip(), rows)
     return out
+
+
+def bucket_state(deps, status) -> str:
+    """'closed' when every row the bucket depends on is done, 'partial' when some
+    are, else 'open'. The one closure rule; `main` and `plan_lint` both use it."""
+    done = sum(1 for d in deps if status.get(d) == "done")
+    return "closed" if done == len(deps) else "partial" if done else "open"
 
 
 def _utf8_stdout() -> None:
@@ -134,16 +146,9 @@ def main(argv=None) -> int:
     closed, partial, openb = set(), set(), set()
     for b, (label, deps) in buckets.items():
         states = [status.get(d, "?") for d in deps]
-        done = [d for d, s in zip(deps, states) if s == "done"]
-        if len(done) == len(deps):
-            closed.add(b)
-            mark = "CLOSED "
-        elif done:
-            partial.add(b)
-            mark = "partial"
-        else:
-            openb.add(b)
-            mark = "open   "
+        state = bucket_state(deps, status)
+        {"closed": closed, "partial": partial, "open": openb}[state].add(b)
+        mark = {"closed": "CLOSED ", "partial": "partial", "open": "open   "}[state]
         outstanding = [d for d, s in zip(deps, states) if s != "done"]
         tail = ("  waiting on " + ", ".join(outstanding)) if outstanding else ""
         print(f"    {mark} {b:4} {label[:34]:36}{tail}")
