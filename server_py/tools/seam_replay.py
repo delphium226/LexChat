@@ -536,6 +536,19 @@ def as_sent_rev(value: Optional[str], doc: dict) -> Optional[str]:
     return rev
 
 
+def worker_tools_for(get_worker_tools, cfg: dict) -> list:
+    """The Worker's tool list for this request's research type AND chat mode,
+    as `run_worker_agent` builds it (P3.25: the quick-lookup Worker is not
+    offered `get_legislation_text`). A `get_worker_tools` from a revision
+    before P3.25 takes the research type only, and is called that way."""
+    import inspect
+
+    rm = cfg.get("_research_mode") or "legislation_only"
+    if len(inspect.signature(get_worker_tools).parameters) > 1:
+        return get_worker_tools(rm, cfg.get("_chat_mode"))
+    return get_worker_tools(rm)
+
+
 def worker_prompt_and_tools_at(rev: str, cfg: dict) -> tuple:
     """The Worker's system prompt and tool list as the code at `rev` built
     them for this request. The tools are sent too, and `sent_chars` does not
@@ -543,7 +556,7 @@ def worker_prompt_and_tools_at(rev: str, cfg: dict) -> tuple:
     rm = cfg.get("_research_mode") or "legislation_only"
     prompts = _module_at(rev, "server_py/src/prompts.py", "src")
     schemas = _module_at(rev, "server_py/src/agent/tools/schemas.py", "src.agent.tools")
-    return prompts.get_worker_system_prompt(rm, cfg), schemas.get_worker_tools(rm)
+    return prompts.get_worker_system_prompt(rm, cfg), worker_tools_for(schemas.get_worker_tools, cfg)
 
 
 def worker_as_sent_messages(doc: dict, turn: dict, delegation: int = 1,
@@ -723,7 +736,7 @@ def _as_sent_command(args, doc: dict, turn: dict, sid: str) -> int:
     if rev:
         _system, tools = worker_prompt_and_tools_at(rev, cfg0)
     else:
-        tools = get_worker_tools(cfg0.get("_research_mode") or "legislation_only")
+        tools = worker_tools_for(get_worker_tools, cfg0)
     probes = (turn.get("audit") or {}).get("empty_completions") or []
     dgs = (turn.get("audit") or {}).get("delegations", [])
     dg = dgs[min(max(args.delegation, 1), len(dgs)) - 1] if dgs else {}
@@ -1114,7 +1127,7 @@ def _first_round_command(args, doc: dict, turn: dict, sid: str) -> int:
                                            args.without_fix, args.rev)
     cfg_turn = _cfg_for(doc, turn)
     rm = cfg_turn.get("_research_mode") or "legislation_only"
-    tools = get_worker_tools(rm)
+    tools = worker_tools_for(get_worker_tools, cfg_turn)
     # P3.7: the product looks up every instrument the brief names by number
     # before the Worker's first round and appends the outcome to the brief.
     # Rebuilt here by the product's own routing, against live LEX (two cheap

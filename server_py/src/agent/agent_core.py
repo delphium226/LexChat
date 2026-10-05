@@ -28,7 +28,7 @@ from ..utils.citation_links import (
     restore_dropped_siblings,
 )
 from ..utils.discovery_budget import new_search_budget
-from ..utils.instrument_lookup import routed_lookup_block
+from ..utils.instrument_lookup import routed_lookup_block, section_search_lookup
 from ..utils.mode_change import apply_mode_change_marker, mode_change_for
 from ..utils.openers import strip_agreement_opener
 from ..utils.empty_completion import (
@@ -64,7 +64,14 @@ from .federation_client import (
 )
 from .learning import format_learning_context, get_relevant_examples
 from .summarisation import WORKER_CONTEXT_BUDGET_CHARS, call_chunk
-from .tools import get_manager_tools, get_planner_tools, get_worker_tools
+from .tools import (
+    QUICK_LOOKUP_WITHHELD_TOOLS,
+    get_manager_tools,
+    get_planner_tools,
+    get_worker_tools,
+    is_quick_lookup_worker,
+    withheld_tool_result,
+)
 
 logger = logging.getLogger("agent")
 
@@ -219,7 +226,9 @@ async def run_worker_agent(
         {"role": "user", "content": query},
     ]
 
-    worker_tools = get_worker_tools(research_mode)
+    # P3.25: the quick-lookup Worker's list omits `get_legislation_text`.
+    worker_tools = get_worker_tools(research_mode, cfg.get("_chat_mode"))
+    quick_lookup = is_quick_lookup_worker(research_mode, cfg.get("_chat_mode"))
     source_accumulator: list = []
     # Limit discovery searches so the model proceeds to Phase 2 instead of looping.
     # Parliamentary modes: three calls to the SP search tools / search_hansard (see
@@ -247,7 +256,7 @@ async def run_worker_agent(
     # step's report.
     search_log: list = []
 
-    async def worker_tool_executor(name: str, args: dict) -> str:
+    async def _run_tool(name: str, args: dict, result_suffix: str = "") -> str:
         return await run_worker_tool(
             name, args, query, summarise_chunk_fn, summarise_model,
             parent_on_chunk=parent_on_chunk,
@@ -261,7 +270,35 @@ async def run_worker_agent(
             audit_delegation=_audit_delegation,
             retrieved_urls=retrieved_urls,
             search_log=search_log,
+            result_suffix=result_suffix,
         )
+
+    # P3.25: the statutory instruments this quick-lookup run has looked up in
+    # code, so each is looked up once.
+    section_lookups: set = set()
+
+    async def worker_tool_executor(name: str, args: dict) -> str:
+        if not quick_lookup:
+            return await _run_tool(name, args)
+        # P3.25. The tool is not offered to this Worker; a call naming it
+        # anyway (a model echoing a tool description that mentions it) is
+        # answered here and never reaches LEX.
+        if name in QUICK_LOOKUP_WITHHELD_TOOLS:
+            logger.info(f"[Worker] '{name}' is not offered in quick-lookup mode — not run")
+            return withheld_tool_result(name)
+        # P3.25. Before searching within a statutory instrument, look it up
+        # once, so its recital (P2.3's permitted branch) and `valid_date`
+        # still have a source now that the whole text does not. Fail-soft
+        # (Invariant 5): without the block the search runs as before.
+        suffix = ""
+        try:
+            suffix = await section_search_lookup(name, args, section_lookups, _run_tool,
+                                                 log=search_log)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning("[Worker] Code lookup before a section search failed", exc_info=True)
+        return await _run_tool(name, args, result_suffix=suffix)
 
     # P3.7 (B5): every instrument the brief names by number is looked up in
     # code before the Worker's first round, and the outcome goes into the

@@ -377,7 +377,7 @@ def main(argv=None) -> int:
         cfg = asyncio.run(sr._provider_cfg(cfg_turn))
         if n_tools == 0:
             msgs = sr.worker_first_round_messages(doc, turn, k, args.without_fix, args.rev)
-            tools = get_worker_tools(cfg_turn.get("_research_mode") or "legislation_only")
+            tools = sr.worker_tools_for(get_worker_tools, cfg_turn)
             content, calls, cost, _m = asyncio.run(sr.run_first_round(msgs, cfg, tools))
             shape = "FIRST"
         else:

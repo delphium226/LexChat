@@ -14,6 +14,7 @@ from typing import Callable, Optional
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import harvest_legislation_urls, provision_url_block
 from ..utils.section_outline import subsection_outline
+from ..utils.instrument_lookup import LOOKUP_TOOL
 from ..utils.discovery_budget import (
     legislation_budget_blocks,
     legislation_stop_message,
@@ -25,6 +26,7 @@ from ..utils.search_scope import (
     currency_note,
     enabling_power_note,
     legislation_search_note,
+    lookup_enabling_note,
     not_held_note,
     record_budget_stop,
     record_section_budget_stop,
@@ -493,6 +495,7 @@ async def run_worker_tool(
     audit_delegation: Optional[dict] = None,
     retrieved_urls: Optional[set] = None,
     search_log: Optional[list] = None,
+    result_suffix: str = "",
 ) -> str:
     """Execute a single Worker tool call and return the (possibly summarised) result.
 
@@ -534,6 +537,12 @@ async def run_worker_tool(
             synthesis — never sees a tool result. Run-scoped, not request-scoped,
             unlike `retrieved_urls`: "what this step searched for" is a statement
             about one step. None disables the record.
+        result_suffix: Text the caller appends to this result, last, so the
+            memo, the context budget and the audit's `final_result` all see
+            exactly what the model receives (P3.25: the quick-lookup Worker's
+            recital block from a code lookup). Not applied to a memo hit or a
+            refused call, which return what they returned before. "" (the
+            default) changes nothing.
     """
     activity_id = uuid.uuid4().hex[:8]
 
@@ -996,6 +1005,10 @@ async def run_worker_tool(
     enabling_note = ""
     if name == "get_legislation_text":
         enabling_note = enabling_power_note(args, raw_result)
+    elif name == LOOKUP_TOOL:
+        # P3.25: the lookup record carries the same `description`, where most
+        # recitals sit. Only the permitting block, and only where it has one.
+        enabling_note = lookup_enabling_note(raw_result)
     record_enabling_power(search_log, name, args, raw_result)
 
     # P3.5 (B3): the other four relations of the bucket, which ARE retrievable.
@@ -1019,7 +1032,9 @@ async def run_worker_tool(
     # this point `raw_result` is still the executor's own output — summarisation
     # is below — so the two calls would see identical data and record the page
     # twice. One seam per tool.
-    if name in ("get_legislation_changes", "get_legislation_text"):
+    # P3.25: and `valid_date` off a lookup record, the route that replaces the
+    # whole text for the quick-lookup Worker.
+    if name in ("get_legislation_changes", "get_legislation_text", LOOKUP_TOOL):
         record_currency(search_log, name, args, raw_result)
 
     # P2.4 (6373): a retrieval by id that the index answered with not-found.
@@ -1212,6 +1227,7 @@ async def run_worker_tool(
     result += sp_plenary_phase2_note
     result += hansard_phase2_note
     result += case_law_note
+    result += result_suffix
 
     if parent_on_chunk:
         await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done"})

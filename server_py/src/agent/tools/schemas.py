@@ -731,8 +731,60 @@ _PARLIAMENT_TOOL_NAMES = {t["function"]["name"] for t in PARLIAMENT_TOOLS}
 _WESTMINSTER_TOOL_NAMES = {t["function"]["name"] for t in WESTMINSTER_TOOLS}
 
 
-def get_worker_tools(research_mode: str = "legislation_only") -> list:
-    """Return the appropriate tool set for the given research mode."""
+# P3.25: the tools the quick-lookup (conversational) Worker is NOT offered.
+# Its prompt said "Do NOT fall back to `get_legislation_text`" while its tool
+# list offered it: 143 of 1,314 answered conversational turns called it (247
+# calls), 133 of 208 successful calls straight from a search, and a whole-text
+# read carries no schedule or annex (P3.27). Removed in code (Invariant 2). The
+# two things only that read supplied, an SI's recital and `valid_date`, now
+# come through `lookup_legislation`, which code runs on every statutory
+# instrument this Worker searches within (`instrument_lookup.
+# section_search_lookup`). The research Workers keep the tool.
+QUICK_LOOKUP_WITHHELD_TOOLS = ("get_legislation_text",)
+
+
+def withheld_tool_result(name: str) -> str:
+    """What the quick-lookup Worker gets back if it calls a withheld tool
+    anyway. No `results` key and nothing about the index, so no recorder or
+    grader can read it as a retrieval that found nothing."""
+    import json
+
+    return json.dumps({
+        "tool": name,
+        "run": False,
+        "note": (
+            f"{name} is not offered in quick-lookup mode, so this call was not run. "
+            "Read an instrument's provisions with search_legislation_sections, and "
+            "its record with lookup_legislation."
+        ),
+    })
+
+
+def is_quick_lookup_worker(research_mode: str = "legislation_only",
+                           chat_mode: str = None) -> bool:
+    """True where the Worker runs on `WORKER_SYSTEM_PROMPT_CONVERSATIONAL`.
+
+    The same test `prompts.get_worker_system_prompt` applies, so the
+    conversational prompt and the narrowed tool list always go together
+    (`tests/test_quick_lookup_tools.py` checks the two agree)."""
+    return (chat_mode == "conversational"
+            and research_mode not in ("parliamentary_records", "westminster_records"))
+
+
+def get_worker_tools(research_mode: str = "legislation_only", chat_mode: str = None) -> list:
+    """Return the appropriate tool set for the given research mode.
+
+    `chat_mode` (P3.25): the quick-lookup Worker's list omits
+    `QUICK_LOOKUP_WITHHELD_TOOLS`. Without it, or in any other chat mode, the
+    list is exactly what it was before (the same list objects)."""
+    tools = _worker_tools_for(research_mode)
+    if is_quick_lookup_worker(research_mode, chat_mode):
+        tools = [t for t in tools
+                 if t["function"]["name"] not in QUICK_LOOKUP_WITHHELD_TOOLS]
+    return tools
+
+
+def _worker_tools_for(research_mode: str) -> list:
     if research_mode == "case_law_only":
         return CASE_LAW_TOOLS
     elif research_mode == "legislation_and_case_law":
