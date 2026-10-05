@@ -8327,3 +8327,158 @@ pointing at the brief; its content stands.**
   also the after-column that counts P3.19's summarised change records), then C, D**, so the replay
   measures A's lever alone. P3.12's build waits on B's probe (the dependency exception). FIX_PLAN's
   top order line points at the brief (`plan_lint` 0, 0).
+---
+
+## Session 39 — 2026-10-05 — parallel batch 7: P3.24, P4.19, P3.23 and P3.9 done; P3.25 built; P3.27 measured and P3.12 probed ($1.24)
+
+**Done:**
+- **Ran `PARALLEL_BATCH_7.md` (user decisions at launch: A, B, C and D as set out; B up to 300 LEX
+  calls and D up to 60 National Archives calls, both agreed; P3.24's replay between the A/B and C/D
+  merges).** Step 1's checks held at `6011b4f`: equal to `origin`; `main` at `a6b4a76`;
+  `plan_status` 49 of 77, 8 of 14; `plan_lint` 0, 0; rubric sha1s `31379ecf…` and `0031831b…`; 57
+  replay directories; `lexchat_test` and `_a` to `_d` present; no python process, port 8000 free, no
+  pin file, no worktrees; baseline suite **2195**. `<INTEGRATOR_HEAD>` was `6011b4f`; no other
+  session committed during the batch (checked before every merge and the fold).
+- **Every worktree came up on `main` (`a6b4a76`) again**; each agent reset to `6011b4f`.
+- **Reviews** (each: the branch contains `6011b4f`, the note and the diff read, the added lines
+  grepped with `matter_grep.py` and an id grep, the scratch compared with its main-checkout copy
+  before the worktree was removed, the revert run on a scratch worktree, one headline number re-run
+  on the merged tree):
+  - **A (P3.24's lever):** grep clean; product revert 234 lines, 21 fail; tooling revert 28 lines, 2
+    fail; the integrator's F3 mutant (`self` relations counted as by another instrument) 3 fail; the
+    line census identical on A's code and on the merged tree (710 delegations, 1,427 lines; 0 differ
+    outside the commencement part). **A found the Worker-facing block (`_relation_currency_limb`)
+    still told the Worker every `coming into force` relation, its own included, "ARE its own
+    commencement and you may state them".** Put to the user before the replay: **extend P3.24 now**
+    (decided); A built it as a further commit (`f758c3a`: 535 of 1,435 stored change-record calls
+    move, nothing else in them; revert 73 lines, 8 fail). A's three other decisions taken as built
+    (the prompt sentence states the rule in the record's own terms, because the Worker never sees
+    `_currency_limb`; "state neither" where no record was consulted; the 12-instrument cap). Scratch
+    144 = 144.
+  - **B (P3.27 measured, P3.12's probe; note only):** grep clean (generic "Annex X" only); two stored
+    figures re-run identically from the main-checkout copy (580 calls, 60 instruments with text; 126
+    pairs in 98 turns on 27 instruments, 25 need pairs). 156 live LEX calls (POST, as LEX's read
+    endpoints are; 4 GETs to `/legislation/proxy`). Scratch 197 = 197.
+  - **C (P3.25):** grep clean (`uksi/1901/9` synthetic); full revert 309 lines, collection fails; the
+    integrator's six single-site mutants (tool list ignores chat mode, lookup drops `valid_date`, no
+    code lookup, recorder ignores the lookup's date, no lookup recital, prompt swap off) fail 4, 3,
+    4, 3, 4 and 1. Scratch 121 = 121.
+  - **D (P4.19, P3.23, P3.9):** grep clean (fixtures "Widget Co v Example Ltd", `[1901] EWCA Civ 1`);
+    no other reader of a case-law `total` (the two in `search_scope.py` are legislation, keyed on
+    `total_matched` first); full revert 298 lines, two test files fail at import; P4.19's revert alone
+    fails 6 of 8; the integrator's ten-a-page mutant (P3.23) 4, old-date-form mutant (P3.9) 4. 36 live
+    National Archives calls. Scratch 152 = 152.
+- **Merged A (`5269ca9`, 2223), B (`cc26fe9`, 2223)**, pushed after each.
+- **P3.24's acceptance replay (`wave4_b7_p324`):** `replay check` (served, probe $0.0010), `replay
+  pin`, uvicorn started fresh with PowerShell `Start-Process -PassThru` (PID 1236, build
+  `v2026.09.3-82-gcc26fe9`), the keep-awake helper (PID 14424); `replay run --session 6410 6378
+  --reps 3 --max-spend 1.31` **$1.24 recorded**, 12 turns answered, no stall, no commit while it ran;
+  then `replay restore`, both processes stopped by PID; no python process, port 8000 free, no pin
+  file. **Graded:** the 16-subcommand exit-1 set all 0; `footer_echo` 0; `negcurrency` 2 claims, both
+  SUPPORTED, 0 unsupported (`--all` on a leaf directory reads 0 turns: run it without `--all`); P3.19's
+  count 27 change-record calls, 0 summarised (largest raw 4,097 characters; `wave4_p37_reach` 10 and
+  0). **Hand-read** (gitignored `evidence/rubrics/handread_wave4_b7_p324.md`): no unsupported negative
+  or continuing claim in 12 turns; 6410's true negative stated in 2 of 3. **Ticked at the user's
+  decision ("tick, note the call")**, with three watch items on the row (below).
+- **Merged C (`c909460`, 2303)** after the restore. A's sentence reaches the conversational prompt
+  through C's copy, which names `get_legislation_text` 0 times (`prompt_check.py`). C's route census
+  re-run on the merged tree with the new directory excluded: every footer, lookup and route figure
+  identical to C's (254 footers; SI recital 3 of 3, `valid_date` 68 of 68); only the Manager-facing
+  block counts differ, which A's line moves. **Merged D (`9ff8d0a`, 2339)**; D's dry run identical
+  (1,253 calls; 88 date moves, 123 totals, 781 notes, 0 unexpected).
+- **Decisions put to the user** (one before C's merge, then three calls of four, all as recommended):
+  - **C1 (before merge):** P2.5's existing currency clause on 254 more conversational footers: keep.
+  - **P3.24:** tick, with the watch items noted.
+  - **P3.27:** send `include_schedules: true` and the unflagged call, with an exact code line naming
+    what the text carries or that the index holds none; no size bound at first; one build with
+    P3.12, P3.27 first; the 6374 guard (Invariant 1) added to the acceptance.
+  - **P3.12:** the route by `/legislation/section/lookup` and `uri`; annex chapters by `_cut_annex`;
+    a paragraph cut only where its `Section N)` line is unique and the next headed paragraph is N+1;
+    the ground truth as a `DepthReq` in `DEPTH_TRUTH`.
+  - **P3.25:** acceptance booked as C proposed, run in one sweep with P3.12's; the shared tool
+    description and P2.7's stop message left.
+  - **D:** retry timeouts and transport errors (kept); correct the `last` link's page size in all
+    four places; **P3.9 ticked with its acceptance generalised**; D4 to D6 as built.
+- **Applied** (`5778b28`): `fold_s39.py` (P3.24, P4.19, P3.23 and P3.9 ticked and annotated; P3.27,
+  P3.12, P3.25 and P3.22 annotated; P3.23's premise and P3.9's named-judgment clause struck through
+  and corrected; four done marks; the top order line; 60 bold markers added). **`plan_lint` 0
+  errors, 0 warnings; `plan_status` 53 of 77 rows, 8 of 14 buckets** (B3 now waits on P3.28 and
+  P4.22; B12 on P3.22 and P3.20). `docs/LEGAL_DATA_SOURCES.md` section 4 corrected; CHANGELOG
+  *Unreleased*: P3.24, P3.25, P3.9, P3.23 and P4.19 as product changes, the grader and probe as
+  tooling. Suite **2339**.
+
+**Surprises / deviations:**
+- **The brief's lever was half a lever.** The Worker never sees `_currency_limb` (it is appended to
+  the report after the Worker writes), and the Worker-facing block said the opposite of the new line
+  for an instrument's own relations. Caught by agent A, extended before the replay at the user's
+  decision; without it the replay would have measured a Worker and a Manager told contradictory
+  things on 6378.
+- **`negcurrency` was blind to P3.19's shape** (it read `changed_provisions` only), so on any
+  directory after P3.19 a negative the record contradicts would have graded SUPPORTED. Fixed by A
+  before the replay; byte-identical on all stored data.
+- **P3.23's row was wrong about its own data source:** the feed's `last` link counts at ten a page
+  regardless of `per_page`; every "about 26,000" figure was five times too high. Corrected on P3.23,
+  P3.22, `LEGAL_DATA_SOURCES.md` and the skill.
+- **P3.9's named judgment no longer discriminates** (the corpus moved): it is on the court-filtered
+  undated first page today. The acceptance was generalised (user decision).
+- **LEX's read endpoints are POST, not GET** (B); `GET /legislation/proxy/<provision path>` returns
+  legislation.gov.uk's page for exactly one paragraph or annex chapter, through LEX's host.
+- **P3.24's replay checks suppression, not the defect, on this model**, as predicted at booking. Its
+  three watch items: 6378 r2 t1's "now apply only in" three nations (a continuing claim
+  `negcurrency` misses; true in substance); 6378 r1 t1 reading commencement from SIs' own relations;
+  6410 naming the uncommenced remainder in 0 of 3 (1 of 5 before).
+- **C's dry run picks up every replay directory**, so the new `wave4_b7_p324` added stored lookup
+  payloads and shifted two footer counts; re-run with it excluded (`p325_dryrun_57.py` in the
+  scratchpad) to compare like with like.
+- **`git worktree remove --force` on a scratch worktree left an empty directory** when the shell's cwd
+  had been inside it; `rmdir` from outside cleared it.
+- **The Fix Tracker was not updated** (only when asked). If asked: P3.24, P4.19, P3.23 and P3.9 Fixed
+  2026-10-05, "Next release".
+
+**State:** branch `fix/prepilot-defects`, pushed (head after this commit); `main` untouched at
+`a6b4a76`. 2339 tests. Session spend **$1.24** (P3.24's replay; agents $0).
+
+---
+
+## Session 39 — handover for Session 40 (2026-10-05)
+
+**Take next, by severity (FIX_PLAN's top order line, "end of Session 39"):**
+1. **P3.27 then P3.12, one build, two commits** (P1, $0 build). Read `notes/batch7_B.md` first: it
+   holds the probe, the cut rules and the payload sizes. P3.27: send `include_schedules: true` on
+   `get_legislation_text`, make the unflagged call too, and append a code line (built from the raw
+   responses, after summarisation, `enabling_power_note`'s pattern) naming the schedules and annexes
+   the text carries, or saying the index holds none; screen it against every detector. P3.12: in
+   `run_worker_tool`, when a section-search query names a schedule or annex unit the results lack,
+   fetch it by `/legislation/section/lookup` and `uri`, cut annex chapters with `_cut_annex` and a
+   paragraph only where its `Section N)` line is unique and the next headed paragraph is N+1, else
+   label the span or summarise the whole schedule; dry-run over all 5,128 stored section searches.
+   Put P3.12's ground truth into `DEPTH_TRUTH` as a `DepthReq` for 6335 turn 7 (the text is in the
+   gitignored `evidence/seam/batch7/B/p312_truth.txt`; regexes over the statutory words only).
+2. **Then one replay sweep for P3.27, P3.12 and P3.25**, priced to the user first (about $5.50 to $7):
+   P3.25's booked table (`p37_6409` n=3, 6340 n=3 Conversational, `p37r_6374` and `p37r_6383` n=1,
+   `p32_6406` cut after export turn 5 n=3, shared with P3.12), 6335 n=3 (P3.12, recorded modes), and
+   6374's guard (P3.27). Remember C's named risk on 6340.
+3. **P2:** P3.22 (the case-law build's last step: its paced $0 measure-first under the published
+   1,000 per five minutes, a before-column, the build flipping `CASE_LAW_RESULT_ORDER` and the
+   nudge's "most relevant", the after-column; book the 6363 and 6359 ground truth first), P3.21 with
+   P5.4 (c)'s probe, P3.4, P3.6, P4.3, P3.10, P4.12, P3.20 last.
+4. **P3:** P4.8, P4.20, P4.22, P3.26, P3.28, P3.14, P4.9, P5.4's other leads, P0.7, TODO B6.
+
+**Watch items carried:** P3.24's three (on its row); `negcurrency` does not match "now apply" or
+"still applies" (batch 6 B's valid/applicable gap); B's F3 is now closed in both the Manager's line
+and the Worker's block, but `provisions_commenced` and P2.5's `_currency_support` still count self
+relations (unchanged, not booked).
+
+**Decisions open with the user (carried):** sending the lawyer pack (unblocks P3.2, P3.3, P3.17);
+sending SCTS the note (P3.20); D23 (the National Archives licence); deploying `v2026.09.3` to the
+target; telling the eval-harness owner about schema v6; D19; which rows go in the next cut
+(`v2026.10.1`: P3.16, P4.16, P4.15, P4.18, P4.17, P5.2, P3.19, P4.21, and now P3.24, P4.19, P3.23,
+P3.9); P4.12, D20, D21/D22; batch 1's three items; the p37_6373 substitution P4.17 exposes; the Fix
+Tracker (P3.24, P4.19, P3.23, P3.9 Fixed) when asked.
+
+**Machine state:** no server, no pin file, no replay running, no worktrees (the four batch 7
+branches were deleted after merging; the 24 earlier `worktree-agent-*` branches and `batch3-B`
+remain locally). Test databases `lexchat_test_a` to `_d` remain. **58 replay directories** (new:
+`wave4_b7_p324`). Rubrics unchanged (`31379ecf…`, `0031831b…`); new gitignored hand-read
+`rubrics/handread_wave4_b7_p324.md`. Agents' scratch in `evidence/seam/batch7/{A,B,C,D}/`, the
+session scratchpad in `batch7/scratchpad_s39/`.
