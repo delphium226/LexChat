@@ -8296,3 +8296,34 @@ P4.21 Fixed, P3.27 and P3.28 new) when asked.
 `lexchat_test_a` to `_d` remain. 57 replay directories. Rubrics unchanged (`31379ecf…`, `0031831b…`).
 Agents' scratch in `evidence/seam/batch6/{A,B,C,D}/`, the integrator's C rebuild in `batch6/Cx/`, and
 the session scratchpad in `batch6/scratchpad_s38/`.
+**Addendum to Session 38 (2026-10-05, at the user's request: "make sure we're not going to lose any
+pertinent information", "update the tracker", then "provide a prompt to kick off the next piece of
+work ... a safe, multi-agent approach"). This supersedes the Session 39 handover's "Take next" only in
+pointing at the brief; its content stands.**
+- **Preserved:** the batch 6 notes, the FIX_PLAN fold, the CHANGELOG and the log were committed and
+  pushed (`3e5a00b`); every agent's scratch and the session scratchpad are in the gitignored
+  `evidence/seam/batch6/` (A 748, B 46, C 277, D 20 files; `scratchpad_s38` 44). Three findings that
+  live in no committed file were written where the next session reads them: **CLAUDE.md** gained one
+  sentence (LEX's `/legislation/text` takes `include_schedules`, never sent; P3.27); the local
+  **external-apis** skill (gitignored `.claude/`) gained the `include_schedules` trap, the Schedule
+  as one provision, the removal effect wordings (P3.28), P3.19's new `changes` shape and the 62% of
+  "to" records holding no commencement relation; the local **repo-map** skill gained
+  `replay_report negcurrency`.
+- **Fix Tracker v37** (same URL; the live body was identical to the repo source before the edit: the
+  Artifact read, then a Read of all 1,268 lines of the saved file): P3.19 and P4.21 Fixed
+  (`fixed: "2026-10-05"`, `ver: "Next release"`); P3.27 (P1) and P3.28 (P3) added as Verified; the lede
+  names eight rows waiting for the next release; three plain-language notes for Thomas (the two
+  fixes, P3.24's measurement, P3.12/P3.25 and the schedule gap) naming no lawyer's topic; the P3.7 note
+  points to P4.21's rewording; "Next" and the stamp. 76 rows: 44 Fixed, 26 Verified, 3 Blocked, 3 To
+  be verified. Script syntax-checked with Node; no render check (data and text only).
+- **`docs/prepilot-fixes/PARALLEL_BATCH_7.md` written: the brief for Session 39.** Four agents in
+  worktrees at $0 model spend, by severity: **A** builds P3.24's decided lever (the per-instrument line
+  in `_currency_limb`, then the sentence beside `_IN_FORCE_RULE`); **B** measures P3.27 over stored
+  evidence and runs the live LEX probe P3.12 needs, with P3.12's ground truth (up to 300 GETs, only if
+  the user agrees at launch); **C** builds P3.25 (the tool out of the conversational Worker, recital
+  and `valid_date` through `lookup_legislation`); **D** builds P4.19, P3.23 and P3.9, in the decided
+  order (up to 60 National Archives GETs for their live checks, only if agreed). **Merge A, B, then
+  P3.24's authorised replay (`wave4_b7_p324`, 6410 and 6378 n=3, up to $1.31, pinned Gemini; it is
+  also the after-column that counts P3.19's summarised change records), then C, D**, so the replay
+  measures A's lever alone. P3.12's build waits on B's probe (the dependency exception). FIX_PLAN's
+  top order line points at the brief (`plan_lint` 0, 0).
