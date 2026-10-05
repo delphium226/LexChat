@@ -2727,6 +2727,783 @@ def cmd_currency(args) -> int:
         _invariant_one(Path(args.before), Path(args.dir))
     return 0
 
+# --- P3.24 (B3): negative and continuing commencement claims ---------------
+#
+# **P2.5's grader cannot see this shape, by design, and that design is right.**
+# `_currency_asserted` returns False on "not yet commenced" because a true
+# negative exists (P2.5's row: an Act with most of its sections uncommenced),
+# and a grader that counted every negative would push the model to
+# hedge a correct statement (Invariant 1; P2.2's first `NEG_ASSERTED` failed at
+# 100% that way). And P3.5's `_CMC_DENIED` grades the INSTRUMENT ("no
+# commencement regulations have been made"), never a provision. So a sentence
+# telling a lawyer "s. 5: Not yet commenced", or that a prohibition "remains in
+# force", is graded by nothing — which is Thomas's 30 September finding on
+# `glm-5.2:cloud`, and why P3.24 exists.
+#
+# **The detector therefore does not count negatives. It reads each one against
+# what the turn retrieved**, the same split `_currency_support` makes for the
+# affirmative, and says which of three things it is:
+#
+#   * ``SUPPORTED``   — the conversation holds a record that shows it. For "not
+#     yet commenced" and "partially in force": a change record for the
+#     instrument that DOES carry commencement relations by another instrument,
+#     lists them in full, and does not list this provision. That is "the
+#     record shows it uncommenced", which is the true negative the row must
+#     keep (Invariant 1). For "no longer in force": a removal relation naming
+#     it, or the instrument's own repeal marker in its title. For "remains in
+#     force": a commencement relation naming it, and a complete record that
+#     lists no removal of it.
+#   * ``UNSUPPORTED`` — read from an absence, or contradicted. No change record
+#     was consulted; or the one consulted carries no commencement relation at
+#     all (the era gap P2.5 measured on a 1998 Act), so its silence about a
+#     provision says nothing; or only the instrument's own commencement
+#     provision was read, which names the mechanism ("on such day as the
+#     Scottish Ministers may by regulations appoint") and not whether it was
+#     used; or the record lists the provision as commenced (or removed) and
+#     the sentence says the opposite.
+#   * ``UNCLEAR``     — something bears on it that only a reader can weigh: a
+#     record that covers commencement but was truncated, a record whose only
+#     commencement relations are the instrument's own, a commencement
+#     provision that fixes a calendar date, a `valid_date` on a retrieved
+#     text, a removal relation not tied to what the sentence is about.
+#
+# Evidence is the conversation's, not the turn's alone: a follow-up that says
+# "as noted, it is partially in force" rests on the earlier turn's retrieval
+# (`_nc_merge`), and the reason says so.
+#
+# **What is NOT a claim**, and is printed as a drop with its reason so both
+# directions are audited: a question; a conditional or subordinate use ("if s. 5
+# is not yet in force"); a hedged one ("may not yet be in force"); a quotation
+# of statutory text ("shall continue in force until Parliament otherwise
+# determines"); and the disclaimer P2.5 asks for ("in-force status could not be
+# verified"). A statement ABOUT the record ("not yet recorded as commenced") is
+# not matched at all: it is what the footer asks the lawyer to read.
+#
+# Dated future commencement ("comes into force on 1 April 2027") is out of
+# scope: it is read from an instrument, not from an absence.
+
+# The claim vocabulary, one pattern per kind. Order matters and is applied in
+# `negcurrency_claim`: a "not yet" sentence is never also read as continuing.
+_NC_NOT_YET = re.compile("|".join([
+    r"\bnot\s+(?:yet\s+)?(?:ha(?:ve|s)\s+)?(?:been\s+)?(?:commenced|brought\s+"
+    r"in(?:to)?\s+(?:force|operation|effect))\b",
+    r"\bnot\s+yet\s+(?:be\s+)?(?:in[- ]force|in\s+operation|in\s+effect|operative|"
+    r"effective)\b",
+    r"\b(?:has|have|had|did)\s+not\s+(?:yet\s+)?(?:come|came)\s+in(?:to)?\s+"
+    r"(?:force|operation|effect)\b",
+    r"\byet\s+to\s+(?:be\s+)?(?:commenced|brought\s+in(?:to)?\s+force|"
+    r"come\s+in(?:to)?\s+force|take\s+effect)\b",
+    r"\buncommenced\b",
+    r"\b(?:awaiting|pending)\s+commencement\b",
+]), re.I)
+# "Partially in force" claims that SOME provisions are not in force, and the
+# provisions it names are usually the ones that ARE ("partially in force, with
+# sections 24 to 28 commencing the day after Royal Assent"), so it is its own
+# kind and is never read as denying the provisions it names.
+_NC_PARTIAL = re.compile(
+    r"\b(?:only\s+)?(?:partially|partly)\s+(?:in[- ]force|commenced)\b"
+    r"|\bnot\s+(?:fully|wholly)\s+(?:in[- ]force|commenced)\b",
+    re.I,
+)
+_NC_NO_LONGER = re.compile("|".join([
+    r"\bno\s+longer\s+(?:in[- ]force|in\s+effect|in\s+operation|operative|"
+    r"effective|ha(?:s|ve)\s+effect|appl(?:y|ies))\b",
+    r"\b(?:has|have|had)\s+ceased\s+to\s+(?:have\s+effect|be\s+in[- ]force|"
+    r"apply|operate)\b",
+]), re.I)
+# "Not in force" with no "yet" and no "longer": either a non-commencement or a
+# repeal, so it is supported by either record.
+_NC_BARE_NOT = re.compile(
+    r"\b(?:is|are|was|were|be|being|remains?)\s+not\s+(?:currently\s+|presently\s+)?"
+    r"(?:in[- ]force|in\s+operation)\b"
+    r"|\bnot\s+currently\s+in[- ]force\b",
+    re.I,
+)
+_NC_CONTINUING = re.compile("|".join([
+    r"\b(?:remains?|remained)\s+(?:still\s+|currently\s+|fully\s+)?"
+    r"(?:in[- ]force|in\s+effect|in\s+operation|operative|"
+    r"on\s+the\s+statute\s+book)\b",
+    r"\bstill\s+(?:in[- ]force|in\s+effect|in\s+operation|operative)\b",
+    r"\bcontinues?\s+(?:to\s+be\s+)?in[- ]force\b",
+    r"\bcontinued\s+in[- ]force\b",
+]), re.I)
+_NC_KINDS = (
+    ("not_yet", _NC_NOT_YET),
+    ("partial", _NC_PARTIAL),
+    ("no_longer", _NC_NO_LONGER),
+    ("not_in_force", _NC_BARE_NOT),
+    ("continuing", _NC_CONTINUING),
+)
+# The wider vocabulary the drops are drawn from: anything that talks about
+# commencement or currency in the negative or continuing sense, matched or not.
+_NC_VOCAB = re.compile(
+    r"\bnot\b[^.;\n]{0,25}\b(?:commenc\w*|in(?:to)?[- ]force|in\s+operation)"
+    r"|\byet\s+to\b[^.;\n]{0,30}\b(?:commenc\w*|force)"
+    r"|\buncommenced\b|\b(?:awaiting|pending)\s+commencement\b"
+    r"|\b(?:remains?|remained|still|continues?|continued)\b[^.;\n]{0,25}"
+    r"\b(?:in[- ]force|in\s+effect|in\s+operation|operative)\b"
+    r"|\bno\s+longer\b[^.;\n]{0,25}\b(?:in[- ]force|in\s+effect|operative|"
+    r"ha(?:s|ve)\s+effect|appl(?:y|ies))\b"
+    r"|\bceased?\s+to\s+(?:have\s+effect|be\s+in[- ]force)\b"
+    r"|\b(?:partially|partly)\s+(?:in[- ]force|commenced)\b",
+    re.I,
+)
+# The clause the guards look in: back to the nearest clause boundary.
+_NC_CLAUSE_BACK = 70
+# "likely", "probably" and "presumably" are deliberately NOT hedges: "indicating
+# the rest of the Act is likely not yet in force" (read from a search that
+# returned nothing) leans on the absence as hard as the bare form does, and the
+# first draft dropped three such sentences.
+_NC_HEDGE = re.compile(
+    r"\b(?:may|might|could|would|possibly|perhaps|appears?|seems?|"
+    r"unclear|uncertain|unknown)\b", re.I)
+_NC_SUBORDINATE = re.compile(
+    r"\b(?:if|whether|where|while|whilst|unless|until|when|whenever|once)\b",
+    re.I)
+_NC_QUOTES = "\"“”"
+
+
+def _nc_clause_before(sentence: str, start: int) -> str:
+    """The text before `start`, back to a clause boundary (or 70 chars)."""
+    head = sentence[max(0, start - _NC_CLAUSE_BACK):start]
+    cut = max(head.rfind(","), head.rfind(";"), head.rfind(":"),
+              head.rfind("("), head.rfind("|"))
+    return head[cut + 1:] if cut >= 0 else head
+
+
+def negcurrency_claim(sentence: str) -> tuple:
+    """(kind, guard) for one sentence.
+
+    `kind` is one of ``not_yet``, ``partial``, ``no_longer``, ``not_in_force``,
+    ``continuing``, or ``None`` when the sentence makes no such claim. `guard`
+    is ``None`` for a claim, or the reason a matched phrase is NOT a claim
+    (``question``, ``quoted``, ``conditional``, ``hedged``, ``disclaimer``),
+    which the command prints as a drop. Pure: no I/O, no state.
+    """
+    s = sentence or ""
+    first = None
+    for kind, pat in _NC_KINDS:
+        for m in pat.finditer(s):
+            guard = _nc_guard(s, m.start())
+            if guard is None:
+                return kind, None
+            if first is None:
+                first = (kind, guard)
+    return first if first else (None, None)
+
+
+def _nc_guard(s: str, start: int):
+    """Why the claim phrase at `start` is not a claim, or None if it is one."""
+    before = _nc_clause_before(s, start)
+    if s.rstrip().rstrip("*_").endswith("?"):
+        return "question"
+    if sum(s[:start].count(q) for q in _NC_QUOTES) % 2 == 1:
+        return "quoted"
+    if _NC_SUBORDINATE.search(before):
+        return "conditional"
+    if _NC_HEDGE.search(before):
+        return "hedged"
+    # The disclaimer is read on the CLAUSE, not the sentence: "...establishing
+    # that some provisions are no longer in force, but does not establish the
+    # in-force status of the Act as a whole" claims in one clause and
+    # disclaims in the next, and the first draft dropped the claim.
+    tail = re.split(r"[,;:|]", s[start:], maxsplit=1)[0]
+    if _currency_disclaimed(before + tail):
+        return "disclaimer"
+    return None
+
+
+# Provisions named in a sentence, normalised to the change record's own base
+# form ("s. 5", "reg. 2", "art. 3", "Sch. 1", "Pt. 2"), so a sentence and a
+# record can be compared. Subsections are dropped: the record's base is what
+# a commencement relation is listed under, and "s. 13A(2A)-(2C)" and "s. 13A"
+# must meet. A provision cited as AUTHORITY ("under section 39(1)", "not
+# covered by section 39") is not the subject of the claim and is skipped —
+# found by reading `wave3_p35`, where the commencement section itself is named
+# in a sentence about everything it did NOT commence.
+_NC_PROV = re.compile(
+    r"\b(?P<kind>sections?|ss?\.|regulations?|regs?\.|articles?|arts?\.|"
+    r"schedules?|sch\.|parts?|pt\.)\s*\(?\s*"
+    r"(?P<list>\d+[A-Z]{0,2}(?:\(\w{1,4}\))*"
+    r"(?:\s*(?:,|and|to|or|&|–|—|-)\s*(?:and\s+)?\d+[A-Z]{0,2}"
+    r"(?:\(\w{1,4}\))*)*)",
+    re.I,
+)
+_NC_AUTHORITY = re.compile(
+    r"\b(?:under|by|per|see|pursuant\s+to|in\s+accordance\s+with|"
+    r"according\s+to|cf\.?)\s*\[?\s*$"
+    # A provision written straight after another instrument's citation is a
+    # provision OF that instrument: "revoked by SI 1901/3, reg. 2(c)".
+    r"|\b(?:S\.?S?\.?I\.?|SR)\s*(?:No\.?\s*)?\d{4}[/ ]\s*(?:No\.?\s*)?\d+"
+    r"\s*[,(]?\s*$", re.I)
+# A sentence that names no provision is about part of the instrument when it
+# says so ("the remaining provisions", "the rest of the Act", "partially") and
+# about the whole of it otherwise ("the Act is not yet in force"). The
+# distinction decides the verdict: a record holding commencement relations
+# SUPPORTS "the rest is not yet in force" and CONTRADICTS "the Act is not yet in
+# force".
+_NC_PARTITIVE = re.compile(
+    r"\b(?:remaining|remainder|rest|other|others|further|some|certain|"
+    r"majority|most|many|several|substantive|those|these|partially|partly|"
+    r"fully|wholly|not\s+all|provisions?|sections?|parts?|paragraphs?|"
+    r"regulations?\s+\d|articles?)\b", re.I)
+
+
+def _nc_base(kind: str, num: str) -> str:
+    """One provision in the record's base form: "s. 5", "reg. 2", "Sch. 1"."""
+    k = kind.lower().rstrip(".")
+    if k.startswith("reg"):
+        label = "reg."
+    elif k.startswith("art"):
+        label = "art."
+    elif k.startswith("sch"):
+        label = "Sch."
+    elif k.startswith("part") or k == "pt":
+        label = "Pt."
+    else:
+        label = "s."
+    return "%s %s" % (label, re.sub(r"\(.*$", "", num).strip().upper())
+
+
+def negcurrency_provisions(sentence: str) -> list:
+    """Provisions this sentence makes its claim about, in record base form."""
+    out = []
+    for m in _NC_PROV.finditer(sentence or ""):
+        if _NC_AUTHORITY.search(sentence[max(0, m.start() - 25):m.start()]):
+            continue
+        kind = m.group("kind")
+        items = re.split(r"\s*(?:,|and|or|&)\s*", m.group("list"))
+        for it in items:
+            it = it.strip()
+            if not it:
+                continue
+            rng = re.match(r"^(\d+)\s*(?:to|–|—|-)\s*(\d+)$", it)
+            if rng and 0 < int(rng.group(2)) - int(rng.group(1)) <= 200:
+                for n in range(int(rng.group(1)), int(rng.group(2)) + 1):
+                    b = _nc_base(kind, str(n))
+                    if b not in out:
+                        out.append(b)
+                continue
+            for part in re.split(r"\s*(?:to|–|—|-)\s*", it):
+                # A year after "Regulations" or "Order" is a title, not a
+                # provision: "the ... (Scotland) Regulations 2013".
+                if re.match(r"^(?:1[89]|20)\d\d$", part):
+                    continue
+                if re.match(r"^\d", part):
+                    b = _nc_base(kind, part)
+                    if b not in out:
+                        out.append(b)
+    return out
+
+
+def _nc_record_base(prov: str) -> str:
+    """A change record's `changed_provisions` entry in base form, or ""."""
+    m = re.match(r"^\s*(s|reg|art|sch|pt)\.?\s*(\d+[A-Z]{0,2})", str(prov or ""), re.I)
+    if not m:
+        return ""
+    return _nc_base(m.group(1), m.group(2))
+
+
+_NC_TITLE_MARKER = re.compile(r"\s*\((?:repealed|revoked|expired|spent)\b[^)]*\)\s*", re.I)
+_NC_CMC_TEXT = re.compile(
+    r"\bcomes?\s+into\s+force\b[^.]{0,160}\b(?:royal\s+assent|such\s+day|"
+    r"may\s+by\s+(?:regulations|order)\s+appoint|appoint)", re.I)
+# A commencement provision that fixes a calendar date, which is the one case in
+# which the instrument's own text can support "not yet in force" (a date still
+# to come) without a change record.
+_NC_CMC_DATED = re.compile(
+    r"\bcomes?\s+into\s+force\s+on\s+(?:the\s+)?\d{1,2}(?:st|nd|rd|th)?\s+"
+    r"(?:January|February|March|April|May|June|July|August|September|October|"
+    r"November|December)\s+\d{4}", re.I)
+
+
+# The removal family, read off a group's `type_of_effect`. **Wider than the
+# product's own `_REPEAL_EFFECT_TOKENS` (lex.py), deliberately, and the gap is a
+# finding:** the feed also writes a removal as "rev (saving)", "rev in pt (...)",
+# "omitted" and "ceases to have effect", none of which the slimmer counts in
+# `repeal_or_revocation_relations`. A 1985 instrument whose only relation is
+# "rev (saving)" was graded a repeal-less record by the first draft while the
+# model, which read the group, correctly said it was revoked. "words omitted"
+# is an amendment of text, not the removal of a provision, and is not counted.
+_NC_REMOVAL = re.compile(
+    r"repeal|revok|revoc|^rev\b|^omitted\b|^entr(?:y|ies) omitted\b"
+    r"|^ceases? to have effect\b|^ceased to have effect\b")
+# A removal group's changed provision that names the whole instrument rather
+# than a provision of it ("Order", "Instrument", "Act").
+_NC_WHOLE = re.compile(
+    r"^\s*(?:the\s+)?(?:act|order|instrument|regulations?|rules|scheme|whole)\b",
+    re.I)
+
+
+def _nc_lid(value) -> str:
+    """An id as the change record writes it; older section rows carry a URL."""
+    return re.sub(r"^https?://(?:www\.)?legislation\.gov\.uk/(?:id/)?", "",
+                  str(value or "")).strip("/")
+
+
+def _nc_is_removal(effect: str) -> bool:
+    return bool(_NC_REMOVAL.search(str(effect or "").strip().lower()))
+
+
+def _nc_cmc(text: str) -> tuple:
+    """(is a commencement provision, fixes a calendar date) for one text."""
+    t = str(text or "")
+    dated = bool(_NC_CMC_DATED.search(t))
+    return bool(_NC_CMC_TEXT.search(t)) or dated, dated
+
+
+def negcurrency_evidence(turn: dict) -> dict:
+    """Everything this turn retrieved that bears on a negative or continuing
+    commencement claim, read off the audit trace. Never raises on odd shapes.
+
+    `records` — one per change-record call, direction-aware: under ``"to"``
+    the commenced and repealed provisions belong to the subject; under ``"by"``
+    to the instrument the group names (a commencing SSI's own record lists the
+    Act's provisions it commenced). `cif_complete` is False when the record's
+    `coming into force` relations are not all listed (a group cut at 60, or
+    groups cut at 40), which is the difference between "the record does not
+    list s. 5" and "the record we saw does not list s. 5".
+    """
+    ev = {"records": [], "marked": [], "titles": {}, "cmc_provisions": [],
+          "valid_dates": []}
+    for dg in (turn.get("audit") or {}).get("delegations", []) or []:
+        for tl in dg.get("tools", []) or []:
+            name = tl.get("name")
+            o = _json_or_none(tl.get("raw_result"))
+            if name == "get_legislation_changes" and isinstance(o, dict):
+                lid = str(o.get("legislation_id") or
+                          (tl.get("args") or {}).get("legislation_id") or "")
+                direction = o.get("direction") or "to"
+                rec = {"lid": lid, "direction": direction, "commenced": {},
+                       "self_commenced": {}, "repealed": {}, "whole_removed": set(),
+                       "commenced_n": {}, "repeal_n": {},
+                       "groups": [], "cif_complete": True, "rep_complete": True}
+                eff = o.get("effects") if isinstance(o.get("effects"), dict) else {}
+                listed_cif = listed_rep = 0
+                for g in o.get("related") or []:
+                    if not isinstance(g, dict):
+                        continue
+                    glid = str(g.get("legislation_id") or "")
+                    if glid and glid not in rec["groups"]:
+                        rec["groups"].append(glid)
+                    e = str(g.get("type_of_effect") or "").strip().lower()
+                    is_cif = e == "coming into force"
+                    is_rep = _nc_is_removal(e)
+                    if not (is_cif or is_rep):
+                        continue
+                    owner = lid if direction == "to" else glid
+                    # **A self-referential `coming into force` relation is not
+                    # a commencement.** It is the instrument's own commencement
+                    # section, and it lists every provision that section
+                    # governs — including those it leaves to regulations. The
+                    # first draft read one such group (28 of 28 sections) as
+                    # "the record lists s. 1 as commenced" and graded a true
+                    # negative as contradicted. Kept apart, never counted.
+                    self_rel = bool(g.get("self")) and direction == "to"
+                    key = ("self_commenced" if self_rel else "commenced") \
+                        if is_cif else "repealed"
+                    bucket = rec[key].setdefault(owner, set())
+                    for p in g.get("changed_provisions") or []:
+                        b = _nc_record_base(p)
+                        if b:
+                            bucket.add(b)
+                        elif is_rep and _NC_WHOLE.match(str(p)):
+                            rec["whole_removed"].add(owner)
+                    n = int(g.get("count") or 0)
+                    if is_cif and not self_rel:
+                        rec["commenced_n"][owner] = rec["commenced_n"].get(owner, 0) + n
+                    if is_rep:
+                        rec["repeal_n"][owner] = rec["repeal_n"].get(owner, 0) + n
+                    if is_cif:
+                        listed_cif += n
+                        if g.get("changed_provisions_not_listed"):
+                            rec["cif_complete"] = False
+                    else:
+                        listed_rep += n
+                        if g.get("changed_provisions_not_listed"):
+                            rec["rep_complete"] = False
+                if direction == "to":
+                    c = o.get("provisions_commenced")
+                    if not isinstance(c, int):
+                        c = sum(v for k, v in eff.items()
+                                if str(k).strip().lower() == "coming into force")
+                    r = o.get("repeal_or_revocation_relations")
+                    if not isinstance(r, int):
+                        r = sum(v for k, v in eff.items()
+                                if any(tok in str(k).lower()
+                                       for tok in ("repeal", "revok", "revoc")))
+                    rec["repeal_n"][lid] = max(r, rec["repeal_n"].get(lid, 0))
+                    if listed_cif < c:
+                        rec["cif_complete"] = False
+                    if listed_rep < r:
+                        rec["rep_complete"] = False
+                if o.get("window_complete") is False:
+                    rec["cif_complete"] = rec["rep_complete"] = False
+                ev["records"].append(rec)
+            elif name == "search_legislation" and isinstance(o, dict):
+                for row in o.get("results") or []:
+                    if not isinstance(row, dict):
+                        continue
+                    rlid = str(row.get("legislation_id") or "")
+                    title = str(row.get("title") or "")
+                    if not rlid:
+                        continue
+                    clean = _NC_TITLE_MARKER.sub(" ", title).strip()
+                    ev["titles"].setdefault(rlid, clean)
+                    if clean != title.strip() and rlid not in [m[0] for m in ev["marked"]]:
+                        ev["marked"].append((rlid, clean))
+            elif name == "search_legislation_sections" and isinstance(o, list):
+                for row in o:
+                    if not isinstance(row, dict):
+                        continue
+                    is_cmc, dated = _nc_cmc(row.get("text"))
+                    if is_cmc or re.search(r"\bcommencement\b",
+                                           str(row.get("title") or ""), re.I):
+                        item = (_nc_lid(row.get("legislation_id")),
+                                str(row.get("number") or ""), dated)
+                        if item not in ev["cmc_provisions"]:
+                            ev["cmc_provisions"].append(item)
+            elif name == "get_legislation_text" and isinstance(o, dict):
+                leg = o.get("legislation") if isinstance(o.get("legislation"), dict) else {}
+                tlid = _nc_lid((tl.get("args") or {}).get("legislation_id") or leg.get("id"))
+                if leg.get("title"):
+                    ev["titles"].setdefault(tlid, str(leg.get("title")))
+                vd = str(leg.get("valid_date") or "")
+                if re.match(r"^\d{4}-\d{2}-\d{2}$", vd):
+                    ev["valid_dates"].append((tlid, vd))
+                is_cmc, dated = _nc_cmc(o.get("full_text") or leg.get("text"))
+                if is_cmc:
+                    item = (tlid, "text", dated)
+                    if item not in ev["cmc_provisions"]:
+                        ev["cmc_provisions"].append(item)
+    return ev
+
+
+def _nc_merge(earlier: dict, now: dict) -> dict:
+    """This turn's evidence plus what earlier turns of the same conversation
+    retrieved. A follow-up that restates an earlier turn's finding ("as noted,
+    it is partially in force") rests on that turn's retrieval, and the lawyer
+    saw it; grading the follow-up on its own trace alone read 7 such sentences
+    as unsupported in the first draft."""
+    if not earlier:
+        return now
+    out = {k: list(earlier.get(k) or []) for k in
+           ("records", "marked", "cmc_provisions", "valid_dates")}
+    for k in out:
+        for item in now.get(k) or []:
+            if item not in out[k]:
+                out[k].append(item)
+    out["titles"] = dict(earlier.get("titles") or {})
+    for lid, t in (now.get("titles") or {}).items():
+        out["titles"].setdefault(lid, t)
+    return out
+
+
+def _nc_names(sentence: str, lid: str, title: str = "") -> bool:
+    """Does this sentence name this instrument (id, link, citation or title)?"""
+    if not lid:
+        return False
+    if re.search(re.escape(lid) + r"(?![\d])", sentence):
+        return True
+    if lid.split("/")[0] in ("ssi", "uksi", "nisr", "wsi") and _names_instrument(sentence, [lid]):
+        return True
+    t = (title or "").strip()
+    return bool(len(t) >= 12 and t.lower() in sentence.lower())
+
+
+_NC_STATUTE_BOOK = re.compile(r"\bon\s+the\s+statute\s+book\b", re.I)
+_NC_DEICTIC = re.compile(
+    r"\b(?:this|that|the said)\s+(?:instrument|order|act|regulations?|statute)\b"
+    r"|^\W*(?:it|they)\b", re.I)
+
+
+def negcurrency_verdict(sentence: str, kind: str, ev: dict, previous: str = "") -> tuple:
+    """(verdict, reason) for one claim, against this turn's evidence.
+
+    See the note above `_NC_NOT_YET` for the three verdicts. The tie between a
+    sentence and a record is made by naming: a record is relevant when the
+    sentence names its subject or an instrument it lists (by id, link,
+    citation or title); a sentence that names none is read against every record
+    the turn holds, and a contradiction is then claimed only when exactly one
+    instrument's record is in play. A sentence whose subject is "this
+    instrument" or "it" is named by the sentence before it (`previous`): a
+    bullet naming an instrument and a next line saying "the index title marks
+    this instrument as revoked" is one statement over two lines.
+    """
+    provs = negcurrency_provisions(sentence)
+    recs = ev.get("records") or []
+
+    def naming(text):
+        return [r for r in recs
+                if _nc_names(text, r["lid"], ev["titles"].get(r["lid"], ""))
+                or any(_nc_names(text, g, ev["titles"].get(g, "")) for g in r["groups"])]
+
+    names_text = sentence
+    if previous and _NC_DEICTIC.search(sentence) and not any(
+            _nc_names(sentence, lid, t) for lid, t in ev["titles"].items()):
+        names_text = previous + " " + sentence
+    named = naming(names_text)
+    names_other = any(_nc_names(names_text, lid, t) for lid, t in ev["titles"].items()) \
+        and not named
+    relevant = named if named else ([] if names_other else recs)
+
+    commenced, repealed = {}, {}
+    for r in relevant:
+        for owner, ps in r["commenced"].items():
+            commenced.setdefault(owner, set()).update(ps)
+        for owner, ps in r["repealed"].items():
+            repealed.setdefault(owner, set()).update(ps)
+    owners = set(commenced) | set(repealed)
+    single = len({r["lid"] for r in relevant}) <= 1
+
+    def hit(table):
+        return [p for p in provs for ps in table.values() if p in ps]
+
+    to_recs = [r for r in relevant if r["direction"] == "to"]
+    covered = [r for r in to_recs if r["commenced_n"].get(r["lid"], 0) > 0]
+    has_repeal = [r for r in to_recs if r["repeal_n"].get(r["lid"], 0) > 0]
+    marked_named = [lid for lid, t in ev.get("marked") or []
+                    if _nc_names(names_text, lid, t)]
+    # A commencement provision or a held-text date counts only for an
+    # instrument the sentence names, or for any when it names none.
+    said = {lid for lid, t in ev["titles"].items() if _nc_names(names_text, lid, t)}
+    said |= {r["lid"] for r in named}
+    cmc = [c for c in ev.get("cmc_provisions") or [] if not said or c[0] in said]
+    vd = [v for v in ev.get("valid_dates") or [] if not said or v[0] in said]
+
+    self_only = [r for r in to_recs if r not in covered and r["self_commenced"]]
+
+    def not_yet(partial=False):
+        c = [] if partial else hit(commenced)
+        if c and (single or len(owners) == 1):
+            return "UNSUPPORTED", "the record lists %s as commenced" % ", ".join(c[:4])
+        if c:
+            return "UNCLEAR", "a record in the turn lists %s as commenced" % ", ".join(c[:4])
+        if covered and not partial and not provs and not _NC_PARTITIVE.search(sentence):
+            return "UNSUPPORTED", "the whole instrument is denied, and the record " \
+                                  "lists commencements of it"
+        if covered:
+            if all(r["cif_complete"] for r in covered):
+                return ("SUPPORTED", "the record carries %d commencement relation(s), "
+                        "listed in full, and not this" % sum(
+                            r["commenced_n"].get(r["lid"], 0) for r in covered))
+            return "UNCLEAR", "the record covers commencement but its list was cut"
+        if self_only:
+            return "UNCLEAR", "the record's only commencement relations are the " \
+                              "instrument's own, which name the mechanism"
+        # The instrument's own commencement provision names the MECHANISM
+        # ("on such day as the Scottish Ministers may by regulations appoint"),
+        # not whether it has been used, so it cannot support "not yet" — unless
+        # it fixes a calendar date, which a reader then has to weigh.
+        if any(c[2] for c in cmc):
+            return "UNCLEAR", "the instrument's commencement provision fixes a date"
+        if to_recs:
+            return "UNSUPPORTED", "the change record consulted carries no " \
+                                  "commencement relation (read from an absence)"
+        if cmc:
+            return "UNSUPPORTED", "commencement provision retrieved, which names the " \
+                                  "mechanism, and no change record (read from an absence)"
+        if names_other:
+            return "UNSUPPORTED", "no change record for the instrument named " \
+                                  "(read from an absence)"
+        return "UNSUPPORTED", "no change record consulted (read from an absence)"
+
+    def no_longer():
+        rp = hit(repealed)
+        if rp or marked_named:
+            return "SUPPORTED", ("a repeal relation names %s" % ", ".join(rp[:4])
+                                 if rp else "the instrument's title carries a repeal marker")
+        # "Those provisions are no longer in force" is supported by any removal
+        # relation; "this instrument is no longer in force" only by one that
+        # removes the instrument itself, or by its title marker — and only for
+        # an instrument the sentence NAMES. Read off every record in the turn,
+        # an unrelated 1967 instrument's revocation "supported" a sentence
+        # about a 2008 one in the first draft.
+        whole = [r for r in named if r["whole_removed"]]
+        if has_repeal and not provs and (_NC_PARTITIVE.search(sentence) or whole):
+            return "SUPPORTED", ("the record removes the instrument itself" if whole
+                                 and not _NC_PARTITIVE.search(sentence)
+                                 else "repeal relation(s) retrieved for the instrument")
+        if has_repeal or ev.get("marked"):
+            return "UNCLEAR", (("repeal relations retrieved, none naming %s"
+                                % ", ".join(provs[:4]) if provs else
+                                "repeal relations retrieved, none tied to the "
+                                "instrument the sentence is about") if has_repeal
+                               else "a repeal-marked title in the turn, not tied")
+        return "UNSUPPORTED", "no repeal relation or title marker (read from an absence)"
+
+    def continuing():
+        rp = hit(repealed)
+        if (rp and (single or len(owners) == 1)) or marked_named \
+                or (not provs and any(r["whole_removed"] for r in named)):
+            return "UNSUPPORTED", ("the record lists %s as repealed" % ", ".join(rp[:4])
+                                   if rp else "the record or title marks the "
+                                   "instrument itself as removed")
+        # "Remains on the statute book" says only that the instrument has not
+        # been removed, so a complete record that does list removals, none of
+        # them of the instrument itself, supports it without any commencement.
+        if _NC_STATUTE_BOOK.search(sentence) and not provs and has_repeal \
+                and all(r["rep_complete"] for r in has_repeal):
+            return "SUPPORTED", "a complete record lists removals, none of the " \
+                                "instrument itself"
+        c = hit(commenced)
+        if covered and (c or not provs):
+            if all(r["cif_complete"] and r["rep_complete"] for r in covered):
+                return "SUPPORTED", "a commencement relation in hand, and a complete " \
+                                    "record listing no repeal of it"
+            return "UNCLEAR", "commencement relation in hand, record cut"
+        if covered or self_only:
+            return "UNCLEAR", ("the record covers commencement but does not name %s"
+                               % ", ".join(provs[:4]) if covered else
+                               "the record's only commencement relations are the "
+                               "instrument's own")
+        # A held revised text up to date to a stated day, with the provision
+        # in it, is the one non-record source on the "not repealed" half. The
+        # commencement provision alone speaks only to the "came into force"
+        # half, so it does not lift this out of UNSUPPORTED.
+        if vd:
+            return "UNCLEAR", "a held text up to date to %s" % vd[0][1]
+        if to_recs:
+            return "UNSUPPORTED", "the change record consulted carries no " \
+                                  "commencement relation (read from an absence)"
+        return "UNSUPPORTED", "no change record consulted (read from an absence)"
+
+    if kind == "not_yet":
+        return not_yet()
+    if kind == "partial":
+        return not_yet(partial=True)
+    if kind == "no_longer":
+        return no_longer()
+    if kind == "continuing":
+        return continuing()
+    a, b = not_yet(), no_longer()
+    if "SUPPORTED" in (a[0], b[0]):
+        return "SUPPORTED", a[1] if a[0] == "SUPPORTED" else b[1]
+    if a[0] == b[0] == "UNSUPPORTED":
+        return "UNSUPPORTED", a[1]
+    return "UNCLEAR", a[1] if a[0] == "UNCLEAR" else b[1]
+
+
+def negcurrency_turn(turn: dict, earlier: dict = None) -> tuple:
+    """(claims, drops) for one answered turn, on its body (footer stripped).
+
+    `earlier` is the evidence the conversation's previous turns retrieved
+    (`_nc_merge`). `claims` is `[(sentence, kind, verdict, reason)]`, the reason
+    saying so when the verdict rests on an earlier turn's retrieval; `drops` is
+    `[(sentence, reason)]` — every sentence in the wider vocabulary that was not
+    graded, with why.
+    """
+    body = _without_footer(turn.get("answer") or "")
+    if not body.strip():
+        return [], []
+    own = merged = None
+    claims, drops = [], []
+    previous, window = "", []
+    for s in _sentences(body):
+        kind, guard = negcurrency_claim(s)
+        if kind and not guard:
+            if own is None:
+                own = negcurrency_evidence(turn)
+                merged = _nc_merge(earlier, own)
+            v, why = negcurrency_verdict(s, kind, merged, previous)
+            if earlier and negcurrency_verdict(s, kind, own, previous)[0] != v:
+                why += " — from an earlier turn's retrieval"
+            claims.append((s, kind, v, why))
+        elif kind:
+            drops.append((s, guard))
+        elif _NC_VOCAB.search(s):
+            drops.append((s, "not a claim shape"))
+        # Three sentences back: a bullet's heading line names the instrument,
+        # a count line follows, and the claim about "this instrument" comes
+        # third (`wave2_p25`).
+        window = (window + [s])[-3:]
+        previous = " ".join(window)
+    return claims, drops
+
+
+def cmd_negcurrency(args) -> int:
+    """P3.24's measurement: negative and continuing commencement claims,
+    each read against what its turn retrieved. Per sentence, then per turn.
+
+    `--dir` may be one replay directory or the replay ROOT; with `--all` every
+    subdirectory is walked and a per-directory table printed. `--sessions`
+    restricts to session ids (a prefixed id such as `p37_6409` matches 6409).
+    `--drops` prints every sentence in the vocabulary that was not graded, with
+    its reason — the both-directions audit.
+    """
+    root = Path(args.dir)
+    dirs = sorted(p for p in root.iterdir() if p.is_dir()) if args.all else [root]
+    want = set(args.sessions.split(",")) if args.sessions else None
+    grand = Counter()
+    per_dir = []
+    for d in dirs:
+        docs = load_runs(d)
+        tally = Counter()
+        lines, drop_lines = [], []
+        for doc in sorted(docs, key=lambda x: (str(x.get("session_id")), x.get("rep", 1))):
+            sid = str(doc.get("session_id"))
+            if want and sid.split("_")[-1] not in want and sid not in want:
+                continue
+            earlier = None
+            for t in doc.get("turns", []):
+                if not (t.get("answer") or "").strip():
+                    earlier = _nc_merge(earlier, negcurrency_evidence(t))
+                    continue
+                tally["answered"] += 1
+                claims, drops = negcurrency_turn(t, earlier)
+                earlier = _nc_merge(earlier, negcurrency_evidence(t))
+                verdicts = {v for _, _, v, _ in claims}
+                if claims:
+                    tally["turns_with_claim"] += 1
+                if "UNSUPPORTED" in verdicts:
+                    tally["turns_unsupported"] += 1
+                for s, kind, v, why in claims:
+                    tally[v] += 1
+                    tally["kind_" + kind] += 1
+                    tally[kind + "_" + v] += 1
+                    p25 = "p25=yes" if _currency_asserted(s) else "p25=no"
+                    lines.append("  %-11s %-12s %s rep%s t%s  %s  [%s]\n        %s"
+                                 % (v, kind, sid, doc.get("rep", 1), t.get("turn"),
+                                    p25, why, s.strip()[:220]))
+                for s, why in drops:
+                    tally["drops"] += 1
+                    drop_lines.append("    DROP %-17s %s rep%s t%s: %s"
+                                      % (why, sid, doc.get("rep", 1), t.get("turn"),
+                                         s.strip()[:200]))
+        grand.update(tally)
+        per_dir.append((d.name, tally))
+        if not args.all or args.verbose:
+            print("== %s" % d.name)
+            for ln in lines:
+                print(ln)
+            if args.drops:
+                for ln in drop_lines:
+                    print(ln)
+    print()
+    print("P3.24 — negative and continuing commencement claims over %s%s"
+          % (args.dir, " (every subdirectory)" if args.all else ""))
+    print("  %-26s %6s %6s %6s %6s %6s %6s %6s" % (
+        "directory", "turns", "w/clm", "claims", "SUPP", "UNSUP", "UNCLR", "drops"))
+    for name, t in per_dir:
+        if args.all and not (t["SUPPORTED"] + t["UNSUPPORTED"] + t["UNCLEAR"]):
+            continue
+        print("  %-26s %6d %6d %6d %6d %6d %6d %6d" % (
+            name[:26], t["answered"], t["turns_with_claim"],
+            t["SUPPORTED"] + t["UNSUPPORTED"] + t["UNCLEAR"],
+            t["SUPPORTED"], t["UNSUPPORTED"], t["UNCLEAR"], t["drops"]))
+    print("  %-26s %6d %6d %6d %6d %6d %6d %6d" % (
+        "TOTAL", grand["answered"], grand["turns_with_claim"],
+        grand["SUPPORTED"] + grand["UNSUPPORTED"] + grand["UNCLEAR"],
+        grand["SUPPORTED"], grand["UNSUPPORTED"], grand["UNCLEAR"], grand["drops"]))
+    print("  turns with an UNSUPPORTED claim: %d of %d answered"
+          % (grand["turns_unsupported"], grand["answered"]))
+    print("  by kind (SUPPORTED / UNSUPPORTED / UNCLEAR):")
+    for kind, _ in _NC_KINDS:
+        print("    %-13s %4d   %4d / %4d / %4d" % (
+            kind, grand["kind_" + kind], grand[kind + "_SUPPORTED"],
+            grand[kind + "_UNSUPPORTED"], grand[kind + "_UNCLEAR"]))
+    return 0
+
 
 def _turn_tool_calls(turn: dict) -> int:
     """Worker tool calls recorded on this turn, across every delegation."""
@@ -7862,6 +8639,19 @@ def main(argv: Iterable[str] | None = None) -> int:
     cu.add_argument("--unasked", action="store_true",
                     help="the measured cost: turns carrying a currency "
                          "disclaimer whose question never asked about currency")
+    nc = sub.add_parser("negcurrency",
+                        help="P3.24 measurement: negative and continuing "
+                             "commencement claims, each read against what "
+                             "its turn retrieved")
+    nc.add_argument("--all", action="store_true",
+                    help="--dir is the replay ROOT: walk every subdirectory")
+    nc.add_argument("--sessions", default=None,
+                    help="comma-separated session ids (6409 also matches p37_6409)")
+    nc.add_argument("--drops", action="store_true",
+                    help="print every sentence in the vocabulary NOT graded, "
+                         "with its reason")
+    nc.add_argument("--verbose", action="store_true",
+                    help="with --all, print every claim per directory too")
     sub.add_parser("scoperecord",
                    help="P2.9 acceptance: every search a worker run issued, "
                         "against what its own scope block recorded")
@@ -8105,6 +8895,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "derivations": cmd_derivations,
         "commencements": cmd_commencements,
         "currency": cmd_currency,
+        "negcurrency": cmd_negcurrency,
         "scoperecord": cmd_scoperecord,
         "nosearch": cmd_nosearch,
         "caselaw": cmd_caselaw,
