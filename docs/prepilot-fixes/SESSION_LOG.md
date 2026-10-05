@@ -8171,3 +8171,128 @@ items according to the severity"). This supersedes the second addendum's "Take n
   matter text was written there).
 **Fourth addendum to Session 37 (2026-10-05, at the user's request: "provide a prompt to kick off the next piece of work ... a safe, multi-agent approach").** `docs/prepilot-fixes/PARALLEL_BATCH_6.md` written: four $0 agents in git worktrees, taken in the severity order above: A builds P3.19 (P1); B measures P3.24 (P1) with a new `replay_report` detector for negative commencement and currency claims, registered in `test_footer_trips_no_detector`, no product code; C rewords P4.21's lookup clause (P2), the exact sentence put to the user before merge; D measures P3.12 and P3.25 (P2) and gives options. Merge A, B, C, D (B before C so C's footer is screened against B's detector). No replay; levers and replay figures go to the user. FIX_PLAN's top order line points at it.
 - **Fix Tracker v36** (2026-10-05, at the user's request; same URL; the live body was identical to the repo source before the edit): no row changed; "Next" now describes batch 6 (P3.19 built, P3.24 measured, P4.21 reworded with its sentence shown to the user first, P3.12 and P3.25 measured, $0), then the rest by severity; the stamp. Script syntax-checked with Node.
+
+---
+
+## Session 38 — 2026-10-05 — parallel batch 6: P3.19 and P4.21 built, P3.24, P3.12 and P3.25 measured ($0)
+
+**Done:**
+- **Ran `PARALLEL_BATCH_6.md` (user decision at launch: A, B, C and D as set out).** Step 1's checks
+  held at `cb04aeb`: equal to `origin`; `main` at `a6b4a76`; `plan_status` 47 of 75, 8 of 14;
+  `plan_lint` 0 errors, 0 warnings; rubric sha1s `31379ecf…` and `0031831b…`, pack `d26bb016…`; 57
+  replay directories; `lexchat_test` and `_a` to `_d` present; no python process, port 8000 free, no
+  pin file, no worktrees; baseline suite **2162**. **Another session committed `995ef34` during the
+  checks** (Fix Tracker v36, `summary-table.html` and one SESSION_LOG line, pushed); it was the
+  uncommitted tracker edit seen at the start, and `<INTEGRATOR_HEAD>` was `995ef34`.
+- **Merged in the order A, B, C, D, each `--no-ff`**, the full suite on `lexchat_test` after each and
+  the branch pushed after each: A `8a1182c` (2171), B `e93d529` (2192), C `c782c1e` (2195), D
+  `d4c16d1` (2195). For each the integrator confirmed the branch contains `995ef34`, read the note and
+  the diff, and grepped the added lines for instrument ids and the matter words (session ids only;
+  the instrument ids are synthetic: `ssi/1902/4`, `uksi/1899/2`, `uksi/1901/9`; D's "Annex X" and
+  "Chapter Y" are generic placeholders). Notes: `docs/prepilot-fixes/notes/batch6_{A,B,C,D}.md`.
+  Every agent's scratch was compared with its main-checkout copy before the worktree was removed (A
+  748, B 46, C 277, D 20 files; all identical).
+- **Agent A (P3.19, built): MET, ticked (user decision).** `_slim_amendment_results` lists each
+  group's relations as `changes`, one entry per effecting provision, so every listed change keeps
+  the provision that made it; the window is still the first 60 changed provisions, a 120-relation
+  backstop, `changes_not_listed` counts what is left out. Integrator's revert on a scratch worktree
+  (`hunk_anchors.py` + `revert_check.py`, four `lex.py` hunks, 69 lines removed): 13 tests fail, A's
+  figure. The dry run (`seam/batch6/A/dryrun.py`, repointed in a copy in the scratchpad) on the merged
+  tree is byte-identical to A's: 1,216 calls, 195,884 relations listed each with its own affecting
+  provision, 43,137 counted, 0 invented, 0 hidden; median size 3,448 to 3,462, max 49,050 to 96,861.
+- **Agent B (P3.24, measured; tooling): MET.** `replay_report negcurrency` and 21 tests; registered
+  in `test_footer_trips_no_detector`. Integrator's revert: the three `replay_report.py` hunks remove
+  791 lines (collection then fails at import); each of `negcurrency_claim`, `_evidence`, `_verdict`
+  and `_turn` stubbed fails 20, 16, 14 and 16 of the 22 tests (`scratchpad_s38/revB/revert_b.py`).
+  Re-run on the merged tree: 178 claims in 142 of 1,943 turns, 144 / 32 / 2 (B's totals); 6410 9
+  claims (6 / 3 / 0), 6378 1 (UNCLEAR, supported by B's hand-read). **All 32 unsupported claims
+  predate P3.5 or are in `wave2`; 0 in the 907 `wave3`/`wave4` turns: on the pinned Gemini the defect
+  is not reproduced after P3.5.**
+- **Agent C (P4.21, built): MET, ticked; wording R1 approved by the user before merge** ("… is not
+  held in this index, which is incomplete; that does not show whether the number is accurate."). The
+  user also chose to leave the three model-facing sites as they are. Integrator's revert (two
+  `search_scope.py` hunks, 13 lines removed): the 3 tests C named fail. **The merge conflicted in
+  `test_footer_trips_no_detector`** (B and C each appended a block, as the brief foresaw): resolved by
+  hand (`resolve_c.py`), both blocks kept and B's `negcurrency_claim` added to C's per-sentence loop;
+  the test passes. Re-run on the merged tree: C's `p421_dryrun.py rebuild`, run from a copy at
+  `seam/batch6/Cx/`, produced 29 files byte-identical to C's `rebuilt/`; `replay_report lookup` is
+  identical on stored and rebuilt `wave4_p37c` (exit 1, P3.15's residual) and `wave4_p315_pre`.
+- **Agent D (P3.12 and P3.25, measured; note only): MET.** Re-derived on the merged tree from D's
+  scripts: 63 of 5,128 section searches name a schedule paragraph (10 turns, 3 sessions); 143 of
+  1,314 conversational turns make 247 `get_legislation_text` calls (29 of 483 after P3.7). **New
+  finding: `get_legislation_text` has never returned a schedule or annex** (LEX's `include_schedules`
+  defaults to false; `executor.py:533` sends only `legislation_id`, checked by the integrator).
+- **Twelve decisions put to the user in three questions, plus C's two before its merge.** All as
+  recommended except P3.24's acceptance and spend:
+  - **P3.24:** lever both, the code line in `_currency_limb` first, then a rule beside
+    `_IN_FORCE_RULE`; acceptance n=3 on 6410 and 6378 **on the pinned Gemini only** (not glm), up to
+    **$1.31** authorised; the removal under-count booked as **P3.28** (P3), measure first; the
+    detector's limits accepted, every after-column hand-read.
+  - **P3.12, P3.25:** `include_schedules` booked as **P3.27** (tracker P1); P3.12's lever is the code
+    route (a live LEX payload probe first); P3.25's is to remove the tool from the conversational
+    Worker in code and route the recital and `valid_date` through `lookup_legislation`; their replays
+    priced after the probe and the builds, one sweep.
+  - **P3.19:** tick at merge; output size accepted as built, counted on the next after-column;
+    Worker-facing wording left.
+- **Applied** (`2018136`): `fold_s38.py` (P3.19 and P4.21 ticked and annotated, P3.24, P3.12 and P3.25
+  annotated, P3.27 and P3.28 added after P3.26, Bucket index: two done marks, P3.28 beside P3.24 on
+  B3, P3.27 beside P3.26 on the no-bucket line) and `order_s38.py` (the top order line); 92 bold
+  markers added. **`plan_lint` 0 errors, 0 warnings; `plan_status` 49 of 77 rows, 8 of 14 buckets**
+  (B3 stays partial, now on P3.24, P3.28 and P4.22). CHANGELOG *Unreleased*: P4.21 and P3.19 as
+  product changes, `negcurrency` as tooling. Suite **2195**.
+
+**Surprises / deviations:**
+- **Every worktree again came up on `main` (`a6b4a76`)**; every agent checked and reset to `995ef34`.
+- **P3.24's defect does not reproduce on the pinned model after P3.5**, so its booked Gemini
+  acceptance can only check that true negatives survive; the user kept it Gemini-only.
+- **A's "`replay_report` never imports `lex.py`" is true of the graders, not of the file:**
+  `_lookup_routing` (the live path of `lookup`) imports the executor, which imports `lex.py`. It is not
+  in the exit-1 set and was not run. P3.19's row says so.
+- **Git Bash's `grep -iF` aborts (exit 134)** on this machine; the matter-word grep moved to Python
+  (`scratchpad_s38/matter_grep.py`). A `$(grep -c …)` over it silently printed blanks first.
+- **`git worktree remove` fails with "Permission denied" while the shell's cwd is inside the
+  worktree**, and the harness refuses `rm -rf` of the shell's own cwd; run both from the main checkout.
+- **The Fix Tracker was not updated** (only when asked). If asked: P3.19 and P4.21 Fixed
+  2026-10-05, "Next release"; P3.27 (P1) and P3.28 (P3) are new tracker rows.
+
+**State:** branch `fix/prepilot-defects`, pushed (head after this commit); `main` untouched at
+`a6b4a76`. 2195 tests. Session spend $0.
+
+---
+
+## Session 38 — handover for Session 39 (2026-10-05)
+
+**Take next, by severity (FIX_PLAN's top order line, "end of Session 38"):**
+1. **P3.24's lever** (P1, $0 build): a per-instrument line in `_currency_limb`, computed from the
+   change record (a provision may be called "not recorded as commenced" only where the record holds
+   commencement relations by another instrument; otherwise state neither), then one sentence beside
+   `_IN_FORCE_RULE` on the three legislation Worker prompts and the conversational ones. Screen the
+   line against every detector (`test_footer_trips_no_detector`, which now holds `negcurrency`). Then
+   its acceptance: n=3 on 6410 and 6378 **on the pinned Gemini, up to $1.31 (authorised)**, graded by
+   `negcurrency` and a hand-read; true negatives still stated. Read B's note sections 6 and 8 first,
+   and F3 (self-referential relations counted as commencements, noted, not booked).
+2. **P3.27** (P1, measure first, $0): which stored whole-text reads were of an instrument with a
+   schedule or annex, and what each answer said. It shares P3.12's live LEX payload probe (no model
+   spend, but a LEX call: say so before running it).
+3. **P2:** P3.12's probe and code route, then P3.25 (remove the tool from the conversational Worker in
+   code; route recital and `valid_date` through `lookup_legislation`, which needs `valid_date` passed
+   on); their replays priced together (D's estimate about $5.50). Then the case-law build (P4.19, P3.23,
+   P3.9, then P3.22), P3.21 (reads P3.19's `changes` now) with P5.4 (c)'s probe, P3.4, P3.6, P4.3,
+   P3.10, P4.12, P3.20 last.
+4. **P3:** P4.8, P4.20, P4.22, P3.26, P3.28, P3.14, P4.9, P5.4's other leads, P0.7, TODO B6.
+
+**Before the next after-column:** count change records summarised (P3.19's long tail, user decision);
+enrol 6370's five hedged readings in `p33.json` (batch 5 D2); hand-read `negcurrency`'s matches.
+
+**Decisions open with the user (carried):** sending the lawyer pack (unblocks P3.2, P3.3, P3.17);
+sending SCTS the note (P3.20); D23 (the National Archives licence); deploying `v2026.09.3` to the
+target; telling the eval-harness owner about schema v6; D19; which rows go in the next cut
+(`v2026.10.1`: P3.16, P4.16, P4.15, P4.18, P4.17, P5.2, and now P3.19 and P4.21); P4.12, D20,
+D21/D22; batch 1's three items; the p37_6373 substitution P4.17 exposes; the Fix Tracker (P3.19 and
+P4.21 Fixed, P3.27 and P3.28 new) when asked.
+
+**Machine state:** no server, no pin file, no replay running, no worktrees (the four batch 6
+`worktree-agent-*` branches remain locally, merged, beside the earlier twenty). Test databases
+`lexchat_test_a` to `_d` remain. 57 replay directories. Rubrics unchanged (`31379ecf…`, `0031831b…`).
+Agents' scratch in `evidence/seam/batch6/{A,B,C,D}/`, the integrator's C rebuild in `batch6/Cx/`, and
+the session scratchpad in `batch6/scratchpad_s38/`.
