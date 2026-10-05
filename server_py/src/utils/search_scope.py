@@ -107,6 +107,8 @@ __all__ = [
     "CASE_LAW_DOCTRINE_SENTENCE",
     "CASE_LAW_ABSENCE_SENTENCE",
     "record_case_law_search",
+    "case_law_search_note",
+    "CASE_LAW_RESULT_ORDER",
     "case_law_scope_clause",
     "case_law_scope_footer",
     "not_held_note",
@@ -2102,6 +2104,57 @@ CASE_LAW_ABSENCE_SENTENCE = (
     "results may still exist, in this database or elsewhere: that is not proof "
     "of absence."
 )
+
+
+# P3.23: the order the feed lists `search_case_law` results in. Today it is the
+# feed's default, `-date`, because the product sends no `order` (P3.22 changes
+# both together, and this string with them).
+CASE_LAW_RESULT_ORDER = "newest first, by date rather than by relevance"
+
+
+def case_law_search_note(args: dict, data: Any) -> str:
+    """The window statement appended to a `search_case_law` result (P3.23).
+
+    P2.2's form, for the case-law tool, which P2.2 did not touch: how many were
+    shown, of how many matching, and in what order, so a negative drawn from
+    the list says what was searched. The count comes from the executor
+    (`caselaw.case_law_count`), which reads it from the feed's `last` link.
+    Empty for an error or a zero-result search: the zero-result note in
+    `agent_shared` speaks for those, and is keyed on the shown count.
+
+    In `[SEARCH SCOPE — …]` form with no brackets inside, so `_TOOL_BLOCK`
+    strips it if a Worker echoes it into a report. Worded to trip no detector
+    that reads answers (pinned by `test_caselaw_window.py`): no "ranked", no
+    "date range", no "limited to", no "not found".
+    """
+    d = _as_dict(data)
+    if not d or d.get("error"):
+        return ""
+    results = d.get("results")
+    shown = len(results) if isinstance(results, list) else 0
+    if not shown:
+        return ""
+    args = args or {}
+    query = str(args.get("query") or "").strip()
+    matching = "matching " + (f'"{query[:200]}"' if query else "the query")
+    court = str(args.get("court") or "").strip()
+    where = "in Find Case Law" + (f" (court: {court})" if court else "")
+    total, lo, hi = d.get("total"), d.get("total_min"), d.get("total_max")
+    if d.get("total_exact") and total == shown:
+        return (f"\n\n[SEARCH SCOPE — all {shown} judgment(s) {where} {matching}, "
+                f"listed {CASE_LAW_RESULT_ORDER}.]")
+    if isinstance(lo, int) and isinstance(hi, int) and hi > shown:
+        count = (f"the {shown} most recent of about {hi:,} judgments {where} "
+                 f"{matching} (the feed reports between {lo:,} and {hi:,})")
+    else:
+        count = (f"the {shown} most recent judgments {where} {matching}; the feed "
+                 "gave no figure for how many match in all")
+    return (
+        f"\n\n[SEARCH SCOPE — {count}, listed {CASE_LAW_RESULT_ORDER}. An older "
+        f"judgment that matches can sit outside these {shown}: to reach it, search "
+        "again with narrower terms (a party's name, a court or dates) rather than "
+        "treat this list as complete.]"
+    )
 
 
 def record_case_law_search(log: Optional[list], name: str, args: dict, data: Any) -> None:

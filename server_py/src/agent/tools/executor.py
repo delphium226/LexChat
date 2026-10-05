@@ -25,7 +25,7 @@ from ...utils.instrument_lookup import (
 from ...utils.redact import redact_args
 from ..provider_factory import get_request_provider_config
 from ._util import _emit
-from .caselaw import _fetch_judgment_text, _parse_case_law_atom
+from .caselaw import _fetch_judgment_text, _parse_case_law_atom, case_law_count
 from .lex import (
     LEX_API_URL,
     _TYPE_CODES,
@@ -633,9 +633,15 @@ async def execute_worker_tool(
                     })
                 resp.raise_for_status()
                 entries = _parse_case_law_atom(resp.text)
+                # P3.23: the shown count and the matching total, separately.
+                # `total` was `len(entries)`, never more than the 50-row page,
+                # so `total: 50` read as "every match seen" when the feed held
+                # thousands. `case_law_count` reads the real figure from the
+                # feed's `last` link; `shown` is what anything deciding "did
+                # this search return results" must key on.
                 return json.dumps({
                     "results": entries,
-                    "total": len(entries),
+                    **case_law_count(resp.text, len(entries)),
                     "query": args["query"],
                 })
 

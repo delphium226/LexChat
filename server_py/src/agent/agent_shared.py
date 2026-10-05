@@ -22,6 +22,7 @@ from ..utils.discovery_budget import (
 )
 from ..utils.search_scope import (
     amendment_search_note,
+    case_law_search_note,
     currency_note,
     enabling_power_note,
     legislation_search_note,
@@ -764,7 +765,13 @@ async def run_worker_tool(
     if name == "search_case_law":
         try:
             raw_data = json.loads(result)
-            n = raw_data.get("total", 0)
+            # P3.23: keyed on the SHOWN count, never on `total`. `total` is
+            # now the matching total read from the feed's `last` link (an
+            # estimate, and for a full page an upper bound), so it need not be
+            # 0 when nothing was shown; P1.3 kept `returned` apart from
+            # `total_matched` for legislation for the same reason.
+            _cl_results = raw_data.get("results")
+            n = len(_cl_results) if isinstance(_cl_results, list) else 0
             if n == 0 and not raw_data.get("error"):
                 # P2.4 (B12): "does not comprehensively index" was false; the
                 # gap is total (TNA rejects `court=csoh` with a 400). The UKSC
@@ -784,7 +791,9 @@ async def run_worker_tool(
                     for r in results[:3]
                     if r.get("url")
                 )
-                case_law_note = (
+                # P3.23: the window first, so the imperative stays last (P2.2's
+                # order for the legislation scope block).
+                case_law_note = case_law_search_note(args, raw_data) + (
                     f"\n\n[MANDATORY NEXT STEP — DO NOT synthesise yet. "
                     f"Call get_case_law_text for the 1–3 most relevant cases below to retrieve the full judgment text "
                     f"before composing your answer. Pass the exact url field:\n{url_lines}]"

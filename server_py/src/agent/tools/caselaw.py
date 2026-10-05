@@ -167,6 +167,70 @@ def _parse_case_law_atom(xml_text: str) -> list[dict]:
     return entries
 
 
+# ---------------------------------------------------------------------------
+# P3.23: how many judgments matched, not how many were shown
+# ---------------------------------------------------------------------------
+#
+# `search_case_law` used to return `"total": len(entries)`, never more than the
+# 50-row page, so a model reading `total: 50` believed it had seen every match
+# when the feed may hold thousands. The real figure is in the feed's `last`
+# link, and **it is computed at ten judgments a page, whatever page size was
+# asked for** (measured live 2026-10-05, batch 7 D): a one-word surname query
+# returns 50 rows a page and `last` page 520, with or without `per_page=50`; the true count,
+# found by paging, is 5,193, and page 520 at `per_page=10` holds exactly 3.
+# Read at the page size requested, the same link said "up to 26,000" and the
+# last pages came back empty, which is the "the last page can be empty" that
+# P3.23's row recorded. At ten a page the total is known to within ten.
+#
+# A page holding fewer rows than the page size is the whole matching set,
+# whatever the link says (a dated query showed 19 rows with `last` page 2).
+CASE_LAW_PAGE_SIZE = 50          # the feed's default; we send no `per_page`
+_LAST_LINK_PAGE_SIZE = 10        # the page size the `last` link counts in
+
+
+def _parse_case_law_last_page(xml_text: str) -> Optional[int]:
+    """The page number in the feed's `<link rel="last">`, or None."""
+    from urllib.parse import parse_qs, urlparse
+
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    for link in root.findall(f"{{{_ATOM_NS}}}link"):
+        if link.get("rel") != "last":
+            continue
+        try:
+            page = parse_qs(urlparse(link.get("href", "")).query).get("page")
+            return int(page[0]) if page else None
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
+def case_law_count(xml_text: str, shown: int, page_size: int = CASE_LAW_PAGE_SIZE) -> dict:
+    """The shown count and the matching total, kept apart (P1.3's split).
+
+    `total` is the best figure for how many judgments match: exact where it is
+    known (a page that is not full holds the whole set), otherwise the upper
+    end of the range the `last` link gives (`total_min` to `total_max`). With
+    no usable `last` link on a full page, `total` stays the shown count and
+    `total_exact` is False, so a consumer reading `total` as an int still gets
+    one. Callers deciding whether anything was returned key on `shown`, never on
+    `total` (P3.23's constraint).
+    """
+    if shown < page_size:
+        return {"shown": shown, "total": shown, "total_exact": True,
+                "total_min": shown, "total_max": shown}
+    last = _parse_case_law_last_page(xml_text)
+    if not last or last < 1:
+        return {"shown": shown, "total": shown, "total_exact": False,
+                "total_min": shown, "total_max": None}
+    lo = max(shown, (last - 1) * _LAST_LINK_PAGE_SIZE + 1)
+    hi = max(shown, last * _LAST_LINK_PAGE_SIZE)
+    return {"shown": shown, "total": hi, "total_exact": lo == hi,
+            "total_min": lo, "total_max": hi}
+
+
 def _extract_judgment_text(xml_text: str) -> str:
     """Extract plain text from a LegalDocML (AKOMA NTOSO) XML judgment."""
     try:
