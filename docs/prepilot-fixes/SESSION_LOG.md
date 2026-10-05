@@ -8098,3 +8098,28 @@ pertinent information", then "update the tracker").**
   plain-language Session 37 paragraphs for Thomas naming no lawyer's topic; "Next" rewritten (P3.19,
   P4.8, the lawyer pack); P0.4 recorded as dropped in the "Not listed" line; the stamp. 42 of 68
   fixed. Script syntax-checked with Node; no render check (data and text only).
+**Second addendum to Session 37 (2026-10-05, at the user's request: "tackle things in order of
+priority, unless there's dependencies", then "park items with dependencies on the lawyer pack; note
+them as blocked, state the reason as part of the description"). This supersedes the Session 38
+handover's "Take next".**
+- The open P1 rows are P3.2, P3.17 and P3.19 (tracker `ROWS`, against the FIX_PLAN ledger). P3.17
+  and P3.2 wait on the lawyer pack (P3.2 also on P3.12, a P2 row, for its criterion (v)); P3.19 waits
+  on nothing.
+- **P3.2, P3.3 and P3.17 parked as BLOCKED on the lawyer pack** (`blocked_s37.py`, each anchor
+  asserted once): a BLOCKED note with the reason at the head of each row, a sentence added to the
+  lawyer-pack paragraph above the Ledger, the tracker's Blocked status recorded in "How to use this
+  file" step 7, and a new top order line. `plan_lint` 0 errors, 0 warnings; `plan_status` 47 of 69
+  rows, 8 of 14 buckets (unchanged: the rows stay `[ ]`).
+- **Take next, by severity:** P3.19 (P1, $0); then P3.12 (P2, ahead of other P2 rows because P3.2
+  needs it; measure first at $0, its 6335 n=3 replay priced to the user first); then P4.8 (P3, $0);
+  then the remaining P2 rows. Sending the pack is the user's action and unblocks all three.
+- **Fix Tracker v34** (same URL): a new **Blocked** status, after Verified, with the reason ending
+  each row's fix text (P3.2 and P3.17 are P1, P3.3 is P2). Its amber fill was the user's choice
+  among three options: about 25 candidates were run through the dataviz validator over all pairs
+  (a bar skips empty statuses, so Blocked can sit beside any fill); only an amber clears every pair
+  in both themes (a brick red collapses into the In-progress brown under protanopia, ΔE 3.2). Two
+  costs accepted and recorded in the page's CSS: the light fill is 2.24:1 on the page (labels, the
+  legend and the table carry it, as for To be verified), and the dark fill sits above the dark
+  lightness band (L 0.81 against 0.67). Rendered once over a local server
+  (`.playwright-mcp/tracker_v34.png`; the only console error is the local favicon 404); the
+  "Next" paragraph, a dated note for Thomas and the stamp updated. 42 of 68 fixed, 3 blocked.

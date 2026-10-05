@@ -23,6 +23,8 @@
     --partial-soft: #f8e9f3;
     --verified: oklch(0.34 0.09 255);
     --verified-soft: oklch(0.94 0.03 240);
+    --blocked: #7a5a00;
+    --blocked-soft: #fbf1d6;
     --tbv: #465277;
     --focus: oklch(0.50 0.10 240);
     /* Bar fills for the progress summary: the chip hues re-stepped into the mark band
@@ -32,11 +34,22 @@
        from the navy by lightness, because a violet of the same weight collapses into
        it under protanopia (ΔE 5.4). Re-validated with it in place: the worst adjacent
        pair is still green/brown (light 16.1, dark 9.2); its fill is 3.16:1 on --paper
-       light and 4.23:1 dark; its count label is 5.5:1 light and 4.8:1 dark. */
+       light and 4.23:1 dark; its count label is 5.5:1 light and 4.8:1 dark.
+       Blocked (added in v34, user decision 2026-10-05) sits after Verified. About 25
+       candidates were run through the validator, all pairs (a bar skips empty statuses,
+       so Blocked can meet any fill): only an amber passes every pair in both themes
+       (light worst pair involving it ΔE 18.3 normal; dark 15.9, against the brown).
+       A brick red collapses into the brown under protanopia (ΔE 3.2), teal and violet
+       into the green, mauve or navy. Two accepted costs, chosen by the user: light
+       fill 2.24:1 on --paper (labels, legend and table carry it, as for To be
+       verified), and the dark fill sits above the dark lightness band (L 0.81 against
+       0.67), so it reads brighter than the others; every in-band dark gold is within
+       ΔE 15 of the brown. Count label 7.7:1 light, 9.7:1 dark. */
     --bar-fixed: #46a16b;    --bar-fixed-ink: #111a2e;
     --bar-wip: #81520a;      --bar-wip-ink: #ffffff;
     --bar-partial: #c975b0;  --bar-partial-ink: #111a2e;
     --bar-verified: #085491; --bar-verified-ink: #ffffff;
+    --bar-blocked: #d4a72c;  --bar-blocked-ink: #111a2e;
     --bar-tbv: #c3cbdd;      --bar-tbv-ink: #111a2e;   /* neutral: sub-3:1 by design, label + table carry it */
     --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-serif: 'Source Serif 4', Georgia, serif;
@@ -63,12 +76,15 @@
       --partial-soft: #3a2238;
       --verified: oklch(0.82 0.08 250);
       --verified-soft: oklch(0.26 0.06 240);
+      --blocked: #e8c75a;
+      --blocked-soft: #2f2810;
       --tbv: #a8b0c8;
       --focus: oklch(0.70 0.12 240);
       --bar-fixed: #4ca871;    --bar-fixed-ink: #0f1830;
       --bar-wip: #c8800d;      --bar-wip-ink: #0f1830;
       --bar-partial: #c65a9a;  --bar-partial-ink: #0a1020;
       --bar-verified: #488acb; --bar-verified-ink: #0f1830;
+      --bar-blocked: #e2bd4a;  --bar-blocked-ink: #0f1830;
       --bar-tbv: #313f5c;      --bar-tbv-ink: #e4e8f2;
     }
   }
@@ -92,12 +108,15 @@
     --partial-soft: #3a2238;
     --verified: oklch(0.82 0.08 250);
     --verified-soft: oklch(0.26 0.06 240);
+    --blocked: #e8c75a;
+    --blocked-soft: #2f2810;
     --tbv: #a8b0c8;
     --focus: oklch(0.70 0.12 240);
     --bar-fixed: #4ca871;    --bar-fixed-ink: #0f1830;
     --bar-wip: #c8800d;      --bar-wip-ink: #0f1830;
     --bar-partial: #c65a9a;  --bar-partial-ink: #0a1020;
     --bar-verified: #488acb; --bar-verified-ink: #0f1830;
+    --bar-blocked: #e2bd4a;  --bar-blocked-ink: #0f1830;
     --bar-tbv: #313f5c;      --bar-tbv-ink: #e4e8f2;
   }
 
@@ -176,6 +195,7 @@
   [data-status="In progress"]    { --seg: var(--bar-wip);      --seg-ink: var(--bar-wip-ink); }
   [data-status="Partial"]        { --seg: var(--bar-partial);  --seg-ink: var(--bar-partial-ink); }
   [data-status="Verified"]       { --seg: var(--bar-verified); --seg-ink: var(--bar-verified-ink); }
+  [data-status="Blocked"]        { --seg: var(--bar-blocked);  --seg-ink: var(--bar-blocked-ink); }
   [data-status="To be verified"] { --seg: var(--bar-tbv);      --seg-ink: var(--bar-tbv-ink); }
   .seg {
     position: relative;
@@ -321,6 +341,7 @@
   .st-wip { background: var(--wip-soft); color: var(--wip); }
   .st-partial { background: var(--partial-soft); color: var(--partial); }
   .st-verified { background: var(--verified-soft); color: var(--verified); }
+  .st-blocked { background: var(--blocked-soft); color: var(--blocked); }
   .st-tbv { background: transparent; color: var(--tbv); border: 1px dashed var(--rule-strong); }
 
   .sev { display: inline-block; min-width: 2.4em; text-align: center; padding: 1px 8px; border-radius: 4px;
@@ -422,6 +443,7 @@
         <dt>In progress</dt><dd>Under way. No fix is in progress now: P5.2 was, until the decision on 2 October about where Scottish case law will come from.</dd>
         <dt>Partial</dt><dd>A fix was attempted, and we decided to defer it and come back to it later. No fix is Partial now: P4.10 was, until its last check was run on 25 September.</dd>
         <dt>Verified</dt><dd>The problem is confirmed in our replays, the code or a live test, but no fix is built yet.</dd>
+        <dt>Blocked</dt><dd>Confirmed, and parked until something outside our control happens; the reason is in the row's description. Since 5 October, P3.2, P3.3 and P3.17 wait on a lawyer answering our questions about the readings of the law their tests use.</dd>
         <dt>To be verified</dt><dd>Proposed, not yet confirmed or agreed.</dd>
       </dl>
       <h2 style="margin-top:16px">Severity</h2>
@@ -444,6 +466,12 @@
         box (Settings, then About), so a problem report can say which release it was.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.</p>
+      <p><strong>5 October: three rows blocked.</strong> We are taking the remaining serious
+        problems in order of severity. Two of the three, <strong>P3.2</strong> and
+        <strong>P3.17</strong>, and the related <strong>P3.3</strong>, cannot be finished until a
+        lawyer confirms the readings of the law their tests use, so they are now marked
+        <em>Blocked</em>, with the reason in each row, rather than waiting in the queue. The
+        third, <strong>P3.19</strong>, is next.</p>
       <p><strong>2 October, later: the plan checked against itself.</strong> Before building
         anything more, we checked the fix plan for consistency, at no cost and with no re-run. Four
         pieces of work ran side by side: a tool that checks the plan's structure (every row listed
@@ -888,10 +916,12 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next.</strong> <strong>P3.19</strong> (keeping which provision made which change),
-        then <strong>P4.8</strong>, both at no cost. Then send the questions to a lawyer:
-        <strong>P3.2</strong>, <strong>P3.3</strong> and <strong>P3.17</strong> wait on the answers,
-        and nothing else does. After that, the case-law rows as one piece of work, or the date a
+      <p><strong>Next, by severity.</strong> <strong>P3.19</strong> (keeping which provision made
+        which change), the one serious problem we can build now; then <strong>P3.12</strong>
+        (reaching a Schedule paragraph asked for by number), which P3.2 also needs; then
+        <strong>P4.8</strong>. All three cost nothing to build; P3.12's re-run will be priced first.
+        <strong>P3.2</strong>, <strong>P3.3</strong> and <strong>P3.17</strong> are blocked until a
+        lawyer answers our questions, and nothing else waits on them. After that, the case-law rows as one piece of work, or the date a
         provision came into force (<strong>P3.21</strong>) together with the legislation.gov.uk
         check (<strong>P5.4</strong>). The other open groups remain: <strong>P3.4</strong> (the
         Scottish jurisdiction default), <strong>P4.3</strong> (the sources list) and
@@ -909,7 +939,9 @@
 
 <script>
   // ---- Update here at the end of a session, when the user asks. ----
-  // status: "Fixed" | "In progress" | "Partial" | "Verified" | "To be verified"
+  // status: "Fixed" | "In progress" | "Partial" | "Verified" | "Blocked" | "To be verified"
+  //         Blocked: confirmed and parked on an external event (user decision, v34); the
+  //         row's fix text ends "Blocked: <reason>".
   //         Partial: a fix was attempted and deferred, to be revisited. Set only by the
   //         user's decision; FIX_PLAN.md has no ledger marker for it.
   // sev:    "P1" | "P2" | "P3"  (see the Severity notes; grades the defect, not the fix)
@@ -919,7 +951,7 @@
   // ver:    on a Fixed row only: the release that carries it ("2026.09.1", the git tag
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
-  const UPDATED = "2 October 2026, end of Session 37 (the plan checked for consistency; P5.2 decided; P0.4 dropped; a second extra question for the lawyer; next, P3.19 and P4.8)";
+  const UPDATED = "5 October 2026 (P3.2, P3.3 and P3.17 blocked on the lawyer's answers; work taken by severity: next, P3.19, then P3.12 and P4.8)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23", ver: "2026.09.3" },
@@ -940,8 +972,8 @@
     { src: "R", fix: "Record memo-served searches in the search scope", sev: "P3", status: "Fixed", ref: "P2.9", t: "", fixed: "2026-09-16", ver: "2026.09.1" },
     { src: "R", fix: "Cite the provision at the subsection asked for, not the whole section", sev: "P2", status: "Fixed", ref: "P3.1", t: "", fixed: "2026-09-18", ver: "2026.09.1" },
     { src: "R", fix: "Allow up to three section searches per Act, capped in code", sev: "P2", status: "Fixed", ref: "P3.1", t: "", fixed: "2026-09-18", ver: "2026.09.1" },
-    { src: "R", fix: "Stop an answer changing back and forth under pushback: check the law before agreeing or holding firm", sev: "P1", status: "Verified", ref: "P3.2", t: "" },
-    { src: "T & R", fix: "Separate retrieval from interpretation", sev: "P2", status: "Verified", ref: "P3.3", t: "NH1" },
+    { src: "R", fix: "Stop an answer changing back and forth under pushback: check the law before agreeing or holding firm. Blocked: its test rests on our reading of the regulation, which a lawyer must confirm first (questions ready, not yet sent)", sev: "P1", status: "Blocked", ref: "P3.2", t: "" },
+    { src: "T & R", fix: "Separate retrieval from interpretation. Blocked: its tests rest on readings of the law a lawyer must confirm first, and it includes P3.2's test", sev: "P2", status: "Blocked", ref: "P3.3", t: "NH1" },
     { src: "T & R", fix: "Default to Scottish jurisdiction; flag UK-wide divergence", sev: "P2", status: "Verified", ref: "P3.4", t: "NH1" },
     { src: "T", fix: "Correct the jurisdiction filter note in the prompt", sev: "P3", status: "Verified", ref: "P3.4", t: "5" },
     { src: "R", fix: "Retrieve amendment and commencement relations", sev: "P1", status: "Fixed", ref: "P3.5", t: "", fixed: "2026-09-16", ver: "2026.09.1" },
@@ -956,7 +988,7 @@
     { src: "R", fix: "Tell the quick-lookup step which research filters are active", sev: "P3", status: "Verified", ref: "P3.14", t: "" },
     { src: "R", fix: "In a follow-up answered without new research, say the instrument itself is not held, not just its text", sev: "P3", status: "Fixed", ref: "P3.15", t: "", fixed: "2026-09-25", ver: "2026.09.3" },
     { src: "R", fix: "Stop the step that condenses search results adding its own interpretation (one reached a lawyer as a quotation)", sev: "P1", status: "Fixed", ref: "P3.16", t: "", fixed: "2026-10-01", ver: "Next release" },
-    { src: "R", fix: "Fetch the section that says where a general rule applies, not only its definitions", sev: "P1", status: "Verified", ref: "P3.17", t: "" },
+    { src: "R", fix: "Fetch the section that says where a general rule applies, not only its definitions. Blocked: the fix is built; whether it passes turns on a lawyer saying if a reading offered as one possibility is acceptable", sev: "P1", status: "Blocked", ref: "P3.17", t: "" },
     { src: "R", fix: "Stop the Deep Research report asserting that an English doctrine applies in Scotland without a Scottish source", sev: "P1", status: "Fixed", ref: "P3.18", t: "", fixed: "2026-09-29", ver: "2026.09.3" },
     { src: "R", fix: "Keep which provision made which change when reading the record of changes (a wrong inserting subsection reached an answer)", sev: "P1", status: "Verified", ref: "P3.19", t: "" },
     { src: "R", fix: "Retrieve Scottish judgments from the Scottish Courts and Tribunals Service's judgments search", sev: "P2", status: "Verified", ref: "P3.20", t: "" },
@@ -992,8 +1024,8 @@
   ];
   // ---- End of data. ----
 
-  const STATUSES = ["Fixed", "In progress", "Partial", "Verified", "To be verified"];
-  const STATUS_CLASS = { "Fixed": "st-fixed", "In progress": "st-wip", "Partial": "st-partial", "Verified": "st-verified", "To be verified": "st-tbv" };
+  const STATUSES = ["Fixed", "In progress", "Partial", "Verified", "Blocked", "To be verified"];
+  const STATUS_CLASS = { "Fixed": "st-fixed", "In progress": "st-wip", "Partial": "st-partial", "Verified": "st-verified", "Blocked": "st-blocked", "To be verified": "st-tbv" };
   const SOURCES = [["all", "All"], ["T", "Thomas"], ["R", "Us"], ["T & R", "Both"]];
   let statusFilter = "all";
   let sourceFilter = "all";
@@ -1157,7 +1189,7 @@
     document.getElementById("hero-of").textContent = "of " + total + " fixes";
     document.getElementById("hero-sub").textContent =
       counts["In progress"] + " in progress · " + counts["Partial"] + " partial · " + counts["Verified"] + " verified, not yet built · " +
-      counts["To be verified"] + " to be verified";
+      counts["Blocked"] + " blocked · " + counts["To be verified"] + " to be verified";
     buildBar(document.getElementById("bar-all"), ROWS, false);
     const legend = document.getElementById("legend");
     legend.textContent = "";
