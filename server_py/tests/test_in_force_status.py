@@ -326,7 +326,9 @@ def test_a_retrieved_commencement_is_still_permitted():
     slim = _slim_amendment_results(
         _rows(("s. 9", "ssi/2025/119", "coming into force")), "asp/2025/2", "to")
     note = amendment_search_note({"legislation_id": "asp/2025/2"}, slim)
-    assert "you may state them" in note
+    # P3.24: the permission now names who made the relation (another
+    # instrument), never the instrument's own commencement provision.
+    assert "you may state each of those provisions as commenced" in note
     assert "citing the instrument" in note
 
 

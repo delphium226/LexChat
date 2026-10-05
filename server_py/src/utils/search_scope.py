@@ -1068,6 +1068,72 @@ def currency_note(args: dict, data: Any) -> str:
     )
 
 
+def _relation_commencement_bits(d: dict, commenced: int) -> str:
+    """P3.24: the Worker-facing commencement sentences on a change record.
+
+    The Worker's own view of the rule the Manager gets per instrument from
+    `_commencement_lines`, computed from the same split:
+
+    * relations made by ANOTHER instrument: state each, citing it; if all are
+      listed, a provision not among them may be called not recorded as
+      commenced, and if not, the list is said to be incomplete;
+    * `self: true` relations: the instrument's own commencement provision,
+      which says how its provisions come into force, not whether they have.
+      For an Act that is the commencement section, often an appointed-day
+      power; for an SI it is usually the regulation fixing the day the SI
+      comes into force, so the Worker is sent to that provision for the date
+      rather than to the relation, which carries none;
+    * a count whose groups are not listed: which provisions, and who made
+      them, is not shown;
+    * under ``"by"``: this legislation commencing OTHER legislation, which
+      says nothing about its own commencement.
+    """
+    split = _commencement_split(d)
+    if split["direction"] != "to":
+        return (
+            f" {commenced} relation(s) are `coming into force`: this legislation "
+            "commencing provisions of the legislation named against each. You may "
+            "state those, citing it; they do not show whether this legislation's "
+            "own provisions have been commenced."
+        )
+    other, own = split["commenced_by_other"], split["commenced_self"]
+    bits = []
+    if other:
+        bits.append(
+            f" {other} `coming into force` relation(s) were made by another "
+            "instrument and name a provision of this legislation: you may state "
+            "each of those provisions as commenced, citing the instrument against it."
+        )
+        if split["commenced_listed_in_full"]:
+            bits.append(
+                " They are all listed here, so a provision of this legislation not "
+                "among them may be called not recorded as commenced, citing this "
+                "record."
+            )
+        else:
+            bits.append(
+                " The commencement relations are not all listed here, so a "
+                "provision not listed may be in the part not shown: do not state "
+                "whether it has been commenced."
+            )
+    if own:
+        bits.append(
+            f" {own} `coming into force` relation(s) are marked `self: true`: this "
+            "legislation's own commencement provision acting on itself, which says "
+            "how its provisions come into force, not whether they have. Read that "
+            "provision itself for any date it fixes, and do not state from these "
+            "relations alone whether a provision has been commenced."
+        )
+    if not other and not own:
+        bits.append(
+            f" {commenced} relation(s) are `coming into force`, but their groups "
+            "are not listed here, so which provisions they name, and who made them, "
+            "is not shown: do not state from this record whether a provision has "
+            "been commenced."
+        )
+    return "".join(bits)
+
+
 def _relation_currency_limb(d: dict) -> str:
     """The three currency-bearing relation classes, appended to a change record.
 
@@ -1081,11 +1147,13 @@ def _relation_currency_limb(d: dict) -> str:
     repeals = d.get("repeal_or_revocation_relations")
     bits = []
     if isinstance(commenced, int) and commenced:
-        bits.append(
-            f" {commenced} relation(s) are `coming into force` and name a "
-            "provision of this legislation: those ARE its own commencement and "
-            "you may state them, citing the instrument against each."
-        )
+        # P3.24 (batch 7 A, extension decided by the user): P2.5's sentence
+        # here said every `coming into force` relation "ARE its own
+        # commencement and you may state them", the instrument's OWN
+        # relations included (batch 6 B's F3), which is the opposite of what
+        # the Manager's line in `_currency_limb` and `_COMMENCEMENT_RECORD_RULE`
+        # now say. Split by who made them, from `_commencement_split`.
+        bits.append(_relation_commencement_bits(d, commenced))
     if isinstance(orders, int) and orders:
         bits.append(
             f" {orders} relation(s) carry the effect `Commencement Order` and are "

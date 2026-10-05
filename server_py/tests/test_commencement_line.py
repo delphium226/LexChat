@@ -318,3 +318,93 @@ def test_negcurrency_reads_the_p319_cut_marker():
     rows = _rows(*[(f"s. {i}", _ORDER, "coming into force") for i in range(1, 62)])
     (claim,) = _graded("Section 99 of the Widget Act 1901 is not yet in force.", rows)
     assert claim[2] == "UNCLEAR"
+
+
+# --- the Worker-facing block on the change record (extension, user decision) ---
+
+def _worker_note(rows, lid=_ACT, direction="to"):
+    from src.utils.search_scope import amendment_search_note
+    slim = _slim_amendment_results(rows, lid, direction)
+    return amendment_search_note({"legislation_id": lid, "direction": direction}, slim)
+
+
+_P25_SENTENCE = "those ARE its own commencement and you may state them"
+
+
+def test_the_worker_block_permits_relations_by_another_instrument():
+    note = _worker_note(_rows(("s. 1", _ORDER, "coming into force"),
+                              ("s. 2", _ORDER, "coming into force")))
+    assert " 2 `coming into force` relation(s) were made by another instrument and " \
+           "name a provision of this legislation: you may state each of those " \
+           "provisions as commenced, citing the instrument against it." in note
+    assert "They are all listed here, so a provision of this legislation not among " \
+           "them may be called not recorded as commenced" in note
+    assert _P25_SENTENCE not in note
+    assert "self: true` relation" not in note
+
+
+def test_the_worker_block_says_when_the_list_is_cut():
+    rows = _rows(*[(f"s. {i}", _ORDER, "coming into force") for i in range(1, 62)])
+    note = _worker_note(rows)
+    assert "The commencement relations are not all listed here, so a provision " \
+           "not listed may be in the part not shown: do not state whether it has " \
+           "been commenced." in note
+    assert "not recorded as commenced" not in note
+
+
+def test_the_worker_block_does_not_read_self_relations_as_commencement():
+    """F3 at the Worker's own seam. For an Act the self relation is its
+    commencement section; for an SI it is usually the regulation fixing its own
+    commencement day, which is why the Worker is sent to that provision for the
+    date."""
+    for lid in (_ACT, _ORDER):
+        rows = _rows(("s. 1", lid, "coming into force"), ("s. 7", lid, "coming into force"),
+                     changed=lid)
+        note = _worker_note(rows, lid=lid)
+        assert " 2 `coming into force` relation(s) are marked `self: true`: this " \
+               "legislation's own commencement provision acting on itself, which says " \
+               "how its provisions come into force, not whether they have. Read that " \
+               "provision itself for any date it fixes, and do not state from these " \
+               "relations alone whether a provision has been commenced." in note
+        assert _P25_SENTENCE not in note
+        assert "made by another instrument" not in note
+
+
+def test_the_worker_block_splits_a_mixed_record():
+    rows = _rows(("s. 1", _ORDER, "coming into force"),
+                 ("s. 2", _ACT, "coming into force"), ("s. 3", _ACT, "coming into force"))
+    note = _worker_note(rows)
+    assert " 1 `coming into force` relation(s) were made by another instrument" in note
+    assert " 2 `coming into force` relation(s) are marked `self: true`" in note
+
+
+def test_the_worker_block_with_a_count_and_no_listed_group():
+    from src.utils.search_scope import amendment_search_note
+    d = {"legislation_id": _ACT, "direction": "to", "relations": 5,
+         "provisions_commenced": 5, "related": [], "window_complete": True}
+    note = amendment_search_note({"legislation_id": _ACT}, d)
+    assert " 5 relation(s) are `coming into force`, but their groups are not listed " \
+           "here" in note
+
+
+def test_the_worker_block_under_by_speaks_of_other_legislation():
+    note = _worker_note(_rows(("s. 1", _ORDER, "coming into force")),
+                        lid=_ORDER, direction="by")
+    assert "this legislation commencing provisions of the legislation named " \
+           "against each" in note
+    assert "they do not show whether this legislation's own provisions have been " \
+           "commenced" in note
+    assert _P25_SENTENCE not in note
+
+
+def test_the_worker_block_keeps_the_honest_failure_branch():
+    """Invariant 1: a record with no `coming into force` relation still says
+    the commencement is not recorded here, never that it was not made."""
+    for rows in ([], _rows(("s. 2", "asp/1901/9", "words substituted"))):
+        note = _worker_note(rows)
+        if rows:
+            assert "NO relation here is a `coming into force` relation for this " \
+                   "legislation" in note
+            assert "do not conclude it was never commenced" in note
+        assert "made by another instrument" not in note
+        assert "self: true` relation" not in note

@@ -1187,6 +1187,20 @@ def test_footer_trips_no_detector():
         text = _commencement_lines(clog)
         assert text, name
         screened.append(text)
+    # P3.24 extension: the Worker-facing sentences on the change record itself
+    # (`_relation_commencement_bits`), every case, since a Worker can echo them.
+    from src.utils.search_scope import _relation_commencement_bits
+    variants["mixed"] = [_rec("asp/1901/11", [_cif("ssi/1901/3", 2),
+                                              _cif("asp/1901/11", 3, self_=True)], 5)]
+    worker_texts = []
+    for name, recs in variants.items():
+        for r in recs:
+            if r["provisions_commenced"]:
+                worker_texts.append(_relation_commencement_bits(r, r["provisions_commenced"]))
+    # by another instrument in full, cut, self only, a count with no group,
+    # "by" (twice) and mixed
+    assert len(worker_texts) == 7 and all(worker_texts), worker_texts
+    screened += worker_texts
     for text in screened:
         assert not NEG_ASSERTED.search(text), text
         assert not NOT_FOUND.search(text), text
