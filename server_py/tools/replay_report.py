@@ -3052,6 +3052,29 @@ def _nc_cmc(text: str) -> tuple:
     return bool(_NC_CMC_TEXT.search(t)) or dated, dated
 
 
+def _nc_changed_provisions(g: dict) -> list:
+    """The changed provisions a change-record group lists, in either shape.
+
+    P3.19 (2026-10-05) replaced a group's flat `changed_provisions` with
+    `changes`, one entry per effecting provision (`{"by": ..., "changed":
+    [...]}`), and its cut marker `changed_provisions_not_listed` with
+    `changes_not_listed`. Every directory before `wave4_b7_p324` holds the old
+    shape; read only that, a record in the new shape lists no provision, so a
+    sentence denying a provision the record shows commenced was graded
+    SUPPORTED (batch 7 A, `nc_shape_probe.py`).
+    """
+    flat = g.get("changed_provisions")
+    if isinstance(flat, list):
+        return flat
+    out = []
+    for c in g.get("changes") or []:
+        if isinstance(c, dict):
+            for p in c.get("changed") or []:
+                if p is not None and p not in out:
+                    out.append(p)
+    return out
+
+
 def negcurrency_evidence(turn: dict) -> dict:
     """Everything this turn retrieved that bears on a negative or continuing
     commencement claim, read off the audit trace. Never raises on odd shapes.
@@ -3103,7 +3126,7 @@ def negcurrency_evidence(turn: dict) -> dict:
                     key = ("self_commenced" if self_rel else "commenced") \
                         if is_cif else "repealed"
                     bucket = rec[key].setdefault(owner, set())
-                    for p in g.get("changed_provisions") or []:
+                    for p in _nc_changed_provisions(g):
                         b = _nc_record_base(p)
                         if b:
                             bucket.add(b)
@@ -3114,13 +3137,15 @@ def negcurrency_evidence(turn: dict) -> dict:
                         rec["commenced_n"][owner] = rec["commenced_n"].get(owner, 0) + n
                     if is_rep:
                         rec["repeal_n"][owner] = rec["repeal_n"].get(owner, 0) + n
+                    cut = g.get("changed_provisions_not_listed") or \
+                        g.get("changes_not_listed")
                     if is_cif:
                         listed_cif += n
-                        if g.get("changed_provisions_not_listed"):
+                        if cut:
                             rec["cif_complete"] = False
                     else:
                         listed_rep += n
-                        if g.get("changed_provisions_not_listed"):
+                        if cut:
                             rec["rep_complete"] = False
                 if direction == "to":
                     c = o.get("provisions_commenced")

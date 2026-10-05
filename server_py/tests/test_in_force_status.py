@@ -326,7 +326,9 @@ def test_a_retrieved_commencement_is_still_permitted():
     slim = _slim_amendment_results(
         _rows(("s. 9", "ssi/2025/119", "coming into force")), "asp/2025/2", "to")
     note = amendment_search_note({"legislation_id": "asp/2025/2"}, slim)
-    assert "you may state them" in note
+    # P3.24: the permission now names who made the relation (another
+    # instrument), never the instrument's own commencement provision.
+    assert "you may state each of those provisions as commenced" in note
     assert "citing the instrument" in note
 
 
@@ -370,8 +372,12 @@ def test_the_limb_names_what_was_retrieved_when_something_was():
     log.append({"tool": "search_legislation", "query": "q", "shown": 5,
                 "matched": 9, "legislation_id": ""})
     limb = _currency_limb(log)
-    assert "Commencement relations WERE retrieved for asp/2025/2" in limb
-    assert "carry no dates" in limb
+    # P3.24: P2.5's "Commencement relations WERE retrieved for …" is now one
+    # line per instrument, computed from who made the relations
+    # (`tests/test_commencement_line.py`).
+    assert (": 1 commencement relation(s) made by another instrument, "
+            "all listed") in limb
+    assert "Neither carries a date." in limb
 
 
 def test_the_limb_carries_the_valid_date_as_a_text_version_date():

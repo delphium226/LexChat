@@ -1068,6 +1068,72 @@ def currency_note(args: dict, data: Any) -> str:
     )
 
 
+def _relation_commencement_bits(d: dict, commenced: int) -> str:
+    """P3.24: the Worker-facing commencement sentences on a change record.
+
+    The Worker's own view of the rule the Manager gets per instrument from
+    `_commencement_lines`, computed from the same split:
+
+    * relations made by ANOTHER instrument: state each, citing it; if all are
+      listed, a provision not among them may be called not recorded as
+      commenced, and if not, the list is said to be incomplete;
+    * `self: true` relations: the instrument's own commencement provision,
+      which says how its provisions come into force, not whether they have.
+      For an Act that is the commencement section, often an appointed-day
+      power; for an SI it is usually the regulation fixing the day the SI
+      comes into force, so the Worker is sent to that provision for the date
+      rather than to the relation, which carries none;
+    * a count whose groups are not listed: which provisions, and who made
+      them, is not shown;
+    * under ``"by"``: this legislation commencing OTHER legislation, which
+      says nothing about its own commencement.
+    """
+    split = _commencement_split(d)
+    if split["direction"] != "to":
+        return (
+            f" {commenced} relation(s) are `coming into force`: this legislation "
+            "commencing provisions of the legislation named against each. You may "
+            "state those, citing it; they do not show whether this legislation's "
+            "own provisions have been commenced."
+        )
+    other, own = split["commenced_by_other"], split["commenced_self"]
+    bits = []
+    if other:
+        bits.append(
+            f" {other} `coming into force` relation(s) were made by another "
+            "instrument and name a provision of this legislation: you may state "
+            "each of those provisions as commenced, citing the instrument against it."
+        )
+        if split["commenced_listed_in_full"]:
+            bits.append(
+                " They are all listed here, so a provision of this legislation not "
+                "among them may be called not recorded as commenced, citing this "
+                "record."
+            )
+        else:
+            bits.append(
+                " The commencement relations are not all listed here, so a "
+                "provision not listed may be in the part not shown: do not state "
+                "whether it has been commenced."
+            )
+    if own:
+        bits.append(
+            f" {own} `coming into force` relation(s) are marked `self: true`: this "
+            "legislation's own commencement provision acting on itself, which says "
+            "how its provisions come into force, not whether they have. Read that "
+            "provision itself for any date it fixes, and do not state from these "
+            "relations alone whether a provision has been commenced."
+        )
+    if not other and not own:
+        bits.append(
+            f" {commenced} relation(s) are `coming into force`, but their groups "
+            "are not listed here, so which provisions they name, and who made them, "
+            "is not shown: do not state from this record whether a provision has "
+            "been commenced."
+        )
+    return "".join(bits)
+
+
 def _relation_currency_limb(d: dict) -> str:
     """The three currency-bearing relation classes, appended to a change record.
 
@@ -1081,11 +1147,13 @@ def _relation_currency_limb(d: dict) -> str:
     repeals = d.get("repeal_or_revocation_relations")
     bits = []
     if isinstance(commenced, int) and commenced:
-        bits.append(
-            f" {commenced} relation(s) are `coming into force` and name a "
-            "provision of this legislation: those ARE its own commencement and "
-            "you may state them, citing the instrument against each."
-        )
+        # P3.24 (batch 7 A, extension decided by the user): P2.5's sentence
+        # here said every `coming into force` relation "ARE its own
+        # commencement and you may state them", the instrument's OWN
+        # relations included (batch 6 B's F3), which is the opposite of what
+        # the Manager's line in `_currency_limb` and `_COMMENCEMENT_RECORD_RULE`
+        # now say. Split by who made them, from `_commencement_split`.
+        bits.append(_relation_commencement_bits(d, commenced))
     if isinstance(orders, int) and orders:
         bits.append(
             f" {orders} relation(s) carry the effect `Commencement Order` and are "
@@ -1115,6 +1183,63 @@ def _relation_currency_limb(d: dict) -> str:
         "is in force as a whole, as at today. Do not write that it is."
     )
     return "".join(bits)
+
+
+# FIX_PLAN P3.24. The effect string that names a provision of the subject (see
+# `_COMMENCEMENT_OF_SUBJECT` in `agent/tools/lex.py`, not imported: this module
+# depends on nothing in the agent package).
+_COMING_INTO_FORCE = "coming into force"
+
+
+def _commencement_split(d: dict) -> dict:
+    """A change record's `coming into force` relations, split by who made them.
+
+    `provisions_commenced` counts every such relation, and the instrument's
+    OWN ones are among them: a group marked `self: true` is its commencement
+    provision acting on itself, listed against every provision that provision
+    governs, including those it leaves to an appointed day (batch 6 B, F3: 100
+    of the 518 stored records holding any commencement relation hold only
+    those). That says how a provision comes into force, not that it has, so it
+    cannot ground "not recorded as commenced" for the rest.
+
+    Returns `commenced_by_other` and `commenced_self`, the relations in the
+    LISTED groups, and `commenced_listed_in_full`: every commencement relation
+    the record holds is listed, with every provision it changed (no group cut
+    at the slimmer's window, none cut at its instrument cap, and the fetch not
+    truncated). Reads both group shapes, P3.19's `changes_not_listed` and the
+    older `changed_provisions_not_listed`, so a stored result rebuilds through
+    this code. Direction is left to the caller: under ``"by"`` a `self` group
+    has no commencement meaning for the subject.
+    """
+    total = d.get("provisions_commenced")
+    if not isinstance(total, int):
+        effects = d.get("effects") if isinstance(d.get("effects"), dict) else {}
+        total = sum(v for k, v in effects.items()
+                    if isinstance(v, int)
+                    and str(k).strip().lower() == _COMING_INTO_FORCE)
+    by_other = by_self = 0
+    cut = False
+    for g in d.get("related") or []:
+        if not isinstance(g, dict):
+            continue
+        if str(g.get("type_of_effect") or "").strip().lower() != _COMING_INTO_FORCE:
+            continue
+        n = g.get("count") if isinstance(g.get("count"), int) else 0
+        if g.get("self"):
+            by_self += n
+        else:
+            by_other += n
+        if g.get("changes_not_listed") or g.get("changed_provisions_not_listed"):
+            cut = True
+    return {
+        "direction": d.get("direction") or "to",
+        "commenced_by_other": by_other,
+        "commenced_self": by_self,
+        "commenced_listed_in_full": bool(
+            not cut and by_other + by_self >= total
+            and d.get("window_complete") is not False
+        ),
+    }
 
 
 def record_currency(log: Optional[list], name: str, args: dict, data: Any) -> None:
@@ -1153,6 +1278,9 @@ def record_currency(log: Optional[list], name: str, args: dict, data: Any) -> No
                 "commenced": d.get("provisions_commenced") or 0,
                 "orders": d.get("commencement_orders_of_amendments") or 0,
                 "repeals": d.get("repeal_or_revocation_relations") or 0,
+                # P3.24: which of those commencements another instrument made,
+                # for the per-instrument line in `_currency_limb`.
+                **_commencement_split(d),
             })
         elif name == "get_legislation_text":
             # `_text_record` returns the `{legislation, full_text}` wrapper, and
@@ -1176,6 +1304,152 @@ def record_currency(log: Optional[list], name: str, args: dict, data: Any) -> No
         pass
 
 
+# P3.24: how many instruments get a commencement line of their own. One of the
+# 710 stored delegations that consulted a change record consulted more (14;
+# batch 7 A's census); the rest beyond the cap share one line that permits
+# nothing, which is true of a record the line does not describe.
+_MAX_COMMENCEMENT_LINES = 12
+
+
+def _commencement_case(e: dict) -> str:
+    """Which of the line's cases one recorded change-record call falls in."""
+    if (e.get("direction") or "to") != "to":
+        return "by"
+    if e.get("commenced_by_other"):
+        return "other_full" if e.get("commenced_listed_in_full") else "other_cut"
+    if e.get("commenced_self"):
+        return "self_only"
+    if e.get("commenced"):
+        return "unlisted"
+    return "none"
+
+
+# Best first: where one instrument's record was consulted twice in a step (a
+# memo hit, say), its line takes the call that shows the most. A ``"by"`` call
+# is never ranked against a ``"to"`` one: it is about other legislation.
+_CASE_RANK = ("other_full", "other_cut", "self_only", "unlisted", "none")
+
+
+def _commencement_line(lid: str, case: str, e: dict) -> str:
+    """The line for one instrument's own provisions, from its ``"to"`` record."""
+    if case == "other_full":
+        return (
+            f"{lid}: {e.get('commenced_by_other')} commencement relation(s) made by "
+            "another instrument, all listed. A provision listed there may be stated "
+            "as commenced by the instrument named against it; one of its "
+            "provisions not listed there may be called not recorded as commenced, "
+            "citing this record. Neither carries a date."
+        )
+    if case == "other_cut":
+        return (
+            f"{lid}: commencement relations made by another instrument are "
+            "recorded, but not all are listed. A provision listed there may be "
+            "stated as commenced by the instrument named against it; one not listed "
+            "may be in the part not shown, so do not state whether it has been "
+            "commenced."
+        )
+    if case == "self_only":
+        return (
+            f"{lid}: the only commencement relations recorded are its own "
+            "commencement provision acting on itself, which says how its provisions "
+            "come into force, not whether they have: do not state from this record "
+            "whether any of its provisions has been commenced."
+        )
+    if case == "unlisted":
+        return (
+            f"{lid}: the record counts {e.get('commenced')} commencement relation(s) "
+            "but does not list them: do not state from it whether any of its "
+            "provisions has been commenced."
+        )
+    return (
+        f"{lid}: the record lists neither a commencement by another instrument "
+        "nor one of its own: do not state from it whether any of its provisions "
+        "has been commenced."
+    )
+
+
+def _commencement_lines(rows: list) -> str:
+    """P3.24: one line per instrument whose change record this step consulted.
+
+    Thomas's retest (30 September, `glm-5.2:cloud`) listed provisions as not
+    yet commenced where the research found only that no commencement was
+    recorded. A change record that lists no commencement is not evidence that
+    none was made, so the line says, per instrument and computed from the
+    record, what may be said about the commencement of its provisions:
+
+    * commencement relations made by ANOTHER instrument, all listed: a
+      provision not among them may be called "not recorded as commenced",
+      citing the record (the true negative Invariant 1 keeps stateable);
+    * such relations, but not all listed: the listed ones only;
+    * only the instrument's own commencement provision acting on itself
+      (batch 6 B's F3), none at all, or a count with no list: neither
+      commenced nor uncommenced, from that record;
+    * only the changes it makes to other legislation consulted (``"by"``):
+      those, and nothing about its own provisions;
+
+    and, for every instrument whose record was not consulted, neither. Addressed
+    to the agent that writes the answer (a Manager or the Deep Research
+    synthesis), which never sees the record itself. Screened against every
+    detector in `test_footer_trips_no_detector`, because a Manager can echo it.
+    """
+    to_best: dict = {}
+    by_commenced: dict = {}
+    order: list = []
+    for e in rows:
+        if e.get("kind") != "relations":
+            continue
+        lid = e.get("legislation_id") or "?"
+        if lid not in order:
+            order.append(lid)
+        case = _commencement_case(e)
+        if case == "by":
+            by_commenced[lid] = by_commenced.get(lid, False) or bool(e.get("commenced"))
+        elif lid not in to_best or _CASE_RANK.index(case) < _CASE_RANK.index(to_best[lid][0]):
+            to_best[lid] = (case, e)
+    if not order:
+        return (
+            " Commencement: this step consulted no change record, so do not state "
+            "whether any provision of any instrument has been commenced."
+        )
+
+    lines = [
+        " Commencement, from the change records this step consulted (one line per "
+        "instrument; what a line does not permit, do not state):"
+    ]
+    for lid in order[:_MAX_COMMENCEMENT_LINES]:
+        by_part = (
+            "A provision of other legislation it lists as commenced may be stated "
+            "as commenced by it."
+            if by_commenced.get(lid) else ""
+        )
+        if lid in to_best:
+            line = _commencement_line(lid, *to_best[lid])
+            if lid in by_commenced and by_part:
+                line += " Its changes to other legislation were also consulted: " \
+                        + by_part[0].lower() + by_part[1:]
+        else:
+            line = (
+                f"{lid}: only the changes it makes to other legislation were "
+                "consulted. " + (by_part + " " if by_part else "")
+                + f"The record does not show whether any provision of {lid} itself "
+                "has been commenced."
+            )
+        lines.append(f"\n- {line}")
+    more = order[_MAX_COMMENCEMENT_LINES:]
+    if more:
+        lines.append(
+            f"\n- {', '.join(more[:8])}"
+            + (f" and {len(more) - 8} more" if len(more) > 8 else "")
+            + ": records consulted but not described here: do not state from them "
+            "whether any of their provisions has been commenced."
+        )
+    lines.append(
+        "\nFor any instrument not named here, this step consulted no change "
+        "record: do not state whether its provisions have been commenced."
+    )
+    return "".join(lines)
+
+
 def _currency_limb(log: Optional[list]) -> str:
     """The currency limb of the worker's report block.
 
@@ -1197,7 +1471,7 @@ def _currency_limb(log: Optional[list]) -> str:
     if not touched and not rows:
         return ""
 
-    marked, commenced, repealed, valid = [], [], [], []
+    marked, repealed, valid = [], [], []
     for e in rows:
         kind = e.get("kind")
         if kind == "title_marker":
@@ -1207,8 +1481,6 @@ def _currency_limb(log: Optional[list]) -> str:
                     marked.append(label)
         elif kind == "relations":
             lid = e.get("legislation_id") or "?"
-            if e.get("commenced") and lid not in commenced:
-                commenced.append(lid)
             if e.get("repeals") and lid not in repealed:
                 repealed.append(lid)
         elif kind == "valid_date":
@@ -1221,12 +1493,10 @@ def _currency_limb(log: Optional[list]) -> str:
         "in force as at today. The index records which text version it holds, not "
         "currency, and no tool returns an in-force flag."
     ]
-    if commenced:
-        parts.append(
-            f" Commencement relations WERE retrieved for {', '.join(commenced[:6])}"
-            " — a provision-level statement about those, citing the commencing "
-            "instrument, is supported. The relations carry no dates."
-        )
+    # P3.24: one line per instrument whose change record this step consulted,
+    # in place of P2.5's "Commencement relations WERE retrieved for …", which
+    # counted an instrument's own commencement provision as a commencement.
+    parts.append(_commencement_lines(rows))
     if repealed:
         parts.append(
             " Repeal or revocation relations were retrieved for "
