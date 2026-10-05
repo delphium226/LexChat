@@ -115,7 +115,7 @@ def test_http_and_https_twins_collapse_to_one_relation():
     assert out["rows_returned"] == 2
     assert out["relations"] == 1
     assert out["duplicate_rows_collapsed"] == 1
-    assert out["related"][0]["changed_provisions"] == ["s. 9"]
+    assert out["related"][0]["changes"] == [{"by": "reg. 2 sch.", "changed": ["s. 9"]}]
 
 
 def test_the_surviving_url_is_https():
@@ -170,8 +170,7 @@ def test_direction_by_flips_the_grouping_side_only():
                affecting="asp/2025/2", affecting_prov="s. 4")
     out = _slim_amendment_results([row], "asp/2025/2", "by")
     assert out["related"][0]["legislation_id"] == "asp/2018/9"
-    assert out["related"][0]["changed_provisions"] == ["s. 95"]
-    assert out["related"][0]["effected_by"] == ["s. 4"]
+    assert out["related"][0]["changes"] == [{"by": "s. 4", "changed": ["s. 95"]}]
     assert "made BY asp/2025/2" in out["relations_are"]
 
 
@@ -180,7 +179,8 @@ def test_provisions_come_back_in_natural_order():
     reading "s. 9, s. 21, s. 20, s. 17" cannot see what is commenced."""
     rows = [_row(changed_prov=p) for p in ("s. 21", "s. 2", "s. 10", "s. 9")]
     out = _slim_amendment_results(rows, "asp/2025/2", "to")
-    assert out["related"][0]["changed_provisions"] == ["s. 2", "s. 9", "s. 10", "s. 21"]
+    assert out["related"][0]["changes"] == [
+        {"by": "reg. 2 sch.", "changed": ["s. 2", "s. 9", "s. 10", "s. 21"]}]
 
 
 def test_provision_sort_handles_schedule_paragraphs():
@@ -197,8 +197,8 @@ def test_a_long_provision_list_is_capped_and_says_how_many_it_dropped():
     rows = [_row(changed_prov=f"s. {i}") for i in range(1, lex._MAX_CHANGED_PROVISIONS + 6)]
     out = _slim_amendment_results(rows, "asp/2025/2", "to")
     g = out["related"][0]
-    assert len(g["changed_provisions"]) == lex._MAX_CHANGED_PROVISIONS
-    assert g["changed_provisions_not_listed"] == 5
+    assert sum(len(c["changed"]) for c in g["changes"]) == lex._MAX_CHANGED_PROVISIONS
+    assert g["changes_not_listed"] == 5
     # The count is of the whole group, not of what was listed.
     assert g["count"] == lex._MAX_CHANGED_PROVISIONS + 5
 
@@ -211,6 +211,190 @@ def test_a_long_instrument_list_is_capped_and_says_how_many_it_dropped():
     assert out["related_instruments"] == n
     assert len(out["related"]) == lex._MAX_RELATED_INSTRUMENTS
     assert out["related_instruments_not_listed"] == 3
+
+
+# --- P3.19: which provision made which change ----------------------------------
+#
+# The slimmer used to keep `changed_provisions` and `effected_by` as two lists
+# sorted apart, so a group with two or more of each could not say which provision
+# made which change, and it cut `effected_by` at six with no count. Synthetic ids
+# throughout (`asp/1901/1` is the subject, `ssi/1901/3` the other instrument).
+
+_SUBJECT = "asp/1901/1"
+_OTHER = "ssi/1901/3"
+
+
+def _pairs_of(group):
+    """Every (changed, by) pair a slimmed group lists, flattened."""
+    return [(c, e["by"]) for e in group["changes"] for c in e["changed"]]
+
+
+def test_every_relation_keeps_its_own_effecting_provision():
+    """Three changes by three provisions: each is listed with the one that made it."""
+    rows = [
+        _row(changed=_SUBJECT, changed_prov="s. 9", affecting=_OTHER,
+             affecting_prov="s. 6(2)", effect="inserted"),
+        _row(changed=_SUBJECT, changed_prov="s. 2", affecting=_OTHER,
+             affecting_prov="s. 6(4)", effect="inserted"),
+        _row(changed=_SUBJECT, changed_prov="s. 10", affecting=_OTHER,
+             affecting_prov="s. 6(3)", effect="inserted"),
+    ]
+    out = _slim_amendment_results(rows, _SUBJECT, "to")
+    (g,) = out["related"]
+    assert sorted(_pairs_of(g)) == sorted(
+        [("s. 9", "s. 6(2)"), ("s. 2", "s. 6(4)"), ("s. 10", "s. 6(3)")])
+    # One entry per effecting provision, in provision order.
+    assert [e["by"] for e in g["changes"]] == ["s. 6(2)", "s. 6(3)", "s. 6(4)"]
+
+
+def test_an_effecting_provision_past_the_old_sixth_is_still_listed_with_its_change():
+    """The shape of the defect: a group of 16 relations, each by its own provision.
+
+    The old slimmer listed the first six effecting provisions in sort order and
+    dropped the rest without a count, so the one that made the change asked
+    about could be missing from the result altogether.
+    """
+    # The two sides run in opposite orders, so the change asked about (s. 1) was
+    # made by the provision that sorts LAST on the effecting side.
+    rows = [
+        _row(changed=_SUBJECT, changed_prov=f"s. {i}", affecting=_OTHER,
+             affecting_prov=f"s. {20 - i}(2)", effect="inserted")
+        for i in range(1, 17)
+    ]
+    out = _slim_amendment_results(rows, _SUBJECT, "to")
+    (g,) = out["related"]
+    assert g["count"] == 16
+    assert ("s. 1", "s. 19(2)") in _pairs_of(g)
+    assert sorted(_pairs_of(g)) == sorted((f"s. {i}", f"s. {20 - i}(2)") for i in range(1, 17))
+    assert "changes_not_listed" not in g
+
+
+def test_a_cut_list_of_changes_states_its_window():
+    """P3.5's rule for every cut list, now on the effecting side as well."""
+    from src.agent.tools import lex
+    n = lex._MAX_CHANGED_PROVISIONS + 7
+    rows = [
+        _row(changed=_SUBJECT, changed_prov=f"s. {i}", affecting=_OTHER,
+             affecting_prov=f"art. {i}", effect="substituted")
+        for i in range(1, n + 1)
+    ]
+    out = _slim_amendment_results(rows, _SUBJECT, "to")
+    (g,) = out["related"]
+    listed = _pairs_of(g)
+    assert len(listed) == lex._MAX_CHANGED_PROVISIONS
+    assert g["changes_not_listed"] == 7
+    assert len(listed) + g["changes_not_listed"] == g["count"]
+    # The window is the first changes in order of the provision changed, and
+    # each listed change still carries its own effecting provision.
+    assert sorted(c for c, _ in listed) == sorted(
+        (f"s. {i}" for i in range(1, lex._MAX_CHANGED_PROVISIONS + 1)))
+    assert all(by == "art. " + c.split(". ")[1] for c, by in listed)
+
+
+def test_the_window_is_on_changed_provisions_and_each_keeps_every_provision_that_changed_it():
+    """The window's unit is the changed provision, as before P3.19, so nothing the
+    old list showed is hidden: a provision changed by three provisions is listed
+    with all three, and the relations left out are counted."""
+    from src.agent.tools import lex
+    n = lex._MAX_CHANGED_PROVISIONS + 2
+    rows = [
+        _row(changed=_SUBJECT, changed_prov=f"s. {i}", affecting=_OTHER,
+             affecting_prov=f"art. {i}", effect="words substituted")
+        for i in range(1, n + 1)
+    ] + [
+        _row(changed=_SUBJECT, changed_prov="s. 1", affecting=_OTHER,
+             affecting_prov=f"art. {k}(3)", effect="words substituted")
+        for k in (70, 71)
+    ]
+    out = _slim_amendment_results(rows, _SUBJECT, "to")
+    (g,) = out["related"]
+    listed = _pairs_of(g)
+    assert {c for c, _ in listed} == {f"s. {i}" for i in range(1, lex._MAX_CHANGED_PROVISIONS + 1)}
+    assert sorted(by for c, by in listed if c == "s. 1") == ["art. 1", "art. 70(3)", "art. 71(3)"]
+    assert g["changes_not_listed"] == 2
+    assert len(listed) + g["changes_not_listed"] == g["count"]
+
+
+def test_a_change_with_no_named_provision_takes_no_slot_in_the_window():
+    """The old list skipped an empty changed provision, so it never cost a named
+    one its place; the null pair is listed, and the window still holds 60 named."""
+    from src.agent.tools import lex
+    n = lex._MAX_CHANGED_PROVISIONS + 1
+    rows = [
+        _row(changed=_SUBJECT, changed_prov=f"s. {i}", affecting=_OTHER,
+             affecting_prov=f"art. {i}", effect="amended")
+        for i in range(1, n + 1)
+    ] + [_row(changed=_SUBJECT, changed_prov=None, affecting=_OTHER,
+              affecting_prov="art. 99", effect="amended")]
+    out = _slim_amendment_results(rows, _SUBJECT, "to")
+    (g,) = out["related"]
+    listed = _pairs_of(g)
+    assert (None, "art. 99") in listed
+    assert len([c for c, _ in listed if c]) == lex._MAX_CHANGED_PROVISIONS
+    assert g["changes_not_listed"] == 1
+
+
+def test_the_backstop_on_relations_listed_is_stated_too():
+    """However the changed provisions share them out, a group lists at most
+    `_MAX_CHANGES_LISTED` relations and counts the rest."""
+    from src.agent.tools import lex
+    per = lex._MAX_CHANGES_LISTED // 2 + 5
+    rows = [
+        _row(changed=_SUBJECT, changed_prov=p, affecting=_OTHER,
+             affecting_prov=f"para. {k}", effect="amended")
+        for p in ("s. 3", "s. 4") for k in range(1, per + 1)
+    ]
+    out = _slim_amendment_results(rows, _SUBJECT, "to")
+    (g,) = out["related"]
+    assert len(_pairs_of(g)) == lex._MAX_CHANGES_LISTED
+    assert g["changes_not_listed"] == 2 * per - lex._MAX_CHANGES_LISTED
+    assert g["count"] == 2 * per
+
+
+def test_one_provision_making_many_changes_is_one_entry():
+    """A commencement reads "reg. 2 commenced ss. 2, 10 and 21": one entry, not three."""
+    rows = [
+        _row(changed=_SUBJECT, changed_prov=p, affecting=_OTHER, affecting_prov="reg. 2")
+        for p in ("s. 21", "s. 2", "s. 10")
+    ]
+    out = _slim_amendment_results(rows, _SUBJECT, "to")
+    assert out["related"][0]["changes"] == [
+        {"by": "reg. 2", "changed": ["s. 2", "s. 10", "s. 21"]}]
+
+
+def test_a_provision_the_record_does_not_name_is_null_not_dropped():
+    """The old lists skipped an empty side, so the relation vanished from the list."""
+    rows = [
+        _row(changed=_SUBJECT, changed_prov="s. 9", affecting=_OTHER, affecting_prov=None),
+        _row(changed=_SUBJECT, changed_prov="", affecting=_OTHER, affecting_prov="reg. 4"),
+    ]
+    out = _slim_amendment_results(rows, _SUBJECT, "to")
+    (g,) = out["related"]
+    assert sorted(_pairs_of(g), key=str) == sorted(
+        [("s. 9", None), (None, "reg. 4")], key=str)
+
+
+def test_every_deduplicated_row_is_listed_with_its_pair_or_counted():
+    """The dry run's check, at the slimmer: no relation is lost between the two."""
+    rows = []
+    for i in range(1, 80):
+        for scheme in ("http", "https"):
+            rows.append(_row(changed=_SUBJECT, changed_prov=f"s. {i % 23}",
+                             affecting=_OTHER if i % 3 else "ssi/1901/4",
+                             affecting_prov=f"reg. {i % 7}",
+                             effect="words substituted" if i % 2 else "inserted",
+                             scheme=scheme))
+    out = _slim_amendment_results(rows, _SUBJECT, "to")
+    expected = {}
+    for r in rows:
+        gk = (r["affecting_legislation"], r["type_of_effect"])
+        expected.setdefault(gk, set()).add((r["changed_provision"], r["affecting_provision"]))
+    for g in out["related"]:
+        want = expected[(g["legislation_id"], g["type_of_effect"])]
+        got = _pairs_of(g)
+        assert len(got) == len(set(got))
+        assert set(got) <= want
+        assert len(got) + g.get("changes_not_listed", 0) == len(want) == g["count"]
 
 
 # --- the tool-result block -----------------------------------------------------

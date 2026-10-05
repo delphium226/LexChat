@@ -376,13 +376,31 @@ _TYPE_CODES: dict[str, set[str]] = {
 # `ssi/2018/298`, and a commencement answer that stops at 40 of them is a worse
 # answer than one that lists them. Above this the count carries the fact and the
 # list carries the examples.
+#
+# **FIX_PLAN P3.19: each listed change carries the provision that made it.**
+# ~~A separate, separately sorted list of effecting provisions, cut at
+# `_MAX_EFFECTING_PROVISIONS = 6` with no count.~~ Two lists sorted apart cannot
+# say which provision made which change: 6338's inserting Act has an `inserted`
+# group of 16 relations whose six listed effecting provisions did not include
+# the one that inserted the section asked about, and the summariser paired the
+# section with one of the six, so a lawyer was given a wrong pinpoint for an
+# insertion. The window is still the first 60 distinct changed provisions, in
+# provision order, so nothing the old list showed is hidden; each is now listed
+# with EVERY provision that changed it (`changes`, below), and a group that lists
+# fewer relations than it holds says how many it left out (`changes_not_listed`),
+# as P3.5's rule requires of every cut list. Measured over every stored
+# change-record call at the build (batch 6 A, `notes/batch6_A.md`): the median
+# output does not move; the long tail grows, because the six-item cut no longer
+# hides the effecting side.
 _MAX_CHANGED_PROVISIONS = 60
+# A backstop, not a window: the most relations one group lists however its
+# changed provisions are shared out. The stored maximum inside the window above
+# is 92 (one changed provision is changed by at most 20 provisions), so this
+# binds only on a shape the corpus has not shown, and says so when it does.
+_MAX_CHANGES_LISTED = 120
 # How many related instruments are listed. `ukpga/2004/33` reaches 369 groups;
 # no answer is improved by the 41st, and the total is reported either way.
 _MAX_RELATED_INSTRUMENTS = 40
-# The operative provision on the other side ("reg. 2 sch.") — a handful is
-# provenance, a hundred is noise.
-_MAX_EFFECTING_PROVISIONS = 6
 
 
 def _provision_sort_key(label) -> list:
@@ -485,6 +503,15 @@ def _slim_amendment_results(resp_json, legislation_id: str, direction: str) -> d
     other instrument is the affecting one under ``"to"`` and the changed one
     under ``"by"``.
 
+    Each group lists its relations as ``changes``, one entry per effecting
+    provision: ``{"by": <affecting_provision>, "changed": [<changed_provision>,
+    ...]}`` (FIX_PLAN P3.19). So every listed change keeps the provision that
+    made it, and a provision the record does not name is ``null`` on its side
+    rather than dropped. A group lists its first `_MAX_CHANGED_PROVISIONS`
+    changed provisions in provision order, each with every provision that
+    changed it (at most `_MAX_CHANGES_LISTED` relations in all), and
+    ``changes_not_listed`` counts the relations it leaves out.
+
     Anything that is not a list of dicts is passed through untouched, for the
     reason `_slim_section_results` does: a slimmer must never be the reason a
     retrieval goes missing.
@@ -501,6 +528,7 @@ def _slim_amendment_results(resp_json, legislation_id: str, direction: str) -> d
 
     seen = set()
     groups = {}
+    pairs_seen = {}
     effects = {}
     rows_returned = 0
     for item in items:
@@ -534,27 +562,49 @@ def _slim_amendment_results(resp_json, legislation_id: str, direction: str) -> d
             **({"commences_this_legislation": False}
                if _effect_is_commencement_order(effect) else {}),
             "count": 0,
-            "changed_provisions": [],
-            "effected_by": [],
+            "changes": [],
         })
         g["count"] += 1
-        prov = item.get("changed_provision")
-        if prov and prov not in g["changed_provisions"]:
-            g["changed_provisions"].append(prov)
-        eff_prov = item.get("affecting_provision")
-        if eff_prov and eff_prov not in g["effected_by"]:
-            g["effected_by"].append(eff_prov)
+        # P3.19: the pair, never the two sides separately. A provision the
+        # record leaves empty stays in the pair as None (JSON null) so the
+        # relation is still listed and still says what it does not know.
+        pair = (item.get("changed_provision") or None, item.get("affecting_provision") or None)
+        held_pairs = pairs_seen.setdefault((other, effect), set())
+        if pair not in held_pairs:
+            held_pairs.add(pair)
+            g["changes"].append(pair)
 
     related = []
     for g in groups.values():
-        g["changed_provisions"].sort(key=_provision_sort_key)
-        held = len(g["changed_provisions"])
-        if held > _MAX_CHANGED_PROVISIONS:
-            g["changed_provisions"] = g["changed_provisions"][:_MAX_CHANGED_PROVISIONS]
-            g["changed_provisions_not_listed"] = held - _MAX_CHANGED_PROVISIONS
-        g["effected_by"] = sorted(
-            g["effected_by"], key=_provision_sort_key
-        )[:_MAX_EFFECTING_PROVISIONS]
+        pairs = sorted(g["changes"], key=lambda p: (
+            _provision_sort_key(p[0]), _provision_sort_key(p[1])))
+        held = len(pairs)
+        # The window: the first `_MAX_CHANGED_PROVISIONS` NAMED changed
+        # provisions, each with every pair it has (a change whose provision the
+        # record leaves empty takes no slot, as it took none in the old list);
+        # then the backstop on pairs.
+        window = []
+        for changed, _ in pairs:
+            if changed is not None and changed not in window:
+                window.append(changed)
+                if len(window) == _MAX_CHANGED_PROVISIONS:
+                    break
+        window = set(window)
+        pairs = [p for p in pairs if p[0] is None or p[0] in window][:_MAX_CHANGES_LISTED]
+        if held > len(pairs):
+            g["changes_not_listed"] = held - len(pairs)
+        # One entry per effecting provision, its changes in provision order:
+        # "reg. 2 commenced ss. 1, 2 and 9" is how a commencement reads, and a
+        # group whose one provision made every change costs barely more than
+        # the old flat list did.
+        by_effecting = {}
+        for changed, effecting in pairs:
+            by_effecting.setdefault(effecting, []).append(changed)
+        g["changes"] = [
+            {"by": effecting, "changed": changed}
+            for effecting, changed in sorted(
+                by_effecting.items(), key=lambda kv: _provision_sort_key(kv[0]))
+        ]
         related.append(g)
     # Relations by another instrument first: that is the answer to "commenced by
     # regulation", and the self-referential block is context for it. P2.5 sends
