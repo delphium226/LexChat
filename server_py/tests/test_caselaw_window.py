@@ -182,6 +182,16 @@ def test_window_note_is_stripped_if_a_worker_echoes_it():
         assert n == 1 and out == "The answer."
 
 
+def test_a_bracketed_query_does_not_defeat_the_strip():
+    """Found by the dry run over the stored calls: 14 queries carried a
+    neutral citation, whose brackets ended the strip's match early."""
+    note = case_law_search_note({"query": "[1901] EWHC 1 (Ch) widget"},
+                                _data(50, last=520))
+    assert '"(1901) EWHC 1 (Ch) widget"' in note
+    out, n = strip_scope_blocks("The answer." + note)
+    assert n == 1 and out == "The answer."
+
+
 def test_window_note_trips_no_detector():
     """Any text the product writes into a block the model can echo is read by
     every grader (batch 6 lesson). Screened on every branch, per sentence where

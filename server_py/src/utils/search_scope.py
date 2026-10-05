@@ -2135,7 +2135,12 @@ def case_law_search_note(args: dict, data: Any) -> str:
     if not shown:
         return ""
     args = args or {}
-    query = str(args.get("query") or "").strip()
+    # Square brackets in the query (a neutral citation such as "[1901] EWHC 1")
+    # would put a bracket inside the block, and `_TOOL_BLOCK` stops at it, so
+    # an echoed note would survive the strip. 14 of the 781 stored searches
+    # with results had one (batch 7 D's dry run). Shown as round brackets.
+    query = (str(args.get("query") or "").strip()
+             .replace("[", "(").replace("]", ")"))
     matching = "matching " + (f'"{query[:200]}"' if query else "the query")
     court = str(args.get("court") or "").strip()
     # P3.9: the window the search actually ran under (the model's dates
