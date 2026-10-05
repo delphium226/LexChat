@@ -330,6 +330,12 @@ rate limits and outages (retry later); never forward the provider's raw response
 `ConnectionError` → 503 as it is. **Test:** simulate a provider 402 and 429 at the planner
 boundary; a connection failure must still read as a connectivity failure.
 
+**Reproduced by Thomas on 30 September 2026** (his retest of `v2026.09.3`, his severity 3):
+once the provider hit its rate limit, 12 of 12 Deep Research attempts got `502` from
+`/api/research/plan`, seconds after the chat stream had reported "HTTP 429". Still on the Fix
+Tracker as "TODO B6", P3 (recorded 2026-10-05; FIX_PLAN "External review — Thomas, 30 September
+2026").
+
 Outside the pre-pilot fix plan (not a pre-pilot defect), so it can go straight to `main`.
 
 ### B5. Add a 'Data coverage' tab to the parliament bot (feature; added 2026-07-24, unscoped)

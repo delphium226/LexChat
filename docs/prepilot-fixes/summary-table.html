@@ -465,7 +465,24 @@
         listed in <code>CHANGELOG.md</code>. The app shows the version it is running in its About
         box (Settings, then About), so a problem report can say which release it was.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
-        first and second points of his closing section, “What is deliberately not here”.</p>
+        first and second points of his closing section, “What is deliberately not here”.
+        <strong>30 Sep</strong> marks a point from his retest of release 2026.09.3 on 30 September.</p>
+      <p><strong>5 October: Thomas's retest of 30 September, booked.</strong> Thomas re-asked our
+        pre-pilot questions on release 2026.09.3, on a different model from ours, and found five
+        problems he had first reported on 23 September that had no row: his report of that day
+        never reached our plan. We checked each against the code and our stored re-runs, and
+        all five are real. Three also happen on the model we test with: the quick research step
+        fetches whole Acts in about 1 conversational answer in 9 (<strong>P3.25</strong>), the
+        line under an answer can name two lists of change records that disagree (in about 1
+        stored answer in 4 that names both, <strong>P4.20</strong>), and a report that names the
+        enabling-power note in a sentence loses those words (<strong>P4.22</strong>). The most
+        serious, <strong>P3.24</strong>, an answer calling provisions “not yet commenced” when the
+        research found only that no commencement is recorded, is one our own checks were built not
+        to count, so it is measured first. <strong>P4.21</strong> rewords a line that tells the
+        lawyer a citation is not wrong, which a lookup cannot know. A sixth,
+        <strong>P3.26</strong>, is a filter rule that would drop a result with an unfamiliar
+        territorial extent; none has appeared yet. His other points were already rows; his new
+        evidence is added to them.</p>
       <p><strong>5 October: three rows blocked.</strong> We are taking the remaining serious
         problems in order of severity. Two of the three, <strong>P3.2</strong> and
         <strong>P3.17</strong>, and the related <strong>P3.3</strong>, cannot be finished until a
@@ -916,16 +933,18 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next, by severity.</strong> <strong>P3.19</strong> (keeping which provision made
-        which change), the one serious problem we can build now; then <strong>P3.12</strong>
-        (reaching a Schedule paragraph asked for by number), which P3.2 also needs; then
-        <strong>P4.8</strong>. All three cost nothing to build; P3.12's re-run will be priced first.
-        <strong>P3.2</strong>, <strong>P3.3</strong> and <strong>P3.17</strong> are blocked until a
-        lawyer answers our questions, and nothing else waits on them. After that, the case-law rows as one piece of work, or the date a
-        provision came into force (<strong>P3.21</strong>) together with the legislation.gov.uk
-        check (<strong>P5.4</strong>). The other open groups remain: <strong>P3.4</strong> (the
-        Scottish jurisdiction default), <strong>P4.3</strong> (the sources list) and
-        <strong>P4.12</strong>.</p>
+      <p><strong>Next, by severity.</strong> The serious problems first:
+        <strong>P3.19</strong> (keeping which provision made which change), then
+        <strong>P3.24</strong> (a provision called “not yet commenced” on no evidence), measured
+        before anything is built. Then the P2 rows: <strong>P3.12</strong> first, because P3.2
+        needs it; then <strong>P4.21</strong> and <strong>P3.25</strong>, which cost nothing; the
+        case-law rows as one piece of work (P4.19, P3.23, P3.9, then P3.22); the date a provision
+        came into force (<strong>P3.21</strong>) with the legislation.gov.uk check; then
+        <strong>P3.4</strong>, <strong>P3.6</strong>, <strong>P4.3</strong>, <strong>P3.10</strong>
+        and <strong>P4.12</strong>, and <strong>P3.20</strong> once the Scottish Courts and
+        Tribunals Service replies. Then the P3 rows, starting with <strong>P4.8</strong>. Any
+        re-run is priced to us first. <strong>P3.2</strong>, <strong>P3.3</strong> and
+        <strong>P3.17</strong> stay blocked until a lawyer answers our questions.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.3, P0.4, dropped on 2 October, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
         and three items from <code>docs/TODO.md</code> D16 (the impossible year window, always
@@ -951,7 +970,7 @@
   // ver:    on a Fixed row only: the release that carries it ("2026.09.1", the git tag
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
-  const UPDATED = "5 October 2026 (P3.2, P3.3 and P3.17 blocked on the lawyer's answers; work taken by severity: next, P3.19, then P3.12 and P4.8)";
+  const UPDATED = "5 October 2026 (Thomas's retest of 30 September booked as six rows; P3.2, P3.3 and P3.17 blocked on the lawyer's answers; work taken by severity: next, P3.19, then P3.24)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23", ver: "2026.09.3" },
@@ -994,6 +1013,9 @@
     { src: "R", fix: "Retrieve Scottish judgments from the Scottish Courts and Tribunals Service's judgments search", sev: "P2", status: "Verified", ref: "P3.20", t: "" },
     { src: "R", fix: "Retrieve the date a provision came into force, not only the instrument that commenced it", sev: "P2", status: "Verified", ref: "P3.21", t: "" },
     { src: "R", fix: "Tell the system how many case-law results there were, not how many it was shown (at most 50)", sev: "P2", status: "Verified", ref: "P3.23", t: "" },
+    { src: "T", fix: "Don't say a provision is “not yet commenced” or “remains in force” when the research found only that no commencement or repeal is recorded", sev: "P1", status: "Verified", ref: "P3.24", t: "30 Sep" },
+    { src: "T", fix: "Stop the quick research step fetching whole Acts, which its own instructions forbid (about 1 conversational answer in 9)", sev: "P2", status: "Verified", ref: "P3.25", t: "30 Sep" },
+    { src: "T", fix: "Include, not drop, a search result whose territorial extent the jurisdiction filter does not recognise (none seen so far)", sev: "P3", status: "Verified", ref: "P3.26", t: "30 Sep" },
     { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", sev: "P1", status: "Fixed", ref: "P4.1", t: "9", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Show a change of mode or research type in the conversation itself", sev: "P3", status: "Verified", ref: "P4.9", t: "" },
     { src: "R", fix: "Never show a blank or lost reply", sev: "P1", status: "Fixed", ref: "P4.2", t: "", fixed: "2026-09-16", ver: "2026.09.1" },
@@ -1011,6 +1033,9 @@
     { src: "R", fix: "Say what was searched under an answer whose research used only section searches (it gets no search-scope line)", sev: "P2", status: "Fixed", ref: "P4.17", t: "", fixed: "2026-10-02", ver: "Next release" },
     { src: "R", fix: "Stop the line under an answer saying no record of changes was consulted when one was", sev: "P3", status: "Fixed", ref: "P4.18", t: "", fixed: "2026-10-02", ver: "Next release" },
     { src: "R", fix: "Retry a case-law request refused because the service is busy, as legislation requests are", sev: "P2", status: "Verified", ref: "P4.19", t: "" },
+    { src: "T", fix: "Name one list of the change records consulted under an answer, not two that disagree", sev: "P3", status: "Verified", ref: "P4.20", t: "30 Sep" },
+    { src: "T", fix: "Don't tell the lawyer an instrument we don't hold is “not a sign that the citation is wrong”: a lookup can't tell", sev: "P2", status: "Verified", ref: "P4.21", t: "30 Sep" },
+    { src: "T", fix: "Stop the answer cleaner leaving a hole where a report names the enabling-power note in a sentence", sev: "P3", status: "Verified", ref: "P4.22", t: "30 Sep" },
     { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Fixed", ref: "P4.6", t: "4", fixed: "2026-09-23", ver: "2026.09.3" },
     { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Fixed", ref: "P4.7", t: "2", fixed: "2026-09-24", ver: "2026.09.3" },
     { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", sev: "P3", status: "Verified", ref: "P4.8", t: "" },

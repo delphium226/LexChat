@@ -8123,3 +8123,49 @@ handover's "Take next".**
   lightness band (L 0.81 against 0.67). Rendered once over a local server
   (`.playwright-mcp/tracker_v34.png`; the only console error is the local favicon 404); the
   "Next" paragraph, a dated note for Thomas and the stamp updated. 42 of 68 fixed, 3 blocked.
+**Third addendum to Session 37 (2026-10-05, at the user's request: "analyze [Thomas's] feedback
+and determine if we already know about the issues", then "book them, and replan our next work
+items according to the severity"). This supersedes the second addendum's "Take next".**
+- **Thomas's retest of `v2026.09.3` (30 September, on `glm-5.2:cloud`)** was supplied by the user
+  and saved, gitignored, as `evidence/seam/thomas_s37/2026-09-30-evals-developer-report.md`.
+  **Five problems he had raised on 23 September had no row: his 23 September report and email
+  points never reached this plan** (only his 10 September review was mapped). Each was checked
+  against the code at HEAD and the 57 stored replay directories (`thomas_census.py`,
+  `thomas_census2.py`, `extent_census.py` beside it), and all five are real:
+  - **P3.24 (tracker P1):** "not yet commenced" or "remains in force" read from an absence of
+    commencement relations. P2.5's `_currency_asserted` skips negatives by design, so no grader
+    can see the first shape ("remains in force" it counts; both phrasings tested). Not yet measured
+    on the pinned model; measure first.
+  - **P3.25 (P2):** the conversational Worker's prompt forbids `get_legislation_text`, yet the tool
+    is offered and the prompt elsewhere relies on its results; 143 of 1,314 answered conversational
+    turns call it on the pinned model.
+  - **P4.20 (P3):** P3.5's and P2.5's footer clauses name different change-record lists; 109 of 423
+    stored footers carrying both name different instruments, 36 more differ only in order. Not
+    what P4.18 fixed.
+  - **P4.21 (P2):** P3.7's lookup clause says a not-held instrument is "not a sign that the
+    citation is wrong", which a lookup cannot establish; 69 stored answers carry it.
+  - **P4.22 (P3):** `_TOOL_BLOCK` strips an `[ENABLING POWER]` named inside a sentence; 4 stored
+    Worker reports on the pinned model name it inline (one left "an explicit `` block").
+  - **P3.26 (P3):** an extent value `_TERRITORY_ALIASES` does not know is dropped under a
+    jurisdiction filter, against the function's own rule; latent, 0 of 36,343 stored search rows.
+    Filed by him under P3.4; it is P1.1's code, booked in Wave 3 so as not to reopen Wave 1.
+  - Already known, evidence added: TODO B6 (his 12 of 12 reproduction, in `docs/TODO.md`), P4.3
+    (6354, on its row). P3.3/P3.17, P3.9/P3.22, P3.10, the summary counts and the £ scan were
+    already rows or held items; his "fixed since 23 September" agrees with the ledger.
+- **Booked** (`thomas_book.py`, then A's fold with six placements: P3.24 and P4.22 on B3, which
+  stays partial; the rest on the no-bucket line): six ledger rows, a section "External review —
+  Thomas, 30 September 2026" mapping every point, P4.3's evidence, and a new top order line.
+  `plan_lint` 0 errors, 0 warnings; `plan_status` **47 of 75 rows, 8 of 14 buckets**.
+- **Replanned by severity** (the user's rule; within a severity: a row a higher one needs first,
+  then $0 deterministic before a paid replay, outside parties last): **P1: P3.19, then P3.24**
+  (measure first). **P2:** P3.12 (P3.2 needs it); P4.21 and P3.25; the case-law build (P4.19, P3.23,
+  P3.9, then P3.22); P3.21 with P5.4 (c); P3.4; P3.6; P4.3, P3.10, P4.12; P3.20 last (SCTS).
+  **P3:** P4.8, P4.20, P4.22, P3.26, P3.14, P4.9, P5.4's other leads, P0.7, TODO B6. P3.2, P3.3
+  and P3.17 stay Blocked on the lawyer pack.
+- **Fix Tracker v35:** the six rows (source T, Thomas ref "30 Sep", explained in References), a
+  dated note for Thomas, "Next" in severity order, the stamp. 74 tracker rows: 42 Fixed, 26
+  Verified, 3 Blocked, 3 To be verified. Script syntax-checked with Node.
+- **Lesson, recorded in the new FIX_PLAN section:** an external report that is not saved and
+  mapped here in the session that receives it is lost to the plan. Also: `evidence/` itself is
+  not gitignored, only its listed subfolders (`git check-ignore` caught `evidence/external/` before
+  matter text was written there).
