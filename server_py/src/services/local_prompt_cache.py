@@ -57,8 +57,13 @@ CACHEABLE_TOOLS = frozenset({
     # `legislation_id` and a direction, its output is public statutory data,
     # and no part of either is user content — so nothing about one lawyer's
     # matter can reach the shared table through it. Note the cache only ever
-    # engages on the summarisation path, and a slimmed change record is 1-23KB,
-    # so in practice this admits the rare very large one and little else.
+    # engages on the summarisation path, and a slimmed change record is a
+    # median ~3.5K characters and at most ~97K over the 1,216 stored calls
+    # (P3.19's paired shape; ~~1-23KB~~, which was already 49K before it), so
+    # in practice this admits the rare very large one and little else. P3.19
+    # changed the slimmed shape without a `_CANON_VERSION` bump, deliberately:
+    # the content hash is of the slimmed result, so the new shape misses the
+    # old rows rather than being served them.
     "get_legislation_changes",
     # Case law (Find Case Law)
     "search_case_law", "get_case_law_text",
