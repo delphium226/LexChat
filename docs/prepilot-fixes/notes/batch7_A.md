@@ -271,3 +271,117 @@ collector and its pickle (`deleg.pkl`), the old-code copy (`old/`), the rebuilt 
 its listing (instrument ids: never commit), the supported-claim check, the screen, the grader probe,
 `negcurrency_all_after.txt`, `grade16.sh` and its two output directories, `revert_a.py` and its output,
 and the splice/reword scripts and block source used to edit `search_scope.py` with CRLF kept.
+
+## 8. Extension: the Worker-facing change-record block (user decision, relayed by the integrator)
+
+**Decided:** Decision 1 (a), extend P3.24 before its replay; Decisions 2, 3 and 4 accepted as built
+(the prompt sentence as built; "state neither" kept where no record was consulted; the 12-instrument
+cap kept). Built as a new commit, `f758c3a`, on top of `bc82672`.
+
+**What changed.** In `amendment_search_note` -> `_relation_currency_limb` (the block the Worker reads
+on every `get_legislation_changes` result), P2.5's sentence "N relation(s) are `coming into force` and
+name a provision of this legislation: those ARE its own commencement and you may state them, citing
+the instrument against each", which counted the instrument's own `self: true` relations (F3, F-A1
+above), is replaced by `_relation_commencement_bits`, built from `_commencement_split`, the same split
+the Manager's line uses. The "NO relation here is a `coming into force` relation" branch (Invariant
+1's honest failure), the `Commencement Order` and repeal branches and the closing sentence are
+byte-identical. The exact new Worker-facing wording, per case (N, X and Y are the counts):
+
+- **made by another instrument** (always first when there are any):
+  > X `coming into force` relation(s) were made by another instrument and name a provision of this legislation: you may state each of those provisions as commenced, citing the instrument against it.
+
+  then, if all are listed:
+  > They are all listed here, so a provision of this legislation not among them may be called not recorded as commenced, citing this record.
+
+  or, if not:
+  > The commencement relations are not all listed here, so a provision not listed may be in the part not shown: do not state whether it has been commenced.
+- **the instrument's own** (`self: true`; alone, or after the above on a mixed record):
+  > Y `coming into force` relation(s) are marked `self: true`: this legislation's own commencement provision acting on itself, which says how its provisions come into force, not whether they have. Read that provision itself for any date it fixes, and do not state from these relations alone whether a provision has been commenced.
+- **a count with no commencement group listed** (the groups cut at the 40-instrument cap):
+  > N relation(s) are `coming into force`, but their groups are not listed here, so which provisions they name, and who made them, is not shown: do not state from this record whether a provision has been commenced.
+- **direction "by"** (changes this legislation makes to other legislation):
+  > N relation(s) are `coming into force`: this legislation commencing provisions of the legislation named against each. You may state those, citing it; they do not show whether this legislation's own provisions have been commenced.
+
+**How it treats an SI.** An SI's self relations are, in practice, its own commencement regulation
+("these Regulations come into force on …"), so the SI usually is in force from a fixed day. The
+record carries no date and does not say which kind of provision it is, so the wording neither calls
+the SI commenced nor uncommenced from the relation. It sends the Worker to the provision itself ("Read
+that provision itself for any date it fixes"). For an SI that is where the date is; for an Act's
+appointed-day section it is where the Worker learns the provision names a mechanism, not its use. The
+same wording serves both, because it describes what the relation is, not what the instrument is. One
+consequence to watch in the hand-read: an SI whose record holds only self relations (B's F3: 24 of
+the 26 such ids were SIs) now gets no "you may state them" for its own commencement. Its commencement
+date remains stateable from its own text, and P2.5's `valid_date` and Status rules are unchanged.
+(Decision 3, accepted as built, keeps "state neither" in the Manager's line where no record was
+consulted. This Worker wording only ever applies where a record WAS consulted, and it points at the
+text.)
+
+**Dry run with the built code over every stored change-record result**
+(`python $S/worker_block_dryrun.py <server_py> [--list --examples]`; output
+`$S/worker_block_dryrun.txt`, full listing and one before/after example per case in
+`$S/worker_block_dryrun_list.txt`, ids gitignored). The product calls `amendment_search_note(args,
+raw_result)` on every such result, and so does the script. The before column is `6011b4f`'s
+`search_scope.py` (the first commit did not touch this function), loaded beside the built one:
+
+| case | calls | block moved |
+|---|---|---|
+| by another instrument, all listed | 122 | 122 |
+| by another instrument, all listed, plus self | 96 | 96 |
+| by another instrument, not all listed | 156 | 156 |
+| by another instrument, not all listed, plus self | 9 | 9 |
+| self only | 73 | 73 |
+| a count, no group listed | 26 | 26 |
+| direction "by" | 53 | 53 |
+| no `coming into force` relation, empty record, or error | 860 | 0 |
+| no count (pre-P2.5 stored shape, `wave3_p35`) | 40 | 0 |
+| **total** | **1,435** | **535** |
+
+**In all 535, the block moved only in the replaced sentence:** with the old sentence removed from the
+before text and the new sentences removed from the after text, 0 of 535 differ. Nothing else in the
+tool result moves: the slimmer (`lex.py`) is untouched, and the block is the only appended text this
+function builds. The 73 "self only" calls are the ones where P2.5 told the Worker "those ARE its own
+commencement and you may state them" about relations that are the instrument's own commencement
+provision; 6378 is among them.
+
+**Detector screen.** Every variant above (by another instrument, all listed and cut; self only; a
+count with no group; "by", alone and on an instrument also consulted "to"; mixed) is screened in
+`test_footer_trips_no_detector`, against the same detectors as section 2: **0 trips** (`python
+$S/screen.py .`, `$S/screen_out2.txt`). The one draft that touched a detector's vocabulary, "Not all
+of the commencement relations are listed", was in `negcurrency`'s drop vocabulary. It was reworded to
+"The commencement relations are not all listed". The only remaining drop-vocabulary sentence is "may
+be called not recorded as commenced", the prescribed form. **No grader re-run was needed:** no grader
+imports `search_scope`, and graders read stored answers and results, which this change cannot
+rewrite. Text it adds can reach a grader only through a future answer that echoes it, and that is
+what the screen covers.
+
+**Tests and revert proofs.** Seven new tests in `tests/test_commencement_line.py`:
+- by another instrument (all listed);
+- the cut list;
+- self relations, for an Act id and an SI id;
+- a mixed record;
+- a count with no group;
+- "by";
+- the honest-failure branch kept.
+
+`test_in_force_status.py::test_a_retrieved_commencement_is_still_permitted` asserted the removed
+"you may state them"; it now asserts "you may state each of those provisions as commenced" (Invariant
+1's suppression check, kept). `test_footer_trips_no_detector` now also screens the seven Worker
+variants.
+
+Revert proofs on scratch copies (`python $S/revert_ext.py <server_py> bc82672`,
+`$S/revert_ext_out.txt`; copies deleted afterwards):
+- control: 337 passed over the five affected files;
+- **`search_scope.py` reverted to `bc82672` (73 lines removed, 5 restored): 8 fail.** These are 6 of
+  the 7 new tests, the updated permission test and the footer screen. The seventh new test, the
+  honest-failure branch, pins unchanged behaviour and passes on the revert by design;
+- four single-site mutants:
+  - self relations counted as by another instrument: 2 fail;
+  - a cut list read as complete: 1;
+  - direction ignored: 1;
+  - P2.5's sentence put back: 7.
+
+**Full suite on `lexchat_test_a`: 2223 passed** (2216 + 7).
+
+**Still not done:** no replay, no model or external call, no change to the `Commencement Order` or
+repeal branches, the closing sentence, the slimmer, the footer clauses or any prompt. F-A2 (the
+lawyer footer counting self relations) remains P4.20's.
