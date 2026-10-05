@@ -933,17 +933,20 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next, by severity.</strong> The serious problems first:
-        <strong>P3.19</strong> (keeping which provision made which change), then
-        <strong>P3.24</strong> (a provision called “not yet commenced” on no evidence), measured
-        before anything is built. Then the P2 rows: <strong>P3.12</strong> first, because P3.2
-        needs it; then <strong>P4.21</strong> and <strong>P3.25</strong>, which cost nothing; the
+      <p><strong>Next, by severity.</strong> The next session runs four pieces of work side by
+        side, at no cost and with no re-run: <strong>P3.19</strong> built (keeping which provision
+        made which change); <strong>P3.24</strong> measured, with a new check that finds a
+        provision called “not yet commenced” and asks whether the research supports it, before any
+        fix is chosen; <strong>P4.21</strong> reworded, with the new sentence shown to us before it
+        goes in, because a lawyer reads it; and <strong>P3.12</strong> and <strong>P3.25</strong>
+        measured, with options. Any fix that needs a re-run to test is priced to us first. After
+        that, the rest of the P2 rows: the
         case-law rows as one piece of work (P4.19, P3.23, P3.9, then P3.22); the date a provision
         came into force (<strong>P3.21</strong>) with the legislation.gov.uk check; then
         <strong>P3.4</strong>, <strong>P3.6</strong>, <strong>P4.3</strong>, <strong>P3.10</strong>
         and <strong>P4.12</strong>, and <strong>P3.20</strong> once the Scottish Courts and
-        Tribunals Service replies. Then the P3 rows, starting with <strong>P4.8</strong>. Any
-        re-run is priced to us first. <strong>P3.2</strong>, <strong>P3.3</strong> and
+        Tribunals Service replies. Then the P3 rows, starting with <strong>P4.8</strong>.
+        <strong>P3.2</strong>, <strong>P3.3</strong> and
         <strong>P3.17</strong> stay blocked until a lawyer answers our questions.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.3, P0.4, dropped on 2 October, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
@@ -970,7 +973,7 @@
   // ver:    on a Fixed row only: the release that carries it ("2026.09.1", the git tag
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
-  const UPDATED = "5 October 2026 (Thomas's retest of 30 September booked as six rows; P3.2, P3.3 and P3.17 blocked on the lawyer's answers; work taken by severity: next, P3.19, then P3.24)";
+  const UPDATED = "5 October 2026, later (the next session's work set up: P3.19 built, P3.24 measured, P4.21 reworded, P3.12 and P3.25 measured, side by side at no cost; P3.2, P3.3 and P3.17 still blocked on the lawyer's answers)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23", ver: "2026.09.3" },
