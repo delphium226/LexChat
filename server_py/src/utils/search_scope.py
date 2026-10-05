@@ -504,25 +504,7 @@ def enabling_power_note(args: dict, data: Any) -> str:
 
     recital = _recital_in(d)
     if recital:
-        # Bounded: a preamble runs to a few hundred characters and the point is
-        # to hand back the words, not the document.
-        #
-        # Square brackets are removed from the quote, and that is load-bearing
-        # rather than cosmetic: `strip_scope_blocks` matches this block with
-        # `\[ENABLING POWER[^\[\]]*\]`, so a `[` or `]` inside the recital would
-        # end the match early and leave agent-facing bookkeeping rendering in
-        # front of a lawyer. The same single-bracket form as the other tool
-        # block, and the same reason it stays balanced.
-        quoted = recital[:600].replace("[", "(").replace("]", ")")
-        quoted += "..." if len(recital) > 600 else ""
-        return (
-            f"\n\n[ENABLING POWER — this record DOES state what {lid} was made "
-            f"under, and these words are the only evidence of it you have:\n"
-            f'  "{quoted}"\n'
-            f"You MAY state the enabling power of {lid}, citing this text. Do NOT "
-            "extend the claim to any other instrument: each one states its own, "
-            "and most records do not state it at all.]"
-        )
+        return _enabling_stated_block(lid, recital)
     return (
         f"\n\n[ENABLING POWER — this record does NOT state what {lid} was made "
         "under. No endpoint we call returns a made-under relation, and this "
@@ -533,6 +515,74 @@ def enabling_power_note(args: dict, data: Any) -> str:
         "on it, say the enabling power could not be verified from the available "
         "material.]"
     )
+
+
+def _enabling_stated_block(lid: str, recital: str, source: str = "this record") -> str:
+    """The permitting branch of the ENABLING POWER block: the recital, quoted.
+
+    `source` names what carried it. "this record" for a `/legislation/text`
+    result, which is the wording P2.3 built, byte for byte; P3.25's lookup
+    route names the lookup record, because its block can arrive appended to a
+    section search, where "this record" would read as the ranked sections.
+    """
+    # Bounded: a preamble runs to a few hundred characters and the point is
+    # to hand back the words, not the document.
+    #
+    # Square brackets are removed from the quote, and that is load-bearing
+    # rather than cosmetic: `strip_scope_blocks` matches this block with
+    # `\[ENABLING POWER[^\[\]]*\]`, so a `[` or `]` inside the recital would
+    # end the match early and leave agent-facing bookkeeping rendering in
+    # front of a lawyer. The same single-bracket form as the other tool
+    # block, and the same reason it stays balanced.
+    quoted = recital[:600].replace("[", "(").replace("]", ")")
+    quoted += "..." if len(recital) > 600 else ""
+    return (
+        f"\n\n[ENABLING POWER — {source} DOES state what {lid} was made "
+        f"under, and these words are the only evidence of it you have:\n"
+        f'  "{quoted}"\n'
+        f"You MAY state the enabling power of {lid}, citing this text. Do NOT "
+        "extend the claim to any other instrument: each one states its own, "
+        "and most records do not state it at all.]"
+    )
+
+
+# P3.25: `lookup_legislation` carries the same `description` as the
+# `/legislation/text` record (17 of 17 paired calls, batch 6 D; 10 of 10 stored
+# LEX lookup payloads, batch 7 C), and the recital lives there for 7 of the 8
+# stored text records that carry one (the eighth has it only in `full_text`,
+# which no lookup returns). So the quick-lookup Worker, which no longer has
+# `get_legislation_text`, keeps P2.3's permitted branch through the lookup.
+# A lookup is not a read of the instrument: only the PERMITTING branch is built
+# from it, and a lookup whose record carries no recital adds no block and no
+# record. The section search, which is the read, already records the
+# instrument as looked at.
+_LOOKUP_ENABLING_STATUSES = (HELD, HELD_WITHOUT_TEXT)
+
+
+def _lookup_recital(data: Any) -> tuple:
+    """`(legislation_id, recital)` from a `lookup_legislation` result, or
+    `("", "")`. Only for a secondary instrument whose record was found."""
+    got = parse_lookup_result(data)
+    if not got or got.get("status") not in _LOOKUP_ENABLING_STATUSES:
+        return "", ""
+    lid = str(got.get("legislation_id") or "").strip()
+    if not _is_secondary(lid):
+        return "", ""
+    recital = _recital_in({"legislation": {"description": got.get("description") or ""}})
+    return (lid, recital) if recital else ("", "")
+
+
+def lookup_enabling_note(data: Any) -> str:
+    """The ENABLING POWER block for a `lookup_legislation` result whose record
+    states a recital, else "". Never raises."""
+    try:
+        lid, recital = _lookup_recital(data)
+        if not recital:
+            return ""
+        return _enabling_stated_block(
+            lid, recital, source=f"the index record lookup_legislation returned for {lid}")
+    except Exception:
+        return ""
 
 
 # Appended to `search_legislation` and `search_legislation_sections` results.
@@ -579,6 +629,13 @@ def record_enabling_power(log: Optional[list], name: str, args: dict, data: Any)
     if log is None:
         return
     try:
+        if name == LOOKUP_TOOL:
+            # P3.25: the permitting record only (see `_lookup_recital`).
+            lid, recital = _lookup_recital(data)
+            if recital:
+                log.append({"tool": "enabling_power", "legislation_id": lid[:60],
+                            "stated": True})
+            return
         if name not in _ENABLING_ROUTES:
             return
         lid = str((args or {}).get("legislation_id") or "").strip()
@@ -1171,6 +1228,20 @@ def record_currency(log: Optional[list], name: str, args: dict, data: Any) -> No
                         args.get("legislation_id") or leg.get("id") or ""
                     )[:60],
                     "valid_date": vd,
+                })
+        elif name == LOOKUP_TOOL:
+            # P3.25: the same `valid_date` on the lookup record (9 of 9 stored
+            # pairs equal to the text record's). Only for a record whose text
+            # is held: a stub has no "held text" for the date to describe.
+            got = parse_lookup_result(data)
+            vd = str((got or {}).get("valid_date") or "")
+            if got and got.get("status") == HELD and _VALID_DATE.match(vd):
+                log.append({
+                    "tool": "currency",
+                    "kind": "valid_date",
+                    "legislation_id": str(got.get("legislation_id") or "")[:60],
+                    "valid_date": vd,
+                    "via": LOOKUP_TOOL,
                 })
     except Exception:
         pass

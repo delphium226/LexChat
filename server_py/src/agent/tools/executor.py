@@ -505,10 +505,19 @@ async def execute_worker_tool(
                     url=url or None,
                     category=record.get("category"),
                     enactment_date=record.get("enactment_date"),
+                    # P3.25: the date the held text is stated to be up to date
+                    # to, the field `get_legislation_text` was the only route
+                    # to (equal on 9 of 9 stored pairs). Not an in-force date;
+                    # `record_currency` reads it, for a held record only.
+                    valid_date=record.get("valid_date") or None,
                     # The description carries a commencement instrument's
                     # effect and date ("bring sections 2, 9 … into force on 10
                     # May 2025"), which is all a stub has to offer. Capped: the
                     # reason `_slim_search_results` drops it is its size.
+                    # P3.25: it is also where an SI's recital sits (7 of the 8
+                    # stored text records carrying one), and each of those 7
+                    # descriptions is 600 characters or fewer in whole, so the
+                    # cap loses none of them (batch 7 C, `p325_fields.py`).
                     description=(str(record.get("description") or "")[:600] or None),
                 )
                 try:

@@ -1647,6 +1647,11 @@ def retrieved_enabling(turn: dict) -> list:
             for r in (o.get("results") or []):
                 if isinstance(r, dict) and r.get("description"):
                     cands.append((str(r.get("legislation_id") or ""), str(r["description"])))
+            # P3.25: a lookup record carries the same `description`, and is the
+            # quick-lookup Worker's route to a recital now that it has no whole
+            # text. Unread, a claim the product permits grades as unverified.
+            if o.get("tool") == "lookup_legislation" and o.get("description"):
+                cands.append((str(o.get("legislation_id") or ""), str(o["description"])))
             for lid, descr in cands:
                 if descr and _DERIV_RECITAL.search(descr) and lid not in [x[0] for x in out]:
                     out.append((lid, descr[:200]))
@@ -3176,6 +3181,17 @@ def negcurrency_evidence(turn: dict) -> dict:
                     item = (tlid, "text", dated)
                     if item not in ev["cmc_provisions"]:
                         ev["cmc_provisions"].append(item)
+            elif name == "lookup_legislation" and isinstance(o, dict) \
+                    and o.get("status") == "held":
+                # P3.25: the quick-lookup Worker's `valid_date` arrives on a
+                # lookup record now, not on a whole text. The same record's
+                # date (9 of 9 stored pairs equal), read the same way.
+                llid = _nc_lid(o.get("legislation_id"))
+                if o.get("title"):
+                    ev["titles"].setdefault(llid, str(o.get("title")))
+                vd = str(o.get("valid_date") or "")
+                if re.match(r"^\d{4}-\d{2}-\d{2}$", vd) and (llid, vd) not in ev["valid_dates"]:
+                    ev["valid_dates"].append((llid, vd))
     return ev
 
 

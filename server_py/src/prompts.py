@@ -484,6 +484,30 @@ _GENERAL_RULE_APPLICATION_PHASE = """PHASE 2c — A WORD THE INSTRUMENT DOES NOT
 The meaning then turns on the general interpretation legislation that applies to that instrument, and which legislation that is depends on the kind of instrument and its date. Like Phase 2b, this is worth the extra calls in quick-lookup mode. Find that legislation, and retrieve its APPLICATION provision (the section or article saying which Acts or instruments it applies to: call `search_legislation_sections` on it with the query "application") as well as its definition. A definition retrieved without the application provision does not show that the definition applies here.
 - Say that general legislation applies to the instrument only if the application provision you retrieved covers it. If that provision excludes the instrument, say so and find the legislation that does apply. If you retrieved no application provision, say the instrument does not define the word, name the general legislation you found, and say that whether it applies was not checked."""
 
+# P3.25: the quick-lookup Worker is not offered `get_legislation_text`
+# (`schemas.get_worker_tools`), so the two shared rules that named it as the
+# route to a recital and to `valid_date` name the route it does have. The
+# shared constants are untouched (the research Workers keep the tool); this
+# prompt takes a copy with the one tool name swapped in each. A swap whose
+# anchor is not found exactly once leaves the rule as it was (Invariant 5) and
+# `tests/test_quick_lookup_tools.py` fails, because this prompt must name no
+# tool its Worker is not offered.
+_QUICK_LOOKUP_ROUTE_SWAPS = (
+    ("which arrives in a `get_legislation_text` result for some instruments and not others.",
+     "which arrives in a `lookup_legislation` result for some instruments and not others "
+     "(code also looks up each statutory instrument you search within)."),
+    ("(d) the `valid_date` on a `get_legislation_text` response",
+     "(d) the `valid_date` on a `lookup_legislation` result"),
+)
+
+
+def _quick_lookup_route(rule: str) -> str:
+    for old, new in _QUICK_LOOKUP_ROUTE_SWAPS:
+        if rule.count(old) == 1:
+            rule = rule.replace(old, new)
+    return rule
+
+
 WORKER_SYSTEM_PROMPT_CONVERSATIONAL ="""You are a Legal Research Support Agent operating in quick-lookup mode.
 
 YOUR MANDATE:
@@ -500,7 +524,7 @@ Issue one targeted search using the appropriate search tool.
 
 PHASE 2 — RETRIEVE:
 For each result from Phase 1, call the appropriate retrieval tool once.
-- Legislation: call `search_legislation_sections` with a focused query. One call per `legislation_id`. Do NOT fall back to `get_legislation_text`.
+- Legislation: call `search_legislation_sections` with a focused query. One call per `legislation_id`.
 - Case law: call `get_case_law_text` for the 1–2 most relevant cases only.
 
 PHASE 2b — RELATIONSHIPS (only when the question turns on one, and then it is required):
@@ -522,7 +546,7 @@ CITATION FORMAT:
 Inline only. Example: "Under s.7(2) of the [Acquisition of Land Act 1981](URL), ..."
 Do not produce a standalone References list.
 
-""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE + "\n\n" + _IN_FORCE_RULE
+""" + _quick_lookup_route(_ENABLING_POWER_RULE) + "\n\n" + _RELATIONSHIP_RULE + "\n\n" + _quick_lookup_route(_IN_FORCE_RULE)
 
 
 _LEGISLATION_TYPE_LABELS = {
