@@ -2138,7 +2138,15 @@ def case_law_search_note(args: dict, data: Any) -> str:
     query = str(args.get("query") or "").strip()
     matching = "matching " + (f'"{query[:200]}"' if query else "the query")
     court = str(args.get("court") or "").strip()
-    where = "in Find Case Law" + (f" (court: {court})" if court else "")
+    # P3.9: the window the search actually ran under (the model's dates
+    # intersected with the lawyer's), as the executor reports it.
+    dates = d.get("dates") if isinstance(d.get("dates"), dict) else {}
+    d_from, d_to = dates.get("from"), dates.get("to")
+    dated = (f"dated {d_from} to {d_to}" if d_from and d_to
+             else f"dated from {d_from}" if d_from
+             else f"dated up to {d_to}" if d_to else "")
+    limits = "; ".join(p for p in (f"court: {court}" if court else "", dated) if p)
+    where = "in Find Case Law" + (f" ({limits})" if limits else "")
     total, lo, hi = d.get("total"), d.get("total_min"), d.get("total_max")
     if d.get("total_exact") and total == shown:
         return (f"\n\n[SEARCH SCOPE — all {shown} judgment(s) {where} {matching}, "

@@ -231,6 +231,89 @@ def case_law_count(xml_text: str, shown: int, page_size: int = CASE_LAW_PAGE_SIZ
             "total_min": lo, "total_max": hi}
 
 
+# ---------------------------------------------------------------------------
+# P3.9: the date filter the feed honours
+# ---------------------------------------------------------------------------
+#
+# `search_case_law` sent `date_from`/`date_to`, and the feed ignores both (as it
+# ignores `from_date`/`to_date`): a 2025-only window returned the same 50
+# results as no window at all, so the model's per-query dates and the lawyer's
+# date range, intersected into the same params, silently did nothing. **The
+# form that works is the advanced search's day/month/year triple,
+# `from_date_0/1/2` and `to_date_0/1/2`, and it is NOT in the published API
+# spec** (`public_api.yml` documents no date parameter at all; batch 5 C,
+# `docs/LEGAL_DATA_SOURCES.md` section 4). It is what the feed does, verified
+# live 2026-09-18 and 2026-10-05, and `tools/caselaw_probe.py` re-checks it, so
+# a withdrawal is seen rather than silently turning the filter off again.
+
+def _parse_case_law_date(value, end: bool):
+    """`YYYY-MM-DD`, or `YYYY-MM` / `YYYY` widened to the month or year (its
+    first day for a start, its last for an end). Raises ValueError otherwise."""
+    import calendar
+    import re as _re
+    from datetime import date
+
+    s = str(value).strip()
+    m = _re.fullmatch(r"(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?", s)
+    if not m:
+        raise ValueError(s)
+    y = int(m.group(1))
+    if m.group(3):
+        return date(y, int(m.group(2)), int(m.group(3)))
+    if m.group(2):
+        mo = int(m.group(2))
+        return date(y, mo, calendar.monthrange(y, mo)[1] if end else 1)
+    return date(y, 12, 31) if end else date(y, 1, 1)
+
+
+def case_law_date_window(args: dict, cfg: dict) -> dict:
+    """The date window a case-law search runs under, and the params that apply it.
+
+    The model's `date_from`/`date_to` are INTERSECTED with the lawyer's date
+    range (`_date_from`/`_date_to`): the later start and the earlier end win,
+    as before P3.9. Returns `{"params", "dates", "error"}`: `params` are the
+    feed's `from_date_0/1/2` / `to_date_0/1/2` (day, month, year); `dates` is
+    the applied window as ISO strings (None for an open end), for the result
+    and the window note; `error` is set, and nothing is to be sent, when a date
+    is not a date or the window is empty (a start after its end; the case-law
+    twin of `docs/TODO.md` D16 defect 1, which stays parked for legislation).
+    """
+    args, cfg = args or {}, cfg or {}
+    bounds = {}
+    for key, user_key, end in (("date_from", "_date_from", False),
+                               ("date_to", "_date_to", True)):
+        got = []
+        for who, raw in (("the dates asked for", args.get(key)),
+                         ("the lawyer's dates", cfg.get(user_key))):
+            if raw in (None, ""):
+                continue
+            try:
+                got.append(_parse_case_law_date(raw, end))
+            except ValueError:
+                return {"params": {}, "dates": None, "error": (
+                    f"{key} '{raw}' ({who}) is not a date in YYYY-MM-DD form, so "
+                    "no search was run. Search again with dates in that form.")}
+        bounds[key] = (min(got) if end else max(got)) if got else None
+    lo, hi = bounds["date_from"], bounds["date_to"]
+    if lo and hi and lo > hi:
+        both = bool(cfg.get("_date_from") or cfg.get("_date_to"))
+        return {"params": {}, "dates": None, "error": (
+            f"The date window is empty: it would run from {lo.isoformat()} to "
+            f"{hi.isoformat()}"
+            + (" once the dates asked for are combined with the dates the lawyer "
+               "set for this research" if both else "")
+            + ", so no search was run. Search again with a start date on or "
+              "before the end date.")}
+    params = {}
+    for prefix, d in (("from_date", lo), ("to_date", hi)):
+        if d:
+            params.update({f"{prefix}_0": str(d.day), f"{prefix}_1": str(d.month),
+                           f"{prefix}_2": str(d.year)})
+    dates = ({"from": lo.isoformat() if lo else None, "to": hi.isoformat() if hi else None}
+             if (lo or hi) else None)
+    return {"params": params, "dates": dates, "error": None}
+
+
 def _extract_judgment_text(xml_text: str) -> str:
     """Extract plain text from a LegalDocML (AKOMA NTOSO) XML judgment."""
     try:
