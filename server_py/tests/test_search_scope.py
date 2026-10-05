@@ -1092,6 +1092,36 @@ def test_footer_trips_no_detector():
         assert not _CUR_DISCLOSED.search(clause)
     assert "no change record was consulted" not in _currency_footer_clause(consulted_log)
 
+    # P3.24: the negative and continuing commencement detector
+    # (`replay_report negcurrency`). Screened on the WHOLE footer, every clause
+    # at once, because the lookup clause (P3.7) and the change-record clause
+    # (P3.5) say "not held" and "not recorded" in the vocabulary it reads.
+    from src.utils.instrument_lookup import HELD_WITHOUT_TEXT, NOT_HELD
+    from src.utils.search_scope import LOOKUP_ENTRY, record_relations
+    from tools.replay_report import negcurrency_claim
+    full_log = _log_with(("ssi/1901/8", False), ("uksi/1901/9", True))
+    full_log += empty_log + sourced_log + consulted_log
+    record_relations(full_log, "get_legislation_changes",
+                     {"legislation_id": "ssi/1901/1"},
+                     {"legislation_id": "ssi/1901/1", "relations": 0,
+                      "by_other_legislation": 0, "related": [],
+                      "window_complete": False})
+    record_relations(full_log, "get_legislation_changes",
+                     {"legislation_id": "asp/1901/2"},
+                     {"legislation_id": "asp/1901/2", "relations": 3,
+                      "by_other_legislation": 3, "window_complete": True,
+                      "related": [{"legislation_id": "ssi/1901/3", "self": False}]})
+    full_log += [
+        {"tool": LOOKUP_ENTRY, "legislation_id": "ssi/1901/4",
+         "label": "SSI 1901/4", "status": NOT_HELD},
+        {"tool": LOOKUP_ENTRY, "legislation_id": "ssi/1901/5",
+         "label": "SSI 1901/5", "status": HELD_WITHOUT_TEXT},
+    ]
+    footer = answer_scope_footer(full_log, {})
+    assert "looked up by" in footer and "recorded changes" in footer
+    for s in _sentences(footer):
+        assert negcurrency_claim(s)[0] is None, s
+
 
 def test_the_enabling_block_is_stripped_before_a_lawyer_sees_it():
     """The block is an instruction to an agent. In research mode the Manager is
