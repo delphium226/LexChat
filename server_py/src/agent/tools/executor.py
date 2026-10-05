@@ -25,7 +25,12 @@ from ...utils.instrument_lookup import (
 from ...utils.redact import redact_args
 from ..provider_factory import get_request_provider_config
 from ._util import _emit
-from .caselaw import _fetch_judgment_text, _parse_case_law_atom
+from .caselaw import (
+    _fetch_judgment_text,
+    _parse_case_law_atom,
+    case_law_count,
+    case_law_date_window,
+)
 from .lex import (
     LEX_API_URL,
     _TYPE_CODES,
@@ -578,24 +583,31 @@ async def execute_worker_tool(
                 params: dict = {"query": args["query"]}
                 if args.get("court"):
                     params["court"] = args["court"]
-                if args.get("date_from"):
-                    params["date_from"] = args["date_from"]
-                if args.get("date_to"):
-                    params["date_to"] = args["date_to"]
 
                 # Apply user's hard filter constraints (override model args).
                 # `_court` is gone (P4.4): the UI filter used to clobber the
                 # model's own `court` argument here, so a court selected turns
                 # earlier beat the model's per-query judgement. The date
-                # filters below deliberately INTERSECT rather than override,
-                # which is what court should always have done.
+                # filters deliberately INTERSECT rather than override, which
+                # is what court should always have done.
+                #
+                # P3.9: and they are now sent in the one form the feed honours
+                # (`from_date_0/1/2`, `to_date_0/1/2`; NOT in the published
+                # spec, see `case_law_date_window`). `date_from`/`date_to`
+                # were sent until P3.9 and the feed ignored them, so neither
+                # the model's dates nor the lawyer's ever applied. An empty
+                # window or a malformed date is refused here, with no call.
                 cl_cfg = get_request_provider_config()
-                if cl_cfg.get("_date_from"):
-                    model_df = args.get("date_from") or ""
-                    params["date_from"] = max(model_df, cl_cfg["_date_from"]) if model_df else cl_cfg["_date_from"]
-                if cl_cfg.get("_date_to"):
-                    model_dt = args.get("date_to") or ""
-                    params["date_to"] = min(model_dt, cl_cfg["_date_to"]) if model_dt else cl_cfg["_date_to"]
+                window = case_law_date_window(args, cl_cfg)
+                if window["error"]:
+                    return json.dumps({
+                        "error": window["error"],
+                        "results": [],
+                        "shown": 0,
+                        "total": 0,
+                        "query": args["query"],
+                    })
+                params.update(window["params"])
 
                 await _emit(on_chunk, {
                     "type": "api_call_start",
@@ -606,7 +618,19 @@ async def execute_worker_tool(
                 })
 
                 t0 = time.perf_counter()
-                resp = await client.get(url, params=params, timeout=15.0)
+                # P4.19: through the retry helper, as every LEX call is. The
+                # National Archives publishes a limit of 1,000 requests per
+                # rolling five minutes per IP and answers it with a 429; the
+                # target is one IP for every user, so a direct `client.get`
+                # turned a 429 into a dropped retrieval. A 400 (an invalid
+                # court code) is not in `_RETRY_STATUS` and still returns at
+                # once to the branch below. The helper also retries a timeout
+                # or transport error, which is wanted here: the only failures
+                # in 1,149 stored calls were 3 DNS transport errors, and none
+                # reached the 15 s timeout (batch 7 D's note).
+                resp = await _request_with_retry(
+                    client, "GET", url, name=name, params=params, timeout=15.0
+                )
                 elapsed_ms = (time.perf_counter() - t0) * 1000
 
                 if timing_collector:
@@ -630,10 +654,18 @@ async def execute_worker_tool(
                     })
                 resp.raise_for_status()
                 entries = _parse_case_law_atom(resp.text)
+                # P3.23: the shown count and the matching total, separately.
+                # `total` was `len(entries)`, never more than the 50-row page,
+                # so `total: 50` read as "every match seen" when the feed held
+                # thousands. `case_law_count` reads the real figure from the
+                # feed's `last` link; `shown` is what anything deciding "did
+                # this search return results" must key on.
                 return json.dumps({
                     "results": entries,
-                    "total": len(entries),
+                    **case_law_count(resp.text, len(entries)),
                     "query": args["query"],
+                    # P3.9: the window the search ran under, for the note.
+                    **({"dates": window["dates"]} if window["dates"] else {}),
                 })
 
             elif name == "get_case_law_text":
@@ -649,7 +681,9 @@ async def execute_worker_tool(
 
                 t0 = time.perf_counter()
                 try:
-                    result = await _fetch_judgment_text(url)
+                    # P4.19: the shared client, so the fetch can go through
+                    # `_request_with_retry` like the search above.
+                    result = await _fetch_judgment_text(url, client=client)
                 except httpx.HTTPStatusError as e:
                     result = {"error": f"HTTP {e.response.status_code} fetching judgment", "url": url, "text": ""}
                 except Exception as e:

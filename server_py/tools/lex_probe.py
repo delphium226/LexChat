@@ -752,7 +752,13 @@ def main(argv=None) -> int:
     ap.add_argument("--full", action="store_true",
                     help="with --inforce: walk all 272 corpus legislation_ids "
                          "rather than the named sample (~10 min)")
+    ap.add_argument("--caselaw", action="store_true",
+                    help="P3.23/P3.9: live checks of the National Archives "
+                         "case-law feed (tools/caselaw_probe.py), not LEX")
     args = ap.parse_args(argv)
+    if args.caselaw:
+        from tools.caselaw_probe import main as caselaw_main
+        return caselaw_main()
     if args.inforce:
         return in_force(full=args.full)
     if args.coverage:

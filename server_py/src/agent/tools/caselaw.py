@@ -2,6 +2,7 @@
 
 import re
 import xml.etree.ElementTree as ET
+from typing import Optional
 
 import httpx
 
@@ -166,6 +167,153 @@ def _parse_case_law_atom(xml_text: str) -> list[dict]:
     return entries
 
 
+# ---------------------------------------------------------------------------
+# P3.23: how many judgments matched, not how many were shown
+# ---------------------------------------------------------------------------
+#
+# `search_case_law` used to return `"total": len(entries)`, never more than the
+# 50-row page, so a model reading `total: 50` believed it had seen every match
+# when the feed may hold thousands. The real figure is in the feed's `last`
+# link, and **it is computed at ten judgments a page, whatever page size was
+# asked for** (measured live 2026-10-05, batch 7 D): a one-word surname query
+# returns 50 rows a page and `last` page 520, with or without `per_page=50`; the true count,
+# found by paging, is 5,193, and page 520 at `per_page=10` holds exactly 3.
+# Read at the page size requested, the same link said "up to 26,000" and the
+# last pages came back empty, which is the "the last page can be empty" that
+# P3.23's row recorded. At ten a page the total is known to within ten.
+#
+# A page holding fewer rows than the page size is the whole matching set,
+# whatever the link says (a dated query showed 19 rows with `last` page 2).
+CASE_LAW_PAGE_SIZE = 50          # the feed's default; we send no `per_page`
+_LAST_LINK_PAGE_SIZE = 10        # the page size the `last` link counts in
+
+
+def _parse_case_law_last_page(xml_text: str) -> Optional[int]:
+    """The page number in the feed's `<link rel="last">`, or None."""
+    from urllib.parse import parse_qs, urlparse
+
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    for link in root.findall(f"{{{_ATOM_NS}}}link"):
+        if link.get("rel") != "last":
+            continue
+        try:
+            page = parse_qs(urlparse(link.get("href", "")).query).get("page")
+            return int(page[0]) if page else None
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
+def case_law_count(xml_text: str, shown: int, page_size: int = CASE_LAW_PAGE_SIZE) -> dict:
+    """The shown count and the matching total, kept apart (P1.3's split).
+
+    `total` is the best figure for how many judgments match: exact where it is
+    known (a page that is not full holds the whole set), otherwise the upper
+    end of the range the `last` link gives (`total_min` to `total_max`). With
+    no usable `last` link on a full page, `total` stays the shown count and
+    `total_exact` is False, so a consumer reading `total` as an int still gets
+    one. Callers deciding whether anything was returned key on `shown`, never on
+    `total` (P3.23's constraint).
+    """
+    if shown < page_size:
+        return {"shown": shown, "total": shown, "total_exact": True,
+                "total_min": shown, "total_max": shown}
+    last = _parse_case_law_last_page(xml_text)
+    if not last or last < 1:
+        return {"shown": shown, "total": shown, "total_exact": False,
+                "total_min": shown, "total_max": None}
+    lo = max(shown, (last - 1) * _LAST_LINK_PAGE_SIZE + 1)
+    hi = max(shown, last * _LAST_LINK_PAGE_SIZE)
+    return {"shown": shown, "total": hi, "total_exact": lo == hi,
+            "total_min": lo, "total_max": hi}
+
+
+# ---------------------------------------------------------------------------
+# P3.9: the date filter the feed honours
+# ---------------------------------------------------------------------------
+#
+# `search_case_law` sent `date_from`/`date_to`, and the feed ignores both (as it
+# ignores `from_date`/`to_date`): a 2025-only window returned the same 50
+# results as no window at all, so the model's per-query dates and the lawyer's
+# date range, intersected into the same params, silently did nothing. **The
+# form that works is the advanced search's day/month/year triple,
+# `from_date_0/1/2` and `to_date_0/1/2`, and it is NOT in the published API
+# spec** (`public_api.yml` documents no date parameter at all; batch 5 C,
+# `docs/LEGAL_DATA_SOURCES.md` section 4). It is what the feed does, verified
+# live 2026-09-18 and 2026-10-05, and `tools/caselaw_probe.py` re-checks it, so
+# a withdrawal is seen rather than silently turning the filter off again.
+
+def _parse_case_law_date(value, end: bool):
+    """`YYYY-MM-DD`, or `YYYY-MM` / `YYYY` widened to the month or year (its
+    first day for a start, its last for an end). Raises ValueError otherwise."""
+    import calendar
+    import re as _re
+    from datetime import date
+
+    s = str(value).strip()
+    m = _re.fullmatch(r"(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?", s)
+    if not m:
+        raise ValueError(s)
+    y = int(m.group(1))
+    if m.group(3):
+        return date(y, int(m.group(2)), int(m.group(3)))
+    if m.group(2):
+        mo = int(m.group(2))
+        return date(y, mo, calendar.monthrange(y, mo)[1] if end else 1)
+    return date(y, 12, 31) if end else date(y, 1, 1)
+
+
+def case_law_date_window(args: dict, cfg: dict) -> dict:
+    """The date window a case-law search runs under, and the params that apply it.
+
+    The model's `date_from`/`date_to` are INTERSECTED with the lawyer's date
+    range (`_date_from`/`_date_to`): the later start and the earlier end win,
+    as before P3.9. Returns `{"params", "dates", "error"}`: `params` are the
+    feed's `from_date_0/1/2` / `to_date_0/1/2` (day, month, year); `dates` is
+    the applied window as ISO strings (None for an open end), for the result
+    and the window note; `error` is set, and nothing is to be sent, when a date
+    is not a date or the window is empty (a start after its end; the case-law
+    twin of `docs/TODO.md` D16 defect 1, which stays parked for legislation).
+    """
+    args, cfg = args or {}, cfg or {}
+    bounds = {}
+    for key, user_key, end in (("date_from", "_date_from", False),
+                               ("date_to", "_date_to", True)):
+        got = []
+        for who, raw in (("the dates asked for", args.get(key)),
+                         ("the lawyer's dates", cfg.get(user_key))):
+            if raw in (None, ""):
+                continue
+            try:
+                got.append(_parse_case_law_date(raw, end))
+            except ValueError:
+                return {"params": {}, "dates": None, "error": (
+                    f"{key} '{raw}' ({who}) is not a date in YYYY-MM-DD form, so "
+                    "no search was run. Search again with dates in that form.")}
+        bounds[key] = (min(got) if end else max(got)) if got else None
+    lo, hi = bounds["date_from"], bounds["date_to"]
+    if lo and hi and lo > hi:
+        both = bool(cfg.get("_date_from") or cfg.get("_date_to"))
+        return {"params": {}, "dates": None, "error": (
+            f"The date window is empty: it would run from {lo.isoformat()} to "
+            f"{hi.isoformat()}"
+            + (" once the dates asked for are combined with the dates the lawyer "
+               "set for this research" if both else "")
+            + ", so no search was run. Search again with a start date on or "
+              "before the end date.")}
+    params = {}
+    for prefix, d in (("from_date", lo), ("to_date", hi)):
+        if d:
+            params.update({f"{prefix}_0": str(d.day), f"{prefix}_1": str(d.month),
+                           f"{prefix}_2": str(d.year)})
+    dates = ({"from": lo.isoformat() if lo else None, "to": hi.isoformat() if hi else None}
+             if (lo or hi) else None)
+    return {"params": params, "dates": dates, "error": None}
+
+
 def _extract_judgment_text(xml_text: str) -> str:
     """Extract plain text from a LegalDocML (AKOMA NTOSO) XML judgment."""
     try:
@@ -181,12 +329,30 @@ def _extract_judgment_text(xml_text: str) -> str:
     return "\n".join(parts)
 
 
-async def _fetch_judgment_text(url: str) -> dict:
-    """Fetch and return the full text of a National Archives judgment via its data.xml URL."""
+async def _fetch_judgment_text(url: str, client: Optional[httpx.AsyncClient] = None) -> dict:
+    """Fetch and return the full text of a National Archives judgment via its data.xml URL.
+
+    P4.19: the GET goes through `_request_with_retry` (A5a), so a 429 under
+    the National Archives' per-IP limit (1,000 requests per rolling five
+    minutes) is retried with backoff, honouring `Retry-After`, instead of
+    reaching `raise_for_status()` as a dropped retrieval. `client` is the
+    executor's; without one, a client is opened here as before. The 15 s
+    timeout is kept per request, whichever client carries it.
+    """
+    # Imported here, not at the top: `executor` imports this module.
+    from .executor import _request_with_retry
+
     data_url = url.rstrip("/") + "/data.xml"
-    async with httpx.AsyncClient(timeout=15.0, verify=False) as client:
-        resp = await client.get(data_url)
-        resp.raise_for_status()
+    if client is None:
+        async with httpx.AsyncClient(timeout=15.0, verify=False) as own:
+            resp = await _request_with_retry(
+                own, "GET", data_url, name="get_case_law_text", timeout=15.0
+            )
+    else:
+        resp = await _request_with_retry(
+            client, "GET", data_url, name="get_case_law_text", timeout=15.0
+        )
+    resp.raise_for_status()
     text = _extract_judgment_text(resp.text)
     # Extract title (FRBRname/@value) and neutral citation (<uk:cite> text) from the
     # AKN judgment XML. Earlier code read the NCN from a non-existent /terms/v1 element,
