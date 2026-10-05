@@ -2358,6 +2358,18 @@ def _lookup_footer_clause(entries: Optional[list]) -> str:
     Worded clear of `NEG_ASSERTED` ("not held in THIS index", never "in the")
     and of `LK_FOOTER`'s sibling detectors, and pinned by
     `test_footer_trips_no_detector`.
+
+    P4.21: the not-held clause states only what the lookup established. It
+    used to end "that is a gap in the index, not a sign that the citation is
+    wrong", but a lookup that finds nothing cannot tell a missing instrument
+    from a mistyped number, so that was a default, not a finding (Thomas, 30
+    September; 69 stored answers). It now says the index is incomplete (true
+    of the index, `LEX_COVERAGE_SENTENCE`) and that this does not show whether
+    the number is accurate: neutral both ways, so it neither vouches for the
+    citation nor asks the lawyer to check it (P2.4's defect). "accurate", not
+    "right" or "correct", which `OPENER_VOCAB` reads as a concession. The
+    opening up to "not held in this index" is unchanged: `_EARLIER_LOOKUP`
+    parses it back out of an earlier answer, old wording and new.
     """
     rows = [e for e in _lookups(entries) if e.get("status") in (NOT_HELD, HELD_WITHOUT_TEXT)]
     if not rows:
@@ -2369,8 +2381,9 @@ def _lookup_footer_clause(entries: Optional[list]) -> str:
         bits.append(
             f" {_and_join(absent)} {'was' if len(absent) == 1 else 'were'} looked up by "
             f"{'its number' if len(absent) == 1 else 'their numbers'} and "
-            f"{'is' if len(absent) == 1 else 'are'} not held in this index; that is a gap "
-            "in the index, not a sign that the citation is wrong."
+            f"{'is' if len(absent) == 1 else 'are'} not held in this index, which is "
+            "incomplete; that does not show whether the "
+            f"{'number is' if len(absent) == 1 else 'numbers are'} accurate."
         )
     if stub:
         bits.append(

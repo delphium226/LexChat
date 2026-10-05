@@ -344,8 +344,8 @@ def test_the_footer_states_not_held_and_stub_and_is_silent_on_held():
                           _outcome("held_without_text", "ssi/2025/119", "SSI 2025/119"),
                           _outcome("held", "asp/2025/2", "2025 asp 2"))
     footer = answer_scope_footer(log)
-    assert ("SSI 2025/377 was looked up by its number and is not held in this index; that "
-            "is a gap in the index, not a sign that the citation is wrong.") in footer
+    assert ("SSI 2025/377 was looked up by its number and is not held in this index, which "
+            "is incomplete; that does not show whether the number is accurate.") in footer
     assert "SSI 2025/119 was looked up by its number: this index holds its record" in footer
     assert "asp 2" not in footer
     assert answer_scope_footer(searched + _log(_outcome("held", "asp/2025/2", "2025 asp 2"))) \
@@ -469,6 +469,63 @@ def test_the_footer_clause_trips_no_detector_and_is_stripped():
                                        + _log(_outcome("not_held"))),
                    lookup_scope_footer(_log(_outcome("not_held")))):
         assert _without_footer("Answer." + footer) == "Answer."
+
+
+# --- P4.21: the not-held clause says only what the lookup established ----------
+#
+# Thomas (30 September): "that is a gap in the index, not a sign that the
+# citation is wrong" was a default, not a finding; a lookup that finds nothing
+# cannot tell a missing instrument from a mistyped number. Synthetic ids only.
+
+def _syn(status="not_held", lid="ssi/1901/3", label="SSI 1901/3"):
+    return _outcome(status, lid, label)
+
+
+def test_p421_the_not_held_clause_states_what_the_lookup_established():
+    one = _lookup_footer_clause(_log(_syn()))
+    assert one == (" SSI 1901/3 was looked up by its number and is not held in this index, "
+                   "which is incomplete; that does not show whether the number is accurate.")
+    two = _lookup_footer_clause(_log(_syn(), _syn(lid="ssi/1902/4", label="SSI 1902/4")))
+    assert two == (" SSI 1901/3 and SSI 1902/4 were looked up by their numbers and are not "
+                   "held in this index, which is incomplete; that does not show whether the "
+                   "numbers are accurate.")
+    for clause in (one, two):
+        # Neither vouches for the citation (the defect) nor questions it (P2.4's).
+        assert "citation" not in clause
+        assert "not a sign" not in clause and "gap in the index" not in clause
+
+
+def test_p421_the_clause_neither_blames_the_citation_nor_concedes():
+    from tools.replay_report import (
+        LK_BLAME, NEG_BLAMED_USER, OPENER_VOCAB, _lk_classify, _sentences,
+    )
+
+    clause = _lookup_footer_clause(_log(_syn(), _syn("held_without_text", "ssi/1902/4",
+                                                     "SSI 1902/4")))
+    assert not LK_BLAME.search(clause) and not NEG_BLAMED_USER.search(clause)
+    # "accurate", never "right" or "correct", which the opener grader reads as
+    # a concession.
+    assert not OPENER_VOCAB.search(clause)
+    assert all(_lk_classify(s) != "blame" for s in _sentences(clause))
+
+
+def test_p421_an_earlier_footer_in_either_wording_is_read_back_and_restated_new():
+    """Answers stored before P4.21 carry the old clause, and a follow-up reads
+    them out of the history: the parse takes both, and restates in the new."""
+    from src.utils.search_scope import _earlier_lookups
+
+    old = ("\n\n*Search scope: no ranked search of the legislation index was run for this "
+           "reply. SSI 1901/3 was looked up by its number and is not held in this index; that "
+           "is a gap in the index, not a sign that the citation is wrong.*")
+    new = lookup_scope_footer(_log(_syn()))
+    for footer in (old, new):
+        got = _earlier_lookups([_assistant("X." + footer)])
+        assert [(e["label"], e["status"]) for e in got] == [("SSI 1901/3", "not_held")]
+    restated = lookup_scope_footer([], [_assistant("X." + old)])
+    assert ("Earlier in this conversation, SSI 1901/3 was looked up by its number and is not "
+            "held in this index, which is incomplete; that does not show whether the number "
+            "is accurate.") in restated
+    assert "not a sign" not in restated
 
 
 # --- the wiring decisions, each deliberate ------------------------------------
