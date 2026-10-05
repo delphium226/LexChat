@@ -1092,6 +1092,21 @@ def test_footer_trips_no_detector():
         assert not _CUR_DISCLOSED.search(clause)
     assert "no change record was consulted" not in _currency_footer_clause(consulted_log)
 
+    # P4.21: P3.7's lookup clause, both branches, so a detector added here
+    # screens it too.
+    from src.utils.search_scope import LOOKUP_ENTRY, _lookup_footer_clause
+    lookup_clause = _lookup_footer_clause([
+        {"tool": LOOKUP_ENTRY, "legislation_id": "ssi/1901/3", "label": "SSI 1901/3",
+         "status": "not_held"},
+        {"tool": LOOKUP_ENTRY, "legislation_id": "ssi/1901/4", "label": "SSI 1901/4",
+         "status": "held_without_text"}])
+    assert lookup_clause and not NEG_ASSERTED.search(lookup_clause)
+    assert derivation_claims(lookup_clause)[0] == []
+    assert not IN_FORCE_CLAIM.search(lookup_clause)
+    for s in _sentences(lookup_clause):
+        assert not (_CMC_CONTEXT.search(s) and _CMC_DENIED.search(s)), s
+        assert not _currency_asserted(s), s
+
 
 def test_the_enabling_block_is_stripped_before_a_lawyer_sees_it():
     """The block is an instruction to an agent. In research mode the Manager is
