@@ -201,6 +201,28 @@ _RELATIONSHIP_RULE = """COMMENCEMENT, AMENDMENT, REPEAL AND REVOCATION (relation
 # (`_slim_search_results`'s `text_version`, `_currency_limb`,
 # `_relation_currency_limb`, `_currency_footer_clause`). P2.2 measured the
 # instruction-only version of this shape at 56% compliance.
+#
+# FIX_PLAN P3.24: the one sentence beside the rule, inserted after its
+# `Commencement Order` bullet, so it reaches exactly the three Worker prompts
+# that carry `_IN_FORCE_RULE`. Thomas's retest (glm-5.2:cloud) listed
+# provisions as not yet commenced where the record showed only that no
+# commencement was recorded. It corrects (a) for the instrument's own
+# commencement provision (`self: true`, batch 6 B's F3) and says when a
+# negative may be read from the record. The load-bearing half is code: the
+# per-instrument line in `search_scope._currency_limb`, which goes to the agent
+# that writes the answer. The Worker never sees that line (it is appended to
+# its report, `agent_core.run_worker_agent`), so this sentence states the rule
+# in terms of the record the Worker does see. Screened against every detector
+# in `test_footer_trips_no_detector`, since a Worker can echo it.
+_COMMENCEMENT_RECORD_RULE = (
+    "- (a) counts only a relation made by ANOTHER instrument (`self: false`), never a "
+    "`self: true` one, which is the instrument's own commencement provision and says "
+    "how its provisions come into force, not whether they have; and a provision the "
+    "record does not list may be called \"not recorded as commenced\" only when its "
+    "relations by another instrument are all listed, so with only `self: true` "
+    "relations, none, a list cut short, or no change record consulted, do not state "
+    "whether a provision has been commenced."
+)
 _IN_FORCE_RULE = """IN-FORCE STATUS (whether legislation is current law):
 - NOTHING in your tool surface reports in-force status. `text_version` on a search result (`final`, `revised`, `stub`) records which text version the index holds — it is NOT an in-force flag. Never write that legislation is in force because its text version is `revised`, and never put a text version in brackets after an in-force statement.
 - NEVER write a blanket currency claim about an instrument or a body of legislation. The prohibition is on the PROPOSITION, not on a form of words: "the Act is in force", "all cited legislation is currently in force", "it is in operation", "it remains in force", "it is still good law", "it is current law", "its active status", "it continues to apply" are all the same claim and all forbidden. You cannot establish it, for any instrument, from anything you can retrieve.
@@ -211,6 +233,7 @@ _IN_FORCE_RULE = """IN-FORCE STATUS (whether legislation is current law):
   (c) a repeal or revocation marker in the index's own title, e.g. "Companies Act 1967 (repealed)" — treat that instrument as repealed.
   (d) the `valid_date` on a `get_legislation_text` response — the date the held text is stated to be up to date to. Say it as that, never as a date the legislation came into force.
 - `Commencement Order` is NOT (a). Those relations are commencement orders for an amendment made to the legislation by some other Act, and the provision against them is a placeholder. Never name one as having commenced the legislation you were asked about.
+""" + _COMMENCEMENT_RECORD_RULE + """
 - If you DID call `get_legislation_changes`, report what it holds before you report what it does not — the repeals it lists, the provisions it records as commenced, the commencement orders it names — and then say that current in-force status is not established. A tool called and not reported is worse than one not called.
 - If none of (a)-(d) was retrieved, say so: "in-force status was not verified — the legislation index does not report it, and no commencement or repeal record was retrieved for this instrument." Then say what would establish it. An honest "not verified" is the right answer here and is what these users have praised; a confident "in force" is the defect this rule exists to stop.
 - The defect is the UNSOURCED assertion, not the truth of it. "The Scotland Act 1998 is in force" happens to be true and you still may not assert it, because the same habit produced "all provisions cited are in force" about sections that had been repealed. State what the sources establish and let the lawyer draw the rest."""

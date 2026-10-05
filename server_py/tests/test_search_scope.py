@@ -1138,6 +1138,70 @@ def test_footer_trips_no_detector():
         assert not _currency_asserted(s), s
         assert negcurrency_claim(s)[0] is None, s
 
+    # P3.24: the per-instrument commencement line in `_currency_limb`, every
+    # case, and the prompt sentence beside `_IN_FORCE_RULE`. Neither is a
+    # footer, but the line sits in the scope block a Manager can echo into an
+    # answer and the sentence in a prompt a Worker can echo into a report, so
+    # both are screened as footer text, sentence by sentence, against every
+    # detector that reads answers. ("not recorded as commenced", the wording
+    # the line permits, is in `negcurrency`'s drop vocabulary by design: a
+    # statement about the record, never a claim.)
+    from src.prompts import _COMMENCEMENT_RECORD_RULE
+    from src.utils.search_scope import _commencement_lines
+    from tools.replay_report import (
+        HALT_AS_TIMEOUT, HALT_LITERAL, HALT_PARAPHRASE, NEG_BLAMED_INDEX,
+        NEG_BLAMED_USER, NEG_LIMITS, NEG_TERMS, NOT_FOUND, OPENER_VOCAB,
+    )
+
+    def _cif(lid, n, self_=False, cut=0, effect="coming into force", direction="to"):
+        g = {"legislation_id": lid, "self": self_, "type_of_effect": effect,
+             "count": n, "changes": [{"by": "reg. 2", "changed": ["s. 1"]}]}
+        if cut:
+            g["changes_not_listed"] = cut
+        return g
+
+    def _rec(lid, related, total, direction="to"):
+        return {"legislation_id": lid, "direction": direction, "relations": 9,
+                "provisions_commenced": total, "window_complete": True,
+                "related": related}
+
+    variants = {
+        "other_full": [_rec("asp/1901/1", [_cif("ssi/1901/3", 4)], 4)],
+        "other_cut": [_rec("asp/1901/2", [_cif("ssi/1901/3", 70, cut=10)], 70)],
+        "self_only": [_rec("asp/1901/4", [_cif("asp/1901/4", 9, self_=True)], 9)],
+        "unlisted": [_rec("asp/1901/5", [], 3)],
+        "none": [_rec("asp/1901/6", [_cif("ssi/1901/7", 2, effect="words substituted")], 0)],
+        "by": [_rec("ssi/1901/8", [_cif("asp/1901/9", 5)], 5, "by")],
+        "by, empty": [_rec("ssi/1901/10", [], 0, "by")],
+        "to and by": [_rec("asp/1901/6", [], 0),
+                      _rec("asp/1901/6", [_cif("asp/1901/9", 5)], 5, "by")],
+        "not consulted": [],
+        "overflow": [_rec(f"asp/1901/{20 + i}", [], 0) for i in range(14)],
+    }
+    screened = [_COMMENCEMENT_RECORD_RULE]
+    for name, recs in variants.items():
+        clog = []
+        for r in recs:
+            record_currency(clog, "get_legislation_changes",
+                            {"legislation_id": r["legislation_id"]}, r)
+        text = _commencement_lines(clog)
+        assert text, name
+        screened.append(text)
+    for text in screened:
+        assert not NEG_ASSERTED.search(text), text
+        assert not NOT_FOUND.search(text), text
+        assert derivation_claims(text)[0] == [], text
+        assert not IN_FORCE_CLAIM.search(text), text
+        assert not _CUR_DISCLOSED.search(text), text
+        for rx in (NEG_TERMS, NEG_LIMITS, NEG_BLAMED_INDEX, NEG_BLAMED_USER,
+                   HALT_LITERAL, HALT_PARAPHRASE, HALT_AS_TIMEOUT, OPENER_VOCAB):
+            assert not rx.search(text), (rx.pattern[:40], text)
+        assert _without_footer(text) == text.strip()
+        for s in _sentences(text):
+            assert not (_CMC_CONTEXT.search(s) and _CMC_DENIED.search(s)), s
+            assert not _currency_asserted(s), s
+            assert negcurrency_claim(s)[0] is None, s
+
 
 def test_the_enabling_block_is_stripped_before_a_lawyer_sees_it():
     """The block is an instruction to an agent. In research mode the Manager is

@@ -370,8 +370,12 @@ def test_the_limb_names_what_was_retrieved_when_something_was():
     log.append({"tool": "search_legislation", "query": "q", "shown": 5,
                 "matched": 9, "legislation_id": ""})
     limb = _currency_limb(log)
-    assert "Commencement relations WERE retrieved for asp/2025/2" in limb
-    assert "carry no dates" in limb
+    # P3.24: P2.5's "Commencement relations WERE retrieved for …" is now one
+    # line per instrument, computed from who made the relations
+    # (`tests/test_commencement_line.py`).
+    assert (": 1 commencement relation(s) made by another instrument, "
+            "all listed") in limb
+    assert "Neither carries a date." in limb
 
 
 def test_the_limb_carries_the_valid_date_as_a_text_version_date():
