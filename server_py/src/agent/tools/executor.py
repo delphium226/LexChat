@@ -597,7 +597,19 @@ async def execute_worker_tool(
                 })
 
                 t0 = time.perf_counter()
-                resp = await client.get(url, params=params, timeout=15.0)
+                # P4.19: through the retry helper, as every LEX call is. The
+                # National Archives publishes a limit of 1,000 requests per
+                # rolling five minutes per IP and answers it with a 429; the
+                # target is one IP for every user, so a direct `client.get`
+                # turned a 429 into a dropped retrieval. A 400 (an invalid
+                # court code) is not in `_RETRY_STATUS` and still returns at
+                # once to the branch below. The helper also retries a timeout
+                # or transport error, which is wanted here: the only failures
+                # in 1,149 stored calls were 3 DNS transport errors, and none
+                # reached the 15 s timeout (batch 7 D's note).
+                resp = await _request_with_retry(
+                    client, "GET", url, name=name, params=params, timeout=15.0
+                )
                 elapsed_ms = (time.perf_counter() - t0) * 1000
 
                 if timing_collector:
@@ -640,7 +652,9 @@ async def execute_worker_tool(
 
                 t0 = time.perf_counter()
                 try:
-                    result = await _fetch_judgment_text(url)
+                    # P4.19: the shared client, so the fetch can go through
+                    # `_request_with_retry` like the search above.
+                    result = await _fetch_judgment_text(url, client=client)
                 except httpx.HTTPStatusError as e:
                     result = {"error": f"HTTP {e.response.status_code} fetching judgment", "url": url, "text": ""}
                 except Exception as e:

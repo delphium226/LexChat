@@ -2,6 +2,7 @@
 
 import re
 import xml.etree.ElementTree as ET
+from typing import Optional
 
 import httpx
 
@@ -181,12 +182,30 @@ def _extract_judgment_text(xml_text: str) -> str:
     return "\n".join(parts)
 
 
-async def _fetch_judgment_text(url: str) -> dict:
-    """Fetch and return the full text of a National Archives judgment via its data.xml URL."""
+async def _fetch_judgment_text(url: str, client: Optional[httpx.AsyncClient] = None) -> dict:
+    """Fetch and return the full text of a National Archives judgment via its data.xml URL.
+
+    P4.19: the GET goes through `_request_with_retry` (A5a), so a 429 under
+    the National Archives' per-IP limit (1,000 requests per rolling five
+    minutes) is retried with backoff, honouring `Retry-After`, instead of
+    reaching `raise_for_status()` as a dropped retrieval. `client` is the
+    executor's; without one, a client is opened here as before. The 15 s
+    timeout is kept per request, whichever client carries it.
+    """
+    # Imported here, not at the top: `executor` imports this module.
+    from .executor import _request_with_retry
+
     data_url = url.rstrip("/") + "/data.xml"
-    async with httpx.AsyncClient(timeout=15.0, verify=False) as client:
-        resp = await client.get(data_url)
-        resp.raise_for_status()
+    if client is None:
+        async with httpx.AsyncClient(timeout=15.0, verify=False) as own:
+            resp = await _request_with_retry(
+                own, "GET", data_url, name="get_case_law_text", timeout=15.0
+            )
+    else:
+        resp = await _request_with_retry(
+            client, "GET", data_url, name="get_case_law_text", timeout=15.0
+        )
+    resp.raise_for_status()
     text = _extract_judgment_text(resp.text)
     # Extract title (FRBRname/@value) and neutral citation (<uk:cite> text) from the
     # AKN judgment XML. Earlier code read the NCN from a non-existent /terms/v1 element,
