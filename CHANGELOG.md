@@ -29,6 +29,18 @@ Saying honestly what was and was not found:
   (P4.17).
 - Don't say no change record was consulted when one was: say that the
   records consulted list neither a commencement nor a repeal (P4.18).
+- When an instrument cited by number is looked up and is not in the index,
+  say that it is not held in this index, which is incomplete, and that this
+  does not show whether the number is accurate. It used to say this was "not
+  a sign that the citation is wrong", which a lookup cannot establish (P4.21).
+
+Change records:
+- When listing the changes made to or by an instrument, keep each change with
+  the provision that made it, and say how many changes a long list leaves out.
+  The changed provisions and the provisions that changed them used to be two
+  separate lists, which lost which made which (one lawyer was given the wrong
+  provision for an insertion), and the second list was cut at six with no
+  count (P3.19).
 
 Interpretation. P3.17 and P3.3 stay open: P3.17's change fixed the turn it
 aimed at but has not met its acceptance.
@@ -50,7 +62,10 @@ whether the section-search scope line appears on exactly the replies that
 searched only within instruments (P4.17). The derivation grader no longer
 reads an application or appeal "made under section N" as a claim about what
 an instrument was made under, and the interpretation grader reads "on a third
-reading" (a numbered or contrasted reading) as a hedge (P3.3).
+reading" (a numbered or contrasted reading) as a hedge (P3.3). A new
+`replay_report negcurrency` lists every claim that a provision is not yet
+commenced, not in force or remains in force, and grades each against what the
+conversation retrieved; footer wording is now screened against it (P3.24).
 
 Planning tools only, no product change: a new `python -m tools.plan_lint`
 checks the fix plan's structure (one table cell per column, every row in the
