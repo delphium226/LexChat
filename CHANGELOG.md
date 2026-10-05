@@ -41,6 +41,29 @@ Change records:
   separate lists, which lost which made which (one lawyer was given the wrong
   provision for an insertion), and the second list was cut at six with no
   count (P3.19).
+- Say a provision is "not recorded as commenced" only where the change record
+  lists, in full, the commencements made by other instruments. An
+  instrument's own commencement provision says how its provisions come into
+  force, not whether they have, so it is no longer treated as evidence either
+  way; where no record was consulted, say neither (P3.24).
+
+Quick lookups:
+- The quick-lookup research step no longer reads an instrument's whole text,
+  which its own instructions forbade and which never included schedules or
+  annexes. An SI's own recital of its enabling power, and the date its held
+  text is up to date to, now come from the index record, looked up before the
+  SI is searched. The existing "in-force status is not something this index
+  reports" sentence therefore appears on more quick-lookup replies (P3.25).
+
+Case law:
+- Date ranges on a case-law search now apply. They never did: the National
+  Archives ignored the form we sent. A start date after the end date is
+  refused rather than searched (P3.9).
+- Say how many judgments matched a case-law search, not only how many were
+  shown, and that they are listed newest first, so a negative drawn from the
+  list says what was searched (P3.23).
+- Retry a case-law search or judgment fetch that hits the National Archives'
+  rate limit, as legislation calls already are (P4.19).
 
 Interpretation. P3.17 and P3.3 stay open: P3.17's change fixed the turn it
 aimed at but has not met its acceptance.
@@ -66,6 +89,11 @@ reading" (a numbered or contrasted reading) as a hedge (P3.3). A new
 `replay_report negcurrency` lists every claim that a provision is not yet
 commenced, not in force or remains in force, and grades each against what the
 conversation retrieved; footer wording is now screened against it (P3.24).
+It now reads the change record's new shape, where on the old reading a
+negative the record contradicted was graded supported (P3.24). The seam
+tools offer the quick-lookup Worker the same tool list the product does
+(P3.25). `python -m tools.lex_probe --caselaw` live-checks the case-law total
+and the date filter (P3.23, P3.9).
 
 Planning tools only, no product change: a new `python -m tools.plan_lint`
 checks the fix plan's structure (one table cell per column, every row in the
