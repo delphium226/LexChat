@@ -27,7 +27,10 @@ is also offered, so the Worker can look up an instrument it meets mid-run (a
 change record naming SSI 2025/377 is how 6409 turn 9 met it). No Worker prompt
 names the tool: Session 14 measured a prompt block moving the quick-lookup
 Worker to bullet lists and costing the lawyer case links, and Session 22 a
-prompt edit moving a call it was not aimed at.
+prompt edit moving a call it was not aimed at. (P3.25: the quick-lookup
+prompt now names it in two existing sentences, as the route to a recital and
+to `valid_date` in place of `get_legislation_text`, which that Worker is no
+longer offered. No rule tells it to call the tool.)
 
 This module holds the pure parts: parsing a citation out of a brief,
 normalising the tool's arguments, a lawyer-readable label, and the block. The
