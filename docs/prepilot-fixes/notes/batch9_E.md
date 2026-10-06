@@ -387,3 +387,35 @@ $10.83, 2b $1.45 / $1.96, 3 $0.69 / $1.13), more at the allowance for 6363 and 6
    1. **(Recommended) Fix it in a separate tooling commit before P3.24's next measurement**, with an
       identity run listing every verdict that moves (it is not in the exit-1 set).
    2. Leave it and note the gap on P3.24's row.
+
+## Follow-up (integrator)
+
+**The gap.** The integrator's mutant in `cmd_cmcdates` survived all 52 tests. It changed
+`not (args.negative_allows_supported and v == "SUPPORTED")` to `not (args.negative_allows_supported)`.
+No test ran `--negative-allows-supported`, so under that option an UNCLEAR or SUPPORTED_RAW_ONLY
+claim on the negative branch could pass, and nothing would notice.
+
+**Closed** with one parametrised test, `test_the_negative_branch_with_and_without_the_option`. It
+has 5 cases on a synthetic negative-branch session (`CMCDATE_NEGATIVE_BRANCH` monkeypatched), and
+each case runs once without the option and once with it:
+
+| Case | Verdict | Exit without the option | Exit with it |
+|---|---|---|---|
+| a date the source states | SUPPORTED | 1 | 0 |
+| a date stated for another instrument | UNCLEAR | 1 | 1 |
+| a date only in an unseen API response | SUPPORTED_RAW_ONLY | 1 | 1 |
+| a date no source states | UNSUPPORTED | 1 | 1 |
+| no date stated | none | 0 | 0 |
+
+**Mutants** (`python $S/mutants.py <worktree>`; every anchor asserted to occur exactly once, CRLF
+kept). **68 mutants, 0 survive.** The three that bear on the option:
+
+| Mutant | Tests failed | Which |
+|---|---|---|
+| The integrator's (the option passes every verdict) | 2 | the UNCLEAR and SUPPORTED_RAW_ONLY cases |
+| Mine on the option's argparse wiring (`action="store_false"`) | 2 | |
+| The earlier "option ignored" mutant | 2 | |
+
+The full revert fails 55 of 57 tests.
+
+**Tests:** 57 in the file. **Full suite on `lexchat_test_e`: 2539 passed.**

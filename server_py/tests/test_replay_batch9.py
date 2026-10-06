@@ -607,6 +607,36 @@ def test_the_command_fails_an_unsupported_claim_and_any_claim_on_the_negative_br
     assert rr.main(["--dir", str(silent), "cmcdates"]) == 0
 
 
+_NEG_OTHER = _tool("lookup_legislation", {}, {"legislation_id": "ssi/1901/9", "status": "held",
+                                              "title": "Gadget", "description": _DESC})
+
+
+@pytest.mark.parametrize("name,answer,tools,plain,allowing", [
+    ("supported", "SSI 1901/3 brought sections 1 and 2 into force on 10 May 1901.",
+     [_LOOKUP], 1, 0),
+    ("unclear", "SSI 1901/4 came into force on 10 May 1901.", [_NEG_OTHER], 1, 1),
+    ("raw only", "SSI 1901/3 brought sections 1 and 2 into force on 10 May 1901.",
+     [_search_leg(api_desc=_DESC)], 1, 1),
+    ("unsupported", "SSI 1901/3 brought sections 1 and 2 into force on 1 April 1901.",
+     [_LOOKUP], 1, 1),
+    ("no claim", "No commencement date is stated.", [_LOOKUP], 0, 0),
+])
+def test_the_negative_branch_with_and_without_the_option(
+        tmp_path, monkeypatch, name, answer, tools, plain, allowing):
+    """Only a SUPPORTED claim passes under --negative-allows-supported; an
+    UNCLEAR, SUPPORTED_RAW_ONLY or UNSUPPORTED one still fails; a turn
+    stating no date passes either way."""
+    monkeypatch.setattr(rr, "CMCDATE_NEGATIVE_BRANCH", {"9002"})
+    d = _write_dir(tmp_path / "neg", [_run([_turn(1, answer, tools)], session_id="9002")])
+    claims = rr.cmcdate_rows(_run([_turn(1, answer, tools)], session_id="9002"))[0]["claims"]
+    expected = {"supported": ["SUPPORTED"], "unclear": ["UNCLEAR"],
+                "raw only": ["SUPPORTED_RAW_ONLY"], "unsupported": ["UNSUPPORTED"],
+                "no claim": []}[name]
+    assert [c["verdict"] for c in claims] == expected
+    assert rr.main(["--dir", str(d), "cmcdates"]) == plain
+    assert rr.main(["--dir", str(d), "cmcdates", "--negative-allows-supported"]) == allowing
+
+
 def test_product_wording_states_no_commencement_date():
     """No product text a model can echo trips the claim detector today: the
     currency limb with a text-version date, the lawyer's footer clause, and
