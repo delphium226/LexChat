@@ -2005,21 +2005,35 @@ _SECTION_BUDGET_TOOL = "section_budget"
 
 
 def record_section_budget_stop(log: Optional[list], name: str, args: dict,
-                               budget: Optional[dict]) -> None:
-    """Record one section search the per-instrument budget refused. Never raises."""
+                               budget: Optional[dict], held: Optional[dict] = None) -> None:
+    """Record one section search the per-instrument budget refused. Never raises.
+
+    Batch 8 A2: `held` is what code's COMPLETE read of the instrument's
+    provision list in this worker run established
+    (`schedule_units.provision_list_facts`). Recorded as `provisions` and
+    `units` only when given, so the limb and the footer can say it; every
+    other entry is exactly as before.
+    """
     if log is None:
         return
     try:
         args = args or {}
         budget = budget or {}
-        log.append({
+        entry = {
             "tool": _SECTION_BUDGET_TOOL,
             "blocked_tool": name,
             "legislation_id": str(args.get("legislation_id") or "")[:60],
             "query": str(args.get("query") or "")[:200],
             "limit": budget.get("section_limit"),
             "run": budget.get("id"),
-        })
+        }
+        if held:
+            try:
+                entry.update({"provisions": int(held["provisions"]),
+                              "units": [str(u) for u in (held.get("units") or [])]})
+            except Exception:
+                pass            # the stop is still recorded, saying nothing new
+        log.append(entry)
     except Exception:
         pass
 
@@ -2040,6 +2054,70 @@ def _section_budget_limb(log: Optional[list]) -> str:
         rows = _section_budget_rows(log)
         if not rows:
             return ""
+        # Batch 8 A2: an instrument whose complete provision list code read in
+        # this run gets its own sentences; the rest keep the text below.
+        limit = next((e.get("limit") for e in rows if e.get("limit")), None)
+        held = {}
+        for lid, facts in list(_section_budget_held(rows).items())[:4]:
+            k = sum(1 for e in rows if _sb_lid(e) == lid)
+            text = _held_section_budget_limb(lid, facts, k, limit)
+            if text:
+                held[lid] = text
+        plain = [e for e in rows if _sb_lid(e) not in held]
+        parts = ([_plain_section_budget_limb(plain)] if plain else []) + list(held.values())
+        return " ".join(p for p in parts if p)
+    except Exception:
+        return ""
+
+
+def _sb_lid(e: dict) -> str:
+    return str(e.get("legislation_id") or "").strip()
+
+
+def _section_budget_held(rows: list) -> dict:
+    """lid -> {"provisions", "units"} for every refused instrument whose stop
+    recorded a complete code-read provision list (batch 8 A2), in order."""
+    out = {}
+    for e in rows:
+        lid = _sb_lid(e)
+        if lid and lid not in out and isinstance(e.get("provisions"), int):
+            out[lid] = {"provisions": e["provisions"], "units": list(e.get("units") or [])}
+    return out
+
+
+def _held_section_budget_limb(lid: str, facts: dict, k: int, limit) -> str:
+    """Batch 8 A2: the limb for one instrument whose complete provision list
+    code read before the cap stopped the step. Screened with the footer
+    (`test_footer_trips_no_detector`); "" when the facts are not usable."""
+    try:
+        from .schedule_units import provision_list_sentence
+        lid_c = lid.replace("[", "(").replace("]", ")")
+        fact = provision_list_sentence(lid_c, facts)
+        n = int(facts["provisions"])
+    except Exception:
+        return ""
+    if not fact:
+        return ""
+    return (
+        f"Searching within {lid_c} was stopped by this step's limit "
+        + (f"of {limit} rounds of section searches" if limit else "on section searches")
+        + f" on one instrument, and {k} further "
+        + ("section search it asked for was" if k == 1 else "section searches it asked for were")
+        + f" not run. Before that, code had read the index's complete provision list "
+        f"for {lid_c}: {fact}. The index holds only those {n:,} provisions for {lid_c}, "
+        "so the limit kept nothing outside that list from this step: if the answer you "
+        f"write speaks of a provision of {lid_c} outside that list, it must say what the "
+        f"index holds for {lid_c}, and must not put it down to the limit. Provisions in "
+        "that list that this step did not retrieve may still bear on the question: if "
+        "the answer reports one of them as absent or unretrieved, it MUST also say that "
+        "searching within the instrument was stopped by a limit before it finished."
+    )
+
+
+def _plain_section_budget_limb(rows: list) -> str:
+    """The limb as P3.1 wrote it, over the refused instruments with no
+    complete code-read provision list."""
+    try:
         limit = next((e.get("limit") for e in rows if e.get("limit")), None)
         ids = []
         for e in rows:
@@ -2086,7 +2164,29 @@ def _section_budget_footer_clause(entries: Optional[list]) -> str:
             + ("search of it was" if n == 1 else "searches of it were")
             + " not run, so the answer above may not cover every provision of "
             "that instrument."
+            + _held_section_budget_footer(rows)
         )
+    except Exception:
+        return ""
+
+
+def _held_section_budget_footer(rows: list) -> str:
+    """Batch 8 A2: for each refused instrument (at most 3) whose complete
+    provision list code read before the cap stopped the step, what that list
+    established, after the clause above. "" when there is none."""
+    try:
+        from .schedule_units import provision_list_sentence
+        out = []
+        for lid, facts in list(_section_budget_held(rows).items())[:3]:
+            lid_c = lid.replace("[", "(").replace("]", ")")
+            fact = provision_list_sentence(lid_c, facts)
+            if fact:
+                out.append(
+                    f" For {lid_c}, the index's complete list of provisions had been "
+                    f"read before that cap was reached: {fact}, so the cap did not "
+                    "cause any provision outside that list to be missed."
+                )
+        return "".join(out)
     except Exception:
         return ""
 

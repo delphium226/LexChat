@@ -71,6 +71,8 @@ __all__ = [
     "unit_without_text_line",
     "instrument_without_text_line",
     "fetch_failed_line",
+    "provision_list_facts",
+    "provision_list_sentence",
     "bare_schedule_action",
     "row_unit",
     "sole_schedule_reason",
@@ -322,9 +324,23 @@ _SCH_LABEL = r"([A-Z]{0,3}\d{1,3}[A-Z]{0,4}|[A-Z]\d?)\b"
 _SCH_RX = re.compile(_SCH_WORD + r"[ \t]*" + _SCH_LABEL)
 _PARA_WORD = r"\b(?i:paragraphs?|paras?\.?|para\b|¶)"
 _PNUM = r"\d{1,3}[A-Z]{0,2}"
+# Batch 8 A2: a further number joined by spaces alone ("paragraphs 12 13 14",
+# which the Worker writes as often as "12, 13 and 14"). Read only as a whole
+# token: never the start of a longer number, a year or a citation ("1990",
+# "2009/12", "1.5"), and never a day of a date or a count ("1 April",
+# "14 days", "5 per cent"). `_paragraphs` also stops such a run where it stops
+# ascending.
+_NOT_A_PARA_NEXT = (
+    r"[ \t]+(?i:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|"
+    r"aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|"
+    r"days?|weeks?|months?|years?|hours?|minutes?|per|percent)\b"
+)
+_SPACE_PNUM = (r"[ \t]+" + _PNUM + r"(?:\([^)]{1,6}\))*"
+               r"(?![0-9A-Za-z/%]|[.:]\d|[ \t]*%|" + _NOT_A_PARA_NEXT + r")")
 _PARA_RX = re.compile(
     _PARA_WORD + r"[ \t]*(" + _PNUM + r"(?:\([^)]{1,6}\))*"
-    r"(?:[ \t]*(?:,|and|to|-|–|&)[ \t]*(?:and[ \t]+)?" + _PNUM + r"(?:\([^)]{1,6}\))*)*)"
+    r"(?:[ \t]*(?:,|and|to|-|–|&)[ \t]*(?:and[ \t]+)?" + _PNUM + r"(?:\([^)]{1,6}\))*"
+    r"|" + _SPACE_PNUM + r")*)"
 )
 _SCH_PART_RX = re.compile(
     _SCH_WORD + r"[ \t]*[A-Z]{0,3}\d{1,3}[A-Z]{0,4}[ \t,]+"
@@ -340,6 +356,27 @@ _MAX_PARAGRAPHS = 4
 _MAX_UNITS = 2
 
 
+def _expand_range(a: str, b: str) -> list:
+    if a.isdigit() and b.isdigit() and 0 < int(b) - int(a) <= 6:
+        return [str(i) for i in range(int(a), int(b) + 1)]
+    return [a, b]
+
+
+def _space_run(piece: str) -> list:
+    """A run of paragraph numbers joined by spaces alone ("12 13 14", or
+    "12 13 to 15"), read only while it ascends: a number that does not follow
+    the one before it ends the run, so a stray number never joins it."""
+    out, prev = [], None
+    for m in re.finditer(rf"({_PNUM})(?:[ \t]*(?:to|-|–)[ \t]*({_PNUM}))?", piece):
+        first = int(re.match(r"\d+", m.group(1)).group())
+        if prev is not None and first <= prev:
+            break
+        items = _expand_range(m.group(1), m.group(2)) if m.group(2) else [m.group(1)]
+        out.extend(items)
+        prev = int(re.match(r"\d+", items[-1]).group())
+    return out
+
+
 def _paragraphs(query: str) -> tuple:
     """The schedule paragraph numbers a query names, ranges expanded, capped."""
     out = []
@@ -351,14 +388,12 @@ def _paragraphs(query: str) -> tuple:
                 continue
             rng = re.fullmatch(rf"({_PNUM})[ \t]*(?:to|-|–)[ \t]*({_PNUM})", p)
             if rng:
-                a, b = rng.group(1), rng.group(2)
-                if a.isdigit() and b.isdigit() and 0 < int(b) - int(a) <= 6:
-                    out.extend(str(i) for i in range(int(a), int(b) + 1))
-                else:
-                    out.extend([a, b])
+                out.extend(_expand_range(rng.group(1), rng.group(2)))
                 continue
             if re.fullmatch(_PNUM, p):
                 out.append(p)
+                continue
+            out.extend(_space_run(p))
     seen = []
     for p in out:
         if p not in seen:
@@ -740,11 +775,68 @@ def unit_absent_line(lid: str, unit: ScheduleUnit, rows: list, complete: bool) -
     # The labels come from LEX's own uris, so they are cleaned like the id:
     # a bracket in one would end `_TOOL_BLOCK`'s match early (batch 8 review).
     inv = [_clean(name, 40) for name in unit_inventory(rows)]
-    held = (f"its schedules and annexes among them are {_and_join(inv)}" if inv
-            else "none of them is a schedule or an annex")
     return (f"\n\n{FETCHED_OPEN}the index holds {len(rows):,} provisions for {lid_c}, "
-            f"and {held}: {name} is not one of them. This search's results "
+            f"and {_held_clause(inv)}: {name} is not one of them. This search's results "
             "left it out for that reason.]")
+
+
+def _held_clause(inv: list, cap: Optional[int] = None) -> str:
+    """What a complete provision list holds besides its sections: "its
+    schedules and annexes among them are ..." or "none of them is a schedule
+    or an annex". With `cap`, at most that many names, then "and N more"."""
+    if not inv:
+        return "none of them is a schedule or an annex"
+    names = list(inv)
+    if cap is not None and len(names) > cap:
+        names = names[:cap] + [f"{len(inv) - cap} more"]
+    return f"its schedules and annexes among them are {_and_join(names)}"
+
+
+# ---------------------------------------------------------------------------
+# Batch 8 A2: what a complete code-read provision list establishes when P3.1's
+# section-search cap stops a Worker on that instrument
+# ---------------------------------------------------------------------------
+#
+# In the sweep (Session 40) a Worker was told in code, correctly, that the
+# index holds no schedule for an instrument (the P3.12 line above), kept
+# searching it, hit P3.1's cap, and the cap's text ("may still be in it") won:
+# the answers put the missing Schedule down to the limit. Where code has read
+# the instrument's COMPLETE provision list in the same worker run, the cap's
+# refusal, the scope block's limb and the lawyer's footer clause now say what
+# that list established. A list cut short, failed or without text says
+# nothing new (`provision_list_facts` returns None).
+
+_MAX_HELD_NAMED = 8
+
+
+def provision_list_facts(outcome: Any) -> Optional[dict]:
+    """`{"provisions": N, "units": [...]}` from a provision-list outcome
+    (`executor.fetch_provision_list`) that came back COMPLETE with rows; None
+    for anything else. Never raises."""
+    try:
+        if not isinstance(outcome, dict) or outcome.get("status") != "ok" \
+                or outcome.get("complete") is not True:
+            return None
+        rows = outcome.get("rows")
+        if not isinstance(rows, list) or not rows:
+            return None
+        return {"provisions": len(rows),
+                "units": [_clean(n, 40) for n in unit_inventory(rows)][:_MAX_LISTED]}
+    except Exception:
+        return None
+
+
+def provision_list_sentence(lid: str, facts: dict) -> str:
+    """"the index holds N provisions for <lid>, and none of them is a
+    schedule or an annex" (or names its schedules and annexes). No full stop,
+    no bracket. "" when `facts` is not usable."""
+    try:
+        n = int(facts["provisions"])
+        units = [str(u) for u in (facts.get("units") or [])]
+    except Exception:
+        return ""
+    return (f"the index holds {n:,} provisions for {_clean(lid, 60)}, "
+            f"and {_held_clause(units, cap=_MAX_HELD_NAMED)}")
 
 
 def unit_without_text_line(lid: str, unit: ScheduleUnit) -> str:

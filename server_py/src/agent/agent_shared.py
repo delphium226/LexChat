@@ -30,6 +30,7 @@ from ..utils.schedule_units import (
     instrument_without_text_line,
     named_units,
     pick_provision,
+    provision_list_facts,
     schedules_note,
     unit_absent_line,
     unit_in_results,
@@ -509,6 +510,28 @@ def _worker_tool_key_arg(args: dict) -> Optional[str]:
 MAX_PROVISION_FETCHES = MAX_ROUTED_LOOKUPS
 
 
+def provision_fetch_key(args) -> str:
+    """The key `provision_fetches` holds an instrument under: the canonical
+    id where the argument parses, else the argument as given. One definition,
+    so the route that fills the dict and the cap that reads it agree."""
+    ref = lookup_args({"legislation_id": args.get("legislation_id")})
+    return lookup_legislation_id(ref) if ref else str(args.get("legislation_id") or "").strip()
+
+
+def held_provision_list(fetches: Optional[dict], args) -> Optional[dict]:
+    """Batch 8 A2: what code's COMPLETE read of this instrument's provision
+    list, earlier in the same worker run, established
+    (`schedule_units.provision_list_facts`), or None: no dict, no read yet
+    (or one still in flight), a list cut short, failed or without text.
+    Never raises."""
+    try:
+        if not fetches or not isinstance(args, dict):
+            return None
+        return provision_list_facts(fetches.get(provision_fetch_key(args)))
+    except Exception:
+        return None
+
+
 async def schedule_route_block(
     name: str,
     args: dict,
@@ -544,8 +567,7 @@ async def schedule_route_block(
              if unit_in_results(raw_result, u) is False]
     if not units:
         return ""
-    ref = lookup_args({"legislation_id": args.get("legislation_id")})
-    lid = lookup_legislation_id(ref) if ref else str(args.get("legislation_id") or "").strip()
+    lid = provision_fetch_key(args)
     if not lid:
         return ""
     if lid not in fetches:
@@ -736,8 +758,12 @@ async def run_worker_tool(
             refusal = (legislation_stop_message(search_budget),
                        "Discovery budget spent", "Search limit reached")
         elif section_budget_blocks(search_budget, name, args):
-            record_section_budget_stop(search_log, name, args, search_budget)
-            refusal = (section_stop_message(search_budget, args),
+            # Batch 8 A2: where code has read this instrument's complete
+            # provision list in this run, the refusal, the scope record and
+            # the footer say what it holds (None: exactly as before).
+            held = held_provision_list(provision_fetches, args)
+            record_section_budget_stop(search_log, name, args, search_budget, held=held)
+            refusal = (section_stop_message(search_budget, args, held=held),
                        "Section budget spent for this instrument",
                        "Section-search limit reached")
     if refusal is not None:

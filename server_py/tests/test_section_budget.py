@@ -543,3 +543,256 @@ def test_a_broken_clause_never_costs_the_footer(monkeypatch):
     log = _leg("q") + _stops(FOISA)
     assert "*Search scope:" in answer_scope_footer(log, {})
     assert "[SEARCH SCOPE" in worker_scope_block(log, {})
+
+
+# ---------------------------------------------------------------------------
+# 8. Batch 8 A2: the cap on an instrument whose COMPLETE provision list code
+#    read in the same worker run (P3.12's route) says what that list holds
+# ---------------------------------------------------------------------------
+#
+# The integrator's sweep: told in code that the index holds no schedule for an
+# instrument, a Worker kept searching it, hit this cap, and the cap's text
+# ("may still be in it") won, so the answer put the missing Schedule down to
+# the limit. Synthetic ids only.
+
+LID = "ssi/1901/3"
+OTHER = "ssi/1901/4"
+URI = f"http://www.legislation.gov.uk/id/{LID}"
+NONE_HELD = {"provisions": 3, "units": []}
+SOME_HELD = {"provisions": 6, "units": ["Schedule 2", "Annex II"]}
+
+_OLD_STOP = (
+    '{"notice": "Section-search limit reached: this research step has already searched '
+    'within ssi/1901/4 in 3 rounds, the most one step may use on one instrument. This '
+    'search was NOT run.", "searched": false, "legislation_id": "ssi/1901/4", '
+    '"instruction": "Do not call search_legislation_sections for this legislation_id '
+    'again in this step. Work from the provisions your earlier searches of it returned, '
+    'then write your report. If a provision you need was not among them, your report '
+    'must say that it was not retrieved because searching within this instrument was cut '
+    'short by a limit, and name the provision you were looking for. Do not say that the '
+    'instrument does not contain it."}')
+_OLD_LIMB = (
+    "Searching within ssi/1901/4 was cut short: this step used its limit of 3 rounds of "
+    "section searches on that instrument, and 1 further section search it asked for was "
+    "not run. Provisions this step did not retrieve may still be in it. If the answer "
+    "you write reports a provision of it as absent or not found, it MUST also say that "
+    "searching within the instrument was stopped by a limit before it finished.")
+_OLD_CLAUSE = (
+    " Searching within an instrument was also limited: one research step reached the cap "
+    "on how many times a step may search inside one instrument, and 1 further search of "
+    "it was not run, so the answer above may not cover every provision of that instrument.")
+_FACT_NONE = ("the index holds 3 provisions for ssi/1901/3, and none of them is a "
+              "schedule or an annex")
+
+
+def _held_stops(lid, held, n=1, run="r1"):
+    log = []
+    for _ in range(n):
+        record_section_budget_stop(log, "search_legislation_sections",
+                                   {"legislation_id": lid, "query": "q"},
+                                   {"section_limit": 3, "id": run}, held=held)
+    return log
+
+
+def _sched_classes(text):
+    import re as _re
+    return [c for c, _, _ in rr.sched_unit_clauses(
+        text, _re.compile(r"\b(?:schedules?|annex(?:es)?)\b", _re.I))]
+
+
+def test_without_a_complete_list_the_stop_limb_and_clause_are_exactly_as_before():
+    b = {"section_limit": 3}
+    for held in (None, {}, {"provisions": "three"}, {"units": []}):
+        assert section_stop_message(b, {"legislation_id": OTHER}, held=held) == _OLD_STOP
+    assert section_stop_message(b, {"legislation_id": OTHER}) == _OLD_STOP
+    log = _held_stops(OTHER, None)
+    assert log == _stops(OTHER)
+    assert _section_budget_limb(log) == _OLD_LIMB
+    assert _section_budget_footer_clause(log) == _OLD_CLAUSE
+
+
+def test_a_complete_code_read_list_is_what_the_stop_states():
+    msg = json.loads(section_stop_message({"section_limit": 3}, {"legislation_id": LID},
+                                          held=NONE_HELD))
+    assert msg["searched"] is False and "results" not in msg and "total" not in msg
+    assert "NOT run" in msg["notice"]
+    assert msg["provision_list"] == (
+        "Code has already read the index's complete provision list for ssi/1901/3 in "
+        f"this step: {_FACT_NONE}.")
+    ins = msg["instruction"]
+    assert ins.startswith("Do not call search_legislation_sections for this legislation_id")
+    assert ("The index holds only the 3 provisions in that list for ssi/1901/3, so this "
+            "limit kept nothing outside that list from you") in ins
+    assert "do not put it down to this limit" in ins
+    # The old text that won in the sweep is gone; a listed provision the step
+    # did not reach is still put down to the limit.
+    assert "Do not say that the instrument does not contain it" not in ins
+    assert "If a provision you need is in that list" in ins and "cut short by a limit" in ins
+    some = json.loads(section_stop_message({"section_limit": 3}, {"legislation_id": LID},
+                                           held=SOME_HELD))
+    assert some["provision_list"].endswith(
+        "the index holds 6 provisions for ssi/1901/3, and its schedules and annexes among "
+        "them are Schedule 2 and Annex II.")
+    assert _sched_classes(msg["provision_list"]) == ["INDEX"]
+
+
+@pytest.mark.parametrize("outcome,facts", [
+    ({"status": "ok", "complete": True, "rows": [{"uri": f"{URI}/article/1"}]},
+     {"provisions": 1, "units": []}),
+    ({"status": "ok", "complete": True,
+      "rows": [{"uri": f"{URI}/article/1"}, {"uri": f"{URI}/schedule/2"}]},
+     {"provisions": 2, "units": ["Schedule 2"]}),
+    ({"status": "ok", "complete": False, "rows": [{"uri": f"{URI}/article/1"}]}, None),
+    ({"status": "ok", "complete": True, "rows": []}, None),
+    ({"status": "failed"}, None),
+    ({"status": "failed", "text": None}, None),
+    ({"status": "no_text"}, None),
+    (None, None),
+    ("ok", None),
+])
+def test_only_a_complete_list_with_rows_establishes_anything(outcome, facts):
+    from src.utils.schedule_units import provision_list_facts
+    assert provision_list_facts(outcome) == facts
+
+
+def _route_stub(monkeypatch, rows):
+    """The route's `/section/lookup` call answered with `rows`; the section
+    search itself returns one article and no schedule."""
+    from src.agent.tools import executor
+    import httpx
+    asked = []
+
+    async def fake_retry(client, method, url, *, name="", **kwargs):
+        asked.append(url)
+        return httpx.Response(200, json=rows, request=httpx.Request(method, url))
+
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
+        return json.dumps({"results": [{
+            "legislation_id": LID, "provision_type": "section", "number": 1,
+            "title": "Citation", "url": f"{URI}/article/1",
+            "text": "Section 1) Citation\n1) Widget Order 1901."}], "returned": 1})
+
+    monkeypatch.setattr(executor, "_request_with_retry", fake_retry)
+    monkeypatch.setattr(agent_shared, "execute_worker_tool", fake_exec)
+    return asked
+
+
+_THREE = [{"uri": f"{URI}/article/{i}", "text": f"Section {i}) x"} for i in (1, 2, 3)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route_spelling,cap_spelling", [(URI, LID), (LID, URI)])
+async def test_the_stop_reads_the_list_the_route_read_in_this_run(
+        monkeypatch, route_spelling, cap_spelling):
+    """The real wiring: the route fills `provision_fetches` on a section search
+    naming "the Schedule"; the cap, three rounds later, reads it, however the
+    route and the cap were each handed the instrument (an id or a URL)."""
+    asked = _route_stub(monkeypatch, _THREE)
+    b, log, fetches = new_search_budget("legislation_only"), [], {}
+    outs = []
+    for rnd, lid in enumerate([route_spelling] * 3 + [cap_spelling]):
+        set_react_round(rnd)
+        outs.append(await run_worker_tool(
+            "search_legislation_sections", {"legislation_id": lid, "query": "the Schedule widgets"},
+            "brief", _chunk, "test-model", search_budget=b, search_log=log,
+            provision_fetches=fetches))
+    assert "none of them is a schedule or an annex: the Schedule is not one of them" in outs[0]
+    assert len(asked) == 1                       # one list read for the run
+    stop = json.loads(outs[3])
+    assert stop["searched"] is False
+    assert stop["provision_list"].endswith(
+        f"the index holds 3 provisions for {cap_spelling}, and none of them is a "
+        "schedule or an annex.")
+    (row,) = [e for e in log if e["tool"] == "section_budget"]
+    assert (row["provisions"], row["units"]) == (3, [])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fetches", [
+    None,
+    {},
+    {LID: {"status": "ok", "complete": False, "rows": _THREE}},
+    {LID: {"status": "failed", "text": None}},
+    {LID: {"status": "no_text"}},
+    {"ssi/1901/9": {"status": "ok", "complete": True, "rows": _THREE}},
+])
+async def test_a_list_cut_short_failed_absent_or_for_another_instrument_changes_nothing(
+        monkeypatch, fetches):
+    _route_stub(monkeypatch, _THREE)
+    b, log = new_search_budget("legislation_only"), []
+    b["section_rounds"][LID] = {0, 1, 2}
+    set_react_round(3)
+    out = await run_worker_tool(
+        "search_legislation_sections", {"legislation_id": LID, "query": "widgets"},
+        "brief", _chunk, "test-model", search_budget=b, search_log=log,
+        provision_fetches=fetches)
+    assert out == section_stop_message(b, {"legislation_id": LID})
+    assert "provision_list" not in json.loads(out)
+    (row,) = [e for e in log if e["tool"] == "section_budget"]
+    assert "provisions" not in row and "units" not in row
+
+
+def test_the_limb_states_the_list_for_that_instrument_and_keeps_the_rest():
+    limb = _section_budget_limb(_held_stops(LID, NONE_HELD, n=2))
+    assert limb.startswith(
+        "Searching within ssi/1901/3 was stopped by this step's limit of 3 rounds of "
+        "section searches on one instrument, and 2 further section searches it asked for "
+        "were not run.")
+    assert ("Before that, code had read the index's complete provision list for "
+            f"ssi/1901/3: {_FACT_NONE}.") in limb
+    assert ("so the limit kept nothing outside that list from this step: if the answer "
+            "you write speaks of a provision of ssi/1901/3 outside that list, it must say "
+            "what the index holds for ssi/1901/3, and must not put it down to the limit.") in limb
+    assert "may still be in it" not in limb
+    # A listed provision the step did not reach is still the limit's.
+    assert "Provisions in that list that this step did not retrieve may still bear" in limb
+    assert "INDEX" in _sched_classes(limb) and "LIMIT" not in _sched_classes(limb)
+    mixed = _section_budget_limb(_stops(OTHER) + _held_stops(LID, NONE_HELD))
+    assert mixed.startswith(_OLD_LIMB + " Searching within ssi/1901/3 was stopped")
+    assert mixed.count("may still be in it") == 1
+
+
+def test_the_footer_clause_adds_what_the_list_established():
+    clause = _section_budget_footer_clause(_held_stops(LID, NONE_HELD))
+    assert clause == (
+        _OLD_CLAUSE + " For ssi/1901/3, the index's complete list of provisions had been "
+        f"read before that cap was reached: {_FACT_NONE}, so the cap did not cause any "
+        "provision outside that list to be missed.")
+    assert "LIMIT" not in _sched_classes(clause)
+    assert "INDEX" in _sched_classes(clause)
+    log = _leg("widgets") + _secs(LID) + _held_stops(LID, SOME_HELD)
+    fresh = answer_scope_footer(log, {})
+    assert "its schedules and annexes among them are Schedule 2 and Annex II, so the cap" in fresh
+    assert fresh.strip().count("\n") == 0 and fresh.count("*Search scope:") == 1
+    prose = "Article 1 cites the Widget Order 1901."
+    assert rr._without_footer(prose + fresh) == prose
+    assert strip_answer_footer(prose + fresh) == prose
+    (parsed,) = _earlier_footers([{"role": "user", "content": "q"},
+                                  {"role": "assistant", "content": prose + fresh}])
+    assert parsed["terms"] == ["widgets"]
+
+
+@pytest.mark.asyncio
+async def test_a_worker_run_carries_the_list_to_its_block(monkeypatch):
+    """End to end through `run_worker_agent`: the refusal the Worker reads
+    (its tool result) and the limb the Manager reads (the block on the
+    report) both state the list, from the route's one read."""
+    _route_stub(monkeypatch, _THREE)
+    seen = []
+    set_request_provider_config({"_provider": "openrouter", "_research_mode": "legislation_only",
+                                 "model": "test-model", "_tool_memo_enabled": False})
+
+    async def loop(messages, model, cancel_event, num_ctx, tools, executor,
+                   on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False):
+        for i in range(4):
+            set_react_round(i)
+            seen.append(await executor("search_legislation_sections",
+                                       {"legislation_id": LID, "query": f"the Schedule {i}"}))
+        return {"role": "assistant", "content": (
+            "1. **Summary Answer (BLUF):** Article 1 applies.\n2. **References:** None.")}
+
+    result = await run_worker_agent(loop, lambda *a, **k: None, "q", "test-model", None, 0)
+    assert json.loads(seen[3])["provision_list"].endswith(f"{_FACT_NONE}.")
+    assert f"Before that, code had read the index's complete provision list for {LID}" \
+        in result["content"]
+    assert "may still be in it" not in result["content"]
