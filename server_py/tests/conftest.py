@@ -145,6 +145,28 @@ async def _clean_tables():
     yield
 
 
+@pytest.fixture(autouse=True)
+def _commencement_dates_offline(monkeypatch):
+    """FIX_PLAN P3.21: no test reaches the network through the commencement-date
+    hop. `get_legislation_changes` now reads legislation.gov.uk through LEX's
+    proxy with its own client, which a test that patches `_request_with_retry`
+    does not cover; by default that client refuses every request, so the hop
+    reports the dates as not retrieved. `tests/test_commencement_dates.py`
+    patches `_client` itself to serve synthetic feeds."""
+    import httpx as _httpx
+
+    from src.agent.tools import commencement_dates as _cd
+
+    def _refuse(request):
+        raise _httpx.ConnectError("network disabled in tests", request=request)
+
+    monkeypatch.setattr(
+        _cd, "_client",
+        lambda: _httpx.AsyncClient(transport=_httpx.MockTransport(_refuse)))
+    # The process-level made-date store, emptied for each test.
+    monkeypatch.setattr(_cd, "_MADE_CACHE", {})
+
+
 @pytest_asyncio.fixture
 async def db_session():
     """Provide a DB session for each test."""

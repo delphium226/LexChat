@@ -32,6 +32,7 @@ from .caselaw import (
     case_law_count,
     case_law_date_window,
 )
+from .commencement_dates import add_commencement_dates
 from .lex import (
     LEX_API_URL,
     _TYPE_CODES,
@@ -516,6 +517,17 @@ async def execute_worker_tool(
                     )
                     if not slimmed["window_complete"]:
                         slimmed["window_size"] = requested
+                # P3.21: the date of each commencement made by another
+                # instrument, from legislation.gov.uk's Changes to Legislation
+                # record read through LEX's proxy (one feed per change record,
+                # memoised per request, at most 2 pages, 8 s, fail-soft, no
+                # date before the instrument's made date). A record with no such
+                # relation, or direction "by", comes back untouched. See
+                # `commencement_dates.py`.
+                slimmed = await add_commencement_dates(
+                    slimmed, on_chunk=on_chunk, timing_collector=timing_collector,
+                    call_id=call_id, tool_name=name,
+                )
                 return json.dumps(slimmed)
 
             elif name == LOOKUP_TOOL:

@@ -353,7 +353,11 @@ _TYPE_CODES: dict[str, set[str]] = {
 # There is **no date** on a relation row (confirmed at P5.1 and again here), so
 # this tool can establish that s. 9 was commenced by `ssi/2025/119` and never
 # that it came into force on a given day. That bears on P2.5, and the tool block
-# says it in terms.
+# says it in terms. **P3.21:** the date now comes from a second source, after
+# this slimmer: `commencement_dates.add_commencement_dates` reads legislation.
+# gov.uk's Changes to Legislation record and adds `in_force` to the `changes`
+# entries it can date (the executor's `get_legislation_changes` branch). The
+# row itself still carries none.
 
 # **Provision labels, not provision URLs, and that is a decision rather than an
 # omission.** Emitting a URL beside every listed provision costs 45-70 KB on the

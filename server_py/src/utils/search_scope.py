@@ -726,6 +726,125 @@ def _enabling_limb(log: Optional[list]) -> str:
 _EFFECT_NOT_STATED = "not stated"
 
 
+# ---------------------------------------------------------------------------
+# P3.21 — the commencement DATE, where code retrieved one
+# ---------------------------------------------------------------------------
+#
+# `agent/tools/commencement_dates.py` adds, after a change record whose listed
+# relations include a commencement made by another instrument, the date
+# legislation.gov.uk's Changes to Legislation record gives for each of them
+# (`in_force` and `qualification` on the `changes` entry) and a result-level
+# `commencement_dates` status. Every sentence in this module that says the
+# record carries no dates is true of the relations themselves and false of a
+# record that hop dated, so each is GATED on the hop's result (P3.20's
+# pattern): unchanged where no hop ran or it dated nothing, and, where it
+# dated something, saying that a date is when the named instrument brought a
+# provision into force, with its source and qualification, and never that the
+# provision is in force today (P2.5; the repeal half is unchanged: no repeal is
+# dated). This module depends on nothing in the agent package, so it reads the
+# hop's output by its keys. Every new sentence is screened against every
+# detector in `tests/test_commencement_dates.py`.
+_DATE_RECORD = "legislation.gov.uk's Changes to Legislation record"
+
+# The hop's not-retrieved reasons, as a sentence. Worded without "timed out"
+# (`HALT_AS_TIMEOUT` reads answers for that) and without "not retrieved"
+# (`NOT_FOUND`): a Worker can echo this.
+_HOP_REASONS = {
+    "no_reply": "the record did not answer within 8 seconds",
+    "unreadable": "what came back was not a readable record",
+    "error": "the request failed",
+}
+
+
+def _hop_reason(reason: Any) -> str:
+    r = str(reason or "error")
+    if r.startswith("http_") and r[5:].isdigit():
+        return f"the record answered with an error, HTTP {r[5:]}"
+    return _HOP_REASONS.get(r, _HOP_REASONS["error"])
+
+
+def _commencement_dates(d: dict) -> dict:
+    """What P3.21's hop did to one change record, read off the record.
+
+    `status` is None where no hop ran (no ``commencement_dates`` key), else the
+    hop's own status. `dated` is the number of listed commencement relations it
+    dated, and is 0 unless an entry really carries an ``in_force`` (the gate is
+    the structure, not the count alone).
+    """
+    cd = d.get("commencement_dates") if isinstance(d, dict) else None
+    out = {"status": None, "dated": 0, "relations": 0, "reason": None,
+           "refused": [], "unchecked": [], "window": None}
+    if not isinstance(cd, dict):
+        return out
+    out["status"] = cd.get("status")
+    out["reason"] = cd.get("reason")
+    entries = 0
+    for g in d.get("related") or []:
+        if not isinstance(g, dict) or g.get("self"):
+            continue
+        for c in g.get("changes") or []:
+            if isinstance(c, dict) and c.get("in_force"):
+                entries += 1
+    if out["status"] == "retrieved" and entries:
+        out["dated"] = cd.get("dated") if isinstance(cd.get("dated"), int) else entries
+        out["relations"] = cd.get("relations") if isinstance(cd.get("relations"), int) else 0
+    for key, name in (("refused_instruments", "refused"), ("made_date_not_read", "unchecked")):
+        v = cd.get(key)
+        if isinstance(v, list):
+            out[name] = [str(x) for x in v if x]
+    w = cd.get("feed_window")
+    if isinstance(w, dict) and isinstance(w.get("read"), int) and isinstance(w.get("total"), int):
+        out["window"] = w
+    return out
+
+
+def _some(ids: list, k: int = 6) -> str:
+    """At most `k` ids, and how many more: a list that names some and stops
+    would leave the rest unexplained."""
+    more = len(ids) - k
+    return ", ".join(ids[:k]) + (f" and {more} more" if more > 0 else "")
+
+
+def _dated_closing(lid: str, hop: dict) -> str:
+    """The Worker-facing closing of a change record the hop dated (P3.21)."""
+    bits = [
+        " The relations themselves carry no date. The `in_force` date on "
+        f"{hop['dated']} of the {hop['relations'] or hop['dated']} commencement "
+        "relation(s) made by another instrument listed here was added by code from "
+        f"{_DATE_RECORD}, read through the LEX API, with that record's "
+        "`qualification` (such as \"wholly in force\" or \"for specified "
+        "purposes\"): you MAY state such a date, with its qualification, as the "
+        "date the instrument named against that entry brought those provisions "
+        "into force, citing that record. It records when they were brought into "
+        "force, not whether they have since been amended or repealed, so it is "
+        "never evidence of in-force status today. Do not give a date for a "
+        "relation listed without `in_force`."
+    ]
+    if hop["refused"]:
+        bits.append(
+            f" For relations made by {_some(hop['refused'])} no date is given: "
+            "the date that record holds for them is earlier than the day the "
+            "instrument was made, which is impossible."
+        )
+    if hop["unchecked"]:
+        bits.append(
+            f" For relations made by {_some(hop['unchecked'])} no date is given: "
+            "the day that instrument was made could not be read, so the date could "
+            "not be checked against it."
+        )
+    if hop["window"]:
+        bits.append(
+            f" That record was read for the first {hop['window']['read']} of the "
+            f"{hop['window']['total']} changes it lists for {lid}, so a relation "
+            "without a date here may be in the part that was not read."
+        )
+    bits.append(
+        " There is no made-under relation, so this record says nothing about any "
+        "instrument's enabling power.]"
+    )
+    return "".join(bits)
+
+
 def amendment_search_note(args: dict, data: Any) -> str:
     """The scope block appended to every `get_legislation_changes` result.
 
@@ -814,6 +933,21 @@ def amendment_search_note(args: dict, data: Any) -> str:
     # do and do not. Placed before the closing caveats so the caveats still end
     # the block.
     bits.append(_relation_currency_limb(d))
+    # P3.21: gated on the date hop. Where it dated a relation, the closing says
+    # where the date came from and what it is (and is not); where it ran and
+    # could not read the record, one sentence says so ahead of the unchanged
+    # closing; where it did not run, or dated nothing, the closing is P3.5's.
+    hop = _commencement_dates(d)
+    if hop["dated"]:
+        bits.append(_dated_closing(lid, hop))
+        return "".join(bits)
+    if hop["status"] == "not_retrieved":
+        bits.append(
+            " Code tried to read the date of each commencement made by another "
+            f"instrument from {_DATE_RECORD}, through the LEX API, and could not "
+            f"this time ({_hop_reason(hop['reason'])}), so no date is given against "
+            "any relation here."
+        )
     bits.append(
         " Two things this record does NOT contain, whatever it shows: there is no "
         "DATE on any relation, so you cannot say when a provision came into force "
@@ -850,6 +984,7 @@ def record_relations(log: Optional[list], name: str, args: dict, data: Any) -> N
             if isinstance(g, dict) and not g.get("self") and g.get("legislation_id"):
                 if g["legislation_id"] not in others:
                     others.append(g["legislation_id"])
+        hop = _commencement_dates(d)
         log.append({
             "tool": "change_record",
             "legislation_id": str(
@@ -861,6 +996,9 @@ def record_relations(log: Optional[list], name: str, args: dict, data: Any) -> N
                 d.get("by_other_legislation"), int) else 0,
             "others": others[:8],
             "complete": d.get("window_complete") is not False,
+            # P3.21: how many listed commencements code dated (0 where no hop
+            # ran or it dated none), for `_relations_limb` and the footer.
+            "dated": hop["dated"],
         })
     except Exception:
         pass
@@ -914,6 +1052,25 @@ def _relations_limb(log: Optional[list]) -> str:
         parts.append(
             " At least one of those lists was truncated, so it is not exhaustive."
         )
+    # P3.21: gated on the date hop having dated a listed commencement.
+    dated = []
+    for e in rows:
+        lid = e.get("legislation_id") or ""
+        if e.get("dated") and lid and lid not in dated:
+            dated.append(lid)
+    if dated:
+        parts.append(
+            " The change record's relations carry no dates of their own, and no "
+            f"made-under relation. For the record of {', '.join(dated[:8])}, code "
+            f"added the date {_DATE_RECORD} gives for each commencement made by "
+            "another instrument, with that record's qualification: a date the report "
+            "gives for such a commencement may be stated, with its qualification, as "
+            "the date that instrument brought the provision into force, citing that "
+            "record, and never as evidence of in-force status today. Do not state "
+            "any other commencement date, or an enabling power, from the change "
+            "record."
+        )
+        return "".join(parts)
     parts.append(
         " The change record carries no dates and no made-under relation: do not "
         "state a commencement date, or an enabling power, from it."
@@ -954,7 +1111,18 @@ def _relations_footer_clause(entries: Optional[list]) -> str:
         f"recorded changes for {', '.join(consulted[:3])}, which this research "
         "consulted directly"
     )
-    if any_found:
+    if any_found and any(e.get("dated") for e in rows):
+        # P3.21: a date the hop retrieved is not "read from the instrument
+        # itself", so this branch says where it did come from.
+        lead += (
+            "; those records carry no dates of their own, so a commencement date "
+            "given above for a provision commenced by another instrument is the "
+            f"date {_DATE_RECORD} gives for that commencement, read through the LEX "
+            "API, with its qualification. It says when the provision was brought "
+            "into force, not whether it has been amended or repealed since; any "
+            "other date was read from the instrument itself."
+        )
+    elif any_found:
         lead += (
             "; those records carry no dates, so any date given above was read from "
             "the instrument itself and not from the relation."
@@ -1224,10 +1392,13 @@ def _relation_currency_limb(d: dict) -> str:
             "legislation or any of its provisions."
         )
     if isinstance(repeals, int) and repeals:
+        # P3.21: "either" assumed the commencements were undated too; where
+        # code dated them, the repeal half stands without it.
         bits.append(
             f" {repeals} relation(s) are repeals or revocations: those establish "
             "that the named provision is no longer in force, and you may state "
-            "them the same way. The record gives no date for them either."
+            "them the same way. The record gives no date for them"
+            + ("." if _commencement_dates(d)["dated"] else " either.")
         )
     if isinstance(commenced, int) and not commenced:
         bits.append(
@@ -1340,6 +1511,9 @@ def record_currency(log: Optional[list], name: str, args: dict, data: Any) -> No
                 # P3.24: which of those commencements another instrument made,
                 # for the per-instrument line in `_currency_limb`.
                 **_commencement_split(d),
+                # P3.21: how many of those code dated (0 where no hop ran or it
+                # dated none), for the line and the currency footer clause.
+                "dated": _commencement_dates(d)["dated"],
             })
         elif name == "get_legislation_text":
             # `_text_record` returns the `{legislation, full_text}` wrapper, and
@@ -1403,9 +1577,26 @@ def _commencement_case(e: dict) -> str:
 _CASE_RANK = ("other_full", "other_cut", "self_only", "unlisted", "none")
 
 
+# P3.21: what a line says of a listed commencement where code dated the
+# record's commencements, in place of "Neither carries a date".
+_DATED_LISTED = (
+    "A provision listed there may be stated as commenced by the instrument named "
+    "against it, with the date " + _DATE_RECORD + " gives for it where the report "
+    "gives one: the day that instrument brought it into force, with its "
+    "qualification, never its status today"
+)
+
+
 def _commencement_line(lid: str, case: str, e: dict) -> str:
     """The line for one instrument's own provisions, from its ``"to"`` record."""
     if case == "other_full":
+        if e.get("dated"):
+            return (
+                f"{lid}: {e.get('commenced_by_other')} commencement relation(s) made "
+                f"by another instrument, all listed. {_DATED_LISTED}; one of its "
+                "provisions not listed there may be called not recorded as "
+                "commenced, citing this record, without a date."
+            )
         return (
             f"{lid}: {e.get('commenced_by_other')} commencement relation(s) made by "
             "another instrument, all listed. A provision listed there may be stated "
@@ -1414,6 +1605,13 @@ def _commencement_line(lid: str, case: str, e: dict) -> str:
             "citing this record. Neither carries a date."
         )
     if case == "other_cut":
+        if e.get("dated"):
+            return (
+                f"{lid}: commencement relations made by another instrument are "
+                f"recorded, but not all are listed. {_DATED_LISTED}; one not listed "
+                "may be in the part not shown, so do not state whether it has been "
+                "commenced."
+            )
         return (
             f"{lid}: commencement relations made by another instrument are "
             "recorded, but not all are listed. A provision listed there may be "
@@ -1468,6 +1666,7 @@ def _commencement_lines(rows: list) -> str:
     to_best: dict = {}
     by_commenced: dict = {}
     order: list = []
+    dated: set = set()
     for e in rows:
         if e.get("kind") != "relations":
             continue
@@ -1477,8 +1676,16 @@ def _commencement_lines(rows: list) -> str:
         case = _commencement_case(e)
         if case == "by":
             by_commenced[lid] = by_commenced.get(lid, False) or bool(e.get("commenced"))
-        elif lid not in to_best or _CASE_RANK.index(case) < _CASE_RANK.index(to_best[lid][0]):
-            to_best[lid] = (case, e)
+        else:
+            # P3.21: an instrument whose record was dated on any of this step's
+            # calls keeps the date wording, whichever call ranks best.
+            if e.get("dated"):
+                dated.add(lid)
+            if lid not in to_best or _CASE_RANK.index(case) < _CASE_RANK.index(to_best[lid][0]):
+                to_best[lid] = (case, e)
+    for lid in dated:
+        case, e = to_best[lid]
+        to_best[lid] = (case, {**e, "dated": e.get("dated") or 1})
     if not order:
         return (
             " Commencement: this step consulted no change record, so do not state "
@@ -1571,10 +1778,14 @@ def _currency_limb(log: Optional[list]) -> str:
     # counted an instrument's own commencement provision as a commencement.
     parts.append(_commencement_lines(rows))
     if repealed:
+        # P3.21: "again" pointed back at commencements that carried no date;
+        # where code dated them, the repeal half stands without it.
+        any_dated = any(e.get("kind") == "relations" and e.get("dated") for e in rows)
         parts.append(
             " Repeal or revocation relations were retrieved for "
             f"{', '.join(repealed[:6])} — a statement that those provisions are no "
-            "longer in force is supported, again without a date."
+            "longer in force is supported, "
+            + ("without a date." if any_dated else "again without a date.")
         )
     if marked:
         parts.append(
@@ -1643,13 +1854,28 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
     rows = [e for e in (entries or []) if e.get("tool") == "currency"]
     if not rows:
         return ""
-    sourced, consulted = [], False
+    sourced, consulted, dated = [], False, []
     for e in rows:
         if e.get("kind") == "relations":
             consulted = True
             lid = e.get("legislation_id") or ""
             if lid and (e.get("commenced") or e.get("repeals")) and lid not in sourced:
                 sourced.append(lid)
+            if lid and e.get("dated") and lid not in dated:
+                dated.append(lid)
+    if sourced and dated:
+        # P3.21: code retrieved commencement dates, so "nothing above has been
+        # checked against a commencement date" is false here. Says what the date
+        # is, and that it is not a check of current status. Keeps the opening's
+        # one "is in force" (an indirect question) and its disclaimer literal.
+        return (
+            " Whether legislation is in force is not something this index reports; "
+            f"what was checked is the recorded changes for {', '.join(sorted(sourced)[:3])}, "
+            "which name the instruments involved provision by provision, and, for "
+            f"the commencements of {', '.join(sorted(dated)[:3])} made by another "
+            f"instrument, the date {_DATE_RECORD} gives for each. Neither is a check "
+            "of whether a provision has since been amended or repealed."
+        )
     lead = (
         " Whether legislation is in force is not something this index reports, so "
         "nothing above has been checked against a commencement date"
