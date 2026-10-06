@@ -982,3 +982,72 @@ def test_the_output_shape():
     nr = _not_retrieved()
     assert nr["commencement_dates"] == {"status": "not_retrieved", "reason": "no_reply"}
     assert nr["related"][0]["changes"] == [{"by": "reg. 2", "changed": ["s. 1", "s. 2"]}]
+
+
+# ---------------------------------------------------------------------------
+# the static texts the Worker reads (the tool's description and the prompt
+# rules), which cannot be gated: worded to be true with a date and without
+# ---------------------------------------------------------------------------
+
+_OLD_STATIC = (
+    "It does NOT return dates",
+    "The change record gives no DATES.",
+    "The relation carries no date;",
+    "grouped — but no dates, and no enabling power",
+)
+
+_NEW_STATIC = (
+    # the tool's description
+    "The relations carry no dates of their own: where legislation.gov.uk's Changes to "
+    "Legislation record dates a commencement made by another instrument, code adds that date "
+    "to the entry as `in_force`, and the result says when it could not.",
+    # _RELATIONSHIP_RULE
+    "- The change record's relations give no DATES of their own. Where code has added an "
+    "`in_force` date to a commencement made by another instrument (from legislation.gov.uk's "
+    "Changes to Legislation record; the note on the result says so), you may state it, with "
+    "its qualification, as the date that instrument brought the provision into force.",
+    # _IN_FORCE_RULE (a)
+    "The relation carries no date of its own; where code added an `in_force` date to it, give "
+    "that date with its qualification as the date the instrument brought the provision into "
+    "force, never as its status today; otherwise, for a date, retrieve the commencing "
+    "instrument and quote it.",
+    # the research Worker's tool list
+    "with no dates of their own (code adds a commencement's `in_force` date where "
+    "legislation.gov.uk's record gives one), and no enabling power.",
+)
+
+
+def test_no_static_text_still_says_the_record_has_no_dates():
+    from src import prompts
+    from src.agent.tools.schemas import WORKER_TOOLS
+    desc = next(t["function"]["description"] for t in WORKER_TOOLS
+                if t["function"]["name"] == "get_legislation_changes")
+    workers = (prompts.WORKER_SYSTEM_PROMPT, prompts.WORKER_SYSTEM_PROMPT_HYBRID,
+               prompts.WORKER_SYSTEM_PROMPT_CONVERSATIONAL)
+    everything = (desc, *workers)
+    for old in _OLD_STATIC:
+        assert not any(old in t for t in everything), old
+    assert _NEW_STATIC[0] in desc
+    for p in workers:
+        assert _NEW_STATIC[1] in p and _NEW_STATIC[2] in p
+    assert _NEW_STATIC[3] in prompts.WORKER_SYSTEM_PROMPT
+
+
+def test_no_new_static_sentence_trips_a_detector():
+    """A Worker can echo its own prompt and tool description into a report."""
+    rr = _detectors()
+    for text in _NEW_STATIC:
+        assert not rr.NEG_ASSERTED.search(text), text
+        assert not rr.NOT_FOUND.search(text), text
+        assert rr.derivation_claims(text)[0] == [], text
+        assert not rr.IN_FORCE_CLAIM.search(text), text
+        assert not rr._CUR_DISCLOSED.search(text), text
+        for rx in (rr.NEG_TERMS, rr.NEG_LIMITS, rr.NEG_BLAMED_INDEX, rr.NEG_BLAMED_USER,
+                   rr.HALT_LITERAL, rr.HALT_PARAPHRASE, rr.HALT_AS_TIMEOUT, rr.OPENER_VOCAB):
+            assert not rx.search(text), (rx.pattern[:40], text)
+        assert not rr._names_search_terms(text), text
+        for s in rr._sentences(text):
+            assert not (rr._CMC_CONTEXT.search(s) and rr._CMC_DENIED.search(s)), s
+            assert not rr._currency_asserted(s), s
+            assert rr.negcurrency_claim(s)[0] is None, s
+            assert not rr._lk_classify(s), s
