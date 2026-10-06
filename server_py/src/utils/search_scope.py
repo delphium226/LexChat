@@ -1842,9 +1842,12 @@ _PINPOINT_BLOCK = re.compile(
 _OUTLINE_BLOCK = re.compile(
     r"\[SECTION OUTLINE[^\]]*\][\s\S]*?\[/SECTION OUTLINE\]", re.I
 )
+# P3.27 adds `SCHEDULES AND ANNEXES` (`schedule_units.schedules_note`). Not
+# the bare word "SCHEDULES": the pattern is case-insensitive, and a lawyer's
+# answer can open a citation link with it ("[Schedules 1 and 2](...)").
 _TOOL_BLOCK = re.compile(
     r"\[/?(?:SEARCH SCOPE|ENABLING POWER|CHANGE RECORD|CURRENCY|PINPOINTS TO KEEP"
-    r"|SECTION OUTLINE)"
+    r"|SECTION OUTLINE|SCHEDULES AND ANNEXES —)"
     r"[^\[\]]*\]",
     re.I,
 )

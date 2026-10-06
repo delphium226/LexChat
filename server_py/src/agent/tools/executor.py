@@ -23,6 +23,7 @@ from ...utils.instrument_lookup import (
     lookup_args,
 )
 from ...utils.redact import redact_args
+from ...utils import schedule_units
 from ..provider_factory import get_request_provider_config
 from ._util import _emit
 from .caselaw import (
@@ -544,7 +545,16 @@ async def execute_worker_tool(
 
             elif name == "get_legislation_text":
                 url = f"{LEX_API_URL}/legislation/text"
-                payload = {"legislation_id": args["legislation_id"]}
+                # P3.27: `include_schedules` (default false: "only sections
+                # are returned") was never sent, so every whole-text read left
+                # out every schedule and annex, and said nothing (batch 7 B: 98
+                # of 195 reading turns). With it the text is the sections and
+                # then the schedules (60 of 60 live). The unflagged call below
+                # tells code exactly where the schedules start, which one
+                # flagged call does in only 22 of 27; `schedules_note` builds
+                # the Worker's line from the two.
+                payload = {"legislation_id": args["legislation_id"],
+                           "include_schedules": True}
 
                 await _emit(on_chunk, {
                     "type": "api_call_start",
@@ -576,7 +586,40 @@ async def execute_worker_tool(
                 })
 
                 resp.raise_for_status()
-                return json.dumps(resp_json)
+                # P3.27: the same call without the flag, for the boundary
+                # only. Fail-soft (Invariant 5): any failure here keeps the
+                # flagged text and leaves the boundary unknown, so the line
+                # says less, never more. Its response reaches the audit as a
+                # length, not the text again (a large Act's sections are
+                # 0.9 MB, already carried by the call above).
+                unflagged = None
+                base_id = f"{call_id}-without-schedules"
+                base_payload = {"legislation_id": args["legislation_id"]}
+                try:
+                    await _emit(on_chunk, {
+                        "type": "api_call_start", "id": base_id, "url": url,
+                        "method": "POST", "payload": base_payload,
+                    })
+                    t1 = time.perf_counter()
+                    base_resp = await _request_with_retry(
+                        client, "POST", url, name=name, json=base_payload)
+                    base_ms = (time.perf_counter() - t1) * 1000
+                    if timing_collector:
+                        timing_collector.record_lex_api_call(name, base_ms)
+                    if base_resp.status_code == 200:
+                        unflagged = base_resp.json()
+                    base_text = schedule_units.full_text_of(unflagged)
+                    await _emit(on_chunk, {
+                        "type": "api_call_end", "id": base_id, "url": url,
+                        "status": base_resp.status_code,
+                        "response": {"full_text_chars": len(base_text)
+                                     if base_text is not None else None},
+                        "elapsed_ms": round(base_ms),
+                    })
+                except Exception as e:  # noqa: BLE001 - the boundary is optional
+                    logger.warning(f"[Worker Tool Exec] {name}: unflagged text call failed: {e!r}")
+                    unflagged = None
+                return json.dumps(schedule_units.mark_schedule_boundary(resp_json, unflagged))
 
             elif name == "search_case_law":
                 url = "https://caselaw.nationalarchives.gov.uk/atom.xml"

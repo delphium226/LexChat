@@ -1201,6 +1201,10 @@ def test_footer_trips_no_detector():
     # "by" (twice) and mixed
     assert len(worker_texts) == 7 and all(worker_texts), worker_texts
     screened += worker_texts
+    # P3.27: the SCHEDULES AND ANNEXES line on a whole-text read, every case
+    # (headings named, one heading, lead text, no heading, none held, the
+    # boundary unknown). It is Worker-facing, and a Worker can echo it.
+    screened += _schedule_line_variants()
     for text in screened:
         assert not NEG_ASSERTED.search(text), text
         assert not NOT_FOUND.search(text), text
@@ -1215,6 +1219,32 @@ def test_footer_trips_no_detector():
             assert not (_CMC_CONTEXT.search(s) and _CMC_DENIED.search(s)), s
             assert not _currency_asserted(s), s
             assert negcurrency_claim(s)[0] is None, s
+
+
+def _schedule_line_variants() -> list:
+    """Every wording `schedule_units.schedules_note` can produce, on synthetic
+    text, for the detector screen above."""
+    from src.utils.schedule_units import schedules_note
+
+    sections = "Section 1) **Citation**\nThis Order may be cited as the Widget Order 1901."
+
+    def line(appended, start="exact"):
+        rec = {"legislation": {}, "full_text": sections + appended,
+               "include_schedules": True,
+               "schedule_text_starts_at": len(sections) if start == "exact" else start}
+        return schedules_note({"legislation_id": "ssi/1901/3"}, json.dumps(rec))
+
+    variants = [
+        line("\n\nSCHEDULE 1 Widgets\n1) text\n\nSCHEDULE 2 Fees\n1) text"),
+        line("\n\nSCHEDULE Widgets regulation 4"),
+        line("\n\nSECOND SCHEDULE referred to\n\nANNEX XII Widgets"),
+        line("\n\nlead text\n\nSCHEDULE 1 Widgets"),
+        line("\n\nChapter: 1901 c. 1."),
+        line(""),
+        line("\n\nSCHEDULE 1 Widgets", start=None),
+    ]
+    assert all(variants) and len(set(variants)) == len(variants), variants
+    return variants
 
 
 def test_the_enabling_block_is_stripped_before_a_lawyer_sees_it():

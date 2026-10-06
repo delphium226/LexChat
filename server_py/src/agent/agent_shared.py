@@ -14,6 +14,7 @@ from typing import Callable, Optional
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import harvest_legislation_urls, provision_url_block
 from ..utils.section_outline import subsection_outline
+from ..utils.schedule_units import schedules_note
 from ..utils.instrument_lookup import LOOKUP_TOOL
 from ..utils.discovery_budget import (
     legislation_budget_blocks,
@@ -1012,8 +1013,15 @@ async def run_worker_tool(
     # instrument gets summarised and the summariser drops the preamble, so by
     # the time the model reads the text the evidence has gone.
     enabling_note = ""
+    # P3.27: which schedules and annexes this whole text carries, or that the
+    # index holds none for the instrument. From the RAW result (the executor
+    # stamped where the schedule text starts), appended after summarisation:
+    # a summary of a 1.2M-character Act keeps neither the boundary nor the
+    # headings, and the Worker must know what the text it read contains.
+    schedules_line = ""
     if name == "get_legislation_text":
         enabling_note = enabling_power_note(args, raw_result)
+        schedules_line = schedules_note(args, raw_result)
     elif name == LOOKUP_TOOL:
         # P3.25: the lookup record carries the same `description`, where most
         # recitals sit. Only the permitting block, and only where it has one.
@@ -1229,6 +1237,7 @@ async def run_worker_tool(
     result += scope_note
     result += not_held
     result += enabling_note
+    result += schedules_line
     result += relations_note
     result += phase2_note
     result += sp_phase2_note
