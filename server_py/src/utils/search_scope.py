@@ -2549,7 +2549,8 @@ CASE_LAW_DOCTRINE_SENTENCE = (
 # `NEG_BLAMED_INDEX`, by design (pinned by `test_case_law_gap.py`): two earlier
 # wordings ("a ranked keyword search", "a keyword search can miss") also
 # tripped `NEG_LIMITS` and `NEG_TERMS`, and "ranked" was unverified (the
-# product sends no `order` to the case-law feed).
+# product sent no `order` to the case-law feed until P3.22; the window note
+# below states the order it now sends, still without the word).
 CASE_LAW_ABSENCE_SENTENCE = (
     "A search can miss a judgment the database holds, so one missing from its "
     "results may still exist, in this database or elsewhere: that is not proof "
@@ -2557,10 +2558,13 @@ CASE_LAW_ABSENCE_SENTENCE = (
 )
 
 
-# P3.23: the order the feed lists `search_case_law` results in. Today it is the
-# feed's default, `-date`, because the product sends no `order` (P3.22 changes
-# both together, and this string with them).
-CASE_LAW_RESULT_ORDER = "newest first, by date rather than by relevance"
+# P3.23: the order the feed lists `search_case_law` results in. P3.22 flipped
+# it: the executor now sends `order=relevance` with `per_page=50`
+# (`caselaw.CASE_LAW_ORDER_PARAMS`), where until then it sent no `order` and
+# the feed listed newest first. This string and the params change together
+# (`test_caselaw_window.py` pins both). No "ranked": that word trips
+# `NEG_LIMITS` (see the comment above `CASE_LAW_ABSENCE_SENTENCE`).
+CASE_LAW_RESULT_ORDER = "most relevant first, by relevance to the search words rather than by date"
 
 
 def case_law_search_note(args: dict, data: Any) -> str:
@@ -2576,7 +2580,8 @@ def case_law_search_note(args: dict, data: Any) -> str:
     In `[SEARCH SCOPE — …]` form with no brackets inside, so `_TOOL_BLOCK`
     strips it if a Worker echoes it into a report. Worded to trip no detector
     that reads answers (pinned by `test_caselaw_window.py`): no "ranked", no
-    "date range", no "limited to", no "not found".
+    "top N of" (both `NEG_LIMITS`), no "date range", no "limited to", no
+    "not found".
     """
     d = _as_dict(data)
     if not d or d.get("error"):
@@ -2607,14 +2612,17 @@ def case_law_search_note(args: dict, data: Any) -> str:
     if d.get("total_exact") and total == shown:
         return (f"\n\n[SEARCH SCOPE — all {shown} judgment(s) {where} {matching}, "
                 f"listed {CASE_LAW_RESULT_ORDER}.]")
+    # P3.22: "the first N", not "the N most recent", and "another judgment",
+    # not "an older judgment": the list is in relevance order now, so the
+    # judgments outside it are the ones the feed placed lower, of any date.
     if isinstance(lo, int) and isinstance(hi, int) and hi > shown:
-        count = (f"the {shown} most recent of about {hi:,} judgments {where} "
+        count = (f"the first {shown} of about {hi:,} judgments {where} "
                  f"{matching} (the feed reports between {lo:,} and {hi:,})")
     else:
-        count = (f"the {shown} most recent judgments {where} {matching}; the feed "
+        count = (f"the first {shown} judgments {where} {matching}; the feed "
                  "gave no figure for how many match in all")
     return (
-        f"\n\n[SEARCH SCOPE — {count}, listed {CASE_LAW_RESULT_ORDER}. An older "
+        f"\n\n[SEARCH SCOPE — {count}, listed {CASE_LAW_RESULT_ORDER}. Another "
         f"judgment that matches can sit outside these {shown}: to reach it, search "
         "again with narrower terms (a party's name, a court or dates) rather than "
         "treat this list as complete.]"

@@ -184,7 +184,7 @@ def _parse_case_law_atom(xml_text: str) -> list[dict]:
 #
 # A page holding fewer rows than the page size is the whole matching set,
 # whatever the link says (a dated query showed 19 rows with `last` page 2).
-CASE_LAW_PAGE_SIZE = 50          # the feed's default; we send no `per_page`
+CASE_LAW_PAGE_SIZE = 50          # the page size we ask for (P3.22 sends `per_page`)
 _LAST_LINK_PAGE_SIZE = 10        # the page size the `last` link counts in
 
 
@@ -229,6 +229,32 @@ def case_law_count(xml_text: str, shown: int, page_size: int = CASE_LAW_PAGE_SIZ
     hi = max(shown, last * _LAST_LINK_PAGE_SIZE)
     return {"shown": shown, "total": hi, "total_exact": lo == hi,
             "total_min": lo, "total_max": hi}
+
+
+# ---------------------------------------------------------------------------
+# P3.22: the order the feed lists results in
+# ---------------------------------------------------------------------------
+#
+# With no `order`, the feed lists newest first (`-date`), so every case-law
+# search until P3.22 handed the model the 50 most recent matches rather than
+# the 50 most relevant, and the Phase-2 nudge's "most relevant" first three
+# were the three newest. Measured live over every stored query (batch 8 C,
+# 2026-10-06): relevance keeps the matching set (304 of 304 short pages the
+# same rows, 52 of 52 full pages the same `last` link) and changes the first
+# three about seven times in ten.
+#
+# **`order=relevance` is the advanced search's own sort and is NOT in the
+# published API spec**: `public_api.yml` v0.6.0 (re-read 2026-10-06) lists
+# `order` as `date`, `updated` or `transformation` (with `-` forms; default
+# `-date`). It is what the feed does, and `tools/caselaw_probe.check_order`
+# re-checks it live, so a withdrawal (the list coming back newest first) is
+# seen rather than silently returning the old order.
+#
+# **The two params travel together.** ANY explicit `order` resets the page
+# size to 10 unless `per_page` is sent with it (that is why relevance once
+# looked like it cut 50 results to 10), and `last` still counts at ten a page
+# under either order, so `case_law_count` is unchanged. A test pins both.
+CASE_LAW_ORDER_PARAMS = {"order": "relevance", "per_page": str(CASE_LAW_PAGE_SIZE)}
 
 
 # ---------------------------------------------------------------------------

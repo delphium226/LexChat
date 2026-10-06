@@ -27,6 +27,7 @@ from ...utils import schedule_units
 from ..provider_factory import get_request_provider_config
 from ._util import _emit
 from .caselaw import (
+    CASE_LAW_ORDER_PARAMS,
     _fetch_judgment_text,
     _parse_case_law_atom,
     case_law_count,
@@ -736,6 +737,11 @@ async def execute_worker_tool(
                         "query": args["query"],
                     })
                 params.update(window["params"])
+                # P3.22: by relevance, not newest first (the feed's default).
+                # `order=relevance` is not in the published spec and `per_page`
+                # must travel with it, or the page falls to 10 rows: see
+                # `caselaw.CASE_LAW_ORDER_PARAMS`.
+                params.update(CASE_LAW_ORDER_PARAMS)
 
                 await _emit(on_chunk, {
                     "type": "api_call_start",
