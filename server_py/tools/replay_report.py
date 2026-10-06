@@ -5671,6 +5671,15 @@ class DepthReq:
     stated, anywhere in the answer or, with `near`, in the sentence that cites
     the provision or the one after it. A match counts only where
     `_attribute_instrument` assigns it to `act`.
+
+    Two optional fields (P3.12, batch 8 B), both off by default so every
+    earlier entry grades exactly as before: `span`, how many sentences or
+    list lines after the citing one the `near` window takes (a paragraph of a
+    Schedule is often cited on one line and its heads listed on the next few);
+    and `unless`, a pattern that disqualifies a deep match whose own sentence
+    carries it ("paragraphs 42, 43 and 44 were not retrieved" cites the
+    provision without delivering it). A disqualified match still counts as
+    coarse.
     """
     label: str
     act: str
@@ -5678,6 +5687,8 @@ class DepthReq:
     coarse: Any
     facts: tuple = ()
     near: bool = False
+    span: int = 1
+    unless: Any = None
 
 
 _S36_SUBSTANCE = re.compile(
@@ -5686,6 +5697,61 @@ _S36_SUBSTANCE = re.compile(
     r"\b(?:another|a third|third|other)\b"
     r"|\bthird[- ]part(?:y|ies)\b",
     re.I)
+
+# P3.12 (batch 8 B): 6335 turn 7 asks how the administration moratorium works
+# under Schedule B1 to the Insolvency Act 1986, and its acceptance is that the
+# answer delivers paragraphs 42-44. The facts are the statutory words of those
+# paragraphs as LEX holds them, read live by batch 7 B (the cut text is in the
+# gitignored `evidence/seam/batch7/B/p312_truth.txt`; paragraph 44 checked
+# against legislation.gov.uk's own page): 42, no resolution and no order for
+# the company's winding up; 43, no step to enforce security, and no legal
+# process instituted or continued, except with the administrator's consent or
+# the court's permission; 44, the interim moratorium, which runs from an
+# administration application made or a notice of intention to appoint filed.
+_SCH_B1 = r"\bSch(?:edule|\.)?\s*B1\b"
+_PARA_SEP = r"\s*(?:,\s*(?:and|or)?|and|or|&)\s*"
+
+
+def _sch_b1_paragraph(num: int):
+    """A reference to paragraph `num` of a schedule: ``paragraph 43``,
+    ``para. 43(2)``, ``paras 42-44``, ``paragraphs 41, 42 and 43``, and LEX's
+    own rendering echoed back (``Section 43 of Schedule B1``)."""
+    n = str(num)
+    ranges = "|".join(f"{a}\\s*(?:-|–|—|to)\\s*{b}"
+                      for a in range(num - 4, num + 1) for b in range(num, num + 5) if a < b)
+    return re.compile(
+        r"\bpara(?:graph)?s?\.?\s*(?:" + ranges + r")(?!\d)"
+        r"|\bpara(?:graph)?s?\.?\s*" + n + r"(?![\d/])"
+        r"|\bpara(?:graph)?s\.?\s*(?:\d+[A-Z]?" + _PARA_SEP + r")+" + n + r"(?![\d/])"
+        r"|\bsections?\s*" + n + r"(?![\d/])(?=[^.\n]{0,30}?" + _SCH_B1 + r")"
+        r"|" + _SCH_B1 + r"[^.\n]{0,20}?\bs(?:ection|\.)\s*" + n + r"(?![\d/])",
+        re.I)
+
+
+# A citation inside a sentence saying the paragraph was NOT obtained.
+_P312_NOT_DELIVERED = re.compile(
+    r"\bnot (?:been |be )?(?:retrieved|returned|found|located|available|held)\b"
+    r"|\bwas(?:n['’]t| not) (?:fully )?retrieved\b|\bcould not\b|\bunable to\b"
+    r"|\bno results\b|\bcut short\b|\bdid not (?:return|retrieve)\b",
+    re.I)
+_P312_WINDING_UP = re.compile(
+    r"\b(?:resolution|order)s?\b[^.\n]{0,80}?\bwinding[- ]?up\b"
+    r"|\bwinding[- ]?up\b[^.\n]{0,60}?\b(?:resolution|order)s?\b", re.I)
+_P312_SECURITY = re.compile(
+    r"\benforc\w*\b[^.\n]{0,40}?\bsecurit(?:y|ies)\b"
+    r"|\bsecurit(?:y|ies)\b[^.\n]{0,40}?\benforc\w*", re.I)
+_P312_LEGAL_PROCESS = re.compile(r"\blegal (?:process|proceedings)\b", re.I)
+_P312_CONSENT = re.compile(
+    r"\bconsent\b[^.\n]{0,40}?\badministrator\b"
+    r"|\badministrator(?:['’]s)?\b[^.\n]{0,20}?\bconsent"
+    r"|\b(?:permission|leave)\b[^.\n]{0,20}?\bcourt\b"
+    r"|\bcourt(?:['’]s)?\b[^.\n]{0,20}?\b(?:permission|leave)\b", re.I)
+_P312_INTERIM_TRIGGER = re.compile(
+    r"\b(?:administration )?application\b[^.\n]{0,80}?"
+    r"\b(?:made|filed|lodged|presented|pending|submitted)\b"
+    r"|\b(?:made|filed|lodged|presented|pending)\b[^.\n]{0,40}?"
+    r"\b(?:administration )?application\b"
+    r"|\bnotice of (?:an )?intention to appoint\b", re.I)
 
 DEPTH_TRUTH = {
     "6396": {
@@ -5763,6 +5829,46 @@ DEPTH_TRUTH = {
             ),
         ),
     },
+    # P3.12. Turn 7 is the export's turn 7: the unscripted session runs every
+    # export turn in order, so run turn and export turn are the same (checked
+    # over every stored 6335 run file). The Schedule named on its own is the
+    # coarse citation. Each paragraph needs its own facts in the sentence that
+    # cites it or the `span` lines after it, and a citation in a sentence
+    # saying it was not retrieved does not count.
+    "6335": {
+        "turns": (7,),
+        "acts": {
+            "ukpga/1986/45": re.compile(
+                r"Insolvency Act 1986|\bIA 1986\b|\b1986 Act\b|\bukpga/1986/45\b|" + _SCH_B1,
+                re.I),
+        },
+        "reqs": (
+            DepthReq(
+                label="Sch B1 para 42: no winding-up resolution or order",
+                act="ukpga/1986/45",
+                deep=_sch_b1_paragraph(42),
+                coarse=re.compile(_SCH_B1, re.I),
+                facts=(_P312_WINDING_UP,),
+                near=True, span=2, unless=_P312_NOT_DELIVERED,
+            ),
+            DepthReq(
+                label="Sch B1 para 43: security and legal process, consent or permission",
+                act="ukpga/1986/45",
+                deep=_sch_b1_paragraph(43),
+                coarse=re.compile(_SCH_B1, re.I),
+                facts=(_P312_SECURITY, _P312_LEGAL_PROCESS, _P312_CONSENT),
+                near=True, span=4, unless=_P312_NOT_DELIVERED,
+            ),
+            DepthReq(
+                label="Sch B1 para 44: the interim moratorium and when it runs",
+                act="ukpga/1986/45",
+                deep=_sch_b1_paragraph(44),
+                coarse=re.compile(_SCH_B1, re.I),
+                facts=(_P312_INTERIM_TRIGGER,),
+                near=True, span=2, unless=_P312_NOT_DELIVERED,
+            ),
+        ),
+    },
 }
 
 
@@ -5796,15 +5902,21 @@ def _attribute_instrument(text: str, pos: int, acts: dict) -> Optional[str]:
     return last[1] if last else None
 
 
-def _sentence_window(text: str, pos: int) -> str:
-    """The sentence (or list line) holding `pos`, plus the one after it."""
+def _sentence_window(text: str, pos: int, span: int = 1) -> str:
+    """The sentence (or list line) holding `pos`, plus the `span` after it."""
     masked = _ABBREV.sub(lambda m: m.group(0).replace(".", _DOT), text)
     bounds = [0] + [m.end() for m in re.finditer(r"(?<=[.!?])\s+|\n+", masked)]
     bounds.append(len(text))
     for i in range(len(bounds) - 1):
         if bounds[i] <= pos < bounds[i + 1]:
-            return text[bounds[i]:bounds[min(i + 2, len(bounds) - 1)]]
+            return text[bounds[i]:bounds[min(i + 1 + span, len(bounds) - 1)]]
     return text[max(0, pos - 200):pos + 200]
+
+
+def _depth_disqualified(text: str, m, req: DepthReq) -> bool:
+    """A deep match whose own sentence carries `req.unless` (batch 8 B)."""
+    return bool(req.unless is not None
+                and req.unless.search(_sentence_window(text, m.start(), 0)))
 
 
 def _grade_depth_req(text: str, req: DepthReq, acts: dict) -> tuple:
@@ -5820,8 +5932,10 @@ def _grade_depth_req(text: str, req: DepthReq, acts: dict) -> tuple:
 
     deep = owned(req.deep)
     for m in deep:
+        if _depth_disqualified(text, m, req):
+            continue
         if req.near:
-            window = _sentence_window(text, m.start())
+            window = _sentence_window(text, m.start(), req.span)
             if all(f.search(window) for f in req.facts):
                 return "deep", m, window
         elif all(f.search(text) for f in req.facts):
@@ -5853,7 +5967,9 @@ def depth_counts(text: str, req: DepthReq, acts: dict) -> tuple:
     spans = [(m.start(), m.end()) for m in deep]
     coarse = [m for m in owned(req.coarse)
               if not any(s <= m.start() < e for s, e in spans)]
-    return len(deep), len(deep) + len(coarse)
+    # A disqualified deep match (`unless`) is a reference, not one at depth.
+    at_depth = [m for m in deep if not _depth_disqualified(text, m, req)]
+    return len(at_depth), len(deep) + len(coarse)
 
 
 def depth_verdict(session_id: str, answer: str) -> tuple:
@@ -8621,6 +8737,267 @@ def cmd_sectionscope(args) -> int:
     return 0 if not bad else 1
 
 
+# --- P3.27 / P3.12: what an answer says about a schedule or annex unit --------
+#
+# Batch 8 B. Two acceptances read the same thing, so one command grades both:
+#   * P3.27 (and P3.12's criterion (v)): on a turn about a schedule or annex
+#     unit that LEX HOLDS, the answer must not call it "not held", "not
+#     retrievable" or "not in the text" (batch 7 B: 14 of 23 need turns did, and
+#     LEX held the unit in all 14).
+#   * P3.27's Invariant 1 guard: on 6374's turns about its Order's Schedule,
+#     which LEX does NOT hold (no schedule provision on `/section/lookup`, and
+#     `include_schedules` adds nothing), the answer still says the index holds
+#     no text for it, and no longer blames a search or step limit or offers to
+#     fetch it (batch 7 B: 5 of 14 answers blamed a limit).
+# Which units a session is about, and whether LEX holds each, are a matter's
+# facts, so they live in a gitignored rubric (`evidence/rubrics/p327.json`,
+# written by batch 8 B); this code is generic. Per unit: `label`, `held`
+# (true/false), `mention` (a pattern for a sentence about the unit, compiled
+# case-insensitively; use `(?-i:...)` for a case-sensitive part), optional
+# `turns` (export turns to grade; default every turn that mentions it).
+#
+# Classified per CLAUSE, not per sentence, because a sentence can say one thing
+# about the unit and another about the run: "the database lacked the Schedule
+# ...; furthermore step 2 was halted by a system limit" states the index for
+# the Schedule and blames the limit for something else. The classes, in order:
+#   OFFER  the answer implies the unit can be fetched ("would you like me to
+#          pull ...", "would require a deeper look");
+#   LIMIT  its absence put down to a search or step limit, or to the search
+#          being short ("cut short", "did not complete", "initial search");
+#   INDEX  a negative attributed to the index ("not held in this index",
+#          "missing from the database", "the index holds no ...");
+#   TEXT   a negative about the text retrieved ("the retrieved text does not
+#          contain the Annexes");
+#   NEG    a negative with no attribution ("could not be retrieved", "was not
+#          returned").
+# Negatives are `NEG_ASSERTED` (P2.2's) plus `SCHED_NEG_EXTRA`: NEG_ASSERTED
+# alone misses "not held in THIS index", "missing from", "lacked", "not in the
+# text" and "was not returned", each in a stored answer; NEG_ASSERTED's "no
+# <noun>" alternative is not used alone (a reading of the law). Index
+# attribution is `SCHED_INDEX_NEG` (the index as the negative's subject:
+# "lacked", "missing from the database", "holds no", "no schedules ... in this
+# index"), or a negative beside `NEG_BLAMED_INDEX` / `SCHED_INDEX_EXTRA` ("from
+# the database"). Verdicts:
+#   held unit:     FAIL on INDEX, TEXT or NEG (it is held, so each is false);
+#                  LIMIT is reported, not failed (true of the run: batch 7 B's
+#                  NEG_BUDGET), OFFER is fine (it can be fetched);
+#   not-held unit: FAIL on LIMIT or OFFER; PASS on INDEX; TEXT, NEG or a
+#                  mention with no statement (SILENT) are reported, not failed,
+#                  and read by hand.
+DEFAULT_P327_RUBRIC = EVIDENCE_ROOT / "rubrics" / "p327.json"
+_SCHED_URL = re.compile(r"\]\([^)\s]*\)")
+_SCHED_CLAUSE = re.compile(
+    r";|\s+[—–]\s+|,\s*(?=(?:and|but|while|whereas|so|meaning|though|although|"
+    r"consequently|however|furthermore|moreover)\b)", re.I)
+_SCHED_ANAPHOR = re.compile(r"\b(?:its|it|this|that|which|their|them)\b", re.I)
+# Research negatives only. A bare "does not contain" is NOT here: "Chapter 2 of
+# Annex 9 does not contain any provision for widget oil" is a reading
+# of the law (and the right one on P3.2's control turn), so a containment
+# negative counts only with the text or the index as its subject.
+SCHED_NEG_EXTRA = re.compile(
+    r"\bnot (?:currently )?held\b|\bmissing from\b"
+    r"|\bnot (?:fully )?retrieved\b|\bwas(?:n['’]t| not) (?:fully )?"
+    r"(?:retrieved|returned|included)\b|\bnot (?:be )?retrievable\b"
+    r"|\bunable to (?:retrieve|access|obtain)\b"
+    r"|\bcannot be (?:retrieved|accessed)\b"
+    r"|\bnot (?:included|contained|present|available) in (?:the|this|our|its)\b"
+    r"|\btext\b[^.\n]{0,40}?\b(?:does|did) not (?:contain|include)\b"
+    r"|\bdid not return\b|\bnot (?:been )?returned\b|\bdid not complete\b"
+    r"|\bunavailable (?:in|from)\b", re.I)
+SCHED_LIMIT = re.compile(
+    r"\bcut short\b|\b(?:system|step|search|research|tool[- ]call|internal|round)s?\b"
+    r"[^.\n]{0,25}?"
+    r"\blimits?\b|\blimits? on (?:search|tool|step)|\blimit (?:was|had been) reached\b"
+    r"|\bdid not complete\b|\bhalted\b|\b(?:not|n['’]t) fully retrieved\b"
+    r"|\b(?:initial|quick) search\b|\btimed out\b", re.I)
+SCHED_OFFER = re.compile(
+    r"\bwould you like me to\b|\bI can (?:retrieve|pull|fetch|look)\b"
+    r"|\bshall I (?:retrieve|pull|fetch)\b|\bswitch(?:ing)? to \**Research mode\b"
+    r"|\bmore comprehensive search\b|\bdeeper (?:look|search)\b", re.I)
+# A negative whose subject is the index: a negative on its own (INDEX).
+SCHED_INDEX_NEG = re.compile(
+    r"\b(?:database|index|corpus|collection)\b[^.\n]{0,60}?\b(?:lack(?:s|ed)?|"
+    r"did not (?:hold|contain|include|have)|does not (?:have|hold|contain|include)"
+    r"|holds? no|has no)\b"
+    r"|\bno (?:text|schedules?|annex(?:es)?)\b[^.\n]{0,60}?\b(?:index|database)\b"
+    r"|\bmissing from (?:the |this |our )?(?:retrieved |available |legislation )?"
+    r"(?:database|index)\b", re.I)
+# An index named beside a negative: attributes it (INDEX).
+SCHED_INDEX_EXTRA = re.compile(
+    r"\b(?:from|in|by) (?:the|this|our) (?:retrieved |available |legislation )?"
+    r"(?:database|index)\b", re.I)
+SCHED_TEXT = re.compile(
+    r"\b(?:retrieved|returned|full|whole|available) text\b|\btext (?:retrieved|returned)\b"
+    r"|\bin the text\b", re.I)
+
+
+# NEG_ASSERTED's "no <noun>" alternative reads "contains no provision for X"
+# as a research negative; about a schedule's contents that is a reading of the
+# law. Such a match counts only for a search noun or with a found-type verb.
+_SCHED_LEGAL_NO = re.compile(r"no\b", re.I)
+_SCHED_SEARCH_NO = re.compile(
+    r"\b(?:results?|matches?|records?|found|located|retrieved|identified|returned|"
+    r"surfaced|available)\b", re.I)
+
+
+# "I cannot verify/confirm X" is a research negative only beside the index or
+# the text ("Because the index is incomplete, I cannot verify ..."); on its own
+# it is as often a refusal to answer from memory (`wave4_b4_post` r3 export 8).
+_SCHED_VERIFY = re.compile(r"\b(?:cannot|could not|can ?not|unable to) (?:verify|confirm)\b", re.I)
+
+
+def _sched_research_negative(clause: str) -> bool:
+    if SCHED_NEG_EXTRA.search(clause):
+        return True
+    if _SCHED_VERIFY.search(clause) and (
+            NEG_BLAMED_INDEX.search(clause) or SCHED_INDEX_EXTRA.search(clause)
+            or SCHED_TEXT.search(clause)):
+        return True
+    for m in NEG_ASSERTED.finditer(clause):
+        if not _SCHED_LEGAL_NO.match(m.group(0)) or _SCHED_SEARCH_NO.search(m.group(0)):
+            return True
+    return False
+
+
+def sched_clause_class(clause: str) -> str:
+    """OFFER / LIMIT / INDEX / TEXT / NEG, or '' for a clause stating no
+    negative about its subject. See the block comment above."""
+    if SCHED_OFFER.search(clause):
+        return "OFFER"
+    if SCHED_LIMIT.search(clause):
+        return "LIMIT"
+    if SCHED_INDEX_NEG.search(clause):
+        return "INDEX"
+    if not _sched_research_negative(clause):
+        return ""
+    if NEG_BLAMED_INDEX.search(clause) or SCHED_INDEX_EXTRA.search(clause):
+        return "INDEX"
+    if SCHED_TEXT.search(clause):
+        return "TEXT"
+    return "NEG"
+
+
+def sched_unit_clauses(prose: str, mention) -> list:
+    """[(class, clause, sentence)] for every clause of `prose` about the unit:
+    a clause matching `mention`, or a clause with an anaphor ("its text") in a
+    sentence where an earlier clause matched it. Link URLs are removed first,
+    so a `/schedule/8` path is not a mention."""
+    out = []
+    for s in _sentences(_SCHED_URL.sub("]", prose or "")):
+        seen = False
+        for c in _SCHED_CLAUSE.split(s):
+            if mention.search(c):
+                seen = True
+            elif not (seen and _SCHED_ANAPHOR.search(c)):
+                continue
+            out.append((sched_clause_class(c), c.strip(), s))
+    return out
+
+
+def sched_verdict(held: bool, classes: set, mentioned: bool) -> tuple:
+    """(verdict, reason) for one unit on one turn."""
+    if held:
+        bad = classes & {"INDEX", "TEXT", "NEG"}
+        if bad:
+            return "FAIL", "a held unit called " + "/".join(
+                {"INDEX": "not held", "TEXT": "not in the text",
+                 "NEG": "not retrievable"}[k] for k in sorted(bad))
+        if "LIMIT" in classes:
+            return "LIMIT", "not obtained, put down to a limit (true of the run)"
+        return ("OK", "") if mentioned else ("SILENT", "not mentioned")
+    if classes & {"LIMIT", "OFFER"}:
+        return "FAIL", ("blames a search limit" if "LIMIT" in classes
+                        else "implies it can be fetched")
+    if "INDEX" in classes:
+        return "PASS", "says the index holds no text for it"
+    if classes & {"TEXT", "NEG"}:
+        return "UNATTRIBUTED", "a negative not attributed to the index"
+    return "SILENT", ("mentioned, no statement about what is held" if mentioned
+                      else "not mentioned")
+
+
+def sched_rows(doc: dict, rubric: dict) -> list:
+    """One row per (turn, unit) the run file has to say something about."""
+    script = doc.get("script") or {}
+    base = str(script.get("base") or doc.get("session_id"))
+    entry = rubric.get(base)
+    if not entry:
+        return []
+    src = [t.get("from_turn") for t in (script.get("turns") or [])]
+    rows = []
+    for i, t in enumerate(doc.get("turns") or [], 1):
+        n = t.get("turn") or i
+        exp = src[n - 1] if src and n <= len(src) else n
+        prose = _without_footer(t.get("answer") or "")
+        for unit in entry.get("units") or []:
+            if unit.get("turns") and exp not in unit["turns"]:
+                continue
+            mrx = re.compile(unit["mention"], re.I)
+            clauses = sched_unit_clauses(prose, mrx)
+            asked = bool(mrx.search(t.get("question") or "")) or bool(unit.get("turns"))
+            if not clauses and not asked:
+                continue
+            classes = {k for k, _, _ in clauses if k}
+            verdict, why = sched_verdict(bool(unit.get("held")), classes, bool(clauses))
+            if not (t.get("answer") or "").strip():
+                verdict, why = "NO ANSWER", ""
+            rows.append({"session": base, "run": str(doc.get("session_id")),
+                         "rep": doc.get("rep", 1), "turn": n, "export_turn": exp,
+                         "chat_mode": t.get("chat_mode") or "?", "unit": unit["label"],
+                         "held": bool(unit.get("held")), "classes": classes,
+                         "clauses": clauses, "verdict": verdict, "why": why})
+    return rows
+
+
+def cmd_schedules(args) -> int:
+    """P3.27 acceptance and its Invariant 1 guard (P3.12's criterion (v) too):
+    what each answer says about a schedule or annex unit, held or not. Prints
+    every clause it classified (they quote a matter: keep the output out of
+    the repo) and, with --drops, every clause about a unit that carries no
+    statement. Exits 1 if any graded slot FAILS."""
+    rpath = Path(args.rubric)
+    try:
+        rubric = json.loads(rpath.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"  rubric not read ({rpath}): {e}")
+        return 2
+    dirs = [Path(args.dir)] + [Path(d) for d in (args.also or [])]
+    if getattr(args, "all_dirs", False):
+        dirs = sorted(p for p in Path(args.dir).parent.iterdir() if p.is_dir())
+    print(f"P3.27 schedules and annexes: what the answer says about a unit; rubric {rpath.name}")
+    print("  held unit:     FAIL = called not held / not in the text / not retrievable;"
+          " LIMIT reported")
+    print("  not-held unit: FAIL = blames a limit or offers to fetch it; PASS = says the"
+          " index holds no text for it")
+    rows = []
+    for d in dirs:
+        for doc in load_runs(d):
+            if args.session and not ({str(doc.get("session_id")),
+                                      str((doc.get("script") or {}).get("base"))}
+                                     & set(args.session)):
+                continue
+            for r in sched_rows(doc, rubric):
+                r["dir"] = d.name
+                rows.append(r)
+    tally: dict = {}
+    for r in rows:
+        print(f"\n  {r['dir']} {r['run']} r{r['rep']} t{r['turn']} (export {r['export_turn']}) "
+              f"{r['chat_mode']}  [{r['unit']}, {'held' if r['held'] else 'NOT held'}]  "
+              f"{r['verdict']}{(': ' + r['why']) if r['why'] else ''}")
+        for k, c, _s in r["clauses"]:
+            if k or args.drops:
+                print(f"      {k or '-':<6} {c[:args.chars]}")
+        key = (r["session"], r["unit"], r["held"])
+        tally.setdefault(key, Counter())[r["verdict"]] += 1
+    print("\n  per unit:")
+    for (sid, unit, held), c in sorted(tally.items()):
+        print(f"    {sid} [{unit}] {'held' if held else 'NOT held'}: "
+              + ", ".join(f"{k} {v}" for k, v in sorted(c.items())))
+    fails = [r for r in rows if r["verdict"] == "FAIL"]
+    print(f"\n  graded slots: {len(rows)}, failing: {len(fails)}")
+    return 1 if fails else 0
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     _utf8_stdout()
     p = argparse.ArgumentParser(prog="replay_report")
@@ -8925,6 +9302,22 @@ def main(argv: Iterable[str] | None = None) -> int:
                               "other turn does (MISSING / MISATTRIBUTED)")
     ssc.add_argument("--all", action="store_true",
                      help="list every answered turn, not only the shape and findings")
+    sch = sub.add_parser("schedules",
+                         help="P3.27 acceptance and its Invariant 1 guard: what each "
+                              "answer says about a schedule or annex unit LEX holds "
+                              "(never 'not held') or does not hold (the index, not a "
+                              "search limit)")
+    sch.add_argument("--rubric", default=str(DEFAULT_P327_RUBRIC),
+                     help="the gitignored rubric JSON (units name a matter's instruments)")
+    sch.add_argument("--also", nargs="+", metavar="DIR", help="further dirs to grade")
+    sch.add_argument("--all-dirs", action="store_true",
+                     help="grade every directory beside --dir (say so in any write-up: "
+                          "a new directory changes the counts)")
+    sch.add_argument("--session", nargs="+", default=None,
+                     help="restrict to these session ids or script bases")
+    sch.add_argument("--drops", action="store_true",
+                     help="also print every clause about a unit that states nothing")
+    sch.add_argument("--chars", type=int, default=240)
     args = p.parse_args(list(argv) if argv is not None else None)
     return {
         "summary": cmd_summary,
@@ -8957,6 +9350,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "hedges": cmd_hedges,
         "corpus": cmd_corpus,
         "sectionscope": cmd_sectionscope,
+        "schedules": cmd_schedules,
     }[args.cmd](args)
 
 
