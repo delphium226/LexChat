@@ -6,10 +6,11 @@ execute the tool, optionally summarise large results, append a Phase 2 nudge for
 search_legislation calls.  This module owns that logic once so future changes only
 need to happen here.
 """
+import asyncio
 import json
 import logging
 import uuid
-from typing import Callable, Optional
+from typing import Awaitable, Callable, Optional
 
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import harvest_legislation_urls, provision_url_block
@@ -36,7 +37,7 @@ from ..utils.schedule_units import (
     unit_in_results,
     unit_without_text_line,
 )
-from ..utils.instrument_lookup import MAX_ROUTED_LOOKUPS, lookup_args
+from ..utils.instrument_lookup import lookup_args
 from ..utils.instrument_lookup import legislation_id as lookup_legislation_id
 from .tools.executor import fetch_provision_list, fetch_text_with_schedules
 from ..utils.instrument_lookup import LOOKUP_TOOL
@@ -505,9 +506,14 @@ def _worker_tool_key_arg(args: dict) -> Optional[str]:
 
 
 # P3.12: at most this many instruments' provision lists fetched by code in one
-# worker run, like P3.7's routed lookups. Each is one call (memoised for the
-# run); a unit named on a further instrument is left to the Worker.
-MAX_PROVISION_FETCHES = MAX_ROUTED_LOOKUPS
+# worker run. Each is one call (memoised for the run); a unit named on a
+# further instrument is left to the Worker. Batch 9 A (user decision,
+# 2026-10-06): its own constant, 8, no longer P3.7's MAX_ROUTED_LOOKUPS (5,
+# which P3.7's lookups keep). The bound now holds within a round (see
+# `_fetch_once`); at 5 it would have cut a Deep Research step that read six
+# lists in one round in Session 40's sweep. No stored worker run reaches 8:
+# the most instruments the route fires on in one run is 6.
+MAX_PROVISION_FETCHES = 8
 
 
 def provision_fetch_key(args) -> str:
@@ -516,6 +522,46 @@ def provision_fetch_key(args) -> str:
     so the route that fills the dict and the cap that reads it agree."""
     ref = lookup_args({"legislation_id": args.get("legislation_id")})
     return lookup_legislation_id(ref) if ref else str(args.get("legislation_id") or "").strip()
+
+
+async def _fetch_once(holder: dict, key, fetch: Callable[[], Awaitable],
+                      bound: Optional[int] = None):
+    """`holder[key]`, fetched by `fetch()` once however many calls of one
+    round ask for it at the same time; None when `bound` refuses a new key.
+
+    Batch 9 A (P3.12): `chat_loop` runs a round's tool calls as concurrent
+    tasks, and the route used to check its per-run bound and memo before the
+    fetch's await and write the result after it, so every call of a batched
+    round passed the check (one Deep Research step in the Session 40 sweep
+    read 6 provision lists against a bound of 5, and one instrument could be
+    fetched twice). Here the slot is reserved, and counted against `bound`,
+    before the await: while the fetch is in flight `holder[key]` is a
+    Future, and every other call for that key waits on it (shielded, so a
+    waiter cancelled mid-fetch takes nothing from the others). A Future is
+    not a dict, so `provision_list_facts` never reads an in-flight slot as a
+    complete list. A value `fetch()` returns, a failed outcome included, is
+    recorded in the slot. A fetch that raises (a cancelled round) releases
+    the slot, establishing nothing, and the calls waiting on it get None.
+    With calls made one at a time nothing differs from before: no call ever
+    finds a slot in flight."""
+    if key in holder:
+        value = holder[key]
+        if isinstance(value, asyncio.Future):
+            value = await asyncio.shield(value)
+        return value
+    if bound is not None and len(holder) >= bound:
+        return None
+    slot = asyncio.get_running_loop().create_future()
+    holder[key] = slot
+    try:
+        value = await fetch()
+    except BaseException:
+        del holder[key]
+        slot.set_result(None)
+        raise
+    holder[key] = value
+    slot.set_result(value)
+    return value
 
 
 def held_provision_list(fetches: Optional[dict], args) -> Optional[dict]:
@@ -551,7 +597,8 @@ async def schedule_route_block(
     names and its results left out ("" when there is none).
 
     Fetches the instrument's provision list once per worker run (`fetches`,
-    lid -> outcome; None disables the route), picks the unit by `uri` and hands
+    lid -> outcome, or a Future while that fetch is in flight: `_fetch_once`;
+    None disables the route), picks the unit by `uri` and hands
     it over: cut where it cuts cleanly (`schedule_units.cut_pieces`), else
     whole, summarised for the query when it is larger than a result the Worker
     would be handed verbatim (the same threshold, and the same context budget,
@@ -570,12 +617,16 @@ async def schedule_route_block(
     lid = provision_fetch_key(args)
     if not lid:
         return ""
-    if lid not in fetches:
-        if len(fetches) >= MAX_PROVISION_FETCHES:
-            return ""
-        fetches[lid] = await fetch_provision_list(
-            lid, on_chunk=parent_on_chunk, timing_collector=timing_collector)
-    outcome = fetches[lid]
+    # Batch 9 A: the slot is reserved (and counted against the bound) before
+    # the await, so the bound and the one-fetch-per-instrument memo hold
+    # across a round whose section searches run concurrently.
+    outcome = await _fetch_once(
+        fetches, lid,
+        lambda: fetch_provision_list(lid, on_chunk=parent_on_chunk,
+                                     timing_collector=timing_collector),
+        bound=MAX_PROVISION_FETCHES)
+    if outcome is None:
+        return ""
 
     from .provider_factory import get_summarise_threshold
     threshold = get_summarise_threshold()
@@ -620,10 +671,13 @@ async def schedule_route_block(
             out.append(instrument_without_text_line(lid, unit))
             continue
         else:
-            if "text" not in outcome:
-                outcome["text"] = await fetch_text_with_schedules(
-                    lid, on_chunk=parent_on_chunk, timing_collector=timing_collector)
-            text = cut_unit_from_text(outcome.get("text") or "", unit)
+            # The fallback's whole text is fetched once per instrument too,
+            # by the same reservation, however many calls of a round need it.
+            whole = await _fetch_once(
+                outcome, "text",
+                lambda: fetch_text_with_schedules(lid, on_chunk=parent_on_chunk,
+                                                  timing_collector=timing_collector))
+            text = cut_unit_from_text(whole or "", unit)
             if not text:
                 out.append(fetch_failed_line(lid, unit))
                 continue
@@ -725,8 +779,10 @@ async def run_worker_tool(
             of code's `/legislation/section/lookup` for it (P3.12). When a
             section search's query names a schedule or annex unit its results
             left out, `schedule_route_block` fetches the instrument's
-            provisions once, picks the unit by `uri` and appends it. None (the
-            default) disables the route.
+            provisions once, picks the unit by `uri` and appends it. A slot
+            holds a Future while its fetch is in flight, so the calls of one
+            round share it (`_fetch_once`). None (the default) disables the
+            route.
     """
     activity_id = uuid.uuid4().hex[:8]
 
