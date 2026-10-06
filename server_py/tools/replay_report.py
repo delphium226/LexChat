@@ -9214,8 +9214,8 @@ def _p322_auths(entry: dict) -> list:
 
 
 def _p322_turn_retrieval(turn: dict) -> tuple:
-    """({key: how} returned by search_case_law, {key: how} read by
-    get_case_law_text) for one turn."""
+    """({key: {how}} returned by search_case_law, {key: {how}} read by
+    get_case_law_text) for one turn; `how` is "ncn", "url" or "text"."""
     retrieved, read = {}, {}
     for dg in (turn.get("audit") or {}).get("delegations") or []:
         for tl in dg.get("tools") or []:
@@ -9229,21 +9229,21 @@ def _p322_turn_retrieval(turn: dict) -> tuple:
                         break
                 if rows is None:
                     for k, how, _ in cl_keys(str(tl.get("final_result") or "")):
-                        retrieved.setdefault(k, "text")
+                        retrieved.setdefault(k, set()).add("text")
                     continue
                 for r in rows:
                     if isinstance(r, dict):
                         for fld in ("url", "ncn"):
                             for k, how, _ in cl_keys(str(r.get(fld) or "")):
-                                retrieved.setdefault(k, how)
+                                retrieved.setdefault(k, set()).add(how)
             elif nm == "get_case_law_text":
                 for k, how, _ in cl_keys(str((tl.get("args") or {}).get("url") or "")):
-                    read.setdefault(k, how)
+                    read.setdefault(k, set()).add(how)
                 o = _json_or_none(tl.get("raw_result"))
                 if isinstance(o, dict):
                     for fld in ("url", "ncn"):
                         for k, how, _ in cl_keys(str(o.get(fld) or "")):
-                            read.setdefault(k, how)
+                            read.setdefault(k, set()).add(how)
     return retrieved, read
 
 
@@ -9268,8 +9268,8 @@ def p322_run(doc: dict, entry: dict) -> dict:
                    named_only=[], mentions=[], carrier_verdict=None)
         for t in turns:
             if a["keys"] & set(t["retrieved"]):
-                row["retrieved"].append((t["export_turn"], sorted(
-                    {t["retrieved"][k] for k in a["keys"] & set(t["retrieved"])})))
+                row["retrieved"].append((t["export_turn"], sorted(set().union(
+                    *(t["retrieved"][k] for k in a["keys"] & set(t["retrieved"]))))))
             if a["keys"] & set(t["read"]):
                 row["read"].append(t["export_turn"])
             hit = a["keys"] & set(t["cited"])

@@ -1,0 +1,8 @@
+{
+  "session_id": "p34_6378",
+  "base": "6378",
+  "note": "P3.4 acceptance (b), batch 9 E: session 6378's turn 1 only, Conversational under 'legislation_only' and no jurisdiction filter, as recorded (evidence/replay_set.json: chat mode and research type from the feedback snapshot; evidence/research_mode_reads.json holds no read for 6378). The question says 'the UK', so the answer must cover all four nations and flag whether they diverge. Graded by `replay_report jurisdiction` (rubric evidence/rubrics/p34.json). Turn text is taken from the export by index and is never stored here.",
+  "turns": [
+    {"from_turn": 1, "research_mode": "legislation_only", "chat_mode": "conversational"}
+  ]
+}
