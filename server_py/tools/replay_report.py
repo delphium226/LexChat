@@ -5466,6 +5466,19 @@ def _discovery_invariant_one(before: Path, after: Path, only: Optional[list]) ->
             print(ln)
 
 
+# The agent-facing blocks `corpus` counts as LEAKED when an answer carries one.
+# `[CURRENCY` added at P2.5. The list has to grow with `_TOOL_BLOCK` in
+# `search_scope.py` or a new block's leak is invisible here, which is how P2.3
+# shipped `[ENABLING POWER ...]` with the strip un-widened. P3.27's
+# `[SCHEDULES AND ANNEXES` line and P3.12's `[PROVISION FETCHED BY CODE` block
+# (and its closer, which a model can echo alone) added at batch 8 B2.
+CORPUS_LEAK_MARKERS = (
+    "[SEARCH SCOPE", "[ENABLING POWER", "[CHANGE RECORD", "[CURRENCY",
+    "[SECTION OUTLINE", "[SCHEDULES AND ANNEXES", "[PROVISION FETCHED BY CODE",
+    "[/PROVISION FETCHED BY CODE]",
+)
+
+
 def cmd_corpus(args) -> int:
     """The retrieval shape of a replay directory — every number P2.3 published.
 
@@ -5499,13 +5512,8 @@ def cmd_corpus(args) -> int:
             _ans = t.get("answer") or ""
             if _ans.strip():
                 answered += 1
-                # `[CURRENCY` added at P2.5. The list has to grow with
-                # `_TOOL_BLOCK` in `search_scope.py` or a new block's leak is
-                # invisible here — which is how P2.3 shipped
-                # `[ENABLING POWER …]` with the strip un-widened.
-                if any(m in _ans for m in
-                       ("[SEARCH SCOPE", "[ENABLING POWER", "[CHANGE RECORD",
-                        "[CURRENCY", "[SECTION OUTLINE")):
+                # `CORPUS_LEAK_MARKERS`, above: it grows with `_TOOL_BLOCK`.
+                if any(m in _ans for m in CORPUS_LEAK_MARKERS):
                     leaked += 1
                 if _ans.count("*Search scope:") > 1:
                     dup_footer += 1
@@ -8815,13 +8823,29 @@ SCHED_OFFER = re.compile(
     r"|\bshall I (?:retrieve|pull|fetch)\b|\bswitch(?:ing)? to \**Research mode\b"
     r"|\bmore comprehensive search\b|\bdeeper (?:look|search)\b", re.I)
 # A negative whose subject is the index: a negative on its own (INDEX).
+# The last four alternatives (batch 8 B2) read P3.12's true-negative lines and
+# their echoes, whose index clause is split from the unit clause at ", and" or
+# ", so": "the index holds 3 provisions for X, and none of them is a schedule
+# or an annex: Schedule 2 is not one of them" and "the index holds X without
+# its provision text, so it holds none for Schedule 2 either". "is not one of
+# them" counts only with the unit as its subject (an anaphor clause such as
+# "theft is not one of them" after "the Schedule lists offences" does not),
+# and never "was not among them": that is P3.12's OPEN line ("code fetched
+# only the first N provisions ... and Schedule 2 was not among them"), which
+# says nothing about what the index holds.
 SCHED_INDEX_NEG = re.compile(
     r"\b(?:database|index|corpus|collection)\b[^.\n]{0,60}?\b(?:lack(?:s|ed)?|"
     r"did not (?:hold|contain|include|have)|does not (?:have|hold|contain|include)"
-    r"|holds? no|has no)\b"
+    r"|holds? no(?:ne)?|has no)\b"
     r"|\bno (?:text|schedules?|annex(?:es)?)\b[^.\n]{0,60}?\b(?:index|database)\b"
     r"|\bmissing from (?:the |this |our )?(?:retrieved |available |legislation )?"
-    r"(?:database|index)\b", re.I)
+    r"(?:database|index)\b"
+    r"|\bnone of (?:them|these|those|which|its provisions|the provisions)\b"
+    r"[^.\n]{0,15}?\b(?:is|are)\b (?:an? )?(?:schedules?|annex(?:es)?)\b"
+    r"|\b(?:schedule|annex)(?: [A-Z0-9][\w.]{0,7})? is not one of them\b"
+    r"|\bholds? none for\b"
+    r"|\b(?:database|index|corpus|collection)\b[^.\n]{0,60}?\bwithout (?:its|the|any) "
+    r"(?:[\w-]+ ){0,3}?text\b", re.I)
 # An index named beside a negative: attributes it (INDEX).
 SCHED_INDEX_EXTRA = re.compile(
     r"\b(?:from|in|by) (?:the|this|our) (?:retrieved |available |legislation )?"

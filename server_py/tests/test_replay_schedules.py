@@ -303,3 +303,144 @@ def test_stance_reads_the_control_on_the_cut_script_s_last_run_turn():
     turns[3]["answer"] = "The text of Chapter 2 is not held in this index."
     g = rr.stance_grade({"session_id": cut["session_id"], "turns": turns, "script": cut}, rub)
     assert [r for r in g["rows"] if r["base"] == 5][0]["control"] is False
+
+
+# --- batch 8 B2: P3.12's true-negative lines read INDEX; the held wording does not ---
+#
+# The strings below are agent A's built wording (`src/utils/schedule_units.py`
+# on A's branch), copied verbatim with the synthetic id `ssi/1901/3`. A's
+# true-negative lines put the index in one clause and the unit in the next
+# (", and none of them is a schedule ...", ", so it holds none for ..."), so
+# before B2 they classed '' and a model echoing one read SILENT on 6374's guard.
+
+_ANY_UNIT = re.compile(r"\b(?:schedules?|annex(?:es)?)\b", re.I)
+
+_A_TRUE_NEGATIVES = (
+    "[PROVISION FETCHED BY CODE — the index holds 1 provisions for ssi/1901/3, and none "
+    "of them is a schedule or an annex: Schedule 2 is not one of them. This search's "
+    "results left it out for that reason.]",
+    "[PROVISION FETCHED BY CODE — the index holds ssi/1901/3 without its provision text, "
+    "so it holds none for Schedule 2 either.]",
+    "[PROVISION FETCHED BY CODE — the index holds 3 provisions for ssi/1901/3, and its "
+    "schedules and annexes among them are Schedule 1 and Schedule 3: Schedule 2 is not "
+    "one of them. This search's results left it out for that reason.]",
+    # Read INDEX before B2 too; kept so the set is A's whole true-negative set.
+    "[PROVISION FETCHED BY CODE — the index lists Schedule 2 of ssi/1901/3 as a "
+    "provision and holds no text for it.]",
+    "[SCHEDULES AND ANNEXES — the index holds no schedule or annex text for ssi/1901/3, "
+    "so this text is its sections only.]",
+)
+
+_ECHOES = (
+    "The index holds three provisions for the Widget Order 1901, and none of them is a schedule.",
+    "The index holds 4 provisions for the Order, and none of them is a schedule or an annex.",
+    "The index holds the Widget Order 1901 without its provision text, so it holds none "
+    "for its Schedule either.",
+    "The legislation index lists the Order but holds none for the Schedule.",
+    "The legislation index holds none of the Order's schedules.",
+    "The database holds the Widget Order 1901 without the text of its Schedule.",
+)
+
+_URL = "http://www.legislation.gov.uk/id/ssi/1901/3/schedule/2"
+_LIST_LEAD = (f"[PROVISION FETCHED BY CODE — the index holds Schedule 2 of ssi/1901/3 as one "
+              f"provision (url: {_URL}). This search's results left it out, so code fetched "
+              "it from the index's provision list.")
+_TEXT_LEAD = ("[PROVISION FETCHED BY CODE — the index's provision list for ssi/1901/3 did not "
+              "come back, so code cut Schedule 2 out of the instrument's whole text with its "
+              "schedules, at its heading and the next schedule or annex heading.")
+_TAILS = (" Below is the part of it this search named, labelled.",
+          " Below is the whole of Schedule 2.",
+          " Below is Schedule 2 summarised for this research question, because it runs to "
+          "123,456 characters. The summary is not the statutory text: quote the provision "
+          "only from retrieved text.")
+_REASONS = ("", " Paragraph 4 has no single heading of its own in it to cut at.",
+            " Paragraphs 4 and 5 have no single heading of their own in it to cut at.",
+            " It carries no heading for Chapter II to cut at.")
+
+_A_HELD = tuple(lead + tail + reason + "]" for lead in (_LIST_LEAD, _TEXT_LEAD)
+                for tail in _TAILS for reason in _REASONS) + (
+    "[/PROVISION FETCHED BY CODE]",
+    "[SCHEDULES AND ANNEXES — this text of ssi/1901/3 carries, after its sections, the "
+    "schedule and annex text the index holds, under this heading: Schedule 1.]",
+    "[SCHEDULES AND ANNEXES — this text of ssi/1901/3 carries, after its sections, the "
+    "schedule and annex text the index holds, under these headings: Schedule 1 and "
+    "Schedule 2. Some text with no schedule or annex heading comes before the first of them.]",
+    "[SCHEDULES AND ANNEXES — this text of ssi/1901/3 carries, after its sections, further "
+    "text that the index holds as schedule or annex text. It carries no schedule or annex "
+    "heading.]",
+    "[SCHEDULES AND ANNEXES — this text of ssi/1901/3 was requested with its schedules and "
+    "annexes included, where the index holds them. Which ones it carries was not checked.]",
+    "Paragraph 4 of Schedule 2, cut at its own heading and the next one:",
+    "The text of Schedule 2 from the heading of paragraph 4 to the next headed paragraph. It "
+    "runs through paragraphs 4 to 7, because the paragraphs after 4 in it carry no heading "
+    "of their own:",
+    "The text of Schedule 2 from the heading of paragraph 4 to the next headed paragraph, "
+    "which may hold more than paragraph 4:",
+    "The text of Schedule 2 from the heading of paragraph 4 to its end, which may hold later "
+    "paragraphs that carry no heading of their own:",
+    "Chapter II of Annex IV, cut at its heading and the next chapter's heading:",
+    # P3.12's OPEN line: "was not among them" says nothing about what is held.
+    "[PROVISION FETCHED BY CODE — whether the index holds Schedule 2 of ssi/1901/3 is open: "
+    "code fetched only the first 200 provisions of its list, and Schedule 2 was not among them.]",
+    "[PROVISION FETCHED BY CODE — the index's provision list for ssi/1901/3 did not come back, "
+    "so code could fetch Schedule 2 neither from it nor from the whole text. Whether the index "
+    "holds Schedule 2 is open: do not report it as absent.]",
+)
+
+
+def _unit_classes(text):
+    return [k for k, _, _ in rr.sched_unit_clauses(text, _ANY_UNIT)]
+
+
+def test_a_s_true_negative_lines_read_as_index():
+    for text in _A_TRUE_NEGATIVES:
+        got = _unit_classes(text)
+        assert "INDEX" in got and set(got) <= {"", "INDEX"}, (text[:70], got)
+
+
+def test_an_echo_of_a_s_true_negative_lines_reads_as_index():
+    for text in _ECHOES:
+        got = _unit_classes(text)
+        assert "INDEX" in got and set(got) <= {"", "INDEX"}, (text[:70], got)
+
+
+def test_none_of_a_s_held_unit_wording_reads_as_a_negative():
+    assert len(_A_HELD) == 36
+    for text in _A_HELD:
+        assert set(_unit_classes(text)) <= {""}, (text[:90], _unit_classes(text))
+
+
+def test_a_reading_of_the_law_with_one_of_them_is_not_an_index_negative():
+    # The anaphor clause is about the Schedule, but its subject is not the unit.
+    got = _unit_classes("The Schedule lists five offences, and theft is not one of them.")
+    assert set(got) <= {""}, got
+    assert rr.sched_clause_class("the Schedule lists offences: theft is not one of them") == ""
+
+
+def test_the_guard_passes_an_echo_of_the_none_is_a_schedule_line(tmp_path, capsys):
+    doc = _run("9001", ["The index holds three provisions for the Widget Order 1901, and "
+                        "none of them is a schedule."])
+    d, rub = _write(tmp_path, [doc])
+    assert rr.cmd_schedules(_args(d, rub)) == 0
+    out = capsys.readouterr().out
+    assert "PASS" in out and "SILENT" not in out
+
+
+# --- batch 8 B2: corpus's leak check knows P3.27's and P3.12's blocks ------------
+
+def test_corpus_counts_a_leaked_schedules_or_fetched_block(tmp_path, capsys):
+    answers = ["A clean answer.",
+               "Text. [SCHEDULES AND ANNEXES — the index holds no schedule or annex text "
+               "for ssi/1901/3, so this text is its sections only.]",
+               "Text. [PROVISION FETCHED BY CODE — the index lists Schedule 2 of ssi/1901/3 "
+               "as a provision and holds no text for it.]",
+               "Paragraph 4 of Schedule 2 says widgets are gadgets.\n"
+               "[/PROVISION FETCHED BY CODE]"]
+    d = tmp_path / "corpus"
+    d.mkdir()
+    (d / "9004_rep1.json").write_text(json.dumps(_run("9004", answers)), encoding="utf-8")
+    import argparse
+    assert rr.cmd_corpus(argparse.Namespace(dir=str(d))) == 0
+    out = capsys.readouterr().out
+    m = re.search(r"LEAKED an agent-facing block\s*(\d+)", out)
+    assert m and int(m.group(1)) == 3, out

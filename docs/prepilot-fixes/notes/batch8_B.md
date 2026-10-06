@@ -332,3 +332,97 @@ also for the three later Orders (live). C's P3.25 prices: `p37_6409` median $0.4
       cite; the existing `DEPTH_TRUTH` entries require the provision at depth plus its facts.
    2. **The facts alone suffice** (an answer delivering all three paragraphs' substance under "Schedule
       B1" with no paragraph numbers would pass). Kinder to a prose answer; weaker as a citation check.
+
+---
+
+## Follow-up (batch 8 B2)
+
+**Base.** Agent B's worktree was gone, so B2 worked in a fresh worktree. It came up on `main`
+(`a6b4a76`), as every batch's has; with no commits made, I ran
+`git reset --hard worktree-agent-ab3e470cc7c4b6d25` (B's head `2f73bb3`, on the integrator's
+`87ceeff`; `git merge-base --is-ancestor 87ceeff… HEAD` passes). **$0**: no model call, no external
+call, no server, no replay. **No product code** (nothing under `server_py/src/`). Two changes, both
+in `server_py/tools/replay_report.py` (33 lines added, 9 changed), plus 6 tests appended to
+`server_py/tests/test_replay_schedules.py`. Scratch: gitignored
+`docs/prepilot-fixes/evidence/seam/batch8/B2/` (`git check-ignore -v` gives `.gitignore:113`),
+copied to the main checkout's same path. Commands below run from `server_py/` with the batch's
+`PREPILOT_EVIDENCE`, `PYTHONIOENCODING=utf-8` and `TEST_DATABASE_URL=…/lexchat_test_b`;
+`$B2=../docs/prepilot-fixes/evidence/seam/batch8/B2`.
+
+### Fix 1: P3.12's true-negative lines read INDEX, not SILENT
+
+**The defect (the integrator's finding, reproduced).** Agent A's absent-unit and no-text lines put the
+index in one clause and the unit in the next, split at ", and" or ", so" by `_SCHED_CLAUSE`. The unit
+clause ("and none of them is a schedule or an annex: Schedule 2 is not one of them"; "so it holds
+none for Schedule 2 either") named no index, so it classed '' and an echo read **SILENT** on 6374's
+guard where it should read **PASS**. The inventory variant of the same line ("its schedules and
+annexes among them are Schedule 1 and Schedule 3: Schedule 2 is not one of them") had the same fault.
+
+**The change.** `SCHED_INDEX_NEG` gains four alternatives and one widening:
+- `none of (them|these|those|which|its provisions|the provisions) … (is|are) (a|an) schedule(s)/annex(es)`;
+- `(schedule|annex)[ <label>] is not one of them`: the unit must be the subject, so an anaphor
+  clause such as "and theft is not one of them" after "the Schedule lists five offences" does not
+  count. **"was not among them" is excluded on purpose**: that is P3.12's OPEN line ("code fetched
+  only the first N provisions … and Schedule 2 was not among them"), which says nothing about what
+  is held;
+- `holds none for`;
+- `(database|index|corpus|collection) … without (its|the|any) [up to 3 words] text`;
+- the index-subject verb `holds no` widened to `holds no(ne)`.
+
+**The screen of A's BUILT wording** (A's `server_py/src/utils/schedule_units.py`, taken with
+`git show worktree-agent-a5655c6d5f4d0102d:server_py/src/utils/schedule_units.py` into the
+gitignored scratch and imported from there; `python $B2/screen.py`, output `$B2/screen_before.txt`
+at B's head and `$B2/screen_after.txt` after). Each string goes through `sched_unit_clauses` with a
+generic unit mention and with each of the four rubric mentions:
+
+| Group | Strings | Before | After |
+|---|---|---|---|
+| Held-unit wording: P3.27 variants 1, 3, 4 (one heading, two, preceded, no heading, boundary unknown, "and N more"); P3.12 block headers (2 leads x 3 tails x 4 reasons = 24); the closer; 5 piece labels; the OPEN (cut-short) line; the fetch-failed line | 38 | all '' | **all ''** |
+| A's true negatives: P3.27 none-held; absent, none is a schedule; absent, with inventory; listed, no text; instrument without text | 5 | INDEX, '', '', INDEX, '' | **all INDEX** (no other class) |
+| Synthetic echoes ("none of them is a schedule", "holds none for the Schedule", "holds … without its provision text", "holds no schedule or annex text", …) | 6 | 1 INDEX, 5 '' | **all INDEX** |
+
+**What it moves in the stored answers: nothing.**
+`python -m tools.replay_report --dir $PREPILOT_EVIDENCE/replay/baseline schedules --rubric <B's p327.json> --all-dirs --session 6374 6335 6406 6389 --drops`
+before (`$B2/sched_before.txt`) and after (`$B2/sched_after.txt`): **1,493 lines each, byte-identical**
+(`diff` exits 0), so no verdict and no clause class moved: 253 graded slots, 20 failing; 6374 FAIL 7,
+PASS 12, SILENT 17; 6335 FAIL 1, LIMIT 3, OK 2, SILENT 1; 6406 FAIL 12, LIMIT 2, OK 191; 6389 OK 5
+(B's figures, re-derived). Why none moves: **no stored answer sentence matches any new alternative**
+(`python $B2/scan_new_alts.py`: 485 run files, 1,953 answers, 33,629 sentences, 0 matches for each of
+the five; the same scan finds 295 sentences matching the whole `SCHED_INDEX_NEG`, so it reads them).
+The new forms are A's wording, which no stored run has seen.
+
+### Fix 2: `corpus`'s leak check knows the new blocks
+
+The marker tuple inside `cmd_corpus` is lifted to a module constant `CORPUS_LEAK_MARKERS` (same
+five markers, same order) and gains `[SCHEDULES AND ANNEXES`, `[PROVISION FETCHED BY CODE` and the
+closer `[/PROVISION FETCHED BY CODE]` (listed separately: a model can echo the closer alone, and
+`[PROVISION…` does not match `[/PROVISION…`). Stored answers carrying any of the three: **0 of 1,955
+answered turns over 58 directories** (inline count over every run file under
+`$PREPILOT_EVIDENCE/replay`), so no `corpus` LEAKED count moves.
+
+### Tests, revert and mutants
+
+6 tests appended (synthetic; A's strings verbatim with `ssi/1901/3`): A's 5 true negatives read
+INDEX; 6 echoes read INDEX; A's 36 held-unit strings class '' (a guard); "theft is not one of them"
+after a Schedule clause stays '' (a guard); `cmd_schedules` PASSes a 6374-style echo and reports no
+SILENT; `cmd_corpus` counts 3 leaks in 4 synthetic answers (one per new marker).
+
+`python $B2/mutants.py <worktree>` (scratch copy `$B2/rev/`, never the worktree; output
+`$B2/mutants.txt`; every anchor asserted once, CRLF kept):
+- **Full revert** (`replay_report.py` back to `2f73bb3`: the 33 added lines removed, 9 restored):
+  **4 failed, 2 passed**. The 2 that pass are the two guards (held wording, the legal "one of them"),
+  which pass at B's head by design; M6 and M7 show they check behaviour.
+- **10 single-site mutants, each fails 1 or 2 tests, none survives**: M1 the "none of them" alternative
+  removed (2); M2 "is not one of them" removed (1); M3 "holds none for" removed (2); M4 "index …
+  without its text" removed (1); M5 `holds no(ne)` back to `holds no` (1); M6 "was not among them"
+  also read as INDEX, i.e. the OPEN line (1, the held guard); M7 "is not one of them" without the
+  unit as subject (1, the legal guard); M8, M9, M10 each new corpus marker dropped (1 each).
+
+**Full suite on `lexchat_test_b`: 2367 passed** (2361 + 6; `python -m pytest -q -p no:cacheprovider`).
+
+**Data handling.** Staged diff grepped with `scratchpad_s39/matter_grep.py`; the instrument id in the
+tests is the synthetic `ssi/1901/3`, the units are "Schedule 1-3", "Annex IV" and "Widget Order 1901".
+
+**Not done.** No product code; A's module was read from a scratch copy only. No sweep, no replay. I did
+not copy B's rubric into `evidence/rubrics/` and did not edit FIX_PLAN, SESSION_LOG, CHANGELOG,
+CLAUDE.md, any rubric or memory. Not pushed, not merged.
