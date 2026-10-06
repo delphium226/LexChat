@@ -479,6 +479,43 @@ def test_a_failed_list_falls_back_to_the_whole_text_cut_at_the_heading(monkeypat
     assert asked[1] == ("/text", {"legislation_id": LID, "include_schedules": True})
 
 
+def test_a_heading_met_twice_in_the_whole_text_is_not_cut(monkeypatch):
+    """The fallback cuts only at a heading met once: a contents line at a
+    paragraph start and the schedule itself are two, and cutting at the first
+    would hand over the contents line as the unit."""
+    contents = "SCHEDULE 2 Widget fees\n\nSCHEDULE 3 Forms"
+    whole = (SECTIONS + "\n\nARRANGEMENT\n\n" + contents + "\n\n" + SCHED_1
+             + "\n\n" + SCHED_2_TEXT)
+    assert su.cut_unit_from_text(whole, su.ScheduleUnit("schedule", "2")) is None
+    assert su.cut_unit_from_text(whole, su.ScheduleUnit("schedule", "1")) is not None
+    _route_lex(monkeypatch, provisions=(503, {"detail": "busy"}), text=(200, _record(whole)))
+    out = _route("Schedule 2 paragraph 4", monkeypatch=monkeypatch)
+    assert "Whether the index holds Schedule 2 is open: do not report it as absent." in out
+    assert "refunded" not in out
+
+
+def test_a_bracket_in_the_id_or_url_never_reaches_a_header():
+    """`_clean` keeps the header bracket-free, whatever the model passed as
+    the legislation_id or LEX returned as the uri, so the strip still removes
+    the block whole."""
+    lid, url = "ssi/1901/[3]", "http://www.legislation.gov.uk/id/ssi/1901/3/schedule/[2]"
+    unit = su.ScheduleUnit("schedule", "2", paragraphs=("4",))
+    blocks = [
+        su.fetched_block(lid, unit, url, [("", "SCHEDULE 2 text")], su.WHOLE),
+        su.fetched_block(lid, unit, url, [("", "x")], su.SUMMARY, total_chars=9,
+                         source=su.FROM_TEXT),
+        su.unit_absent_line(lid, unit, [{"uri": url}], True),
+        su.unit_absent_line(lid, unit, [{"uri": url}], False),
+        su.unit_without_text_line(lid, unit),
+        su.instrument_without_text_line(lid, unit),
+        su.fetch_failed_line(lid, unit),
+    ]
+    for b in blocks:
+        header = b.strip().split("\n", 1)[0]
+        assert header.count("[") == 1 and header.count("]") == 1, header
+        assert strip_scope_blocks("Answer." + b) == ("Answer.", 1), header
+
+
 def test_a_failed_list_and_text_say_the_question_is_open(monkeypatch):
     _route_lex(monkeypatch, provisions=(httpx.ConnectTimeout("slow"), None), text=(503, {}))
     out = _route("Schedule 2", monkeypatch=monkeypatch)

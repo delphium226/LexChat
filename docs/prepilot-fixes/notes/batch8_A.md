@@ -411,10 +411,39 @@ tests.** They are:
 Mutant 20 first survived; I added `test_a_failing_route_leaves_the_section_search_as_it_was`, and it
 now fails.
 
+**Gaps the integrator's review found, now closed** (follow-up commit). Two of the integrator's three
+single-site mutants in `schedule_units.py` survived the tests:
+
+- `cut_unit_from_text` with `!= 1` changed to `< 1` (a heading met twice cut at the first);
+- `_clean` without its bracket replacement.
+
+I added two tests:
+
+- `test_a_heading_met_twice_in_the_whole_text_is_not_cut`: a contents line plus the schedule, so
+  the fallback returns nothing and the line says the question is open;
+- `test_a_bracket_in_the_id_or_url_never_reaches_a_header`: a bracket in the `legislation_id` and in
+  the `uri`, across every block and line builder, with the header bracket-free and the strip whole.
+
+**The second test exposed a real defect, and I fixed it.** `unit_absent_line` built its "schedules
+and annexes among them" list from LEX's uris without cleaning them. A bracket in a uri would reach
+the header and end `_TOOL_BLOCK`'s match early. The labels now pass through `_clean` too, which is
+the one product change in this commit.
+
+**Mutants** (`spec_review.json`, `mutants_review.txt`): each fails exactly 1 test, and the tests pass
+without them.
+
+| Mutant | Fails |
+|---|---|
+| the integrator's (1) | the heading-twice test |
+| the integrator's (2) | the bracket test |
+| my inventory fix reverted | the bracket test |
+| the integrator's third (`through = nn`) | `test_a_paragraph_whose_cut_swallows_the_next_is_labelled`, as reported |
+
 **Full suite** on `lexchat_test_a`, with outbound HTTP blocked:
 
 - after commit 1: **2357 passed**;
-- after commit 2: **2377 passed** (base 2339).
+- after commit 2: **2377 passed** (base 2339);
+- after the review follow-up: **2379 passed**.
 
 ---
 

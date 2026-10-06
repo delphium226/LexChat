@@ -684,8 +684,10 @@ def unit_absent_line(lid: str, unit: ScheduleUnit, rows: list, complete: bool) -
         return (f"\n\n{FETCHED_OPEN}whether the index holds {name} of {lid_c} is open: "
                 f"code fetched only the first {len(rows):,} provisions of its list, and "
                 f"{name} was not among them.]")
-    inv = unit_inventory(rows)
-    held = (f"its schedules and annexes among them are {_and_join(inv)}" if inv
+    # The labels come from LEX's own uris, so they are cleaned like the id:
+    # a bracket in one would end `_TOOL_BLOCK`'s match early (batch 8 review).
+    inv = [_clean(name, 40) for name in unit_inventory(rows)]
+    held =(f"its schedules and annexes among them are {_and_join(inv)}" if inv
             else "none of them is a schedule or an annex")
     return (f"\n\n{FETCHED_OPEN}the index holds {len(rows):,} provisions for {lid_c}, "
             f"and {held}: {name} is not one of them. This search's results "
