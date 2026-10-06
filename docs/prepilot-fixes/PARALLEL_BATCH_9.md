@@ -600,7 +600,8 @@ mutants.
     (`.claude/` is gitignored) where a finding changes what they say; update the Fix Tracker only if
     the user asks (FIX_PLAN "How to use this file" step 7: Artifact `read` the live URL and Read every
     line of the saved file first; a newly ticked row gets `fixed` and `ver: "Next release"`; set
-    `AS_AT` to the local date and time of the update, e.g. "7th Oct 2026, 4:05pm", and `UPDATED`).
+    `AS_AT` to the local date and time of the update, e.g. "7th Oct 2026, 4:05pm", and `UPDATED`; a new
+    row gets `added`, the day it is added; the table sorts unfinished rows first, P1 at the top).
 
 **Open with the user, carried (do not act on them yourself):** sending the lawyer pack (five
 questions now; unblocks P3.2, P3.3, P3.17, and confirms P3.22's 6363 list; confirm the cover note's
