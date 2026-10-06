@@ -376,3 +376,108 @@ to keep the call the same as before.
       one `-provision-list` read per instrument per worker run, recorded under the tool call that made
       it, including within a round. A harness counting reads per tool call would otherwise be surprised.
    2. **Leave it.** The shape is the one a memoised later round already had.
+
+---
+
+## 7. Follow-up (integrator)
+
+Two follow-ups, on the same branch and under the same rules ($0, no external call, `lexchat_test_a`).
+The user decided both items in section 6: decision 1, option 1 (the bound raised to 8); decision 2 is
+the integrator's to fold. I did not edit `AUDIT_TRACE.md`.
+
+**Commits:**
+
+- `e543ca1` fix(prepilot): P3.12's provision-list bound raised to 8, its own constant;
+- `9483c45` test(prepilot): a failed provision list is not read again in a later round;
+- this addendum.
+
+**Full suite after the last code commit: 2493 passed** on `lexchat_test_a` (2490, plus 3).
+
+### 7.1 The bound raised to 8 (`e543ca1`)
+
+**The change.**
+
+- `MAX_PROVISION_FETCHES = 8` in `agent_shared.py`, with a comment saying why: the bound now holds
+  within a round; no stored run reaches 8; the most is 6.
+- It is no longer `= MAX_ROUTED_LOOKUPS`, and the now-unused import goes.
+- P3.7's `MAX_ROUTED_LOOKUPS` and `MAX_SECTION_LOOKUPS` stay at 5, untouched. The new test asserts it.
+
+**New test.** `test_a_round_on_six_instruments_reads_all_six`: a gathered round on six instruments, the
+sweep's shape, reads all six lists.
+
+**The dry run on the committed tree** (`e543ca1`, no override). Command: `sh run_committed8.sh`, which
+runs `dryrun_slot.py` over the corpus and over the sweep with the synthetic lists, in all three modes,
+then `compare_c8.py` (`compare_c8.txt`).
+
+- **Against the live sweep: nothing moves, in every mode, `seq` included.** Block headers equal live in
+  23 of 23 firing calls, and the list reads are 22, as recorded.
+- **Against the bound-5 build (`7be6482`):**
+  - In the sweep, one round moves: 6374 rep 1, turn 4, step 3 goes from 5 reads to 6. One block moves
+    back: tool 7, from nothing to its 207-character none-held line, equal to live.
+  - Over the corpus with the saved lists, three rounds move: that one, and the sixth instrument of the
+    two older 6374 runs (`wave2_p23` r1 t3, `wave2_p27_pre` r1 t4 step 3), each 0 to 1 read in a later
+    round. No block moves (0 of 257): those two instruments have no saved list.
+  - Those two runs predate the route, so their sixth block was never seen live. At bound 8 it would be
+    the route's ordinary block.
+- **Against the old code (`ca3d45c`):**
+  - The sweep with the synthetic lists, `model` and `burst`: 0 rounds and 0 blocks move. The built code
+    now makes exactly the live reads.
+  - Over the corpus, the only rounds that move are the same-round duplicate reads now shared (the
+    `wave4_p32_pre` p32_6406 round, 2 to 1; with all calls at once, also `baseline` 6406, 2 to 1) and the
+    two older 6374 runs' sixth instrument (0 to 1). 0 blocks move.
+- The committed tree's runs are identical to the earlier `DRYRUN_BOUND=8` runs on `7be6482`, in all
+  three modes (`compare_c8.txt`).
+
+**Every test that follows the constant still means what it did.** Three tests read
+`MAX_PROVISION_FETCHES`:
+
+| Test | What it checks, unchanged | At 8 |
+|---|---|---|
+| `test_the_route_is_bounded_per_run` | a run whose dict is full refuses a new instrument with no read | the dict holds 8 failed outcomes |
+| `test_a_round_on_more_instruments_than_the_bound_fetches_only_the_bound` | n+1 instruments gathered: n reads, the last refused | 9 instruments, 8 reads |
+| `test_a_failed_list_and_its_fallback_text_are_fetched_once_for_a_round` | a recorded failed slot counts against the bound | `bound - 1` fillers, then a new instrument refused |
+
+The synthetic ids stay clear of the test instrument: `ssi/1901/10` to `/18` and `/99`, never `/3`.
+
+**Check (passes).** The bound mutants re-run at 8 fail exactly the tests they failed at 5. Command:
+`python spec_bound8.py`, then `python mutants.py spec_bound8.json` (`mutants_bound8.txt`).
+
+| Mutant | Fails at 8 | Same set as at 5 |
+|---|---|---|
+| b7, the bound ignored | 3 | yes (s7) |
+| b8, only finished reads counted | 1 | yes (s8) |
+| b11, no bound passed | 3 | yes (s11) |
+| b12, a refused slot not checked | 4 | yes (s12) |
+| b0, the bound put back to 5 | 1, the new six-instrument test | (new) |
+
+`test_quick_lookup_tools.py` (P3.7's `MAX_SECTION_LOOKUPS`) is in the selection and unaffected.
+`bound_refusals.py` reads the constant, so it now reports refusals against 8.
+
+### 7.2 The gap the integrator's mutant found (`9483c45`)
+
+The integrator's mutant of `_fetch_once` made a slot holding a FINISHED failed outcome not count as
+memoised, so a later call read the list and the fallback text again. All 267 of my tests passed under
+it.
+
+The spec is unchanged since batch 8 A's "fetch failed" case: a failed read stays recorded for the run
+and is not read again.
+
+**New test.** `test_a_failed_list_is_not_read_again_in_a_later_round`, parametrised on whether the
+fallback text comes back:
+
+- round 1: a failed list makes one list read and one text read;
+- round 2: two gathered calls on the same instrument make no further read, and each gets exactly round
+  1's output (the cut from the whole text, or the "neither from it nor from the whole text" line);
+- the slot stays `{"status": "failed", ...}`, and the dict holds one instrument.
+
+**The mutants.** Command: `python spec_failedmemo.py`, then `python mutants.py spec_failedmemo.json`
+(`mutants_failedmemo.txt`). The runner asserts each anchor occurs exactly once and writes the file back
+with its own line endings; the mutated file is CRLF in 1,531 of 1,531 lines and carries the mutation
+once.
+
+| Mutant | Fails (of 350 tests) |
+|---|---|
+| f1, the integrator's verbatim (`if key in holder and not (isinstance(holder[key], dict) and holder[key].get("status") == "failed"):`) | 2: both cases of the new test |
+| f2, a sibling: a recorded None (a fallback text that did not come back) not memoised | 1: the no-text case |
+
+**Check (passes).** Both cases pass on the build, inside the 2493.
