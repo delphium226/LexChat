@@ -147,6 +147,60 @@ def test_check_dates_fails_when_the_window_is_ignored():
     assert caselaw_probe.check_dates(get, query="widget", court="ewhc/ch", year=1901) is False
 
 
+def _dates_getter(window=None, one_end=None, undated=None):
+    """A fake GET for `check_dates`: each request kind answered separately,
+    defaulting to a passing feed."""
+    def get(url, params=None):
+        params = dict(params or {})
+        if "from_date_2" in params:
+            return window if window is not None else _dated_feed("w", 1901, 5)
+        if "to_date_2" in params:
+            return one_end if one_end is not None else _dated_feed("w", 1901, 5)
+        return undated if undated is not None else _dated_feed("n", 1902, 5)
+    return get
+
+
+def test_check_dates_each_guard_fails_alone():
+    """Each condition of the PASS, failed on its own (batch 9 B: one guard was
+    untested): a window holding a judgment outside it, a window page that is
+    the undated page, an empty window, and the same two for the one-end call."""
+    check = lambda get: caselaw_probe.check_dates(get, query="widget", court="ewhc/ch", year=1901)
+    assert check(_dates_getter()) is True
+    # outside the window, but not on the undated page
+    assert check(_dates_getter(window=_dated_feed("w", 1899, 5))) is False
+    # inside the window, but the very rows of the undated page
+    assert check(_dates_getter(window=_dated_feed("n", 1901, 5),
+                               undated=_dated_feed("n", 1901, 5))) is False
+    # nothing in the window
+    assert check(_dates_getter(window=_dated_feed("w", 1901, 0))) is False
+    # the one-end call: outside its window, then empty
+    assert check(_dates_getter(one_end=_dated_feed("w", 1902, 5))) is False
+    assert check(_dates_getter(one_end=_dated_feed("w", 1901, 0))) is False
+
+
+def test_check_count_each_guard_fails_alone():
+    """The count check's two conditions, each failed on its own: the last page
+    empty, and the paged count outside the product's range (a page size the
+    feed did not honour); and a short page passes without paging."""
+    def getter(tail_rows, first=None, calls=None):
+        def get(url, params=None):
+            params = dict(params or {})
+            if calls is not None:
+                calls.append(params)
+            if "page" in params:
+                return _feed(_NEWEST[:tail_rows], last=520)
+            return first if first is not None else _feed(_RELEVANT[:50], last=520)
+        return get
+
+    check = lambda get: caselaw_probe.check_count(get, query="widget")
+    assert check(getter(3)) is True
+    assert check(getter(0)) is False                 # the last page held nothing
+    assert check(getter(50)) is False                # 5,240 is outside 5,191-5,200
+    calls = []
+    assert check(getter(3, first=_feed(_RELEVANT[:7], last=1), calls=calls)) is True
+    assert len(calls) == 1                           # a short page is the whole set
+
+
 def test_fails_when_the_feed_ignores_the_order():
     # A withdrawn `order=relevance` looks like the default list again.
     ignored = _feed(_NEWEST[:50], last=520)
