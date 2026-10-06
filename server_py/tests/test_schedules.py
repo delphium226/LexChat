@@ -337,6 +337,47 @@ def test_named_units_reads_every_form():
         assert su.named_units(q) == [], q
 
 
+@pytest.mark.parametrize("query, want", [
+    ("Schedule A1 paragraphs 12 13 14 widgets", ("12", "13", "14")),
+    ("Schedule A1 paragraph 12 13 14", ("12", "13", "14")),
+    ("Schedule 2 para 12 13 to 15", ("12", "13", "14", "15")),
+    ("Schedule 2 paragraphs 12(1) 13(2) widgets", ("12", "13")),
+    ("Schedule 2 paras 1 2A 3", ("1", "2A", "3")),
+    ("Schedule 2 paragraphs 2 3 4 5 6 7", ("2", "3", "4", "5")),      # the cap
+])
+def test_a_paragraph_run_joined_by_spaces_is_read(query, want):
+    """Batch 8 A2 (the integrator's sweep): the Worker wrote a schedule's
+    paragraphs as "paragraphs 12 13 14", the parser read only the first, and
+    the route cut only that one."""
+    assert su.named_units(query)[0].paragraphs == want
+
+
+@pytest.mark.parametrize("query, want", [
+    ("Schedule 2 paragraph 3 1901 widgets", ("3",)),          # a year
+    ("Schedule 2 paragraph 3 1901/12", ("3",)),               # a citation
+    ("Schedule 2 paragraph 3 Part 2", ("3",)),
+    ("Schedule 2 paragraph 4 1 April 1901", ("4",)),          # a date
+    ("Schedule 2 paragraph 3 12 March", ("3",)),              # a date, ascending
+    ("Schedule 2 paragraph 5 14 days", ("5",)),               # a count
+    ("Schedule 2 paragraph 3 5 per cent", ("3",)),
+    ("Schedule 2 paragraph 3 5% widgets", ("3",)),
+    ("Schedule 2 paragraph 3 4.5 widgets", ("3",)),
+    ("Schedule 2 paragraph 4 2 widgets", ("4",)),             # not ascending
+    ("Schedule 2 paragraph 4 5 6 3 widgets", ("4", "5", "6")),
+])
+def test_a_number_after_a_paragraph_that_is_not_one_is_not_read(query, want):
+    assert su.named_units(query)[0].paragraphs == want
+
+
+def test_the_route_cuts_every_paragraph_of_a_run_joined_by_spaces(monkeypatch):
+    _route_lex(monkeypatch)
+    out = _route("Schedule 2 paragraphs 1 4 widgets", monkeypatch=monkeypatch)
+    assert "Paragraph 1 of Schedule 2, cut at its own heading and the next one:" in out
+    assert "Paragraph 4 of Schedule 2, cut at its own heading and the next one:" in out
+    assert "one shilling" in out and "A fee may be refunded." in out
+    assert "sixpence" not in out and "waive" not in out
+
+
 def test_unit_in_results():
     u = su.named_units("Schedule 2 paragraph 4")[0]
     assert su.unit_in_results(_search_result("article/1"), u) is False
