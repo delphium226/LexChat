@@ -14,7 +14,25 @@ from typing import Callable, Optional
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import harvest_legislation_urls, provision_url_block
 from ..utils.section_outline import subsection_outline
-from ..utils.schedule_units import schedules_note
+from ..utils.schedule_units import (
+    FROM_LIST,
+    FROM_TEXT,
+    SUMMARY,
+    cut_pieces,
+    cut_unit_from_text,
+    fetch_failed_line,
+    fetched_block,
+    instrument_without_text_line,
+    named_units,
+    pick_provision,
+    schedules_note,
+    unit_absent_line,
+    unit_in_results,
+    unit_without_text_line,
+)
+from ..utils.instrument_lookup import MAX_ROUTED_LOOKUPS, lookup_args
+from ..utils.instrument_lookup import legislation_id as lookup_legislation_id
+from .tools.executor import fetch_provision_list, fetch_text_with_schedules
 from ..utils.instrument_lookup import LOOKUP_TOOL
 from ..utils.discovery_budget import (
     legislation_budget_blocks,
@@ -480,6 +498,112 @@ def _worker_tool_key_arg(args: dict) -> Optional[str]:
     return key_arg
 
 
+# P3.12: at most this many instruments' provision lists fetched by code in one
+# worker run, like P3.7's routed lookups. Each is one call (memoised for the
+# run); a unit named on a further instrument is left to the Worker.
+MAX_PROVISION_FETCHES = MAX_ROUTED_LOOKUPS
+
+
+async def schedule_route_block(
+    name: str,
+    args: dict,
+    raw_result,
+    query: str,
+    fetches: Optional[dict],
+    chunk_fn: Callable = None,
+    summarise_model: str = "",
+    parent_on_chunk: Optional[Callable] = None,
+    timing_collector=None,
+    cancel_event=None,
+    pending_chars: int = 0,
+    context_budget: Optional[dict] = None,
+    retrieved_urls: Optional[set] = None,
+) -> str:
+    """P3.12: the block for a schedule or annex unit a section search's query
+    names and its results left out ("" when there is none).
+
+    Fetches the instrument's provision list once per worker run (`fetches`,
+    lid -> outcome; None disables the route), picks the unit by `uri` and hands
+    it over: cut where it cuts cleanly (`schedule_units.cut_pieces`), else
+    whole, summarised for the query when it is larger than a result the Worker
+    would be handed verbatim (the same threshold, and the same context budget,
+    as any tool result). A unit the complete list does not hold is said in
+    code: a true negative, attributed to the index. On a failed list, the
+    instrument's whole text with its schedules (P3.27's flag) is cut at the
+    unit's heading; failing that, a line says the question is open.
+    Exceptions propagate: the caller fails soft.
+    """
+    if name != "search_legislation_sections" or fetches is None or not isinstance(args, dict):
+        return ""
+    units = [u for u in named_units(args.get("query"))
+             if unit_in_results(raw_result, u) is False]
+    if not units:
+        return ""
+    ref = lookup_args({"legislation_id": args.get("legislation_id")})
+    lid = lookup_legislation_id(ref) if ref else str(args.get("legislation_id") or "").strip()
+    if not lid:
+        return ""
+    if lid not in fetches:
+        if len(fetches) >= MAX_PROVISION_FETCHES:
+            return ""
+        fetches[lid] = await fetch_provision_list(
+            lid, on_chunk=parent_on_chunk, timing_collector=timing_collector)
+    outcome = fetches[lid]
+
+    from .provider_factory import get_summarise_threshold
+    threshold = get_summarise_threshold()
+    out = []
+    for unit in units:
+        source, url, text = FROM_LIST, "", None
+        if outcome.get("status") == "ok":
+            row = pick_provision(outcome.get("rows"), unit)
+            if row is None:
+                out.append(unit_absent_line(lid, unit, outcome.get("rows") or [],
+                                            bool(outcome.get("complete"))))
+                continue
+            url = str(row.get("uri") or row.get("id") or "")
+            text = str(row.get("text") or "")
+            if not text.strip():
+                out.append(unit_without_text_line(lid, unit))
+                continue
+        elif outcome.get("status") == "no_text":
+            out.append(instrument_without_text_line(lid, unit))
+            continue
+        else:
+            if "text" not in outcome:
+                outcome["text"] = await fetch_text_with_schedules(
+                    lid, on_chunk=parent_on_chunk, timing_collector=timing_collector)
+            text = cut_unit_from_text(outcome.get("text") or "", unit)
+            if not text:
+                out.append(fetch_failed_line(lid, unit))
+                continue
+            source = FROM_TEXT
+        pieces, how, reason = cut_pieces(unit, text)
+        total = sum(len(t) for _, t in pieces)
+        over_budget = (context_budget is not None and
+                       context_budget["used"] + pending_chars + total > context_budget["limit"])
+        if total > threshold or over_budget:
+            joined = "\n\n".join((lbl + "\n" if lbl else "") + t for lbl, t in pieces)
+            summary, _degraded = await summarise_for_query(
+                joined, query, summarise_model, chunk_fn=chunk_fn,
+                timing_collector=timing_collector,
+                doc_name=f"{unit.display()} of {lid}", cancel_event=cancel_event)
+            if len(summary) > threshold:
+                summary = summary[:threshold]
+            if timing_collector:
+                from .summarisation import SUMMARISE_CHUNK_CHARS
+                timing_collector.record_summarisation(
+                    total, len(summary), max(1, -(-total // SUMMARISE_CHUNK_CHARS)))
+            pieces, how = [("", summary)], SUMMARY
+        if url and retrieved_urls is not None:
+            harvest_legislation_urls(json.dumps({"url": url}), into=retrieved_urls)
+        block = fetched_block(lid, unit, url, pieces, how, reason=reason,
+                              total_chars=total, source=source)
+        pending_chars += len(block)
+        out.append(block)
+    return "".join(out)
+
+
 async def run_worker_tool(
     name: str,
     args: dict,
@@ -498,6 +622,7 @@ async def run_worker_tool(
     retrieved_urls: Optional[set] = None,
     search_log: Optional[list] = None,
     result_suffix: str = "",
+    provision_fetches: Optional[dict] = None,
 ) -> str:
     """Execute a single Worker tool call and return the (possibly summarised) result.
 
@@ -545,6 +670,12 @@ async def run_worker_tool(
             recital block from a code lookup). Not applied to a memo hit or a
             refused call, which return what they returned before. "" (the
             default) changes nothing.
+        provision_fetches: Per-WORKER-RUN dict, legislation_id -> the outcome
+            of code's `/legislation/section/lookup` for it (P3.12). When a
+            section search's query names a schedule or annex unit its results
+            left out, `schedule_route_block` fetches the instrument's
+            provisions once, picks the unit by `uri` and appends it. None (the
+            default) disables the route.
     """
     activity_id = uuid.uuid4().hex[:8]
 
@@ -1229,6 +1360,23 @@ async def run_worker_tool(
     if _audit_summarised:
         result += summarised_result_blocks(name, raw_result)
 
+    # P3.12: a schedule or annex unit the query named and the results left
+    # out, fetched by code from the instrument's provision list. After the
+    # result's own summarisation, so the unit is never folded into that
+    # summary; fail-soft (Invariant 5), so a failure here leaves the search
+    # result exactly as it was.
+    fetched_note = ""
+    try:
+        fetched_note = await schedule_route_block(
+            name, args, raw_result, query, provision_fetches,
+            chunk_fn=chunk_fn, summarise_model=summarise_model,
+            parent_on_chunk=parent_on_chunk, timing_collector=timing_collector,
+            cancel_event=cancel_event, pending_chars=len(result),
+            context_budget=context_budget, retrieved_urls=retrieved_urls)
+    except Exception:
+        logger.warning("[Worker] Schedule route after a section search failed", exc_info=True)
+        fetched_note = ""
+
     # Append phase nudges after summarisation so they are not discarded
     # by the summariser and remain visible in the message the model receives.
     # P2.2's scope block goes on before the Phase-2 nudge, so the imperative
@@ -1239,6 +1387,7 @@ async def run_worker_tool(
     result += enabling_note
     result += schedules_line
     result += relations_note
+    result += fetched_note
     result += phase2_note
     result += sp_phase2_note
     result += sp_committee_phase2_note

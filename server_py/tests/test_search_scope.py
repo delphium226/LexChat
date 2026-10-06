@@ -1205,6 +1205,9 @@ def test_footer_trips_no_detector():
     # (headings named, one heading, lead text, no heading, none held, the
     # boundary unknown). It is Worker-facing, and a Worker can echo it.
     screened += _schedule_line_variants()
+    # P3.12: every header, piece label and line of the PROVISION FETCHED BY
+    # CODE block, on synthetic labels with no statutory text in the body.
+    screened += _fetched_wording_variants()
     for text in screened:
         assert not NEG_ASSERTED.search(text), text
         assert not NOT_FOUND.search(text), text
@@ -1245,6 +1248,39 @@ def _schedule_line_variants() -> list:
     ]
     assert all(variants) and len(set(variants)) == len(variants), variants
     return variants
+
+
+def _fetched_wording_variants() -> list:
+    """Every wording P3.12's route can write (`schedule_units`), for the screen."""
+    from src.utils import schedule_units as su
+
+    lid, url = "ssi/1901/3", "http://www.legislation.gov.uk/id/ssi/1901/3/schedule/2"
+    sch = su.ScheduleUnit("schedule", "2", paragraphs=("4",))
+    anx = su.ScheduleUnit("annex", "II", chapter="II")
+    rows = [{"uri": url}, {"uri": url.replace("schedule/2", "annex/II")}]
+    texts = [
+        su.unit_absent_line(lid, su.ScheduleUnit("schedule", "7"), rows, True),
+        su.unit_absent_line(lid, su.ScheduleUnit("schedule", "7"), [{"uri": "x/article/1"}], True),
+        su.unit_absent_line(lid, su.ScheduleUnit("schedule", "7"), rows, False),
+        su.unit_without_text_line(lid, sch),
+        su.instrument_without_text_line(lid, sch),
+        su.fetch_failed_line(lid, sch),
+        su.paragraph_label(sch, "4", su.PARAGRAPH_CUT, None),
+        su.paragraph_label(sch, "4", su.SPAN_CUT, 6),
+        su.paragraph_label(sch, "4", su.SPAN_CUT, None),
+        su.paragraph_label(sch, "4", su.TO_THE_END, None),
+        su.cut_pieces(anx, "CHAPTER IIRules. CHAPTER IIIMore.")[0][0][0],
+        su.cut_pieces(anx, "no chapter headings")[2],
+        su.cut_pieces(sch, "1) bare")[2],
+        su.cut_pieces(su.ScheduleUnit("schedule", "2", paragraphs=("4", "5")), "1) bare")[2],
+    ]
+    for source in (su.FROM_LIST, su.FROM_TEXT):
+        for how in (su.CUT, su.WHOLE, su.SUMMARY):
+            for reason in ("", texts[-2]):
+                texts.append(su.fetched_block(lid, sch, url, [("", "")], how, reason=reason,
+                                              total_chars=92066, source=source).strip())
+    assert all(texts) and len(set(texts)) == len(texts), texts
+    return texts
 
 
 def test_the_enabling_block_is_stripped_before_a_lawyer_sees_it():

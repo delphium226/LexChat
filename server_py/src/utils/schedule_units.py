@@ -1,4 +1,5 @@
-"""Schedules and annexes: what a whole-text read carries (FIX_PLAN P3.27).
+"""Schedules and annexes: what a whole-text read carries (FIX_PLAN P3.27) and
+the code route to one named unit a section search did not return (P3.12).
 
 **P3.27, the defect.** LEX's `/legislation/text` takes `include_schedules`,
 default `false` ("only sections are returned"), and `get_legislation_text`
@@ -16,9 +17,27 @@ and names only the schedules and annexes the text carries, or says the index
 holds none for the instrument. It says nothing else: not what they contain,
 and nothing about whether the instrument has schedules the index does not hold.
 
+**P3.12, the defect.** LEX holds a schedule or an annex as ONE provision
+(`/schedule/B1`, `/annex/XIV`): there is no `/schedule/B1/paragraph/43` to rank,
+and the section search does not reliably reach the unit by name (batch 7 B:
+a schedule asked for by its name was not in the top 50 for its Act). P3.12's
+Worker searched for one paragraph eighteen times; on P3.2's control turn the
+annex chapter came back from a section search in 2 of 15 reps. So when a
+section search's query names a schedule or annex unit the results lack, code
+fetches the instrument's provisions by `/legislation/section/lookup` (which
+returns every provision with its text), picks the unit by `uri`, and hands it
+over: an annex chapter cut at its heading (`cut_annex`, 112 of 112 live
+chapters); a schedule paragraph cut only where its `Section N)` line is unique
+AND the next headed paragraph is N+1 (348 of 440 live), otherwise labelled with
+the paragraphs the cut runs through; otherwise the whole unit, summarised for
+the query when it is large (P1.6's pattern). A unit the provision list does not
+hold is said in code (Invariant 1: the negative is true, and attributed to the
+index, not to a search limit). The HTTP calls are in `agent/tools/executor.py`
+and the orchestration in `agent_shared.py`; this module is the pure part.
+
 **Every block here is addressed to the Worker.** Each sits in a tool result and
 is stripped from an answer by `search_scope.strip_scope_blocks`
-(`_TOOL_BLOCK`). No header carries a square bracket inside it,
+(`_FETCHED_BLOCK`, `_TOOL_BLOCK`). No header carries a square bracket inside it,
 and the wording is screened against every answer detector in
 `tools/replay_report.py` (`tests/test_search_scope.py::
 test_footer_trips_no_detector`).
@@ -28,6 +47,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from typing import Any, Optional
 
 __all__ = [
@@ -37,6 +57,32 @@ __all__ = [
     "schedule_headings",
     "schedules_note",
     "full_text_of",
+    "ScheduleUnit",
+    "named_units",
+    "unit_in_results",
+    "pick_provision",
+    "unit_inventory",
+    "cut_annex",
+    "cut_schedule_paragraph",
+    "cut_unit_from_text",
+    "paragraph_label",
+    "fetched_block",
+    "unit_absent_line",
+    "unit_without_text_line",
+    "instrument_without_text_line",
+    "fetch_failed_line",
+    "cut_pieces",
+    "CUT",
+    "WHOLE",
+    "SUMMARY",
+    "FROM_LIST",
+    "FROM_TEXT",
+    "PARAGRAPH_CUT",
+    "SPAN_CUT",
+    "TO_THE_END",
+    "NOT_CUT",
+    "FETCHED_OPEN",
+    "FETCHED_CLOSE",
 ]
 
 # ---------------------------------------------------------------------------
@@ -242,3 +288,423 @@ def schedules_note(args: dict, data: Any) -> str:
         )
     except Exception:
         return ""
+
+
+# ---------------------------------------------------------------------------
+# P3.12: the unit a section-search query names
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ScheduleUnit:
+    """One schedule or annex unit a query names."""
+    kind: str                       # "schedule" | "annex"
+    label: str                      # "B1", "2", "XIV"
+    paragraphs: tuple = ()          # ("42", "43", "44"), schedules only
+    part: str = ""                  # a Part, Chapter or Head of a schedule
+    chapter: str = ""               # an annex chapter numeral
+
+    def display(self) -> str:
+        return f"{'Schedule' if self.kind == 'schedule' else 'Annex'} {self.label}"
+
+
+# The word is case-insensitive, the label is not: "Schedules 1 and 2" names
+# Schedule 1 and "schedules to the Act" names nothing (batch 7 B's first draft
+# read "Schedules" as "Schedule S").
+_SCH_WORD = r"\b(?i:schedules?|sch(?:ed)?\.?)"
+_SCH_LABEL = r"([A-Z]{0,3}\d{1,3}[A-Z]{0,4}|[A-Z]\d?)\b"
+_SCH_RX = re.compile(_SCH_WORD + r"[ \t]*" + _SCH_LABEL)
+_PARA_WORD = r"\b(?i:paragraphs?|paras?\.?|para\b|¶)"
+_PNUM = r"\d{1,3}[A-Z]{0,2}"
+_PARA_RX = re.compile(
+    _PARA_WORD + r"[ \t]*(" + _PNUM + r"(?:\([^)]{1,6}\))*"
+    r"(?:[ \t]*(?:,|and|to|-|–|&)[ \t]*(?:and[ \t]+)?" + _PNUM + r"(?:\([^)]{1,6}\))*)*)"
+)
+_SCH_PART_RX = re.compile(
+    _SCH_WORD + r"[ \t]*[A-Z]{0,3}\d{1,3}[A-Z]{0,4}[ \t,]+"
+    r"(?i:part|chapter|head)[ \t]+([A-Z0-9]{1,6})\b"
+)
+_ANNEX_RX = re.compile(r"\b(?i:annex)[ \t]+([IVXLC]{1,7}|\d{1,3})\b")
+_CHAPTER_RX = re.compile(r"\b(?i:chapter)[ \t]+([IVXL]{1,6})\b")
+_MAX_PARAGRAPHS = 4
+_MAX_UNITS = 2
+
+
+def _paragraphs(query: str) -> tuple:
+    """The schedule paragraph numbers a query names, ranges expanded, capped."""
+    out = []
+    for m in _PARA_RX.finditer(query):
+        body = re.sub(r"\([^)]{1,6}\)", "", m.group(1))
+        for p in re.split(r"[ \t]*(?:,|&|\band\b)[ \t]*", body):
+            p = p.strip()
+            if not p:
+                continue
+            rng = re.fullmatch(rf"({_PNUM})[ \t]*(?:to|-|–)[ \t]*({_PNUM})", p)
+            if rng:
+                a, b = rng.group(1), rng.group(2)
+                if a.isdigit() and b.isdigit() and 0 < int(b) - int(a) <= 6:
+                    out.extend(str(i) for i in range(int(a), int(b) + 1))
+                else:
+                    out.extend([a, b])
+                continue
+            if re.fullmatch(_PNUM, p):
+                out.append(p)
+    seen = []
+    for p in out:
+        if p not in seen:
+            seen.append(p)
+    return tuple(seen[:_MAX_PARAGRAPHS])
+
+
+def named_units(query: Any) -> list:
+    """Every schedule or annex unit `query` names, as `ScheduleUnit`s, at most
+    `_MAX_UNITS`. A paragraph number (or a Part) is attached to a schedule only
+    when the query names exactly one schedule, an annex chapter only when it
+    names exactly one annex: the model quotes "Schedule X" and "paragraph N"
+    separately as often as together (batch 6 D's hand-read). Never raises.
+    """
+    try:
+        q = str(query or "")
+        if not q:
+            return []
+        sched_labels, annex_labels = [], []
+        for m in _SCH_RX.finditer(q):
+            if m.group(1) not in sched_labels:
+                sched_labels.append(m.group(1))
+        for m in _ANNEX_RX.finditer(q):
+            if m.group(1) not in annex_labels:
+                annex_labels.append(m.group(1))
+        one_sched = len(sched_labels) == 1
+        paras = _paragraphs(q) if one_sched else ()
+        part_m = _SCH_PART_RX.search(q) if one_sched else None
+        units = [ScheduleUnit("schedule", lab, paragraphs=paras,
+                              part=part_m.group(1) if part_m else "")
+                 for lab in sched_labels]
+        ch = _CHAPTER_RX.search(q) if len(annex_labels) == 1 else None
+        units += [ScheduleUnit("annex", lab, chapter=ch.group(1) if ch else "")
+                  for lab in annex_labels]
+        return units[:_MAX_UNITS]
+    except Exception:
+        return []
+
+
+def _url_of(row: Any) -> str:
+    if not isinstance(row, dict):
+        return ""
+    return str(row.get("url") or row.get("uri") or row.get("id") or "").strip().rstrip("/")
+
+
+def _seg(unit: ScheduleUnit) -> str:
+    return "schedule" if unit.kind == "schedule" else "annex"
+
+
+def _is_sole_unit_url(url: str, unit: ScheduleUnit) -> bool:
+    """An unnumbered `/schedule` (or `/annex`): legislation.gov.uk writes an
+    instrument's only schedule without a number. It answers a query naming
+    Schedule 1 (or Annex I, Annex 1)."""
+    return (url.lower().endswith(f"/{_seg(unit)}")
+            and unit.label.upper() in ("1", "I"))
+
+
+def unit_in_results(data: Any, unit: ScheduleUnit) -> Optional[bool]:
+    """Did this section search return the unit? None when the result is not a
+    list of rows (an error), so the caller does nothing. Never raises."""
+    try:
+        d = data
+        if isinstance(data, str):
+            d, _ = json.JSONDecoder().raw_decode(data.lstrip())
+        rows = d.get("results") if isinstance(d, dict) else d
+        if not isinstance(rows, list):
+            return None
+        want = f"/{_seg(unit)}/{unit.label}".lower()
+        return any(_url_of(r).lower().endswith(want) or _is_sole_unit_url(_url_of(r), unit)
+                   for r in rows)
+    except Exception:
+        return None
+
+
+def pick_provision(rows: Any, unit: ScheduleUnit) -> Optional[dict]:
+    """The unit's row from a `/legislation/section/lookup` list, by `uri`: an
+    exact `/schedule/<label>` (or `/annex/<label>`), case-insensitive; else, for
+    Schedule 1 or Annex I, the instrument's only, unnumbered one, where it has
+    no numbered one. None otherwise."""
+    if not isinstance(rows, list):
+        return None
+    want = f"/{_seg(unit)}/{unit.label}".lower()
+    for r in rows:
+        if _url_of(r).lower().endswith(want):
+            return r
+    numbered = [r for r in rows if re.search(rf"/{_seg(unit)}/[^/]+$", _url_of(r), re.I)]
+    if not numbered:
+        for r in rows:
+            if _is_sole_unit_url(_url_of(r), unit):
+                return r
+    return None
+
+
+def unit_inventory(rows: Any) -> list:
+    """The schedules and annexes a provision list holds, in its own order:
+    "Schedule 2", "the Schedule", "Annex XIV"."""
+    out = []
+    for r in rows if isinstance(rows, list) else []:
+        m = re.search(r"/(schedule|annex)(?:/([^/]+))?$", _url_of(r), re.I)
+        if not m:
+            continue
+        word = "Schedule" if m.group(1).lower() == "schedule" else "Annex"
+        name = f"{word} {m.group(2)}" if m.group(2) else f"the {word}"
+        if name not in out:
+            out.append(name)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# P3.12: cutting the unit out of its text
+# ---------------------------------------------------------------------------
+
+# Moved here from `tools/provision_hints.py` (Session 31's dev tool, which now
+# delegates to it), unchanged in behaviour: LEX renders a heading run into its
+# title ("CHAPTER XIGeneral ...", "Section 3Specific ..."), so a numeral is
+# ended by a non-numeral or by a capital followed by a lower-case letter, never
+# by a word boundary.
+_ROMAN_END = r"(?=[^IVXL]|[IVXL][a-z]|$)"
+
+
+def cut_annex(text: str, chapter: str = "", section: str = "") -> tuple:
+    """(slice, how). A chapter is cut on its upper-case heading, to the next
+    chapter heading; a section only where its heading occurs once in the
+    chapter span. `how`: "whole annex", "chapter cut", "chapter heading
+    absent", with ", section cut" or ", section heading xN" after it."""
+    text = text or ""
+    span, how = text, "whole annex"
+    if chapter:
+        m = re.search(rf"\bCHAPTER\s*{chapter}{_ROMAN_END}", text)
+        if m:
+            nxt = re.search(rf"\bCHAPTER\s*[IVXL]+{_ROMAN_END}", text[m.end():])
+            span = text[m.start(): m.end() + (nxt.start() if nxt else len(text))]
+            how = "chapter cut"
+        else:
+            how = "chapter heading absent"
+    if section:
+        hits = list(re.finditer(rf"Section\s*{section}(?=\s*[A-Z])", span))
+        if len(hits) == 1:
+            nxt = re.search(r"Section\s*\d+(?=\s*[A-Z])", span[hits[0].end():])
+            span = span[hits[0].start(): hits[0].end() + (nxt.start() if nxt else len(span))]
+            how = (how + ", section cut") if how == "chapter cut" else "section cut"
+        else:
+            how += f", section heading x{len(hits)}"
+    return span, how
+
+
+# A schedule paragraph's own heading line, "Section 43) **...**" at a line
+# start (LEX writes "Section" for a schedule paragraph). Un-headed paragraphs
+# are rendered bare ("44) ..."), like sub-paragraphs, so they cannot be told
+# apart and are never cut on (batch 6 D: a bare marker is unique for only 106
+# of 397).
+_SEC_LINE = re.compile(r"(?m)^[ \t]*Section\s+(\d{1,3})([A-Z]{0,3})\)")
+PARAGRAPH_CUT = "paragraph cut"
+SPAN_CUT = "span cut"
+TO_THE_END = "to the end"
+NOT_CUT = "no unique heading"
+
+
+def _split_label(label: str) -> tuple:
+    m = re.fullmatch(r"(\d{1,3})([A-Z]{0,3})", str(label or "").strip().upper())
+    return (int(m.group(1)), m.group(2)) if m else (None, "")
+
+
+def cut_schedule_paragraph(text: str, label: str) -> tuple:
+    """(slice, how, through) for paragraph `label` of a schedule's text.
+
+    * PARAGRAPH_CUT: its `Section N)` line is unique and the next headed
+      paragraph is N+1 (or a lettered insert after N), so the slice is exactly
+      paragraph N (batch 7 B: 348 of 440 live paragraphs);
+    * SPAN_CUT: unique, but the next headed paragraph comes later, so the slice
+      also holds the un-headed paragraphs between; `through` is the last
+      paragraph it runs through (None if the numbering restarts);
+    * TO_THE_END: unique and the last headed paragraph: the slice runs to the
+      end of the schedule;
+    * NOT_CUT: no unique heading line; the slice is None.
+    """
+    text = text or ""
+    n, suf = _split_label(label)
+    if n is None:
+        return None, NOT_CUT, None
+    hits = [m for m in _SEC_LINE.finditer(text) if int(m.group(1)) == n and m.group(2) == suf]
+    if len(hits) != 1:
+        return None, NOT_CUT, None
+    m = hits[0]
+    nxt = _SEC_LINE.search(text, m.end())
+    if not nxt:
+        return text[m.start():].strip(), TO_THE_END, None
+    span = text[m.start():nxt.start()].strip()
+    nn, ns = int(nxt.group(1)), nxt.group(2)
+    if (nn == n + 1 and not ns) or (nn == n and ns > suf):
+        return span, PARAGRAPH_CUT, None
+    through = nn if ns else nn - 1
+    return span, SPAN_CUT, (through if through > n else None)
+
+
+def cut_unit_from_text(full_text: str, unit: ScheduleUnit) -> Optional[str]:
+    """The unit's own text out of a whole text with its schedules appended,
+    from its heading to the next schedule or annex heading. P3.12's fallback
+    when the provision list does not come back. None when the heading is
+    absent or met more than once."""
+    try:
+        text = full_text or ""
+        hits = []
+        for rx in (_HEADING, _HEADING_MIXED):
+            for m in rx.finditer(text):
+                kind, label, _ = _heading_label(m)
+                hits.append((m.end() - len(m.group(0).lstrip()), kind, label))
+        hits.sort()
+        want = [i for i, h in enumerate(hits)
+                if h[1] == unit.kind and h[2].upper() == unit.label.upper()]
+        if len(want) != 1:
+            return None
+        i = want[0]
+        end = hits[i + 1][0] if i + 1 < len(hits) else len(text)
+        return text[hits[i][0]:end].strip() or None
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# P3.12: the block
+# ---------------------------------------------------------------------------
+
+# Delimited, like P3.11's outline, because the body is retrieved statutory text
+# and may carry a square bracket; the header, the piece labels and the closer
+# carry none. `search_scope.strip_scope_blocks` removes the block whole if a
+# model echoes it, and `_TOOL_BLOCK` a stray header or closer.
+FETCHED_OPEN = "[PROVISION FETCHED BY CODE — "
+FETCHED_CLOSE = "[/PROVISION FETCHED BY CODE]"
+
+
+def _clean(text: str, cap: int = 200) -> str:
+    s = re.sub(r"\s+", " ", str(text or "")).strip().replace("[", "(").replace("]", ")")
+    return s[:cap]
+
+
+def paragraph_label(unit: ScheduleUnit, para: str, how: str, through: Optional[int]) -> str:
+    """The one-sentence label put before a cut paragraph, by how it was cut."""
+    name = unit.display()
+    if how == PARAGRAPH_CUT:
+        return f"Paragraph {para} of {name}, cut at its own heading and the next one:"
+    if how == SPAN_CUT and through is not None:
+        return (f"The text of {name} from the heading of paragraph {para} to the next "
+                f"headed paragraph. It runs through paragraphs {para} to {through}, "
+                f"because the paragraphs after {para} in it carry no heading of their own:")
+    if how == SPAN_CUT:
+        return (f"The text of {name} from the heading of paragraph {para} to the next "
+                f"headed paragraph, which may hold more than paragraph {para}:")
+    return (f"The text of {name} from the heading of paragraph {para} to its end, "
+            "which may hold later paragraphs that carry no heading of their own:")
+
+
+CUT, WHOLE, SUMMARY = "cut", "whole", "summary"
+FROM_LIST, FROM_TEXT = "list", "text"
+
+
+def cut_pieces(unit: ScheduleUnit, text: str) -> tuple:
+    """`(pieces, how, reason)` for one unit's text, before any size rule.
+
+    * an annex chapter, cut at its heading (`cut_annex`): CUT;
+    * schedule paragraphs, each cut by `cut_schedule_paragraph`: CUT, only
+      when every named paragraph has a unique heading line; one that has none
+      sends the whole schedule instead, with the reason said;
+    * anything else (the unit alone, a schedule Part, a chapter heading the
+      annex lacks): WHOLE.
+    """
+    text = str(text or "")
+    if unit.kind == "annex" and unit.chapter:
+        span, how = cut_annex(text, unit.chapter)
+        if how == "chapter cut":
+            label = (f"Chapter {unit.chapter} of {unit.display()}, cut at its heading "
+                     "and the next chapter's heading:")
+            return [(label, span)], CUT, ""
+        return [("", text)], WHOLE, f"It carries no heading for Chapter {unit.chapter} to cut at."
+    if unit.kind == "schedule" and unit.paragraphs:
+        pieces, uncut = [], []
+        for p in unit.paragraphs:
+            span, how, through = cut_schedule_paragraph(text, p)
+            if how == NOT_CUT:
+                uncut.append(p)
+            elif all(span != s for _, s in pieces):
+                pieces.append((paragraph_label(unit, p, how, through), span))
+        if pieces and not uncut:
+            return pieces, CUT, ""
+        names = _and_join(uncut)
+        reason = (f"Paragraph {names} has no single heading of its own in it to cut at."
+                  if len(uncut) == 1 else
+                  f"Paragraphs {names} have no single heading of their own in it to cut at.")
+        return [("", text)], WHOLE, reason
+    return [("", text)], WHOLE, ""
+
+
+def fetched_block(lid: str, unit: ScheduleUnit, url: str, pieces: list, how: str,
+                  reason: str = "", total_chars: int = 0, source: str = FROM_LIST) -> str:
+    """The block handed to the Worker. `pieces` is [(label, text)]. `how` is
+    CUT (each piece labelled), WHOLE (the unit verbatim) or SUMMARY (the unit,
+    or the cut, summarised for the query). `source` is FROM_LIST (the provision
+    list) or FROM_TEXT (P3.12's fallback: cut out of the whole text because the
+    provision list did not come back). `reason` says why a named sub-unit was
+    not cut. One block per unit."""
+    lid_c, name = _clean(lid, 60), unit.display()
+    where = f" (url: {_clean(url, 160)})" if url else ""
+    if source == FROM_TEXT:
+        lead = (f"the index's provision list for {lid_c} did not come back, so code "
+                f"cut {name} out of the instrument's whole text with its schedules, at "
+                f"its heading and the next schedule or annex heading.")
+    else:
+        lead = (f"the index holds {name} of {lid_c} as one provision{where}. This "
+                "search's results left it out, so code fetched it from the index's "
+                "provision list.")
+    if how == SUMMARY:
+        tail = (f" Below is {name} summarised for this research question, because it "
+                f"runs to {total_chars:,} characters. The summary is not the statutory "
+                "text: quote the provision only from retrieved text.")
+    elif how == WHOLE:
+        tail = f" Below is the whole of {name}."
+    else:
+        tail = " Below is the part of it this search named, labelled."
+    if reason:
+        tail += f" {reason}"
+    body = []
+    for label, text in pieces:
+        body.append((label + "\n" if label else "") + str(text or "").strip())
+    return (f"\n\n{FETCHED_OPEN}{lead}{tail}]\n" + "\n\n".join(body) + f"\n{FETCHED_CLOSE}")
+
+
+def unit_absent_line(lid: str, unit: ScheduleUnit, rows: list, complete: bool) -> str:
+    """The line for a unit the provision list does not hold. A definite
+    statement about the index only when the list came back complete
+    (Invariant 1: a true negative, stated in code); otherwise it says the
+    question is open."""
+    lid_c, name = _clean(lid, 60), unit.display()
+    if not complete:
+        return (f"\n\n{FETCHED_OPEN}whether the index holds {name} of {lid_c} is open: "
+                f"code fetched only the first {len(rows):,} provisions of its list, and "
+                f"{name} was not among them.]")
+    inv = unit_inventory(rows)
+    held = (f"its schedules and annexes among them are {_and_join(inv)}" if inv
+            else "none of them is a schedule or an annex")
+    return (f"\n\n{FETCHED_OPEN}the index holds {len(rows):,} provisions for {lid_c}, "
+            f"and {held}: {name} is not one of them. This search's results "
+            "left it out for that reason.]")
+
+
+def unit_without_text_line(lid: str, unit: ScheduleUnit) -> str:
+    return (f"\n\n{FETCHED_OPEN}the index lists {unit.display()} of {_clean(lid, 60)} "
+            "as a provision and holds no text for it.]")
+
+
+def instrument_without_text_line(lid: str, unit: ScheduleUnit) -> str:
+    return (f"\n\n{FETCHED_OPEN}the index holds {_clean(lid, 60)} without its "
+            f"provision text, so it holds none for {unit.display()} either.]")
+
+
+def fetch_failed_line(lid: str, unit: ScheduleUnit) -> str:
+    name = unit.display()
+    return (f"\n\n{FETCHED_OPEN}the index's provision list for {_clean(lid, 60)} did "
+            f"not come back, so code could fetch {name} neither from it nor from the "
+            f"whole text. Whether the index holds {name} is open: do not report it "
+            "as absent.]")

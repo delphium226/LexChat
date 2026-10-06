@@ -1842,12 +1842,19 @@ _PINPOINT_BLOCK = re.compile(
 _OUTLINE_BLOCK = re.compile(
     r"\[SECTION OUTLINE[^\]]*\][\s\S]*?\[/SECTION OUTLINE\]", re.I
 )
+# P3.12: the provision code fetched for a schedule or annex unit a section
+# search left out (`schedule_units.fetched_block`). Its body is retrieved
+# statutory text, so, like the outline, the whole block goes first, then any
+# stray header or closer via `_TOOL_BLOCK`.
+_FETCHED_BLOCK = re.compile(
+    r"\[PROVISION FETCHED BY CODE[^\]]*\][\s\S]*?\[/PROVISION FETCHED BY CODE\]", re.I
+)
 # P3.27 adds `SCHEDULES AND ANNEXES` (`schedule_units.schedules_note`). Not
 # the bare word "SCHEDULES": the pattern is case-insensitive, and a lawyer's
 # answer can open a citation link with it ("[Schedules 1 and 2](...)").
 _TOOL_BLOCK = re.compile(
     r"\[/?(?:SEARCH SCOPE|ENABLING POWER|CHANGE RECORD|CURRENCY|PINPOINTS TO KEEP"
-    r"|SECTION OUTLINE|SCHEDULES AND ANNEXES —)"
+    r"|SECTION OUTLINE|SCHEDULES AND ANNEXES —|PROVISION FETCHED BY CODE)"
     r"[^\[\]]*\]",
     re.I,
 )
@@ -3211,8 +3218,9 @@ def strip_scope_blocks(text: str) -> tuple:
     out, n = _WORKER_BLOCK.subn("", text)
     out, n1 = _PINPOINT_BLOCK.subn("", out)
     out, n3 = _OUTLINE_BLOCK.subn("", out)
+    out, n4 = _FETCHED_BLOCK.subn("", out)
     out, n2 = _TOOL_BLOCK.subn("", out)
-    n += n1 + n2 + n3
+    n += n1 + n2 + n3 + n4
     if n:
         out = re.sub(r"\n{3,}", "\n\n", out).strip()
     return out, n

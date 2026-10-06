@@ -146,6 +146,91 @@ async def _request_with_retry(
 
 
 # -----------------------------------------------------------------------
+# P3.12: one instrument's provision list, and its whole text, for code
+# -----------------------------------------------------------------------
+# `/legislation/section/lookup` with a `limit` above the provision count
+# returns every provision with its text (batch 7 B, live: 674 of 674 for the
+# largest Act the route fires on, 1.6 MB in 405 ms; a schedule is one row, and
+# not the last, so a small `limit` cannot be used). Neither call is a tool the
+# Worker can make: `agent_shared.run_worker_tool` calls them after a section
+# search whose query names a schedule or annex unit its results left out. Each
+# emits `api_call_start`/`api_call_end` on the caller's `on_chunk`, so the
+# audit records it under that section search, with a size, not the payload.
+PROVISION_LIST_LIMIT = 5000
+
+
+async def fetch_provision_list(
+    legislation_id: str, on_chunk: Optional[Callable] = None,
+    timing_collector=None, tool_name: str = "search_legislation_sections",
+) -> dict:
+    """`{"status": "ok", "rows": [...], "complete": bool}`, `{"status":
+    "no_text"}` (LEX's own "No sections found"), or `{"status": "failed"}`
+    for anything else. Never raises."""
+    url = f"{LEX_API_URL}/legislation/section/lookup"
+    payload = {"legislation_id": legislation_id, "limit": PROVISION_LIST_LIMIT}
+    call_id = f"{uuid.uuid4()}-provision-list"
+    try:
+        async with httpx.AsyncClient(timeout=60.0, verify=False) as client:
+            await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url,
+                                   "method": "POST", "payload": payload})
+            t0 = time.perf_counter()
+            resp = await _request_with_retry(client, "POST", url, name=tool_name, json=payload)
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            if timing_collector:
+                timing_collector.record_lex_api_call(tool_name, elapsed_ms)
+            try:
+                body = resp.json()
+            except ValueError:
+                body = None
+            await _emit(on_chunk, {
+                "type": "api_call_end", "id": call_id, "url": url,
+                "status": resp.status_code,
+                "response": {"provisions": len(body) if isinstance(body, list) else None},
+                "elapsed_ms": round(elapsed_ms),
+            })
+    except Exception as e:  # noqa: BLE001 - fail-soft, reported as failed
+        logger.warning(f"[Worker Tool Exec] provision list for {legislation_id} failed: {e!r}")
+        return {"status": "failed"}
+    if resp.status_code == 200 and isinstance(body, list):
+        return {"status": "ok", "rows": body, "complete": len(body) < PROVISION_LIST_LIMIT}
+    detail = str(body.get("detail") or "") if isinstance(body, dict) else ""
+    if resp.status_code == 404 and detail.startswith("No sections found"):
+        return {"status": "no_text"}
+    return {"status": "failed"}
+
+
+async def fetch_text_with_schedules(
+    legislation_id: str, on_chunk: Optional[Callable] = None,
+    timing_collector=None, tool_name: str = "search_legislation_sections",
+) -> Optional[str]:
+    """The instrument's whole text with its schedules appended (P3.27's flag),
+    or None. P3.12's fallback when the provision list does not come back."""
+    url = f"{LEX_API_URL}/legislation/text"
+    payload = {"legislation_id": legislation_id, "include_schedules": True}
+    call_id = f"{uuid.uuid4()}-text-with-schedules"
+    try:
+        async with httpx.AsyncClient(timeout=60.0, verify=False) as client:
+            await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url,
+                                   "method": "POST", "payload": payload})
+            t0 = time.perf_counter()
+            resp = await _request_with_retry(client, "POST", url, name=tool_name, json=payload)
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            if timing_collector:
+                timing_collector.record_lex_api_call(tool_name, elapsed_ms)
+            text = schedule_units.full_text_of(resp.json()) if resp.status_code == 200 else None
+            await _emit(on_chunk, {
+                "type": "api_call_end", "id": call_id, "url": url,
+                "status": resp.status_code,
+                "response": {"full_text_chars": len(text) if text is not None else None},
+                "elapsed_ms": round(elapsed_ms),
+            })
+            return text
+    except Exception as e:  # noqa: BLE001 - fail-soft
+        logger.warning(f"[Worker Tool Exec] text with schedules for {legislation_id} failed: {e!r}")
+        return None
+
+
+# -----------------------------------------------------------------------
 # Tool execution (LEX API client)
 # -----------------------------------------------------------------------
 

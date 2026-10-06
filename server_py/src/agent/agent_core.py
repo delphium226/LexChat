@@ -256,6 +256,12 @@ async def run_worker_agent(
     # step's report.
     search_log: list = []
 
+    # P3.12: the provision lists code fetched in this run, one call per
+    # instrument. Every legislation Worker gets it, the research and the
+    # quick-lookup Worker alike: the route hangs off `search_legislation_
+    # sections`, which both have (the quick-lookup Worker has no whole text).
+    provision_fetches: dict = {}
+
     async def _run_tool(name: str, args: dict, result_suffix: str = "") -> str:
         return await run_worker_tool(
             name, args, query, summarise_chunk_fn, summarise_model,
@@ -271,6 +277,7 @@ async def run_worker_agent(
             retrieved_urls=retrieved_urls,
             search_log=search_log,
             result_suffix=result_suffix,
+            provision_fetches=provision_fetches,
         )
 
     # P3.25: the statutory instruments this quick-lookup run has looked up in
