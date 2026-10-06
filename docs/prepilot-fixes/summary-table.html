@@ -379,8 +379,8 @@
       its row in the fix plan and its action number in Thomas's review of 10 September 2026.
       <strong>“Fixed” means built and accepted on the fix branch. The Version column says which
       release carries each fix: 2026.09.1 (22 September), 2026.09.2 (23 September) or 2026.09.3
-      (29 September), all merged for deployment to the server. Twelve rows fixed since then, P3.16,
-      P4.16, P4.15, P4.18, P4.17, P5.2, P3.19, P4.21, P3.24, P4.19, P3.23 and P3.9, are marked “Next release”. The fixed date is the day a fix was accepted, not the
+      (29 September), all merged for deployment to the server. Thirteen rows fixed since then, P3.16,
+      P4.16, P4.15, P4.18, P4.17, P5.2, P3.19, P4.21, P3.24, P4.19, P3.23, P3.9 and P3.25, are marked “Next release”. The fixed date is the day a fix was accepted, not the
       day it reached the server.</strong></p>
   </header>
 
@@ -440,7 +440,7 @@
       <h2>Status</h2>
       <dl>
         <dt>Fixed</dt><dd>Built and accepted on the fix branch. Every Fixed row with a release number is merged to <code>main</code> for deployment to the target: release 2026.09.1 on 22 September, 2026.09.2 (P3.13) on 23 September and 2026.09.3 (twelve rows) on 29 September. A row fixed after a release is marked “Next release” and is on the fix branch only, until the next release carries it. P5.2 is a decision, not a change to the system: it is fixed because the decision is made.</dd>
-        <dt>In progress</dt><dd>Under way. P3.25 is built and waits for its re-run, which will be run together with those for P3.27 and P3.12 once they are built.</dd>
+        <dt>In progress</dt><dd>Built, and waiting for the re-run that decides whether it is fixed. P3.27 and P3.12 are built; their first re-run on 6 October found two gaps, both fixed the same day, and they will be re-run again.</dd>
         <dt>Partial</dt><dd>A fix was attempted, and we decided to defer it and come back to it later. No fix is Partial now: P4.10 was, until its last check was run on 25 September.</dd>
         <dt>Verified</dt><dd>The problem is confirmed in our replays, the code or a live test, but no fix is built yet.</dd>
         <dt>Blocked</dt><dd>Confirmed, and parked until something outside our control happens; the reason is in the row's description. Since 5 October, P3.2, P3.3 and P3.17 wait on a lawyer answering our questions about the readings of the law their tests use.</dd>
@@ -467,6 +467,41 @@
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.
         <strong>30 Sep</strong> marks a point from his retest of release 2026.09.3 on 30 September.</p>
+      <p><strong>6 October: one more fix, two built, and two choices made.</strong> Four pieces of work ran
+        side by side at no model cost, with free, capped requests to the legislation database, the
+        National Archives and legislation.gov.uk, then one agreed re-run of seven sessions was paid
+        for ($9.55). <strong>P3.25</strong> is fixed: in the re-run no quick research step fetched a
+        whole instrument, and the answer that had relied on it, a list of which sections of an Act
+        have been brought into force, still gave the list in full. One of its checks was changed, at
+        our decision: it asked every re-run to state what an instrument was made under, but the
+        earlier re-runs in the same chat mode never did either, and every new answer said correctly
+        what it could not confirm.</p>
+      <p><strong>P3.27 and P3.12, built, not yet passed.</strong> Reading an instrument's whole text
+        now includes its schedules and annexes, with a line written by the system saying which ones
+        it carries, or that the database holds none (<strong>P3.27</strong>). When a search inside an
+        instrument asks for a schedule or annex and its results leave it out, the system now fetches
+        that schedule itself and hands over the part asked for, cut at its own heading where that is
+        safe (<strong>P3.12</strong>). In the re-run, the annex chapter one lawyer needed was handed
+        over every time and no answer called it not held, where before it never arrived; a schedule
+        paragraph asked for by number was delivered in every re-run, but two neighbouring paragraphs
+        were not. Two causes were found and fixed the same day: a list of paragraph numbers separated
+        only by spaces was read as its first number, and where the database really holds no schedule
+        for an instrument, a second line about a search limit led every answer to blame the limit
+        rather than the database. That second line now says what the database holds. Both will be
+        re-run next.</p>
+      <p><strong>Two choices made.</strong> Case-law results will be ordered by relevance
+        (<strong>P3.22</strong>). Re-running every stored search both ways (1,241 requests to the
+        National Archives, no model cost) showed that the same judgments are searched either way, the
+        first three results change about seven times in ten, and recent judgments fall from about two
+        thirds of the first three to about a quarter; against a list of the authorities two sessions
+        needed, relevance lost none. Some of the oldest leading cases are not in the National
+        Archives' collection at all, so no ordering can find them, and a lawyer is asked to confirm
+        that list. The date a provision came into force (<strong>P3.21</strong>) will come from
+        legislation.gov.uk's own dated record of changes, which dates 8,144 of the 8,180
+        commencements in our stored research and can be reached through our legislation database's
+        existing connection, so the server needs no new internet access. One new small row,
+        <strong>P3.29</strong>: the check that spots an appeal of a case in the results often links
+        unrelated cases that share a single word.</p>
       <p><strong>5 October, evening: four more fixes, and two chosen.</strong> Four pieces of work ran side by
         side at no cost, and one agreed re-run of two sessions was paid for ($1.24).
         <strong>P3.24</strong> is fixed: for each instrument whose official record of changes the
@@ -1007,17 +1042,15 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next, by severity.</strong> The next session again runs four pieces of work side
-        by side: <strong>P3.27</strong> and <strong>P3.12</strong> built together, the schedules
-        first; the checks their re-run needs prepared and priced; and two case-law and legislation
-        measurements with no model cost, <strong>P3.22</strong> (ordering case-law results by
-        relevance, re-running every stored search both ways) and <strong>P3.21</strong> (the date a
-        provision came into force, with the legislation.gov.uk check). Then one re-run for P3.27,
-        P3.12 and P3.25 together, priced to us first (about $5.50 to $7). Then the rest of the P2
-        rows: P3.22's build, <strong>P3.4</strong>, <strong>P3.6</strong>, <strong>P4.3</strong>,
-        <strong>P3.10</strong> and <strong>P4.12</strong>, and <strong>P3.20</strong> once the
-        Scottish Courts and Tribunals Service replies. Then the P3 rows, starting with
-        <strong>P4.8</strong>. <strong>P3.2</strong>, <strong>P3.3</strong> and
+      <p><strong>Next, by severity.</strong> The next session again runs pieces of work side by side at no
+        model cost: a small correction to P3.12; the build of <strong>P3.22</strong> (relevance), of
+        <strong>P3.21</strong> (the commencement date) and of <strong>P3.4</strong> (answering for
+        Scotland when a question names no jurisdiction); and the checks their re-runs need. Then two
+        re-runs, each priced to us first: one that re-runs P3.27 and P3.12 and measures P3.22 and
+        P3.4 before their changes, and one that measures P3.22 and P3.21 after theirs. Then
+        <strong>P3.6</strong>, <strong>P4.3</strong>, <strong>P3.10</strong> and <strong>P4.12</strong>,
+        and <strong>P3.20</strong> once the Scottish Courts and Tribunals Service replies; then the P3
+        rows, starting with <strong>P4.8</strong>. <strong>P3.2</strong>, <strong>P3.3</strong> and
         <strong>P3.17</strong> stay blocked until a lawyer answers our questions.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.3, P0.4, dropped on 2 October, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
@@ -1044,7 +1077,7 @@
   // ver:    on a Fixed row only: the release that carries it ("2026.09.1", the git tag
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
-  const UPDATED = "6 October 2026 (P3.24, P4.19, P3.23 and P3.9 fixed; P3.25 built, waiting for its re-run; P3.27 and P3.12 measured, their fixes chosen)";
+  const UPDATED = "6 October 2026, evening (P3.25 fixed; P3.27 and P3.12 built, their re-run to follow; P3.22 and P3.21 chosen; P3.29 added)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23", ver: "2026.09.3" },
@@ -1076,7 +1109,7 @@
     { src: "T", fix: "Make the case-law date filter work", sev: "P2", status: "Fixed", ref: "P3.9", t: "6", fixed: "2026-10-05", ver: "Next release" },
     { src: "T", fix: "Keep dependent Deep Research steps in one step", sev: "P2", status: "Verified", ref: "P3.10", t: "3" },
     { src: "R", fix: "Say what a cited subsection's sibling subsections provide", sev: "P2", status: "Fixed", ref: "P3.11", t: "", fixed: "2026-09-22", ver: "2026.09.1" },
-    { src: "R", fix: "Reach a Schedule paragraph asked for by number (LEX holds the Schedule as one provision)", sev: "P2", status: "Verified", ref: "P3.12", t: "" },
+    { src: "R", fix: "Reach a Schedule paragraph asked for by number (LEX holds the Schedule as one provision)", sev: "P2", status: "In progress", ref: "P3.12", t: "" },
     { src: "R", fix: "Stop the chat reply dropping a subsection the research step had already written", sev: "P2", status: "Fixed", ref: "P3.13", t: "", fixed: "2026-09-23", ver: "2026.09.2" },
     { src: "R", fix: "Tell the quick-lookup step which research filters are active", sev: "P3", status: "Verified", ref: "P3.14", t: "" },
     { src: "R", fix: "In a follow-up answered without new research, say the instrument itself is not held, not just its text", sev: "P3", status: "Fixed", ref: "P3.15", t: "", fixed: "2026-09-25", ver: "2026.09.3" },
@@ -1088,10 +1121,11 @@
     { src: "R", fix: "Retrieve the date a provision came into force, not only the instrument that commenced it", sev: "P2", status: "Verified", ref: "P3.21", t: "" },
     { src: "R", fix: "Tell the system how many case-law results there were, not how many it was shown (at most 50)", sev: "P2", status: "Fixed", ref: "P3.23", t: "", fixed: "2026-10-05", ver: "Next release" },
     { src: "T", fix: "Don't say a provision is “not yet commenced” or “remains in force” when the research found only that no commencement or repeal is recorded", sev: "P1", status: "Fixed", ref: "P3.24", t: "30 Sep", fixed: "2026-10-05", ver: "Next release" },
-    { src: "T", fix: "Stop the quick research step fetching whole Acts, which its own instructions forbid (about 1 conversational answer in 9)", sev: "P2", status: "In progress", ref: "P3.25", t: "30 Sep" },
+    { src: "T", fix: "Stop the quick research step fetching whole Acts, which its own instructions forbid (about 1 conversational answer in 9)", sev: "P2", status: "Fixed", ref: "P3.25", t: "30 Sep", fixed: "2026-10-06", ver: "Next release" },
     { src: "T", fix: "Include, not drop, a search result whose territorial extent the jurisdiction filter does not recognise (none seen so far)", sev: "P3", status: "Verified", ref: "P3.26", t: "30 Sep" },
-    { src: "R", fix: "Include schedules and annexes when reading an instrument's whole text (they were always left out, so a provision in one could be called not held)", sev: "P1", status: "Verified", ref: "P3.27", t: "" },
+    { src: "R", fix: "Include schedules and annexes when reading an instrument's whole text (they were always left out, so a provision in one could be called not held)", sev: "P1", status: "In progress", ref: "P3.27", t: "" },
     { src: "R", fix: "Count every kind of removal in the record of changes (“omitted”, “ceases to have effect”), not only repeals and revocations", sev: "P3", status: "Verified", ref: "P3.28", t: "" },
+    { src: "R", fix: "Stop the check that spots a case's appeal linking unrelated cases that share one word of a party's name", sev: "P3", status: "Verified", ref: "P3.29", t: "" },
     { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", sev: "P1", status: "Fixed", ref: "P4.1", t: "9", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Show a change of mode or research type in the conversation itself", sev: "P3", status: "Verified", ref: "P4.9", t: "" },
     { src: "R", fix: "Never show a blank or lost reply", sev: "P1", status: "Fixed", ref: "P4.2", t: "", fixed: "2026-09-16", ver: "2026.09.1" },

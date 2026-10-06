@@ -8670,3 +8670,38 @@ disposable directories. **59 replay directories** (new: `wave4_b8_sweep`, 16 fil
 `p32.json` and `p33.json` unchanged; new `p327.json` (sha1 `5a14e273…`) and the hand-read
 `handread_wave4_b8_sweep.md`. Agents' scratch in `evidence/seam/batch8/{A,A2,B,B2,C,D}/`, the session
 scratchpad in `batch8/scratchpad_s40/`.
+
+**Addendum to Session 40 (2026-10-06, at the user's request: "make sure we're not going to lose any
+pertinent information", "update the tracker", then "provide a prompt to kick off the next piece of
+work ... a safe, multi-agent approach"). This supersedes the Session 41 handover's "Take next" only in
+pointing at the brief; its content stands.**
+- **Preserved:** every Session 40 commit was pushed (`f3068cf` and before); agents' scratch in the
+  gitignored `evidence/seam/batch8/{A,A2,B,B2,C,D}/`, the session scratchpad in
+  `batch8/scratchpad_s40/` (109 files, including `sweep_total.py`, `route_trace.py`,
+  `screen_A_wording.py` and the three mutant runners); the hand-read
+  `evidence/rubrics/handread_wave4_b8_sweep.md`; B's rubric `evidence/rubrics/p327.json`; the lawyer
+  pack's new 6363 question. Findings that lived in no committed file were written where the next
+  session reads them: **CLAUDE.md** gained three additions (P3.27/P3.12 built and the lesson that a
+  code-stated fact loses to a contradicting code text about the same instrument; P3.22's decision;
+  P3.21's decision); **`docs/api/AUDIT_TRACE.md`** gained a note on P3.27/P3.12's new `api_calls`
+  (`-without-schedules`, `-provision-list`, `-text-with-schedules`, recorded by size), result keys and
+  blocks (no schema change; tell the eval-harness owner); **FIX_PLAN's Verification protocol** says
+  `--max-spend` is per command; the local `external-apis` and `repo-map` skills were updated.
+- **P3.27 and P3.12 set `[~]`** (built, their re-run booked: P3.25's precedent), so `plan_status`
+  reads 54 of 78 rows, 2 in progress, 8 of 14 buckets; `plan_lint` 0 errors, 0 warnings.
+- **Fix Tracker v39** (same URL; the live body was identical to the repo source before the edit: the
+  Artifact read, then a Read of all 1,341 lines of the saved file): P3.25 Fixed (`fixed:
+  "2026-10-06"`, the date `e499232` first shows it ticked; `ver: "Next release"`); P3.27 and P3.12 In
+  progress; new row P3.29 (P3, Verified); the lede names thirteen rows waiting for the next release;
+  the In-progress note; three plain-language notes for Thomas (P3.25; P3.27 and P3.12 built, not yet
+  passed, and the two causes fixed; P3.22 and P3.21 chosen, P3.29), naming no lawyer's topic; "Next"
+  and the stamp. 77 rows: 49 Fixed, 2 In progress, 20 Verified, 3 Blocked, 3 To be verified. Script
+  syntax-checked with Node; no render check (data and text only).
+- **`docs/prepilot-fixes/PARALLEL_BATCH_9.md` written: the brief for Session 41.** Five agents in
+  worktrees at $0 model spend: **A** reserves P3.12's per-run slot before the fetch's await; **B**
+  builds P3.22; **C** builds P3.21; **D** builds P3.4 then P3.6; **E** builds the graders for P3.22,
+  P3.21 and P3.4, P3.4's scripts, the confound check, and prices the sweeps. **Merge A, E, then sweep 1
+  (P3.27/P3.12's re-run and P3.22's and P3.4's before-columns, priced to the user first), then B, C,
+  then sweep 2 (P3.22's and P3.21's after-columns, priced first; one sweep or two by E's confound
+  check), then D** (P3.4's after-column priced, this session or next). FIX_PLAN's top order line points
+  at the brief.
