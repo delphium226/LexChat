@@ -450,6 +450,18 @@ OUTPUT STRUCTURE (Use Markdown):
 """ + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE + "\n\n" + _IN_FORCE_RULE + "\n\n" + _NOT_HELD_RULE
 
 
+# FIX_PLAN P3.4 (B9): the default-jurisdiction rule. No prompt carried one, so a
+# question naming no jurisdiction was answered for whichever instrument ranked
+# first (6360: the England and Wales rules, the Scottish ones only on follow-up)
+# and "in the UK" was answered for one part of it with no flag (6378). The rule
+# is in THIS body (the JURISDICTION section) and in the quick-lookup Worker's
+# YOUR MANDATE below, the two prompts the acceptance sessions run on, and in no
+# other prompt: the research Manager, the research Workers, the planner and the
+# parliament/Westminster bots are unchanged (batch 9 D's note says why). It sits
+# INSIDE the triple-quoted literal so `seam_replay --without-fix --rev <before>`
+# can still swap the whole literal for an A/B. It changes the Manager's FIRST
+# delegation brief by design (the brief now names the jurisdiction), and the
+# brief rule forbids naming an instrument for it, after P3.13's lesson.
 _MANAGER_CONV_BODY = """You are a legal assistant for a UK government legal department.
 Your users are qualified lawyers. Be concise, direct, and professional.
 
@@ -466,6 +478,12 @@ YOUR APPROACH:
 1. Ask clarifying questions readily. If a question is ambiguous or broad, ask what the user specifically needs before delegating. Do not assume and over-research. When the user disputes an answer, check the text again before you reply; change your position only on text that decides the point, and say which, and do not open by agreeing.
 2. Delegate: once you have a clear, specific legal question, use `delegate_research` with a narrow, focused brief — one specific question, not a broad research sweep.
 3. Keep responses short. Present the Worker's findings in a few sentences or a short list. Do not wrap them in formal report structure unless the user asks for it.
+
+JURISDICTION:
+- If the question names no jurisdiction and no jurisdiction filter is active, answer it for Scotland (the law that applies in Scotland, including UK legislation that extends there), and say in your answer that this is the position in Scotland.
+- If the question asks about the UK as a whole (for example "in the UK" or "UK-wide"), answer for each of England, Wales, Scotland and Northern Ireland: where the law differs between them, say so and give each, and never give one part's law as the answer for the whole UK.
+- If the question or an active filter names a jurisdiction, or the question is about a named instrument, answer for that jurisdiction or instrument.
+- Put the jurisdiction in every `delegate_research` brief (for example "for Scotland", or "for each of England, Wales, Scotland and Northern Ireland, noting where the law differs"). Name the jurisdiction only: do not add an Act or instrument for it that neither the user nor a tool result has given you.
 
 WHEN USING delegate_research IN CHAT MODE:
 - Write a tightly scoped brief. Example: "Find the definition of 'acquiring authority' in the Acquisition of Land Act 1981 s.7." — not a multi-Act research mandate.
@@ -531,11 +549,18 @@ def _quick_lookup_route(rule: str) -> str:
     return rule
 
 
+# P3.4: the default-jurisdiction rule is ONE bullet in YOUR MANDATE, not a block
+# of its own: a block appended to this prompt once changed its output format
+# (P2.4's A/B, see `_NOT_HELD_RULE`). It is scoped to legislation, so a
+# case-law query is not narrowed by an added "Scotland". This Worker is never
+# told the filters (P3.14), so it takes the jurisdiction from the brief, which
+# the conversational Manager is now told to state.
 WORKER_SYSTEM_PROMPT_CONVERSATIONAL ="""You are a Legal Research Support Agent operating in quick-lookup mode.
 
 YOUR MANDATE:
 - Find and return the specific information requested. Do not broaden the scope.
 - Ground your answer in retrieved text. Do not fill gaps with training knowledge. State what the text says plainly; where it does not settle a point, say so and give each reading as a reading, with the text it rests on. Do not say that a general rule (an interpretation Act, a common-law doctrine) applies to an instrument or in a jurisdiction unless you retrieved the provision or source that applies it there.
+- Jurisdiction: if the brief names no jurisdiction, find the legislation that applies in Scotland (UK legislation that extends there included) and say that your answer is for Scotland. If the brief asks about the UK as a whole, find it for each of England, Wales, Scotland and Northern Ireland, say where it differs and give each, and never give one part's law as the answer for the whole UK. If the brief names a jurisdiction, answer for that one.
 
 RESEARCH PROCESS — keep it tight:
 
@@ -586,22 +611,53 @@ _JURISDICTION_LABELS = {
     "uk_wide": "United Kingdom (UK-wide only)",
 }
 
+# FIX_PLAN P3.4 (Thomas's action 5, verified at Session 15). These notes used to
+# say "Prioritise legislation where extent includes S or E+W+S+NI": a letter
+# format the LEX API never sends (it sends territory names, `['Scotland']`,
+# `['United Kingdom']`; P1.1), and nothing told the model that most rows carry
+# no extent at all. Measured over every stored replay (batch 9 D,
+# `extent_count.py`): 40,148 of 69,430 API rows (57.8%) and 4,529 of 7,189
+# distinct instruments (63.0%) carry an empty extent. `_matches_jurisdiction`
+# keeps those rows under a territorial filter (P1.1's "applies in" policy), so a
+# filtered result set is not a set of instruments shown to apply there; the
+# `uk_wide` filter removes them, so it misses UK-wide law that does not say so.
+# Each note now says what the filter kept, in the API's own vocabulary, and the
+# unstated-extent sentence is ONE string so the notes cannot drift apart.
+# `tests/test_default_jurisdiction.py` pins: no letter code in any note, and
+# every note saying most results carry no stated extent.
+_EXTENT_UNSTATED = (
+    "Most legislation search results carry no stated extent (their `extent` is empty), and "
+    "the filter keeps those too unless the identifier marks them as another jurisdiction's "
+    "legislation, so a result returned under this filter has not thereby been shown to apply "
+    "in {territory}: give an instrument's extent only where its result or its retrieved text "
+    "states it."
+)
+
+
+def _extent_note(kept_where: str, territory: str) -> str:
+    return (f"Legislation search results are kept where their stated extent includes "
+            f"{kept_where}. " + _EXTENT_UNSTATED.format(territory=territory))
+
+
 _JURISDICTION_EXTENT_NOTES = {
     "england_and_wales": (
-        "Prioritise legislation where extent includes E+W or E+W+S+NI. "
-        "If a cited Act's extent does not cover England and Wales, note this explicitly."
+        _extent_note("England, Wales or the United Kingdom", "England and Wales")
+        + " If a cited instrument's stated extent does not include England and Wales, say so."
     ),
     "scotland": (
-        "Prioritise legislation where extent includes S or E+W+S+NI. "
+        _extent_note("Scotland or the United Kingdom", "Scotland") + " "
         "Note that the case law database holds no decisions of the Court of Session, the Sheriff "
         "Appeal Court, the Sheriff Courts or the High Court of Justiciary; Scottish appeals decided "
         "by the UK Supreme Court are included."
     ),
-    "northern_ireland": "Prioritise legislation where extent includes NI or E+W+S+NI.",
-    "wales": "Prioritise legislation where extent includes W or E+W+S+NI.",
+    "northern_ireland": _extent_note("Northern Ireland or the United Kingdom", "Northern Ireland"),
+    "wales": _extent_note("Wales or the United Kingdom", "Wales"),
     "uk_wide": (
-        "Include only legislation that applies UK-wide (E+W+S+NI). "
-        "If no UK-wide legislation exists for this topic, note this clearly."
+        "Legislation search results are kept only where their stated extent is the United "
+        "Kingdom. Most legislation search results carry no stated extent (their `extent` is "
+        "empty), and this filter removes them, so legislation that applies across the UK "
+        "without stating it is missing from these results. Say that the results were limited "
+        "in this way; it is a fact about this filter, not about the law."
     ),
 }
 
