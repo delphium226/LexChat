@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Live checks of the National Archives case-law feed (FIX_PLAN P3.23, P3.9).
+"""Live checks of the National Archives case-law feed (FIX_PLAN P3.23, P3.9, P3.22).
 
     python -m tools.lex_probe --caselaw      # or: python -m tools.caselaw_probe
 
@@ -23,6 +23,10 @@ the published limit of 1,000 requests per rolling five minutes per IP.
   judgment is in the window and not on the first undated page, which is the
   shape of Thomas's reproduction (P3.9's row); its query and citation are
   passed in, not kept here.
+* **P3.22, the order** (measured, not yet built). `order=relevance` with
+  `per_page=50` returns a full page over the same matching set (the same
+  `last` link) in an order that is not newest first; a withdrawal of the
+  undocumented value, or the page size falling back to 10, fails it.
 
 The National Archives' published spec (`public_api.yml`) documents neither the
 `last` link's page size nor a date parameter; both are what the feed does, so
@@ -128,8 +132,65 @@ def check_dates(get: Callable = paced_get, query: str = "negligence",
     return ok
 
 
+# P3.22 (measured in batch 8 C, not yet built): the params a relevance-ranked
+# search would add. `order=relevance` is the advanced search's own sort and is
+# NOT in the published spec, whose `order` enum is `date`/`updated`/
+# `transformation`; and ANY explicit `order` resets the page size to 10, so
+# `per_page` must travel with it or the 10-row trap returns silently. When
+# P3.22 is built, point this at the product's params instead of a copy.
+RELEVANCE_PARAMS = {"order": "relevance", "per_page": "50"}
+
+
+def _newest_first(rows) -> bool:
+    dates = [x["date"] for x in rows if x.get("date")]
+    return all(a >= b for a, b in zip(dates, dates[1:]))
+
+
+def check_order(get: Callable = paced_get, query: str = "negligence",
+                relevance_params: dict = None) -> bool:
+    """P3.22: `order=relevance` with `per_page=50` still ranks, over the same set.
+
+    Three GETs: the default order (no `order`, no `per_page`, what the product
+    sends today), the relevance params, and `order=relevance` alone. PASS
+    needs: the relevance page full at the default page size (so `per_page` is
+    honoured with `order`); the same `last` link under both orders (the same
+    matching set, counted at ten a page); and a different list that is not
+    newest first (so the feed did not silently ignore `order`, which is what a
+    withdrawal of the undocumented value would look like). The bare `order`
+    call is reported, not asserted: it shows whether the 10-row trap is still
+    there, which is why the params travel together.
+    """
+    from src.agent.tools.caselaw import (
+        CASE_LAW_PAGE_SIZE,
+        _parse_case_law_atom,
+        _parse_case_law_last_page,
+    )
+
+    rp = dict(RELEVANCE_PARAMS if relevance_params is None else relevance_params)
+    print(f"\n--- P3.22: relevance ordering for {query!r} ({rp}) ---")
+    d = get(ATOM, params={"query": query})
+    r = get(ATOM, params={"query": query, **rp})
+    bare = get(ATOM, params={"query": query, "order": rp.get("order", "relevance")})
+    d_rows, r_rows = _parse_case_law_atom(d.text), _parse_case_law_atom(r.text)
+    n_bare = len(_parse_case_law_atom(bare.text))
+    d_last, r_last = _parse_case_law_last_page(d.text), _parse_case_law_last_page(r.text)
+    same_list = [x["url"] for x in d_rows] == [x["url"] for x in r_rows]
+    full = len(r_rows) == CASE_LAW_PAGE_SIZE
+    same_set = d_last is not None and d_last == r_last
+    reordered = not same_list and not _newest_first(r_rows)
+    print(f"  default: {len(d_rows)} rows, last {d_last}, newest first {_newest_first(d_rows)}")
+    print(f"  relevance: {len(r_rows)} rows, last {r_last}, newest first {_newest_first(r_rows)}; "
+          f"top 3 shared with default {len({x['url'] for x in d_rows[:3]} & {x['url'] for x in r_rows[:3]})}")
+    print(f"  `order` alone: {n_bare} rows ({'the 10-row trap is still there' if n_bare == 10 else 'no 10-row trap'})")
+    ok = full and same_set and reordered
+    print(f"  -> {'PASS' if ok else 'FAIL'} (full page {full}; same matching set {same_set}; "
+          f"reordered {reordered})")
+    return ok
+
+
 def main(get: Callable = paced_get) -> int:
-    results = {"P3.23 count": check_count(get), "P3.9 dates": check_dates(get)}
+    results = {"P3.23 count": check_count(get), "P3.9 dates": check_dates(get),
+               "P3.22 order": check_order(get)}
     print("\n" + "; ".join(f"{k}: {'PASS' if v else 'FAIL'}" for k, v in results.items()))
     return 0 if all(results.values()) else 1
 
