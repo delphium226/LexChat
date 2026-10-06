@@ -11,7 +11,8 @@ batch 7 D: one query gives `last` page 520 with 50 rows a page; paging finds
 * `caselaw.case_law_count` reports `shown` and the matching total apart
   (`total`, `total_exact`, `total_min`, `total_max`);
 * `search_scope.case_law_search_note` states the window in P2.2's form,
-  naming today's order (newest first; P3.22 flips it);
+  naming the order the feed lists them in (by relevance since P3.22, which
+  flipped the note's three order statements: `test_caselaw_order.py`);
 * the zero-result note and the Phase-2 nudge in `agent_shared` stay keyed on
   the SHOWN count, since `total` is now an estimate.
 
@@ -145,10 +146,10 @@ def _data(n, last=None):
 
 def test_window_note_states_shown_of_about_total_and_the_order():
     note = case_law_search_note({"query": "widget"}, _data(50, last=520))
-    assert "the 50 most recent of about 5,200 judgments" in note
+    assert "the first 50 of about 5,200 judgments" in note
     assert "between 5,191 and 5,200" in note
     assert '"widget"' in note
-    assert CASE_LAW_RESULT_ORDER in note and "newest first" in note
+    assert CASE_LAW_RESULT_ORDER in note and "most relevant first" in note
 
 
 def test_window_note_names_the_court_when_one_was_set():
@@ -159,12 +160,13 @@ def test_window_note_names_the_court_when_one_was_set():
 
 def test_window_note_on_a_complete_set_says_all():
     note = case_law_search_note({"query": "widget"}, _data(7, last=1))
-    assert "all 7 judgment(s)" in note and "newest first" in note
-    assert "most recent of" not in note
+    assert "all 7 judgment(s)" in note and "most relevant first" in note
+    assert "first 7 of" not in note and "of about" not in note
 
 
 def test_window_note_without_a_figure_does_not_invent_one():
     note = case_law_search_note({"query": "widget"}, _data(50))
+    assert "the first 50 judgments" in note
     assert "no figure for how many match in all" in note
     assert "about" not in note
 
@@ -180,6 +182,10 @@ def test_window_note_is_stripped_if_a_worker_echoes_it():
         note = case_law_search_note({"query": "widget"}, data)
         out, n = strip_scope_blocks("The answer." + note)
         assert n == 1 and out == "The answer."
+    # P3.22: every variant, so a new wording cannot slip a bracket past it.
+    for note in _every_note_variant():
+        out, n = strip_scope_blocks("The answer." + note)
+        assert n == 1 and out == "The answer.", note
 
 
 def test_a_bracketed_query_does_not_defeat_the_strip():
@@ -192,37 +198,72 @@ def test_a_bracketed_query_does_not_defeat_the_strip():
     assert n == 1 and out == "The answer."
 
 
+def _every_note_variant() -> list:
+    """Every wording `case_law_search_note` can produce, on synthetic input:
+    the complete set, the "about" total (plain, court, each date form, no
+    query, a bracketed query), no figure (with and without a query), and a
+    full page whose link fits in it."""
+    def dated(n, last, d_from, d_to):
+        return {**_data(n, last=last), "dates": {"from": d_from, "to": d_to}}
+    return [
+        case_law_search_note({"query": "widget", "court": "ewhc/ch"}, _data(50, last=520)),
+        case_law_search_note({"query": "widget"}, _data(50, last=520)),
+        case_law_search_note({"query": "widget"}, dated(50, 520, "1900-01-01", "1901-12-31")),
+        case_law_search_note({"query": "widget"}, dated(50, 520, "1900-01-01", None)),
+        case_law_search_note({"query": "widget"}, dated(50, 520, None, "1901-12-31")),
+        case_law_search_note({"query": "[1901] EWHC 1 (Ch) widget"}, _data(50, last=520)),
+        case_law_search_note({}, _data(50, last=520)),
+        case_law_search_note({"query": "widget"}, _data(7, last=1)),
+        case_law_search_note({"query": "widget", "court": "ewhc/ch"},
+                             dated(7, 1, "1900-01-01", "1901-12-31")),
+        case_law_search_note({"query": "widget"}, _data(50)),
+        case_law_search_note({}, _data(50)),
+        case_law_search_note({"query": "widget"}, _data(50, last=5)),
+    ]
+
+
 def test_window_note_trips_no_detector():
     """Any text the product writes into a block the model can echo is read by
     every grader (batch 6 lesson). Screened on every branch, per sentence where
-    the detector is per sentence."""
+    the detector is per sentence. P3.22 (batch 9 B) widened it to every
+    variant and to the detectors `test_search_scope.test_footer_trips_no_detector`
+    screens with that this test did not (`HALT_LITERAL`, the schedule-clause
+    grader), plus the word "ranked" (the comment above
+    `CASE_LAW_ABSENCE_SENTENCE`) and a bracket inside the block."""
+    import re
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from tools.replay_report import (
-        HALT_AS_TIMEOUT, HALT_PARAPHRASE, IN_FORCE_CLAIM, NEG_ASSERTED,
-        NEG_BLAMED_INDEX, NEG_BLAMED_USER, NEG_LIMITS, NEG_TERMS, NOT_FOUND,
-        OPENER_VOCAB, SCOTS_CASELAW_GAP, _CMC_CONTEXT, _CMC_DENIED,
-        _CUR_DISCLOSED, _currency_asserted, _sentences, derivation_claims,
-        negcurrency_claim,
+        HALT_AS_TIMEOUT, HALT_LITERAL, HALT_PARAPHRASE, IN_FORCE_CLAIM,
+        NEG_ASSERTED, NEG_BLAMED_INDEX, NEG_BLAMED_USER, NEG_LIMITS, NEG_TERMS,
+        NOT_FOUND, OPENER_VOCAB, SCOTS_CASELAW_GAP, _CMC_CONTEXT, _CMC_DENIED,
+        _CUR_DISCLOSED, _currency_asserted, _sentences, _without_footer,
+        derivation_claims, negcurrency_claim, sched_clause_class,
+        sched_unit_clauses,
     )
-    notes = [
-        case_law_search_note({"query": "widget", "court": "ewhc/ch"}, _data(50, last=520)),
-        case_law_search_note({"query": "widget"}, _data(7, last=1)),
-        case_law_search_note({"query": "widget"}, _data(50)),
-        case_law_search_note({}, _data(50, last=520)),
-    ]
+    unit_rx = re.compile(r"\b(?:schedules?|annex(?:es)?)\b", re.I)
+    notes = _every_note_variant()
+    assert len(set(notes)) == len(notes) == 12
     for note in notes:
         assert note
         for rx in (NEG_ASSERTED, NOT_FOUND, NEG_BLAMED_INDEX, NEG_BLAMED_USER,
-                   NEG_LIMITS, NEG_TERMS, HALT_PARAPHRASE, HALT_AS_TIMEOUT,
-                   IN_FORCE_CLAIM, OPENER_VOCAB, SCOTS_CASELAW_GAP, _CUR_DISCLOSED):
+                   NEG_LIMITS, NEG_TERMS, HALT_LITERAL, HALT_PARAPHRASE,
+                   HALT_AS_TIMEOUT, IN_FORCE_CLAIM, OPENER_VOCAB,
+                   SCOTS_CASELAW_GAP, _CUR_DISCLOSED):
             assert not rx.search(note), (rx.pattern[:40], note)
+        assert "ranked" not in note.lower(), note
+        block = note.strip()
+        assert block.startswith("[SEARCH SCOPE — ") and block.endswith("]")
+        assert "[" not in block[1:-1] and "]" not in block[1:-1], note
+        assert _without_footer(note) == block
         assert derivation_claims(note)[0] == []
+        assert sched_unit_clauses(note, unit_rx) == []
         for s in _sentences(note):
             assert not (_CMC_CONTEXT.search(s) and _CMC_DENIED.search(s)), s
             assert not _currency_asserted(s), s
             assert negcurrency_claim(s)[0] is None, s
+            assert sched_clause_class(s) == "", s
 
 
 # --- agent_shared: keyed on the shown count ------------------------------------
