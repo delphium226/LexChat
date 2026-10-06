@@ -8482,3 +8482,40 @@ remain locally). Test databases `lexchat_test_a` to `_d` remain. **58 replay dir
 `wave4_b7_p324`). Rubrics unchanged (`31379ecf…`, `0031831b…`); new gitignored hand-read
 `rubrics/handread_wave4_b7_p324.md`. Agents' scratch in `evidence/seam/batch7/{A,B,C,D}/`, the
 session scratchpad in `batch7/scratchpad_s39/`.
+**Addendum to Session 39 (2026-10-06, at the user's request: "make sure we're not going to lose any
+pertinent information", "update the tracker", then "provide a prompt to kick off the next piece of
+work ... a safe, multi-agent approach"). This supersedes the Session 40 handover's "Take next" only in
+pointing at the brief; its content stands.**
+- **Preserved:** every Session 39 commit was pushed (`a5f740e` and before); the four agents' scratch
+  is in the gitignored `evidence/seam/batch7/{A,B,C,D}/` (144, 197, 121, 152 files) and the session
+  scratchpad in `batch7/scratchpad_s39/` (99 files, including the three CRLF-safe mutant runners
+  moved out of `C:/Temp`); P3.24's hand-read is `evidence/rubrics/handread_wave4_b7_p324.md`.
+  Findings that lived in no committed file were written where the next session reads them:
+  **CLAUDE.md** gained three short additions (the live LEX probe and the P3.27/P3.12 decision beside
+  the `include_schedules` sentence; a case-law bullet on the `last` link's ten-a-page count, the date
+  form and the retries; a Worker bullet on P3.24's commencement split, the fact that the Worker never
+  sees `worker_scope_block`, and P3.25's tool removal); the local **external-apis** skill (gitignored
+  `.claude/`) gained the probe findings (POST read endpoints, `/legislation/proxy` per provision,
+  `include_schedules` appending 60 of 60, the section lookup's completeness, the cut rules) and the
+  case-law corrections; the local **repo-map** skill gained the Session 39 functions and an
+  `instrument_lookup.py` row. **P3.25 is now `[~]`** (built, its replay booked), so `plan_status`
+  reads 53 of 77 rows, 1 in progress, 8 of 14 buckets.
+- **Fix Tracker v38** (same URL; the live body was identical to the repo source before the edit:
+  the Artifact read, then a Read of all 1,302 lines of the saved file): P3.24, P4.19, P3.23 and P3.9
+  Fixed (`fixed: "2026-10-05"`, the date `5778b28` first shows them ticked; `ver: "Next release"`);
+  P3.25 In progress; the lede names twelve rows waiting for the next release; the In-progress note
+  names P3.25; four plain-language notes for Thomas (P3.24; the three case-law fixes; P3.25; P3.27
+  and P3.12 measured and chosen), naming no lawyer's topic; "Next" and the stamp. 76 rows: 48 Fixed,
+  1 In progress, 21 Verified, 3 Blocked, 3 To be verified. Script syntax-checked with Node; no
+  render check (data and text only).
+- **`docs/prepilot-fixes/PARALLEL_BATCH_8.md` written: the brief for Session 40.** Four agents in
+  worktrees at $0 model spend: **A** builds P3.27 then P3.12 (one build, two commits, as decided);
+  **B** builds the acceptance sweep's instruments (P3.12's `DEPTH_TRUTH` entry, a `p32_6406` script
+  cut after export turn 5, the 6374 guard and P3.27's schedule check made gradeable) and prices the
+  sweep from stored costs; **C** measures P3.22 (a paced live re-run of every stored case-law query
+  under both orderings, up to 1,300 National Archives calls if the user agrees, and the 6363 and 6359
+  ground truth); **D** measures P3.21 with P5.4 (c)'s probe (up to 300 LEX and 300 legislation.gov.uk
+  calls if agreed). **Merge A, B, then the sweep for P3.27, P3.12 and P3.25 (priced to the user
+  first, about $5.50 to $7, run only on their go-ahead), then C, D.** One correction found while
+  writing it: `_cut_annex` lives in the dev tool `tools/provision_hints.py`, not in `lex.py`, so A
+  must give the cut a product home. FIX_PLAN's top order line points at the brief.
