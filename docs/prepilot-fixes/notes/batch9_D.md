@@ -358,7 +358,7 @@ query on a page of instruments reaches 2,495 characters, against 2,227 before.
 > legislation_id — it is the only tool that returns those relations, and it answers in one call
 > what no number of searches can.
 
-> (new) A row's `description` is that instrument's own published summary, possibly cut short: you
+> (new) A row's `description` is that instrument's own published summary, possibly truncated: you
 > may quote it, citing the instrument (a date it gives for bringing provisions into force, for
 > example), but it is not the change record, it is no evidence of current in-force status, and an
 > enabling power it quotes still needs an ENABLING POWER block.
@@ -551,3 +551,41 @@ Read by hand:
      under, where the row is shown and no lookup or text read follows).
    - (b) Build it now, in this batch's follow-up.
    - (c) No row: the prompt rule stands, and the Worker must look the instrument up.
+
+---
+
+## Follow-up (integrator)
+
+**The user's decisions:** 1 approved as built; 2 and 3 as built (the two booked prompts only, with
+the research Manager and planner booked as a follow-up; "the UK" means four parts); 5 approved with
+one change; 4 and 6 still open.
+
+**The change.** In `_DESCRIPTION_CLAUSE`, "possibly cut short" is now "possibly truncated". The
+integrator's screen with the built code found that "cut short" matches `replay_report.SCHED_LIMIT`.
+So a Worker echoing the clause beside a schedule or annex mention would read as LIMIT in
+`replay_report schedules`. My screen missed it: it ran `sched_unit_clauses`, which classes a clause
+only beside a unit mention, and the clause names none.
+
+**The test.** `test_the_new_clauses_trip_no_detector` now also asserts `SCHED_LIMIT` on each new
+text, and `sched_clause_class` (sentence level, no unit mention needed) returns "" for every
+sentence. Also added, as the integrator suggested: `test_no_punctuation_is_left_before_the_cut_mark`
+(the `.rstrip(" ,;:.")` before "...").
+
+**The screen, with the built code** (`screen_clauses_p36.py`, plus an inline check):
+
+| text | trips (full screen) | `SCHED_LIMIT` | `SCHED_OFFER` | `sched_clause_class` per sentence |
+|---|---|---|---|---|
+| `_ADJACENCY_CLAUSE_DESCRIBED` | `NEGATIVE_EXPLAINED` (pre-existing: "search for") | no | no | `['']` |
+| `_RELATION_ROUTE_CLAUSE_DESCRIBED` | none | no | no | `['', '']` |
+| `_DESCRIPTION_CLAUSE` ("possibly truncated") | none | no | no | `['']` |
+
+`SCHED_LIMIT` matches "possibly cut short" and does not match "possibly truncated".
+
+**Mutants** (`mut_followup.py`; the anchor asserted once, CRLF checked on the written file;
+`mut_followup.out`):
+- F0, the built code as a control: 29 passed.
+- F1, "cut short" put back: CAUGHT. The wording assertion fails, and so does
+  `test_the_new_clauses_trip_no_detector`, the screen.
+- F2, the `.rstrip(" ,;:.")` dropped: CAUGHT by `test_no_punctuation_is_left_before_the_cut_mark`.
+
+**Suite:** P3.6's file now has 29 tests; the full suite on `lexchat_test_d` gives **2642 passed**.

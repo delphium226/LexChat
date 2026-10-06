@@ -257,8 +257,8 @@ _RELATION_ROUTE_CLAUSE_DESCRIBED = (
     "can."
 )
 _DESCRIPTION_CLAUSE = (
-    " A row's `description` is that instrument's own published summary, possibly cut "
-    "short: you may quote it, citing the instrument (a date it gives for bringing "
+    " A row's `description` is that instrument's own published summary, possibly "
+    "truncated: you may quote it, citing the instrument (a date it gives for bringing "
     "provisions into force, for example), but it is not the change record, it is no "
     "evidence of current in-force status, and an enabling power it quotes still needs "
     "an ENABLING POWER block."

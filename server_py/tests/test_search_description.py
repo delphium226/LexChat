@@ -99,6 +99,11 @@ def test_whitespace_is_collapsed():
     assert got == "These Regulations amend the Widget Order 1901."
 
 
+def test_no_punctuation_is_left_before_the_cut_mark():
+    got = _search_description(" ".join(["widget,"] * 200))
+    assert got.endswith("widget...") and ",..." not in got
+
+
 def test_the_cut_is_at_a_space_in_the_second_half_only():
     """One unbroken token longer than half the cap is cut hard rather than
     reduced to nothing."""
@@ -225,7 +230,7 @@ def test_a_page_of_acts_with_descriptions_gets_no_adjacency_clause():
 
 def test_the_description_clause_says_what_a_description_is_and_is_not():
     c = ss._DESCRIPTION_CLAUSE
-    assert "own published summary, possibly cut short" in c
+    assert "own published summary, possibly truncated" in c
     assert "you may quote it, citing the instrument" in c
     assert "it is not the change record" in c
     assert "no evidence of current in-force status" in c
@@ -281,8 +286,9 @@ def test_the_new_clauses_trip_no_detector():
     from tools.replay_report import (
         HALT_AS_TIMEOUT, HALT_LITERAL, HALT_PARAPHRASE, IN_FORCE_CLAIM, NEG_ASSERTED,
         NEG_BLAMED_INDEX, NEG_BLAMED_USER, NEG_LIMITS, NEG_TERMS, NOT_FOUND, OPENER_VOCAB,
-        _CMC_CONTEXT, _CMC_DENIED, _CUR_DATED, _CUR_DISCLOSED, _currency_asserted, _sentences,
-        _without_footer, derivation_claims, negcurrency_claim, sched_unit_clauses,
+        SCHED_LIMIT, _CMC_CONTEXT, _CMC_DENIED, _CUR_DATED, _CUR_DISCLOSED, _currency_asserted,
+        _sentences, _without_footer, derivation_claims, negcurrency_claim, sched_clause_class,
+        sched_unit_clauses,
     )
     unit_rx = re.compile(r"\b(?:schedules?|annex(?:es)?)\b", re.I)
     for text in (ss._ADJACENCY_CLAUSE_DESCRIBED, ss._RELATION_ROUTE_CLAUSE_DESCRIBED,
@@ -292,10 +298,15 @@ def test_the_new_clauses_trip_no_detector():
         assert _without_footer(text) == text.strip()
         for rx in (NEG_ASSERTED, NOT_FOUND, NEG_TERMS, NEG_LIMITS, NEG_BLAMED_INDEX,
                    NEG_BLAMED_USER, IN_FORCE_CLAIM, _CUR_DISCLOSED, _CUR_DATED, HALT_LITERAL,
-                   HALT_PARAPHRASE, HALT_AS_TIMEOUT, OPENER_VOCAB):
+                   HALT_PARAPHRASE, HALT_AS_TIMEOUT, OPENER_VOCAB, SCHED_LIMIT):
             assert not rx.search(text), (rx.pattern[:40], text)
         assert not [c for c, _, _ in sched_unit_clauses(text, unit_rx) if c], text
         for s in _sentences(text):
+            # Batch 9 integrator: `sched_unit_clauses` classes a clause only
+            # beside a schedule or annex mention, so a Worker echo of this text
+            # next to one ("possibly cut short" read as LIMIT) went unseen.
+            # Classed here at sentence level, with no mention needed.
+            assert sched_clause_class(s) == "", (sched_clause_class(s), s)
             assert not (_CMC_CONTEXT.search(s) and _CMC_DENIED.search(s)), s
             assert not _currency_asserted(s), s
             assert negcurrency_claim(s)[0] is None, s
