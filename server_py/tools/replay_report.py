@@ -9022,6 +9022,1056 @@ def cmd_schedules(args) -> int:
     return 1 if fails else 0
 
 
+def _export_turns(doc: dict) -> list:
+    """[(run turn, export turn, turn)] for a run file; a scripted run maps each
+    of its turns back to the export turn it was taken from (`from_turn`)."""
+    src = [t.get("from_turn") for t in ((doc.get("script") or {}).get("turns") or [])]
+    out = []
+    for i, t in enumerate(doc.get("turns") or [], 1):
+        n = t.get("turn") or i
+        out.append((n, src[n - 1] if src and n <= len(src) else n, t))
+    return out
+
+
+def _run_base(doc: dict) -> str:
+    """The export session a run file replays (a script's `base`)."""
+    return str((doc.get("script") or {}).get("base") or doc.get("session_id"))
+
+
+def _grading_dirs(args) -> list:
+    """--dir, plus --also, or every directory beside --dir with --all-dirs."""
+    if getattr(args, "all_dirs", False):
+        return sorted(p for p in Path(args.dir).parent.iterdir() if p.is_dir())
+    return [Path(args.dir)] + [Path(d) for d in (getattr(args, "also", None) or [])]
+
+
+# --- P3.22: the authorities 6363 and 6359 need, retrieved and cited ------------
+#
+# Batch 9 E. Grades batch 8 C's bar (adopted by the user, 2026-10-06) per run,
+# from a gitignored rubric (`evidence/rubrics/p322.json`): case names are a
+# matter's facts, so this code is generic. Per base session, `authorities`, each
+# with `label`; an in-corpus judgment carries `ncn` and/or `url`, matched by
+# neutral citation and by Find Case Law URL MERGED into one key ("2022 uksc 18"),
+# so a judgment written either way is one judgment. Optional: `in_corpus`
+# (default true), `lead` (bar item 2), `carrier` with `need_turns` (item 4),
+# `mention` (a name pattern: how an answer names an out-of-corpus authority, or
+# an in-corpus one cited by name alone, which is printed as a drop).
+#
+# The bar's four items, per run:
+#   1. each in-corpus authority RETRIEVED (returned by a `search_case_law`
+#      call in the run) or not, and CITED (its key in an answer) or not,
+#      counted per session across runs; with --before, FAIL where it is
+#      retrieved in fewer runs after than before (a rate where the run counts
+#      differ);
+#   2. the `lead` authority retrieved in how many runs (FAIL with --before
+#      where fewer);
+#   3. an answer naming an out-of-corpus authority does so second-hand or
+#      says the judgment is not in the database (Invariant 1). Each sentence
+#      naming one is LINKED (a Find Case Law link labelled with its name: the
+#      corpus does not hold it, so the link is another judgment's or made up),
+#      NOT_HELD, SECOND_HAND (a citing word AND the judgment it came through:
+#      a citation, a rubric authority, or "the retrieved judgments") or
+#      UNQUALIFIED. FAIL on LINKED or UNQUALIFIED;
+#   4. the `carrier` retrieved at or before the last of its `need_turns`, in
+#      every run that answered any of them.
+# "Retrieved" is the search's result list, not a read: `get_case_law_text`
+# reads are printed beside it.
+DEFAULT_P322_RUBRIC = EVIDENCE_ROOT / "rubrics" / "p322.json"
+# A neutral citation: "[1901] UKSC 3", "[1901] EWCA Civ 4", "[1901] UKUT 5
+# (TCC)". Only the Court of Appeal puts its division before the number; the
+# High Court and the tribunals put it in a bracket after. The court is one of
+# the neutral-citation courts, so a law report ("[1901] AC 52", "[1901] IRLR
+# 8") is not read as a judgment key: it names no Find Case Law document, and
+# an out-of-corpus authority's own report must not count as the judgment it
+# came through (found on the stored 6359 answers).
+_CL_COURTS = (r"UKSC|UKHL|UKPC|EWCA|EWHC|EWCOP|EWFC|EWCC|EWCR|UKUT|UKFTT|UKEAT|EAT|UKAIT"
+              r"|CSOH|CSIH|HCJAC|SAC|NICA|NIQB|NICH|NIFam|UKIPTrib|UKSIAC")
+_CL_NCN_RX = re.compile(
+    r"\[(?P<y>(?:19|20)\d{2})\]\s*(?P<court>" + _CL_COURTS + r")\s+(?:(?P<div>Civ|Crim)\s+)?"
+    r"(?P<num>\d{1,5})\b(?:\s*\((?P<sub>[A-Za-z]{2,8})\))?")
+# A Find Case Law URL, with or without `/id/`: court[/division]/year/number.
+_CL_URL_RX = re.compile(
+    r"caselaw\.nationalarchives\.gov\.uk/(?:id/)?(?P<court>[a-z]{2,8})/"
+    r"(?:(?P<sub>[a-z]{2,8})/)?(?P<y>(?:19|20)\d{2})/(?P<num>\d{1,5})\b", re.I)
+
+
+def _cl_key(m, sub: str) -> str:
+    return "%s %s%s %d" % (m.group("y"), m.group("court").lower(),
+                           (" " + sub.lower()) if sub else "", int(m.group("num")))
+
+
+def cl_keys(text: str) -> list:
+    """[(key, how, matched text)] for every neutral citation and Find Case Law
+    URL in `text`. One judgment written both ways gives the same key twice."""
+    out = []
+    for m in _CL_NCN_RX.finditer(text or ""):
+        out.append((_cl_key(m, m.group("div") or m.group("sub") or ""), "ncn", m.group(0)))
+    for m in _CL_URL_RX.finditer(text or ""):
+        out.append((_cl_key(m, m.group("sub") or ""), "url", m.group(0)))
+    return out
+
+
+# Two families of citing words. A CITING verb ("Gadget Ltd cites Widget Co",
+# "Widget Co (applied in Gadget Ltd ...)") makes a mention second-hand when the
+# judgment it came through is named nearby. A SOURCE phrase ("as set out in",
+# "according to", "derived from") names its OBJECT as the source, so it counts
+# only when that object is the judgment it came through, never the
+# out-of-corpus authority itself: "As set out in Widget Co ..." presents Widget
+# Co as read (found on the stored 6359 answers, where the first draft passed it).
+_P322_SECOND = re.compile(
+    r"\b(?:cit(?:es|ed|ing)|referr(?:ed|ing)\s+to|refers?\s+to|referenc(?:ed|es|ing)"
+    r"|relie[ds]\s+(?:up)?on"
+    r"|relying\s+(?:up)?on|appl(?:ied|ies|ying)|follow(?:ed|s|ing)|approv(?:ed|es|ing)"
+    r"|endors(?:ed|es|ing)|adopt(?:ed|s|ing)|discuss(?:ed|es|ing)|consider(?:ed|s|ing)"
+    r"|summari[sz](?:ed|es|ing)|quot(?:ed|es|ing)|restat(?:ed|es|ing)|(?:re)?affirm(?:ed|s|ing)"
+    r"|distinguish(?:ed|es|ing)|second[- ]hand|indirectly)\b", re.I)
+_P322_SOURCE = re.compile(
+    r"\b(?:derived\s+from|drawn\s+from|according\s+to|as\s+(?:set\s+out|stated|explained"
+    r"|described|noted|recorded|summari[sz]ed|laid\s+down)\s+(?:in|by))\b", re.I)
+# The judgment a second-hand mention came through, named generically.
+_P322_VIA = re.compile(
+    r"\b(?:the|these|those|this|that|several|many|later|recent|retrieved|other)\s+"
+    r"(?:\w+\s+){0,2}?(?:judgments?|cases?|decisions?|authorit(?:y|ies))\b", re.I)
+_P322_NOT_HELD = re.compile(
+    r"\bnot\s+(?:currently\s+)?(?:held|indexed|available|included|present|contained|found"
+    r"|retrievable|accessible)\b"
+    r"|\b(?:could|can|was|were)\s*(?:not|n['’]t)\s+(?:be\s+)?(?:find|locate|retrieve|access"
+    r"|found|located|retrieved|accessed|returned)\b"
+    r"|\bunable\s+to\s+(?:find|locate|retrieve|access)\b"
+    r"|\bdid\s+not\s+(?:find|return|retrieve|surface)\b"
+    r"|\b(?:absent|missing)\s+from\b"
+    r"|\boutside\s+(?:the|this|our)\s+(?:database|index|corpus|collection|dataset)\b"
+    r"|\b(?:database|index|corpus|collection|dataset|national\s+archives|find\s+case\s+law)\b"
+    r"[^.\n]{0,80}?\b(?:does|did)\s*(?:not|n['’]t)\s+(?:hold|contain|include|have|cover)\b",
+    re.I)
+
+
+def p322_mention_class(sentence: str, mention, carriers=(), window: str = "") -> tuple:
+    """(class, reason) for one sentence naming an out-of-corpus authority.
+    `carriers` are compiled name patterns of the rubric's in-corpus authorities;
+    `window` is the two sentences before, where the judgment a citing word
+    points to is often named ("... Gadget Ltd ... The tribunal referenced the
+    principles established in Widget Co")."""
+    for label, url in MD_LINK.findall(sentence):
+        if "caselaw.nationalarchives" in url.lower() and mention.search(label):
+            return "LINKED", "a Find Case Law link labelled with its name"
+    if _P322_NOT_HELD.search(sentence) or NEG_BLAMED_INDEX.search(sentence):
+        return "NOT_HELD", "says the judgment is not in the database or was not found"
+
+    def carrier(text):
+        if cl_keys(text):
+            return "a cited judgment"
+        if any(c.search(text) for c in carriers):
+            return "a rubric authority"
+        if _P322_VIA.search(text):
+            return "'the ... judgments'"
+        return ""
+
+    for m in _P322_SOURCE.finditer(sentence):
+        obj = sentence[m.end():m.end() + 90]
+        if mention.search(obj[:30]):
+            continue
+        c = carrier(obj)
+        if c:
+            return "SECOND_HAND", "a source phrase naming " + c
+    if _P322_SECOND.search(sentence):
+        for where, text in (("", sentence), (" (the sentences before)", window)):
+            c = carrier(text)
+            if c:
+                return "SECOND_HAND", "a citing word and " + c + where
+        return "UNQUALIFIED", "a citing word, but no judgment it came through"
+    if _P322_SOURCE.search(sentence):
+        return "UNQUALIFIED", "a source phrase naming the authority itself"
+    return "UNQUALIFIED", "named as if read"
+
+
+def p322_answer_verdict(classes: list, qualified_before: bool) -> str:
+    """Item 3 for one answer naming an out-of-corpus authority: FAIL on a
+    LINKED sentence; PASS where any of its sentences is SECOND_HAND or
+    NOT_HELD (the answer qualifies it); EARLIER where none does but an earlier
+    answer of the same run did (reported, not failed); FAIL otherwise."""
+    if "LINKED" in classes:
+        return "FAIL"
+    if {"SECOND_HAND", "NOT_HELD"} & set(classes):
+        return "PASS"
+    return "EARLIER" if qualified_before else "FAIL"
+
+
+def _p322_auths(entry: dict) -> list:
+    out = []
+    for a in entry.get("authorities") or []:
+        keys = set()
+        if a.get("ncn"):
+            keys |= {k for k, _, _ in cl_keys(a["ncn"])}
+        if a.get("url"):
+            u = str(a["url"])
+            if "caselaw.nationalarchives" not in u:
+                u = "caselaw.nationalarchives.gov.uk/" + u.lstrip("/")
+            keys |= {k for k, _, _ in cl_keys(u)}
+        out.append(dict(a, keys=keys, in_corpus=a.get("in_corpus", True) is not False,
+                        mention_rx=re.compile(a["mention"], re.I) if a.get("mention") else None))
+    return out
+
+
+def _p322_turn_retrieval(turn: dict) -> tuple:
+    """({key: how} returned by search_case_law, {key: how} read by
+    get_case_law_text) for one turn."""
+    retrieved, read = {}, {}
+    for dg in (turn.get("audit") or {}).get("delegations") or []:
+        for tl in dg.get("tools") or []:
+            nm = tl.get("name")
+            if nm == "search_case_law":
+                rows = None
+                for field_ in ("raw_result", "final_result"):
+                    o = _json_or_none(tl.get(field_))
+                    if isinstance(o, dict) and isinstance(o.get("results"), list):
+                        rows = o["results"]
+                        break
+                if rows is None:
+                    for k, how, _ in cl_keys(str(tl.get("final_result") or "")):
+                        retrieved.setdefault(k, "text")
+                    continue
+                for r in rows:
+                    if isinstance(r, dict):
+                        for fld in ("url", "ncn"):
+                            for k, how, _ in cl_keys(str(r.get(fld) or "")):
+                                retrieved.setdefault(k, how)
+            elif nm == "get_case_law_text":
+                for k, how, _ in cl_keys(str((tl.get("args") or {}).get("url") or "")):
+                    read.setdefault(k, how)
+                o = _json_or_none(tl.get("raw_result"))
+                if isinstance(o, dict):
+                    for fld in ("url", "ncn"):
+                        for k, how, _ in cl_keys(str(o.get(fld) or "")):
+                            read.setdefault(k, how)
+    return retrieved, read
+
+
+def p322_run(doc: dict, entry: dict) -> dict:
+    """What one run did with each rubric authority (see the block comment)."""
+    auths = _p322_auths(entry)
+    carriers = [a["mention_rx"] for a in auths if a["in_corpus"] and a["mention_rx"]]
+    rubric_keys = set().union(*(a["keys"] for a in auths)) if auths else set()
+    turns = []
+    for n, exp, t in _export_turns(doc):
+        retrieved, read = _p322_turn_retrieval(t)
+        prose = _without_footer(t.get("answer") or "")
+        cited = {}
+        for k, how, _ in cl_keys(prose):
+            cited.setdefault(k, set()).add(how)
+        turns.append(dict(turn=n, export_turn=exp, answered=bool(prose.strip()),
+                          retrieved=retrieved, read=read, cited=cited, prose=prose))
+    per = []
+    for a in auths:
+        row = dict(label=a["label"], in_corpus=a["in_corpus"], lead=bool(a.get("lead")),
+                   carrier=bool(a.get("carrier")), retrieved=[], read=[], cited=[],
+                   named_only=[], mentions=[], carrier_verdict=None)
+        for t in turns:
+            if a["keys"] & set(t["retrieved"]):
+                row["retrieved"].append((t["export_turn"], sorted(
+                    {t["retrieved"][k] for k in a["keys"] & set(t["retrieved"])})))
+            if a["keys"] & set(t["read"]):
+                row["read"].append(t["export_turn"])
+            hit = a["keys"] & set(t["cited"])
+            if hit:
+                row["cited"].append((t["export_turn"], sorted(
+                    set().union(*(t["cited"][k] for k in hit)))))
+            if not a["in_corpus"] and a["mention_rx"]:
+                sents, back = [], []
+                for s in _sentences(t["prose"]):
+                    if a["mention_rx"].search(s):
+                        cls, why = p322_mention_class(s, a["mention_rx"], carriers,
+                                                      " ".join(back))
+                        sents.append((cls, why, s))
+                    back = (back + [s])[-2:]
+                if sents:
+                    before = any(v == "PASS" for _, v, _ in row["mentions"])
+                    row["mentions"].append((t["export_turn"], p322_answer_verdict(
+                        [c for c, _, _ in sents], before), sents))
+            elif a["mention_rx"] and not hit and a["mention_rx"].search(t["prose"]):
+                row["named_only"].append(t["export_turn"])
+        if a.get("carrier"):
+            need = [int(x) for x in a.get("need_turns") or []]
+            reached = any(t["answered"] and t["export_turn"] in need for t in turns)
+            if not need or not reached:
+                row["carrier_verdict"] = ("n/a", "no need turn answered")
+            else:
+                by = [e for e, _ in row["retrieved"] if e <= max(need)]
+                row["carrier_verdict"] = (("PASS", "retrieved in export turn(s) %s"
+                                           % ", ".join(map(str, by))) if by else
+                                          ("FAIL", "not retrieved by export turn %d" % max(need)))
+        per.append(row)
+    others = {}
+    for t in turns:
+        for k in t["cited"]:
+            if k not in rubric_keys:
+                others.setdefault(k, []).append(t["export_turn"])
+    return {"auths": per, "turns": turns, "others": others}
+
+
+def _p322_grade(dirs, rubric, sessions=None) -> dict:
+    """{session: [(dir, doc, run)]} over the directories given."""
+    out = {}
+    for d in dirs:
+        for doc in load_runs(d):
+            b = _run_base(doc)
+            if b not in rubric or (sessions and b not in sessions
+                                   and str(doc.get("session_id")) not in sessions):
+                continue
+            out.setdefault(b, []).append((d.name, doc, p322_run(doc, rubric[b])))
+    return out
+
+
+def _p322_counts(graded: list) -> dict:
+    """{label: (runs retrieving, runs reading, runs citing, runs)}."""
+    out = {}
+    for _d, _doc, run in graded:
+        for a in run["auths"]:
+            c = out.setdefault(a["label"], [0, 0, 0, 0, a["in_corpus"], a["lead"]])
+            c[0] += bool(a["retrieved"])
+            c[1] += bool(a["read"])
+            c[2] += bool(a["cited"])
+            c[3] += 1
+    return out
+
+
+def cmd_authorities(args) -> int:
+    """P3.22's bar (batch 8 C's four items) per run, from a gitignored rubric.
+    Prints every match (retrieved, read, cited: by neutral citation or URL)
+    and every drop (cited by name only; authorities cited outside the rubric;
+    every sentence naming an out-of-corpus authority, classified). The output
+    quotes answers: keep it out of the repo. Exits 1 on an item-3 or item-4
+    FAIL, or, with --before, an item-1 or item-2 regression."""
+    rpath = Path(args.rubric)
+    try:
+        rubric = {k: v for k, v in json.loads(rpath.read_text(encoding="utf-8")).items()
+                  if not k.startswith("_")}
+    except Exception as e:
+        print(f"  rubric not read ({rpath}): {e}")
+        return 2
+    sessions = set(args.session) if args.session else None
+    graded = _p322_grade(_grading_dirs(args), rubric, sessions)
+    print(f"P3.22 authorities: retrieved / read / cited, per run; rubric {rpath.name}")
+    print("  retrieved = returned by a search_case_law call; read = get_case_law_text;"
+          " cited = its NCN or URL in an answer (footer removed)")
+    bad = []
+    for sid in sorted(graded):
+        print(f"\n== {sid}")
+        for dname, doc, run in graded[sid]:
+            tag = f"{dname} {doc.get('session_id')} r{doc.get('rep', 1)}"
+            print(f"  {tag}")
+            for a in run["auths"]:
+                if a["in_corpus"]:
+                    ret = ", ".join(f"t{e} ({'/'.join(h)})" for e, h in a["retrieved"]) or "-"
+                    cit = ", ".join(f"t{e} ({'/'.join(h)})" for e, h in a["cited"]) or "-"
+                    rd = ", ".join(f"t{e}" for e in a["read"]) or "-"
+                    flags = ("lead " if a["lead"] else "") + ("carrier " if a["carrier"] else "")
+                    print(f"    [{a['label']}] {flags}retrieved {ret}; read {rd}; cited {cit}")
+                    if a["named_only"]:
+                        print(f"      DROP named but not cited by NCN or URL in t"
+                              + ", t".join(map(str, a["named_only"])))
+                    if a["carrier_verdict"]:
+                        v, why = a["carrier_verdict"]
+                        print(f"      item 4 (carrier): {v}: {why}")
+                        if v == "FAIL":
+                            bad.append((tag, a["label"], "item 4"))
+                else:
+                    if not a["mentions"]:
+                        print(f"    [{a['label']}] out of corpus: not named")
+                    for e, verdict, sents in a["mentions"]:
+                        print(f"    [{a['label']}] out of corpus: t{e} item 3 {verdict}")
+                        for cls, why, s in sents:
+                            print(f"      {cls:<11} ({why}) {s[:args.chars]}")
+                        if verdict == "FAIL":
+                            bad.append((tag, a["label"], "item 3 t%s" % e))
+            if run["others"]:
+                print("    other judgments cited (not in the rubric): " + "; ".join(
+                    f"{k} (t{', t'.join(map(str, v))})" for k, v in sorted(run["others"].items())))
+        counts = _p322_counts(graded[sid])
+        print(f"  -- {sid}, {len(graded[sid])} run(s): runs retrieving / reading / citing")
+        for label, (r, rd, c, n, inc, lead) in counts.items():
+            if inc:
+                print(f"     {label:<34} {r}/{n} / {rd}/{n} / {c}/{n}"
+                      + ("   <- item 2 (lead)" if lead else ""))
+    if args.before:
+        before = _p322_grade([Path(d) for d in args.before], rubric, sessions)
+        print("\n== item 1 and 2 against --before (" + ", ".join(Path(d).name for d in args.before) + ")")
+        for sid in sorted(set(graded) & set(before)):
+            a_c, b_c = _p322_counts(graded[sid]), _p322_counts(before[sid])
+            for label, (r, _rd, _c, n, inc, lead) in a_c.items():
+                if not inc or label not in b_c:
+                    continue
+                br, bn = b_c[label][0], b_c[label][3]
+                worse = (r < br) if n == bn else (r / max(n, 1) < br / max(bn, 1))
+                print(f"  {sid} [{label}] retrieved {br}/{bn} before -> {r}/{n} after"
+                      + ("   FAIL (fewer)" if worse else "") + ("   (lead)" if lead else ""))
+                if worse:
+                    bad.append((sid, label, "item 2" if lead else "item 1"))
+    print(f"\n  failing: {len(bad)}")
+    for b in bad:
+        print(f"    {b[2]}: {b[0]} [{b[1]}]")
+    return 1 if bad else 0
+
+
+# --- P3.21: commencement dates an answer states, against what the conversation
+#     retrieved ----------------------------------------------------------------
+#
+# Batch 9 E. P3.21's acceptance: "every commencement date an answer states is
+# one a retrieved description or text states" (6409), "a commencement question
+# gets a date wherever one is retrievable", and on 6411 the negative branch
+# only: NO commencement date stated. A CLAIM is a date (day month year, a
+# month and year, ISO or d/m/y) in a sentence about commencement ("into force",
+# "commenced", "commencement date", "in force from", "appointed day"), or in a
+# table row under such a heading, unless the words just before it make it
+# another event's date (Royal Assent, made, laid, "as at", today). Each claim is
+#   SUPPORTED   a source retrieved in the same conversation (this turn or an
+#               earlier one) states that date for an instrument or provision
+#               the sentence names (or the three lines before it, when the
+#               sentence names none);
+#   UNCLEAR     the date is retrieved, but for something else, or the sentence
+#               names nothing to tie it to, or names provisions the source
+#               does not list;
+#   UNSUPPORTED no retrieved source states the date.
+# Sources: (1) P3.21's feed dates on a change record (`related[].changes[]
+# .in_force`, `qualification`; agent C's shape, read whether `in_force` is a
+# string, a list or a {provision: date} map) — none exist before P3.21;
+# (2) a description (`lookup_legislation`, `legislation.description` on a
+# whole text, a search row's `description`); (3) retrieved text (a whole text,
+# a section search's rows, a summary). A raw API response the tool did not
+# pass on is not a source (the model never saw it); an UNSUPPORTED claim whose
+# date sits only there says so. The result-level `commencement_dates` status
+# (`retrieved`, `not_retrieved` with a reason) is printed per turn.
+_CD_MON = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|"
+           r"aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)")
+_CD_DATE = re.compile(
+    r"\b(?P<d1>[0-3]?\d)(?:st|nd|rd|th)?(?:\s+of)?\s+(?P<m1>" + _CD_MON
+    + r")\.?,?\s+(?P<y1>(?:19|20)\d{2})\b"
+    r"|\b(?P<m2>" + _CD_MON + r")\.?\s+(?P<d2>[0-3]?\d)(?:st|nd|rd|th)?,?\s+(?P<y2>(?:19|20)\d{2})\b"
+    r"|\b(?P<y3>(?:19|20)\d{2})-(?P<m3>[01]\d)-(?P<d3>[0-3]\d)\b"
+    r"|\b(?P<d4>[0-3]?\d)/(?P<m4>[01]?\d)/(?P<y4>(?:19|20)\d{2})\b"
+    r"|\b(?P<m5>" + _CD_MON + r")\.?\s+(?P<y5>(?:19|20)\d{2})\b", re.I)
+_CD_MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct",
+              "nov", "dec")
+_CD_CUE = re.compile(
+    r"\binto\s+force\b|\bcommenc(?:e|ed|es|ement|ing)\b"
+    r"|\bin[- ]force\s+(?:on|from|since|with\s+effect\s+from|as\s+from)\b"
+    r"|\bappointed\s+day\b|\bday\s+appointed\b", re.I)
+# Another event's date, by the words just before it.
+_CD_OTHER = re.compile(
+    r"(?:\bassent(?:ed)?|\b(?:made|laid(?:\s+before\s+[\w ]{0,40}?)?|signed|sealed|enacted"
+    r"|passed|published|issued|dated|sampled|accessed|checked|decided|delivered"
+    r"|handed\s+down|heard))[\s\-–—:]*(?:on|of)?[\s\-–—:]*\(?\s*$"
+    r"|\bas\s+(?:of|at)\s*:?\s*$|\bup\s+to\s+date\s+(?:to|as\s+at|as\s+of|on)\s*:?\s*$"
+    r"|\bup\s+(?:to|until)\s*$"
+    r"|\btoday(?:['’]s\s+date)?(?:\s+is)?\s*,?\s*(?:the\s+)?$"
+    r"|\bvalid\s+(?:from|to|as\s+at|on)\s*:?\s*$", re.I)
+# "came into force on the day it was passed (19 November 1998)": a commencement
+# on Royal Assent, stated with the assent date. A claim, tagged.
+_CD_BY_ASSENT = re.compile(
+    r"\bon\s+the\s+day\s+(?:after\s+)?(?:(?:it|the\s+act|this\s+act|the\s+bill)\s+)?"
+    r"(?:was\s+|is\s+|received\s+)?(?:passed|royal\s+assent)\s*\(?\s*$", re.I)
+_CD_ASSENT_WORD = re.compile(r"\broyal\s+assent\b|\bwas\s+passed\b", re.I)
+_CD_TABLE_SEP = re.compile(r"^\s*\|?\s*:?-{3,}")
+CMCDATE_NEGATIVE_BRANCH = {"6411"}
+_CD_SOURCE_WORDS = re.compile(
+    r"legislation\.gov\.uk|changes\s+to\s+legislation|\beffects?\b|\bfeed\b|\brecords?\b"
+    r"|\bdescription\b|\bmetadata\b|\bexplanatory\b|\bindex\b", re.I)
+_CD_QUAL_WORDS = re.compile(
+    r"\bwholly\b|\bpartly\b|\bpartially\b|\bfor\s+(?:certain|specified|the)\s+purposes?\b"
+    r"|\bin\s+so\s+far\b|\binsofar\b|\bfor\s+(?:E|W|S|NI|E\.W\.|E\.W\.S\.)\b", re.I)
+
+
+def cd_dates(text: str) -> list:
+    """[(start, end, (year, month, day or 0), raw)] for every date in `text`."""
+    out = []
+    for m in _CD_DATE.finditer(text or ""):
+        g = m.groupdict()
+        try:
+            if g["y1"]:
+                ymd = (int(g["y1"]), _CD_MONTHS.index(g["m1"][:3].lower()) + 1, int(g["d1"]))
+            elif g["y2"]:
+                ymd = (int(g["y2"]), _CD_MONTHS.index(g["m2"][:3].lower()) + 1, int(g["d2"]))
+            elif g["y3"]:
+                ymd = (int(g["y3"]), int(g["m3"]), int(g["d3"]))
+            elif g["y4"]:
+                ymd = (int(g["y4"]), int(g["m4"]), int(g["d4"]))
+            else:
+                ymd = (int(g["y5"]), _CD_MONTHS.index(g["m5"][:3].lower()) + 1, 0)
+        except ValueError:
+            continue
+        if not (1 <= ymd[1] <= 12 and 0 <= ymd[2] <= 31) or (ymd[2] == 0 and not g["y5"]):
+            continue
+        out.append((m.start(), m.end(), ymd, m.group(0)))
+    return out
+
+
+def _cd_fmt(ymd) -> str:
+    return "%04d-%02d" % ymd[:2] + ("-%02d" % ymd[2] if ymd[2] else "")
+
+
+def cd_statements(text: str, cue_given: bool = False) -> tuple:
+    """(statements, drops) for one sentence or table row. A statement is
+    (ymd, raw, tags); a drop is (raw, reason). A date is a statement when a
+    commencement cue sits between the previous date and the next one (or
+    `cue_given`, for a row under a commencement heading), and the words just
+    before it are not another event's."""
+    dates = cd_dates(text)
+    out, drops = [], []
+    for i, (s, e, ymd, raw) in enumerate(dates):
+        lo = dates[i - 1][1] if i else 0
+        hi = dates[i + 1][0] if i + 1 < len(dates) else len(text)
+        window = text[lo:hi]
+        before = text[lo:s]
+        tags = []
+        if _CD_BY_ASSENT.search(before):
+            tags.append("assent")
+        elif _CD_OTHER.search(before):
+            drops.append((raw, "another event's date (%s)"
+                          % _CD_OTHER.search(before).group(0).strip()[:30]))
+            continue
+        if not (cue_given or _CD_CUE.search(window)):
+            drops.append((raw, "no commencement cue"))
+            continue
+        if _CD_ASSENT_WORD.search(text) and "assent" not in tags:
+            tags.append("assent")
+        out.append((ymd, raw, tags))
+    return out, drops
+
+
+def cd_claims(prose: str) -> tuple:
+    """(claims, drops) for an answer body: claims are (sentence, ymd, raw, tags,
+    window) with `window` the three lines before; drops are (sentence, raw,
+    reason). Table rows under a heading with a commencement cue are read with
+    the cue given."""
+    claims, drops = [], []
+    lines = (prose or "").split("\n")
+    table_cue = False
+    prev: list = []
+    for i, line in enumerate(lines):
+        is_row = line.strip().startswith("|")
+        if is_row and i + 1 < len(lines) and _CD_TABLE_SEP.match(lines[i + 1]) \
+                and not _CD_TABLE_SEP.match(line):
+            table_cue = bool(_CD_CUE.search(line))
+            prev = (prev + [line])[-3:]
+            continue
+        if not is_row:
+            table_cue = False
+        if is_row and _CD_TABLE_SEP.match(line):
+            continue
+        for s in ([line] if is_row else list(_sentences(line))):
+            got, dr = cd_statements(s, cue_given=is_row and table_cue)
+            for ymd, raw, tags in got:
+                claims.append((s, ymd, raw, tags, " ".join(prev)))
+            for raw, why in dr:
+                drops.append((s, raw, why))
+            prev = (prev + [s])[-3:]
+    return claims, drops
+
+
+_CD_LID_LINK = re.compile(r"legislation\.gov\.uk/(?:id/)?([a-z]{2,5})/((?:18|19|20)\d{2})/(\d+)", re.I)
+_CD_LID_CITE = re.compile(
+    r"\b(S\.?S\.?I|W\.?S\.?I|S\.?I|S\.?R|NISR)\.?\s*(?:No\.?\s*)?((?:18|19|20)\d{2})\s*[/ ]\s*"
+    r"(?:No\.?\s*)?(\d+)\b|\b((?:18|19|20)\d{2})\s+asp\s+(\d+)\b|\b(asp|ssi|uksi|wsi|nisr|ukpga)/"
+    r"((?:18|19|20)\d{2})/(\d+)\b", re.I)
+_CD_SERIES = {"ssi": "ssi", "si": "uksi", "wsi": "wsi", "sr": "nisr", "nisr": "nisr"}
+
+
+def cd_lids(text: str, titles: Optional[dict] = None) -> set:
+    """Instrument ids a text names: legislation.gov.uk links, citations ("SSI
+    1901/3", "(1901 asp 2)", "uksi/1901/4") and, given `titles`
+    ({lid: title}), any title of 12 characters or more."""
+    out = {"%s/%s/%s" % (m.group(1).lower(), m.group(2), m.group(3))
+           for m in _CD_LID_LINK.finditer(text or "")}
+    for m in _CD_LID_CITE.finditer(text or ""):
+        if m.group(1):
+            series = _CD_SERIES.get(re.sub(r"\W", "", m.group(1)).lower())
+            if series:
+                out.add("%s/%s/%s" % (series, m.group(2), int(m.group(3))))
+        elif m.group(4):
+            out.add("asp/%s/%s" % (m.group(4), int(m.group(5))))
+        else:
+            out.add("%s/%s/%s" % (m.group(6).lower(), m.group(7), int(m.group(8))))
+    low = (text or "").lower()
+    for lid, t in (titles or {}).items():
+        t = (t or "").strip().lower()
+        if len(t) >= 12 and t in low:
+            out.add(lid)
+    return out
+
+
+def _cd_in_force_items(entry: dict) -> list:
+    """[(ymd, changed provisions, qualification)] from one `changes` entry,
+    reading `in_force` as a string, a list of strings or a {provision: date}
+    map, and `qualification` as a string or the same map."""
+    v, q = entry.get("in_force"), entry.get("qualification")
+    changed = [p for p in (entry.get("changed") or []) if p]
+    out = []
+    if isinstance(v, dict):
+        for prov, d in v.items():
+            for _, _, ymd, _ in cd_dates(str(d)):
+                out.append((ymd, [prov], str((q or {}).get(prov) or "") if isinstance(q, dict)
+                            else str(q or "")))
+        return out
+    for d in (v if isinstance(v, list) else [v] if v else []):
+        for _, _, ymd, _ in cd_dates(str(d)):
+            out.append((ymd, changed, str(q or "") if not isinstance(q, dict) else ""))
+    return out
+
+
+def cd_evidence(turn: dict, turn_no=None) -> dict:
+    """Every commencement date this turn's tools returned or showed, with what
+    it is stated for: {"items": [...], "titles": {lid: title}, "statuses":
+    [...], "api_dates": set()}. Never raises on odd shapes."""
+    ev = {"items": [], "titles": {}, "statuses": [], "api_dates": set(), "commencing": set()}
+
+    def add_text(text, src, lid, tool):
+        for s in _sentences(text or ""):
+            got, _ = cd_statements(s)
+            for ymd, raw, _tags in got:
+                ev["items"].append(dict(ymd=ymd, src=src, lid=lid, subject=None,
+                                        provisions=set(negcurrency_provisions(s)),
+                                        qualification="", tool=tool, turn=turn_no,
+                                        text=s.strip()[:240], named=cd_lids(s)))
+
+    for dg in (turn.get("audit") or {}).get("delegations") or []:
+        for tl in dg.get("tools") or []:
+            nm = tl.get("name") or ""
+            args = tl.get("args") or {}
+            o = _json_or_none(tl.get("raw_result"))
+            for ac in tl.get("api_calls") or []:
+                for _, _, ymd, _ in cd_dates(json.dumps(ac.get("response"), ensure_ascii=False)
+                                             if ac.get("response") is not None else ""):
+                    ev["api_dates"].add(ymd)
+            if nm == "get_legislation_changes" and isinstance(o, dict):
+                lid = _nc_lid(o.get("legislation_id") or args.get("legislation_id"))
+                direction = o.get("direction") or "to"
+                st = o.get("commencement_dates")
+                if st is not None:
+                    status = st.get("status") if isinstance(st, dict) else st
+                    reason = (st.get("reason") if isinstance(st, dict) else
+                              o.get("commencement_dates_reason") or "")
+                    ev["statuses"].append((lid, str(status), str(reason or "")))
+                for g in o.get("related") or []:
+                    if not isinstance(g, dict):
+                        continue
+                    glid = _nc_lid(g.get("legislation_id"))
+                    if str(g.get("type_of_effect") or "").strip().lower() == "coming into force" \
+                            and not g.get("self"):
+                        ev["commencing"] |= {glid if direction == "to" else lid,
+                                             lid if direction == "to" else glid}
+                    for ch in g.get("changes") or []:
+                        if not isinstance(ch, dict):
+                            continue
+                        for ymd, changed, qual in _cd_in_force_items(ch):
+                            ev["items"].append(dict(
+                                ymd=ymd, src="feed", tool=nm, turn=turn_no,
+                                lid=glid if direction == "to" else lid,
+                                subject=lid if direction == "to" else glid,
+                                provisions={b for b in (_nc_record_base(p) for p in changed) if b},
+                                by=str(ch.get("by") or ""), qualification=qual,
+                                text="%s %s by %s %s" % (lid if direction == "to" else glid,
+                                                         ", ".join(changed[:6]), glid if
+                                                         direction == "to" else lid,
+                                                         ch.get("by") or ""),
+                                named=set()))
+                continue
+            recs = []
+            if nm == "lookup_legislation" and isinstance(o, dict):
+                recs.append((_nc_lid(o.get("legislation_id")), o.get("title"), o.get("description")))
+            elif nm == "get_legislation_text" and isinstance(o, dict):
+                leg = o.get("legislation") if isinstance(o.get("legislation"), dict) else {}
+                tlid = _nc_lid(args.get("legislation_id") or leg.get("id"))
+                recs.append((tlid, leg.get("title"), leg.get("description")))
+                add_text(o.get("full_text") or leg.get("text") or "", "text", tlid, nm)
+            elif nm == "search_legislation" and isinstance(o, dict):
+                for r in o.get("results") or []:
+                    if isinstance(r, dict):
+                        recs.append((_nc_lid(r.get("legislation_id")), r.get("title"),
+                                     r.get("description")))
+            elif nm == "search_legislation_sections":
+                # Two stored shapes: a bare list (older directories) and
+                # {"results": [...], "returned": n}. Reading only the list read
+                # no section text on the newer shape (found on 6411's stored
+                # runs: the Commencement Order's article stating its appointed
+                # day was invisible).
+                rows = o if isinstance(o, list) else (
+                    o.get("results") if isinstance(o, dict) else None)
+                for r in rows or []:
+                    if isinstance(r, dict):
+                        add_text(str(r.get("text") or ""), "text",
+                                 _nc_lid(r.get("legislation_id")), nm)
+            for rlid, title, desc in recs:
+                if rlid and title:
+                    ev["titles"].setdefault(rlid, str(title))
+                if desc:
+                    before = len(ev["items"])
+                    add_text(str(desc), "description", rlid, nm)
+                    for it in ev["items"][before:]:
+                        it["subject"] = next(iter(sorted(it["named"] - {rlid})), None)
+            if tl.get("summarised") and isinstance(tl.get("final_result"), str):
+                # A summary is the summariser's text, not a source: on the
+                # stored 6411 runs summaries of a change record (which carries
+                # no dates) and of a case-law search state commencement dates
+                # (P3.16's class). A date a summary states counts as the
+                # source's only where the raw result it summarised carries it;
+                # otherwise it is kept as "summary", which supports nothing.
+                lid0 = _nc_lid(args.get("legislation_id") or "")
+                raw_dates = {ymd for _, _, ymd, _ in cd_dates(
+                    tl.get("raw_result") if isinstance(tl.get("raw_result"), str)
+                    else json.dumps(tl.get("raw_result"), ensure_ascii=False))}
+                before = len(ev["items"])
+                add_text(tl["final_result"], "summary", lid0, nm)
+                for it in ev["items"][before:]:
+                    if it["ymd"] in raw_dates:
+                        it["src"] = "text (summarised)"
+    return ev
+
+
+def _cd_merge(earlier: Optional[dict], now: dict) -> dict:
+    if not earlier:
+        return {"items": list(now["items"]), "titles": dict(now["titles"]),
+                "statuses": list(now["statuses"]), "api_dates": set(now["api_dates"]),
+                "commencing": set(now["commencing"])}
+    out = {"items": earlier["items"] + now["items"], "titles": dict(earlier["titles"]),
+           "statuses": earlier["statuses"] + now["statuses"],
+           "api_dates": earlier["api_dates"] | now["api_dates"],
+           "commencing": earlier["commencing"] | now["commencing"]}
+    for k, v in now["titles"].items():
+        out["titles"].setdefault(k, v)
+    return out
+
+
+def _cd_same_date(a, b) -> bool:
+    if a[2] and b[2]:
+        return a == b
+    return a[:2] == b[:2]
+
+
+def cmcdate_verdict(sentence: str, ymd, ev: dict, window: str = "",
+                    question: str = "") -> tuple:
+    """(verdict, reason, tied evidence) for one claimed date against the
+    conversation's evidence. See the block comment. A sentence that names no
+    instrument is tied through the three lines before it, then through the
+    turn's question ("What about X?" answered "these provisions commenced on
+    D")."""
+    cands = [e for e in ev["items"] if _cd_same_date(e["ymd"], ymd)
+             and e["src"] != "summary"]
+    named = cd_lids(sentence, ev["titles"])
+    provs = set(negcurrency_provisions(sentence))
+    via = ""
+    if not named and window:
+        named = cd_lids(window, ev["titles"])
+    if not named and not provs and question:
+        named = cd_lids(question, ev["titles"])
+        via = " (named in the question)" if named else ""
+    if not cands:
+        others = sorted({_cd_fmt(e["ymd"]) for e in ev["items"] if e["src"] != "summary"
+                         and (e["lid"] in named or (e.get("subject") and e["subject"] in named))})
+        why = "no retrieved source states %s" % _cd_fmt(ymd)
+        if others:
+            why += "; for what it names the sources state %s" % ", ".join(others[:4])
+        if any(_cd_same_date(e["ymd"], ymd) for e in ev["items"] if e["src"] == "summary"):
+            why += " (only a summary states it, not the text it summarised)"
+        if any(_cd_same_date(a, ymd) for a in ev["api_dates"]):
+            why += " (the date is in a raw API response the tool did not pass on)"
+        return "UNSUPPORTED", why, []
+    tied = [e for e in cands if e["lid"] in named
+            or (e.get("subject") and e["subject"] in named
+                and (not provs or provs & e["provisions"]))
+            or (provs and provs & e["provisions"])]
+    if not tied:
+        lids = sorted({e["lid"] or "?" for e in cands})
+        if not named and not provs:
+            return "UNCLEAR", ("the date is retrieved (for %s) but the sentence names no "
+                               "instrument or provision" % ", ".join(lids[:4])), cands
+        return "UNCLEAR", ("the date is retrieved for %s, not for what the sentence names"
+                           % ", ".join(lids[:4])), cands
+    ev_provs = set().union(*(e["provisions"] | ({_nc_record_base(e["by"])} if e.get("by")
+                                                  else set()) for e in tied))
+    kinds = {p.split()[0] for p in ev_provs if p}
+    extra = sorted(p for p in provs if p.split()[0] in kinds and p not in ev_provs)
+    if extra and ev_provs:
+        return "UNCLEAR", ("the date is retrieved, but the sentence also names %s, which "
+                           "the source does not list" % ", ".join(extra[:6])), tied
+    return "SUPPORTED", "stated by " + "; ".join(sorted({
+        "%s %s" % (e["src"], e["lid"] or "?") for e in tied})) + via, tied
+
+
+def cmcdate_rows(doc: dict) -> list:
+    """One row per answered turn: its claims graded, its drops, and what the
+    conversation had retrieved by then."""
+    base = _run_base(doc)
+    truth = _truth_for(base)
+    rows = []
+    earlier = None
+    for n, exp, t in _export_turns(doc):
+        now = cd_evidence(t, exp)
+        ev = _cd_merge(earlier, now)
+        earlier = ev
+        prose = _without_footer(t.get("answer") or "")
+        if not prose.strip():
+            continue
+        claims, drops = cd_claims(prose)
+        graded = []
+        for s, ymd, raw, tags, window in claims:
+            v, why, tied = cmcdate_verdict(s, ymd, ev, window, t.get("question") or "")
+            src_named = bool(_CD_SOURCE_WORDS.search(s))
+            quals = {e["qualification"] for e in tied if e.get("qualification")}
+            qual_stated = bool(_CD_QUAL_WORDS.search(s)) or any(
+                q.lower() in s.lower() for q in quals)
+            graded.append(dict(sentence=s, ymd=ymd, raw=raw, tags=tags, verdict=v, why=why,
+                               tied=tied, src_named=src_named, quals=sorted(quals),
+                               qual_stated=qual_stated))
+        asked = bool(_CMC_QUESTION.search(t.get("question") or ""))
+        # "A date retrieved" for the question: a feed date, or a date stated
+        # for an instrument the question names, a commencing instrument a
+        # change record in the conversation named (or its subject), or one of
+        # the session's known commencing instruments. Not every date in the
+        # conversation: a Deep Research step reads many unrelated orders'
+        # own commencement articles.
+        relevant = cd_lids(t.get("question") or "", ev["titles"]) | ev["commencing"] \
+            | set(truth[1] if truth else ())
+        relevant_items = [e for e in ev["items"] if e["src"] != "summary" and (
+            e["src"] == "feed" or e["lid"] in relevant or (e.get("subject") in relevant))]
+        dated_for = {}
+        if truth:
+            for lid in truth[1]:
+                dated_for[lid] = (
+                    any(g["verdict"] == "SUPPORTED" and any(e["lid"] == lid for e in g["tied"])
+                        for g in graded),
+                    any(e["lid"] == lid for e in ev["items"]))
+        rows.append(dict(session=base, run=str(doc.get("session_id")), rep=doc.get("rep", 1),
+                         turn=n, export_turn=exp, chat_mode=t.get("chat_mode") or "?",
+                         claims=graded, drops=drops, asked=asked,
+                         retrieved=len(relevant_items), statuses=now["statuses"],
+                         negative_branch=base in CMCDATE_NEGATIVE_BRANCH, dated_for=dated_for))
+    return rows
+
+
+def cmd_cmcdates(args) -> int:
+    """P3.21's acceptance: every commencement date an answer states, graded
+    SUPPORTED / UNCLEAR / UNSUPPORTED against what the same conversation
+    retrieved; whether a commencement question got a date wherever one was
+    retrieved; and on the negative-branch session (6411) that no date is
+    stated. Prints every claim and, with --drops, every dated sentence not
+    graded, with why (the output quotes answers: keep it out of the repo).
+    Exits 1 on an UNSUPPORTED claim or any claim on a negative-branch session."""
+    dirs = _grading_dirs(args)
+    want = set(args.session) if args.session else None
+    print("P3.21 commencement dates: each date an answer states, against what the "
+          "conversation retrieved (feed / description / text)")
+    tally, bad = Counter(), []
+    asked = Counter()
+    for d in dirs:
+        for doc in sorted(load_runs(d), key=lambda x: (str(x.get("session_id")), x.get("rep", 1))):
+            if want and not ({_run_base(doc), str(doc.get("session_id"))} & want):
+                continue
+            rows = cmcdate_rows(doc)
+            if not rows:
+                continue
+            print(f"\n== {d.name} {doc.get('session_id')} r{doc.get('rep', 1)}")
+            for r in rows:
+                head = (f"  t{r['turn']} (export {r['export_turn']}) {r['chat_mode']}"
+                        f"{'  ASKED' if r['asked'] else ''}  relevant retrieved dates in the "
+                        f"conversation: {r['retrieved']}")
+                if r["statuses"]:
+                    head += "  hop: " + "; ".join(
+                        f"{lid} {st}{(' (' + why + ')') if why else ''}"
+                        for lid, st, why in r["statuses"])
+                print(head)
+                for c in r["claims"]:
+                    v = c["verdict"]
+                    neg_fail = r["negative_branch"] and not (
+                        args.negative_allows_supported and v == "SUPPORTED")
+                    if r["negative_branch"]:
+                        v = ("NEG-BRANCH FAIL/" if neg_fail else "NEG-BRANCH ok/") + v
+                    tally[c["verdict"]] += 1
+                    flags = ",".join(c["tags"] + (["source named"] if c["src_named"] else [])
+                                     + (["qualification"] if c["qual_stated"] else []))
+                    print(f"    {v:<12} {_cd_fmt(c['ymd'])} [{c['why']}]"
+                          + (f" {{{flags}}}" if flags else "")
+                          + (f" feed qualification: {', '.join(c['quals'])}" if c["quals"] else ""))
+                    print(f"        {c['sentence'][:args.chars]}")
+                    for e in c["tied"][:2]:
+                        print(f"        <- {e['src']} {e['lid'] or '?'} (export t{e['turn']}): "
+                              f"{e['text'][:args.chars // 2]}")
+                    if c["verdict"] == "UNSUPPORTED" or neg_fail:
+                        bad.append((d.name, doc.get("session_id"), doc.get("rep", 1), r["turn"]))
+                if r["dated_for"]:
+                    print("    commencing instruments: " + "; ".join(
+                        f"{lid} {'DATED' if dd else 'not dated'}"
+                        f"{'' if rr_ else ' (no date retrieved for it)'}"
+                        for lid, (dd, rr_) in r["dated_for"].items()))
+                if args.drops:
+                    for s, raw, why in r["drops"]:
+                        print(f"    DROP {raw!r}: {why}: {s[:args.chars]}")
+                sup = any(c["verdict"] == "SUPPORTED" for c in r["claims"])
+                if r["asked"]:
+                    key = ("asked, a date retrieved, " + ("DATED" if sup else "NOT DATED")
+                           if r["retrieved"] else "asked, no date retrieved, "
+                           + ("dated" if r["claims"] else "no date stated"))
+                    asked[key] += 1
+                if r["negative_branch"] and not r["claims"]:
+                    print("    negative branch: no commencement date stated (PASS)")
+    print("\n  claims: " + ", ".join(f"{k} {tally[k]}" for k in
+                                     ("SUPPORTED", "UNCLEAR", "UNSUPPORTED")))
+    print("  commencement questions: " + ("; ".join(f"{k} {v}" for k, v in sorted(asked.items()))
+                                          or "none"))
+    print(f"  failing (UNSUPPORTED, or any claim on a negative-branch session): {len(bad)}")
+    return 1 if bad else 0
+
+
+# --- P3.4: does the answer name the jurisdiction it answers for? ---------------
+#
+# Batch 9 E. P3.4's acceptance (b): "6378 turn 1 and 6360 turn 1 name their
+# jurisdiction explicitly": where the question names none, the answer is for
+# Scotland and says so; where it says "the UK", the answer covers all four
+# nations and flags whether they diverge. The expectation comes from the
+# rubric (`evidence/rubrics/p34.json`: per base session `expect` "scotland" or
+# "uk_all", `turns` (export turns, default [1]), optional `markers` {name:
+# pattern} printed as columns, optional pattern overrides) or, where the rubric
+# gives none, from the question ("the UK" -> uk_all, else scotland). The
+# nation vocabulary below is generic; a nation named only inside an
+# instrument's title ("(Scotland) Regulations"), a link, or an institution
+# ("the Scottish Ministers") is IMPLICIT, not a statement of jurisdiction.
+DEFAULT_P34_RUBRIC = EVIDENCE_ROOT / "rubrics" / "p34.json"
+_JX_PATTERNS = {
+    "title": (r"\((?:Scotland|Wales|England|Northern\s+Ireland|England\s+and\s+Wales)\)"
+              r"|\bRegulations\s+\(Northern\s+Ireland\)"),
+    "institution": (r"\b(?:Scottish|Welsh|Northern\s+Ireland)\s+(?:Ministers?|Parliament|"
+                    r"Government|Assembly|Executive|Statutory\s+Instruments?|Courts)\b"
+                    r"|\bSenedd\b|\bScotland\s+Act\b"),
+    "scotland": r"\bScotland\b|\bScottish\b|\bScots\b",
+    "england": r"\bEngland\b|\bEnglish\b",
+    "wales": r"\bWales\b|\bWelsh\b",
+    "ni": r"\bNorthern\s+Ireland\b|\bNorthern\s+Irish\b",
+    "gb": r"\bGreat\s+Britain\b",
+    "all_four": (r"\b(?:all|each\s+of\s+the)\s+four\s+(?:nations|jurisdictions|parts|countries)\b"
+                 r"|\b(?:UK|United\s+Kingdom)[- ]wide\b|\b(?:across|throughout)\s+(?:the\s+)?"
+                 r"(?:whole\s+(?:of\s+the\s+)?)?(?:UK|United\s+Kingdom)\b"),
+    "diverge": (r"\bdiffer(?:s|ent|ence|ences|ing)?\b|\bvar(?:y|ies|ying|iation|iations)\b"
+                r"|\bdiverg\w*|\bdepend(?:s|ing)?\s+on\s+(?:where|the\s+(?:nation|jurisdiction|"
+                r"part|country))\b|\bseparate\s+(?:rules|regimes?|legislation|provisions|"
+                r"regulations|legal\s+systems?)\b|\bdevolved\b|\bwhereas\b|\b(?:by|in)\s+contrast\b"
+                r"|\bonly\s+(?:in|applies\s+in|apply\s+in|to)\s+(?:England|Wales|Scotland|"
+                r"Northern\s+Ireland)\b|\bno\s+longer\s+(?:applies|apply)\s+in\b"
+                r"|\bdoes\s+not\s+(?:apply|extend)\s+(?:in|to)\b"),
+    # Sameness stated: the rule is the same in every nation, or applies
+    # UK-wide. A bare "UK-wide" naming an instrument ("the UK-wide Regulations
+    # 1967 have been revoked") names all four nations but flags nothing.
+    "uniform": (r"\b(?:the\s+same|identical|uniform(?:ly)?|equally|consistent)\b[^.\n]{0,60}"
+                r"\b(?:UK|United\s+Kingdom|nations|jurisdictions|England|Scotland|Wales|"
+                r"Northern\s+Ireland)\b"
+                r"|\b(?:appl(?:y|ies)|extends?)\s+(?:equally\s+)?(?:across|throughout|to)\s+"
+                r"(?:the\s+)?(?:whole\s+(?:of\s+the\s+)?)?(?:UK|United\s+Kingdom)\b"
+                r"|\b(?:UK|United\s+Kingdom)[- ]wide\s+(?:rules?|requirements?|regimes?|"
+                r"standards?)\b"),
+    "question_uk": r"\b(?:the\s+)?(?:UK|U\.K\.|United\s+Kingdom|Britain)\b",
+}
+_JX_NATIONS = ("scotland", "england", "wales", "ni")
+
+
+def _jx_compile(rubric: dict) -> dict:
+    pats = dict(_JX_PATTERNS)
+    pats.update((rubric.get("_patterns") or {}))
+    return {k: re.compile(v, re.I) for k, v in pats.items()}
+
+
+def jx_sentence(sentence: str, rx: dict) -> tuple:
+    """(explicit nations, implicit hits) for one sentence: link URLs, titles
+    and institutions are masked before the nation words are read."""
+    s = _SCHED_URL.sub("]", sentence)
+    implicit = [m.group(0) for k in ("title", "institution") for m in rx[k].finditer(s)]
+    s = rx["institution"].sub(" ", rx["title"].sub(" ", s))
+    s = re.sub(r"\[[^\]]*\]", " ", s)     # a link's label is a title, not a statement
+    nations = {n for n in _JX_NATIONS if rx[n].search(s)}
+    if rx["gb"].search(s):
+        nations |= {"england", "wales", "scotland"}
+    if rx["all_four"].search(s):
+        nations |= set(_JX_NATIONS) | {"all_four"}
+    return nations, implicit
+
+
+def jx_verdict(prose: str, expect: str, rx: dict) -> tuple:
+    """(verdict, reason, explicit nations, flags, sentences) for one answer."""
+    explicit, implicit, sents = set(), [], []
+    for s in _sentences(prose):
+        nations, imp = jx_sentence(s, rx)
+        if nations or imp:
+            sents.append(("EXPLICIT " + "/".join(sorted(nations)) if nations else "IMPLICIT",
+                          s))
+        explicit |= nations
+        implicit += imp
+    flags = [k for k in ("diverge", "uniform") if rx[k].search(prose)]
+    nations = explicit - {"all_four"}
+    if expect == "uk_all":
+        missing = [n for n in _JX_NATIONS if n not in nations]
+        if missing:
+            return "FAIL", "does not name " + ", ".join(missing), nations, flags, sents
+        if not flags:
+            return "FAIL", "names all four, flags no divergence (or sameness)", nations, flags, sents
+        return "PASS", "all four named, " + "/".join(flags), nations, flags, sents
+    if "scotland" in nations:
+        return "PASS", "names Scotland as its jurisdiction", nations, flags, sents
+    if nations:
+        return "FAIL", "names " + ", ".join(sorted(nations)) + " and not Scotland", \
+            nations, flags, sents
+    if implicit:
+        return "IMPLICIT", "Scotland only in a title, link or institution", nations, flags, sents
+    return "FAIL", "names no jurisdiction", nations, flags, sents
+
+
+def cmd_jurisdiction(args) -> int:
+    """P3.4's acceptance (b): the graded turns name their jurisdiction
+    explicitly (Scotland where the question names none; all four nations,
+    divergence flagged, where it says "the UK"). Prints every sentence naming a
+    nation, EXPLICIT or IMPLICIT (the both-directions audit; the output quotes
+    answers: keep it out of the repo). Exits 1 on a FAIL; IMPLICIT is
+    reported, not failed."""
+    rpath = Path(args.rubric)
+    try:
+        rubric = json.loads(rpath.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"  rubric not read ({rpath}): {e}")
+        return 2
+    rx = _jx_compile(rubric)
+    sessions = {k: v for k, v in rubric.items() if not k.startswith("_")}
+    print(f"P3.4 jurisdiction named, per graded turn; rubric {rpath.name}")
+    tally, bad = Counter(), []
+    for d in _grading_dirs(args):
+        for doc in sorted(load_runs(d), key=lambda x: (str(x.get("session_id")), x.get("rep", 1))):
+            base = _run_base(doc)
+            entry = sessions.get(base)
+            if entry is None or (args.session and not ({base, str(doc.get("session_id"))}
+                                                       & set(args.session))):
+                continue
+            for n, exp, t in _export_turns(doc):
+                if exp not in (entry.get("turns") or [1]):
+                    continue
+                prose = _without_footer(t.get("answer") or "")
+                expect = entry.get("expect") or (
+                    "uk_all" if rx["question_uk"].search(t.get("question") or "") else "scotland")
+                src = "rubric" if entry.get("expect") else "question"
+                if not prose.strip():
+                    v, why, nations, flags, sents = "NO ANSWER", "", set(), [], []
+                else:
+                    v, why, nations, flags, sents = jx_verdict(prose, expect, rx)
+                tally[v] += 1
+                if v == "FAIL":
+                    bad.append((d.name, doc.get("session_id"), doc.get("rep", 1), n))
+                marks = {k: bool(re.search(p, prose, re.I))
+                         for k, p in (entry.get("markers") or {}).items()}
+                print(f"\n  {d.name} {doc.get('session_id')} r{doc.get('rep', 1)} t{n} "
+                      f"(export {exp}) {t.get('chat_mode') or '?'} expect {expect} ({src}): "
+                      f"{v}{(': ' + why) if why else ''}"
+                      + (f"  markers {marks}" if marks else ""))
+                if args.sentences:
+                    for cls, s in sents:
+                        print(f"      {cls:<36} {s[:args.chars]}")
+    print("\n  verdicts: " + ", ".join(f"{k} {v}" for k, v in sorted(tally.items())))
+    return 1 if bad else 0
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     _utf8_stdout()
     p = argparse.ArgumentParser(prog="replay_report")
@@ -9342,6 +10392,47 @@ def main(argv: Iterable[str] | None = None) -> int:
     sch.add_argument("--drops", action="store_true",
                      help="also print every clause about a unit that states nothing")
     sch.add_argument("--chars", type=int, default=240)
+    au = sub.add_parser("authorities",
+                        help="P3.22's bar: each rubric authority retrieved / read / cited "
+                             "per run, out-of-corpus authorities named second-hand, the "
+                             "carrier retrieved (gitignored rubric)")
+    au.add_argument("--rubric", default=str(DEFAULT_P322_RUBRIC),
+                    help="the gitignored rubric JSON (names a matter's authorities)")
+    au.add_argument("--also", nargs="+", metavar="DIR", help="further dirs to grade")
+    au.add_argument("--all-dirs", action="store_true",
+                    help="grade every directory beside --dir (a new directory changes the counts)")
+    au.add_argument("--before", nargs="+", metavar="DIR",
+                    help="the before-column: items 1 and 2 compared run counts against it")
+    au.add_argument("--session", nargs="+", default=None)
+    au.add_argument("--chars", type=int, default=300)
+    cd = sub.add_parser("cmcdates",
+                        help="P3.21's acceptance: every commencement date an answer states, "
+                             "SUPPORTED / UNCLEAR / UNSUPPORTED against what the conversation "
+                             "retrieved; 6411's negative branch")
+    cd.add_argument("--also", nargs="+", metavar="DIR", help="further dirs to grade")
+    cd.add_argument("--all-dirs", action="store_true",
+                    help="grade every directory beside --dir (a new directory changes the counts)")
+    cd.add_argument("--session", nargs="+", default=None,
+                    help="restrict to these session ids or script bases")
+    cd.add_argument("--drops", action="store_true",
+                    help="also print every dated sentence NOT graded as a claim, with why")
+    cd.add_argument("--negative-allows-supported", action="store_true",
+                    help="on a negative-branch session fail only a claim that is not "
+                         "SUPPORTED (the booked criterion fails any date stated)")
+    cd.add_argument("--chars", type=int, default=300)
+    jx = sub.add_parser("jurisdiction",
+                        help="P3.4's acceptance (b): the graded turn names its jurisdiction "
+                             "(Scotland, or all four nations with divergence flagged where "
+                             "the question says 'the UK')")
+    jx.add_argument("--rubric", default=str(DEFAULT_P34_RUBRIC),
+                    help="the gitignored rubric JSON (sessions, turns, expectations)")
+    jx.add_argument("--also", nargs="+", metavar="DIR", help="further dirs to grade")
+    jx.add_argument("--all-dirs", action="store_true",
+                    help="grade every directory beside --dir (a new directory changes the counts)")
+    jx.add_argument("--session", nargs="+", default=None)
+    jx.add_argument("--sentences", action="store_true",
+                    help="print every sentence naming a nation, EXPLICIT or IMPLICIT")
+    jx.add_argument("--chars", type=int, default=240)
     args = p.parse_args(list(argv) if argv is not None else None)
     return {
         "summary": cmd_summary,
@@ -9375,6 +10466,9 @@ def main(argv: Iterable[str] | None = None) -> int:
         "corpus": cmd_corpus,
         "sectionscope": cmd_sectionscope,
         "schedules": cmd_schedules,
+        "authorities": cmd_authorities,
+        "cmcdates": cmd_cmcdates,
+        "jurisdiction": cmd_jurisdiction,
     }[args.cmd](args)
 
 
