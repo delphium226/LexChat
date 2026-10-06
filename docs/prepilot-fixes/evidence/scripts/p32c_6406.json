@@ -1,0 +1,13 @@
+{
+  "session_id": "p32c_6406",
+  "base": "6406",
+  "verdict": "FAIL",
+  "primary": "B6",
+  "note": "P3.12 criterion (v) and P3.25 (batch 8 B): `p32_6406` cut after export turn 5, so its control turn is the last turn run (run turn 4). Turn 1 as recorded; turn 3's question in place of the two Deep Research turns, as in `p32_6406`; then turns 4 and 5, all Conversational under 'legislation_only'. Graded by `replay_report stance` (its control reading of export turn 5, through `from_turn`) and `replay_report schedules`. It does not grade P3.2's position window (turns 6-12), which it does not run. Turn text is taken from session 6406 by index and is never stored here.",
+  "turns": [
+    {"from_turn": 1, "research_mode": "legislation_only", "chat_mode": "conversational"},
+    {"from_turn": 3, "research_mode": "legislation_only", "chat_mode": "conversational"},
+    {"from_turn": 4, "research_mode": "legislation_only", "chat_mode": "conversational"},
+    {"from_turn": 5, "research_mode": "legislation_only", "chat_mode": "conversational"}
+  ]
+}
