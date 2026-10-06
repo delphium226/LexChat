@@ -152,6 +152,8 @@
     color: var(--ink);
     text-wrap: balance;
   }
+  h1 .as-at { font-family: var(--font-ui); font-weight: 500; font-size: 0.5em; color: var(--ink-soft);
+    white-space: nowrap; }
   .lede { margin: 0; color: var(--ink-soft); max-width: 68ch; }
   .lede strong { color: var(--ink); font-weight: 600; }
 
@@ -374,7 +376,7 @@
 <div class="wrap">
   <header>
     <span class="eyebrow">AILA · pre-pilot defect fixes</span>
-    <h1>Pre-pilot Fix Tracker</h1>
+    <h1>Pre-pilot Fix Tracker <span class="as-at" id="as-at">as at 6th Oct 2026, 3:42pm</span></h1>
     <p class="lede">Every proposed fix, ours (<strong>R</strong>) and Thomas's (<strong>T</strong>), with its status,
       its row in the fix plan and its action number in Thomas's review of 10 September 2026.
       <strong>“Fixed” means built and accepted on the fix branch. The Version column says which
@@ -1077,6 +1079,8 @@
   // ver:    on a Fixed row only: the release that carries it ("2026.09.1", the git tag
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
+  // AS_AT: the date and time of this update, shown in the header (tracker v40, user request).
+  const AS_AT = "6th Oct 2026, 3:42pm";
   const UPDATED = "6 October 2026, evening (P3.25 fixed; P3.27 and P3.12 built, their re-run to follow; P3.22 and P3.21 chosen; P3.29 added)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22", ver: "2026.09.1" },
@@ -1199,9 +1203,13 @@
     body.textContent = "";
     let shown = 0;
     let lastGroup = null;
-    // Severity first (P1 at the top), then status (Fixed first), then fixed date (oldest
-    // first); rows with no fixed date, and ties, keep plan order.
+    // Unfinished rows first (tracker v40, user request), then severity (P1 at the top), then
+    // status (In progress, Partial, Verified, Blocked, To be verified; Fixed last), then fixed
+    // date (oldest first); rows with no fixed date, and ties, keep plan order. So unfinished P1
+    // rows lead the table and the Fixed rows follow, again P1 first.
+    const isFixed = r => (r.status === "Fixed" ? 1 : 0);
     const ordered = ROWS.map((r, i) => [r, i]).sort((a, b) =>
+      isFixed(a[0]) - isFixed(b[0]) ||
       a[0].sev.localeCompare(b[0].sev) ||
       STATUSES.indexOf(a[0].status) - STATUSES.indexOf(b[0].status) ||
       (a[0].fixed || "").localeCompare(b[0].fixed || "") || a[1] - b[1]).map(x => x[0]);
@@ -1367,6 +1375,7 @@
   buildFilters();
   render();
   renderProgress();
+  document.getElementById("as-at").textContent = "as at " + AS_AT;
   document.getElementById("stamp").textContent =
     "Last updated " + UPDATED + ". Source: docs/prepilot-fixes/summary-table.html on the fix branch.";
 </script>

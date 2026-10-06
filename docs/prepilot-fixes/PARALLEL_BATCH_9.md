@@ -65,8 +65,9 @@ live payloads) is NOT in this file; it is in the gitignored files named below.
 - **Ledger:** `python -m tools.plan_status` gives **54 of 78 rows, 2 in progress (P3.27, P3.12)**,
   **8 of 14 buckets**; **`python -m tools.plan_lint` exits 0** (0 errors, 0 warnings). Run both after
   every fold.
-- **Fix Tracker v39** (<https://claude.ai/artifact/JtrwLwRZnRihfe8kHj3EaJ>, source
-  `docs/prepilot-fixes/summary-table.html`).
+- **Fix Tracker v40** (<https://claude.ai/artifact/JtrwLwRZnRihfe8kHj3EaJ>, source
+  `docs/prepilot-fixes/summary-table.html`; v40, at the user's request, shows the date and time of the
+  update in its header from an `AS_AT` constant and sorts unfinished rows first, P1 at the top).
 - **What Session 40 built** (notes `docs/prepilot-fixes/notes/batch8_{A,A2,B,C,D}.md`, committed):
   - **P3.27:** `executor.py`'s `get_legislation_text` branch sends `include_schedules: true` and makes
     the unflagged call; `utils/schedule_units.py` `mark_schedule_boundary`, `schedules_note`.
@@ -598,7 +599,8 @@ mutants.
     scratchpad to the gitignored `evidence/seam/batch9/scratchpad_s41/`; update the local skills
     (`.claude/` is gitignored) where a finding changes what they say; update the Fix Tracker only if
     the user asks (FIX_PLAN "How to use this file" step 7: Artifact `read` the live URL and Read every
-    line of the saved file first; a newly ticked row gets `fixed` and `ver: "Next release"`).
+    line of the saved file first; a newly ticked row gets `fixed` and `ver: "Next release"`; set
+    `AS_AT` to the local date and time of the update, e.g. "7th Oct 2026, 4:05pm", and `UPDATED`).
 
 **Open with the user, carried (do not act on them yourself):** sending the lawyer pack (five
 questions now; unblocks P3.2, P3.3, P3.17, and confirms P3.22's 6363 list; confirm the cover note's
