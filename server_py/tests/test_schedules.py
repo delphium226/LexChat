@@ -707,3 +707,250 @@ async def test_a_failing_route_leaves_the_section_search_as_it_was(monkeypatch):
         assert "PROVISION FETCHED BY CODE" not in out
     finally:
         set_request_provider_config({})
+
+
+# --- batch 9 A: the per-run slot is reserved before the fetch's await ---------
+#
+# `chat_loop` runs one round's tool calls as concurrent tasks. The route used
+# to check its bound and its one-fetch-per-instrument memo before the fetch's
+# await and write the result after it, so every call of a batched round passed
+# the check (Session 40's sweep: 6 list reads against a bound of 5).
+
+def _slow_lex(monkeypatch, provisions=(200, PROVISIONS), text=(200, None), gate=None):
+    """`_route_lex`, except that every call yields before it answers, as a
+    real fetch does, so the calls of one gathered round overlap. With `gate`
+    (a dict), every answer waits for `gate["ev"]`, an asyncio.Event the test
+    makes inside its running loop."""
+    asked = []
+
+    async def fake(client, method, url, *, name="", **kwargs):
+        path = url.split("/legislation", 1)[-1]
+        asked.append(path)
+        if gate is not None:
+            await gate["ev"].wait()
+        else:
+            await asyncio.sleep(0.01)
+        status, body = provisions if path == "/section/lookup" else text
+        return httpx.Response(status, json=body, request=httpx.Request(method, url))
+
+    monkeypatch.setattr(executor, "_request_with_retry", fake)
+    return asked
+
+
+def _route_env(monkeypatch, threshold=8000):
+    """The patches `_route` makes, for tests that build their own round."""
+    from src.agent import provider_factory
+    monkeypatch.setattr(provider_factory, "get_summarise_threshold", lambda *a, **k: threshold)
+
+    async def fake_summarise(text, q, model, **kw):
+        return "SUMMARY.", False
+    monkeypatch.setattr(agent_shared, "summarise_for_query", fake_summarise)
+
+
+def _route_coro(query, fetches, lid=LID):
+    return agent_shared.schedule_route_block(
+        "search_legislation_sections", {"legislation_id": lid, "query": query},
+        _search_result("article/1"), "q", fetches)
+
+
+def _run(main, seconds=10):
+    """`asyncio.run` with a deadline, so a call left waiting on a slot that
+    is never resolved fails the test instead of hanging it."""
+    return asyncio.run(asyncio.wait_for(main(), seconds))
+
+
+def _gathered(*coros):
+    async def main():
+        return await asyncio.gather(*coros)
+    return _run(main)
+
+
+def test_a_round_of_searches_on_one_instrument_makes_one_fetch(monkeypatch):
+    asked = _slow_lex(monkeypatch)
+    _route_env(monkeypatch)
+    seq_4 = _route("Schedule 2 paragraph 4", monkeypatch=monkeypatch)
+    seq_3 = _route("Schedule 3", monkeypatch=monkeypatch)
+    asked.clear()
+    fetches = {}
+    outs = _gathered(_route_coro("Schedule 2 paragraph 4", fetches),
+                     _route_coro("Schedule 3", fetches),
+                     _route_coro("Schedule 2 paragraph 4", fetches))
+    assert asked == ["/section/lookup"]
+    # Every call reads what it would have read alone.
+    assert outs == [seq_4, seq_3, seq_4] and "A fee may be refunded." in seq_4
+    # The slot holds the outcome once the round is over, never the in-flight marker.
+    assert list(fetches) == [LID] and fetches[LID]["status"] == "ok"
+
+
+def test_a_round_on_more_instruments_than_the_bound_fetches_only_the_bound(monkeypatch):
+    asked = _slow_lex(monkeypatch)
+    _route_env(monkeypatch)
+    n = agent_shared.MAX_PROVISION_FETCHES
+    lids = [f"ssi/1901/{k}" for k in range(10, 11 + n)]           # n + 1 instruments
+    fetches = {}
+    outs = _gathered(*[_route_coro("Schedule 2 paragraph 4", fetches, lid=x) for x in lids])
+    assert asked == ["/section/lookup"] * n
+    # The first n to reach the route are fetched; the last is refused as today.
+    assert [bool(o) for o in outs] == [True] * n + [False]
+    assert len(fetches) == n and lids[-1] not in fetches
+
+
+def test_a_failed_list_and_its_fallback_text_are_fetched_once_for_a_round(monkeypatch):
+    whole = SECTIONS + "\n\n" + SCHED_1 + "\n\n" + SCHED_2_TEXT + "\n\nSCHEDULE 3 FORMS\n1) A."
+    asked = _slow_lex(monkeypatch, provisions=(503, {"detail": "busy"}), text=(200, _record(whole)))
+    _route_env(monkeypatch)
+    seq = _route("Schedule 2 paragraph 4", monkeypatch=monkeypatch)
+    assert "did not come back, so code cut Schedule 2" in seq
+    asked.clear()
+    fetches = {}
+    outs = _gathered(_route_coro("Schedule 2 paragraph 4", fetches),
+                     _route_coro("Schedule 2 paragraph 4", fetches),
+                     _route_coro("Schedule 3", fetches))
+    assert asked == ["/section/lookup", "/text"]
+    assert outs[0] == outs[1] == seq and "1) A." in outs[2]
+    # A failed list is recorded in its slot, as before: it counts against the
+    # bound, is not fetched again, and establishes nothing for P3.1's cap.
+    assert fetches[LID]["status"] == "failed" and isinstance(fetches[LID]["text"], str)
+    assert agent_shared.held_provision_list(fetches, {"legislation_id": LID}) is None
+    fetches.update({f"ssi/1901/{k}": {"status": "failed", "text": None}
+                    for k in range(10, 9 + agent_shared.MAX_PROVISION_FETCHES)})
+    assert asyncio.run(_route_coro("Schedule 2", fetches, lid="ssi/1901/99")) == ""
+    assert asked == ["/section/lookup", "/text"]
+
+
+def test_an_in_flight_slot_is_counted_and_is_never_a_complete_list(monkeypatch):
+    """Batch 8 A2's reader (P3.1's cap text) states a list only from a slot
+    holding a complete outcome; a slot reserved for a read still in flight
+    must read as no list at all, and the refusal stay exactly as before."""
+    from src.utils.discovery_budget import new_search_budget, section_stop_message, set_react_round
+    gate = {}
+    three = [{"uri": f"{URI}/article/{i}", "text": f"Section {i}) x"} for i in (1, 2, 3)]
+    _slow_lex(monkeypatch, provisions=(200, three), gate=gate)
+    _route_env(monkeypatch)
+    set_request_provider_config({"_provider": "openrouter", "model": "test-model"})
+    args = {"legislation_id": LID}
+
+    async def main():
+        gate["ev"] = asyncio.Event()
+        fetches = {}
+        task = asyncio.create_task(_route_coro("the Schedule", fetches))
+        await asyncio.sleep(0.02)                     # the route now awaits its read
+        assert list(fetches) == [LID]                 # reserved, so the bound counts it
+        assert agent_shared.held_provision_list(fetches, args) is None
+        assert su.provision_list_facts(fetches[LID]) is None
+        budget = new_search_budget("legislation_only")
+        budget["section_rounds"][LID] = {0, 1, 2}
+        set_react_round(3)
+        stop = await agent_shared.run_worker_tool(
+            "search_legislation_sections", {"legislation_id": LID, "query": "widgets"},
+            "q", None, "m", search_budget=budget, search_log=[], provision_fetches=fetches)
+        assert stop == section_stop_message(budget, {"legislation_id": LID})
+        assert "provision_list" not in json.loads(stop)
+        gate["ev"].set()
+        out = await task
+        assert "none of them is a schedule or an annex" in out
+        assert agent_shared.held_provision_list(fetches, args) == {"provisions": 3, "units": []}
+
+    try:
+        _run(main)
+    finally:
+        set_request_provider_config({})
+
+
+def test_a_cancelled_read_releases_its_slot_and_its_waiters_get_nothing(monkeypatch):
+    gate = {}
+    asked = _slow_lex(monkeypatch, gate=gate)
+    _route_env(monkeypatch)
+
+    async def main():
+        gate["ev"] = asyncio.Event()
+        fetches = {}
+        owner = asyncio.create_task(_route_coro("Schedule 2 paragraph 4", fetches))
+        await asyncio.sleep(0.02)
+        waiter = asyncio.create_task(_route_coro("Schedule 2 paragraph 4", fetches))
+        await asyncio.sleep(0.02)
+        owner.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await owner
+        # The read it waited on was abandoned: nothing appended, and no hang.
+        assert await asyncio.wait_for(waiter, 1) == ""
+        # Released: nothing established, nothing counted against the bound.
+        assert fetches == {}
+        assert agent_shared.held_provision_list(fetches, {"legislation_id": LID}) is None
+        gate["ev"].set()
+        again = await _route_coro("Schedule 2 paragraph 4", fetches)
+        assert "Paragraph 4 of Schedule 2, cut at its own heading" in again
+        assert fetches[LID]["status"] == "ok"
+
+    _run(main)
+    assert asked == ["/section/lookup", "/section/lookup"]
+
+
+def test_a_waiter_cancelled_mid_read_costs_no_other_call_its_result(monkeypatch):
+    gate = {}
+    asked = _slow_lex(monkeypatch, gate=gate)
+    _route_env(monkeypatch)
+
+    async def main():
+        gate["ev"] = asyncio.Event()
+        fetches = {}
+        owner = asyncio.create_task(_route_coro("Schedule 2 paragraph 4", fetches))
+        await asyncio.sleep(0.02)
+        gone = asyncio.create_task(_route_coro("Schedule 2 paragraph 4", fetches))
+        other = asyncio.create_task(_route_coro("Schedule 3", fetches))
+        await asyncio.sleep(0.02)
+        gone.cancel()
+        gate["ev"].set()
+        outs = await asyncio.gather(owner, other)
+        assert gone.cancelled()
+        assert "Paragraph 4 of Schedule 2, cut at its own heading" in outs[0]
+        assert "Below is the whole of Schedule 3" in outs[1]
+        assert fetches[LID]["status"] == "ok"
+
+    _run(main)
+    assert asked == ["/section/lookup"]
+
+
+def test_calls_one_at_a_time_read_what_they_read_before(monkeypatch):
+    """The sequential case, unchanged: each call finds its slot either empty
+    or holding an outcome, and every slot ends as a plain outcome. (This
+    passes on the code before batch 9 A too, by design: the sequential
+    behaviour is the specification. The dry run's sequential mode is the
+    evidence over the stored runs.)"""
+    asked = _slow_lex(monkeypatch)
+    _route_env(monkeypatch)
+    fetches = {}
+    outs = [asyncio.run(_route_coro(q, fetches, lid=x)) for q, x in (
+        ("Schedule 2 paragraph 4", LID), ("Schedule 3", LID), ("Schedule 7", LID),
+        ("Annex II Chapter II", "ssi/1901/4"), ("Schedule 2", "ssi/1901/5"))]
+    assert asked == ["/section/lookup"] * 3
+    assert "Paragraph 4 of Schedule 2, cut at its own heading" in outs[0]
+    assert "Below is the whole of Schedule 3" in outs[1]
+    assert "Schedule 7 is not one of them" in outs[2]
+    assert "Chapter II of Annex II, cut at its heading" in outs[3]
+    assert list(fetches) == [LID, "ssi/1901/4", "ssi/1901/5"]
+    assert all(isinstance(v, dict) and v["status"] == "ok" for v in fetches.values())
+
+
+@pytest.mark.asyncio
+async def test_a_gathered_round_through_run_worker_tool_reads_one_list(monkeypatch):
+    """The real path: two section searches of one round, run as `chat_loop`
+    runs them, through `run_worker_tool`."""
+    asked = _slow_lex(monkeypatch)
+    _route_env(monkeypatch)
+
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
+        await asyncio.sleep(0)
+        return _search_result("article/1")
+
+    set_request_provider_config({"_provider": "openrouter", "model": "test-model"})
+    try:
+        monkeypatch.setattr(agent_shared, "execute_worker_tool", fake_exec)
+        fetches = {}
+        outs = await asyncio.wait_for(asyncio.gather(*[agent_shared.run_worker_tool(
+            "search_legislation_sections", {"legislation_id": LID, "query": q}, "q", None, "m",
+            provision_fetches=fetches) for q in ("Schedule 2 paragraph 4", "Schedule 3")]), 10)
+    finally:
+        set_request_provider_config({})
+    assert asked == ["/section/lookup"]
+    assert "A fee may be refunded." in outs[0] and "Below is the whole of Schedule 3" in outs[1]
