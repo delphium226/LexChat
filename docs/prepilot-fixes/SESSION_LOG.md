@@ -8519,3 +8519,154 @@ pointing at the brief; its content stands.**
   first, about $5.50 to $7, run only on their go-ahead), then C, D.** One correction found while
   writing it: `_cut_annex` lives in the dev tool `tools/provision_hints.py`, not in `lex.py`, so A
   must give the cut a product home. FIX_PLAN's top order line points at the brief.
+
+---
+
+## Session 40 — 2026-10-06 — parallel batch 8: P3.25 done; P3.27 and P3.12 built, their replay not met; P3.22 and P3.21 measured and decided ($9.55)
+
+**Done:**
+- **Ran `PARALLEL_BATCH_8.md` (user decisions at launch: A, B, C and D as set out; B up to 40 LEX
+  calls, C up to 1,300 National Archives calls, D up to 300 LEX and 300 legislation.gov.uk calls, all
+  agreed; merge order A, B, the priced sweep on the user's go-ahead, then C, D).** Step 1's checks held at
+  `87ceeff`: equal to `origin`; `main` at `a6b4a76`; `plan_status` 53 of 77, 1 in progress, 8 of 14;
+  `plan_lint` 0, 0; rubric sha1s `31379ecf…` and `0031831b…`; 58 replay directories; the five test
+  databases; no python process, port 8000 free, no pin file, no worktrees; baseline suite **2339**.
+  `<INTEGRATOR_HEAD>` was `87ceeff`; no other session committed during the batch (checked before every
+  merge and the fold).
+- **The four agents were cut off once when the session's process ended (about an hour in), and resumed
+  from their transcripts in their worktrees**; each recounted its call log before going on (the caps
+  covered calls made before the stop). The whole session ran on 2026-10-06 (checked against commit and
+  file times at the user's request).
+- **Every worktree came up on `main` (`a6b4a76`) again**; each agent reset to its base.
+- **Reviews** (each: the base contained, the note and diff read, the added lines grepped with
+  `matter_grep.py` and an id grep, the scratch compared with its main-checkout copy before removal, one
+  headline number re-run on the merged tree; for A, A2 and B the revert on a scratch worktree and the
+  integrator's own mutants):
+  - **A (P3.27, P3.12):** grep clean (generic "Annex"); revert 1,026 product lines, collection fails;
+    of the integrator's three mutants **two survived** (the lookup-failure fallback accepting a heading
+    met twice; a bracket in the id or url reaching a block header). Sent back: two tests added in
+    `f3af75a`, and one of them found a real defect (schedule labels from LEX's uris not cleaned), fixed.
+    The user approved both wordings before merge and chose to **extend the trigger to an unlabelled
+    "the Schedule"** (A's decision 1), built in `1d1876e` (the integrator's mutant fails 2). Dry run
+    re-run on the merged tree: 22 / 33 / 5 lines, x1.96 and x1.94. Scratch 97 = 97.
+  - **B (instruments):** grep clean (P3.12's Act inside `DEPTH_TRUTH` only); revert 399 lines, 19 of 22
+    fail; the integrator's three mutants all caught. The integrator's screen of A's BUILT wording with
+    B's `sched_clause_class` found A's code-stated true negatives read SILENT, not INDEX; B's worktree was
+    gone, so a fresh agent **B2** fixed it (`68f5611`: four phrasings read as index statements, and A's
+    two block markers added to `cmd_corpus`'s leak list; 0 stored verdicts move). The user decided:
+    silent 6374 turns report SILENT; `depth` needs each paragraph cited with its facts. Re-run on the
+    merged tree: `wave3_p38_pre` 6335 t7 PARTIAL, SHALLOW, SHALLOW; 6374 guard 7 / 12 / 17 of 36; the
+    price $7.29 / $12.16. Scratch 222 = 222 (B), 20 = 20 (B2). B's rubric copied to
+    `evidence/rubrics/p327.json` (sha1 `5a14e273…`).
+  - **C (P3.22):** grep clean; census re-run identically (1,257 calls, 612 tuples, 35 dated, 245 all
+    zero); call log 1,241 calls, one host. Scratch 1,279 = 1,279.
+  - **D (P3.21, P5.4 (c)):** grep clean; census re-run identically (1,462 change-record calls, 157
+    commencing instruments, 993 hops, cap 5 = 74%). Scratch 509 = 509.
+- **Merged A (`35ed6d7`, 2386), B with B2 (`68fd879`, 2414)**; the branch push was refused by the
+  permission classifier and **pushed on the user's go-ahead**.
+- **The acceptance sweep (`wave4_b8_sweep`, user decision: the booked set plus full 6374 and 6389 n=1,
+  cap $12.20):** `replay check` (served), `replay pin`, uvicorn started fresh with PowerShell
+  `Start-Process -PassThru` (PID 14504, build `v2026.09.3-103-g68fd879`), the keep-awake helper (PID
+  12648). `--max-spend` is per command, so the cap was enforced across the seven commands by a running
+  total (`sweep_total.py`); command 5 stopped at its own cap after `p37r_6374` ($0.82, a lost-completion
+  episode) and `p37r_6383` was run as 5b. **16 run files, $9.55 recorded.** Then `replay restore`, both
+  processes stopped by PID; no python process, port 8000 free, no pin file. No commit while it ran.
+- **Graded** (hand-read: gitignored `evidence/rubrics/handread_wave4_b8_sweep.md`): the exit-1 set 0
+  except `negatives` 1 (`p37r_6383` r1 t2, P2.2's limits column; the stored reps pass), `commencements`
+  1 (it never grades scripted runs: a blind spot) and `modes` 1 (2 of 67 answers research-shaped by an
+  echoed report label, as in stored 6406 directories); `negcurrency` 0 unsupported in 67 turns;
+  `footer_echo` 0.
+  - **P3.12:** the route fired in every rep; **6335 t7 DELIVERED 0 of 3** (PARTIAL 3): paragraph 42 at
+    depth 3 of 3 (0 of 7 before); reps 1-2 named Schedule B1 alone and got the whole Schedule summarised;
+    rep 3 named "paragraphs 42 43 44", which the parser read as 42, and the answer said falsely that the
+    index had not returned 43 and 44. **Criterion (v) met 3 of 3 by hand** (6406's annex chapter cut and
+    handed over in 3 of 3; `schedules` OK 12).
+  - **P3.27:** **the 6374 guard FAILS 4 of 4**: the Worker was told the true negative in code on every
+    step, kept searching the Order, hit P3.1's cap, and the cap's "may still be in it" won. 6389 made no
+    whole-text call (P3.12's route fetched both schedules).
+  - **P3.25:** 0 whole-text calls in a quick-lookup turn; 6409's list delivered 3 of 3 by hand; 6340 0
+    derivations, but the stored Conversational rep asserted none either (every stored derivation is
+    Research mode), and all three answers are true.
+- **Merged C (`fcfd267`, 2423) and D (`23a16cf`, 2442)** after the restore, pushed.
+- **Decisions put to the user** (seven calls, all as recommended except where noted): A's and A2's
+  wordings approved; the trigger extension; no Manager limb before the sweep; the audit records sizes;
+  **two sweep-found fixes built now, re-run next session**; **P3.25 ticked with 6340's criterion
+  amended to suppression**; P3.22 relevance with the note flipped, the before-column n=3, the rubric
+  adopted and 6363's Tier 1 added to the lawyer pack, P3.29 booked; one GET of the published spec; P3.21
+  the feed through LEX's proxy, one feed per change record, 6411 on the negative branch, self-commencing
+  Acts out; P5.4 (c) no new row; A2's route bound fixed next session, P3.27's line not yet treated as
+  established, the ascending-only paragraph run.
+- **The spec GET** (one, user-agreed): `public_api.yml` v0.6.0 (200, 22,590 bytes): `order` enum `date`,
+  `updated`, `transformation` (and `-` forms), default `-date`; no "relevance" anywhere.
+- **A2 (the two fixes):** grep clean; revert 290 lines, 25 fail; of the integrator's three mutants two
+  caught, one survivor (the refusal's own bracket cleaning: harmless in a JSON tool result); merged
+  (`342ab50`, 2482), pushed. The parser reads the sweep's query as 42, 43, 44 on the merged tree.
+- **The lawyer pack** gained a further question after Reading 4 (reference 6363: the proposed list of
+  authorities, the three the corpus lacks named, Scottish authority invited); the cover note says so.
+- **Applied** (`e499232`): `fold_s40.py` (P3.25 ticked; P3.27, P3.12, P3.22, P3.21, P5.4 annotated;
+  new P3.29; two index entries; the top order line; 68 bold markers added). **`plan_lint` 0 errors, 0
+  warnings; `plan_status` 54 of 78 rows, 0 in progress, 8 of 14 buckets.** CHANGELOG *Unreleased*:
+  schedules and annexes (P3.27, P3.12, A2's fixes) and tooling; `docs/LEGAL_DATA_SOURCES.md`
+  (commencement dates, schedules, relevance order). Suite **2482**.
+
+**Surprises / deviations:**
+- **The code-stated negative was right and still lost.** P3.27's and P3.12's lines told the Worker the
+  truth on every step of 6374, and P3.1's cap note, a second code text for the same instrument, said a
+  provision "may still be in it". Batch 7's lesson again, one level down: check every code text that
+  speaks of the same instrument, not only the one being built.
+- **A dry run cannot see a query form no stored run used.** The space-separated paragraph list appeared
+  first in the sweep.
+- **6340's booked bar was set from Research-mode runs** but booked in Conversational mode, where the
+  before-column never met it either. Read a booked bar against the before-column in the same mode.
+- **`commencements` has never graded a scripted run** (`p37_6409` here and on `wave4_p37c`); P3.25's
+  6409 criterion was a hand-read.
+- **A2's finding:** P3.12's per-run bound is checked before the fetch's `await`, so a batched round can
+  exceed it (6 reads against 5) and fetch one instrument twice. Extra LEX calls only.
+- **Costs ran above the stored figures** (6335 $1.55 against a $0.98 single-rep estimate; `p37r_6374`
+  $0.82 against about $0.21 with a lost-completion episode) but the sweep stayed under its cap.
+- **Removals blocked by the harness's safety check:** an `rm` on a shell-variable path and an `rmdir`
+  under `C:\Temp` (a session working directory); neither was needed. `git worktree remove` could not
+  delete `C:\Temp\b8_revA`, `b8_revA2` or `b8_revA3` (the shell had been inside them): git no longer
+  tracks them; they are disposable copies for the user to delete.
+- **The Fix Tracker was not updated** (only when asked). If asked: P3.25 Fixed 2026-10-06, "Next
+  release"; P3.29 a new row (P3).
+
+**State:** branch `fix/prepilot-defects`, pushed (head after this commit); `main` untouched at
+`a6b4a76`. 2482 tests. Session spend **$9.55** (the sweep; agents $0).
+
+---
+
+## Session 40 — handover for Session 41 (2026-10-06)
+
+**Take next, by severity (FIX_PLAN's top order line, "end of Session 40"):**
+1. **P1: the re-run for P3.27 and P3.12** (A2's two fixes are merged): 6335 n=3 (P3.12: `depth` on t7,
+   each paragraph cited with its facts), `p37r_6374` n=1 and full 6374 n=1 (P3.27's guard:
+   `replay_report schedules --session 6374`, SILENT reported). About $4 to $5 at this sweep's costs:
+   **price it to the user first**, cap the running total (`--max-spend` is per command). Before it, the
+   small commit the user booked: reserve P3.12's per-run slot before the fetch's `await` (A2's finding),
+   with a test. Hand-read every 6374 verdict and every 6335 t7 verdict. P3.27's flag cost on a
+   schedule-bearing whole text is still unmeasured (6389 made no whole-text read).
+2. **P2:** P3.22 (its before-column first: 6363 and 6359 n=3 each at a head without P3.22, graded on
+   C's gitignored rubric `evidence/seam/batch8/C/rubric_p322_6363_6359.md`, about $9.65 a column,
+   priced first; then the build: `order=relevance` with `per_page=50`, the note's three order
+   statements flipped without "ranked"; then the after-column); P3.21's build (the feed through LEX's
+   proxy, one per change record, 2 pages, 8 s, fail-soft, a made-date check; then 6409 and 6411 n=3);
+   P3.4, P3.6, P4.3, P3.10, P4.12, P3.20 last.
+3. **P3:** P4.8, P4.20, P4.22, P3.26, P3.28, P3.29, P3.14, P4.9, P5.4's other leads, P0.7, TODO B6.
+
+**Watch items carried:** P3.24's three (on its row); `negcurrency`'s "now apply" gap; `negatives` on
+`p37r_6383` t2 (one rep); the research-shaped echo on 6406 (2 of 67); 6409's lost SSI date (P3.21);
+`commencements` blind to scripted runs.
+
+**Decisions open with the user (carried):** sending the lawyer pack (now five questions; unblocks
+P3.2, P3.3, P3.17, and confirms P3.22's 6363 list); sending SCTS the note (P3.20); D23; deploying
+`v2026.09.3`; telling the eval-harness owner about schema v6; D19; the next cut (`v2026.10.1`: P3.16,
+P4.16, P4.15, P4.18, P4.17, P5.2, P3.19, P4.21, P3.24, P4.19, P3.23, P3.9, and now P3.25); P4.12,
+D20, D21/D22; batch 1's three items; the p37_6373 substitution; the Fix Tracker when asked.
+
+**Machine state:** no server, no pin file, no replay running; no registered worktrees (the batch 8
+agent branches remain locally, merged); `C:\Temp\b8_revA`, `b8_revA2`, `b8_revA3` are untracked
+disposable directories. **59 replay directories** (new: `wave4_b8_sweep`, 16 files). Rubrics:
+`p32.json` and `p33.json` unchanged; new `p327.json` (sha1 `5a14e273…`) and the hand-read
+`handread_wave4_b8_sweep.md`. Agents' scratch in `evidence/seam/batch8/{A,A2,B,B2,C,D}/`, the session
+scratchpad in `batch8/scratchpad_s40/`.
