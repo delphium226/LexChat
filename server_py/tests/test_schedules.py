@@ -835,6 +835,31 @@ def test_a_failed_list_and_its_fallback_text_are_fetched_once_for_a_round(monkey
     assert asked == ["/section/lookup", "/text"]
 
 
+@pytest.mark.parametrize("text_ok", [True, False])
+def test_a_failed_list_is_not_read_again_in_a_later_round(monkeypatch, text_ok):
+    """A failed list read stays recorded for the run, as batch 8 A's "fetch
+    failed" case always had it: a later round's calls on the same instrument
+    make no further list or text read and get the same output, whether the
+    fallback text came back or not. (The integrator's mutant: a finished
+    failed slot not treated as memoised, so it was read again.)"""
+    whole = SECTIONS + "\n\n" + SCHED_1 + "\n\n" + SCHED_2_TEXT + "\n\nSCHEDULE 3 FORMS\n1) A."
+    text = (200, _record(whole)) if text_ok else (503, {"detail": "busy"})
+    asked = _slow_lex(monkeypatch, provisions=(503, {"detail": "busy"}), text=text)
+    _route_env(monkeypatch)
+    fetches = {}
+    (first,) = _gathered(_route_coro("Schedule 2 paragraph 4", fetches))         # round 1
+    assert asked == ["/section/lookup", "/text"]
+    if text_ok:
+        assert "did not come back, so code cut Schedule 2" in first
+    else:
+        assert "could fetch Schedule 2 neither from it nor from the whole text" in first
+    later = _gathered(_route_coro("Schedule 2 paragraph 4", fetches),            # round 2
+                      _route_coro("Schedule 2 paragraph 4", fetches))
+    assert asked == ["/section/lookup", "/text"]
+    assert later == [first, first]
+    assert fetches[LID]["status"] == "failed" and len(fetches) == 1
+
+
 def test_an_in_flight_slot_is_counted_and_is_never_a_complete_list(monkeypatch):
     """Batch 8 A2's reader (P3.1's cap text) states a list only from a slot
     holding a complete outcome; a slot reserved for a read still in flight
