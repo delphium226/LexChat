@@ -1208,6 +1208,19 @@ def test_footer_trips_no_detector():
     # P3.12: every header, piece label and line of the PROVISION FETCHED BY
     # CODE block, on synthetic labels with no statutory text in the body.
     screened += _fetched_wording_variants()
+    # Batch 8 A2: P3.1's cap on an instrument whose complete provision list
+    # code read, every new sentence: the refusal's two fields (Worker-facing),
+    # the limb (Manager-facing) and the footer's added sentence (lawyer-facing).
+    # The clause about schedules must read as an index fact, never a limit.
+    held_texts = _section_cap_held_variants()
+    screened += held_texts
+    from tools.replay_report import sched_unit_clauses
+    unit_rx = re.compile(r"\b(?:schedules?|annex(?:es)?)\b", re.I)
+    for text in held_texts:
+        classes = [c for c, _, _ in sched_unit_clauses(text, unit_rx)]
+        assert not {"LIMIT", "OFFER"} & set(classes), (classes, text)
+        if "none of them is a schedule" in text:
+            assert "INDEX" in classes, (classes, text)
     for text in screened:
         assert not NEG_ASSERTED.search(text), text
         assert not NOT_FOUND.search(text), text
@@ -1248,6 +1261,32 @@ def _schedule_line_variants() -> list:
     ]
     assert all(variants) and len(set(variants)) == len(variants), variants
     return variants
+
+
+def _section_cap_held_variants() -> list:
+    """Every new sentence batch 8 A2 adds to P3.1's cap, on synthetic ids:
+    none held, schedules and annexes held, more than the named cap held."""
+    from src.utils import discovery_budget as db
+    from src.utils import search_scope as ss
+
+    budget = {"section_limit": 3, "id": "r1"}
+    texts = []
+    for held in ({"provisions": 3, "units": []},
+                 {"provisions": 6, "units": ["Schedule 2", "Annex II"]},
+                 {"provisions": 60, "units": [f"Schedule {i}" for i in range(1, 13)]}):
+        msg = json.loads(db.section_stop_message(budget, {"legislation_id": "ssi/1901/3"},
+                                                 held=held))
+        log = []
+        for _ in range(2):
+            ss.record_section_budget_stop(log, "search_legislation_sections",
+                                          {"legislation_id": "ssi/1901/3", "query": "q"},
+                                          budget, held=held)
+        texts += [msg["provision_list"], msg["instruction"], ss._section_budget_limb(log),
+                  ss._held_section_budget_footer(log).strip()]
+    texts.append(ss._held_section_budget_limb("ssi/1901/3", {"provisions": 3, "units": []},
+                                              1, None))
+    assert all(texts) and len(set(texts)) == len(texts), texts
+    return texts
 
 
 def _fetched_wording_variants() -> list:

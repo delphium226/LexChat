@@ -71,6 +71,8 @@ __all__ = [
     "unit_without_text_line",
     "instrument_without_text_line",
     "fetch_failed_line",
+    "provision_list_facts",
+    "provision_list_sentence",
     "bare_schedule_action",
     "row_unit",
     "sole_schedule_reason",
@@ -773,11 +775,68 @@ def unit_absent_line(lid: str, unit: ScheduleUnit, rows: list, complete: bool) -
     # The labels come from LEX's own uris, so they are cleaned like the id:
     # a bracket in one would end `_TOOL_BLOCK`'s match early (batch 8 review).
     inv = [_clean(name, 40) for name in unit_inventory(rows)]
-    held = (f"its schedules and annexes among them are {_and_join(inv)}" if inv
-            else "none of them is a schedule or an annex")
     return (f"\n\n{FETCHED_OPEN}the index holds {len(rows):,} provisions for {lid_c}, "
-            f"and {held}: {name} is not one of them. This search's results "
+            f"and {_held_clause(inv)}: {name} is not one of them. This search's results "
             "left it out for that reason.]")
+
+
+def _held_clause(inv: list, cap: Optional[int] = None) -> str:
+    """What a complete provision list holds besides its sections: "its
+    schedules and annexes among them are ..." or "none of them is a schedule
+    or an annex". With `cap`, at most that many names, then "and N more"."""
+    if not inv:
+        return "none of them is a schedule or an annex"
+    names = list(inv)
+    if cap is not None and len(names) > cap:
+        names = names[:cap] + [f"{len(inv) - cap} more"]
+    return f"its schedules and annexes among them are {_and_join(names)}"
+
+
+# ---------------------------------------------------------------------------
+# Batch 8 A2: what a complete code-read provision list establishes when P3.1's
+# section-search cap stops a Worker on that instrument
+# ---------------------------------------------------------------------------
+#
+# In the sweep (Session 40) a Worker was told in code, correctly, that the
+# index holds no schedule for an instrument (the P3.12 line above), kept
+# searching it, hit P3.1's cap, and the cap's text ("may still be in it") won:
+# the answers put the missing Schedule down to the limit. Where code has read
+# the instrument's COMPLETE provision list in the same worker run, the cap's
+# refusal, the scope block's limb and the lawyer's footer clause now say what
+# that list established. A list cut short, failed or without text says
+# nothing new (`provision_list_facts` returns None).
+
+_MAX_HELD_NAMED = 8
+
+
+def provision_list_facts(outcome: Any) -> Optional[dict]:
+    """`{"provisions": N, "units": [...]}` from a provision-list outcome
+    (`executor.fetch_provision_list`) that came back COMPLETE with rows; None
+    for anything else. Never raises."""
+    try:
+        if not isinstance(outcome, dict) or outcome.get("status") != "ok" \
+                or outcome.get("complete") is not True:
+            return None
+        rows = outcome.get("rows")
+        if not isinstance(rows, list) or not rows:
+            return None
+        return {"provisions": len(rows),
+                "units": [_clean(n, 40) for n in unit_inventory(rows)][:_MAX_LISTED]}
+    except Exception:
+        return None
+
+
+def provision_list_sentence(lid: str, facts: dict) -> str:
+    """"the index holds N provisions for <lid>, and none of them is a
+    schedule or an annex" (or names its schedules and annexes). No full stop,
+    no bracket. "" when `facts` is not usable."""
+    try:
+        n = int(facts["provisions"])
+        units = [str(u) for u in (facts.get("units") or [])]
+    except Exception:
+        return ""
+    return (f"the index holds {n:,} provisions for {_clean(lid, 60)}, "
+            f"and {_held_clause(units, cap=_MAX_HELD_NAMED)}")
 
 
 def unit_without_text_line(lid: str, unit: ScheduleUnit) -> str:
