@@ -282,7 +282,7 @@ def test_dates_in_every_written_form():
 
 
 def _claim_dates(text):
-    return [rr._cd_fmt(ymd) for _, ymd, _, _, _ in rr.cd_claims(text)[0]]
+    return [rr._cd_fmt(ymd) for _, ymd, _, _, _, _ in rr.cd_claims(text)[0]]
 
 
 def test_a_claim_needs_a_commencement_cue():
@@ -312,7 +312,7 @@ def test_a_commencement_on_royal_assent_is_a_claim_tagged():
 def test_each_date_reads_its_own_stretch_of_the_sentence():
     text = ("Made 3rd March 1901 Laid before the Widget Parliament 5th March 1901 "
             "Coming into force 10th May 1901")
-    assert [rr._cd_fmt(y) for y, _, _ in rr.cd_statements(text)[0]] == ["1901-05-10"]
+    assert [rr._cd_fmt(y) for y, _, _, _ in rr.cd_statements(text)[0]] == ["1901-05-10"]
 
 
 def test_a_table_row_under_a_commencement_heading_is_a_claim():
@@ -368,6 +368,35 @@ def test_a_by_record_names_the_commencing_instrument_as_its_subject():
     ev = rr.cd_evidence(_turn(1, "", [_feed(direction="by")]), 1)
     e = ev["items"][0]
     assert (e["lid"], e["subject"]) == ("ssi/1901/3", "asp/1901/2")
+
+
+def test_agent_c_s_built_shape_is_read():
+    """Agent C's shape as built (its `test_the_output_shape`): a dict status,
+    and an entry split where its provisions take different dates, so one `by`
+    repeats; an undated provision keeps the old {"by", "changed"} shape."""
+    rec = {"legislation_id": "asp/1901/2", "direction": "to",
+           "commencement_dates": {"status": "retrieved", "source": "the feed", "relations": 3,
+                                  "dated": 2, "refused": 0},
+           "related": [{"legislation_id": "ssi/1901/3", "self": False,
+                        "type_of_effect": "coming into force", "count": 3,
+                        "changes": [{"by": "reg. 2", "changed": ["s. 1"], "in_force": "1901-10-08",
+                                     "qualification": "wholly in force"},
+                                    {"by": "reg. 2", "changed": ["s. 2"], "in_force": "1901-11-01",
+                                     "qualification": "for specified purposes"},
+                                    {"by": "reg. 3", "changed": ["s. 3"]}]}]}
+    ev = rr.cd_evidence(_turn(1, "", [_tool("get_legislation_changes",
+                                            {"legislation_id": "asp/1901/2"}, rec)]), 1)
+    assert sorted((rr._cd_fmt(e["ymd"]), tuple(e["provisions"]), e["qualification"])
+                  for e in ev["items"]) == [("1901-10-08", ("s. 1",), "wholly in force"),
+                                            ("1901-11-01", ("s. 2",), "for specified purposes")]
+    assert ev["statuses"] == [("asp/1901/2", "retrieved", "dated 2 of 3, refused 0")]
+    doc = _run([_turn(1, "Section 2 came into force on 1 November 1901 (for specified purposes); "
+                         "section 3 came into force on 8 October 1901.",
+                      [_tool("get_legislation_changes", {"legislation_id": "asp/1901/2"}, rec)])])
+    claims = rr.cmcdate_rows(doc)[0]["claims"]
+    # Each date keeps its own provisions: s. 2 is dated by the feed, s. 3 is not.
+    assert [c["verdict"] for c in claims] == ["SUPPORTED", "UNCLEAR"]
+    assert claims[0]["qual_stated"] and claims[0]["quals"] == ["for specified purposes"]
 
 
 def test_a_not_retrieved_status_with_its_reason_is_read():
@@ -486,9 +515,12 @@ def test_a_search_rows_description_only_in_the_api_response_is_its_own_class():
     # Before P3.6: the slimmer dropped it, so the Worker never saw it.
     assert _v(s, _ev(_search_leg(api_desc=_DESC)))[0] == "SUPPORTED_RAW_ONLY"
     # After P3.6: shown (cut) in the row, and the API's full text is not counted twice.
-    ev = _ev(_search_leg(shown_desc=_DESC[:60] + _DESC[60:], api_desc=_DESC))
+    ev = _ev(_search_leg(shown_desc=_DESC, api_desc=_DESC))
     assert _v(s, ev)[0] == "SUPPORTED"
-    assert [e["src"] for e in ev["items"]] == ["description"]
+    assert sorted(e["src"] for e in ev["items"]) == ["description", rr._CD_RAW_ONLY]
+    # P3.6 cuts at a word with "...": a date past the cut was never seen.
+    ev = _ev(_search_leg(shown_desc=_DESC[:70] + "...", api_desc=_DESC))
+    assert _v(s, ev)[0] == "SUPPORTED_RAW_ONLY"
     # An unseen date stated for something else does not make a claim UNCLEAR.
     other = _tool("search_legislation", {}, {"results": []}, api=[{"response": {"results": [
         {"id": "http://www.legislation.gov.uk/id/ssi/1901/9", "description": _DESC}]}}])
@@ -531,6 +563,11 @@ def test_a_date_retrieved_earlier_in_the_conversation_supports_a_later_claim():
     rows = rr.cmcdate_rows(doc)
     assert [c["verdict"] for c in rows[1]["claims"]] == ["SUPPORTED"]
     assert rows[0]["asked"] and not rows[0]["claims"] and rows[0]["retrieved"] == 1
+
+
+def test_a_date_before_its_provisions_is_tied_to_them():
+    doc = _run([_turn(1, "* **10 May 1901**: Sections 1 and 2 came into force.", [_LOOKUP])])
+    assert [c["verdict"] for c in rr.cmcdate_rows(doc)[0]["claims"]] == ["SUPPORTED"]
 
 
 def test_only_relevant_dates_count_as_retrieved_for_the_question():

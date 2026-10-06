@@ -9547,7 +9547,14 @@ def cd_statements(text: str, cue_given: bool = False) -> tuple:
             continue
         if _CD_ASSENT_WORD.search(text) and "assent" not in tags:
             tags.append("assent")
-        out.append((ymd, raw, tags))
+        # The provisions a date is stated for: those between the previous date
+        # and this one ("section 2 came into force on D1; section 3 ... on
+        # D2"), or, where none is named there, those after it up to the next
+        # date ("1 April 1901: sections 1 to 3 came into force").
+        scope = text[lo:e]
+        if not negcurrency_provisions(scope):
+            scope = text[s:hi]
+        out.append((ymd, raw, tags, scope))
     return out, drops
 
 
@@ -9573,8 +9580,8 @@ def cd_claims(prose: str) -> tuple:
             continue
         for s in ([line] if is_row else list(_sentences(line))):
             got, dr = cd_statements(s, cue_given=is_row and table_cue)
-            for ymd, raw, tags in got:
-                claims.append((s, ymd, raw, tags, " ".join(prev)))
+            for ymd, raw, tags, scope in got:
+                claims.append((s, ymd, raw, tags, " ".join(prev), scope))
             for raw, why in dr:
                 drops.append((s, raw, why))
             prev = (prev + [s])[-3:]
@@ -9640,9 +9647,9 @@ def cd_evidence(turn: dict, turn_no=None) -> dict:
     def add_text(text, src, lid, tool):
         for s in _sentences(text or ""):
             got, _ = cd_statements(s)
-            for ymd, raw, _tags in got:
+            for ymd, raw, _tags, scope in got:
                 ev["items"].append(dict(ymd=ymd, src=src, lid=lid, subject=None,
-                                        provisions=set(negcurrency_provisions(s)),
+                                        provisions=set(negcurrency_provisions(scope)),
                                         qualification="", tool=tool, turn=turn_no,
                                         text=s.strip()[:240], named=cd_lids(s)))
 
@@ -9661,8 +9668,15 @@ def cd_evidence(turn: dict, turn_no=None) -> dict:
                 st = o.get("commencement_dates")
                 if st is not None:
                     status = st.get("status") if isinstance(st, dict) else st
-                    reason = (st.get("reason") if isinstance(st, dict) else
-                              o.get("commencement_dates_reason") or "")
+                    # Agent C's built shape (commit 36ddcee): a dict, {"status":
+                    # "retrieved", "relations", "dated", "refused", ...} or
+                    # {"status": "not_retrieved", "reason": ...}; absent when
+                    # no hop ran. A bare string is read too.
+                    reason = ((st.get("reason") or (
+                        "dated %s of %s, refused %s" % (st.get("dated"), st.get("relations"),
+                                                         st.get("refused"))
+                        if "dated" in st else "")) if isinstance(st, dict) else
+                        o.get("commencement_dates_reason") or "")
                     ev["statuses"].append((lid, str(status), str(reason or "")))
                 for g in o.get("related") or []:
                     if not isinstance(g, dict):
@@ -9721,9 +9735,11 @@ def cd_evidence(turn: dict, turn_no=None) -> dict:
                         if not (isinstance(r, dict) and r.get("description")):
                             continue
                         rlid = _nc_lid(r.get("legislation_id") or r.get("id") or r.get("uri"))
-                        if any(str(r["description"]).startswith(d[:200]) or d.startswith(
-                                str(r["description"])[:200]) for lid_, d in shown if lid_ == rlid):
-                            continue
+                        # Kept even where the row showed a description: P3.6
+                        # cuts at 600 characters, so a date past the cut was
+                        # never seen. A date also in the shown text has a
+                        # "description" item beside this one, and grades
+                        # SUPPORTED on it.
                         before = len(ev["items"])
                         add_text(str(r["description"]), "description (API response only)",
                                  rlid, nm)
@@ -9792,7 +9808,7 @@ _CD_RAW_ONLY = "description (API response only)"
 
 
 def cmcdate_verdict(sentence: str, ymd, ev: dict, window: str = "",
-                    question: str = "") -> tuple:
+                    question: str = "", scope: Optional[str] = None) -> tuple:
     """(verdict, reason, tied evidence) for one claimed date against the
     conversation's evidence. See the block comment. A sentence that names no
     instrument is tied through the three lines before it, then through the
@@ -9801,7 +9817,9 @@ def cmcdate_verdict(sentence: str, ymd, ev: dict, window: str = "",
     cands = [e for e in ev["items"] if _cd_same_date(e["ymd"], ymd)
              and e["src"] != "summary"]
     named = cd_lids(sentence, ev["titles"])
-    provs = set(negcurrency_provisions(sentence))
+    # `scope`: the stretch of the sentence this date is stated for (see
+    # `cd_statements`), so two dates in one sentence keep their own provisions.
+    provs = set(negcurrency_provisions(sentence if scope is None else scope))
     via = ""
     if not named and window:
         named = cd_lids(window, ev["titles"])
@@ -9867,8 +9885,8 @@ def cmcdate_rows(doc: dict) -> list:
             continue
         claims, drops = cd_claims(prose)
         graded = []
-        for s, ymd, raw, tags, window in claims:
-            v, why, tied = cmcdate_verdict(s, ymd, ev, window, t.get("question") or "")
+        for s, ymd, raw, tags, window, scope in claims:
+            v, why, tied = cmcdate_verdict(s, ymd, ev, window, t.get("question") or "", scope)
             src_named = bool(_CD_SOURCE_WORDS.search(s))
             quals = {e["qualification"] for e in tied if e.get("qualification")}
             qual_stated = bool(_CD_QUAL_WORDS.search(s)) or any(
