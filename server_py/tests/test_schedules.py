@@ -332,8 +332,8 @@ def test_named_units_reads_every_form():
     # Two schedules: no paragraph is attached to either.
     two = su.named_units("Schedule 2 and Schedule 3 paragraph 1")
     assert [x.label for x in two] == ["2", "3"] and all(not x.paragraphs for x in two)
-    # The word without a label, and a section query, name nothing.
-    for q in ("schedules to the Widget Order", "section 5 widgets", "the schedule of fees", ""):
+    # The plural without a label, and a section query, name nothing.
+    for q in ("schedules to the Widget Order", "section 5 widgets", "Schedules", ""):
         assert su.named_units(q) == [], q
 
 
@@ -477,6 +477,73 @@ def test_a_failed_list_falls_back_to_the_whole_text_cut_at_the_heading(monkeypat
     assert "did not come back, so code cut Schedule 2 out of the instrument's whole text" in out
     assert "A fee may be refunded." in out and "Form" not in out
     assert asked[1] == ("/text", {"legislation_id": LID, "include_schedules": True})
+
+
+# --- decision 1 (user, 2026-10-06): "the Schedule" with no label ---------------
+
+def test_the_unlabelled_schedule_is_read_and_the_plural_is_not():
+    u = su.named_units("the Schedule to the Widget Order")
+    assert len(u) == 1 and (u[0].kind, u[0].label) == ("schedule", "")
+    assert u[0].display() == "the Schedule"
+    assert su.named_units("schedule of widget fees")[0].label == ""
+    assert su.named_units("schedules to the Widget Order") == []
+    # A labelled schedule in the query: no extra unlabelled unit.
+    assert [x.label for x in su.named_units("Schedule 2 and the schedule")] == ["2"]
+
+
+def test_the_unlabelled_schedule_is_present_when_any_schedule_row_is():
+    u = su.ScheduleUnit("schedule", "")
+    assert su.unit_in_results(_search_result("schedule/3"), u) is True
+    assert su.unit_in_results(_search_result("schedule"), u) is True
+    assert su.unit_in_results(_search_result("article/1", "annex/II"), u) is False
+
+
+def test_unlabelled_with_none_held_says_so(monkeypatch):
+    asked = _route_lex(monkeypatch, provisions=(200, PROVISIONS[:1] + PROVISIONS[2:3]))
+    out = _route("the Schedule widgets", monkeypatch=monkeypatch)
+    assert out == ("\n\n[PROVISION FETCHED BY CODE — the index holds 2 provisions for "
+                   "ssi/1901/3, and none of them is a schedule or an annex: the Schedule is "
+                   "not one of them. This search's results left it out for that reason.]")
+    assert asked and asked[0][0] == "/section/lookup"
+
+
+def test_unlabelled_with_one_schedule_hands_it_over_whole(monkeypatch):
+    rows = [PROVISIONS[0], _prow("schedule", SCHED_2_TEXT.replace("SCHEDULE 2", "SCHEDULE"))]
+    _route_lex(monkeypatch, provisions=(200, rows))
+    out = _route("the Schedule widgets", monkeypatch=monkeypatch)
+    assert "the index holds the Schedule of ssi/1901/3 as one provision" in out
+    assert "Below is the whole of the Schedule. It is the only schedule the index holds " \
+           "for ssi/1901/3." in out
+    assert "A fee may be refunded." in out and "one shilling" in out    # cut nothing
+    numbered = [PROVISIONS[0], _prow("schedule/3", SCHED_3_TEXT), PROVISIONS[4]]
+    _route_lex(monkeypatch, provisions=(200, numbered))
+    out3 = _route("schedule of forms", monkeypatch=monkeypatch)
+    assert "Below is the whole of Schedule 3. It is the only schedule" in out3
+
+
+def test_unlabelled_with_two_or_more_schedules_does_nothing(monkeypatch):
+    asked = _route_lex(monkeypatch)                     # Schedules 2, 3 and 4
+    assert _route("the Schedule widgets", monkeypatch=monkeypatch) == ""
+    assert asked and asked[0][0] == "/section/lookup"   # fetched, then nothing said
+    _route_lex(monkeypatch, provisions=(200, [PROVISIONS[0], PROVISIONS[4]]))
+    assert _route("the Schedule", monkeypatch=monkeypatch) == ""   # annexes, no schedule
+
+
+def test_unlabelled_does_not_fire_when_a_schedule_row_is_in_the_results(monkeypatch):
+    asked = _route_lex(monkeypatch)
+    assert _route("the Schedule widgets", results=_search_result("schedule/2"),
+                  monkeypatch=monkeypatch) == ""
+    assert _route("schedules to the Widget Order", monkeypatch=monkeypatch) == ""
+    assert asked == []
+
+
+def test_unlabelled_on_a_failed_or_short_list_says_nothing(monkeypatch):
+    asked = _route_lex(monkeypatch, provisions=(503, {"detail": "busy"}))
+    assert _route("the Schedule", monkeypatch=monkeypatch) == ""
+    assert [p for p, _ in asked] == ["/section/lookup"]        # no text fallback
+    monkeypatch.setattr(executor, "PROVISION_LIST_LIMIT", 1)
+    _route_lex(monkeypatch, provisions=(200, PROVISIONS[:1]))
+    assert _route("the Schedule", monkeypatch=monkeypatch) == ""
 
 
 def test_a_heading_met_twice_in_the_whole_text_is_not_cut(monkeypatch):

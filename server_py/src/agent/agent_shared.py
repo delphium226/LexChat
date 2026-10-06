@@ -15,6 +15,11 @@ from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import harvest_legislation_urls, provision_url_block
 from ..utils.section_outline import subsection_outline
 from ..utils.schedule_units import (
+    BARE_ABSENT,
+    BARE_ONE,
+    bare_schedule_action,
+    row_unit,
+    sole_schedule_reason,
     FROM_LIST,
     FROM_TEXT,
     SUMMARY,
@@ -555,7 +560,30 @@ async def schedule_route_block(
     out = []
     for unit in units:
         source, url, text = FROM_LIST, "", None
-        if outcome.get("status") == "ok":
+        sole_reason = ""
+        if not unit.label:
+            # Decision 1 (user, 2026-10-06): "the Schedule" with no label. Act
+            # only on a provision list that holds no schedule or annex (the
+            # true negative) or exactly one schedule (handed over whole, cut
+            # nothing); with two or more the query does not say which, so
+            # nothing is appended. No fallback on a failed list.
+            if outcome.get("status") != "ok":
+                continue
+            action, row = bare_schedule_action(outcome.get("rows"),
+                                               bool(outcome.get("complete")))
+            if action == BARE_ABSENT:
+                out.append(unit_absent_line(lid, unit, outcome.get("rows") or [], True))
+                continue
+            if action != BARE_ONE:
+                continue
+            unit = row_unit(row)
+            url = str(row.get("uri") or row.get("id") or "")
+            text = str(row.get("text") or "")
+            if not text.strip():
+                out.append(unit_without_text_line(lid, unit))
+                continue
+            sole_reason = sole_schedule_reason(lid)
+        elif outcome.get("status") == "ok":
             row = pick_provision(outcome.get("rows"), unit)
             if row is None:
                 out.append(unit_absent_line(lid, unit, outcome.get("rows") or [],
@@ -579,6 +607,7 @@ async def schedule_route_block(
                 continue
             source = FROM_TEXT
         pieces, how, reason = cut_pieces(unit, text)
+        reason = " ".join(r for r in (sole_reason, reason) if r)
         total = sum(len(t) for _, t in pieces)
         over_budget = (context_budget is not None and
                        context_budget["used"] + pending_chars + total > context_budget["limit"])

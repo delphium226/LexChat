@@ -71,6 +71,11 @@ __all__ = [
     "unit_without_text_line",
     "instrument_without_text_line",
     "fetch_failed_line",
+    "bare_schedule_action",
+    "row_unit",
+    "sole_schedule_reason",
+    "BARE_ABSENT",
+    "BARE_ONE",
     "cut_pieces",
     "CUT",
     "WHOLE",
@@ -304,7 +309,9 @@ class ScheduleUnit:
     chapter: str = ""               # an annex chapter numeral
 
     def display(self) -> str:
-        return f"{'Schedule' if self.kind == 'schedule' else 'Annex'} {self.label}"
+        word = "Schedule" if self.kind == "schedule" else "Annex"
+        # An unlabelled unit is the instrument's own schedule ("the Schedule").
+        return f"{word} {self.label}" if self.label else f"the {word}"
 
 
 # The word is case-insensitive, the label is not: "Schedules 1 and 2" names
@@ -323,6 +330,10 @@ _SCH_PART_RX = re.compile(
     _SCH_WORD + r"[ \t]*[A-Z]{0,3}\d{1,3}[A-Z]{0,4}[ \t,]+"
     r"(?i:part|chapter|head)[ \t]+([A-Z0-9]{1,6})\b"
 )
+# The word alone, singular ("the Schedule", "schedule of fees"): `\b` after it
+# keeps the plural ("schedules to the Act") out. Read only where the query
+# names no labelled schedule (user decision, 2026-10-06, batch 8 A decision 1).
+_SCH_BARE_RX = re.compile(r"\b(?i:schedule)\b")
 _ANNEX_RX = re.compile(r"\b(?i:annex)[ \t]+([IVXLC]{1,7}|\d{1,3})\b")
 _CHAPTER_RX = re.compile(r"\b(?i:chapter)[ \t]+([IVXL]{1,6})\b")
 _MAX_PARAGRAPHS = 4
@@ -379,6 +390,11 @@ def named_units(query: Any) -> list:
         units = [ScheduleUnit("schedule", lab, paragraphs=paras,
                               part=part_m.group(1) if part_m else "")
                  for lab in sched_labels]
+        # P3.12, decision 1: "the Schedule" with no label. The route acts on it
+        # only where the provision list holds no schedule or annex, or exactly
+        # one schedule (`bare_schedule_action`).
+        if not sched_labels and _SCH_BARE_RX.search(q):
+            units.append(ScheduleUnit("schedule", ""))
         ch = _CHAPTER_RX.search(q) if len(annex_labels) == 1 else None
         units += [ScheduleUnit("annex", lab, chapter=ch.group(1) if ch else "")
                   for lab in annex_labels]
@@ -415,6 +431,9 @@ def unit_in_results(data: Any, unit: ScheduleUnit) -> Optional[bool]:
         rows = d.get("results") if isinstance(d, dict) else d
         if not isinstance(rows, list):
             return None
+        if not unit.label:
+            # "the Schedule": any schedule row in the results answers it.
+            return any(re.search(r"/schedule(?:/[^/]+)?$", _url_of(r), re.I) for r in rows)
         want = f"/{_seg(unit)}/{unit.label}".lower()
         return any(_url_of(r).lower().endswith(want) or _is_sole_unit_url(_url_of(r), unit)
                    for r in rows)
@@ -439,6 +458,40 @@ def pick_provision(rows: Any, unit: ScheduleUnit) -> Optional[dict]:
             if _is_sole_unit_url(_url_of(r), unit):
                 return r
     return None
+
+
+BARE_ABSENT, BARE_ONE = "absent", "one"
+
+
+def bare_schedule_action(rows: Any, complete: bool) -> tuple:
+    """What the route does for "the Schedule" with no label, from the
+    provision list: `(BARE_ABSENT, None)` where the complete list holds no
+    schedule or annex row (the true negative, stated in code);
+    `(BARE_ONE, row)` where it holds exactly one schedule row (handed over
+    whole, as for "Schedule 1"); `(None, None)` otherwise. With two or more
+    schedules the query does not say which, so nothing is guessed; with
+    annexes and no schedule, "the Schedule" is not obviously any of them; a
+    list cut short says nothing about absence."""
+    if not isinstance(rows, list):
+        return None, None
+    scheds = [r for r in rows if re.search(r"/schedule(?:/[^/]+)?$", _url_of(r), re.I)]
+    annexes = [r for r in rows if re.search(r"/annex(?:/[^/]+)?$", _url_of(r), re.I)]
+    if not scheds and not annexes:
+        return (BARE_ABSENT, None) if complete else (None, None)
+    if len(scheds) == 1:
+        return BARE_ONE, scheds[0]
+    return None, None
+
+
+def row_unit(row: dict) -> "ScheduleUnit":
+    """The unit a schedule row is, from its uri: "Schedule 3" or "the Schedule"."""
+    m = re.search(r"/schedule(?:/([^/]+))?$", _url_of(row), re.I)
+    return ScheduleUnit("schedule", _clean(m.group(1), 12) if m and m.group(1) else "")
+
+
+def sole_schedule_reason(lid: str) -> str:
+    """Said after the tail when "the Schedule" was handed over."""
+    return f"It is the only schedule the index holds for {_clean(lid, 60)}."
 
 
 def unit_inventory(rows: Any) -> list:
@@ -687,7 +740,7 @@ def unit_absent_line(lid: str, unit: ScheduleUnit, rows: list, complete: bool) -
     # The labels come from LEX's own uris, so they are cleaned like the id:
     # a bracket in one would end `_TOOL_BLOCK`'s match early (batch 8 review).
     inv = [_clean(name, 40) for name in unit_inventory(rows)]
-    held =(f"its schedules and annexes among them are {_and_join(inv)}" if inv
+    held = (f"its schedules and annexes among them are {_and_join(inv)}" if inv
             else "none of them is a schedule or an annex")
     return (f"\n\n{FETCHED_OPEN}the index holds {len(rows):,} provisions for {lid_c}, "
             f"and {held}: {name} is not one of them. This search's results "

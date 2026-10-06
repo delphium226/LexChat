@@ -1279,6 +1279,16 @@ def _fetched_wording_variants() -> list:
             for reason in ("", texts[-2]):
                 texts.append(su.fetched_block(lid, sch, url, [("", "")], how, reason=reason,
                                               total_chars=92066, source=source).strip())
+    # Decision 1: "the Schedule" with no label, both outcomes it acts on.
+    bare = su.ScheduleUnit("schedule", "")
+    texts += [
+        su.sole_schedule_reason(lid),
+        su.unit_absent_line(lid, bare, [{"uri": "x/article/1"}], True),
+        su.fetched_block(lid, bare, url, [("", "")], su.WHOLE,
+                         reason=su.sole_schedule_reason(lid)).strip(),
+        su.fetched_block(lid, bare, url, [("", "")], su.SUMMARY, total_chars=9000,
+                         reason=su.sole_schedule_reason(lid)).strip(),
+    ]
     assert all(texts) and len(set(texts)) == len(texts), texts
     return texts
 

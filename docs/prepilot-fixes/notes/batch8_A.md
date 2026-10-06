@@ -445,6 +445,84 @@ without them.
 - after commit 2: **2377 passed** (base 2339);
 - after the review follow-up: **2379 passed**.
 
+### 2.5 Decision 1, built at the user's decision (2026-10-06): "the Schedule" with no label
+
+**Approved as built:** the P3.27 line and P3.12 block wordings. **Decision 2:** wait for the sweep;
+no Manager-facing line was added.
+
+**The change** (one commit after the review follow-up):
+
+- `named_units` now also reads the singular word "schedule" when the query names no labelled
+  schedule. It is case-insensitive like the existing rule, and `\b` after the word keeps the plural
+  ("schedules to the Act") out.
+- That unit is present when the section search's results hold any schedule row.
+- When it is missing, the provision list is fetched for that instrument, with the same per-run memo
+  and the same bound of 5. Then `bare_schedule_action` decides:
+  - **No schedule or annex row in a complete list:** the existing true-negative line, now reading
+    "…and none of them is a schedule or an annex: the Schedule is not one of them…".
+  - **Exactly one schedule row:** it is handed over as for "Schedule 1": cut nothing, whole or
+    summarised by the same threshold. The added reason reads `It is the only schedule the index
+    holds for <id>.` The unit is named from the row ("the Schedule", or "Schedule 3" for a sole
+    numbered one).
+  - **Two or more schedule rows: nothing is appended.** The query does not say which schedule it
+    means, and guessing would hand over one schedule under another's name, which is Invariant 1's
+    worst case.
+  - **Annexes but no schedule: nothing.** "The Schedule" is not obviously any of them.
+  - **A list cut short, or a failed list: nothing.** There is no text fallback for the unlabelled
+    case, because nothing can be said about absence.
+- Also fixed: the missing space in `held =(` in `unit_absent_line`.
+
+**Dry run with the built code over all 5,149 stored section searches.** Before and after were both
+run through `dryrun_p312.py`; the "before" tree is HEAD's two files (`make_prev_tree.py`,
+`compare_ext.py`, output `compare_ext.txt`).
+
+- **Nothing the route fired on before changes:** 156 of 156 blocks are byte-identical.
+- **The extension adds 105 calls:** 78 that run, plus 27 memo hits that would carry the first
+  call's block. That matches the earlier 105.
+
+| Session | Instrument | Calls (not memo hits) | Outcome in the dry run |
+|---|---|---|---|
+| 6374 | its Order (saved lookup: 3 provisions, none a schedule or annex) | 53 | none held: the true negative stated in code |
+| 6374 | five other SIs (no saved lookup) | 24 | nothing appended (the mock fails the list) |
+| 6407 | one SSI (no saved lookup) | 1 | nothing appended (the mock fails the list) |
+
+- **The 25 calls with no saved lookup were not called live** (no external calls). Their live outcome
+  is unknown. B's saved whole-text payloads for four of those five SIs show the index holds no
+  schedule text for them, which points to the "none held" line, but that is not the provision list.
+- **The one-schedule handover never fires in the stored corpus.** No saved instrument it reaches has
+  exactly one schedule. It is exercised by tests only.
+
+**Tests** (in `test_schedules.py`):
+
+- the unlabelled word is read and the plural is not;
+- present whenever any schedule row is returned;
+- none held stated;
+- one schedule handed over whole (unnumbered and numbered);
+- two or more: nothing (fetched, then silent), and annexes only: nothing;
+- does not fire when a schedule row is in the results, nor on the plural;
+- a failed or short list says nothing.
+
+One existing assertion changed by design: "the schedule of fees" now names the unlabelled unit; the
+plural "Schedules" still names nothing. The new wording is added to `test_footer_trips_no_detector`
+(passes).
+
+**Revert and mutants** (`spec_bare.json`, `mutants_bare.txt`):
+
+- Restoring the two product files to the review commit removes **85 lines**, and 7 tests fail.
+- Seven single-site mutants each fail 1 to 5 tests:
+  - never read;
+  - the plural read;
+  - acting on two or more schedules;
+  - "absent" ignoring annexes;
+  - a short list called complete;
+  - any schedule row ignored;
+  - the sole reason dropped.
+- The eighth mutant (removing the failed-list guard) **survives, and it is equivalent:** on a failed
+  or text-less list `bare_schedule_action` gets no rows and returns nothing anyway. The guard states
+  the rule; it does not change behaviour.
+
+**Full suite:** 2386 passed on `lexchat_test_a`, with outbound HTTP blocked.
+
 ---
 
 ## 3. What the build moves in the graders and the tooling (checked, not edited)
