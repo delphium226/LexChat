@@ -228,6 +228,48 @@ _RELATION_ROUTE_CLAUSE = (
     "and it answers in one call what no number of searches can."
 )
 
+# FIX_PLAN P3.6 (batch 9 D): a search row now carries its `description`, cut to
+# 600 characters (`lex._search_description`), and two clauses of this block were
+# written when no row did. Measured with the built slimmer over every stored
+# search result (6,521 re-run): `_ADJACENCY_CLAUSE`'s "nothing here states what
+# any instrument was made under" would be FALSE on 3,295 of the 5,632 results
+# that carry it (a description quoting the powers the instrument was made
+# under: 24 of 25 sampled are recitals or "made under" statements), and
+# `_RELATION_ROUTE_CLAUSE`'s "do NOT conclude anything about them from these
+# rows" would forbid, on 5,415 results, quoting a description that states a
+# relation, which is what the description was kept for. So where any shown row
+# carries a description, the block drops the false sentence, points the route
+# clause at which rows came back (what it was always about), and adds ONE
+# sentence on what a description is; a result with none keeps the old clauses
+# byte for byte (gated in code on the data). `_CURRENCY_CLAUSE` is unchanged
+# and stays true beside it: a date a description states is not currency. The
+# section-search block keeps `_RELATION_ROUTE_CLAUSE` (its rows carry no
+# description). The block grows by about 240 to 340 characters where it applies.
+_ADJACENCY_CLAUSE_DESCRIBED = (
+    " An instrument ranking highly in a search for an Act's title has NOT thereby "
+    "been shown to be made under that Act — do not say that it was."
+)
+_RELATION_ROUTE_CLAUSE_DESCRIBED = (
+    " Commencement, amendment, repeal and revocation are a special case: do NOT "
+    "conclude anything about them from which rows came back. Call "
+    "`get_legislation_changes` with the legislation_id — it is the only tool that "
+    "returns those relations, and it answers in one call what no number of searches "
+    "can."
+)
+_DESCRIPTION_CLAUSE = (
+    " A row's `description` is that instrument's own published summary, possibly cut "
+    "short: you may quote it, citing the instrument (a date it gives for bringing "
+    "provisions into force, for example), but it is not the change record, it is no "
+    "evidence of current in-force status, and an enabling power it quotes still needs "
+    "an ENABLING POWER block."
+)
+
+
+def _rows_described(results: Any) -> bool:
+    """Does any shown row carry a `description` (P3.6)?"""
+    return isinstance(results, list) and any(
+        isinstance(r, dict) and r.get("description") for r in results)
+
 
 def legislation_search_note(
     args: dict, data: Any, cfg: Optional[dict] = None
@@ -275,16 +317,20 @@ def legislation_search_note(
             if removed
             else ""
         )
+        # P3.6: the variants where a row carries a description (see above).
+        described = _rows_described(results)
         # P2.3 (B3b): only where a derivation claim can arise — a page of Acts
         # cannot produce one, and an unconditional clause would be noise on the
         # majority of searches.
         adjacency = (
-            _ADJACENCY_CLAUSE
+            (_ADJACENCY_CLAUSE_DESCRIBED if described else _ADJACENCY_CLAUSE)
             if isinstance(results, list)
             and any(_is_secondary(r.get("legislation_id")) for r in results
                     if isinstance(r, dict))
             else ""
         )
+        route = _RELATION_ROUTE_CLAUSE_DESCRIBED if described else _RELATION_ROUTE_CLAUSE
+        description = _DESCRIPTION_CLAUSE if described else ""
         return (
             f"\n\n[SEARCH SCOPE — {window} for {query_phrase}. Filters in force: "
             f"{filters}.{removed_phrase} The index ranks the whole corpus against "
@@ -294,7 +340,7 @@ def legislation_search_note(
             "instrument, commencement, amendment or provision missing from these "
             "rows may still be held, and may still exist. Do NOT state that "
             f"anything does not exist on the strength of this result.{adjacency}"
-            f"{_RELATION_ROUTE_CLAUSE}{_CURRENCY_CLAUSE} "
+            f"{route}{_CURRENCY_CLAUSE}{description} "
             f"{LEX_COVERAGE_SENTENCE} {_REPORTING_RULE}]"
         )
 

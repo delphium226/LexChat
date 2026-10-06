@@ -30,8 +30,14 @@ def _slim_search_results(resp_json: dict) -> dict:
     So it would steer Phase 2 at least as often as it helped. Decided with the
     user at Session 16: not used.
 
-    description is intentionally excluded — it is verbose and redundant once Phase 2
-    retrieves actual section text via search_legislation_sections.
+    ~~description is intentionally excluded — it is verbose and redundant once
+    Phase 2 retrieves actual section text via search_legislation_sections.~~
+    **`description` is kept, cut to `SEARCH_DESCRIPTION_CAP` characters
+    (FIX_PLAN P3.6, batch 9 D).** True of the text, false of the relationships:
+    no section text says what an instrument commences, but its description
+    does, with the date ("These Regulations bring sections 31 and 36 ... into
+    force on 8 October 2020"). The reason it was stripped was size, and the cap
+    answers that: see `_search_description`.
 
     legislation_id is derived from the URI and included explicitly so the model
     can pass it directly to search_legislation_sections.
@@ -71,10 +77,53 @@ def _slim_search_results(resp_json: dict) -> dict:
             "year": item.get("year"),
             "extent": item.get("extent", []),
         })
+        description = _search_description(item.get("description"))
+        if description:
+            slimmed[-1]["description"] = description
     return {
         "results": slimmed,
         "total": resp_json.get("total", len(slimmed)),
     }
+
+
+# FIX_PLAN P3.6: the cap on a search row's `description`, chosen from every
+# stored search row (batch 9 D, `desc_census.py`: 7,189 distinct rows, 6,535
+# with real text). Real descriptions run to a median of 345 characters and a
+# 90th percentile of 593, against the row's sample of 73-210, and the API itself
+# cuts many at 500 ("..."). At 600 the whole description survives for 90.5% of
+# rows, and a stated "into force on <date>" keeps its date for 266 of 273 rows
+# carrying one (at 300: 41.1% and 240; `cap_p36.py`). It is also
+# `lookup_legislation`'s cap on the same field (`executor.py`), so a searched
+# and a looked-up instrument show the same text up to the cut. Re-run over every
+# stored search result, the largest output grows from 2,989 to 4,643 characters,
+# under the 8,000 every stored replay was summarised at, so no Phase-1 result
+# crosses it (batch 9 D's note).
+SEARCH_DESCRIPTION_CAP = 600
+_HAS_LETTER = re.compile(r"[A-Za-z]")
+
+
+def _search_description(value) -> str:
+    """A search row's `description` as the model sees it, or "" for none.
+
+    Whitespace is collapsed (newlines in the API's text cost escapes and carry
+    nothing). A value with no letter is dropped: 304 stored rows are dot
+    leaders (". . . . .") and 282 are empty, and an empty key is noise. Over
+    the cap, the text is cut at the last space in the second half of the cap
+    and marked "...", the mark the API uses for its own cuts, so a cut is never
+    mid-word: a date cut to "1 Ma" would be worse than no date.
+    """
+    if not isinstance(value, str):
+        return ""
+    text = " ".join(value.split())
+    if not _HAS_LETTER.search(text):
+        return ""
+    if len(text) <= SEARCH_DESCRIPTION_CAP:
+        return text
+    cut = text[:SEARCH_DESCRIPTION_CAP - 3]
+    space = cut.rfind(" ")
+    if space >= SEARCH_DESCRIPTION_CAP // 2:
+        cut = cut[:space]
+    return cut.rstrip(" ,;:.") + "..."
 
 
 # The complete `extent` vocabulary the LEX API emits, measured over 17,560 result
