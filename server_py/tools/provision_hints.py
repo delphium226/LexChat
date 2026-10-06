@@ -286,9 +286,6 @@ def _cut_numbered(text: str, sub: str) -> Optional[str]:
     return text[m.start(): m.end() + (nxt.start() if nxt else len(rest))]
 
 
-_ROMAN_END = r"(?=[^IVXL]|[IVXL][a-z]|$)"
-
-
 def _cut_annex(text: str, ref: Ref) -> tuple:
     """(slice, how). A chapter is cut on its upper-case heading; a section
     only where its heading occurs once in the chapter span. LEX renders a
@@ -296,25 +293,14 @@ def _cut_annex(text: str, ref: Ref) -> tuple:
     ...'), so the numeral is ended by a non-numeral or by a capital followed
     by a lower-case letter, never by a word boundary. (Session 31's first
     version required a word boundary, missed every run-together heading and
-    reported the headings as missing from LEX's text: an instrument error.)"""
-    span, how = text, "whole annex"
-    if ref.chapter:
-        m = re.search(rf"\bCHAPTER\s*{ref.chapter}{_ROMAN_END}", text)
-        if m:
-            nxt = re.search(rf"\bCHAPTER\s*[IVXL]+{_ROMAN_END}", text[m.end():])
-            span = text[m.start(): m.end() + (nxt.start() if nxt else len(text))]
-            how = "chapter cut"
-        else:
-            how = "chapter heading absent"
-    if ref.section:
-        hits = list(re.finditer(rf"Section\s*{ref.section}(?=\s*[A-Z])", span))
-        if len(hits) == 1:
-            nxt = re.search(r"Section\s*\d+(?=\s*[A-Z])", span[hits[0].end():])
-            span = span[hits[0].start(): hits[0].end() + (nxt.start() if nxt else len(span))]
-            how = (how + ", section cut") if how == "chapter cut" else "section cut"
-        else:
-            how += f", section heading x{len(hits)}"
-    return span, how
+    reported the headings as missing from LEX's text: an instrument error.)
+
+    P3.12 (batch 8 A) moved the cut into product code, unchanged, as
+    `src.utils.schedule_units.cut_annex`; this delegates to it, so the dev
+    tool and the product cut the same way."""
+    from src.utils.schedule_units import cut_annex  # noqa: PLC0415
+
+    return cut_annex(text, ref.chapter, ref.section)
 
 
 _OPEN_Q = "‘'\"“"

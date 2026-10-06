@@ -1201,6 +1201,13 @@ def test_footer_trips_no_detector():
     # "by" (twice) and mixed
     assert len(worker_texts) == 7 and all(worker_texts), worker_texts
     screened += worker_texts
+    # P3.27: the SCHEDULES AND ANNEXES line on a whole-text read, every case
+    # (headings named, one heading, lead text, no heading, none held, the
+    # boundary unknown). It is Worker-facing, and a Worker can echo it.
+    screened += _schedule_line_variants()
+    # P3.12: every header, piece label and line of the PROVISION FETCHED BY
+    # CODE block, on synthetic labels with no statutory text in the body.
+    screened += _fetched_wording_variants()
     for text in screened:
         assert not NEG_ASSERTED.search(text), text
         assert not NOT_FOUND.search(text), text
@@ -1215,6 +1222,75 @@ def test_footer_trips_no_detector():
             assert not (_CMC_CONTEXT.search(s) and _CMC_DENIED.search(s)), s
             assert not _currency_asserted(s), s
             assert negcurrency_claim(s)[0] is None, s
+
+
+def _schedule_line_variants() -> list:
+    """Every wording `schedule_units.schedules_note` can produce, on synthetic
+    text, for the detector screen above."""
+    from src.utils.schedule_units import schedules_note
+
+    sections = "Section 1) **Citation**\nThis Order may be cited as the Widget Order 1901."
+
+    def line(appended, start="exact"):
+        rec = {"legislation": {}, "full_text": sections + appended,
+               "include_schedules": True,
+               "schedule_text_starts_at": len(sections) if start == "exact" else start}
+        return schedules_note({"legislation_id": "ssi/1901/3"}, json.dumps(rec))
+
+    variants = [
+        line("\n\nSCHEDULE 1 Widgets\n1) text\n\nSCHEDULE 2 Fees\n1) text"),
+        line("\n\nSCHEDULE Widgets regulation 4"),
+        line("\n\nSECOND SCHEDULE referred to\n\nANNEX XII Widgets"),
+        line("\n\nlead text\n\nSCHEDULE 1 Widgets"),
+        line("\n\nChapter: 1901 c. 1."),
+        line(""),
+        line("\n\nSCHEDULE 1 Widgets", start=None),
+    ]
+    assert all(variants) and len(set(variants)) == len(variants), variants
+    return variants
+
+
+def _fetched_wording_variants() -> list:
+    """Every wording P3.12's route can write (`schedule_units`), for the screen."""
+    from src.utils import schedule_units as su
+
+    lid, url = "ssi/1901/3", "http://www.legislation.gov.uk/id/ssi/1901/3/schedule/2"
+    sch = su.ScheduleUnit("schedule", "2", paragraphs=("4",))
+    anx = su.ScheduleUnit("annex", "II", chapter="II")
+    rows = [{"uri": url}, {"uri": url.replace("schedule/2", "annex/II")}]
+    texts = [
+        su.unit_absent_line(lid, su.ScheduleUnit("schedule", "7"), rows, True),
+        su.unit_absent_line(lid, su.ScheduleUnit("schedule", "7"), [{"uri": "x/article/1"}], True),
+        su.unit_absent_line(lid, su.ScheduleUnit("schedule", "7"), rows, False),
+        su.unit_without_text_line(lid, sch),
+        su.instrument_without_text_line(lid, sch),
+        su.fetch_failed_line(lid, sch),
+        su.paragraph_label(sch, "4", su.PARAGRAPH_CUT, None),
+        su.paragraph_label(sch, "4", su.SPAN_CUT, 6),
+        su.paragraph_label(sch, "4", su.SPAN_CUT, None),
+        su.paragraph_label(sch, "4", su.TO_THE_END, None),
+        su.cut_pieces(anx, "CHAPTER IIRules. CHAPTER IIIMore.")[0][0][0],
+        su.cut_pieces(anx, "no chapter headings")[2],
+        su.cut_pieces(sch, "1) bare")[2],
+        su.cut_pieces(su.ScheduleUnit("schedule", "2", paragraphs=("4", "5")), "1) bare")[2],
+    ]
+    for source in (su.FROM_LIST, su.FROM_TEXT):
+        for how in (su.CUT, su.WHOLE, su.SUMMARY):
+            for reason in ("", texts[-2]):
+                texts.append(su.fetched_block(lid, sch, url, [("", "")], how, reason=reason,
+                                              total_chars=92066, source=source).strip())
+    # Decision 1: "the Schedule" with no label, both outcomes it acts on.
+    bare = su.ScheduleUnit("schedule", "")
+    texts += [
+        su.sole_schedule_reason(lid),
+        su.unit_absent_line(lid, bare, [{"uri": "x/article/1"}], True),
+        su.fetched_block(lid, bare, url, [("", "")], su.WHOLE,
+                         reason=su.sole_schedule_reason(lid)).strip(),
+        su.fetched_block(lid, bare, url, [("", "")], su.SUMMARY, total_chars=9000,
+                         reason=su.sole_schedule_reason(lid)).strip(),
+    ]
+    assert all(texts) and len(set(texts)) == len(texts), texts
+    return texts
 
 
 def test_the_enabling_block_is_stripped_before_a_lawyer_sees_it():
