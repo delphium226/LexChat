@@ -55,6 +55,24 @@ Quick lookups:
   SI is searched. The existing "in-force status is not something this index
   reports" sentence therefore appears on more quick-lookup replies (P3.25).
 
+Schedules and annexes:
+- When the research step reads an instrument's whole text, ask the index for
+  its schedules and annexes too, and say which ones the text carries, or that
+  the index holds none for it. Every whole-text read used to leave them out
+  without saying so (P3.27).
+- When a search within an instrument names a schedule or annex ("Schedule
+  B1, paragraph 43", "Annex XIV, Chapter V") and the results leave it out,
+  fetch that schedule or annex from the index and hand over the part named,
+  cut at its own heading where it cuts cleanly, or the whole of it summarised
+  for the question; where the index holds no schedule for the instrument, say
+  so. Both the quick-lookup and the research steps do this (P3.12).
+- Read a list of schedule paragraphs separated only by spaces ("paragraphs
+  42 43 44") as all of them, not just the first (P3.12).
+- Where the index's complete list of an instrument's provisions has been read
+  and a search limit within that instrument is then reached, say what that
+  list holds, so a schedule the index does not hold is not put down to the
+  limit (P3.27, P3.12).
+
 Case law:
 - Date ranges on a case-law search now apply. They never did: the National
   Archives ignored the form we sent. A start date after the end date is
@@ -93,7 +111,14 @@ It now reads the change record's new shape, where on the old reading a
 negative the record contradicted was graded supported (P3.24). The seam
 tools offer the quick-lookup Worker the same tool list the product does
 (P3.25). `python -m tools.lex_probe --caselaw` live-checks the case-law total
-and the date filter (P3.23, P3.9).
+and the date filter (P3.23, P3.9), and whether `order=relevance` still
+reorders the same 50 results (P3.22). The depth grader has a ground
+truth for one schedule-paragraph question, and a new `replay_report
+schedules` checks what an answer says about a schedule or annex: a held one
+called not held, or one the index does not hold blamed on a search limit
+(P3.12, P3.27). A new `python -m tools.lgu_probe` reads legislation.gov.uk's
+dated "Changes to Legislation" effects, directly or through LEX (P3.21,
+P5.4).
 
 Planning tools only, no product change: a new `python -m tools.plan_lint`
 checks the fix plan's structure (one table cell per column, every row in the
