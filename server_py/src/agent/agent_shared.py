@@ -37,7 +37,7 @@ from ..utils.schedule_units import (
     unit_in_results,
     unit_without_text_line,
 )
-from ..utils.instrument_lookup import MAX_ROUTED_LOOKUPS, lookup_args
+from ..utils.instrument_lookup import lookup_args
 from ..utils.instrument_lookup import legislation_id as lookup_legislation_id
 from .tools.executor import fetch_provision_list, fetch_text_with_schedules
 from ..utils.instrument_lookup import LOOKUP_TOOL
@@ -506,9 +506,14 @@ def _worker_tool_key_arg(args: dict) -> Optional[str]:
 
 
 # P3.12: at most this many instruments' provision lists fetched by code in one
-# worker run, like P3.7's routed lookups. Each is one call (memoised for the
-# run); a unit named on a further instrument is left to the Worker.
-MAX_PROVISION_FETCHES = MAX_ROUTED_LOOKUPS
+# worker run. Each is one call (memoised for the run); a unit named on a
+# further instrument is left to the Worker. Batch 9 A (user decision,
+# 2026-10-06): its own constant, 8, no longer P3.7's MAX_ROUTED_LOOKUPS (5,
+# which P3.7's lookups keep). The bound now holds within a round (see
+# `_fetch_once`); at 5 it would have cut a Deep Research step that read six
+# lists in one round in Session 40's sweep. No stored worker run reaches 8:
+# the most instruments the route fires on in one run is 6.
+MAX_PROVISION_FETCHES = 8
 
 
 def provision_fetch_key(args) -> str:

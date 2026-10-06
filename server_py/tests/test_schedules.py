@@ -795,6 +795,23 @@ def test_a_round_on_more_instruments_than_the_bound_fetches_only_the_bound(monke
     assert len(fetches) == n and lids[-1] not in fetches
 
 
+def test_a_round_on_six_instruments_reads_all_six(monkeypatch):
+    """Batch 9 A (user decision, 2026-10-06): the provision-list bound is its
+    own constant, 8, so the shape Session 40's sweep met (six instruments in
+    one Deep Research round, the most any stored run holds) reads every list,
+    as it did live. P3.7's own bounds stay at 5."""
+    from src.utils import instrument_lookup
+    assert agent_shared.MAX_PROVISION_FETCHES == 8
+    assert instrument_lookup.MAX_ROUTED_LOOKUPS == 5 == instrument_lookup.MAX_SECTION_LOOKUPS
+    asked = _slow_lex(monkeypatch)
+    _route_env(monkeypatch)
+    fetches = {}
+    outs = _gathered(*[_route_coro("Schedule 2 paragraph 4", fetches, lid=f"ssi/1901/{k}")
+                       for k in range(10, 16)])
+    assert asked == ["/section/lookup"] * 6
+    assert all("Paragraph 4 of Schedule 2, cut at its own heading" in o for o in outs)
+
+
 def test_a_failed_list_and_its_fallback_text_are_fetched_once_for_a_round(monkeypatch):
     whole = SECTIONS + "\n\n" + SCHED_1 + "\n\n" + SCHED_2_TEXT + "\n\nSCHEDULE 3 FORMS\n1) A."
     asked = _slow_lex(monkeypatch, provisions=(503, {"detail": "busy"}), text=(200, _record(whole)))
