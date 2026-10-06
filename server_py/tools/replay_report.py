@@ -9306,7 +9306,19 @@ def p322_run(doc: dict, entry: dict) -> dict:
         for k in t["cited"]:
             if k not in rubric_keys:
                 others.setdefault(k, []).append(t["export_turn"])
-    return {"auths": per, "turns": turns, "others": others}
+    # Which ordering the run's case-law searches used: P3.22 (agent B) sends
+    # `order` and `per_page`, recorded on `api_calls[].request`; before it no
+    # `order` was sent (the feed's default, newest first).
+    orders = Counter()
+    for _n, _e, t in _export_turns(doc):
+        for dg in (t.get("audit") or {}).get("delegations") or []:
+            for tl in dg.get("tools") or []:
+                if tl.get("name") != "search_case_law":
+                    continue
+                for ac in tl.get("api_calls") or []:
+                    req = ac.get("request") if isinstance(ac.get("request"), dict) else {}
+                    orders["%s/%s" % (req.get("order") or "none", req.get("per_page") or "-")] += 1
+    return {"auths": per, "turns": turns, "others": others, "orders": dict(orders)}
 
 
 def _p322_grade(dirs, rubric, sessions=None) -> dict:
@@ -9359,7 +9371,8 @@ def cmd_authorities(args) -> int:
         print(f"\n== {sid}")
         for dname, doc, run in graded[sid]:
             tag = f"{dname} {doc.get('session_id')} r{doc.get('rep', 1)}"
-            print(f"  {tag}")
+            print(f"  {tag}  case-law requests by order/per_page: "
+                  + (", ".join(f"{k} x{v}" for k, v in sorted(run["orders"].items())) or "none"))
             for a in run["auths"]:
                 if a["in_corpus"]:
                     ret = ", ".join(f"t{e} ({'/'.join(h)})" for e, h in a["retrieved"]) or "-"
@@ -9683,11 +9696,39 @@ def cd_evidence(turn: dict, turn_no=None) -> dict:
                 tlid = _nc_lid(args.get("legislation_id") or leg.get("id"))
                 recs.append((tlid, leg.get("title"), leg.get("description")))
                 add_text(o.get("full_text") or leg.get("text") or "", "text", tlid, nm)
-            elif nm == "search_legislation" and isinstance(o, dict):
-                for r in o.get("results") or []:
-                    if isinstance(r, dict):
-                        recs.append((_nc_lid(r.get("legislation_id")), r.get("title"),
-                                     r.get("description")))
+            elif nm == "search_legislation":
+                # P3.6 (agent D) keeps a row's `description`, cut, in what the
+                # Worker is shown; before it the slimmer dropped it, and the
+                # stored runs hold it only in the API response the tool did
+                # not pass on. A date stated there is kept as its own source,
+                # "description (API response only)", which grades
+                # SUPPORTED_RAW_ONLY, never SUPPORTED, so a before-column and
+                # an after-column stay comparable (integrator, batch 9).
+                shown = set()
+                for field_ in ("raw_result", "final_result"):
+                    fo = _json_or_none(tl.get(field_))
+                    for r in (fo.get("results") or []) if isinstance(fo, dict) else []:
+                        if isinstance(r, dict) and r.get("description"):
+                            key = (_nc_lid(r.get("legislation_id")), str(r["description"]))
+                            if key not in shown:
+                                shown.add(key)
+                                recs.append(key[:1] + (r.get("title"), key[1]))
+                        elif isinstance(r, dict):
+                            recs.append((_nc_lid(r.get("legislation_id")), r.get("title"), None))
+                for ac in tl.get("api_calls") or []:
+                    resp = ac.get("response")
+                    for r in (resp.get("results") or []) if isinstance(resp, dict) else []:
+                        if not (isinstance(r, dict) and r.get("description")):
+                            continue
+                        rlid = _nc_lid(r.get("legislation_id") or r.get("id") or r.get("uri"))
+                        if any(str(r["description"]).startswith(d[:200]) or d.startswith(
+                                str(r["description"])[:200]) for lid_, d in shown if lid_ == rlid):
+                            continue
+                        before = len(ev["items"])
+                        add_text(str(r["description"]), "description (API response only)",
+                                 rlid, nm)
+                        for it in ev["items"][before:]:
+                            it["subject"] = next(iter(sorted(it["named"] - {rlid})), None)
             elif nm == "search_legislation_sections":
                 # Two stored shapes: a bare list (older directories) and
                 # {"results": [...], "returned": n}. Reading only the list read
@@ -9747,6 +9788,9 @@ def _cd_same_date(a, b) -> bool:
     return a[:2] == b[:2]
 
 
+_CD_RAW_ONLY = "description (API response only)"
+
+
 def cmcdate_verdict(sentence: str, ymd, ev: dict, window: str = "",
                     question: str = "") -> tuple:
     """(verdict, reason, tied evidence) for one claimed date against the
@@ -9779,6 +9823,14 @@ def cmcdate_verdict(sentence: str, ymd, ev: dict, window: str = "",
             or (e.get("subject") and e["subject"] in named
                 and (not provs or provs & e["provisions"]))
             or (provs and provs & e["provisions"])]
+    if not tied and all(e["src"] == _CD_RAW_ONLY for e in cands):
+        # A date the Worker never saw, stated for something else, does not
+        # make the claim UNCLEAR (found on the stored 6409 runs: an unrelated
+        # order's description in an API response).
+        return "UNSUPPORTED", ("no source the Worker was shown states %s (an API response the "
+                               "tool did not pass on states it, for %s)" % (
+                                   _cd_fmt(ymd), ", ".join(sorted({e["lid"] or "?"
+                                                                    for e in cands})[:4]))), []
     if not tied:
         lids = sorted({e["lid"] or "?" for e in cands})
         if not named and not provs:
@@ -9793,7 +9845,9 @@ def cmcdate_verdict(sentence: str, ymd, ev: dict, window: str = "",
     if extra and ev_provs:
         return "UNCLEAR", ("the date is retrieved, but the sentence also names %s, which "
                            "the source does not list" % ", ".join(extra[:6])), tied
-    return "SUPPORTED", "stated by " + "; ".join(sorted({
+    verdict = ("SUPPORTED_RAW_ONLY" if all(e["src"] == _CD_RAW_ONLY for e in tied)
+               else "SUPPORTED")
+    return verdict, "stated by " + "; ".join(sorted({
         "%s %s" % (e["src"], e["lid"] or "?") for e in tied})) + via, tied
 
 
@@ -9831,7 +9885,7 @@ def cmcdate_rows(doc: dict) -> list:
         # own commencement articles.
         relevant = cd_lids(t.get("question") or "", ev["titles"]) | ev["commencing"] \
             | set(truth[1] if truth else ())
-        relevant_items = [e for e in ev["items"] if e["src"] != "summary" and (
+        relevant_items = [e for e in ev["items"] if e["src"] not in ("summary", _CD_RAW_ONLY) and (
             e["src"] == "feed" or e["lid"] in relevant or (e.get("subject") in relevant))]
         dated_for = {}
         if truth:
@@ -9914,7 +9968,10 @@ def cmd_cmcdates(args) -> int:
                 if r["negative_branch"] and not r["claims"]:
                     print("    negative branch: no commencement date stated (PASS)")
     print("\n  claims: " + ", ".join(f"{k} {tally[k]}" for k in
-                                     ("SUPPORTED", "UNCLEAR", "UNSUPPORTED")))
+                                     ("SUPPORTED", "SUPPORTED_RAW_ONLY", "UNCLEAR",
+                                      "UNSUPPORTED")))
+    print("  (SUPPORTED_RAW_ONLY: the date is stated by a search row's description in the "
+          "API response the tool did not pass on; reported, not failed)")
     print("  commencement questions: " + ("; ".join(f"{k} {v}" for k, v in sorted(asked.items()))
                                           or "none"))
     print(f"  failing (UNSUPPORTED, or any claim on a negative-branch session): {len(bad)}")
@@ -9983,6 +10040,8 @@ def jx_sentence(sentence: str, rx: dict) -> tuple:
     s = _SCHED_URL.sub("]", sentence)
     implicit = [m.group(0) for k in ("title", "institution") for m in rx[k].finditer(s)]
     s = rx["institution"].sub(" ", rx["title"].sub(" ", s))
+    implicit += [m.group(0) for m in re.finditer(r"\[[^\]]*\]", s)
+                 if any(rx[n].search(m.group(0)) for n in _JX_NATIONS)]
     s = re.sub(r"\[[^\]]*\]", " ", s)     # a link's label is a title, not a statement
     nations = {n for n in _JX_NATIONS if rx[n].search(s)}
     if rx["gb"].search(s):

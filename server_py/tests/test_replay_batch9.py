@@ -216,6 +216,15 @@ def test_an_out_of_corpus_mention_is_graded_per_answer_with_the_earlier_ones():
     assert [(e, v) for e, v, _ in old2["mentions"]] == [(1, "FAIL")]
 
 
+def test_the_ordering_each_case_law_request_sent_is_reported():
+    before = _search(_W)
+    before["api_calls"] = [{"request": {"query": "widgets"}}]
+    after = _search(_W)
+    after["api_calls"] = [{"request": {"query": "widgets", "order": "relevance", "per_page": "50"}}]
+    doc = _run([_turn(1, "a", [before, after])])
+    assert rr.p322_run(doc, _RUBRIC_322["9001"])["orders"] == {"none/-": 1, "relevance/50": 1}
+
+
 def test_other_cited_judgments_are_listed_and_the_rubric_ones_are_not():
     doc = _run([_turn(1, "See [1901] UKSC 3 and [1901] UKSC 9.")])
     assert rr.p322_run(doc, _RUBRIC_322["9001"])["others"] == {"1901 uksc 9": [1]}
@@ -281,6 +290,9 @@ def test_a_claim_needs_a_commencement_cue():
     assert _claim_dates("* **1 April 1901**: Sections 1 to 3 came into force.") == ["1901-04-01"]
     assert _claim_dates("The Order commenced section 4 on 2 June 1901.") == ["1901-06-02"]
     assert _claim_dates("The judgment was given on 10 May 1901.") == []
+    # Each date reads the stretch between its neighbours, not the whole sentence.
+    assert _claim_dates("The Order commenced section 1 on 10 June 1901, and a review "
+                        "followed on 1 July 1901.") == ["1901-06-10"]
 
 
 def test_another_events_date_is_not_a_claim():
@@ -310,6 +322,10 @@ def test_a_table_row_under_a_commencement_heading_is_a_claim():
              "| s. 2 | SSI 1901/3 | 1 June 1901 |\n\n"
              "| Provision | Note |\n|---|---|\n| s. 3 | 2 July 1901 |\n")
     assert _claim_dates(table) == ["1901-05-10", "1901-06-01"]
+    # A table's heading reaches its own rows only, not a stray row after prose.
+    stray = ("| Provision | Commencement date |\n|---|---|\n| s. 1 | 10 May 1901 |\n\n"
+             "Other material follows.\n| s. 4 | 3 July 1901 |\n")
+    assert _claim_dates(stray) == ["1901-05-10"]
 
 
 def test_instruments_named_by_link_citation_or_title():
@@ -337,6 +353,11 @@ def test_feed_dates_are_read_in_c_s_shape_in_every_form():
         items = [(e["src"], e["lid"], e["subject"], rr._cd_fmt(e["ymd"])) for e in ev["items"]]
         assert set(items) == {("feed", "ssi/1901/3", "asp/1901/2", "1901-05-10")}, value
         assert set().union(*(e["provisions"] for e in ev["items"])) == {"s. 1", "s. 2"}
+    # A map gives each provision its own date.
+    ev = rr.cd_evidence(_turn(1, "", [_feed(in_force={"s. 1": "1901-05-10",
+                                                      "s. 2": "1901-06-01"})]), 1)
+    assert {(rr._cd_fmt(e["ymd"]), tuple(sorted(e["provisions"]))) for e in ev["items"]} == {
+        ("1901-05-10", ("s. 1",)), ("1901-06-01", ("s. 2",))}
     ev = rr.cd_evidence(_turn(1, "", [_feed()]), 1)
     assert ev["items"][0]["qualification"] == "wholly in force"
     assert ev["statuses"] == [("asp/1901/2", "retrieved", "")]
@@ -444,10 +465,40 @@ def test_a_date_only_a_summary_states_is_unsupported():
 
 
 def test_a_date_only_in_a_raw_api_response_says_so():
-    tool = _tool("search_legislation", {}, {"results": []},
-                 api=[{"response": {"results": [{"description": "comes into force on 3 May 1901"}]}}])
+    tool = _tool("get_legislation_changes", {"legislation_id": "asp/1901/2"},
+                 {"legislation_id": "asp/1901/2", "related": []},
+                 api=[{"response": {"note": "comes into force on 3 May 1901"}}])
     v, why = _v("SSI 1901/3 came into force on 3 May 1901.", _ev(tool))
     assert v == "UNSUPPORTED" and "raw API response" in why
+
+
+def _search_leg(shown_desc=None, api_desc=None):
+    row = {"legislation_id": "ssi/1901/3", "title": "The Widget Act 1901 (Commencement) Regulations 1901"}
+    if shown_desc:
+        row["description"] = shown_desc
+    api = [{"response": {"results": [{"id": "http://www.legislation.gov.uk/id/ssi/1901/3",
+                                      "description": api_desc}]}}] if api_desc else []
+    return _tool("search_legislation", {"query": "widget"}, {"results": [row]}, api=api)
+
+
+def test_a_search_rows_description_only_in_the_api_response_is_its_own_class():
+    s = "SSI 1901/3 brought sections 1 and 2 into force on 10 May 1901."
+    # Before P3.6: the slimmer dropped it, so the Worker never saw it.
+    assert _v(s, _ev(_search_leg(api_desc=_DESC)))[0] == "SUPPORTED_RAW_ONLY"
+    # After P3.6: shown (cut) in the row, and the API's full text is not counted twice.
+    ev = _ev(_search_leg(shown_desc=_DESC[:60] + _DESC[60:], api_desc=_DESC))
+    assert _v(s, ev)[0] == "SUPPORTED"
+    assert [e["src"] for e in ev["items"]] == ["description"]
+    # An unseen date stated for something else does not make a claim UNCLEAR.
+    other = _tool("search_legislation", {}, {"results": []}, api=[{"response": {"results": [
+        {"id": "http://www.legislation.gov.uk/id/ssi/1901/9", "description": _DESC}]}}])
+    v, why = _v("SSI 1901/4 came into force on 10 May 1901.", _ev(other))
+    assert v == "UNSUPPORTED" and "did not pass on" in why
+
+
+def test_unseen_dates_are_not_counted_as_retrieved_for_the_question():
+    doc = _run([_turn(1, "No.", [_search_leg(api_desc=_DESC)], question="Is SSI 1901/3 in force?")])
+    assert rr.cmcdate_rows(doc)[0]["retrieved"] == 0
 
 
 def test_a_retrieved_date_for_something_else_is_unclear():
@@ -558,34 +609,45 @@ def test_an_echoed_feed_date_is_supported():
 
 # --- P3.4: jurisdiction --------------------------------------------------------------
 
-_RX = rr._jx_compile({})
+def _rx():
+    return rr._jx_compile({})
 
 
 def test_titles_links_and_institutions_are_not_statements_of_jurisdiction():
     assert rr.jx_sentence("[Widget (Scotland) Regulations 1901](https://www.legislation.gov.uk/"
-                          "id/ssi/1901/3)", _RX)[0] == set()
-    assert rr.jx_sentence("The Scottish Ministers may make regulations.", _RX)[0] == set()
+                          "id/ssi/1901/3)", _rx())[0] == set()
+    assert rr.jx_sentence("The Scottish Ministers may make regulations.", _rx())[0] == set()
     assert rr.jx_sentence("Under the Widget (Scotland) Regulations 1901 a licence is needed.",
-                          _RX)[0] == set()
-    assert rr.jx_sentence("In Scotland, a licence is needed.", _RX)[0] == {"scotland"}
-    assert rr.jx_sentence("Across Great Britain the rule applies.", _RX)[0] == {
+                          _rx())[0] == set()
+    assert rr.jx_sentence("In Scotland, a licence is needed.", _rx())[0] == {"scotland"}
+    # A link's label is a title even without a bracketed nation in it.
+    nations, implicit = rr.jx_sentence(
+        "See [Widget Rules for Scotland 1901](https://www.legislation.gov.uk/id/ssi/1901/3).", _rx())
+    assert nations == set() and implicit == ["[Widget Rules for Scotland 1901]"]
+    assert rr.jx_sentence("Across Great Britain the rule applies.", _rx())[0] == {
         "england", "wales", "scotland"}
 
 
 def test_scotland_expected():
-    v = lambda p: rr.jx_verdict(p, "scotland", _RX)[0]  # noqa: E731
+    v = lambda p: rr.jx_verdict(p, "scotland", _rx())[0]  # noqa: E731
     assert v("In Scotland, the Widget Rules 1901 apply.") == "PASS"
     assert v("Under the Widget (Scotland) Rules 1901, the minister decides.") == "IMPLICIT"
-    assert v("In England and Wales, the Widget Rules 1901 apply.") == "FAIL"
-    assert v("Under the Widget Act 1901, the minister decides.") == "FAIL"
+    verdict, why = rr.jx_verdict("In England and Wales, the Widget Rules 1901 apply.",
+                                 "scotland", _rx())[:2]
+    assert verdict == "FAIL" and why == "names england, wales and not Scotland"
+    verdict, why = rr.jx_verdict("Under the Widget Act 1901, the minister decides.",
+                                 "scotland", _rx())[:2]
+    assert verdict == "FAIL" and why == "names no jurisdiction"
 
 
 def test_all_four_expected_with_divergence_or_sameness():
-    v = lambda p: rr.jx_verdict(p, "uk_all", _RX)[:2]  # noqa: E731
+    v = lambda p: rr.jx_verdict(p, "uk_all", _rx())[:2]  # noqa: E731
     assert v("The rules differ: in Scotland, Wales and Northern Ireland a widget needs a "
              "licence; in England it does not.")[0] == "PASS"
     assert v("The rule applies equally across the UK, in England, Wales, Scotland and "
              "Northern Ireland.")[0] == "PASS"
+    # "Across the UK" names all four nations by itself.
+    assert v("The rule applies equally across the UK.")[0] == "PASS"
     verdict, why = v("In Scotland and Wales a widget needs a licence.")
     assert verdict == "FAIL" and "england" in why and "ni" in why
     verdict, why = v("In England, Wales, Scotland and Northern Ireland a widget needs a licence. "
