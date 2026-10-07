@@ -191,8 +191,11 @@ WORKER_TOOLS = [
                 "These relations come from legislation.gov.uk's own change records — they are the "
                 "ONLY source for them, and a keyword search cannot establish any of them. "
                 "Returns relations grouped by the other instrument, each with the provisions "
-                "affected. It does NOT return dates, and it does NOT say what an instrument was "
-                "made under (its enabling power)."
+                "affected. The relations carry no dates of their own: where legislation.gov.uk's "
+                "Changes to Legislation record dates a commencement made by another instrument, "
+                "code adds that date to the entry as `in_force`, and the result says when it "
+                "could not. It does NOT say what an instrument was made under (its enabling "
+                "power)."
             ),
             "parameters": {
                 "type": "object",
