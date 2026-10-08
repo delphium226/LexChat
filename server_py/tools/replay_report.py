@@ -2001,7 +2001,11 @@ def cmd_commencements(args) -> int:
     and honest limits ("no commencement record is held for this Act").
     """
     docs = load_runs(Path(args.dir))
-    docs = [d for d in docs if _truth_for(d.get("session_id"))]
+    # A scripted run (`p37_6409`) is graded against its base session's truth
+    # (`script.base`), each turn reported with the export turn it was taken
+    # from (`from_turn`). Before batch 10 E it was keyed on its own session id,
+    # which has no truth, so no scripted run was ever graded here.
+    docs = [d for d in docs if _truth_for(_run_base(d))]
     if not docs:
         print("No graded session in %s (expected any of %s)"
               % (args.dir, ", ".join(sorted(COMMENCEMENT_TRUTH))))
@@ -2012,8 +2016,10 @@ def cmd_commencements(args) -> int:
     rows, drops = [], []
     for doc in sorted(docs, key=lambda d: (str(d.get("session_id")), d.get("rep", 1))):
         sid = str(doc.get("session_id"))
-        truth = _truth_for(sid)
-        for t in doc.get("turns", []):
+        base = _run_base(doc)
+        truth = _truth_for(base)
+        scripted = bool((doc.get("script") or {}).get("turns"))
+        for _n, exp, t in _export_turns(doc):
             ans = t.get("answer") or ""
             if not ans.strip():
                 continue
@@ -2022,24 +2028,25 @@ def cmd_commencements(args) -> int:
             calls = _consulted_changes(t)
             if calls:
                 consulted_turns += 1
+            label = ("%s (export t%s)" % (t.get("turn"), exp)) if scripted else t.get("turn")
             scoped = bool(_CMC_QUESTION.search(question)) and not _names_instrument(
                 question, truth[1])
             if not scoped:
                 if args.answers:
-                    rows.append((sid, doc.get("rep", 1), t.get("turn"), "out",
+                    rows.append((sid, doc.get("rep", 1), label, "out",
                                  [], [], calls, question))
                 continue
             in_scope += 1
             body = _without_footer(ans)
             retrieved = [o for c in calls for o in c["others"]]
-            verdict, named, denials = commencement_verdict(sid, body, retrieved)
+            verdict, named, denials = commencement_verdict(base, body, retrieved)
             tally[verdict] += 1
-            rows.append((sid, doc.get("rep", 1), t.get("turn"), verdict,
+            rows.append((sid, doc.get("rep", 1), label, verdict,
                          named, denials, calls, question))
             if args.drops:
                 for sent in _sentences(body):
                     if _CMC_CONTEXT.search(sent) and not _CMC_DENIED.search(sent):
-                        drops.append((sid, doc.get("rep", 1), t.get("turn"), sent))
+                        drops.append((sid, doc.get("rep", 1), label, sent))
 
     print("P3.5 (B3) — commencement relations over %s  (%d graded run file(s))"
           % (args.dir, len(docs)))
@@ -3182,8 +3189,16 @@ def negcurrency_evidence(turn: dict) -> dict:
                     ev["titles"].setdefault(rlid, clean)
                     if clean != title.strip() and rlid not in [m[0] for m in ev["marked"]]:
                         ev["marked"].append((rlid, clean))
-            elif name == "search_legislation_sections" and isinstance(o, list):
-                for row in o:
+            elif name == "search_legislation_sections" and (
+                    isinstance(o, list) or isinstance(o, dict)):
+                # Two stored shapes: a bare list (`baseline`) and
+                # {"results": [...], "returned": n} (every directory from
+                # `wave0_conv` on: 4,748 of 5,314 stored section searches).
+                # Reading only the list left an instrument's own commencement
+                # provision, found by section search, out of `cmc_provisions`
+                # on almost every directory (batch 9 E; fixed batch 10 E).
+                rows = o if isinstance(o, list) else o.get("results")
+                for row in rows if isinstance(rows, list) else []:
                     if not isinstance(row, dict):
                         continue
                     is_cmc, dated = _nc_cmc(row.get("text"))
@@ -5568,10 +5583,17 @@ def cmd_corpus(args) -> int:
     print()
     print("  P2.3 — where an enabling power can come from")
     print(f"    search rows seen                 {search_rows:5}")
+    # Both labels are true of every directory, before P3.6 and after it: until
+    # P3.6 (Session 41) `_slim_search_results` stripped `description` (0 of
+    # 5,299 rows carried one at P2.3); since, a row keeps it, cut at a word to
+    # 600 characters. And a whole text's `legislation.description` stopped
+    # being the only route to a preamble at P3.7 (`lookup_legislation` returns
+    # one) and P3.6 (a search row's). Counted here: whole texts only.
     print(f"    ... carrying a `description`     {with_description:5}   "
-          "<- _slim_search_results strips it (P3.6)")
+          "<- 0 before P3.6 (_slim_search_results stripped it); kept, cut to 600 characters, since")
     print(f"    instrument preambles retrieved   {len(recitals):5}   "
-          "<- the ONLY route, via legislation.description")
+          "<- via a whole text's legislation.description (lookup_legislation, P3.7, "
+          "and a search row, P3.6, also carry one)")
     for lid, d in recitals[:5]:
         print(f"      {lid or '(id not in args)':18} {d!r}")
     print(f"    instruments touched by section search {secondary_touch['search_legislation_sections']:5}")
@@ -9208,8 +9230,173 @@ def _p322_auths(entry: dict) -> list:
             if "caselaw.nationalarchives" not in u:
                 u = "caselaw.nationalarchives.gov.uk/" + u.lstrip("/")
             keys |= {k for k, _, _ in cl_keys(u)}
-        out.append(dict(a, keys=keys, in_corpus=a.get("in_corpus", True) is not False,
-                        mention_rx=re.compile(a["mention"], re.I) if a.get("mention") else None))
+        in_corpus = a.get("in_corpus", True) is not False
+        out.append(dict(a, keys=keys, in_corpus=in_corpus,
+                        mention_rx=re.compile(a["mention"], re.I) if a.get("mention") else None,
+                        full_rx=[] if in_corpus else _p322_full_forms(a)))
+    return out
+
+
+# --- An out-of-corpus authority is named by its full party names or its
+#     citation, never by one surname (batch 10 E) ---------------------------------
+#
+# Session 41's sweeps: the rubric's `mention` for one out-of-corpus authority
+# carried its first party's surname as an alternative, and three answers that
+# cited a DIFFERENT judgment sharing that surname (in the corpus, returned by
+# that turn's `search_case_law` and read) were graded as naming the
+# out-of-corpus authority as if read: three false item-3 FAILs. So a sentence
+# names an out-of-corpus authority when it carries a FULL form:
+#   F1  its law-report citation (`citations`, or the one in its label);
+#   F2  "A v B", a distinctive word of its first party (a closing bracket may
+#       follow it: "R (Widget) v ..."), then " v ", then the first
+#       distinctive word of its second party, each gap at most 40 characters
+#       with no bracket in it ("Widget v E. Sprocket & Co Ltd");
+#   F3  a party's first two distinctive words together ("Sprocket, Gear");
+#   F4  a `mention` match of two or more words (the rubric's own full forms).
+# The parties are `parties` ([A, B]) or, where the rubric gives none, the
+# label's "A v B" with its citation and a trailing bracket removed. A one-word
+# `mention` match (a SHORT form: the surname a later sentence uses) counts
+# only where the run's answers name the authority in full in this answer or an
+# earlier one. And whatever the form, a match whose words all appear in the
+# title of a judgment that a `search_case_law` call in the run returned (at or
+# before this turn) and that the sentence cites (by citation or URL) is that
+# judgment, never the out-of-corpus authority.
+_P322_REPORT = re.compile(
+    r"\[(?:18|19|20)\d{2}\]\s*(?:\d{1,2}\s+)?[A-Z][A-Za-z.]{0,10}\s+\d{1,5}\b")
+_P322_PARTY_STOP = {"and", "the", "for", "ltd", "limited", "plc", "llp", "co", "company",
+                    "son", "sons", "anor", "ors", "others", "another", "inc", "application"}
+_P322_GAP = r"[^\[\]()\n]{0,40}?"
+
+
+def _p322_party_words(party: str) -> list:
+    """The distinctive words of one party name, in order: three or more
+    characters, not a corporate or procedural word ("Ltd", "& Son", "Anor")."""
+    return [w for w in re.findall(r"[A-Za-z][A-Za-z'’&]*", party or "")
+            if len(w) >= 3 and w.lower() not in _P322_PARTY_STOP]
+
+
+def _p322_parties(entry: dict) -> list:
+    """[A, B] from `parties`, else from the label's "A v B" (citation and
+    brackets removed), else []."""
+    p = entry.get("parties")
+    if isinstance(p, list) and len(p) == 2 and all(isinstance(x, str) for x in p):
+        return p
+    label = _P322_REPORT.sub(" ", str(entry.get("label") or ""))
+    # A trailing bracket is a court and year ("(EAT 1899)"), not a party; a
+    # bracket inside a name ("R (Widget) v ...") is the party, and stays.
+    label = re.sub(r"\[[^\]]*\]|\s*\([^()]*\)\s*$", " ", label)
+    sides = re.split(r"\s+v\.?\s+", label.strip())
+    return [s.strip() for s in sides] if len(sides) == 2 and all(s.strip() for s in sides) else []
+
+
+def _p322_full_forms(entry: dict) -> list:
+    """Compiled F1-F3 patterns for one out-of-corpus authority (F4 is read off
+    `mention` at match time)."""
+    out = []
+    cites = entry.get("citations")
+    if not isinstance(cites, list):
+        cites = _P322_REPORT.findall(str(entry.get("label") or ""))
+    for c in cites:
+        toks = re.findall(r"\S+", str(c))
+        if toks:
+            out.append(re.compile(r"\s*".join(re.escape(t) for t in toks) + r"(?!\d)"))
+    parties = _p322_parties(entry)
+    if parties:
+        a_words, b_words = (_p322_party_words(x) for x in parties)
+        if a_words and b_words:
+            out.append(re.compile(
+                r"\b(?:" + "|".join(re.escape(w) for w in a_words) + r")\b\)?" + _P322_GAP
+                + r"\s(?-i:[vV])\.?\s" + _P322_GAP + r"\b" + re.escape(b_words[0]) + r"\b",
+                re.I))
+        for words in (a_words, b_words):
+            if len(words) >= 2:
+                out.append(re.compile(r"\b" + re.escape(words[0]) + r"\W{1,3}(?:(?:and|&)\s+)?"
+                                      + re.escape(words[1]) + r"\b", re.I))
+    return out
+
+
+def _p322_ooc_matches(sentence: str, auth: dict) -> list:
+    """[(match text, full)] for every F1-F4 or short-form match in a sentence."""
+    out = []
+    for rx in auth.get("full_rx") or []:
+        out.extend((m.group(0), True) for m in rx.finditer(sentence))
+    if auth.get("mention_rx"):
+        for m in auth["mention_rx"].finditer(sentence):
+            out.append((m.group(0), len(m.group(0).split()) >= 2))
+    return out
+
+
+def _p322_cited_titles(sentence: str, titles: dict) -> list:
+    """Titles of the judgments this sentence cites (by citation or URL) that a
+    `search_case_law` call in the run returned: {key: title} in `titles`."""
+    return [titles[k] for k, _, _ in cl_keys(sentence) if k in titles]
+
+
+def _p322_is_cited_judgment(match_text: str, cited_titles: list) -> bool:
+    """Every word of the match is in one cited, retrieved judgment's title."""
+    words = {w.lower() for w in re.findall(r"[A-Za-z][A-Za-z'’&]*", match_text)}
+    words.discard("v")
+    if not words:
+        return False
+    for t in cited_titles:
+        tw = {w.lower() for w in re.findall(r"[A-Za-z][A-Za-z'’&]*", t)}
+        if words <= tw:
+            return True
+    return False
+
+
+def p322_names_ooc(sentence: str, auth: dict, anchored: bool, titles: dict) -> tuple:
+    """(names it, named in full) for one sentence and one out-of-corpus
+    authority (see the block comment above). `anchored`: the run's answers
+    name it in full in this answer or an earlier one; `titles`: {key: title}
+    of every judgment the run's searches returned so far."""
+    cited = _p322_cited_titles(sentence, titles)
+    names = full = False
+    for text, is_full in _p322_ooc_matches(sentence, auth):
+        if _p322_is_cited_judgment(text, cited):
+            continue
+        if is_full:
+            names = full = True
+        elif anchored:
+            names = True
+    return names, full
+
+
+class _P322OocMention:
+    """`p322_mention_class`'s `mention` for an out-of-corpus authority in one
+    sentence: a `.search` for a link label or a phrase's object, in which a
+    cited, retrieved judgment's own name never counts. A short form counts
+    there: a sentence reaches the classifier only when the answer names the
+    authority in full somewhere (it is anchored), so no anchoring test is
+    needed here."""
+
+    def __init__(self, auth: dict, cited_titles: list):
+        self.auth, self.cited_titles = auth, cited_titles
+
+    def search(self, text: str):
+        for m_text, _full in _p322_ooc_matches(text or "", self.auth):
+            if not _p322_is_cited_judgment(m_text, self.cited_titles):
+                return m_text
+        return None
+
+
+def _p322_turn_titles(turn: dict) -> dict:
+    """{key: title} for every judgment a `search_case_law` call in this turn
+    returned, by its citation and its URL."""
+    out = {}
+    for dg in (turn.get("audit") or {}).get("delegations") or []:
+        for tl in dg.get("tools") or []:
+            if tl.get("name") != "search_case_law":
+                continue
+            for field_ in ("raw_result", "final_result"):
+                o = _json_or_none(tl.get(field_))
+                if isinstance(o, dict) and isinstance(o.get("results"), list):
+                    for r in o["results"]:
+                        if isinstance(r, dict) and r.get("title"):
+                            for fld in ("url", "ncn"):
+                                for k, _, _ in cl_keys(str(r.get(fld) or "")):
+                                    out.setdefault(k, str(r["title"]))
+                    break
     return out
 
 
@@ -9253,19 +9440,24 @@ def p322_run(doc: dict, entry: dict) -> dict:
     carriers = [a["mention_rx"] for a in auths if a["in_corpus"] and a["mention_rx"]]
     rubric_keys = set().union(*(a["keys"] for a in auths)) if auths else set()
     turns = []
+    titles = {}
     for n, exp, t in _export_turns(doc):
         retrieved, read = _p322_turn_retrieval(t)
+        for k, title in _p322_turn_titles(t).items():
+            titles.setdefault(k, title)
         prose = _without_footer(t.get("answer") or "")
         cited = {}
         for k, how, _ in cl_keys(prose):
             cited.setdefault(k, set()).add(how)
         turns.append(dict(turn=n, export_turn=exp, answered=bool(prose.strip()),
-                          retrieved=retrieved, read=read, cited=cited, prose=prose))
+                          retrieved=retrieved, read=read, cited=cited, prose=prose,
+                          titles=dict(titles)))
     per = []
     for a in auths:
         row = dict(label=a["label"], in_corpus=a["in_corpus"], lead=bool(a.get("lead")),
                    carrier=bool(a.get("carrier")), retrieved=[], read=[], cited=[],
                    named_only=[], mentions=[], carrier_verdict=None)
+        anchored = False
         for t in turns:
             if a["keys"] & set(t["retrieved"]):
                 row["retrieved"].append((t["export_turn"], sorted(set().union(
@@ -9276,11 +9468,16 @@ def p322_run(doc: dict, entry: dict) -> dict:
             if hit:
                 row["cited"].append((t["export_turn"], sorted(
                     set().union(*(t["cited"][k] for k in hit)))))
-            if not a["in_corpus"] and a["mention_rx"]:
+            if not a["in_corpus"] and (a["mention_rx"] or a["full_rx"]):
                 sents, back = [], []
-                for s in _sentences(t["prose"]):
-                    if a["mention_rx"].search(s):
-                        cls, why = p322_mention_class(s, a["mention_rx"], carriers,
+                all_s = list(_sentences(t["prose"]))
+                # Anchored: named in full in this answer or an earlier one.
+                anchored = anchored or any(
+                    p322_names_ooc(s, a, False, t["titles"])[1] for s in all_s)
+                for s in all_s:
+                    if p322_names_ooc(s, a, anchored, t["titles"])[0]:
+                        mention = _P322OocMention(a, _p322_cited_titles(s, t["titles"]))
+                        cls, why = p322_mention_class(s, mention, carriers,
                                                       " ".join(back))
                         sents.append((cls, why, s))
                     back = (back + [s])[-2:]
