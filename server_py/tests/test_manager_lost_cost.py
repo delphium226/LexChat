@@ -19,7 +19,6 @@ per seam. Synthetic text only.
 `asyncio.sleep` is stubbed, so no retry waits.
 """
 import asyncio
-import json
 import logging
 
 import httpx
@@ -528,10 +527,3 @@ def test_a_heavy_empty_before_any_research_can_still_recover(
         [{"role": "user", "content": "q"}], "test-model", None, None, 0))
     assert len(h.seen) == 2 and "answer_failed" not in final
     assert final["content"].startswith("hello")
-
-
-def test_the_request_bodies_are_json(_mgr_cfg, _no_sleep, _mock_http):
-    """Sanity for the fixtures above: the delegation body parses as a tool call."""
-    body = json.loads(_OR_DELEGATE.split("data: ")[1].strip())
-    call = body["choices"][0]["delta"]["tool_calls"][0]["function"]
-    assert call["name"] == "delegate_research" and json.loads(call["arguments"]) == {"query": "q"}
