@@ -153,9 +153,20 @@ def _get(client: PacedClient, path: str, via: str) -> tuple:
     return client.request("GET", url)
 
 
-def fetch_record(client: PacedClient, legislation_id: str, via: str = "lgu") -> Optional[dict]:
+def fetch_record(client: PacedClient, legislation_id: str, via: str = "lgu",
+                 full_fallback: bool = True) -> Optional[dict]:
     """The as-made record, falling back to the current version; None if not held."""
-    for version, suffix in (("made", "/made/data.xml"), ("current", "/data.xml")):
+    # The introduction view carries the whole preamble at a fraction of the
+    # size (UKSI 2013/1046: 9,847 bytes against 555,621), and gave the same
+    # recital and powers as the full XML on 50 of 50 sampled SSIs (2026-10-08).
+    # The full XML is tried only with `full_fallback`: a number neither
+    # introduction answers is almost always one the site does not hold, and
+    # the fallback doubles the cost of every such gap. A harvest without it is
+    # checked afterwards by sampling its absent ids against the full XML.
+    routes = [("made", "/introduction/made/data.xml"), ("current", "/introduction/data.xml")]
+    if full_fallback:
+        routes += [("made", "/made/data.xml"), ("current", "/data.xml")]
+    for version, suffix in routes:
         status, body = _get(client, f"/{legislation_id}{suffix}", via)
         if status == 200 and body.lstrip().startswith(b"<"):
             return record_from_xml(legislation_id, body.decode("utf-8", "replace"), version)
@@ -206,7 +217,7 @@ def _done_ids(out: Path) -> set:
 
 
 def harvest(client: PacedClient, typ: str, years: Iterable[int], out: Path,
-            title: Optional[str] = None, via: str = "lgu") -> dict:
+            title: Optional[str] = None, via: str = "lgu", full_fallback: bool = True) -> dict:
     """Append one record per held instrument; skip ids already in `out`.
 
     Without `title`, numbers 1..max are tried directly (the listing feed's
@@ -222,7 +233,7 @@ def harvest(client: PacedClient, typ: str, years: Iterable[int], out: Path,
             if lid in done:
                 stats["skipped"] += 1
                 continue
-            rec = fetch_record(client, lid, via)
+            rec = fetch_record(client, lid, via, full_fallback=full_fallback)
             if rec is None:
                 rec = {"id": lid, "absent": True}
                 stats["absent"] += 1
@@ -383,6 +394,8 @@ def main(argv=None) -> int:
     ap.add_argument("--version", default="", help="--snapshot: the snapshot version")
     ap.add_argument("--title", help="harvest only ids whose title matches (listing feed filter)")
     ap.add_argument("--via", choices=("lgu", "lex"), default="lgu")
+    ap.add_argument("--no-full-fallback", action="store_true",
+                    help="harvest: treat a number neither introduction view answers as absent")
     ap.add_argument("--max-calls", type=int, default=40)
     ap.add_argument("--gap", type=float, default=DEFAULT_GAP_S)
     ap.add_argument("--quiet", action="store_true", help="do not print every call")
@@ -398,7 +411,8 @@ def main(argv=None) -> int:
     if a.harvest:
         if not a.out:
             ap.error("--harvest needs --out")
-        stats = harvest(client, a.harvest[0], _years(a.harvest[1]), a.out, a.title, a.via)
+        stats = harvest(client, a.harvest[0], _years(a.harvest[1]), a.out, a.title, a.via,
+                        full_fallback=not a.no_full_fallback)
         print(json.dumps(stats))
         return 0
     if a.resolve:

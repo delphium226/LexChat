@@ -352,7 +352,11 @@ async def refresh_new(client=None) -> dict:
         for lid in new_ids[:REFRESH_MAX_FETCHES]:
             await asyncio.sleep(REFRESH_GAP_S)
             try:
-                r = await client.get(_proxy(f"{lid}/made/data.xml"))
+                # The introduction view: the whole preamble, a fraction of
+                # the size (same recital on 50 of 50 sampled SSIs).
+                r = await client.get(_proxy(f"{lid}/introduction/made/data.xml"))
+                if r.status_code == 404:
+                    r = await client.get(_proxy(f"{lid}/made/data.xml"))
                 if r.status_code != 200:
                     stats["errors"] += 1
                     continue
