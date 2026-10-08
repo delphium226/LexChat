@@ -89,7 +89,7 @@ def norm_text(text: str) -> str:
     "Widget Act 1901"; emphasis marks so "**Widget Act 1901**" does.
     """
     t = (text or "").lower()
-    t = t.replace("’", "'").replace("‘", "'").replace(" ", " ")
+    t = t.replace("\u2019", "'").replace("\u2018", "'")   # a hard space is \s: _SPACES
     t = _STRIP_CHARS.sub("", t)
     return _SPACES.sub(" ", t)
 

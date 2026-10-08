@@ -59,6 +59,7 @@ def test_token_guards_apply_only_on_a_side_that_ends_in_a_letter_or_digit():
     assert not sn.token_in("abcde", "abcde")                       # under the 6-char floor
     assert sn.token_in("abcdef", "abcdef")
     assert not sn.token_in("ssi/1901/3", "")
+    assert not sn.token_in("ssi/1901/3", None)
     assert not sn.token_in(None, "ssi/1901/3")
 
 
@@ -90,14 +91,25 @@ def test_a_title_named_in_words_keeps_the_source():
     assert not _source_is_used(src, "The Gadget Order 1901 makes provision for this.")
 
 
+def test_emphasis_inside_a_title_and_a_leading_the_are_normalised():
+    src = _leg("ssi/1901/3", "The Widget Order 1901")
+    assert _source_is_used(src, "The Widget *Order* 1901 applies.")
+    assert _source_is_used(src, "Under Widget Order 1901, the duty is owed.")
+
+
 def test_a_comma_before_the_year_still_names_the_title():
     src = _leg("ukpga/1901/3", "Widget Act 1901", kind="Act")
     assert _source_is_used(src, "Under the Widget Act, 1901, the duty is owed.")
 
 
+def test_a_left_curly_quote_is_normalised():
+    src = _leg("ssi/1901/3", "The 'Widget' Order 1901")
+    assert _source_is_used(src, "the \u2018widget' order 1901 applies")
+
+
 def test_curly_quotes_and_hard_spaces_are_normalised():
-    src = _leg("ssi/1901/3", "The Widget’s Order 1901")
-    assert _source_is_used(src, "the widget's order  1901 applies")
+    src = _leg("ssi/1901/3", "The Widget\u2019s Order 1901")
+    assert _source_is_used(src, "the widget's\u00a0order  1901 applies")
 
 
 def test_a_title_inside_a_longer_title_does_not_name_it():
@@ -219,14 +231,18 @@ def test_a_citation_in_the_next_sentence_does_not_decide_the_judgment():
 
 def test_a_citation_beyond_the_lookahead_does_not_decide_the_judgment():
     first = _case("Widget Co v Example Ltd", "[1901] EWHC 5 (Ch)", "ewhc/ch/1901/5")
-    pad = "x" * sn.CASE_LOOKAHEAD_CHARS
-    assert sn.named_in(first, f"Widget Co v Example Ltd {pad} [1902] EWCA Civ 9")
+    assert sn.CASE_LOOKAHEAD_CHARS == 100
+    assert sn.named_in(first, "Widget Co v Example Ltd " + "x" * 100 + " [1902] EWCA Civ 9")
+    assert not sn.named_in(first, "Widget Co v Example Ltd " + "x" * 60 + " [1902] EWCA Civ 9")
     assert not sn.named_in(first, "Widget Co v Example Ltd [1902] EWCA Civ 9")
 
 
 def test_a_case_with_no_citation_of_its_own_is_kept_by_its_parties():
     src = _case("Widget Co v Example Ltd", "", "")
     assert sn.named_in(src, "Widget Co v Example Ltd [1902] EWCA Civ 9 held it.")
+    src["url"] = ""
+    assert sn.named_in(src, "[Widget Co v Example Ltd](https://caselaw.nationalarchives.gov.uk/"
+                            "ewca/civ/1902/9) held it.")
 
 
 def test_the_same_judgment_cited_after_the_parties_is_kept():
@@ -249,6 +265,8 @@ def test_a_retrieved_source_is_kept_whatever_the_report_says():
 
 def test_named_in_with_no_text_is_false():
     assert not sn.named_in(_leg("ssi/1901/3", "Widget Order 1901"), "")
+    assert not sn.named_in(_leg("ssi/1901/3", "Widget Order 1901"), None)
+    assert not sn.named_in(_case("Widget Co v Example Ltd", "", ""), None)
 
 
 # --- the fall-back ----------------------------------------------------------------

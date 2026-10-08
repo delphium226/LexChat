@@ -10448,7 +10448,7 @@ def _rail_src_lid(s: dict) -> str:
 
 
 def _rail_norm_text(t: str) -> str:
-    t = (t or "").lower().replace("’", "'").replace("‘", "'").replace(" ", " ")
+    t = (t or "").lower().replace("\u2019", "'").replace("\u2018", "'").replace("\u00a0", " ")
     t = re.sub(r"[*_`,]", "", t)
     return re.sub(r"\s+", " ", t)
 

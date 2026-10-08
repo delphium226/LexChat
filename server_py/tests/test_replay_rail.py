@@ -77,6 +77,7 @@ def test_a_neutral_citation_running_on_is_not_a_reference():
     s = _case("Widget Co v Example Ltd", "[1901] UKSC 1", "uksc/1901/1")
     assert _read(s, "In Gadget v Other [1901] UKSC 12 it was held") == ""
     assert _read(s, "In [1901] UKSC 1 it was held") == "ncn"
+    assert _read(s, "In [1901] UKSC 12, and later in [1901] UKSC 1, it was held") == "ncn"
 
 
 def test_a_bare_id_running_on_is_not_a_reference():
