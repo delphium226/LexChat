@@ -8842,3 +8842,33 @@ In progress; new row P3.30, P3, `added` 2026-10-08).
 `p322.json` and `p34.json`, the hand-reads `handread_wave4_b9_sweep1.md` and `handread_wave4_b9_sweep2.md`.
 Agents' scratch in `evidence/seam/batch9/{A,B,C,D,E}/`, the session scratchpad in
 `batch9/scratchpad_s41/`. Agent worktrees removed after their merges.
+
+**Addendum to Session 41 (2026-10-08, at the user's request: "make sure we're not going to lose any pertinent
+information", "update the tracker", then "provide a prompt to kick off the next piece of work ... a safe,
+multi-agent approach"). This supersedes the Session 42 handover's "Take next" only in pointing at the brief;
+its content stands.**
+- **Preserved:** findings that lived only in agents' notes were written onto the rows a future session reads
+  (`preserve_s41.py`): **P3.14** (with P3.4 the quick-lookup Worker defaults to Scotland but still never sees the
+  filter block, so a non-Scotland filter with a brief omitting the jurisdiction would answer for Scotland while
+  the executor filters to the other territory); **P3.16** (the summariser also writes commencement dates its
+  source lacks: `wave4_p37_pre` 6409 r2 t2, stored 6411 summaries); **P3.4** (the research Worker's "Note the
+  territorial extent from the metadata" left for the research-mode follow-up; the UI's filter description
+  unchecked); **P3.22** (batch 9 B's correction of batch 8 C's "52 tuples (123 stored calls)": 82 calls; the 10
+  `wave4_b8_sweep` calls left undry-run); **P2.5** (its `_CURRENCY_CLAUSE` trips `IN_FORCE_CLAIM` and
+  `_currency_asserted`, a pre-existing grader false positive); **P3.6** (`cmd_corpus`'s stale label); and in
+  `docs/LEGAL_DATA_SOURCES.md` the provenance finding (1,780 of 7,189 distinct stored search rows carry
+  `provenance_source: llm_ocr`, `provenance_model: gpt-5-mini`). `plan_lint` 0 errors, 0 warnings.
+- **Fix Tracker v42** (same URL; the live body was identical to the repo source apart from the publish
+  wrapper: the Artifact read, then a Read of all 1,394 lines of the saved file): P3.27, P3.21, P3.4 (both rows)
+  and P3.6 Fixed (`fixed: "2026-10-08"`, the date `7daed79` first shows them ticked; `ver: "Next release"`);
+  P3.22 In progress; new row P3.30 (P3, Verified, `added: "2026-10-08"`); the lede names seventeen rows
+  waiting for the next release; the In-progress note; two plain-language notes for Thomas (four fixes; P3.12 and
+  P3.22 built and not yet passed, P3.30), naming no lawyer's topic; "Next"; `AS_AT` "8th Oct 2026, 11:45am" and
+  `UPDATED`. 78 rows: 54 Fixed, 2 In progress, 16 Verified, 3 Blocked, 3 To be verified. Script syntax-checked
+  with Node; no render check (data and text only).
+- **`docs/prepilot-fixes/PARALLEL_BATCH_10.md` written: the brief for Session 42.** Five agents in worktrees at
+  $0 model spend: **A** measures, then builds, P3.12's decided lever; **B** P3.22's per-query retrieval check
+  (live National Archives calls only if agreed, cap 150); **C** P4.3 measured and re-booked; **D** P3.10
+  re-booked and P4.12 measured; **E** the `authorities` and `negcurrency` grader fixes and the sweep priced.
+  **Merge E, A, then P3.12's re-run (6335 n=3, priced to the user first), then B, C, D.** FIX_PLAN's top order
+  line points at the brief. The session scratchpad was re-copied to `evidence/seam/batch9/scratchpad_s41/`.

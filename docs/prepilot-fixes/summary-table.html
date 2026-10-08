@@ -376,13 +376,14 @@
 <div class="wrap">
   <header>
     <span class="eyebrow">AILA · pre-pilot defect fixes</span>
-    <h1>Pre-pilot Fix Tracker <span class="as-at" id="as-at">as at 6th Oct 2026, 3:42pm</span></h1>
+    <h1>Pre-pilot Fix Tracker <span class="as-at" id="as-at">as at 8th Oct 2026, 11:45am</span></h1>
     <p class="lede">Every proposed fix, ours (<strong>R</strong>) and Thomas's (<strong>T</strong>), with its status,
       its row in the fix plan and its action number in Thomas's review of 10 September 2026.
       <strong>“Fixed” means built and accepted on the fix branch. The Version column says which
       release carries each fix: 2026.09.1 (22 September), 2026.09.2 (23 September) or 2026.09.3
-      (29 September), all merged for deployment to the server. Thirteen rows fixed since then, P3.16,
-      P4.16, P4.15, P4.18, P4.17, P5.2, P3.19, P4.21, P3.24, P4.19, P3.23, P3.9 and P3.25, are marked “Next release”. The fixed date is the day a fix was accepted, not the
+      (29 September), all merged for deployment to the server. Seventeen rows fixed since then, P3.16,
+      P4.16, P4.15, P4.18, P4.17, P5.2, P3.19, P4.21, P3.24, P4.19, P3.23, P3.9, P3.25, P3.27, P3.21, P3.4 and
+      P3.6, are marked “Next release”. The fixed date is the day a fix was accepted, not the
       day it reached the server.</strong></p>
   </header>
 
@@ -443,7 +444,7 @@
       <h2>Status</h2>
       <dl>
         <dt>Fixed</dt><dd>Built and accepted on the fix branch. Every Fixed row with a release number is merged to <code>main</code> for deployment to the target: release 2026.09.1 on 22 September, 2026.09.2 (P3.13) on 23 September and 2026.09.3 (twelve rows) on 29 September. A row fixed after a release is marked “Next release” and is on the fix branch only, until the next release carries it. P5.2 is a decision, not a change to the system: it is fixed because the decision is made.</dd>
-        <dt>In progress</dt><dd>Built, and waiting for the re-run that decides whether it is fixed. P3.27 and P3.12 are built; their first re-run on 6 October found two gaps, both fixed the same day, and they will be re-run again.</dd>
+        <dt>In progress</dt><dd>Built, and not yet passed. P3.12 (a schedule paragraph asked for by number) and P3.22 (case-law results by relevance) are built; their re-runs of 6 and 7 October did not yet pass, and the next step for each is chosen (see 8 October below).</dd>
         <dt>Partial</dt><dd>A fix was attempted, and we decided to defer it and come back to it later. No fix is Partial now: P4.10 was, until its last check was run on 25 September.</dd>
         <dt>Verified</dt><dd>The problem is confirmed in our replays, the code or a live test, but no fix is built yet.</dd>
         <dt>Blocked</dt><dd>Confirmed, and parked until something outside our control happens; the reason is in the row's description. Since 5 October, P3.2, P3.3 and P3.17 wait on a lawyer answering our questions about the readings of the law their tests use.</dd>
@@ -474,6 +475,36 @@
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.
         <strong>30 Sep</strong> marks a point from his retest of release 2026.09.3 on 30 September.</p>
+      <p><strong>6 to 8 October: four more fixes, two built and not yet passed.</strong> Five pieces of
+        work ran side by side at no model cost, with a few free, capped requests to the National Archives
+        and the legislation database, then four agreed re-runs were paid for ($29.40 in all; one cost
+        more than planned because the model ran on without answering in one turn, a known problem,
+        P4.12). <strong>P3.27</strong> is fixed: where the database holds no schedule for an
+        instrument, the answers now say so, and none puts it down to a search limit alone (before, all
+        four re-run answers did). One answer still mentions the limit alongside the true reason, so
+        we are watching it. <strong>P3.21</strong> is fixed: when the research reads the official
+        record of changes to an Act, each commencement made by another instrument now carries the date
+        legislation.gov.uk records for it, with its wording such as “for specified purposes”, and a
+        date earlier than the day the commencing instrument was made is refused. In the re-run the
+        answer about an Act's commencement gave both commencing instruments with their dates every
+        time; before, the second was never dated. <strong>P3.4</strong> is fixed: where a question names
+        no jurisdiction, the answer is now for Scotland and says so, and where it asks about the UK it
+        covers each of the four parts and says where the law differs. Before, one test question named
+        no jurisdiction in any of three re-runs; now it does in all three. <strong>P3.6</strong> is
+        fixed: each legislation search result now keeps the instrument's own short published summary
+        (up to 600 characters), which often states when it came into force, without making searches
+        slower to process.</p>
+      <p><strong>Built, not yet passed.</strong> <strong>P3.12</strong>: the system now fetches the
+        schedule a search names, but in this re-run no request named the paragraph numbers, so the
+        whole schedule (about 92,000 characters) was condensed, and some paragraphs were dropped in
+        the condensing; once, the answer then called them not retrieved. The next step is to hand over
+        a long schedule's paragraph headings and the paragraphs that match the question, instead of a
+        summary, measured first at no cost. <strong>P3.22</strong>: case-law results now come back
+        most relevant first. The leading cases two sessions needed were still found every time, but two
+        others were found in fewer re-runs than before; reading them by hand, that came from the system
+        running different searches, not from the new order, so the next check runs the same searches
+        both ways. One new small row, <strong>P3.30</strong>: many instruments' published summaries
+        quote the powers they were made under, and the system cannot yet use that.</p>
       <p><strong>6 October: one more fix, two built, and two choices made.</strong> Four pieces of work ran
         side by side at no model cost, with free, capped requests to the legislation database, the
         National Archives and legislation.gov.uk, then one agreed re-run of seven sessions was paid
@@ -1050,14 +1081,13 @@
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
       <p><strong>Next, by severity.</strong> The next session again runs pieces of work side by side at no
-        model cost: a small correction to P3.12; the build of <strong>P3.22</strong> (relevance), of
-        <strong>P3.21</strong> (the commencement date) and of <strong>P3.4</strong> (answering for
-        Scotland when a question names no jurisdiction); and the checks their re-runs need. Then two
-        re-runs, each priced to us first: one that re-runs P3.27 and P3.12 and measures P3.22 and
-        P3.4 before their changes, and one that measures P3.22 and P3.21 after theirs. Then
-        <strong>P3.6</strong>, <strong>P4.3</strong>, <strong>P3.10</strong> and <strong>P4.12</strong>,
-        and <strong>P3.20</strong> once the Scottish Courts and Tribunals Service replies; then the P3
-        rows, starting with <strong>P4.8</strong>. <strong>P3.2</strong>, <strong>P3.3</strong> and
+        model cost: the next step on <strong>P3.12</strong> (measured first); the same-search check on
+        <strong>P3.22</strong>; and the first measurements for <strong>P4.3</strong> (the sources list
+        and the answer disagreeing), <strong>P3.10</strong> (Deep Research steps that depend on each
+        other) and <strong>P4.12</strong> (a chat reply lost when the model runs on), with corrections
+        to two of our automatic checks. Any re-run is priced to us first. Then <strong>P3.20</strong>
+        once the Scottish Courts and Tribunals Service replies, and the P3 rows, starting with
+        <strong>P4.8</strong>. <strong>P3.2</strong>, <strong>P3.3</strong> and
         <strong>P3.17</strong> stay blocked until a lawyer answers our questions.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.3, P0.4, dropped on 2 October, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
@@ -1089,8 +1119,8 @@
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
   // AS_AT: the date and time of this update, shown in the header (tracker v40, user request).
-  const AS_AT = "6th Oct 2026, 3:50pm";
-  const UPDATED = "6 October 2026, evening (P3.25 fixed; P3.27 and P3.12 built, their re-run to follow; P3.22 and P3.21 chosen; P3.29 added)";
+  const AS_AT = "8th Oct 2026, 11:45am";
+  const UPDATED = "8 October 2026 (P3.27, P3.21, P3.4 and P3.6 fixed; P3.12 and P3.22 built, not yet passed; P3.30 added)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", added: "2026-09-22", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", added: "2026-09-22", fixed: "2026-09-23", ver: "2026.09.3" },
@@ -1113,10 +1143,10 @@
     { src: "R", fix: "Allow up to three section searches per Act, capped in code", sev: "P2", status: "Fixed", ref: "P3.1", t: "", added: "2026-09-14", fixed: "2026-09-18", ver: "2026.09.1" },
     { src: "R", fix: "Stop an answer changing back and forth under pushback: check the law before agreeing or holding firm. Blocked: its test rests on our reading of the regulation, which a lawyer must confirm first (questions ready, not yet sent)", sev: "P1", status: "Blocked", ref: "P3.2", t: "", added: "2026-09-14" },
     { src: "T & R", fix: "Separate retrieval from interpretation. Blocked: its tests rest on readings of the law a lawyer must confirm first, and it includes P3.2's test", sev: "P2", status: "Blocked", ref: "P3.3", t: "NH1", added: "2026-09-14" },
-    { src: "T & R", fix: "Default to Scottish jurisdiction; flag UK-wide divergence", sev: "P2", status: "Verified", ref: "P3.4", t: "NH1", added: "2026-09-14" },
-    { src: "T", fix: "Correct the jurisdiction filter note in the prompt", sev: "P3", status: "Verified", ref: "P3.4", t: "5", added: "2026-09-18" },
+    { src: "T & R", fix: "Default to Scottish jurisdiction; flag UK-wide divergence", sev: "P2", status: "Fixed", ref: "P3.4", t: "NH1", added: "2026-09-14", fixed: "2026-10-08", ver: "Next release" },
+    { src: "T", fix: "Correct the jurisdiction filter note in the prompt", sev: "P3", status: "Fixed", ref: "P3.4", t: "5", added: "2026-09-18", fixed: "2026-10-08", ver: "Next release" },
     { src: "R", fix: "Retrieve amendment and commencement relations", sev: "P1", status: "Fixed", ref: "P3.5", t: "", added: "2026-09-15", fixed: "2026-09-16", ver: "2026.09.1" },
-    { src: "R", fix: "Keep the description field, which carries relationships", sev: "P2", status: "Verified", ref: "P3.6", t: "", added: "2026-09-15" },
+    { src: "R", fix: "Keep the description field, which carries relationships", sev: "P2", status: "Fixed", ref: "P3.6", t: "", added: "2026-09-15", fixed: "2026-10-08", ver: "Next release" },
     { src: "R", fix: "Test whether an instrument is held, by its number", sev: "P2", status: "Fixed", ref: "P3.7", t: "", added: "2026-09-15", fixed: "2026-09-24", ver: "2026.09.3" },
     { src: "T & R", fix: "Stop a step looping on instruments it already has; write up findings at the cap", sev: "P2", status: "Fixed", ref: "P3.8", t: "3", added: "2026-09-17", fixed: "2026-09-21", ver: "2026.09.1" },
     { src: "T", fix: "Make the case-law date filter work", sev: "P2", status: "Fixed", ref: "P3.9", t: "6", added: "2026-09-18", fixed: "2026-10-05", ver: "Next release" },
@@ -1131,14 +1161,15 @@
     { src: "R", fix: "Stop the Deep Research report asserting that an English doctrine applies in Scotland without a Scottish source", sev: "P1", status: "Fixed", ref: "P3.18", t: "", added: "2026-09-29", fixed: "2026-09-29", ver: "2026.09.3" },
     { src: "R", fix: "Keep which provision made which change when reading the record of changes (a wrong inserting subsection reached an answer)", sev: "P1", status: "Fixed", ref: "P3.19", t: "", added: "2026-10-02", fixed: "2026-10-05", ver: "Next release" },
     { src: "R", fix: "Retrieve Scottish judgments from the Scottish Courts and Tribunals Service's judgments search", sev: "P2", status: "Verified", ref: "P3.20", t: "", added: "2026-10-02" },
-    { src: "R", fix: "Retrieve the date a provision came into force, not only the instrument that commenced it", sev: "P2", status: "Verified", ref: "P3.21", t: "", added: "2026-10-02" },
+    { src: "R", fix: "Retrieve the date a provision came into force, not only the instrument that commenced it", sev: "P2", status: "Fixed", ref: "P3.21", t: "", added: "2026-10-02", fixed: "2026-10-08", ver: "Next release" },
     { src: "R", fix: "Tell the system how many case-law results there were, not how many it was shown (at most 50)", sev: "P2", status: "Fixed", ref: "P3.23", t: "", added: "2026-10-02", fixed: "2026-10-05", ver: "Next release" },
     { src: "T", fix: "Don't say a provision is “not yet commenced” or “remains in force” when the research found only that no commencement or repeal is recorded", sev: "P1", status: "Fixed", ref: "P3.24", t: "30 Sep", added: "2026-10-05", fixed: "2026-10-05", ver: "Next release" },
     { src: "T", fix: "Stop the quick research step fetching whole Acts, which its own instructions forbid (about 1 conversational answer in 9)", sev: "P2", status: "Fixed", ref: "P3.25", t: "30 Sep", added: "2026-10-05", fixed: "2026-10-06", ver: "Next release" },
     { src: "T", fix: "Include, not drop, a search result whose territorial extent the jurisdiction filter does not recognise (none seen so far)", sev: "P3", status: "Verified", ref: "P3.26", t: "30 Sep", added: "2026-10-05" },
-    { src: "R", fix: "Include schedules and annexes when reading an instrument's whole text (they were always left out, so a provision in one could be called not held)", sev: "P1", status: "In progress", ref: "P3.27", t: "", added: "2026-10-05" },
+    { src: "R", fix: "Include schedules and annexes when reading an instrument's whole text (they were always left out, so a provision in one could be called not held)", sev: "P1", status: "Fixed", ref: "P3.27", t: "", added: "2026-10-05", fixed: "2026-10-08", ver: "Next release" },
     { src: "R", fix: "Count every kind of removal in the record of changes (“omitted”, “ceases to have effect”), not only repeals and revocations", sev: "P3", status: "Verified", ref: "P3.28", t: "", added: "2026-10-05" },
     { src: "R", fix: "Stop the check that spots a case's appeal linking unrelated cases that share one word of a party's name", sev: "P3", status: "Verified", ref: "P3.29", t: "", added: "2026-10-06" },
+    { src: "R", fix: "Let the system use the enabling powers that an instrument's own published summary quotes (it now shows them but cannot yet state them)", sev: "P3", status: "Verified", ref: "P3.30", t: "", added: "2026-10-08" },
     { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", sev: "P1", status: "Fixed", ref: "P4.1", t: "9", added: "2026-09-14", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Show a change of mode or research type in the conversation itself", sev: "P3", status: "Verified", ref: "P4.9", t: "", added: "2026-09-22" },
     { src: "R", fix: "Never show a blank or lost reply", sev: "P1", status: "Fixed", ref: "P4.2", t: "", added: "2026-09-14", fixed: "2026-09-16", ver: "2026.09.1" },
@@ -1165,7 +1196,7 @@
     { src: "R", fix: "Decide where Scottish case law will come from (Court of Session, Sheriff Courts); the build is P3.20", sev: "P2", status: "Fixed", ref: "P5.2", t: "", added: "2026-09-14", fixed: "2026-10-02", ver: "Next release" },
     { src: "R", fix: "Check legislation.gov.uk for what our legislation database lacks (enabling powers, past versions, dated changes)", sev: "P3", status: "Verified", ref: "P5.4", t: "", added: "2026-10-02" },
     { src: "T", fix: "Show provider errors (credit, rate limit) clearly when planning", sev: "P3", status: "Verified", ref: "TODO B6", t: "8", added: "2026-09-18" },
-    { src: "T", fix: "Order case-law results by relevance (they come back newest first)", sev: "P2", status: "Verified", ref: "P3.22", t: "6", added: "2026-09-18" },
+    { src: "T", fix: "Order case-law results by relevance (they come back newest first)", sev: "P2", status: "In progress", ref: "P3.22", t: "6", added: "2026-09-18" },
     { src: "T", fix: "Reconcile summary counts with the answer's own list", sev: "P2", status: "To be verified", ref: "", t: "NH2", added: "2026-09-18" },
     { src: "T", fix: "Scan whole instruments for a literal “£”", sev: "P3", status: "To be verified", ref: "", t: "4", added: "2026-09-18" },
     { src: "T", fix: "Add an enabling-power rule to the synthesis prompt", sev: "P2", status: "To be verified", ref: "P2.3", t: "1", added: "2026-09-18" },
