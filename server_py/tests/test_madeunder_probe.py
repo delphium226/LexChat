@@ -166,3 +166,14 @@ def test_pdf_ocr_text_is_cleaned():
     assert _powers(text) == [("power",
                               "Widget and Miscellaneous Government Provisions (Scotland) Act 1958",
                               ["section/1"])]
+
+
+def test_act_cited_after_another_instrument_keeps_its_own_title():
+    # The shape of four of the 350 titles that did not resolve.
+    t = ("The Scottish Ministers make the following Regulations in exercise of the powers "
+         "conferred by regulation 7 of the Widget Contracts (Scotland) Regulations 2016, "
+         "sections 1(1) and 4(1) of the Gadget Act 1902 and all other powers enabling them.")
+    powers = _powers(t)
+    assert [p[1] for p in powers] == ["Gadget Act 1902"]
+    assert "regulation/2016" not in powers[0][2]
+    assert "section/1" in powers[0][2] and "section/4" in powers[0][2]

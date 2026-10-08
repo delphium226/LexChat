@@ -71,204 +71,9 @@ except ImportError:  # run as a script from tools/
 USER_AGENT = "AILA-research-probe (FIX_PLAN P3.31; read-only; paced)"
 DEFAULT_GAP_S = 0.3
 
-# --------------------------------------------------------------------------
-# Preamble and recital window
-# --------------------------------------------------------------------------
-
-_WS = re.compile(r"\s+")
-
-
-def preamble_text(xml_text: str) -> tuple:
-    """(state, text) for an instrument's `SecondaryPreamble`.
-
-    state: `ok`, `none` (no preamble element) or `elided` (dotted out, as on a
-    revoked instrument's revised XML).
-    """
-    m = re.search(r"<SecondaryPreamble\b.*?</SecondaryPreamble>", xml_text, re.S)
-    if not m:
-        return "none", ""
-    raw = re.sub(r"<[^>]+>", " ", m.group(0))
-    for ent, ch in (("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"), ("&quot;", '"'),
-                    ("&apos;", "'"), ("&#8217;", "’"), ("&#160;", " ")):
-        raw = raw.replace(ent, ch)
-    text = _WS.sub(" ", raw).strip()
-    # Spacing around punctuation is an artefact of tag removal.
-    text = re.sub(r"\s+([,.;:)])", r"\1", text)
-    text = re.sub(r"\(\s+", "(", text)
-    letters = sum(c.isalpha() for c in text)
-    if letters < 20:
-        return "elided", text
-    return "ok", text
-
-
-_WINDOW_START = re.compile(
-    r"in (?:the )?exercise of (?:the |his |her |their |its |all )?(?:powers?|functions?)"
-    r"|exercising (?:the )?powers?"
-    r"|powers? (?:in that behalf )?conferred (?:(?:on|upon) (?:\w+ ){0,3})?by"
-    # An Order in Council: "in pursuance of the power in section 179(1)(a) ...".
-    r"|in pursuance of (?:the )?powers?(?: (?:in|under|conferred by))?"
-    r"|by virtue of (?:the )?powers?"
-    # An Act of Sederunt: "makes this Act of Sederunt under the powers ...".
-    r"|under (?:the )?powers?",
-    re.I)
-_WINDOW_END = re.compile(
-    r"\band (?:of )?(?:all|every) other (?:powers?|enabling)"
-    r"|\band all powers enabling"
-    r"|\bwith the (?:consent|concurrence|approval|agreement)\b"
-    r"|\bafter (?:consult|carrying out|having)"
-    r"|\bhaving (?:consulted|regard|carried|had)\b"
-    r"|\bin accordance with section\b"
-    r"|\b(?:a )?draft of (?:this|these|the) (?:instrument|regulations|order|rules|scheme)"
-    r"|\bhereby\b|\bmakes? the following\b|\bmake(?:s)? this\b"
-    r"|[:;]",
-    re.I)
-
-
-def recital_window(preamble: str) -> str:
-    """The span that lists the enabling powers, or "" if no recital is found."""
-    m = _WINDOW_START.search(preamble)
-    if not m:
-        return ""
-    rest = preamble[m.end():]
-    e = _WINDOW_END.search(rest)
-    return (rest[: e.start()] if e else rest[:1200]).strip(" ,")
-
-
-# --------------------------------------------------------------------------
-# Powers: provisions + Act
-# --------------------------------------------------------------------------
-
-_KIND = (r"(?i:sections?|ss?\.|paragraphs?|paras?\.|articles?|arts?\.|regulations?|regs?\."
-         r"|rules?|r\.|Schedules?|Sch\.|Parts?)")
-_NUM = r"\d+[A-Z]{0,3}(?:\([^)\s]{1,6}\))*"
-# A list item may be a bare pinpoint of the previous number ("85(2)(g) and (5)
-# and 95"), and the separator may be ", and" ("79(1), and 95"): missing either
-# dropped s.95 from two of the 37 s.95 instruments in the first harvest.
-_SEP = r"(?:\s*,?\s*(?:and|or|to)\s+|\s*,\s*)"
-_LIST = rf"{_NUM}(?:{_SEP}(?:{_NUM}|\([^)\s]{{1,6}}\)(?:\([^)\s]{{1,6}}\))*))*"
-# An Act title: capitalised start, then words that may be lower-case or carry
-# parentheses or dots ("etc.", "(No. 2)"), up to "Act|Measure YYYY". Bounded so
-# it cannot run across a whole recital.
-_TITLE = (r"(?!(?:Schedule|Part|Section|Article|Regulation|Paragraph|Chapter)s?\b)"
-          r"[A-Z][A-Za-z'’(),.\-]*(?:\s+[A-Za-z0-9'’(),.\-&]+){0,16}?\s+(?:Act|Measure)\s+\d{4}")
-_ACT_REF = rf"(?P<title>{_TITLE})|(?P<that>that Act|the said Act|that Measure)|the (?P<year>\d{{4}}) Act"
-_CHUNK = re.compile(
-    rf"(?P<prov>(?:{_KIND})\s+{_NUM}.*?)"
-    rf",?\s+(?:of|to|in),?\s+(?:the\s+)?(?:{_ACT_REF})(?![A-Za-z])",
-    re.S)
-_ROLE = re.compile(r"\bas (?:applied|extended|read with|modified|amended)(?: by)?\s*$", re.I)
-_PIECE = re.compile(rf"(?P<kind>{_KIND})\s+(?P<list>{_LIST})", re.I)
-
-
-def _kind_name(k: str) -> str:
-    k = k.lower().rstrip(".")
-    if k.startswith("s") and not k.startswith("sch"):
-        return "section"
-    if k.startswith("sch"):
-        return "schedule"
-    if k.startswith("para"):
-        return "paragraph"
-    if k.startswith("art"):
-        return "article"
-    if k.startswith("reg"):
-        return "regulation"
-    if k in ("r", "rule", "rules"):
-        return "rule"
-    if k.startswith("part"):
-        return "part"
-    return k
-
-
-def _numbers(lst: str) -> list:
-    out = []
-    # A bare "(5)" is a pinpoint of the previous number, not a new section:
-    # `_NUM` needs a leading digit, so it is skipped here.
-    for m in re.finditer(rf"(?<![\w(]){_NUM}", lst):
-        n = m.group(0)
-        out.append(n)
-    # "4 to 7": expand plain integer ranges only.
-    rng = re.findall(r"(\d+)\s+to\s+(\d+)\b", lst)
-    for a, b in rng:
-        a, b = int(a), int(b)
-        if 0 < b - a <= 50:
-            out.extend(str(i) for i in range(a + 1, b))
-    return out
-
-
-def provisions(prov: str) -> list:
-    """`provision` keys for one chunk: "section/95", "schedule/2/paragraph/1A".
-
-    The pinpoint (the bracketed subsection) is dropped from the key and kept
-    in `pinpoints`, because the reverse question is asked at section level.
-    """
-    pieces = [(_kind_name(m.group("kind")), _numbers(m.group("list")))
-              for m in _PIECE.finditer(prov)]
-    keys = []
-    sched = None
-    for kind, nums in pieces:
-        if kind == "schedule" and nums:
-            sched = re.sub(r"\(.*", "", nums[0])
-    for kind, nums in pieces:
-        for n in nums:
-            base = re.sub(r"\(.*", "", n)
-            if kind == "schedule":
-                key = f"schedule/{base}"
-            elif kind == "paragraph" and sched:
-                key = f"schedule/{sched}/paragraph/{base}"
-            else:
-                key = f"{kind}/{base}"
-            if key not in keys:
-                keys.append(key)
-    # A bare "Schedule 2" that also named paragraphs is covered by them.
-    if sched and any(k.startswith(f"schedule/{sched}/") for k in keys):
-        keys = [k for k in keys if k != f"schedule/{sched}"]
-    return keys
-
-
-def parse_powers(window: str) -> list:
-    """Each enabling power in a recital window, in order.
-
-    `{"act": title or None, "anaphor": text or None, "provisions": [...],
-      "role": "power" | "as applied by" | ..., "text": the chunk}`.
-    Anaphora ("that Act", "the 2018 Act") are resolved to an earlier title in
-    the same window; one left unresolved keeps `act: None`.
-    """
-    out, titles = [], []
-    for m in _CHUNK.finditer(window):
-        prov = m.group("prov")
-        # A chunk's provision text must not itself contain an Act title: if it
-        # does, the non-greedy match crossed a boundary the pattern missed.
-        if re.search(rf"{_TITLE}", prov):
-            prov = re.split(r"\s+(?:of|to),?\s+(?:the\s+)?[A-Z]", prov)[-1]
-        act, anaphor = None, None
-        if m.group("title"):
-            act = _clean_title(m.group("title"))
-            titles.append(act)
-        elif m.group("that"):
-            anaphor = m.group("that")
-            act = titles[-1] if titles else None
-        elif m.group("year"):
-            anaphor = f"the {m.group('year')} Act"
-            act = next((t for t in reversed(titles) if t.endswith(m.group("year"))), None)
-        before = window[: m.start()].rstrip(" ,")
-        role = "power"
-        r = _ROLE.search(before)
-        if r:
-            role = r.group(0).strip().lower()
-        out.append({"act": act, "anaphor": anaphor, "provisions": provisions(prov),
-                    "role": role, "text": m.group(0)[:300]})
-    return out
-
-
-_TITLE_LEAD = re.compile(r"^(?:and|or|of|to|the|by|in|under|with)\s+", re.I)
-
-
-def _clean_title(t: str) -> str:
-    t = _WS.sub(" ", t).strip(" ,")
-    while _TITLE_LEAD.match(t):
-        t = _TITLE_LEAD.sub("", t)
-    return t
-
+from src.utils.made_under import (  # noqa: E402  the one parser, shared with the server
+    _WINDOW_START, _WS, parse_powers, preamble_text, recital_window,
+)
 
 # --------------------------------------------------------------------------
 # One instrument
@@ -475,6 +280,61 @@ def loose_candidates(records: list, act_title: str, section: str) -> list:
     return out
 
 
+def build_snapshot(outdir: Path, inputs: list, label: str, not_covered: str,
+                   version: str) -> dict:
+    """The committed snapshot the server loads (`services/made_under_store`).
+
+    Every held instrument is kept, with or without a recital, so the server's
+    daily refresh does not treat an old instrument as new. A later input file
+    overrides an earlier one for the same id (pass reparsed files last). Act ids
+    come from each input's `.titles.json` cache (`--resolve`); a title that did
+    not resolve exactly keeps `act_id: null`, and the server matches it by title.
+    """
+    import datetime as _dt
+    import gzip
+    recs, titles = {}, {}
+    for path in inputs:
+        cache = path.with_suffix(path.suffix + ".titles.json")
+        if cache.exists():
+            titles.update({k: v for k, v in json.loads(cache.read_text(encoding="utf-8")).items() if v})
+        for r in load_records(path):
+            if r.get("absent"):
+                continue
+            recs[r["id"]] = r
+    rows, with_powers, unresolved = [], 0, set()
+    for lid in sorted(recs, key=lambda i: (i.split("/")[0], int(i.split("/")[1]), int(i.split("/")[2]))):
+        r = recs[lid]
+        powers = []
+        for p in r.get("powers") or []:
+            act = p.get("act")
+            if not act:
+                continue
+            if act not in titles:
+                unresolved.add(act)
+            powers.append({"act": act, "act_id": titles.get(act), "provisions": p.get("provisions") or [],
+                           "role": p.get("role") or "power"})
+        with_powers += bool(powers)
+        rows.append({"id": lid, "title": r.get("title") or "", "version": r.get("version") or "",
+                     "recital": (r.get("window") or "")[:2000], "powers": powers})
+    outdir.mkdir(parents=True, exist_ok=True)
+    with gzip.open(outdir / "made_under_snapshot.jsonl.gz", "wt", encoding="utf-8") as fh:
+        for row in rows:
+            fh.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+    years = sorted({int(i.split("/")[1]) for i in recs})
+    manifest = {
+        "version": version or _dt.date.today().isoformat() + ".1",
+        "label": label, "not_covered": not_covered,
+        "harvested_at": _dt.date.today().isoformat(),
+        "types": sorted({i.split("/")[0] for i in recs}),
+        "years": [years[0], years[-1]] if years else [],
+        "instruments": len(rows), "with_powers": with_powers,
+        "act_titles_unresolved": len(unresolved),
+        "source": "legislation.gov.uk as-made XML preambles; tools/madeunder_probe.py (FIX_PLAN P3.31)",
+    }
+    (outdir / "manifest.json").write_text(json.dumps(manifest, indent=1), encoding="utf-8")
+    return manifest
+
+
 # --------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------
@@ -509,12 +369,18 @@ def main(argv=None) -> int:
     g.add_argument("--resolve", metavar="FILE")
     g.add_argument("--reverse", nargs=3, metavar=("FILE", "ACT", "SECTION"))
     g.add_argument("--loose", nargs=3, metavar=("FILE", "ACT_TITLE", "SECTION"))
+    g.add_argument("--snapshot", nargs="+", metavar=("OUTDIR", "IN"),
+                   help="build server_py/data/made_under from harvest files (resolve titles "
+                        "first with --resolve on each; their .titles.json caches are read)")
     g.add_argument("--reparse", nargs=2, metavar=("IN", "OUT"),
                    help="re-run the parser over stored windows (no network); re-fetch only "
                         "records whose preamble had no recognised window")
     g.add_argument("--pdf-pass", nargs=2, metavar=("IN", "OUT"),
                    help="re-read records with no XML preamble from their PDF scan")
     ap.add_argument("--out", type=Path)
+    ap.add_argument("--label", default="", help="--snapshot: the coverage label")
+    ap.add_argument("--not-covered", default="", help="--snapshot: what the record omits")
+    ap.add_argument("--version", default="", help="--snapshot: the snapshot version")
     ap.add_argument("--title", help="harvest only ids whose title matches (listing feed filter)")
     ap.add_argument("--via", choices=("lgu", "lex"), default="lgu")
     ap.add_argument("--max-calls", type=int, default=40)
@@ -557,6 +423,12 @@ def main(argv=None) -> int:
         for h in hits:
             print(h["id"], "|", h["title"])
         print(f"{len(hits)} instruments")
+        return 0
+    if a.snapshot:
+        outdir, inputs = Path(a.snapshot[0]), [Path(p) for p in a.snapshot[1:]]
+        stats = build_snapshot(outdir, inputs, label=a.label, not_covered=a.not_covered,
+                               version=a.version)
+        print(json.dumps(stats, indent=1))
         return 0
     if a.reparse:
         src, dst = Path(a.reparse[0]), Path(a.reparse[1])

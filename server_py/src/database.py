@@ -269,6 +269,27 @@ async def init_db() -> None:
                 created_at TIMESTAMP NOT NULL DEFAULT NOW(),
                 CONSTRAINT uq_local_prompt_cache_key UNIQUE (content_hash, query_hash)
             )""",
+            # The made-under record (FIX_PLAN P3.31): which instruments' own
+            # preambles name which provisions as their enabling powers. Loaded
+            # from a committed snapshot and refreshed daily
+            # (services/made_under_store.py). Public legislation.gov.uk data.
+            """CREATE TABLE IF NOT EXISTS made_under_instruments (
+                legislation_id VARCHAR(64) PRIMARY KEY,
+                title TEXT,
+                recital TEXT,
+                version VARCHAR(16),
+                source VARCHAR(16) NOT NULL,
+                harvested_at TIMESTAMP
+            )""",
+            """CREATE TABLE IF NOT EXISTS made_under_powers (
+                id SERIAL PRIMARY KEY,
+                legislation_id VARCHAR(64) NOT NULL,
+                act_title TEXT NOT NULL,
+                act_norm TEXT NOT NULL,
+                act_id VARCHAR(64),
+                provision VARCHAR(64) NOT NULL,
+                role VARCHAR(32) NOT NULL
+            )""",
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS local_cache_hits INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS local_cache_chars_saved INTEGER NOT NULL DEFAULT 0",
             # Resolved active provider per request (D8, additive, no backfill —
@@ -328,6 +349,9 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_sp_video_captions_meeting_date ON sp_video_captions (meeting_date)",
             # One-shot cleanup (D8): this index duplicated the leading column of
             # uq_local_prompt_cache_key (content_hash, query_hash).
+            "CREATE INDEX IF NOT EXISTS ix_made_under_powers_act_norm ON made_under_powers (act_norm, provision)",
+            "CREATE INDEX IF NOT EXISTS ix_made_under_powers_act_id ON made_under_powers (act_id, provision)",
+            "CREATE INDEX IF NOT EXISTS ix_made_under_powers_lid ON made_under_powers (legislation_id)",
             "DROP INDEX IF EXISTS ix_local_prompt_cache_content_hash",
             # One-shot cleanup: these single-column meeting_id indexes duplicated
             # the leading column of uq_sp_meeting_iob / uq_sp_plenary_meeting_iob

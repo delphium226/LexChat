@@ -555,8 +555,8 @@ def enabling_power_note(args: dict, data: Any) -> str:
         return _enabling_stated_block(lid, recital)
     return (
         f"\n\n[ENABLING POWER — this record does NOT state what {lid} was made "
-        "under. No endpoint we call returns a made-under relation, and this "
-        "record carries no enabling-power recital, so nothing you hold "
+        "under. It carries no enabling-power recital, and the made-under record "
+        "holds no preamble for it either, so nothing you hold "
         f"establishes it. Do NOT write that {lid} was made under, cites, or "
         "relies on any provision as its enabling power, and do not infer one "
         "from the instrument's title or subject matter. If the question turns "
@@ -706,6 +706,12 @@ def record_enabling_power(log: Optional[list], name: str, args: dict, data: Any)
         pass
 
 
+def _and_more(ids: list, n: int) -> str:
+    """The first `n` ids, and how many more (P3.31: a made-under list can name 37)."""
+    shown = ", ".join(ids[:n])
+    return shown + (f" and {len(ids) - n} more" if len(ids) > n else "")
+
+
 def _enabling_limb(log: Optional[list]) -> str:
     """The enabling-power limb of the worker's report block.
 
@@ -727,20 +733,93 @@ def _enabling_limb(log: Optional[list]) -> str:
     if stated:
         return (
             f"Enabling power: retrieved for {len(stated)} of {total} instrument(s) "
-            f"looked at — {', '.join(stated[:8])} (their own preambles state it). "
+            f"looked at — {_and_more(stated, 8)} (their own preambles state it). "
             "For EVERY other instrument named in this report the enabling power "
             "was NOT retrieved and is NOT known: do not write that it was made "
             "under, cites or relies on any provision."
         )
     return (
         f"Enabling power: NOT retrieved for any of the {total} instrument(s) "
-        "looked at. No endpoint we call returns a made-under relation and none "
-        "of these records states one. Do NOT write that any instrument was made "
+        "looked at. None of these records states one, and the made-under "
+        "record supplied no preamble for them. Do NOT write that any instrument was made "
         "under, cites or relies on a provision as its enabling power — say it "
         "could not be verified instead. Ranking near an Act in a keyword search "
         "is not evidence of being made under it."
     )
 
+
+
+# ---------------------------------------------------------------------------
+# B3 — the made-under record (FIX_PLAN P3.31)
+# ---------------------------------------------------------------------------
+#
+# `find_instruments_made_under` reads a harvest of instrument preambles. Each
+# instrument it lists is recorded as an `enabling_power` entry with `stated`,
+# because its own preamble does state the power, so the limb and the footer
+# above do not then tell the Manager or the lawyer that its derivation is
+# unverified. One `made_under` entry per call carries the coverage, which is
+# the record's edge: the Manager and the lawyer never see the tool result, and
+# a short list read without its coverage is how a total gets invented.
+MADE_UNDER_ENTRY = "made_under"
+
+
+def record_made_under(log: Optional[list], data: Any) -> None:
+    """Record one `find_instruments_made_under` result. Never raises."""
+    if log is None:
+        return
+    try:
+        d = json.loads(data) if isinstance(data, str) else dict(data or {})
+        status = d.get("status")
+        if status not in ("found", "act_known_section_not_cited", "act_not_in_record"):
+            return
+        for inst in d.get("instruments") or []:
+            lid = str(inst.get("legislation_id") or "")[:60]
+            if lid:
+                log.append({"tool": "enabling_power", "legislation_id": lid,
+                            "stated": True, "source": "made_under_record"})
+        log.append({
+            "tool": MADE_UNDER_ENTRY, "status": status,
+            "act": str(d.get("matched_act") or d.get("act") or "")[:160],
+            "provision": str(d.get("provision") or "")[:40],
+            "count": int(d.get("count") or 0),
+            "listed": len(d.get("instruments") or []),
+            "coverage": str((d.get("coverage") or {}).get("label") or "")[:200],
+        })
+    except Exception:
+        pass
+
+
+def _made_under_limb(log: Optional[list]) -> str:
+    rows = [e for e in (log or []) if e.get("tool") == MADE_UNDER_ENTRY]
+    if not rows:
+        return ""
+    parts = []
+    for e in rows:
+        prov = e.get("provision", "").replace("/", " ")
+        if e.get("status") == "found":
+            listed = (f", {e.get('listed')} of them listed" if e.get("listed", 0) < e.get("count", 0)
+                      else "")
+            parts.append(f"{e.get('count')} instrument(s) whose own preamble names {prov} of "
+                         f"the {e.get('act')}{listed}")
+        else:
+            parts.append(f"none whose preamble names {prov} of the {e.get('act')}")
+    cov = rows[-1].get("coverage") or "a stated class of instruments"
+    return (
+        "Made-under record consulted: " + "; ".join(parts) + f". It covers {cov} only; "
+        "instruments outside that coverage were not checked, so give the coverage, "
+        "never a total, and never say nothing else was made under the provision."
+    )
+
+
+def _made_under_footer_clause(entries: Optional[list]) -> str:
+    rows = [e for e in (entries or []) if e.get("tool") == MADE_UNDER_ENTRY]
+    if not rows:
+        return ""
+    cov = rows[-1].get("coverage") or "a stated class of instruments"
+    return (
+        f" The record of enabling powers consulted here covers {cov}; anything "
+        "outside that coverage was not checked."
+    )
 
 # ---------------------------------------------------------------------------
 # B3 — the relationship, retrieved (FIX_PLAN P3.5)
@@ -2535,6 +2614,9 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     _enabling = _enabling_limb(log)
     if _enabling:
         lines.append(_enabling)
+    _made_under = _made_under_limb(log)
+    if _made_under:
+        lines.append(_made_under)
     # P3.5 (B3). Same reason again, and it is the sharpest case of it: the
     # sentence "no commencement regulations have been made" is written by the
     # Manager or the DR synthesis, neither of which has seen the change record
@@ -2657,7 +2739,7 @@ def _enabling_footer_clause(entries: Optional[list]) -> str:
         # moves instead.
         return (
             " An instrument's enabling power is recorded here only where its own "
-            f"preamble states it; that applied only to {', '.join(stated[:4])}, "
+            f"preamble states it; that applied only to {_and_more(stated, 4)}, "
             "and for anything else mentioned above the derivation is unverified."
         )
     return (
@@ -3337,6 +3419,7 @@ def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) ->
         f"absent from the law.{_budget_footer_clause(all_entries)}"
         f"{_section_budget_footer_clause(all_entries)}"
         f"{_enabling_footer_clause(all_entries)}"
+        f"{_made_under_footer_clause(all_entries)}"
         f"{_relations_footer_clause(all_entries)}"
         f"{_currency_footer_clause(all_entries)}"
         f"{_lookup_footer_clause(all_entries)}"
@@ -3480,6 +3563,7 @@ def carried_scope_footer(
             "index that is known to be incomplete, so a result reported as not "
             "found in those searches was not found in this index, which is not "
             f"the same as being absent from the law.{_enabling_footer_clause(entries)}"
+            f"{_made_under_footer_clause(entries)}"
             f"{_relations_footer_clause(entries)}"
             f"{_currency_footer_clause(entries)}"
             # P3.7: a follow-up that looked an instrument up, which is not a
@@ -3568,6 +3652,7 @@ def section_scope_footer(searches: Optional[list]) -> str:
             f"{_budget_footer_clause(entries)}"
             f"{_section_budget_footer_clause(entries)}"
             f"{_enabling_footer_clause(entries)}"
+            f"{_made_under_footer_clause(entries)}"
             f"{_relations_footer_clause(entries)}"
             f"{_currency_footer_clause(entries)}"
             f"{_lookup_footer_clause(entries)}"

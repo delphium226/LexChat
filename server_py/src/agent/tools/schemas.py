@@ -144,6 +144,46 @@ WORKER_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "find_instruments_made_under",
+            # P3.31 (bucket B3). The reverse made-under question — "which
+            # instruments were made under section N of Act X" — was every
+            # made-under question of the pre-pilot (6340, 6382, 6383), and no
+            # search can answer it: a ranked search for the Act returns
+            # instruments that merely mention it. This reads a record of
+            # instrument preambles harvested in advance
+            # (`services/made_under_store.py`). Its result states its coverage.
+            "description": (
+                "List the instruments whose own preamble names a given provision as a power "
+                "they were made under: 'which regulations were made under section 95 of the "
+                "Social Security (Scotland) Act 2018?'. Use this for ANY question asking what "
+                "was made under, or uses the power in, a section of an Act; a keyword search "
+                "cannot answer it. Reads a harvested record of instrument preambles, and the "
+                "result says which instruments the record covers: an instrument outside that "
+                "coverage was not checked, so never turn an empty or short list into a "
+                "statement that nothing else was made under the provision."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "act": {
+                        "type": "string",
+                        "description": (
+                            "The enabling Act: its full title as enacted (e.g. 'Social Security "
+                            "(Scotland) Act 2018') or its legislation_id (e.g. 'asp/2018/9')."
+                        ),
+                    },
+                    "section": {
+                        "type": "string",
+                        "description": "The section number (e.g. '95' or '35A').",
+                    },
+                },
+                "required": ["act", "section"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_legislation_sections",
             "description": (
                 "Search for specific sections within a known piece of legislation. "

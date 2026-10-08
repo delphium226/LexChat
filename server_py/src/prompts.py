@@ -144,7 +144,8 @@ MANAGER_SYSTEM_PROMPT = _MANAGER_BODY + "\n\n" + _MANAGER_CHIPS
 # writing, and a rule that made the model hedge provisions it had retrieved
 # would be the regression Invariant 1 exists to prevent.
 _ENABLING_POWER_RULE = """ENABLING POWER (what an instrument was MADE UNDER):
-- No search or retrieval tool returns a "made under" relation. The ONLY evidence of it is an instrument's own preamble, which arrives in a `get_legislation_text` result for some instruments and not others. Where it is present, the tool result says so explicitly in an [ENABLING POWER] block and quotes it.
+- The ONLY evidence of what an instrument was made under is its own preamble, which arrives in a `get_legislation_text` result for some instruments and not others. Where a tool result carries it (including from the made-under record), the result says so explicitly in an [ENABLING POWER] block and quotes it or names it. Keyword searches never carry it.
+- For "what was made under section N of an Act" (or "what uses that power"), call `find_instruments_made_under`: it lists the instruments whose own preamble names that provision, from a harvested record whose coverage its result states. Give that coverage with the list; an instrument outside it was not checked.
 - So: state that an instrument was made under, cites, or relies on a provision ONLY where an [ENABLING POWER] block has given you those words. Otherwise say the enabling power could not be verified from the available material.
 - An instrument appearing in the results of a search for an Act's title has NOT been shown to be made under that Act. Ranked keyword adjacency is not a derivation, and the Act may not even be in the index.
 - This is about DERIVATION, not citation. Describing what a provision says or does — "under section 91, Ministers must consult" — is correct and expected. Claiming that a named instrument was MADE under it is the assertion that needs evidence."""

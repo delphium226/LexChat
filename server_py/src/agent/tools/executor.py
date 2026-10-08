@@ -22,6 +22,7 @@ from ...utils.instrument_lookup import (
     legislation_id as lookup_legislation_id,
     lookup_args,
 )
+from ...utils.made_under import MADE_UNDER_TOOL
 from ...utils.redact import redact_args
 from ...utils import schedule_units
 from ..provider_factory import get_request_provider_config
@@ -530,6 +531,13 @@ async def execute_worker_tool(
                     call_id=call_id, tool_name=name,
                 )
                 return json.dumps(slimmed)
+
+            elif name == MADE_UNDER_TOOL:
+                # P3.31: a DB read of the made-under record, no external call.
+                from ...services.made_under_store import query as made_under_query
+                result = await made_under_query(str(args.get("act") or ""),
+                                                str(args.get("section") or ""))
+                return json.dumps(result, ensure_ascii=False)
 
             elif name == LOOKUP_TOOL:
                 # P3.7 (bucket B5): the one question a ranked search cannot

@@ -45,6 +45,8 @@ from ..utils.instrument_lookup import lookup_args
 from ..utils.instrument_lookup import legislation_id as lookup_legislation_id
 from .tools.executor import fetch_provision_list, fetch_text_with_schedules
 from ..utils.instrument_lookup import LOOKUP_TOOL
+from ..utils.made_under import MADE_UNDER_TOOL, made_under_note
+from ..utils.search_scope import record_made_under
 from ..utils.discovery_budget import (
     legislation_budget_blocks,
     legislation_stop_message,
@@ -736,6 +738,42 @@ async def schedule_route_block(
     return "".join(out)
 
 
+
+def _enabling_subject(name: str, args: dict, raw_result) -> str:
+    """The one instrument a text read, section search or lookup was about."""
+    if name == LOOKUP_TOOL:
+        try:
+            return str((json.loads(raw_result) or {}).get("legislation_id") or "")
+        except Exception:
+            return ""
+    return str((args or {}).get("legislation_id") or "")
+
+
+async def stored_enabling_note(lid: str, search_log: Optional[list]) -> str:
+    """P2.3's permitting ENABLING POWER block from the made-under record (P3.31),
+    or "". Once per instrument per run; never raises."""
+    try:
+        from ..utils.search_scope import _enabling_stated_block, _is_secondary
+        lid = str(lid or "").strip().strip("/")
+        if not lid or not _is_secondary(lid):
+            return ""
+        if any(e.get("tool") == "enabling_power" and e.get("legislation_id") == lid[:60]
+               and e.get("stated") for e in (search_log or [])):
+            return ""
+        from ..services.made_under_store import recital_for
+        recital = await recital_for(lid)
+        if not recital:
+            return ""
+        if search_log is not None:
+            search_log.append({"tool": "enabling_power", "legislation_id": lid[:60],
+                               "stated": True, "source": "made_under_record"})
+        return _enabling_stated_block(
+            lid, "... " + recital,
+            source=f"the made-under record (the as-made preamble of {lid}, harvested from "
+                   "legislation.gov.uk)")
+    except Exception:
+        return ""
+
 async def run_worker_tool(
     name: str,
     args: dict,
@@ -1295,6 +1333,19 @@ async def run_worker_tool(
         # P3.25: the lookup record carries the same `description`, where most
         # recitals sit. Only the permitting block, and only where it has one.
         enabling_note = lookup_enabling_note(raw_result)
+    elif name == MADE_UNDER_TOOL:
+        # P3.31: the reverse question, answered from the made-under record.
+        enabling_note = made_under_note(raw_result)
+        record_made_under(search_log, raw_result)
+    # P3.31, the forward question: where the record read here carries no
+    # recital (0 of 28 SSIs at `/legislation/text`, P2.3), the made-under
+    # record may hold the instrument's as-made preamble. Only the permitting
+    # block is ever built from it, once per instrument per run, and it
+    # replaces P2.3's forbidding block for that instrument only.
+    if name in ("get_legislation_text", "search_legislation_sections", LOOKUP_TOOL)             and "DOES state what" not in enabling_note:
+        stored = await stored_enabling_note(_enabling_subject(name, args, raw_result), search_log)
+        if stored:
+            enabling_note = stored
     record_enabling_power(search_log, name, args, raw_result)
 
     # P3.5 (B3): the other four relations of the bucket, which ARE retrievable.
@@ -1347,7 +1398,10 @@ async def run_worker_tool(
     _audit_summarised = False
     _audit_local_hit = False
     _audit_truncated = False
-    if len(result) > get_summarise_threshold() or _over_budget:
+    # P3.31: the made-under list is bounded by construction (`MAX_LISTED`,
+    # compact rows), and a summary that dropped instruments from it would
+    # undo the tool, so it always reaches the Worker whole.
+    if (len(result) > get_summarise_threshold() or _over_budget) and name != MADE_UNDER_TOOL:
         if _over_budget and len(result) <= get_summarise_threshold():
             logger.info(
                 f"[Worker] Context budget reached "
