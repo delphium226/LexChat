@@ -951,21 +951,31 @@ async def process_user_request(
 
         return f"Error: Unknown manager tool {name}"
 
+    # P4.12: a Manager call carries the Worker's output cap, and while a
+    # usable worker report is in hand (the very list P4.2's fallback below
+    # reads, so the two cannot disagree) its heavy empty is not retried and
+    # its idle timeout is retried once, not twice: the fallback with those
+    # reports is what the lawyer would get anyway, minutes later. With none in
+    # hand the retries are kept, so a reply lost before any research is never
+    # served the bare notice sooner than it was.
     final = await chat_loop_fn(
         final_messages, model, cancel_event, num_ctx,
         manager_tools, manager_tool_executor, on_chunk,
         emit_tool_details=emit_tool_details,
         timing_collector=timing_collector,
+        manager_call=True,
+        manager_report_in_hand=lambda: bool(worker_reports),
     )
 
     # P4.2 (B13). Last line of defence, above every strip below - all of which
     # are no-ops on an empty body, so without this the scope footer is appended
     # to nothing and the lawyer is shown a footer with no answer above it. That
     # is the exact shape of all nine blank turns measured across the replay
-    # directories. `chat_loop` has already retried three times by the time this
-    # runs, so reaching here means the provider returned nothing on every
-    # attempt; the choice is between the research already in hand, labelled, and
-    # a blank screen.
+    # directories. `chat_loop` has already retried by the time this runs (up to
+    # three attempts; since P4.12 fewer after a heavy empty or an idle timeout
+    # with a worker report in hand), so reaching here means the provider
+    # returned nothing on every attempt it was given; the choice is between the
+    # research already in hand, labelled, and a blank screen.
     if is_empty_completion(final.get("content"), None):
         logger.error(
             "[Manager] Empty completion returned as the answer - "

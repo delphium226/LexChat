@@ -177,6 +177,8 @@ async def run_halt_writeup(
     limit: int,
     log_prefix: str = "[ChatLoop]",
     worker_call: bool = False,
+    manager_call: bool = False,
+    manager_report_in_hand: Optional[Callable] = None,
 ) -> str:
     """One bounded, tool-free call at the step cap. Returns the write-up or "".
 
@@ -190,6 +192,8 @@ async def run_halt_writeup(
 
     `worker_call` (P4.10) is the calling loop's own, passed on so the write-up
     round of a worker run is capped and retried as every other round of it is.
+    `manager_call` and `manager_report_in_hand` (P4.12) are passed on likewise,
+    so a Manager loop's write-up round is governed as its other rounds are.
     """
     async def _no_tools(name: str, args: dict) -> str:
         return _NO_TOOLS_AT_CAP
@@ -204,6 +208,8 @@ async def run_halt_writeup(
             max_turns=turn + 1,
             _final_round=True,
             worker_call=worker_call,
+            manager_call=manager_call,
+            manager_report_in_hand=manager_report_in_hand,
         )
     except Exception as e:  # noqa: BLE001 — fail-soft by design; see docstring
         logger.warning(

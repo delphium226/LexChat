@@ -13,7 +13,9 @@ from ..utils.empty_completion import (
     WORKER_MAX_OUTPUT_TOKENS,
     build_probe,
     is_empty_completion,
+    is_idle_timeout,
     report_empty_completion,
+    report_in_hand_now,
     should_retry_empty,
 )
 from ..utils.discovery_budget import set_react_round
@@ -160,6 +162,8 @@ async def chat_loop(
     max_turns: int = 20,
     _final_round: bool = False,
     worker_call: bool = False,
+    manager_call: bool = False,
+    manager_report_in_hand: Optional[Callable[[], bool]] = None,
 ) -> dict:
     """Core ReAct loop using OpenRouter's OpenAI-compatible streaming API.
 
@@ -167,7 +171,13 @@ async def chat_loop(
     carries `max_tokens` (WORKER_MAX_OUTPUT_TOKENS), and an empty completion
     that reasoned heavily is not retried. It is forwarded through the ReAct
     recursion and the step-cap write-up, so every call a worker run makes has
-    it. Every other caller's payload and retry are unchanged.
+    it.
+
+    `manager_call` (P4.12) is set by `process_user_request` alone: the payload
+    carries the same cap, and while `manager_report_in_hand()` says a usable
+    worker report is in hand, a heavy empty is not retried and an idle timeout
+    is retried once, not twice. Forwarded the same way. Every other caller's
+    payload and retry are unchanged.
     """
     if cancel_event and cancel_event.is_set():
         raise asyncio.CancelledError("Aborted")
@@ -193,6 +203,8 @@ async def chat_loop(
             chat_loop, messages, model, cancel_event, num_ctx, on_chunk,
             emit_tool_details, timing_collector, _turn, max_turns,
             log_prefix="[OpenRouter]", worker_call=worker_call,
+            manager_call=manager_call,
+            manager_report_in_hand=manager_report_in_hand,
         )
         if writeup:
             logger.info("[OpenRouter] Step cap: partial findings written up (%d chars)", len(writeup))
@@ -217,9 +229,12 @@ async def chat_loop(
     if openai_tools:
         payload["tools"] = openai_tools
         payload["tool_choice"] = "auto"
-    if worker_call:
+    if worker_call or manager_call:
         # P4.10: one attempt's output, reasoning included, is bounded. On the
         # seam a capped runaway ended at ~96% of the cap instead of ~62,900.
+        # P4.12: the Manager carries the same cap. It cannot bind on any
+        # stored clean Manager call (the longest window, 42 s, is ~7,600
+        # tokens at the stored runaways' rate).
         payload["max_tokens"] = WORKER_MAX_OUTPUT_TOKENS
 
     total_chars =sum(len(str(m.get("content", "") or "")) for m in messages)
@@ -242,6 +257,9 @@ async def chat_loop(
     # httpx applies `read` to the wait for response headers too, so this doubles
     # as a time-to-first-byte cap on the provider's prefill.
     stream_timeout = httpx.Timeout(None, connect=30.0, read=180.0)
+
+    # P4.12: this call's attempts that ended in an upstream idle timeout.
+    idle_timeouts_seen = 0
 
     for attempt in range(_MAX_STREAM_ATTEMPTS):
         if cancel_event and cancel_event.is_set():
@@ -367,10 +385,17 @@ async def chat_loop(
                 )
                 # P4.10/P4.11: a worker's heavy empty or upstream idle timeout
                 # is not retried; it goes to P4.5's lost-report label and the
-                # Manager re-delegates.
+                # Manager re-delegates. P4.12: on a Manager call with a usable
+                # worker report in hand, a heavy empty is not retried and an
+                # idle timeout only once; the reply goes to P4.2's fallback.
                 retrying = should_retry_empty(
                     probe, attempt=attempt, attempts_max=_MAX_STREAM_ATTEMPTS,
-                    worker_call=worker_call)
+                    worker_call=worker_call, manager_call=manager_call,
+                    report_in_hand=(manager_call
+                                    and report_in_hand_now(manager_report_in_hand)),
+                    earlier_idle_timeouts=idle_timeouts_seen)
+                if is_idle_timeout(probe):
+                    idle_timeouts_seen += 1
                 report_empty_completion(probe, retrying=retrying)
                 if retrying:
                     # The abandoned attempt was billed. Bank it before the reset
@@ -413,13 +438,15 @@ async def chat_loop(
             logger.error(f"[OpenRouter] HTTP {e.response.status_code}: {body}")
             raise
 
-    if worker_call and finish_reason == "length" and full_content.strip():
+    if (worker_call or manager_call) and finish_reason == "length" and full_content.strip():
         # P4.10 watch item: the cap ended a call that was still writing, so the
         # report may be cut. By cost it should be rare; this is how to see it.
+        # P4.12: the same watch on a Manager call, whose content is the answer.
         logger.warning(
-            f"[OpenRouter] Worker call reached the {WORKER_MAX_OUTPUT_TOKENS}-token "
-            f"output cap with {len(full_content)} chars of content — the report "
-            f"may be cut (react_turn={_turn})"
+            f"[OpenRouter] {'Worker' if worker_call else 'Manager'} call reached the "
+            f"{WORKER_MAX_OUTPUT_TOKENS}-token output cap with {len(full_content)} chars "
+            f"of content — the {'report' if worker_call else 'answer'} may be cut "
+            f"(react_turn={_turn})"
         )
 
     # Record timing
@@ -537,6 +564,8 @@ async def chat_loop(
             max_turns=max_turns,
             _final_round=_final_round,
             worker_call=worker_call,
+            manager_call=manager_call,
+            manager_report_in_hand=manager_report_in_hand,
         )
 
     return assistant_message
