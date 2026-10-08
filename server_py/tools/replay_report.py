@@ -1655,7 +1655,28 @@ def retrieved_enabling(turn: dict) -> list:
             for lid, descr in cands:
                 if descr and _DERIV_RECITAL.search(descr) and lid not in [x[0] for x in out]:
                     out.append((lid, descr[:200]))
+            # P3.31: the made-under record is the third route, two ways. Its
+            # tool lists the instruments whose own preamble names a provision
+            # (the class claim, "37 instruments whose preambles state ...",
+            # rests on that list); and a text read, section search or lookup
+            # of an SSI whose LEX record has no recital is handed the stored
+            # one in its ENABLING POWER block, which is in `final_result`, not
+            # `raw_result`. Unread, every claim the record supports grades as
+            # unverified (9 of 9 turns of `wave4_p331`).
+            if o.get("tool") == "find_instruments_made_under" and o.get("status") == "found":
+                for inst in o.get("instruments") or []:
+                    lid = str(inst.get("legislation_id") or "")
+                    if lid and lid not in [x[0] for x in out]:
+                        out.append((lid, f"made-under record: {o.get('provision')} of "
+                                         f"{o.get('matched_act')}"))
+        for tl in dg.get("tools", []):
+            for m in _STORED_RECITAL.finditer(str(tl.get("final_result") or "")):
+                if m.group(1) not in [x[0] for x in out]:
+                    out.append((m.group(1), "made-under record (stored recital)"))
     return out
+
+
+_STORED_RECITAL = re.compile(r"the made-under record \(the as-made preamble of ([a-z]+/\d{4}/\d+)")
 
 
 # P2.3's own clause on the lawyer-facing footer contains the words "made under"

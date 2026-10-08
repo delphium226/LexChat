@@ -250,3 +250,21 @@ def test_recital_lookup_touches_no_database_until_the_record_is_loaded(monkeypat
     monkeypatch.setattr(db, "async_session_maker", boom)
     monkeypatch.setitem(store._STATE, "available", False)
     assert asyncio.run(store.recital_for("ssi/1901/3")) is None
+
+
+def test_p23_grader_counts_the_made_under_record_as_evidence():
+    # Without this, every claim the record supports graded as unverified
+    # (9 of 9 turns of wave4_p331).
+    from tools.replay_report import retrieved_enabling
+    listed = json.dumps(_found(2))
+    stored = ("..." + "\n\n[ENABLING POWER — the made-under record (the as-made preamble of "
+              "ssi/1901/9, harvested from legislation.gov.uk) DOES state what ssi/1901/9 was made under]")
+    turn = {"audit": {"delegations": [{"tools": [
+        {"name": mu.MADE_UNDER_TOOL, "raw_result": listed, "final_result": listed},
+        {"name": "search_legislation_sections", "raw_result": "{}", "final_result": stored},
+    ]}]}}
+    assert [x[0] for x in retrieved_enabling(turn)] == ["ssi/1901/1", "ssi/1901/2", "ssi/1901/9"]
+    # A result that found nothing is no evidence for any instrument.
+    empty = json.dumps(store.build_result("Gadget Act 1902", "1", "section/1", [], [], COV))
+    assert retrieved_enabling({"audit": {"delegations": [{"tools": [
+        {"name": mu.MADE_UNDER_TOOL, "raw_result": empty}]}]}}) == []
