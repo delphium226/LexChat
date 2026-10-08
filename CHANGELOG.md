@@ -90,6 +90,13 @@ Schedules and annexes:
   cut at its own heading where it cuts cleanly, or the whole of it summarised
   for the question; where the index holds no schedule for the instrument, say
   so. Both the quick-lookup and the research steps do this (P3.12).
+- When a schedule fetched for a search is too large to hand over whole and
+  the search names no paragraph, hand over the schedule's paragraph headings
+  and the paragraphs whose headings share a word with the search, each cut at
+  its own heading, instead of one summary of the whole schedule. Where a
+  schedule is still summarised, say that it was retrieved and that the summary
+  is a condensed reading of it, so a paragraph the summary leaves out is not
+  read as missing (P3.12).
 - Read a list of schedule paragraphs separated only by spaces ("paragraphs
   42 43 44") as all of them, not just the first (P3.12).
 - Where the index's complete list of an instrument's provisions has been read
@@ -149,7 +156,12 @@ run retrieved, read and cited against a rubric (P3.22); `cmcdates` lists every
 commencement date an answer states and whether a retrieved source states it
 (P3.21); `jurisdiction` checks that a reply names its jurisdiction (P3.4); with
 two scripted replays of P3.4's opening turns. `lex_probe --caselaw`'s count
-and date checks now send the product's own request (P3.22).
+and date checks now send the product's own request (P3.22). `authorities`
+counts an out-of-corpus authority as named only by its citation or its full
+party names, never by one surname, and reads a link whose label holds a
+bracketed citation (P3.22); `negcurrency` reads both stored shapes of a
+section-search result (P3.24); `commencements` grades scripted replays
+(P3.21); `corpus`'s description labels are true before and after P3.6.
 
 Planning tools only, no product change: a new `python -m tools.plan_lint`
 checks the fix plan's structure (one table cell per column, every row in the
