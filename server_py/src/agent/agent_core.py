@@ -1159,13 +1159,20 @@ def _last_user_content(messages: list) -> str:
     return ""
 
 
-def _build_step_brief(step: dict, approved_plan: dict, user_query: str) -> str:
+def _build_step_brief(step: dict, approved_plan: dict, user_query: str,
+                      earlier_reports: Optional[list] = None) -> str:
     """Build a self-contained worker brief for one approved plan step.
 
     The Worker has no access to the conversation or the rest of the plan, so the
     brief carries the original question and the plan's scope note as context.
     Identifiers in the step text are passed through verbatim (NO SPECULATION —
     the planner was instructed to copy them exactly as the user gave them).
+
+    P3.10: `earlier_reports` are the reports of the steps already run. A step
+    that says it works on what an earlier step identified gets one code-written
+    line naming the instruments those reports cite (`utils/step_handover.py`),
+    instead of re-deriving the list with its own searches. It sits before the
+    CONTEXT sentence, which stays the brief's last word.
     """
     parts = [f"RESEARCH TASK: {step['title']}"]
     detail = step.get("detail") or ""
@@ -1174,6 +1181,13 @@ def _build_step_brief(step: dict, approved_plan: dict, user_query: str) -> str:
     scope_note = approved_plan.get("scope_note") or ""
     if scope_note:
         parts.append(f"SCOPE: {scope_note}")
+    if earlier_reports:
+        from ..utils.step_handover import handover_line, works_on_earlier_list
+
+        if works_on_earlier_list(step):
+            line = handover_line(earlier_reports)
+            if line:
+                parts.append(line)
     if user_query:
         parts.append(
             "CONTEXT: This task is one step of a wider research plan answering the "
@@ -1303,7 +1317,10 @@ async def run_deep_research(
         if timing_collector:
             timing_collector.record_delegation()
 
-        brief = _build_step_brief(step, approved_plan, user_query)
+        # P3.10: the steps already run, so a step that works on their list is
+        # handed it. A lost step's content is its label and names no instrument.
+        brief = _build_step_brief(step, approved_plan, user_query,
+                                  [f["content"] for f in step_findings])
         logger.info(f"[DeepResearch] Step {i}/{len(steps)}: {title}")
         # run_worker_agent opens the audit delegation, but only this loop knows
         # the step number and the approved title — hand them over first.
