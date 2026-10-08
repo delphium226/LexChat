@@ -890,11 +890,13 @@ def fetched_block(lid: str, unit: ScheduleUnit, url: str, pieces: list, how: str
             tail = (f" Code retrieved the whole of {name}, {total_chars:,} characters, and "
                     "below is a summary of that retrieved text, condensed for this research "
                     "question.")
-        tail += (f" A paragraph the summary leaves out is still part of the retrieved "
-                 f"{name}. Cite {name} for what the summary says, and quote its words only "
-                 "from text shown verbatim.")
+        tail += (f" A paragraph the summary leaves out is still part of the retrieved text "
+                 f"of {name}. Cite {name} for what the summary says, and quote its words "
+                 "only from text shown verbatim.")
     elif how == MATCHED:
-        tail = (f" {name} runs to {total_chars:,} characters, longer than one result hands "
+        # The unit opens this sentence: "the Schedule" is capitalised there.
+        opener = name[:1].upper() + name[1:]
+        tail = (f" {opener} runs to {total_chars:,} characters, longer than one result hands "
                 "over whole, so below are its paragraph headings, in order, and then each "
                 "paragraph whose heading shares a word with this search's query, cut from "
                 "the retrieved text and labelled. To read another headed paragraph in its "

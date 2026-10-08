@@ -1342,6 +1342,12 @@ def _fetched_wording_variants() -> list:
                          reason=su.sole_schedule_reason(lid)).strip(),
         su.fetched_block(lid, bare, url, [("", "")], su.SUMMARY, total_chars=9000,
                          reason=su.sole_schedule_reason(lid)).strip(),
+        # Batch 10 A (user's fixes, 2026-10-08): the unlabelled unit's own
+        # wording, "The Schedule runs to" and "the retrieved text of the Schedule".
+        su.fetched_block(lid, bare, url, [("", "")], su.MATCHED, total_chars=92066,
+                         reason=su.sole_schedule_reason(lid)).strip(),
+        su.fetched_block(lid, bare, url, [("", "")], su.SUMMARY, total_chars=9000,
+                         summary_of=su.CUT).strip(),
     ]
     assert all(texts) and len(set(texts)) == len(texts), texts
     return texts

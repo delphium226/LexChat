@@ -1241,6 +1241,31 @@ def test_a_summarised_cut_says_it_is_the_cut_that_was_summarised(monkeypatch):
     assert "paragraph headings" not in out
 
 
+def test_the_wording_reads_for_an_unlabelled_schedule():
+    """User decision (2026-10-08): on "the Schedule" with no label, the
+    summary tail says "the retrieved text of the Schedule" (never "the
+    retrieved the Schedule"), and the MATCHED tail, which opens a sentence
+    with the unit, starts "The Schedule runs to"; "Schedule 5 runs to" is
+    unchanged."""
+    bare = su.ScheduleUnit("schedule", "")
+    url = f"{URI}/schedule"
+    for of in (su.WHOLE, su.CUT):
+        out = su.fetched_block(LID, bare, url, [("", "")], su.SUMMARY, total_chars=9000,
+                               summary_of=of)
+        assert (" A paragraph the summary leaves out is still part of the retrieved text of "
+                "the Schedule. Cite the Schedule for what the summary says, and quote its "
+                "words only from text shown verbatim.") in out, of
+        assert "retrieved the Schedule" not in out
+    out = su.fetched_block(LID, bare, url, [("", "")], su.MATCHED, total_chars=92066)
+    assert ("provision list. The Schedule runs to 92,066 characters, longer than one result "
+            "hands over whole,") in out
+    assert "name the Schedule and its number from the list below" in out
+    assert ". the Schedule" not in out
+    numbered = su.fetched_block(LID, su.ScheduleUnit("schedule", "5"), url, [("", "")],
+                                su.MATCHED, total_chars=92066)
+    assert "provision list. Schedule 5 runs to 92,066 characters," in numbered
+
+
 def test_the_heading_list_is_capped_and_cleaned():
     long_head = "Widget " + "very " * 60 + "long"
     text = "SCHEDULE 7 MANY\n" + "".join(
