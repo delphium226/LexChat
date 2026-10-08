@@ -118,3 +118,6 @@ docs/prepilot-fixes/evidence/lawyer_pack/
 # model and feature flags so `restore` can put them back. Per-machine, and it
 # must not be committed or a restore on one box would rewrite another's config.
 server_py/tools/.replay_pin_state.json
+# P3.31 harvest output (public legislation.gov.uk data, regenerable with tools.madeunder_probe; large)
+docs/prepilot-fixes/evidence/madeunder/*.jsonl
+docs/prepilot-fixes/evidence/madeunder/*.titles.json

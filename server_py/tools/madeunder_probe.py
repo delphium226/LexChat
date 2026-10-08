@@ -1,0 +1,619 @@
+#!/usr/bin/env python
+"""Harvest SI enabling-power recitals for FIX_PLAN P3.31 (the made-under experiment).
+
+**The question this answers.** "Which SIs were made under section N of the X Act?"
+(6340, 6382, 6383). No live call reaches that relation: LEX has no made-under
+endpoint (P5.1), its `description` carries a recital for some instruments only
+(P2.3, P3.30), and the reverse direction needs a scan of every SI. The recital
+itself ("... in exercise of the powers conferred by section 95 of the Social
+Security (Scotland) Act 2018 and all other powers enabling them to do so ...")
+is in each instrument's XML, `SecondaryPreamble`, as plain text with no
+`<Citation>` markup. This probe reads it, cuts the recital out of the
+preamble, parses the powers, and resolves each Act title exactly.
+
+**Read `/made/data.xml`, not `/data.xml`.** A revoked SI's revised XML has its
+preamble dotted out (SSI 2024/100); the as-made version keeps it. Older SIs
+that legislation.gov.uk holds only as revised fall back to `/data.xml`, and
+the record says which version was read.
+
+**Three traps the parser exists for**, each found on a real preamble in the
+feasibility study (i.AI's Lex Graph finder fell into all three):
+
+* the recital ends where the powers end: "after consulting the committee ...
+  under section 413 of the Insolvency Act 1986" is a consultation duty, not a
+  power, so the window stops at "with the concurrence", "after consulting",
+  "and (of) all other powers" and their relatives (`_WINDOW_END`);
+* an Act title may contain parentheses and lower-case words ("Community Care
+  and Health (Scotland) Act 2002"), so the title pattern admits both;
+* provisions come as lists and anaphora: "sections 1(2)(a), 2 and 23(4) of",
+  "section 2(2) of, and paragraph 1A of Schedule 2 to, the ... Act 1972",
+  "of that Act", "the 2018 Act".
+
+**Title resolution is exact or nothing.** `GET /id?title=<title>&type=primary`
+answers 301 with one identifier on an exact match; anything else is recorded
+as unresolved, never guessed (Lex Graph took the shortest of several matches).
+legislation.gov.uk answers in regnal form for pre-1963 Acts
+(`ukpga/Eliz2/10-11/47`), so both that and LEX's chronological form are kept.
+
+**Routes.** Direct to www.legislation.gov.uk by default. LEX's
+`/legislation/proxy/<encoded path>` returns the same as-made XML byte for byte
+(checked 2026-10-08 on `ssi/2024/100/made/data.xml`), so `--via lex` reads it
+through the host the target already calls. A harvest goes direct, so it does
+not draw on LEX's shared rate limit.
+
+**Every run is read-only, paced (`--gap`, default 0.3 s, inside the site's
+fair-use limit of 1,500 requests per 5 minutes), capped (`--max-calls`,
+enforced in code), sends an identifying User-Agent, and resumes**: a harvest
+appends one JSON line per instrument and skips ids already in the file.
+
+    python -m tools.madeunder_probe --made ssi/2024/100 uksi/2013/1046
+    python -m tools.madeunder_probe --harvest ssi 2018-2026 --out FILE
+    python -m tools.madeunder_probe --harvest uksi 1962-1981 --title scotland --out FILE
+    python -m tools.madeunder_probe --resolve FILE           # Act titles -> ids, cached in FILE.titles.json
+    python -m tools.madeunder_probe --reverse FILE asp/2018/9 95
+    python -m tools.madeunder_probe --loose FILE "Social Security (Scotland) Act 2018" 95
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+from typing import Iterable, Optional
+from urllib.parse import quote
+
+try:
+    from tools.lgu_probe import LEX, LGU, PacedClient, proxy_path, _utf8_stdout
+except ImportError:  # run as a script from tools/
+    from lgu_probe import LEX, LGU, PacedClient, proxy_path, _utf8_stdout  # type: ignore
+
+USER_AGENT = "AILA-research-probe (FIX_PLAN P3.31; read-only; paced)"
+DEFAULT_GAP_S = 0.3
+
+# --------------------------------------------------------------------------
+# Preamble and recital window
+# --------------------------------------------------------------------------
+
+_WS = re.compile(r"\s+")
+
+
+def preamble_text(xml_text: str) -> tuple:
+    """(state, text) for an instrument's `SecondaryPreamble`.
+
+    state: `ok`, `none` (no preamble element) or `elided` (dotted out, as on a
+    revoked instrument's revised XML).
+    """
+    m = re.search(r"<SecondaryPreamble\b.*?</SecondaryPreamble>", xml_text, re.S)
+    if not m:
+        return "none", ""
+    raw = re.sub(r"<[^>]+>", " ", m.group(0))
+    for ent, ch in (("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"), ("&quot;", '"'),
+                    ("&apos;", "'"), ("&#8217;", "’"), ("&#160;", " ")):
+        raw = raw.replace(ent, ch)
+    text = _WS.sub(" ", raw).strip()
+    # Spacing around punctuation is an artefact of tag removal.
+    text = re.sub(r"\s+([,.;:)])", r"\1", text)
+    text = re.sub(r"\(\s+", "(", text)
+    letters = sum(c.isalpha() for c in text)
+    if letters < 20:
+        return "elided", text
+    return "ok", text
+
+
+_WINDOW_START = re.compile(
+    r"in (?:the )?exercise of (?:the |his |her |their |its |all )?(?:powers?|functions?)"
+    r"|exercising (?:the )?powers?"
+    r"|powers? (?:in that behalf )?conferred (?:(?:on|upon) (?:\w+ ){0,3})?by"
+    # An Order in Council: "in pursuance of the power in section 179(1)(a) ...".
+    r"|in pursuance of (?:the )?powers?(?: (?:in|under|conferred by))?"
+    r"|by virtue of (?:the )?powers?"
+    # An Act of Sederunt: "makes this Act of Sederunt under the powers ...".
+    r"|under (?:the )?powers?",
+    re.I)
+_WINDOW_END = re.compile(
+    r"\band (?:of )?(?:all|every) other (?:powers?|enabling)"
+    r"|\band all powers enabling"
+    r"|\bwith the (?:consent|concurrence|approval|agreement)\b"
+    r"|\bafter (?:consult|carrying out|having)"
+    r"|\bhaving (?:consulted|regard|carried|had)\b"
+    r"|\bin accordance with section\b"
+    r"|\b(?:a )?draft of (?:this|these|the) (?:instrument|regulations|order|rules|scheme)"
+    r"|\bhereby\b|\bmakes? the following\b|\bmake(?:s)? this\b"
+    r"|[:;]",
+    re.I)
+
+
+def recital_window(preamble: str) -> str:
+    """The span that lists the enabling powers, or "" if no recital is found."""
+    m = _WINDOW_START.search(preamble)
+    if not m:
+        return ""
+    rest = preamble[m.end():]
+    e = _WINDOW_END.search(rest)
+    return (rest[: e.start()] if e else rest[:1200]).strip(" ,")
+
+
+# --------------------------------------------------------------------------
+# Powers: provisions + Act
+# --------------------------------------------------------------------------
+
+_KIND = (r"(?i:sections?|ss?\.|paragraphs?|paras?\.|articles?|arts?\.|regulations?|regs?\."
+         r"|rules?|r\.|Schedules?|Sch\.|Parts?)")
+_NUM = r"\d+[A-Z]{0,3}(?:\([^)\s]{1,6}\))*"
+# A list item may be a bare pinpoint of the previous number ("85(2)(g) and (5)
+# and 95"), and the separator may be ", and" ("79(1), and 95"): missing either
+# dropped s.95 from two of the 37 s.95 instruments in the first harvest.
+_SEP = r"(?:\s*,?\s*(?:and|or|to)\s+|\s*,\s*)"
+_LIST = rf"{_NUM}(?:{_SEP}(?:{_NUM}|\([^)\s]{{1,6}}\)(?:\([^)\s]{{1,6}}\))*))*"
+# An Act title: capitalised start, then words that may be lower-case or carry
+# parentheses or dots ("etc.", "(No. 2)"), up to "Act|Measure YYYY". Bounded so
+# it cannot run across a whole recital.
+_TITLE = (r"(?!(?:Schedule|Part|Section|Article|Regulation|Paragraph|Chapter)s?\b)"
+          r"[A-Z][A-Za-z'’(),.\-]*(?:\s+[A-Za-z0-9'’(),.\-&]+){0,16}?\s+(?:Act|Measure)\s+\d{4}")
+_ACT_REF = rf"(?P<title>{_TITLE})|(?P<that>that Act|the said Act|that Measure)|the (?P<year>\d{{4}}) Act"
+_CHUNK = re.compile(
+    rf"(?P<prov>(?:{_KIND})\s+{_NUM}.*?)"
+    rf",?\s+(?:of|to|in),?\s+(?:the\s+)?(?:{_ACT_REF})(?![A-Za-z])",
+    re.S)
+_ROLE = re.compile(r"\bas (?:applied|extended|read with|modified|amended)(?: by)?\s*$", re.I)
+_PIECE = re.compile(rf"(?P<kind>{_KIND})\s+(?P<list>{_LIST})", re.I)
+
+
+def _kind_name(k: str) -> str:
+    k = k.lower().rstrip(".")
+    if k.startswith("s") and not k.startswith("sch"):
+        return "section"
+    if k.startswith("sch"):
+        return "schedule"
+    if k.startswith("para"):
+        return "paragraph"
+    if k.startswith("art"):
+        return "article"
+    if k.startswith("reg"):
+        return "regulation"
+    if k in ("r", "rule", "rules"):
+        return "rule"
+    if k.startswith("part"):
+        return "part"
+    return k
+
+
+def _numbers(lst: str) -> list:
+    out = []
+    # A bare "(5)" is a pinpoint of the previous number, not a new section:
+    # `_NUM` needs a leading digit, so it is skipped here.
+    for m in re.finditer(rf"(?<![\w(]){_NUM}", lst):
+        n = m.group(0)
+        out.append(n)
+    # "4 to 7": expand plain integer ranges only.
+    rng = re.findall(r"(\d+)\s+to\s+(\d+)\b", lst)
+    for a, b in rng:
+        a, b = int(a), int(b)
+        if 0 < b - a <= 50:
+            out.extend(str(i) for i in range(a + 1, b))
+    return out
+
+
+def provisions(prov: str) -> list:
+    """`provision` keys for one chunk: "section/95", "schedule/2/paragraph/1A".
+
+    The pinpoint (the bracketed subsection) is dropped from the key and kept
+    in `pinpoints`, because the reverse question is asked at section level.
+    """
+    pieces = [(_kind_name(m.group("kind")), _numbers(m.group("list")))
+              for m in _PIECE.finditer(prov)]
+    keys = []
+    sched = None
+    for kind, nums in pieces:
+        if kind == "schedule" and nums:
+            sched = re.sub(r"\(.*", "", nums[0])
+    for kind, nums in pieces:
+        for n in nums:
+            base = re.sub(r"\(.*", "", n)
+            if kind == "schedule":
+                key = f"schedule/{base}"
+            elif kind == "paragraph" and sched:
+                key = f"schedule/{sched}/paragraph/{base}"
+            else:
+                key = f"{kind}/{base}"
+            if key not in keys:
+                keys.append(key)
+    # A bare "Schedule 2" that also named paragraphs is covered by them.
+    if sched and any(k.startswith(f"schedule/{sched}/") for k in keys):
+        keys = [k for k in keys if k != f"schedule/{sched}"]
+    return keys
+
+
+def parse_powers(window: str) -> list:
+    """Each enabling power in a recital window, in order.
+
+    `{"act": title or None, "anaphor": text or None, "provisions": [...],
+      "role": "power" | "as applied by" | ..., "text": the chunk}`.
+    Anaphora ("that Act", "the 2018 Act") are resolved to an earlier title in
+    the same window; one left unresolved keeps `act: None`.
+    """
+    out, titles = [], []
+    for m in _CHUNK.finditer(window):
+        prov = m.group("prov")
+        # A chunk's provision text must not itself contain an Act title: if it
+        # does, the non-greedy match crossed a boundary the pattern missed.
+        if re.search(rf"{_TITLE}", prov):
+            prov = re.split(r"\s+(?:of|to),?\s+(?:the\s+)?[A-Z]", prov)[-1]
+        act, anaphor = None, None
+        if m.group("title"):
+            act = _clean_title(m.group("title"))
+            titles.append(act)
+        elif m.group("that"):
+            anaphor = m.group("that")
+            act = titles[-1] if titles else None
+        elif m.group("year"):
+            anaphor = f"the {m.group('year')} Act"
+            act = next((t for t in reversed(titles) if t.endswith(m.group("year"))), None)
+        before = window[: m.start()].rstrip(" ,")
+        role = "power"
+        r = _ROLE.search(before)
+        if r:
+            role = r.group(0).strip().lower()
+        out.append({"act": act, "anaphor": anaphor, "provisions": provisions(prov),
+                    "role": role, "text": m.group(0)[:300]})
+    return out
+
+
+_TITLE_LEAD = re.compile(r"^(?:and|or|of|to|the|by|in|under|with)\s+", re.I)
+
+
+def _clean_title(t: str) -> str:
+    t = _WS.sub(" ", t).strip(" ,")
+    while _TITLE_LEAD.match(t):
+        t = _TITLE_LEAD.sub("", t)
+    return t
+
+
+# --------------------------------------------------------------------------
+# One instrument
+# --------------------------------------------------------------------------
+
+def pdf_preamble(text: str) -> tuple:
+    """(state, text) from the OCR text layer of a scanned instrument.
+
+    legislation.gov.uk holds most pre-1987 SIs only as a PDF scan: the XML is a
+    metadata stub with a `ukm:Alternative` link. The scan carries an OCR text
+    layer with the recital on page 1, but with line-end hyphenation
+    ("Govern-\\nment"), footnote markers ("Act 1958(a)") and stray glyphs, all
+    of which are cleaned here before the same window and parser run.
+    """
+    t = re.sub(r"(\w)-\s*\n\s*(\w)", r"\1\2", text or "")
+    t = re.sub(r"(\d{4})\s*\([a-z]\)", r"\1", t)          # "Act 1958(a)"
+    t = re.sub(r"[^\x20-\x7E\n’]", " ", t)
+    t = _WS.sub(" ", t).strip()
+    if not _WINDOW_START.search(t):
+        return ("none" if sum(c.isalpha() for c in t) < 20 else "no_recital"), t[:2000]
+    return "ok", t[:4000]
+
+
+def pdf_uri(xml_text: str) -> Optional[str]:
+    m = re.search(r'<ukm:Alternative\b[^>]*URI="([^"]+\.pdf)"', xml_text)
+    return m.group(1) if m else None
+
+
+def record_from_xml(legislation_id: str, xml_text: str, version: str) -> dict:
+    title_m = re.search(r"<dc:title>(.*?)</dc:title>", xml_text, re.S)
+    title = _WS.sub(" ", title_m.group(1)).strip() if title_m else ""
+    state, pre = preamble_text(xml_text)
+    rec = _record(legislation_id, title, version, state, pre)
+    if state == "none":
+        rec["pdf"] = pdf_uri(xml_text)
+    return rec
+
+
+def _record(legislation_id: str, title: str, version: str, state: str, pre: str) -> dict:
+    window = recital_window(pre) if state == "ok" else ""
+    powers = parse_powers(window) if window else []
+    flags = []
+    if state == "ok" and not window:
+        flags.append("no_recital_window")
+    if window and not powers:
+        flags.append("window_unparsed")
+    if any(p["act"] is None for p in powers):
+        flags.append("unresolved_anaphor")
+    return {"id": legislation_id, "title": title, "version": version,
+            "preamble": state, "window": window, "powers": powers, "flags": flags}
+
+
+def pdf_record(client: PacedClient, rec: dict) -> dict:
+    """Re-read a record that had no XML preamble from its PDF's text layer.
+
+    Needs `pypdf` (dev machine only; not a product dependency).
+    """
+    from io import BytesIO
+    from pypdf import PdfReader
+    url = rec["pdf"].replace("http://", "https://")
+    status, body = client.request("GET", url)
+    if status != 200:
+        return dict(rec, pdf_status=status)
+    try:
+        reader = PdfReader(BytesIO(body))
+        text = "\n".join((p.extract_text() or "") for p in reader.pages[:2])
+    except Exception as e:  # a damaged scan is a finding, not a crash
+        return dict(rec, pdf_status=f"unreadable: {type(e).__name__}")
+    state, pre = pdf_preamble(text)
+    out = _record(rec["id"], rec.get("title", ""), "made-pdf", state, pre)
+    out["pdf"] = rec["pdf"]
+    return out
+
+
+def _get(client: PacedClient, path: str, via: str) -> tuple:
+    url = (LEX + proxy_path(path)) if via == "lex" else (LGU + path)
+    return client.request("GET", url)
+
+
+def fetch_record(client: PacedClient, legislation_id: str, via: str = "lgu") -> Optional[dict]:
+    """The as-made record, falling back to the current version; None if not held."""
+    for version, suffix in (("made", "/made/data.xml"), ("current", "/data.xml")):
+        status, body = _get(client, f"/{legislation_id}{suffix}", via)
+        if status == 200 and body.lstrip().startswith(b"<"):
+            return record_from_xml(legislation_id, body.decode("utf-8", "replace"), version)
+        if status not in (404, 410, 300):
+            raise RuntimeError(f"{legislation_id}{suffix} -> {status}")
+    return None
+
+
+# --------------------------------------------------------------------------
+# Enumeration
+# --------------------------------------------------------------------------
+
+_FEED_ID = re.compile(r"<id>http://www\.legislation\.gov\.uk/id/([a-z]+/\d{4}/\d+)</id>")
+
+
+def list_year(client: PacedClient, typ: str, year: int, title: Optional[str]) -> list:
+    """Every held id of a type and year, from the listing feed (20 a page)."""
+    ids, page = [], 1
+    while True:
+        q = f"?page={page}" + (f"&title={quote(title)}" if title else "")
+        status, body = _get(client, f"/{typ}/{year}/data.feed{q}", "lgu")
+        if status != 200:
+            break
+        text = body.decode("utf-8", "replace")
+        found = [i for i in _FEED_ID.findall(text) if i.startswith(f"{typ}/{year}/")]
+        new = [i for i in found if i not in ids]
+        ids.extend(new)
+        more = re.search(r"<leg:morePages>(\d+)</leg:morePages>", text)
+        if not new or not more or int(more.group(1)) == 0:
+            break
+        page += 1
+    return ids
+
+
+def max_number(client: PacedClient, typ: str, year: int) -> int:
+    status, body = _get(client, f"/{typ}/{year}/data.feed", "lgu")
+    if status != 200:
+        return 0
+    nums = [int(i.rsplit("/", 1)[1]) for i in _FEED_ID.findall(body.decode("utf-8", "replace"))
+            if i.startswith(f"{typ}/{year}/")]
+    return max(nums) if nums else 0
+
+
+def _done_ids(out: Path) -> set:
+    if not out.exists():
+        return set()
+    return {json.loads(ln)["id"] for ln in out.read_text(encoding="utf-8").splitlines() if ln.strip()}
+
+
+def harvest(client: PacedClient, typ: str, years: Iterable[int], out: Path,
+            title: Optional[str] = None, via: str = "lgu") -> dict:
+    """Append one record per held instrument; skip ids already in `out`.
+
+    Without `title`, numbers 1..max are tried directly (the listing feed's
+    first page gives the highest number; a gap answers 404 and costs a call).
+    With `title`, the listing feed filtered by title gives the ids.
+    """
+    done = _done_ids(out)
+    stats = {"fetched": 0, "absent": 0, "skipped": 0}
+    for y in years:
+        ids = (list_year(client, typ, y, title) if title
+               else [f"{typ}/{y}/{n}" for n in range(1, max_number(client, typ, y) + 1)])
+        for lid in ids:
+            if lid in done:
+                stats["skipped"] += 1
+                continue
+            rec = fetch_record(client, lid, via)
+            if rec is None:
+                rec = {"id": lid, "absent": True}
+                stats["absent"] += 1
+            else:
+                stats["fetched"] += 1
+            with out.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            done.add(lid)
+    return stats
+
+
+# --------------------------------------------------------------------------
+# Title resolution and the reverse query
+# --------------------------------------------------------------------------
+
+def resolve_title(client: PacedClient, title: str) -> Optional[str]:
+    url = f"{LGU}/id?title={quote(title)}&type=primary"
+    status, body = client.request("GET", url)
+    # PacedClient's transport here does not follow redirects; the identifier is
+    # in the Location header, which `_transport` returns as the body.
+    if status in (301, 302, 303):
+        loc = body.decode("utf-8", "replace").strip()
+        m = re.search(r"/id/(.+?)/?$", loc)
+        return m.group(1) if m else None
+    return None
+
+
+def load_records(path: Path) -> list:
+    return [json.loads(ln) for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+
+
+def reverse(records: list, titles: dict, act: str, section: str) -> list:
+    """Instruments whose recital names `section` of `act` (an id or a title)."""
+    want = f"section/{section}"
+    hits = []
+    for r in records:
+        for p in r.get("powers") or []:
+            pid = titles.get(p.get("act") or "", None)
+            if act in (pid, p.get("act")) and want in p.get("provisions", []):
+                hits.append(r)
+                break
+    return hits
+
+
+def loose_candidates(records: list, act_title: str, section: str) -> list:
+    """Recall-first filter for building ground truth by hand: the preamble
+    mentions the Act (or "the <year> Act") and the number anywhere."""
+    year = act_title[-4:]
+    num = re.compile(rf"\b{re.escape(section)}(?![0-9])")
+    out = []
+    for r in records:
+        w = r.get("window") or ""
+        if (act_title.lower() in w.lower() or f"the {year} act" in w.lower()) and num.search(w):
+            out.append(r)
+    return out
+
+
+# --------------------------------------------------------------------------
+# CLI
+# --------------------------------------------------------------------------
+
+def make_transport():
+    import httpx
+    client = httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=60.0,
+                          follow_redirects=False)
+
+    def _t(method, url, payload):
+        r = client.get(url) if method == "GET" else client.post(url, json=payload)
+        if r.status_code in (301, 302, 303) and "/id?" in url:
+            return r.status_code, (r.headers.get("location") or "").encode()
+        if r.status_code in (301, 302, 303, 307, 308):
+            r = client.get(r.headers["location"] if r.headers["location"].startswith("http")
+                           else LGU + r.headers["location"])
+        return r.status_code, r.content
+    return _t
+
+
+def _years(spec: str) -> list:
+    a, _, b = spec.partition("-")
+    return list(range(int(a), int(b or a) + 1))
+
+
+def main(argv=None) -> int:
+    _utf8_stdout()
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    g = ap.add_mutually_exclusive_group(required=True)
+    g.add_argument("--made", nargs="+", metavar="ID")
+    g.add_argument("--harvest", nargs=2, metavar=("TYPE", "YEARS"))
+    g.add_argument("--resolve", metavar="FILE")
+    g.add_argument("--reverse", nargs=3, metavar=("FILE", "ACT", "SECTION"))
+    g.add_argument("--loose", nargs=3, metavar=("FILE", "ACT_TITLE", "SECTION"))
+    g.add_argument("--reparse", nargs=2, metavar=("IN", "OUT"),
+                   help="re-run the parser over stored windows (no network); re-fetch only "
+                        "records whose preamble had no recognised window")
+    g.add_argument("--pdf-pass", nargs=2, metavar=("IN", "OUT"),
+                   help="re-read records with no XML preamble from their PDF scan")
+    ap.add_argument("--out", type=Path)
+    ap.add_argument("--title", help="harvest only ids whose title matches (listing feed filter)")
+    ap.add_argument("--via", choices=("lgu", "lex"), default="lgu")
+    ap.add_argument("--max-calls", type=int, default=40)
+    ap.add_argument("--gap", type=float, default=DEFAULT_GAP_S)
+    ap.add_argument("--quiet", action="store_true", help="do not print every call")
+    a = ap.parse_args(argv)
+
+    client = PacedClient(cap=a.max_calls, min_gap=a.gap, transport=make_transport(),
+                         echo=not a.quiet)
+    if a.made:
+        for lid in a.made:
+            rec = fetch_record(client, lid, a.via)
+            print(json.dumps(rec, ensure_ascii=False, indent=2))
+        return 0
+    if a.harvest:
+        if not a.out:
+            ap.error("--harvest needs --out")
+        stats = harvest(client, a.harvest[0], _years(a.harvest[1]), a.out, a.title, a.via)
+        print(json.dumps(stats))
+        return 0
+    if a.resolve:
+        path = Path(a.resolve)
+        cache_path = path.with_suffix(path.suffix + ".titles.json")
+        cache = json.loads(cache_path.read_text(encoding="utf-8")) if cache_path.exists() else {}
+        titles = sorted({p["act"] for r in load_records(path) for p in r.get("powers") or []
+                         if p.get("act")})
+        todo = [t for t in titles if t not in cache]
+        print(f"{len(titles)} distinct titles, {len(todo)} to resolve")
+        for t in todo:
+            cache[t] = resolve_title(client, t)
+            cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=1), encoding="utf-8")
+        unresolved = [t for t in titles if not cache.get(t)]
+        print(f"resolved {len(titles) - len(unresolved)} of {len(titles)}; unresolved: {unresolved[:30]}")
+        return 0
+    if a.reverse:
+        path = Path(a.reverse[0])
+        cache_path = path.with_suffix(path.suffix + ".titles.json")
+        titles = json.loads(cache_path.read_text(encoding="utf-8")) if cache_path.exists() else {}
+        hits = reverse(load_records(path), titles, a.reverse[1], a.reverse[2])
+        for h in hits:
+            print(h["id"], "|", h["title"])
+        print(f"{len(hits)} instruments")
+        return 0
+    if a.reparse:
+        src, dst = Path(a.reparse[0]), Path(a.reparse[1])
+        refetched = 0
+        with dst.open("w", encoding="utf-8") as fh:
+            for rec in load_records(src):
+                if rec.get("absent") or rec.get("preamble") not in ("ok",):
+                    pass
+                elif "no_recital_window" in rec.get("flags", []) and rec.get("version") == "made":
+                    rec = fetch_record(client, rec["id"], a.via) or rec
+                    refetched += 1
+                elif rec.get("window"):
+                    powers = parse_powers(rec["window"])
+                    flags = [f for f in rec.get("flags", [])
+                             if f not in ("window_unparsed", "unresolved_anaphor")]
+                    if not powers:
+                        flags.append("window_unparsed")
+                    if any(p["act"] is None for p in powers):
+                        flags.append("unresolved_anaphor")
+                    rec = dict(rec, powers=powers, flags=flags)
+                fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        print(json.dumps({"refetched": refetched}))
+        return 0
+    if a.pdf_pass:
+        src, dst = Path(a.pdf_pass[0]), Path(a.pdf_pass[1])
+        done = _done_ids(dst)
+        n = 0
+        for rec in load_records(src):
+            if rec["id"] in done:
+                continue
+            if rec.get("preamble") == "none" and not rec.get("absent"):
+                if not rec.get("pdf"):
+                    # Harvested before the PDF fallback existed: the scan's
+                    # name follows the id ("uksi/1962/2843" ->
+                    # ".../pdfs/uksi_19622843_en.pdf"); on a miss, the XML
+                    # stub names it.
+                    typ, yr, num = rec["id"].split("/")
+                    rec["pdf"] = f"{LGU}/{rec['id']}/pdfs/{typ}_{yr}{int(num):04d}_en.pdf"
+                rec = pdf_record(client, rec)
+                if rec.get("pdf_status") == 404:
+                    status, body = _get(client, f"/{rec['id']}/made/data.xml", a.via)
+                    uri = pdf_uri(body.decode("utf-8", "replace")) if status == 200 else None
+                    if uri:
+                        rec = pdf_record(client, dict(rec, pdf=uri))
+                n += 1
+            with dst.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        print(json.dumps({"pdf_reads": n}))
+        return 0
+    if a.loose:
+        hits = loose_candidates(load_records(Path(a.loose[0])), a.loose[1], a.loose[2])
+        for h in hits:
+            print(h["id"], "|", h["title"], "|", h["window"][:220])
+        print(f"{len(hits)} candidates")
+        return 0
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
