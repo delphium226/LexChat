@@ -84,9 +84,12 @@ def is_empty_completion(content: str, tool_calls: Any) -> bool:
 #     before: after a rate limit the retry answered 13 times in 14. (An
 #     upstream idle timeout is light too, but is not retried: P4.11, below.)
 #
-# The Manager, the planner and the synthesis are not Worker calls: no heavy
-# empty was ever measured there, and a lost Manager reply has no re-delegation
-# to fall back on.
+# The Manager, the planner and the synthesis are not Worker calls, and a lost
+# Manager reply has no re-delegation to fall back on. ~~No heavy empty was ever
+# measured there~~: corrected at P4.12 (batch 10 D, 63 directories), two
+# Manager heavy empties are now measured, both after P4.10, both unrecovered
+# (the retry after a Manager heavy empty answered 0 of 3). The Manager's own
+# rules are P4.12's, below; the planner and the synthesis are unchanged.
 WORKER_MAX_OUTPUT_TOKENS = 32_000
 
 # The instrument's own threshold for mechanism (a) (`replay_report
@@ -131,16 +134,71 @@ def is_idle_timeout(probe: dict) -> bool:
         return False
 
 
-def should_retry_empty(probe: dict, *, attempt: int, attempts_max: int,
-                       worker_call: bool) -> bool:
-    """P4.2's bounded retry, less a Worker call's heavy empty (P4.10) and its
-    upstream idle timeout (P4.11).
+# ---------------------------------------------------------------------------
+# P4.12 — the same two slow empties, on a Manager call
+# ---------------------------------------------------------------------------
+#
+# Measured over 63 directories (batch 10 D, `notes/batch10_D.md` section 2):
+# 10 Manager calls came back empty, 8 unrecovered. 2 were heavy empties (the
+# retry after one answered 0 of 3); 8 were idle timeouts, and after two of
+# them the third attempt answered 0 of 11 at every site, while all 3 (b)
+# recoveries came on the second attempt. Every one of the 10 came after a
+# delegation, so all 8 unrecovered calls were served P4.2's fallback with the
+# worker reports: the retries cost the lawyer 6 to 18 minutes and changed
+# nothing. Hence, on a Manager call (user decision, 2026-10-08):
+#
+#   * L1: a heavy empty is not retried;
+#   * L2': an idle timeout is retried once, not twice (a second idle timeout
+#     in the same call is not retried, whatever came between);
+#   * L3: the call carries the Worker's output cap (OpenRouter only);
+#
+# and L1 and L2' are GATED: they apply only while a usable worker report is
+# in hand, i.e. while P4.2's fallback would show research rather than the
+# bare LOST_ANSWER_NOTICE. The Manager loop says so itself (a callable over
+# the same list the fallback reads), so the gate and the fallback cannot
+# disagree. With no report in hand the Manager keeps every retry it had.
+# A rate limit and a clean stop with nothing keep their retry either way.
+MANAGER_IDLE_TIMEOUT_RETRIES = 1
 
-    `attempt` is 0-based, as in the `chat_loop` loops.
+
+def report_in_hand_now(probe_fn: Any) -> bool:
+    """The Manager loop's own answer to "is a usable worker report in hand?".
+
+    Fail-soft: no callable, or one that raises, reads as "no report in hand",
+    which keeps the Manager's retries as they were before P4.12.
+    """
+    if not callable(probe_fn):
+        return False
+    try:
+        return bool(probe_fn())
+    except Exception:
+        logger.debug("[EmptyCompletion] report-in-hand check failed", exc_info=True)
+        return False
+
+
+def should_retry_empty(probe: dict, *, attempt: int, attempts_max: int,
+                       worker_call: bool, manager_call: bool = False,
+                       report_in_hand: bool = False,
+                       earlier_idle_timeouts: int = 0) -> bool:
+    """P4.2's bounded retry, less a Worker call's heavy empty (P4.10) and its
+    upstream idle timeout (P4.11), and less a Manager call's heavy empty and
+    second idle timeout while a usable worker report is in hand (P4.12).
+
+    `attempt` is 0-based, as in the `chat_loop` loops. `earlier_idle_timeouts`
+    counts this call's earlier attempts that ended in an idle timeout (this
+    probe excluded).
     """
     if attempt >= attempts_max - 1:
         return False
-    return not (worker_call and (is_heavy_empty(probe) or is_idle_timeout(probe)))
+    if worker_call:
+        return not (is_heavy_empty(probe) or is_idle_timeout(probe))
+    if manager_call and report_in_hand:
+        if is_heavy_empty(probe):
+            return False
+        if (is_idle_timeout(probe)
+                and earlier_idle_timeouts >= MANAGER_IDLE_TIMEOUT_RETRIES):
+            return False
+    return True
 
 
 def build_probe(

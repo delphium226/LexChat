@@ -10,7 +10,9 @@ from ..config import MODEL_LIST, settings
 from ..utils.empty_completion import (
     build_probe,
     is_empty_completion,
+    is_idle_timeout,
     report_empty_completion,
+    report_in_hand_now,
     should_retry_empty,
 )
 from ..utils.discovery_budget import set_react_round
@@ -66,12 +68,18 @@ async def chat_loop(
     max_turns: int = 20,
     _final_round: bool = False,
     worker_call: bool = False,
+    manager_call: bool = False,
+    manager_report_in_hand: Optional[Callable[[], bool]] = None,
 ) -> dict:
     """Core ReAct loop: stream from Ollama, handle tool calls, recurse.
 
     `worker_call` (P4.10): an empty completion that reasoned heavily is not
     retried, as in the OpenRouter loop. The output cap is NOT applied here:
     what `num_predict` does to an Ollama cloud model's reasoning is unmeasured.
+
+    `manager_call` (P4.12): while `manager_report_in_hand()` says a usable
+    worker report is in hand, a heavy empty is not retried and an idle timeout
+    is retried once, not twice, as in the OpenRouter loop. No cap, as above.
 
     Args:
         messages: Conversation history.
@@ -109,6 +117,8 @@ async def chat_loop(
             chat_loop, messages, model, cancel_event, num_ctx, on_chunk,
             emit_tool_details, timing_collector, _turn, max_turns,
             log_prefix="[ChatLoop]", worker_call=worker_call,
+            manager_call=manager_call,
+            manager_report_in_hand=manager_report_in_hand,
         )
         if writeup:
             logger.info("[ChatLoop] Step cap: partial findings written up (%d chars)", len(writeup))
@@ -159,6 +169,9 @@ async def chat_loop(
     # httpx applies `read` to the wait for response headers too, so this doubles
     # as a time-to-first-byte cap on the provider's prefill.
     stream_timeout = httpx.Timeout(None, connect=30.0, read=180.0)
+
+    # P4.12: this call's attempts that ended in an upstream idle timeout.
+    idle_timeouts_seen = 0
 
     for attempt in range(_MAX_STREAM_ATTEMPTS):
         if cancel_event and cancel_event.is_set():
@@ -242,10 +255,16 @@ async def chat_loop(
                     turn=_turn,
                 )
                 # P4.10/P4.11: a worker's heavy empty or upstream idle timeout
-                # is not retried.
+                # is not retried. P4.12: nor a Manager's heavy empty, nor its
+                # second idle timeout, while a usable worker report is in hand.
                 retrying = should_retry_empty(
                     probe, attempt=attempt, attempts_max=_MAX_STREAM_ATTEMPTS,
-                    worker_call=worker_call)
+                    worker_call=worker_call, manager_call=manager_call,
+                    report_in_hand=(manager_call
+                                    and report_in_hand_now(manager_report_in_hand)),
+                    earlier_idle_timeouts=idle_timeouts_seen)
+                if is_idle_timeout(probe):
+                    idle_timeouts_seen += 1
                 report_empty_completion(probe, retrying=retrying)
                 if retrying:
                     await asyncio.sleep(_STREAM_RETRY_BASE_S * (2 ** attempt))
@@ -378,6 +397,8 @@ async def chat_loop(
             max_turns=max_turns,
             _final_round=_final_round,
             worker_call=worker_call,
+            manager_call=manager_call,
+            manager_report_in_hand=manager_report_in_hand,
         )
 
     return message
