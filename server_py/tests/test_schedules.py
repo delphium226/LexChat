@@ -1151,6 +1151,18 @@ def test_the_matched_block_must_fit_the_context_budget(monkeypatch):
     out = _route5(monkeypatch, "Schedule 5 revocation", budget={"used": 1, "limit": size},
                   seen=seen)
     assert seen and "paragraph headings" not in out
+    # The search result's own text, already on its way to the Worker, counts
+    # (the threshold of 50 and the stub summariser are still in place).
+    out = asyncio.run(agent_shared.schedule_route_block(
+        "search_legislation_sections", {"legislation_id": LID, "query": "Schedule 5 revocation"},
+        _search_result("article/1"), "q", {}, pending_chars=1,
+        context_budget={"used": 0, "limit": size}))
+    assert "paragraph headings" not in out and "SUMMARY." in out
+
+
+def test_matched_pieces_fails_soft():
+    assert su.matched_pieces(su.ScheduleUnit("schedule", None), SCHED_5_TEXT, "revocation",
+                             10_000) is None
 
 
 def test_a_schedule_under_the_threshold_but_over_the_budget_is_summarised_as_before(monkeypatch):

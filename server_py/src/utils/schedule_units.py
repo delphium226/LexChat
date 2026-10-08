@@ -809,7 +809,7 @@ def heading_matches(headings: list, query: Any, unit: ScheduleUnit) -> list:
     label = frozenset(re.findall(r"[a-z]+", unit.label.lower()))
     words = [_word_stems(h) for _, h in headings]
     freq = Counter(w for ws in words for w in ws)
-    wanted = {w for w in _word_stems(query, label) if 1 <= freq[w] <= _MAX_HEADINGS_PER_WORD}
+    wanted = {w for w in _word_stems(query, label) if freq[w] <= _MAX_HEADINGS_PER_WORD}
     return [num for (num, _), ws in zip(headings, words) if ws & wanted]
 
 
@@ -838,15 +838,14 @@ def matched_pieces(unit: ScheduleUnit, text: str, query: Any, bound: int) -> Opt
             return None
         text = str(text or "")
         headings = paragraph_headings(text)
-        if not headings:
-            return None
         cuts = []
         for num in heading_matches(headings, query, unit):
+            # A number met on two heading lines is not cut at all (NOT_CUT),
+            # so two matched headings never give the same span.
             span, how, through = cut_schedule_paragraph(text, num)
             if how == NOT_CUT:
                 return None
-            if all(span != s for _, s in cuts):
-                cuts.append((paragraph_label(unit, num, how, through), span))
+            cuts.append((paragraph_label(unit, num, how, through), span))
         if not cuts or sum(len(s) for _, s in cuts) > bound:
             return None
         return [_heading_list_piece(unit, headings)] + cuts
