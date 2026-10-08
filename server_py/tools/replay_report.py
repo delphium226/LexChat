@@ -9168,13 +9168,22 @@ _P322_NOT_HELD = re.compile(
     re.I)
 
 
+# A Markdown link whose label may hold ONE nested bracket pair: a citation
+# inside the label ("[*Widget Co v Example Ltd* [1901] AC 9](https://...)").
+# The shared `MD_LINK` stops at the first "]", so such a link was never seen
+# and fell through to the citing-word test (batch 10 B found it; batch 10 E).
+# Local to `authorities`: the other graders keep `MD_LINK`.
+_P322_LINK = re.compile(
+    r"\[((?:[^\[\]]|\[[^\[\]]{0,60}\]){1,200})\]\((https?://[^)\s]+)\)")
+
+
 def p322_mention_class(sentence: str, mention, carriers=(), window: str = "") -> tuple:
     """(class, reason) for one sentence naming an out-of-corpus authority.
     `carriers` are compiled name patterns of the rubric's in-corpus authorities;
     `window` is the two sentences before, where the judgment a citing word
     points to is often named ("... Gadget Ltd ... The tribunal referenced the
     principles established in Widget Co")."""
-    for label, url in MD_LINK.findall(sentence):
+    for label, url in _P322_LINK.findall(sentence):
         if "caselaw.nationalarchives" in url.lower() and mention.search(label):
             return "LINKED", "a Find Case Law link labelled with its name"
     if _P322_NOT_HELD.search(sentence) or NEG_BLAMED_INDEX.search(sentence):

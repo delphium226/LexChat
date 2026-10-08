@@ -245,6 +245,31 @@ def test_a_link_labelled_with_a_retrieved_judgments_own_name_is_not_linked():
     assert [c for c, _, _ in sents2] == ["LINKED"] and verdict2 == "FAIL"
 
 
+def test_a_link_label_holding_a_bracketed_citation_is_still_a_link():
+    """Batch 10 B's case: the shared MD_LINK stops at the label's first "]",
+    so a label carrying a citation was never read as a link."""
+    old = __import__("re").compile(r"Widget Co", __import__("re").I)
+    url = "https://caselaw.nationalarchives.gov.uk/eat/1901/4"
+    with_cite = f"[*Widget Co v Example Ltd* [1901] AC 9]({url})"
+    without = f"[*Widget Co v Example Ltd*]({url})"
+    assert rr.p322_mention_class(with_cite, old)[0] == "LINKED"
+    assert rr.p322_mention_class(without, old)[0] == "LINKED"
+    # A judgment's own NCN in its label, for a cited, retrieved judgment, is
+    # still that judgment (the surname guard holds on the parsed link).
+    s = f"In [*A Widget v Sample Ltd* [1901] EAT 31]({_SHARED_URL}) the EAT applied " \
+        "Widget v Gadget Sprocket [1899] AC 52."
+    doc = _run([_turn(1, s, [_search(_SHARED)])])
+    (_e, verdict, sents), = _ooc(doc)["mentions"]
+    assert [c for c, _, _ in sents] == ["SECOND_HAND"] and verdict == "PASS"
+    # The out-of-corpus name with its citation, linked to another judgment: LINKED.
+    s2 = f"Following [*Widget v Gadget Sprocket* [1899] AC 52]({_CARRIER_URL}), the test is X."
+    doc2 = _run([_turn(1, s2, [_search(_CARRIER_ROW)])])
+    (_e, verdict2, sents2), = _ooc(doc2)["mentions"]
+    assert [c for c, _, _ in sents2] == ["LINKED"] and verdict2 == "FAIL"
+    # The shared MD_LINK is unchanged.
+    assert rr.MD_LINK.findall(with_cite) == []
+
+
 def test_a_source_phrase_object_short_form_follows_the_same_rules():
     # Anchored: "As set out in Widget" names the authority itself, not second-hand.
     doc = _run([
