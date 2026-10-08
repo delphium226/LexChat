@@ -4,7 +4,8 @@
 `git reset --hard 024e396` (the `<INTEGRATOR_HEAD>`). This note and the branch are based on `024e396`.
 
 **Spend: $0.** No model call, no seam draw, no replay, no server, **no live call to any host** (0 calls).
-**Tests: see section 7** (`TEST_DATABASE_URL=postgresql://lexuser:lexpassword@localhost:5432/lexchat_test_e`).
+**Tests: 2856 passed** (2833 at the base + 23 new; `python -m pytest -q -p no:cacheprovider` from `server_py/`,
+`TEST_DATABASE_URL=postgresql://lexuser:lexpassword@localhost:5432/lexchat_test_e`; `pytest_full.out` in scratch).
 
 **Model.** Every stored run read here ran on the pinned `google/gemini-3.1-pro-preview` (summariser
 `google/gemini-3-flash-preview`), summarised at the 8,000-character fallback. Every number below is from that model.
