@@ -137,6 +137,18 @@ def test_parties_and_citations_come_from_the_rubric_where_given():
     assert _names("See [1899] AC 52.") == (True, True)
 
 
+def test_a_match_with_no_letters_is_never_a_cited_judgment():
+    """A rubric's `citations` (or `mention`) is arbitrary text: a citation of
+    digits alone matches with no word to test against a title, and must still
+    name the authority (the integrator's mutant: an empty word set read as a
+    cited judgment discarded every such match)."""
+    entry = dict(_OOC, citations=["[1899] 52"], mention=r"\bWidget\b")
+    assert _names("The rule comes from [1899] 52.", entry) == (True, True)
+    assert _names("The rule comes from [1899] 52.", entry, titles=_TITLES) == (True, True)
+    assert rr._p322_is_cited_judgment("[1899] 52", []) is False
+    assert rr._p322_is_cited_judgment(" v ", [_SHARED["title"]]) is False
+
+
 def test_corporate_and_short_words_are_not_distinctive():
     assert rr._p322_party_words("E Gadget Sprocket & Co Ltd") == ["Gadget", "Sprocket"]
     assert rr._p322_party_words("Cog & Son Ltd") == ["Cog"]

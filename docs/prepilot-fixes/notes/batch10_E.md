@@ -281,4 +281,25 @@ sweep will be too, which is the condition under which the 92K Schedule reaches t
 
 - `3af296c` the surname fix, `negcurrency`'s shape, the `corpus` labels, `commencements` on scripts, tests.
 - `bed806b` the nested-bracket link label (the coordinator's extra item), and its test.
-- this note.
+- `57c45c9` this note; the follow-up below in the commit after it.
+
+## Follow-up (integrator)
+
+**The gap.** One of the integrator's four mutants survived all 28 tests. It changed
+`_p322_is_cited_judgment`'s `if not words: return False` to `return True`. Under it, a match with no letters
+other than "v" counts as a cited, retrieved judgment, so the mention is discarded whether or not the sentence
+cites anything. F1-F3 as built always carry letters, but a rubric's `citations` and `mention` are arbitrary
+text, so the guard can be reached. The other three were caught (anchoring kept to this answer only; the title
+guard applied to an uncited retrieved judgment; the nested-label bound cut to 3).
+
+**Closed** with `test_a_match_with_no_letters_is_never_a_cited_judgment`. A rubric whose `citations` holds
+the digits-only "[1899] 52", named in a sentence citing no judgment, with and without a retrieved title in
+play, must name the authority in full. The test also checks the function directly on that match and on a
+bare " v ".
+
+**Mutants:** the integrator's mutant was added as A30 in `$S/mutants.py`, run on the scratch copy `$S/rev/`,
+never the worktree. **43 mutants, 0 survive; A30 is caught (1 test fails).** The build passes 29 of 29. The
+full revert now fails 21 of 29.
+
+**Tests:** 29 in the file. **Full suite on `lexchat_test_e`: 2812 passed.** `TEST_DATABASE_URL` was set on
+every run.
