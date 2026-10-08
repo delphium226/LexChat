@@ -547,8 +547,13 @@ class RunSignals:
     provision_links_manufactured: int = 0
     provision_links_reconstructed: int = 0
     sources_kept: int = 0
-    sources_unused: int = 0  # B8: kept but not textually cited
-    turns_source_fallback: int = 0  # B8: rail showed an unvouched-for list
+    # B8, by the TOKEN test (`_source_cited`); `rail` is the reader test.
+    sources_unused: int = 0  # kept but not cited by url/cite/sub token
+    # A turn citing none of its rail by the token test. Before P4.3 (V4) this
+    # was the Worker seam's fall-back-to-all; since then the legislation bot
+    # does not fall back, so it counts only rails the answer cites by no token
+    # (a source named in words reads as uncited). `rail` reads the fall-back.
+    turns_source_fallback: int = 0
     tool_calls: Counter = field(default_factory=Counter)
     delegations: int = 0
 
@@ -582,9 +587,13 @@ class RunSignals:
 def _source_cited(src: dict, text: str) -> bool:
     """Whether a source is *textually cited* in the answer.
 
-    This mirrors the token branch of `agent_core._source_is_used` exactly —
-    same tokens, same >=6-char floor, same substring test — and deliberately
-    omits its `excerpt` branch. That omission is the whole point.
+    This mirrors the token branch of `agent_core._source_is_used` as it was
+    BEFORE P4.3 — same tokens, same >=6-char floor, same substring test — and
+    deliberately omits its `excerpt` branch. That omission is the whole point.
+    P4.3 (V4) made the product's test boundary-aware, dropped a legislation
+    source's `sub` and added a naming test; this one is left as it was so the
+    stored `src_unused` counts stay comparable across sweeps. It is the TOKEN
+    test, and it overstates the unused rate: `rail` is the reader test.
 
     `audit["sources"]` is the ALREADY-FILTERED `kept` list, so re-running the
     full `_source_is_used` over it would return True for everything and measure
@@ -758,11 +767,12 @@ def analyse_run(doc: dict) -> RunSignals:
         cited = sum(1 for s in sources if _source_cited(s, answer))
         sig.sources_kept += len(sources)
         sig.sources_unused += len(sources) - cited
-        # `agent_core` falls back to the UNFILTERED accumulator when filtering
-        # would have left nothing, so a turn citing none of its sources is
-        # showing the rail a list no one vouched for. Counting those turns
-        # separately keeps them from inflating the "consulted, not cited" rate,
-        # which is a different condition with a different fix.
+        # Before P4.3, `agent_core` fell back to the UNFILTERED accumulator
+        # when filtering would have left nothing, so a turn citing none of its
+        # sources was showing the rail a list no one vouched for. Since P4.3
+        # (V4) the legislation bot no longer falls back, and this token-test
+        # count no longer means that: `replay_report rail` grades the fall-back
+        # (a rail source no completed report vouches for) by the reader test.
         if sources and cited == 0:
             sig.turns_source_fallback += 1
 
@@ -892,10 +902,10 @@ def cmd_summary(args) -> int:
     print(f"  unsupported in-force claims {sum(s.in_force_claims for s in sigs)}   <- B4 / P2.5")
     sk = sum(s.sources_kept for s in sigs)
     su = sum(s.sources_unused for s in sigs)
-    print(f"  sources kept                {sk}, consulted-not-cited {su}"
-          f"{f'  ({100*su/sk:.0f}%)' if sk else ''}   <- B8 / P4.3")
-    print(f"  turns citing NONE of their sources (rail fallback): "
-          f"{sum(s.turns_source_fallback for s in sigs)}")
+    print(f"  sources kept                {sk}, consulted-not-cited by the token test {su}"
+          f"{f'  ({100*su/sk:.0f}%)' if sk else ''}   <- B8 / P4.3 (reader test: `rail`)")
+    print(f"  turns citing NONE of their sources by the token test (the rail fallback "
+          f"before P4.3): {sum(s.turns_source_fallback for s in sigs)}")
     mism = [s for s in sigs if s.model_mismatch]
     if mism:
         print(f"\n  [!] {len(mism)} run(s) on a model other than the pin: "
@@ -973,7 +983,7 @@ def cmd_baseline(args) -> int:
         if any(r.in_force_claims for r in runs):
             notes.append(f"in-force claims: {sum(r.in_force_claims for r in runs)}")
         if any(r.sources_unused for r in runs):
-            notes.append(f"unused sources: {sum(r.sources_unused for r in runs)}/{sum(r.sources_kept for r in runs)}")
+            notes.append(f"unused sources (token test): {sum(r.sources_unused for r in runs)}/{sum(r.sources_kept for r in runs)}")
         if any(r.turns_errored for r in runs):
             notes.append(f"errored turns: {sum(r.turns_errored for r in runs)}")
         if any(r.model_mismatch for r in runs):
@@ -1007,8 +1017,8 @@ _COMPARE_METRICS: list[tuple[str, str, str]] = [
     ("bare_negatives", "bare negatives", "B5/P2.2"),
     ("explained_negatives", "  (explained negatives)", ""),
     ("sources_kept", "sources kept", "B8/P4.3"),
-    ("sources_unused", "  consulted, not cited", "B8/P4.3"),
-    ("turns_source_fallback", "  turns citing none of theirs", "B8/P4.3"),
+    ("sources_unused", "  not cited (token test)", "B8/P4.3"),
+    ("turns_source_fallback", "  turns citing none (token)", "B8/P4.3"),
     ("turns_empty_answer", "turns with an empty answer", "B13/P4.2"),
     ("turns_billed_but_empty", "  of those, billed >$0", "B13/P4.2"),
     ("turns_needing_clarification", "turns that asked for clarification", ""),
@@ -10355,6 +10365,362 @@ def cmd_jurisdiction(args) -> int:
     return 1 if bad else 0
 
 
+# --- P4.3: the Sources rail, graded by a careful reader -----------------------
+#
+# The stored counters (`sources_unused`, `turns_source_fallback`, from
+# `_source_cited`) are the TOKEN test's: an exact url/cite/sub substring. Batch
+# 10 C found it overstates the unused rate (43% against 31% post-P2.1) because
+# the audit strips `_lid` and a section search rewrites `cite` to "Title, s.N",
+# so a source the answer links by URL reads as uncited, and a source the answer
+# names in words always does. This is the reader test batch 10 C hand-validated
+# both ways (its `reader.py`), ported verbatim but for three fixes found by
+# validating it against the product's keep test: a neutral citation or bare id
+# must not run on into a longer one (`_rail_ends_clear`), a regnal-year id has
+# four segments (`_RAIL_LID_IN_URL`), and a case's parties followed by another
+# judgment's citation name that judgment (`_rail_case_title_named`). It is
+# deliberately NOT the product's own keep test (`utils/source_naming.py`): a
+# grader built from the code it grades cannot see that code's mistakes.
+
+RAIL_BAR = 0.15  # P4.3 (ii): the reader-unused rate on report turns, per chat mode
+_RAIL_URL_ANY = re.compile(r"https?://[^\s)\]>\"'<]+", re.I)
+# A regnal-year id has four segments (`ukpga/geo6/14/51`): read as three, every
+# Act of one session was "cited" by any other (batch 11 C, 36 report verdicts).
+_RAIL_LID_IN_URL = re.compile(
+    r"legislation\.gov\.uk/([a-z]+/(?:[a-z]+\d*/[\d-]+/[^/]+|[^/]+/[^/]+))")
+_RAIL_BARE_LID = re.compile(r"^([a-z]+/\d{4}/\d+)")
+_RAIL_CASE_HOST = "caselaw.nationalarchives.gov.uk"
+_RAIL_SI_TYPES = {"ssi", "uksi", "wsi", "nisr", "nisi", "ukdsi", "sdsi"}
+_RAIL_LONGER_TITLE = re.compile(r"\s*\([^)]{1,80}\)\s*(regulations|order|rules|scheme)")
+_RAIL_OLD_SI = re.compile(r"(\d{4}) No\. (\d+)")
+_RAIL_MODES = ("conversational", "research", "deep_research")
+
+
+_RAIL_PRODUCT: dict = {}
+
+
+def _rail_product(name: str):
+    """`normalise_leg_url` and `strip_scope_blocks`, imported once."""
+    if not _RAIL_PRODUCT:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from src.utils.citation_links import normalise_leg_url  # noqa: PLC0415
+        from src.utils.search_scope import strip_scope_blocks  # noqa: PLC0415
+        _RAIL_PRODUCT.update(normalise_leg_url=normalise_leg_url,
+                             strip_scope_blocks=strip_scope_blocks)
+    return _RAIL_PRODUCT[name]
+
+
+def _rail_norm_leg_url(u: str) -> str:
+    return _rail_product("normalise_leg_url")(u)
+
+
+def _rail_norm_case_url(u: str) -> str:
+    s = re.sub(r"^https?://", "", (u or "").strip().rstrip(".,;:)]}'\""), flags=re.I)
+    s = re.sub(r"^www\.", "", s, flags=re.I).split("#", 1)[0].split("?", 1)[0]
+    return s.rstrip("/").lower()
+
+
+def _rail_link_keys(text: str) -> tuple:
+    """Distinct normalised legislation and case-law URLs anywhere in text."""
+    leg, case = set(), set()
+    for u in _RAIL_URL_ANY.findall(text or ""):
+        n = _rail_norm_leg_url(u)
+        if n:
+            leg.add(n)
+        elif _RAIL_CASE_HOST in u.lower():
+            case.add(_rail_norm_case_url(u))
+    return leg, case
+
+
+def _rail_lid_of_url(n: str) -> str:
+    m = _RAIL_LID_IN_URL.search(n or "")
+    return m.group(1).lower() if m else ""
+
+
+def _rail_src_lid(s: dict) -> str:
+    """The audit strips `_lid`: recover it from the URL, else a bare-id cite."""
+    n = _rail_norm_leg_url(s.get("url") or "")
+    if n:
+        lid = _rail_lid_of_url(n)
+        if lid:
+            return lid
+    m = _RAIL_BARE_LID.match((s.get("cite") or "").strip().lower())
+    return m.group(1) if m else ""
+
+
+def _rail_norm_text(t: str) -> str:
+    t = (t or "").lower().replace("’", "'").replace("‘", "'").replace(" ", " ")
+    t = re.sub(r"[*_`,]", "", t)
+    return re.sub(r"\s+", " ", t)
+
+
+def _rail_norm_title(t: str) -> str:
+    t = _rail_norm_text(t).strip()
+    return t[4:] if t.startswith("the ") else t
+
+
+def _rail_title_named(title: str, body_n: str) -> bool:
+    """The title occurs somewhere NOT as the head of a longer instrument title
+    ("... Act 2025 (Commencement No. 1) Regulations 2025" does not name the Act)."""
+    i = body_n.find(title)
+    while i != -1:
+        if not _RAIL_LONGER_TITLE.match(body_n, i + len(title)):
+            return True
+        i = body_n.find(title, i + 1)
+    return False
+
+
+def _rail_ends_clear(needle: str, hay: str) -> bool:
+    """`needle` occurs in `hay` with no digit or letter running on after it.
+
+    Batch 11 C: batch 10 C's reader tested a neutral citation and a bare id as
+    plain substrings, so "[1901] EAT 1" read as cited by "[1901] EAT 12" (13
+    rail-source verdicts over the 64 stored directories, every one a neutral
+    citation running on) — the same prefix defect the product's token test
+    had. The only change to the validated reader."""
+    i = hay.find(needle)
+    while i != -1:
+        j = i + len(needle)
+        if j >= len(hay) or not hay[j].isalnum():
+            return True
+        i = hay.find(needle, i + 1)
+    return False
+
+
+_RAIL_NCN = re.compile(r"\[(\d{4})\]\s+([a-z]+(?:\s+[a-z]+){0,2}?)\s+(\d+)")
+_RAIL_CASE_PATH = re.compile(r"caselaw\.nationalarchives\.gov\.uk/([a-z0-9/-]+?)/?(?=[)\s\]#?.;]|$)")
+
+
+def _rail_case_title_named(s: dict, title: str, body_n: str) -> bool:
+    """A case's parties named, and not as another judgment of the same parties.
+
+    Batch 11 C: the reader took a case title anywhere as a reference, so a
+    first-instance search hit read as cited by its appeal ("Widget Co v
+    Example Ltd [1902] EWCA Civ 9" for "[1901] EWHC 5"): 50 of the 52
+    case-title matches in the stored Worker reports, every one read, and 2
+    answer-level verdicts. An occurrence followed in the same sentence (100
+    chars) by a neutral citation or judgment URL that is not this source's
+    names the other judgment."""
+    own_m = _RAIL_NCN.search(_rail_norm_text(s.get("cite") or s.get("sub") or ""))
+    own_ncn = own_m.groups() if own_m else None
+    own_u = _RAIL_CASE_PATH.search((s.get("url") or "").lower())
+    own_path = own_u.group(1) if own_u else ""
+    i = body_n.find(title)
+    while i != -1:
+        win = body_n[i + len(title): i + len(title) + 100]
+        stops = [j for j in (win.find("\n"), win.find(". "), win.find("; ")) if j != -1]
+        win = win[:min(stops)] if stops else win
+        found = [m for m in (_RAIL_NCN.search(win), _RAIL_CASE_PATH.search(win)) if m]
+        if not found:
+            return True
+        first = min(found, key=lambda m: m.start())
+        if first.re is _RAIL_CASE_PATH:
+            if not own_path or first.group(1) == own_path:
+                return True
+        elif not own_ncn or first.groups() == own_ncn:
+            return True
+        i = body_n.find(title, i + 1)
+    return False
+
+
+def rail_reader(s: dict, body: str, body_n: str, leg_lids: set, case_urls: set) -> str:
+    """A careful reader's test: '' if `body` does not reference the source,
+    else the route that found it (url, ncn, title, si-number, eu-number,
+    id-text). `body_n` is `_rail_norm_text(body)`; `leg_lids` the instrument
+    ids of every legislation URL in `body`; `case_urls` its case-law URLs."""
+    if s.get("kind") == "Case":
+        u = _rail_norm_case_url(s.get("url") or "")
+        if u and u in case_urls:
+            return "url"
+        ncn = (s.get("cite") or s.get("sub") or "").strip()
+        if ncn and len(ncn) >= 6 and _rail_ends_clear(_rail_norm_text(ncn), body_n):
+            return "ncn"
+        title = _rail_norm_title(s.get("title") or "")
+        if len(title) >= 8 and _rail_case_title_named(s, title, body_n):
+            return "title"
+        return ""
+    lid = _rail_src_lid(s)
+    if lid and lid in leg_lids:
+        return "url"
+    title = _rail_norm_title(s.get("title") or "")
+    if len(title) >= 8 and not _RAIL_BARE_LID.match(title) and _rail_title_named(title, body_n):
+        return "title"
+    if lid:
+        typ, year, num = lid.split("/", 2)
+        if typ in _RAIL_SI_TYPES and re.search(
+                rf"(?<![\d/]){re.escape(year)}/{re.escape(num)}(?![\d])", body):
+            return "si-number"
+        if typ.startswith("eu") and re.search(
+                rf"(?<![\d/]){re.escape(num)}/{re.escape(year)}(?![\d])", body):
+            return "eu-number"
+        if _rail_ends_clear(lid, body_n):
+            return "id-text"
+    # an old SI whose URL is malformed: cite "1949 No. 870 (S. 47)"
+    m = _RAIL_OLD_SI.match((s.get("cite") or "").strip())
+    if m and (re.search(rf"(?<![\d/]){m.group(1)}/{m.group(2)}(?![\d])", body)
+              or f"{m.group(1)} no. {m.group(2)}" in body_n):
+        return "si-number"
+    return ""
+
+
+def _rail_text_index(text: str) -> tuple:
+    leg, case = _rail_link_keys(text)
+    return text, _rail_norm_text(text), {_rail_lid_of_url(u) for u in leg} - {""}, case
+
+
+def rail_turn(t: dict, doc: Optional[dict] = None) -> dict:
+    """One turn's rail, graded. The turn classes are batch 10 C's census:
+
+    * `report` — answered, at least one delegation, and EVERY delegation
+      completed (no halt, no lost reply, no error, a non-empty report). The
+      bar is read on these alone: a failed delegation's rail is P4.5's.
+    * `report_mixed`, `no_report`, `no_delegation`, `unanswered`.
+
+    Per rail source: `reader` (the answer references it, and how), `token`
+    (the stored `_source_cited`), and `unvouched`: no excerpt, and no
+    completed report references it by either test. A report turn holding an
+    unvouched source shows a rail no report vouched for, which is what the
+    Worker seam's fall-back-to-all produced before P4.3.
+    """
+    doc = doc or {}
+    answer = t.get("answer") if isinstance(t.get("answer"), str) else ""
+    audit = t.get("audit") or {}
+    dgs = audit.get("delegations") or []
+    status = t.get("status") or ""
+    answered = bool(answer.strip()) and status not in ("error", "http_error", "needs_clarification")
+
+    def done(d):
+        return (not (d.get("halted") or d.get("lost") or d.get("error"))
+                and bool((d.get("report") or "").strip()))
+
+    n_done = sum(1 for d in dgs if done(d))
+    if not answered:
+        cls = "unanswered"
+    elif not dgs:
+        cls = "no_delegation"
+    elif n_done == len(dgs):
+        cls = "report"
+    elif n_done:
+        cls = "report_mixed"
+    else:
+        cls = "no_report"
+    mode = (audit.get("chat_mode") or t.get("chat_mode")
+            or doc.get("filter_snapshot_chat_mode") or "?")
+    out = {"cls": cls, "mode": mode, "sources": [], "fallback_counter":
+           bool((t.get("timing") or {}).get("source_filter_fallback"))}
+    if not answered:
+        return out
+    body = _without_footer(answer)
+    b_idx = _rail_text_index(body)
+    strip = _rail_product("strip_scope_blocks")
+    rep_text = ("\n".join(strip(d.get("report") or "")[0] for d in dgs if done(d))
+                if cls == "report" else "")
+    r_idx = _rail_text_index(rep_text)
+    for s in audit.get("sources") or []:
+        reader = rail_reader(s, *b_idx)
+        token = _source_cited(s, body)
+        unvouched = bool(cls == "report" and not s.get("excerpt")
+                         and not rail_reader(s, *r_idx) and not _source_cited(s, rep_text))
+        out["sources"].append({"src": s, "reader": reader, "token": token,
+                               "unvouched": unvouched})
+    return out
+
+
+def _rail_key(s: dict) -> str:
+    return _rail_src_lid(s) or (s.get("url") or "") or (s.get("cite") or "")
+
+
+def cmd_rail(args) -> int:
+    """P4.3's grader: the unused-source rate on report turns by the reader test,
+    per chat mode, and the report turns whose rail no report vouched for (the
+    fall-back). Exit 1 if any such turn exists, or any chat mode's rate is over
+    `RAIL_BAR`. `--drops` lists every source on which the reader and the token
+    test disagree, and every unvouched source: the both-ways audit."""
+    root = Path(args.dir)
+    exclude = {x for x in (args.exclude or "").split(",") if x}
+    dirs = ([p for p in sorted(root.iterdir()) if p.is_dir() and p.name not in exclude]
+            if args.all else [root])
+    turns = Counter()
+    tally = Counter()
+    agree = Counter()
+    drops = []
+    files = 0
+    for d in dirs:
+        for p in sorted(d.glob("*.json")):
+            try:
+                doc = json.loads(p.read_text(encoding="utf-8"))
+            except Exception as e:  # noqa: BLE001
+                print(f"[!] unreadable {p.name}: {e}", file=sys.stderr)
+                continue
+            if "turns" not in doc:
+                continue
+            files += 1
+            for t in doc.get("turns") or []:
+                g = rail_turn(t, doc)
+                turns[g["cls"]] += 1
+                if g["cls"] != "report" or not g["sources"]:
+                    continue
+                m = g["mode"]
+                n = len(g["sources"])
+                unused = sum(1 for x in g["sources"] if not x["reader"])
+                tok_unused = sum(1 for x in g["sources"] if not x["token"])
+                unv = sum(1 for x in g["sources"] if x["unvouched"])
+                for k in (m, "all"):
+                    tally[(k, "turns")] += 1
+                    tally[(k, "sources")] += n
+                    tally[(k, "unused")] += unused
+                    tally[(k, "token_unused")] += tok_unused
+                    tally[(k, "fallback_turns")] += bool(unv)
+                    tally[(k, "unvouched")] += unv
+                    tally[(k, "cite_none")] += unused == n
+                agree[(bool(unv), g["fallback_counter"])] += 1
+                where = f"{d.name} {p.name} t{t.get('turn')} {m}"
+                for x in g["sources"]:
+                    s = x["src"]
+                    if bool(x["reader"]) != x["token"]:
+                        tally["reader_only" if x["reader"] else "token_only"] += 1
+                        drops.append(f"  {'READER-ONLY ' + x['reader'] if x['reader'] else 'TOKEN-ONLY':<22}"
+                                     f" {where}  {s.get('kind')}  {_rail_key(s)[:70]}"
+                                     f"  | {(s.get('title') or '')[:args.chars]}")
+                    if x["unvouched"]:
+                        drops.append(f"  {'UNVOUCHED':<22} {where}  {s.get('kind')}  "
+                                     f"{_rail_key(s)[:70]}  | {(s.get('title') or '')[:args.chars]}")
+    print(f"rail (P4.3): {len(dirs)} director{'y' if len(dirs) == 1 else 'ies'}, {files} run files"
+          + (f"  (excluded: {', '.join(sorted(exclude))})" if exclude else ""))
+    print("  turn classes: " + ", ".join(f"{k} {turns[k]}" for k in
+                                         ("report", "report_mixed", "no_report",
+                                          "no_delegation", "unanswered")))
+    print(f"  {'report turns with a rail':<34} {'turns':>6} {'sources':>8} "
+          f"{'unused (reader)':>18} {'token test':>14} {'fall-back turns':>16} {'cite none':>10}")
+    fail = False
+    for k in _RAIL_MODES + ("all",):
+        n = tally[(k, "sources")]
+        if not tally[(k, "turns")]:
+            continue
+        u = tally[(k, "unused")]
+        rate = u / n if n else 0.0
+        over = k != "all" and rate > RAIL_BAR
+        fail |= over
+        print(f"  {k:<34} {tally[(k, 'turns')]:>6} {n:>8} "
+              f"{u:>8} ({100 * rate:4.1f}%){'*' if over else ' '} "
+              f"{tally[(k, 'token_unused')]:>6} ({100 * tally[(k, 'token_unused')] / n:3.0f}%) "
+              f"{tally[(k, 'fallback_turns')]:>8} ({tally[(k, 'unvouched')]} src) "
+              f"{tally[(k, 'cite_none')]:>6}")
+    fb = tally[("all", "fallback_turns")]
+    fail |= bool(fb)
+    print(f"  reader vs token test: reader-only {tally['reader_only']}, token-only "
+          f"{tally['token_only']} (--drops lists each)")
+    print(f"  fall-back detector vs the product counter (timing.source_filter_fallback):"
+          f" both {agree[(True, True)]}, detector only {agree[(True, False)]},"
+          f" counter only {agree[(False, True)]}, neither {agree[(False, False)]}")
+    print(f"  bar: 0 fall-back turns and each chat mode <= {RAIL_BAR:.0%} unused: "
+          f"{'NOT MET' if fail else 'MET'}  (* = over the bar)")
+    if args.drops:
+        print("\n  -- every disagreement and every unvouched source --")
+        for ln in drops:
+            print(ln)
+    return 1 if fail else 0
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     _utf8_stdout()
     p = argparse.ArgumentParser(prog="replay_report")
@@ -10716,6 +11082,19 @@ def main(argv: Iterable[str] | None = None) -> int:
     jx.add_argument("--sentences", action="store_true",
                     help="print every sentence naming a nation, EXPLICIT or IMPLICIT")
     jx.add_argument("--chars", type=int, default=240)
+    rl = sub.add_parser("rail",
+                        help="P4.3's grader: the unused-source rate on report turns by the "
+                             "careful-reader test, per chat mode, and the rails no report "
+                             "vouched for (exit 1 if over the bar)")
+    rl.add_argument("--all", action="store_true",
+                    help="--dir is the replay ROOT: walk every subdirectory")
+    rl.add_argument("--exclude", default="",
+                    help="with --all, comma-separated directory names to skip "
+                         "(e.g. baseline,wave1, the pre-P2.1 sweeps)")
+    rl.add_argument("--drops", action="store_true",
+                    help="list every source on which the reader and the token test "
+                         "disagree, and every unvouched source")
+    rl.add_argument("--chars", type=int, default=80)
     args = p.parse_args(list(argv) if argv is not None else None)
     return {
         "summary": cmd_summary,
@@ -10752,6 +11131,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "authorities": cmd_authorities,
         "cmcdates": cmd_cmcdates,
         "jurisdiction": cmd_jurisdiction,
+        "rail": cmd_rail,
     }[args.cmd](args)
 
 
