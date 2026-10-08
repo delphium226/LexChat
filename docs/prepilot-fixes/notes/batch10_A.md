@@ -496,3 +496,84 @@ On the build, the test passes.
 
 **Full suite** on `lexchat_test_a`, outbound HTTP pointed at a closed port: **2803 passed**. The count is
 unchanged because the assertions were added to an existing test (`pytest_full_followup.txt`).
+
+### 8.1 The user's wording decisions (2026-10-08), built in `59e854e`
+
+**The decisions:**
+
+- Decision 1 approved, with two fixes.
+- The MATCHED tail's last sentence stays.
+- Decisions 2, 3 and 4 as built.
+- Decision 5: the integrator draws the two seam payloads before the sweep.
+
+Both fixes show only for an unlabelled unit (`ScheduleUnit("schedule", "")`, displayed "the Schedule"):
+
+1. **Both SUMMARY tails** read "still part of the retrieved the Schedule". They now say "still part of the
+   retrieved text of <U>". "Retrieved" is kept, with no "not" beside it.
+2. **The MATCHED tail opens a sentence with the unit**, and read "... heading. the Schedule runs to ...". The
+   first letter is now capitalised there ("The Schedule runs to"); "Schedule 5 runs to" is unchanged.
+   - Checked: no other sentence that batch 10 A added or reworded opens with the unit. The heading-list
+     label opens "The paragraph headings of <U>". The SUMMARY tails open "Code retrieved", "A paragraph"
+     and "Cite <U>", which is not the first word.
+
+**The exact final wording of every variant.** `<U>` is "Schedule 5" or "the Schedule"; `<U'>` is `<U>` with
+its first letter capitalised; `<N>` is the size. The lead and any reason are unchanged.
+
+- **MATCHED tail:**
+  > ` <U'> runs to <N> characters, longer than one result hands over whole, so below are its paragraph
+  > headings, in order, and then each paragraph whose heading shares a word with this search's query, cut
+  > from the retrieved text and labelled. To read another headed paragraph in its own words, name <U> and
+  > its number from the list below in a section search: code cuts it out the same way.`
+- **Heading-list label:** `The paragraph headings of <U>, in order, each after the number of the paragraph
+  it opens:`
+  - its lines are `<number>: <heading>` or `<number>: (untitled)`;
+  - after 150 headings comes `and <k> more headings after paragraph <number>`.
+- **SUMMARY tail, whole unit:**
+  > ` Code retrieved the whole of <U>, <N> characters, and below is a summary of that retrieved text,
+  > condensed for this research question. A paragraph the summary leaves out is still part of the retrieved
+  > text of <U>. Cite <U> for what the summary says, and quote its words only from text shown verbatim.`
+- **SUMMARY tail, a cut summarised:**
+  > ` Code retrieved the whole of <U> and cut out the parts of it this search named, <N> characters, and
+  > below is a summary of those retrieved parts, condensed for this research question. A paragraph the
+  > summary leaves out is still part of the retrieved text of <U>. Cite <U> for what the summary says, and
+  > quote its words only from text shown verbatim.`
+
+**Tests:** `test_the_wording_reads_for_an_unlabelled_schedule` pins both fixes, on both SUMMARY variants
+and the MATCHED tail, and checks that "Schedule 5 runs to" is unchanged. `test_footer_trips_no_detector`
+gains the unlabelled MATCHED and cut-summary blocks. It passes.
+
+**Screen** (`screen_b10A.py`, built code, now 28 texts with every unlabelled variant from both sources):
+**0 trips**. `sched_unit_clauses` and `sched_clause_class` read `""` for every clause; the untitled and cap
+lines carry no clause about the unit.
+
+**Mutants** (`spec_followup.py`, then `python mutants.py spec_followup.json`, output
+`mutants_followup2.txt`, scratch copies):
+
+| Mutant | Fails |
+|---|---|
+| control | 0 (317 passed) |
+| the "-ies" mutant (8) | 1 |
+| **capitalisation dropped** (`opener = name`) | **1** (`test_the_wording_reads_for_an_unlabelled_schedule`) |
+| **"text of" dropped** | **1** (same test) |
+| u22 (the old sentence restored), re-anchored to the new line | 9 |
+
+**Dry run** (`dryrun_b10.py` on `7c3c6ac` and on the committed tree, then `compare_b10.py`, with its
+expected tail updated): 264 firing calls give 190 unchanged, 52 + 6 tails reworded, and **16 SUMMARY to
+MATCHED, 0 unexpected**. Paragraphs 42-44 are clean and byte-equal in 16 of 16.
+
+Against the build before the fixes (`compare_fix.py`, `compare_fix.txt`):
+
+- **58 blocks move, and only by the fixed string** ("retrieved <U>." to "retrieved text of <U>."). This is
+  asserted.
+- 206 are unchanged. The 16 MATCHED blocks are on a labelled unit, so they do not move.
+- No stored call has an unlabelled MATCHED block.
+
+**Seam payloads rebuilt** with the final wording (`make_seam_payloads.py`). Only turn 7, delegation 0, tool
+2's `final_result` differs from the stored file (asserted).
+
+| File | `final_result` | `seam_replay --dry-run` |
+|---|---|---|
+| `seam_6335_r2_tail.json` | 15,920 characters | 38,770 |
+| `seam_6335_r2_matched.json` | 23,824 characters (unchanged: a labelled unit) | 46,674 |
+
+**Full suite:** **2804 passed** on `lexchat_test_a`, with `TEST_DATABASE_URL` set (`pytest_full_wording.txt`).
