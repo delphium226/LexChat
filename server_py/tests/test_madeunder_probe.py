@@ -177,3 +177,37 @@ def test_act_cited_after_another_instrument_keeps_its_own_title():
     assert [p[1] for p in powers] == ["Gadget Act 1902"]
     assert "regulation/2016" not in powers[0][2]
     assert "section/1" in powers[0][2] and "section/4" in powers[0][2]
+
+
+def test_anaphor_resolves_to_an_act_named_before_the_recital():
+    # ssi/1999/40's shape: the antecedent sits before "in exercise of".
+    pre = ("The Scottish Ministers, being designated for the purposes of the Widget Act 1901 "
+           "(\"the said Act\"), in exercise of the powers conferred on them by section 14 of the "
+           "said Act and of all other powers enabling them in that behalf, hereby make:")
+    w = mp.recital_window(pre)
+    assert [(p["act"], p["provisions"]) for p in mp.parse_powers(w, mp.text_before_window(pre))] == [
+        ("Widget Act 1901", ["section/14"])]
+    # Without the preamble before the window it stays unresolved, never guessed.
+    assert mp.parse_powers(w)[0]["act"] is None
+
+
+def test_a_title_may_begin_with_a_provision_word():
+    t = ("The Scottish Ministers, in exercise of the powers conferred by section 22 of the "
+         "Regulation of Widget Powers Act 1901 and all other powers enabling them, make:")
+    assert _powers(t) == [("power", "Regulation of Widget Powers Act 1901", ["section/22"])]
+
+
+def test_part_and_schedule_with_roman_numerals_are_not_titles():
+    t = ("The Scottish Ministers, in exercise of the powers conferred by section 2 of, and "
+         "Part I of Schedule 1 to, the Widget Prevention Act 1901, make the following Regulations:")
+    (role, act, provs), = _powers(t)
+    assert act == "Widget Prevention Act 1901"
+    assert "section/2" in provs
+
+
+def test_unnumbered_and_ordinal_schedules_are_not_titles():
+    for sched in ("the Schedule", "the First Schedule"):
+        t = (f"The Scottish Ministers, in exercise of the powers conferred by paragraph 3 of "
+             f"{sched} to the Widget (Scotland) Act 1901, make the following Regulations:")
+        (role, act, provs), = _powers(t)
+        assert act == "Widget (Scotland) Act 1901", sched

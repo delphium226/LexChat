@@ -77,6 +77,12 @@ _WINDOW_END = re.compile(
     re.I)
 
 
+def text_before_window(preamble: str) -> str:
+    """The preamble up to where the recital opens (for `parse_powers`'s anaphora)."""
+    m = _WINDOW_START.search(preamble or "")
+    return preamble[: m.start()] if m else ""
+
+
 def recital_window(preamble: str) -> str:
     """The span that lists the enabling powers, or "" if no recital is found."""
     m = _WINDOW_START.search(preamble)
@@ -102,11 +108,22 @@ _LIST = rf"{_NUM}(?:{_SEP}(?:{_NUM}|\([^)\s]{{1,6}}\)(?:\([^)\s]{{1,6}}\))*))*"
 # An Act title: capitalised start, then words that may be lower-case or carry
 # parentheses or dots ("etc.", "(No. 2)"), up to "Act|Measure YYYY". Bounded so
 # it cannot run across a whole recital.
-_TITLE = (r"(?!(?:Schedule|Part|Section|Article|Regulation|Paragraph|Chapter)s?\b)"
+# A title may not START with a provision word followed by its number
+# ("Schedule 2 to, the ... Act"), but may start with the word itself: the
+# Regulation of Investigatory Powers Act 2000 was cut to "Investigatory Powers
+# Act 2000" when the bare word was excluded.
+# The same words with a number (arabic or roman: "Part I of Schedule 1 to the
+# ... Act 1999") never occur INSIDE a title either.
+# So does an unnumbered or ordinal schedule ("the Schedule to the ... Act",
+# "the First Schedule to the ... Act").
+_PROV_NUMBERED = (r"(?:(?:Schedule|Part|Section|Article|Regulation|Paragraph|Chapter)s?"
+                  r"\s+(?:\d|[IVXL]+\b)|(?:[A-Z][a-z]+\s+)?Schedule\s+to\b)")
+_TITLE = (rf"(?!{_PROV_NUMBERED})"
           # A lower-case provision word ("sections 1(1) and 4(1) of the Trade
           # Act 2021") is never part of a title: without this the title of an
           # Act cited after another instrument swallowed that instrument.
           r"[A-Z][A-Za-z'’(),.\-]*(?:\s+(?!(?:sections?|paragraphs?|articles?|regulations?|schedules?)\b)"
+          rf"(?!{_PROV_NUMBERED})"
           r"[A-Za-z0-9'’(),.\-&]+){0,16}?\s+(?:Act|Measure)\s+\d{4}")
 _ACT_REF = rf"(?P<title>{_TITLE})|(?P<that>that Act|the said Act|that Measure)|the (?P<year>\d{{4}}) Act"
 _CHUNK = re.compile(
@@ -186,7 +203,7 @@ def provisions(prov: str) -> list:
     return keys
 
 
-def parse_powers(window: str) -> list:
+def parse_powers(window: str, before: str = "") -> list:
     """Each enabling power in a recital window, in order.
 
     `{"act": title or None, "anaphor": text or None, "provisions": [...],
@@ -194,7 +211,16 @@ def parse_powers(window: str) -> list:
     Anaphora ("that Act", "the 2018 Act") are resolved to an earlier title in
     the same window; one left unresolved keeps `act: None`.
     """
-    out, titles = [], []
+    out = []
+    # An anaphor can point before the recital opens: "... the Food Act
+    # 1985 ('the said Act') and in exercise of the powers conferred by section
+    # 14 of the said Act" (71 of 6,497 SSIs of 1999-2017). Act titles in the
+    # preamble before the window seed the antecedents.
+    # Only a title introduced by "the" counts: running text before the
+    # recital opens with capitalised words ("The Scottish Ministers, being
+    # designated ...") that are not a title.
+    titles = [_clean_title(m.group(1))
+              for m in re.finditer(r"\bthe\s+(" + _TITLE + ")", before or "")]
     for m in _CHUNK.finditer(window):
         prov = m.group("prov")
         # A chunk's provision text must not itself contain an Act title: if it

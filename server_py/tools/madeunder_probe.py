@@ -72,7 +72,7 @@ USER_AGENT = "AILA-research-probe (FIX_PLAN P3.31; read-only; paced)"
 DEFAULT_GAP_S = 0.3
 
 from src.utils.made_under import (  # noqa: E402  the one parser, shared with the server
-    _WINDOW_START, _WS, parse_powers, preamble_text, recital_window,
+    _WINDOW_START, _WS, parse_powers, preamble_text, recital_window, text_before_window,
 )
 
 # --------------------------------------------------------------------------
@@ -114,7 +114,7 @@ def record_from_xml(legislation_id: str, xml_text: str, version: str) -> dict:
 
 def _record(legislation_id: str, title: str, version: str, state: str, pre: str) -> dict:
     window = recital_window(pre) if state == "ok" else ""
-    powers = parse_powers(window) if window else []
+    powers = parse_powers(window, text_before_window(pre)) if window else []
     flags = []
     if state == "ok" and not window:
         flags.append("no_recital_window")

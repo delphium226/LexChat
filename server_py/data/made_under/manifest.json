@@ -1,0 +1,17 @@
+{
+ "version": "2026-10-08.1",
+ "label": "Scottish statutory instruments made from 1999 to 2026",
+ "not_covered": "UK statutory instruments, including every instrument made for Scotland before 1999 and UK instruments that extend to Scotland; Scottish statutory instruments published on legislation.gov.uk without their text (mostly temporary traffic orders); and any instrument published after the last refresh",
+ "harvested_at": "2026-10-08",
+ "types": [
+  "ssi"
+ ],
+ "years": [
+  1999,
+  2026
+ ],
+ "instruments": 11451,
+ "with_powers": 8518,
+ "act_titles_unresolved": 5,
+ "source": "legislation.gov.uk as-made XML preambles; tools/madeunder_probe.py (FIX_PLAN P3.31)"
+}

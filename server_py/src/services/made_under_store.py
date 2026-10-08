@@ -42,7 +42,7 @@ from sqlalchemy import text
 
 from ..utils.made_under import (
     MADE_UNDER_TOOL, MAX_LISTED, _short, is_legislation_id, normalise_title,
-    parse_powers, preamble_text, provision_key, recital_window,
+    parse_powers, preamble_text, provision_key, recital_window, text_before_window,
 )
 
 logger = logging.getLogger(__name__)
@@ -318,7 +318,7 @@ def record_from_xml(lid: str, xml_text: str) -> dict:
     state, pre = preamble_text(xml_text)
     window = recital_window(pre) if state == "ok" else ""
     return {"id": lid, "title": title, "version": "made", "recital": window,
-            "powers": parse_powers(window) if window else []}
+            "powers": parse_powers(window, text_before_window(pre)) if window else []}
 
 
 async def refresh_new(client=None) -> dict:
