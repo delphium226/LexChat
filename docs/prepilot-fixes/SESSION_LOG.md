@@ -8872,3 +8872,125 @@ its content stands.**
   re-booked and P4.12 measured; **E** the `authorities` and `negcurrency` grader fixes and the sweep priced.
   **Merge E, A, then P3.12's re-run (6335 n=3, priced to the user first), then B, C, D.** FIX_PLAN's top order
   line points at the brief. The session scratchpad was re-copied to `evidence/seam/batch9/scratchpad_s41/`.
+
+---
+
+## Session 42 — 2026-10-08 — parallel batch 10: P3.12's lever built (re-run n=1, not met); P3.22 item 1 re-booked and met; P4.3, P3.10 and P4.12 re-booked ($1.17)
+
+**Done:**
+- **Ran `PARALLEL_BATCH_10.md` (user decisions at launch: A, B, C, D and E as set out; B up to 150 National
+  Archives calls, agreed; merge order E, A, the sweep on the user's go-ahead, then B, C, D; the branch pushed
+  after each clean merge).** Step 1's checks held at `7c3c6ac`: equal to `origin`; `main` at `a6b4a76`;
+  `plan_status` 58 of 79, 2 in progress, 9 of 14; `plan_lint` 0, 0; the five rubric sha1s; 63 replay
+  directories; the six test databases; no python process, port 8000 free, no pin file; baseline suite **2783**.
+  `<INTEGRATOR_HEAD>` was `7c3c6ac`; no other session committed (checked before every merge and the fold).
+- **Every worktree came up on `main` (`a6b4a76`) again**; each agent reset to its base.
+- **Reviews** (each: the base contained, the note and diff read, the added lines grepped with
+  `matter_grep.py`, the full suite on `lexchat_test`, the scratch compared with its main-checkout copy, one
+  headline number re-run on the main checkout from a copy of the agent's script; for A and E also the
+  integrator's revert on a scratch worktree, four single-site mutants of its own and, for A, the built wording
+  screened):
+  - **B (P3.22, notes only):** 134 National Archives calls (cap 150). `analyze.py` re-run from a copy:
+    identical. Scratch 163 = 163. B also found an `authorities` gap (a link label holding a bracketed citation
+    is not read as a link), relayed to E on the user's decision.
+  - **D (P3.10, P4.12, notes only):** `p412_manager.py` and `p310_recount.py` re-run from repointed copies:
+    identical. Scratch 27 = 27.
+  - **C (P4.3, notes only):** `census.py`, `agg.py unused` and `dryrun_filter.py` re-run with
+    `P43_SERVER_PY` on the main checkout: identical. Scratch 52 = 52.
+  - **E (graders):** revert 225 lines (20 of 28 fail); of the integrator's 4 mutants the empty-words guard in
+    `_p322_is_cited_judgment` survived, so E was sent back (`dc6b630`, a letterless-citation test); then 4 of 4
+    caught, revert 21 of 29 fail. Merged `0444cac` (2812). Headline re-run on the merged tree: item 3 FAILs,
+    sweep 1 0, sweep 2a 2 (r2 t6, r3 t7) = E. Scratch 203 = 203. E ran one pytest without
+    `TEST_DATABASE_URL` (a 2-second create/drop on `lexchat_test`, no suite running then).
+  - **A (P3.12):** revert 185 lines (23 fail); of the integrator's 4 mutants the "-ies" length guard in
+    `_word_stems` survived, so A was sent back (`95603c2`). The integrator's screen (`b10_screenA.py`, built
+    code, 28 texts) found 0 detector trips but two wording defects on an unlabelled unit ("the retrieved the
+    Schedule"; a lower-case "the Schedule runs to" opening a sentence); **the user approved the wording with
+    those two fixes** (`59e854e`), kept the MATCHED tail's last sentence, and took the bound, the fallback and
+    the matched words as built. Re-checked: 4 of 4 mutants caught, revert 187 lines (24 fail), screen 0 trips.
+    Merged `8b4469c` (2833). Headline re-run on the merged tree (`dryrun_b10.py` + `compare_b10.py` from a
+    copy): identical, 16 of 16 MATCHED calls with 42-44 clean and byte-equal. Scratch 92 = 92.
+- **Seam before the sweep (user decision; $0.1767):** the default `seam_replay worker` draw has no output cap
+  and `chat_loop` retries an empty up to 3 times, which the integrator first priced wrongly as capped; the user
+  chose one draw each, then the second only under $0.30. `seam_6335_r2_matched.json` DELIVERED 2 of 2;
+  `seam_6335_r2_tail.json` PARTIAL 2 of 2; no draw called the Schedule not retrieved.
+- **The sweep (`wave4_b10_sweep`, head `8b4469c`, build `v2026.09.3-160-g8b4469c`, cap $1.90):** `replay
+  check` ($0.000984), `replay pin`, uvicorn (PID 19312) and the keep-awake helper (PID 3256) by
+  `Start-Process -PassThru`. **Rep 1 cost $0.99** (turn 1 $0.50: a Worker heavy empty capped by P4.10 at
+  30,719 tokens, re-delegated; turn 7 $0.12), so a second such rep could pass the cap: the replay process was
+  stopped at rep 2 turn 1 (the server cancelled the request) and the user chose to stop there. `replay
+  restore`, both processes stopped by PID; no pin file, no python process, port 8000 free.
+- **Graded and hand-read** (gitignored `evidence/rubrics/handread_wave4_b10_sweep.md`): the exit-1 set 0
+  except `commencements` (no graded session); `schedules` OK 2; `negcurrency`, `footer_echo`, `halts`, `lost`
+  0. **P3.12 not met:** rep 1's turn 7 SHALLOW, not DELIVERED by hand; the route handed the headings and
+  42-44 verbatim, and the Worker wrote 43(6) alone under a broad brief; no "not retrieved".
+- **Merged B `7e2339b`, C `ad5e064`, D `4fa0bb8`** (notes only; `git diff 8b4469c HEAD -- server_py` empty).
+  All agent and scratch worktrees removed.
+- **Decisions put to the user** (seven calls; all as recommended except where noted): A's wording with two
+  fixes; the seam draws, then the corrected seam pricing (one each, then decide); the sweep at $1.90, then stop
+  after rep 1; B's gap relayed to E; P3.22's item 1 re-booked and met on the existing columns; **P3.22 stays
+  `[~]` until item 3 passes (the user's choice over ticking with a new row)**; the carrier watch line,
+  `commencements`' title scope left, `p322.json` unchanged; P3.12 seam-first on rep 1's payload next; P4.3's
+  deterministic bar and V4, the link half split out (P4.23), the `rail` grader, a display row (P4.24), the
+  failed-turn rail as a watch on P4.5; P3.10's list-match bar and the ids lever; P4.12's L1 + L2' + L3 (gated),
+  a deterministic bar, the title widened, lever (i) deferred.
+- **Applied** (`64f0dec`): `fold_s42.py` (P3.12, P3.22, P4.3, P3.10, P4.12, P3.24, P3.6, P4.5 and P3.21
+  annotated; P4.12's title widened; new **P4.23** and **P4.24**; the Bucket index; the top order line; 90 bold
+  markers added). **`plan_lint` 0 errors, 0 warnings; `plan_status` 58 of 81 rows, 2 in progress, 9 of 14
+  buckets.** CHANGELOG *Unreleased*; `docs/LEGAL_DATA_SOURCES.md` and CLAUDE.md (`docs_s42.py`);
+  `docs/api/AUDIT_TRACE.md` unchanged (no new api call or shape). Suite **2833**.
+
+**Surprises / deviations:**
+- **P3.12's gap moved again, from retrieval to composition.** The route now hands paragraphs 42-44 verbatim
+  (first time live), and the Worker wrote one sub-paragraph of them under a broad brief; on the seam the same
+  new block delivered 2 of 2. Whether it is the draw or the payload is Session 43's first question.
+- **The reworded summary tail alone removes "not retrieved"** (seam 0 of 4, live 0 of 1).
+- **The default Worker seam is uncapped and retried** (no `max_tokens`, `chat_loop`'s three attempts): a
+  runaway draw can cost about $2.30, not the $0.37 a capped `--as-sent` draw costs. Priced to the user before
+  drawing.
+- **A rep can cost 1.6 times the stored maximum** from a capped Worker runaway alone ($0.99 against $0.61):
+  the per-command cap covered it only because the process was stopped by hand between reps.
+- **P3.22's drops were query choice, settled by same-query pairs** (134 calls), and a second genuine item-3
+  failure was hidden by a grader that could not read a bracketed citation inside a link label.
+- **P4.3's unused-source rate is mostly one fall-back line**, not the model declining to cite; **P3.10's halt
+  premise no longer holds** (0 of 12), but every dependent step re-derives its list.
+
+**State:** branch `fix/prepilot-defects`, pushed (head after this commit); `main` untouched at `a6b4a76`.
+2833 tests. Session spend **$1.17** (seams $0.18, the sweep's rep 1 $0.99, the probe $0.001; rep 2's turn-1
+spend unrecorded, a few cents). Agents $0 in model spend; 134 National Archives calls (B).
+
+---
+
+## Session 42 — handover for Session 43 (2026-10-08)
+
+**Take next, by severity (FIX_PLAN's top order line, "end of Session 42"):**
+1. **P1: P3.12, seam-first.** Redraw `wave4_b10_sweep/6335_rep1.json` turn 7 (the Worker delegation;
+   `seam_replay worker --run <file> --turn 7 --delegation <n> --reps 1`, about $0.05 a draw, uncapped: price it
+   at the runaway case, about $2.30) to tell whether 43(6)-only is the draw or the payload; compare with
+   `seam_6335_r2_matched.json` (DELIVERED 2 of 2). Then a $0 lever if the payload is the cause (for example the
+   block naming the paragraphs it carries, or the brief), then 6335 n=3 priced (stored reps $0.57-0.99).
+2. **P2:** P4.12's build (L1 + L2' + L3, gated; deterministic) and P4.3's V4 build with the `rail` grader
+   (deterministic), both $0; P3.10's ids line (wording to the user) then its replay (about $4-5, priced
+   first); P4.23 measure first ($0); P3.22's item 3 (measure first: is naming an out-of-corpus authority as if
+   read a prompt, a summary or a link-label shape?); P3.4's research-mode follow-up; P3.20 last.
+3. **P3:** P4.24, P4.8, P4.20, P4.22, P3.26, P3.28, P3.29, P3.30, P3.14, P4.9, P5.4's other leads, P0.7, TODO
+   B6.
+
+**Watch items carried:** P3.12's turn-1 Worker runaway in `wave4_b10_sweep` rep 1 ($0.38); P3.22's carrier
+out of the first three on 6 of 14 queries; the failed-turn rail (P4.5); `commencements`' title scope (read
+export turn 7 by hand); `negcurrency`'s definitional false positive (`wave0_conv` 6341 r1 t8); and Session 41's
+(P3.27's conjoined limit clause, P3.21's omitted "wholly", P3.4's lost 6378 rep, P3.24's three).
+
+**Decisions open with the user (carried):** sending the lawyer pack (unblocks P3.2, P3.3, P3.17; confirms
+P3.22's 6363 list); sending SCTS the note (P3.20); D23; deploying `v2026.09.3`; telling the eval-harness owner
+about schema v6 and the new `api_calls` and request keys; D19; the next cut (`v2026.10.1`: the seventeen rows
+already "Next release"); D20, D21/D22; batch 1's three items; the p37_6373 substitution; the Fix Tracker when
+asked (if asked: new rows P4.23, P2, and P4.24, P3, both `added` 2026-10-08, Verified; no row's status changes:
+P3.12 and P3.22 stay In progress).
+
+**Machine state:** no server, no pin file, no replay running, no worktree but the main checkout. **64 replay
+directories** (new: `wave4_b10_sweep`, 1 file). Rubrics unchanged; hand-read `handread_wave4_b10_sweep.md`.
+Agents' scratch in `evidence/seam/batch10/{A,B,C,D,E}/`, the session scratchpad in
+`batch10/scratchpad_s42/` (integrator tools: `review_branch.sh`, `grade_b8.sh`, `route_trace.py` (now prints
+the heading-list label), `b10_mutA.py`, `b10_mutE.py`, `b10_screenA.py`, `fold_s42.py`, `docs_s42.py`,
+`s42_decisions.md`).
