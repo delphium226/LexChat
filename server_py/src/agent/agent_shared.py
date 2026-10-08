@@ -23,8 +23,11 @@ from ..utils.schedule_units import (
     sole_schedule_reason,
     FROM_LIST,
     FROM_TEXT,
+    MATCHED,
+    MATCHED_CUTS_MIN_CHARS,
     SUMMARY,
     cut_pieces,
+    matched_pieces,
     cut_unit_from_text,
     fetch_failed_line,
     fetched_block,
@@ -602,7 +605,11 @@ async def schedule_route_block(
     it over: cut where it cuts cleanly (`schedule_units.cut_pieces`), else
     whole, summarised for the query when it is larger than a result the Worker
     would be handed verbatim (the same threshold, and the same context budget,
-    as any tool result). A unit the complete list does not hold is said in
+    as any tool result). Batch 10 A: a whole schedule over that threshold
+    whose query names no paragraph goes first as its paragraph headings and
+    the paragraphs whose headings share a distinctive word with the section
+    search's query (`schedule_units.matched_pieces`), where they fit; only
+    otherwise is it summarised. A unit the complete list does not hold is said in
     code: a true negative, attributed to the index. On a failed list, the
     instrument's whole text with its schedules (P3.27's flag) is cut at the
     unit's heading; failing that, a line says the question is open.
@@ -687,7 +694,23 @@ async def schedule_route_block(
         total = sum(len(t) for _, t in pieces)
         over_budget = (context_budget is not None and
                        context_budget["used"] + pending_chars + total > context_budget["limit"])
-        if total > threshold or over_budget:
+        # Batch 10 A: a whole schedule over the verbatim threshold, whose query
+        # names no paragraph, is handed over as its heading list and the
+        # paragraphs whose headings match the section search's query, where
+        # they fit the bound and the context budget; otherwise summarised.
+        # (`matched_pieces` itself refuses a cut, an annex or a named paragraph.)
+        matched = None
+        if total > threshold:
+            matched = matched_pieces(unit, text, args.get("query"),
+                                     max(threshold, MATCHED_CUTS_MIN_CHARS))
+            if matched is not None and context_budget is not None:
+                size = sum(len(lbl) + len(t) for lbl, t in matched)
+                if context_budget["used"] + pending_chars + size > context_budget["limit"]:
+                    matched = None
+        summary_of = how
+        if matched is not None:
+            pieces, how = matched, MATCHED
+        elif total > threshold or over_budget:
             joined = "\n\n".join((lbl + "\n" if lbl else "") + t for lbl, t in pieces)
             summary, _degraded = await summarise_for_query(
                 joined, query, summarise_model, chunk_fn=chunk_fn,
@@ -703,7 +726,7 @@ async def schedule_route_block(
         if url and retrieved_urls is not None:
             harvest_legislation_urls(json.dumps({"url": url}), into=retrieved_urls)
         block = fetched_block(lid, unit, url, pieces, how, reason=reason,
-                              total_chars=total, source=source)
+                              total_chars=total, source=source, summary_of=summary_of)
         pending_chars += len(block)
         out.append(block)
     return "".join(out)

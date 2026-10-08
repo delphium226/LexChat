@@ -1314,10 +1314,25 @@ def _fetched_wording_variants() -> list:
         su.cut_pieces(su.ScheduleUnit("schedule", "2", paragraphs=("4", "5")), "1) bare")[2],
     ]
     for source in (su.FROM_LIST, su.FROM_TEXT):
-        for how in (su.CUT, su.WHOLE, su.SUMMARY):
+        for how in (su.CUT, su.WHOLE, su.SUMMARY, su.MATCHED):
             for reason in ("", texts[-2]):
                 texts.append(su.fetched_block(lid, sch, url, [("", "")], how, reason=reason,
                                               total_chars=92066, source=source).strip())
+        # Batch 10 A: a summarised cut says so.
+        texts.append(su.fetched_block(lid, sch, url, [("", "")], su.SUMMARY,
+                                      total_chars=92066, source=source,
+                                      summary_of=su.CUT).strip())
+    # Batch 10 A: the heading list's label, an untitled heading and the cap's
+    # last line (the headings themselves are statutory text, like a cut).
+    headed = ("SCHEDULE 5 WIDGETS\nSection 1) **Widget fees**\n1) Text.\n"
+              "Section 2) ****\n1) Text.\n")
+    listed = su.matched_pieces(su.ScheduleUnit("schedule", "5"), headed, "fees", 10_000)
+    texts.append(listed[0][0])
+    texts.append(listed[0][1].split("\n")[1])
+    many = "Section 1) **Gizmo fees**\n1) Text.\n" + "".join(
+        f"Section {n}) **Widget {n}**\n1) Text.\n" for n in range(2, 160))
+    texts.append(su.matched_pieces(su.ScheduleUnit("schedule", "5"), many, "gizmo",
+                                   10_000)[0][1].split("\n")[-1])
     # Decision 1: "the Schedule" with no label, both outcomes it acts on.
     bare = su.ScheduleUnit("schedule", "")
     texts += [
@@ -1327,6 +1342,12 @@ def _fetched_wording_variants() -> list:
                          reason=su.sole_schedule_reason(lid)).strip(),
         su.fetched_block(lid, bare, url, [("", "")], su.SUMMARY, total_chars=9000,
                          reason=su.sole_schedule_reason(lid)).strip(),
+        # Batch 10 A (user's fixes, 2026-10-08): the unlabelled unit's own
+        # wording, "The Schedule runs to" and "the retrieved text of the Schedule".
+        su.fetched_block(lid, bare, url, [("", "")], su.MATCHED, total_chars=92066,
+                         reason=su.sole_schedule_reason(lid)).strip(),
+        su.fetched_block(lid, bare, url, [("", "")], su.SUMMARY, total_chars=9000,
+                         summary_of=su.CUT).strip(),
     ]
     assert all(texts) and len(set(texts)) == len(texts), texts
     return texts
