@@ -111,6 +111,26 @@ def test_both_citation_forms_are_read_each_once_in_order():
         "uksi/1901/4", "ssi/1902/30", "uksi/1903/7"]
 
 
+def test_forms_no_stored_run_holds():
+    """Input forms the 148 stored steps 2+ do not contain (batch 11 E's dry
+    run): a lost step (its label, then the scope block), a halted step whose
+    write-up round produced partial findings, and an echoed instrument-lookup
+    block. None stored was lost; the four halted ones were all written up."""
+    from src.utils.instrument_lookup import lookup_brief_block
+    from src.utils.research_halt import halt_worker_report, lost_worker_report
+
+    lost = lost_worker_report(3) + _scope_block("uksi/1909/99")
+    assert SH.handed_on_ids([lost]) == []
+    halted = halt_worker_report({"limit": 20}, sources_retrieved=2,
+                                writeup="## Findings\n- SSI 1902/30 applies.") + _scope_block()
+    assert SH.handed_on_ids([halted]) == ["ssi/1902/30"]
+    echoed = "## Findings\nWidgets.\n" + lookup_brief_block(['{"tool": "lookup_legislation", '
+                                                             '"status": "not_held", "legislation_id": '
+                                                             '"ssi/1908/8", "label": "SSI 1908/8"}'])
+    assert "ssi/1908/8" in echoed
+    assert SH.handed_on_ids([echoed]) == []
+
+
 def test_no_instrument_means_no_line():
     assert SH.handover_line(["## Findings\nNothing was cited."]) == ""
     assert SH.handover_line([]) == ""
