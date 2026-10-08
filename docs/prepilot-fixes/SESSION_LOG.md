@@ -8994,3 +8994,28 @@ Agents' scratch in `evidence/seam/batch10/{A,B,C,D,E}/`, the session scratchpad 
 `batch10/scratchpad_s42/` (integrator tools: `review_branch.sh`, `grade_b8.sh`, `route_trace.py` (now prints
 the heading-list label), `b10_mutA.py`, `b10_mutE.py`, `b10_screenA.py`, `fold_s42.py`, `docs_s42.py`,
 `s42_decisions.md`).
+
+**Addendum to Session 42 (2026-10-08, at the user's request: "make sure we're not going to lose any pertinent
+information" and "update the tracker"). The handover above stands.**
+- **Preserved** (`preserve_s42.py`): findings that lived only in agents' notes or the integrator's scratch,
+  written onto the rows a future session reads: **P3.12** (`depth --seams` strips the whole PROVISION FETCHED BY
+  CODE block, so read the handover with `route_trace.py` in `scratchpad_s42/`; `corpus`'s leak markers match the
+  block's literal opener and closer; A's seam payloads; the two live summarised calls on a 161,434-character
+  schedule with no saved lookup; the brief-plus-query matching option); **P3.10** (P3.7's `MAX_ROUTED_LOOKUPS` = 5
+  is below the 6-8 instruments of 6374's list; about 750 LEX calls over the stored plans; the CONTEXT sentence the
+  ids line must not contradict; the regex's missed form); **P4.3** (the synthetic input forms in
+  `notes/batch10_C.md` section 4; V4 changes what `turns_source_fallback` counts; C's `reader.py`); **P4.12** (no
+  retry after a clean-stop (c) empty ever answered, 0 of 12, not booked; `lostcost` prints no `react_turn`);
+  **P4.23** (6354 on Gemini kept 0 of 6, n=1); **P3.22** (the shared `MD_LINK` keeps the bracketed-label gap for
+  every other grader; `p322.json` has no `parties`/`citations`); **P3.24** (the definitional false positive is
+  not fixed); and in the **Verification protocol** a third seam lesson: the default Worker seam draw is uncapped
+  and retried (about $2.30 a runaway), and a hot sweep is stopped by stopping `replay run` between reps.
+  `plan_lint` 0 errors, 0 warnings; `plan_status` 58 of 81, 9 of 14.
+- **Fix Tracker v43** (same URL; the live body was identical to the repo source apart from the publish wrapper:
+  the Artifact read, then a Read of all 1,425 lines of the saved file): new rows **P4.23** (P2, Verified, src
+  T & R, Thomas ref 7, `added: "2026-09-18"`, the day his action 7 was first listed here, by the T & R rule) and
+  **P4.24** (P3, Verified, `added: "2026-10-08"`); **P4.3** re-labelled to the rail half (src R, no Thomas ref,
+  since action 7 moved to P4.23); **P3.10** and **P4.12** re-labelled to their re-booked levers; the In-progress
+  note; three plain-language Session 42 notes for Thomas, naming no lawyer's topic; "Next"; `AS_AT` "8th Oct
+  2026, 3:05pm" and `UPDATED`. 80 rows: 54 Fixed, 2 In progress, 18 Verified, 3 Blocked, 3 To be verified. The
+  script passes `node --check` (no layout change, so no render check). Source edited by `tracker_v43.py`.
