@@ -57,6 +57,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 import re
 import sys
 from pathlib import Path
@@ -68,6 +69,7 @@ try:
 except ImportError:  # run as a script from tools/
     from lgu_probe import LEX, LGU, PacedClient, proxy_path, _utf8_stdout  # type: ignore
 
+_TRANSIENT = (429, 500, 502, 503, 504)
 USER_AGENT = "AILA-research-probe (FIX_PLAN P3.31; read-only; paced)"
 DEFAULT_GAP_S = 0.3
 
@@ -167,7 +169,14 @@ def fetch_record(client: PacedClient, legislation_id: str, via: str = "lgu",
     if full_fallback:
         routes += [("made", "/made/data.xml"), ("current", "/data.xml")]
     for version, suffix in routes:
-        status, body = _get(client, f"/{legislation_id}{suffix}", via)
+        # A transient 429/5xx is retried with backoff (one 500 on
+        # uksi/1987/1598 stopped a 30,000-number run otherwise).
+        for wait in (0, 2, 5, 15):
+            if wait:
+                time.sleep(wait)
+            status, body = _get(client, f"/{legislation_id}{suffix}", via)
+            if status not in _TRANSIENT:
+                break
         if status == 200 and body.lstrip().startswith(b"<"):
             return record_from_xml(legislation_id, body.decode("utf-8", "replace"), version)
         if status not in (404, 410, 300):
@@ -213,7 +222,13 @@ def max_number(client: PacedClient, typ: str, year: int) -> int:
 def _done_ids(out: Path) -> set:
     if not out.exists():
         return set()
-    return {json.loads(ln)["id"] for ln in out.read_text(encoding="utf-8").splitlines() if ln.strip()}
+    done = set()
+    for ln in out.read_text(encoding="utf-8").splitlines():
+        if ln.strip():
+            r = json.loads(ln)
+            if not r.get("error"):
+                done.add(r["id"])
+    return done
 
 
 def harvest(client: PacedClient, typ: str, years: Iterable[int], out: Path,
@@ -233,7 +248,15 @@ def harvest(client: PacedClient, typ: str, years: Iterable[int], out: Path,
             if lid in done:
                 stats["skipped"] += 1
                 continue
-            rec = fetch_record(client, lid, via, full_fallback=full_fallback)
+            try:
+                rec = fetch_record(client, lid, via, full_fallback=full_fallback)
+            except RuntimeError as e:
+                # Recorded and skipped; `_done_ids` leaves it out, so the next
+                # run of the same harvest retries it.
+                with out.open("a", encoding="utf-8") as fh:
+                    fh.write(json.dumps({"id": lid, "error": str(e)[:200]}) + "\n")
+                stats["errors"] = stats.get("errors", 0) + 1
+                continue
             if rec is None:
                 rec = {"id": lid, "absent": True}
                 stats["absent"] += 1
@@ -309,7 +332,7 @@ def build_snapshot(outdir: Path, inputs: list, label: str, not_covered: str,
         if cache.exists():
             titles.update({k: v for k, v in json.loads(cache.read_text(encoding="utf-8")).items() if v})
         for r in load_records(path):
-            if r.get("absent"):
+            if r.get("absent") or r.get("error"):
                 continue
             recs[r["id"]] = r
     rows, with_powers, unresolved = [], 0, set()
