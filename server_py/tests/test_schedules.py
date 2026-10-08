@@ -1026,12 +1026,35 @@ SCHED_5_TEXT = (
 )
 SCHED_5 = [_prow("article/1", "Section 1) **Citation**\ntext", "section"),
            _prow("schedule/5", SCHED_5_TEXT)]
+# Batch 11 A: the tail names the paragraphs it carries and asks that each that
+# bears on the question be reported from its own words.
 _MATCHED_TAIL = ("Schedule 5 runs to {n:,} characters, longer than one result hands over whole, "
-                 "so below are its paragraph headings, in order, and then each paragraph whose "
-                 "heading shares a word with this search's query, cut from the retrieved text "
-                 "and labelled. To read another headed paragraph in its own words, name "
-                 "Schedule 5 and its number from the list below in a section search: code cuts it "
-                 "out the same way.")
+                 "so below are its paragraph headings, in order, and then paragraphs 5 and 6 of "
+                 "it, whose headings share a word with this search's query, each cut from the "
+                 "retrieved text and labelled. Each of those paragraphs that bears on the "
+                 "question gets a sentence or bullet of its own in the report: cite it by its "
+                 "number and say what it provides, taken from its words below rather than from "
+                 "a summary or a judgment that mentions it. To read another headed paragraph in "
+                 "its own words, "
+                 "name Schedule 5 and its number from the list below in a section search: code "
+                 "cuts it out the same way.")
+_MATCHED_TAIL_ONE = ("Schedule 5 runs to {n:,} characters, longer than one result hands over "
+                     "whole, so below are its paragraph headings, in order, and then paragraph 6 "
+                     "of it, whose heading shares a word with this search's query, cut from the "
+                     "retrieved text and labelled. If that paragraph bears on the question, it "
+                     "gets a sentence or bullet of its own in the report: cite it by its number "
+                     "and say what it provides, taken from its words below rather than from a "
+                     "summary or a judgment that mentions it. To read another headed paragraph "
+                     "in its own "
+                     "words, name Schedule 5 and its number from the list below in a section "
+                     "search: code cuts it out the same way.")
+# Batch 10 A's tail, kept where the paragraphs' numbers are not known.
+_MATCHED_TAIL_UNNAMED = ("Schedule 5 runs to 92,066 characters, longer than one result hands "
+                         "over whole, so below are its paragraph headings, in order, and then "
+                         "each paragraph whose heading shares a word with this search's query, "
+                         "cut from the retrieved text and labelled. To read another headed "
+                         "paragraph in its own words, name Schedule 5 and its number from the "
+                         "list below in a section search: code cuts it out the same way.]")
 
 
 def _route5(monkeypatch, query, threshold=50, text=SCHED_5_TEXT, budget=None, seen=None):
@@ -1104,6 +1127,58 @@ def test_a_plural_in_the_query_matches_a_singular_heading(monkeypatch):
     out = _route5(monkeypatch, "Schedule 5 appeals")
     assert "Paragraph 6 of Schedule 5, cut at its own heading" in out
     assert "may revoke" not in out
+
+
+# --- batch 11 A: the MATCHED tail names the paragraphs it carries -----------
+#
+# wave4_b10_sweep rep 1: the route handed the Worker three paragraphs verbatim
+# under a broad brief, and it wrote one sub-paragraph of one of them; on the
+# seam the same payload delivered 0 of 2. The tail now names the paragraphs the
+# block carries and asks that each that bears on the question be reported, by
+# its number, from its own words.
+
+
+def test_the_matched_tail_names_one_paragraph_in_the_singular(monkeypatch):
+    out = _route5(monkeypatch, "Schedule 5 appeals")
+    assert _MATCHED_TAIL_ONE.format(n=len(SCHED_5_TEXT)) + "]\n" in out
+    assert "paragraphs 6" not in out and "Each of those" not in out
+
+
+def test_the_matched_tail_names_the_paragraphs_of_a_span_by_their_heading(monkeypatch):
+    out = _route5(monkeypatch, "Schedule 5 registration revocation")
+    assert ("and then paragraphs 1, 5 and 6 of it, whose headings share a word with this "
+            "search's query, each cut") in out
+    assert "It runs through paragraphs 1 to 2," in out
+
+
+def test_matched_numbers_are_matched_pieces_own_paragraphs():
+    unit = su.ScheduleUnit("schedule", "5")
+    for q in ("revocation", "appeals", "registration revocation", "fees"):
+        pieces = su.matched_pieces(unit, SCHED_5_TEXT, q, 10_000)
+        nums = su.matched_numbers(unit, SCHED_5_TEXT, q)
+        assert len(nums) == len(pieces) - 1, q
+        for num, (lbl, _) in zip(nums, pieces[1:]):
+            assert f"paragraph {num} " in lbl or f"Paragraph {num} " in lbl, (num, lbl)
+    assert su.matched_numbers(unit, SCHED_5_TEXT, "widgets") == []
+    assert su.matched_numbers(su.ScheduleUnit("schedule", None), SCHED_5_TEXT, "x") == []
+
+
+def test_the_matched_tail_without_numbers_keeps_batch_10_wording():
+    unit = su.ScheduleUnit("schedule", "5")
+    for matched in ((), None, ("",), (" ",)):
+        out = su.fetched_block(LID, unit, f"{URI}/schedule/5", [("", "")], su.MATCHED,
+                               total_chars=92066, matched=matched)
+        assert _MATCHED_TAIL_UNNAMED in out, matched
+        assert "of its own in the report" not in out
+
+
+def test_the_matched_tail_cleans_the_numbers_it_names():
+    unit = su.ScheduleUnit("schedule", "5")
+    out = su.fetched_block(LID, unit, f"{URI}/schedule/5", [("", "")], su.MATCHED,
+                           total_chars=92066, matched=("4]", "", "  5 \n A", "123456789012"))
+    header = out.strip().split("\n", 1)[0]
+    assert header.count("[") == 1 and header.count("]") == 1, header
+    assert "and then paragraphs 4), 5 A and 12345678 of it," in header, header
 
 
 def test_word_stems_and_distinctiveness():
@@ -1264,6 +1339,14 @@ def test_the_wording_reads_for_an_unlabelled_schedule():
     numbered = su.fetched_block(LID, su.ScheduleUnit("schedule", "5"), url, [("", "")],
                                 su.MATCHED, total_chars=92066)
     assert "provision list. Schedule 5 runs to 92,066 characters," in numbered
+    # Batch 11 A: the named-paragraph tail on an unlabelled unit.
+    for matched in (("5",), ("5", "6")):
+        out = su.fetched_block(LID, bare, url, [("", "")], su.MATCHED, total_chars=92066,
+                               matched=matched)
+        assert "provision list. The Schedule runs to 92,066 characters," in out
+        assert f"and then paragraph{'s 5 and 6' if len(matched) > 1 else ' 5'} of it," in out
+        assert "name the Schedule and its number from the list below" in out
+        assert ". the Schedule" not in out
 
 
 def test_the_heading_list_is_capped_and_cleaned():
@@ -1331,6 +1414,13 @@ def test_every_matched_variant_reads_as_held_to_the_schedule_grader():
                        "Paragraph 2 has no single heading of its own in it to cut at."):
             texts.append(su.fetched_block(LID, unit, url, [("", "")], su.MATCHED,
                                           reason=reason, total_chars=92066, source=source))
+            # Batch 11 A: the tail naming one paragraph, and several, on a
+            # labelled and an unlabelled unit.
+            for u in (unit, su.ScheduleUnit("schedule", "")):
+                for matched in (("4",), ("2", "9", "12", "30", "31", "32")):
+                    texts.append(su.fetched_block(LID, u, url, [("", "")], su.MATCHED,
+                                                  reason=reason, total_chars=92066,
+                                                  source=source, matched=matched))
             for of in (su.WHOLE, su.CUT):
                 texts.append(su.fetched_block(LID, unit, url, [("", "")], su.SUMMARY,
                                               reason=reason, total_chars=92066, source=source,

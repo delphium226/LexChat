@@ -1322,6 +1322,14 @@ def _fetched_wording_variants() -> list:
         texts.append(su.fetched_block(lid, sch, url, [("", "")], su.SUMMARY,
                                       total_chars=92066, source=source,
                                       summary_of=su.CUT).strip())
+        # Batch 11 A: the MATCHED tail naming one paragraph, and several, on a
+        # labelled and an unlabelled unit, with and without a reason.
+        for unit in (sch, su.ScheduleUnit("schedule", "")):
+            for matched in (("4",), ("2", "9", "12", "30", "31", "32")):
+                for reason in ("", su.sole_schedule_reason(lid)):
+                    texts.append(su.fetched_block(lid, unit, url, [("", "")], su.MATCHED,
+                                                  reason=reason, total_chars=92066,
+                                                  source=source, matched=matched).strip())
     # Batch 10 A: the heading list's label, an untitled heading and the cap's
     # last line (the headings themselves are statutory text, like a cut).
     headed = ("SCHEDULE 5 WIDGETS\nSection 1) **Widget fees**\n1) Text.\n"

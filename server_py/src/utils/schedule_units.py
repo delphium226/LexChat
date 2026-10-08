@@ -824,6 +824,15 @@ def _heading_list_piece(unit: ScheduleUnit, headings: list) -> tuple:
     return label, "\n".join(lines)
 
 
+def matched_numbers(unit: ScheduleUnit, text: str, query: Any) -> list:
+    """The numbers of the paragraphs `matched_pieces` cuts for `query`, in
+    order (batch 11 A: the MATCHED tail names them). [] on any failure."""
+    try:
+        return heading_matches(paragraph_headings(text), query, unit)
+    except Exception:
+        return []
+
+
 def matched_pieces(unit: ScheduleUnit, text: str, query: Any, bound: int) -> Optional[list]:
     """`[(label, text)]` for a schedule too large to hand over whole whose
     query names no paragraph: its heading list first, then each paragraph
@@ -839,7 +848,7 @@ def matched_pieces(unit: ScheduleUnit, text: str, query: Any, bound: int) -> Opt
         text = str(text or "")
         headings = paragraph_headings(text)
         cuts = []
-        for num in heading_matches(headings, query, unit):
+        for num in matched_numbers(unit, text, query):
             # A number met on two heading lines is not cut at all (NOT_CUT),
             # so two matched headings never give the same span.
             span, how, through = cut_schedule_paragraph(text, num)
@@ -855,15 +864,16 @@ def matched_pieces(unit: ScheduleUnit, text: str, query: Any, bound: int) -> Opt
 
 def fetched_block(lid: str, unit: ScheduleUnit, url: str, pieces: list, how: str,
                   reason: str = "", total_chars: int = 0, source: str = FROM_LIST,
-                  summary_of: str = WHOLE) -> str:
+                  summary_of: str = WHOLE, matched: Any = ()) -> str:
     """The block handed to the Worker. `pieces` is [(label, text)]. `how` is
     CUT (each piece labelled), WHOLE (the unit verbatim), MATCHED (batch 10
     A: the heading list and the query-matched paragraphs, each labelled) or
     SUMMARY (the unit, or with `summary_of=CUT` the cut, summarised for the
     query). `source` is FROM_LIST (the provision list) or FROM_TEXT (P3.12's
     fallback: cut out of the whole text because the provision list did not
-    come back). `reason` says why a named sub-unit was not cut. One block per
-    unit.
+    come back). `reason` says why a named sub-unit was not cut. `matched` is
+    the MATCHED paragraphs' numbers (`matched_numbers`), which the tail names
+    (batch 11 A). One block per unit.
 
     Batch 10 A: the summarised tail used to end "The summary is not the
     statutory text: quote the provision only from retrieved text", and in
@@ -897,11 +907,33 @@ def fetched_block(lid: str, unit: ScheduleUnit, url: str, pieces: list, how: str
         # The unit opens this sentence: "the Schedule" is capitalised there.
         opener = name[:1].upper() + name[1:]
         tail = (f" {opener} runs to {total_chars:,} characters, longer than one result hands "
-                "over whole, so below are its paragraph headings, in order, and then each "
-                "paragraph whose heading shares a word with this search's query, cut from "
-                "the retrieved text and labelled. To read another headed paragraph in its "
-                f"own words, name {name} and its number from the list below in a section "
-                "search: code cuts it out the same way.")
+                "over whole, so below are its paragraph headings, in order, and then ")
+        nums = [_clean(n, 8) for n in (matched or ()) if _clean(n, 8)]
+        if not nums:
+            tail += ("each paragraph whose heading shares a word with this search's query, "
+                     "cut from the retrieved text and labelled.")
+        elif len(nums) == 1:
+            # Batch 11 A (P3.12): in the batch 10 re-run the Worker had three
+            # matched paragraphs verbatim under a broad brief and wrote one
+            # sub-paragraph of one of them (0 of 2 on the seam too); the tail
+            # now names the paragraphs it carries and asks that each that
+            # bears on the question be reported from its own words.
+            tail += (f"paragraph {nums[0]} of it, whose heading shares a word with this "
+                     "search's query, cut from the retrieved text and labelled. If that "
+                     "paragraph bears on the question, it gets a sentence or bullet of its own "
+                     "in the report: cite it by its number and say what it provides, taken "
+                     "from its words below rather than from a summary or a judgment that "
+                     "mentions it.")
+        else:
+            tail += (f"paragraphs {_and_join(nums)} of it, whose headings share a word with "
+                     "this search's query, each cut from the retrieved text and labelled. "
+                     "Each of those paragraphs that bears on the question gets a sentence or "
+                     "bullet of its own in the report: cite it by its number and say what it "
+                     "provides, taken from its words below rather than from a summary or a "
+                     "judgment that mentions it.")
+        tail += (" To read another headed paragraph in its own words, name "
+                 f"{name} and its number from the list below in a section search: code "
+                 "cuts it out the same way.")
     elif how == WHOLE:
         tail = f" Below is the whole of {name}."
     else:
