@@ -335,6 +335,43 @@ async def test_ollama_manager_idle_timeouts_follow_the_gate(_no_sleep, _mock_htt
 
 
 @pytest.mark.asyncio
+async def test_ollama_counts_idle_timeouts_not_attempts(_no_sleep, _mock_http, _audit):
+    """A clean stop, then the call's first idle timeout: that one keeps its retry."""
+    h = _serve(_mock_http, _OLLAMA_EMPTY, _OLLAMA_IDLE, _OLLAMA_CONTENT)
+    assert (await _ollama_mgr(True))["content"] == "hello" and len(h.seen) == 3
+
+
+_OLLAMA_TOOL_CALL = ('{"message":{"tool_calls":[{"function":{"name":"delegate_research",'
+                     '"arguments":{}}}]},"done":true}\n')
+
+
+@pytest.mark.asyncio
+async def test_ollama_forwards_the_flags_through_the_loop(_no_sleep, _mock_http, _audit):
+    reports = []
+
+    async def executor(name, args):
+        reports.append("a report")
+        return "tool output"
+
+    h = _serve(_mock_http, _OLLAMA_TOOL_CALL, _OLLAMA_HEAVY, _OLLAMA_CONTENT)
+    result = await ollama_client.chat_loop(
+        messages=[{"role": "user", "content": "q"}], model="m", cancel_event=None,
+        num_ctx=0, tools=[], tool_executor=executor, manager_call=True,
+        manager_report_in_hand=lambda: bool(reports))
+    assert result["content"] == "" and len(h.seen) == 2
+
+
+@pytest.mark.asyncio
+async def test_ollama_forwards_the_flags_to_the_step_cap_write_up(_no_sleep, _mock_http, _audit):
+    h = _serve(_mock_http, _OLLAMA_HEAVY, _OLLAMA_CONTENT)
+    result = await ollama_client.chat_loop(
+        messages=[{"role": "user", "content": "q"}], model="m", cancel_event=None,
+        num_ctx=0, tools=[], tool_executor=None, max_turns=0, manager_call=True,
+        manager_report_in_hand=lambda: True)
+    assert len(h.seen) == 1 and result["halted"]["written_up"] is False
+
+
+@pytest.mark.asyncio
 async def test_ollama_manager_call_takes_no_cap(_no_sleep, _mock_http):
     h = _serve(_mock_http, _OLLAMA_CONTENT)
     await _ollama_mgr(True)
