@@ -468,8 +468,12 @@ def test_no_marker_hands_over_the_whole_unit_verbatim_or_summarised(monkeypatch)
     assert "Form B." in small
     seen = []
     big = _route("Schedule 3 paragraph 2", threshold=20, summary=seen, monkeypatch=monkeypatch)
-    assert "Below is Schedule 3 summarised for this research question" in big
-    assert "The summary is not the statutory text" in big and "SUMMARY." in big
+    # Batch 10 A: the tail says the unit was retrieved and the summary is a
+    # condensed reading of that retrieved text.
+    assert (f"Code retrieved the whole of Schedule 3, {len(SCHED_3_TEXT)} characters, and "
+            "below is a summary of that retrieved text, condensed for this research "
+            "question.") in big
+    assert "SUMMARY." in big
     assert "Form B." not in big and seen == [len(SCHED_3_TEXT)]
 
 
@@ -478,7 +482,8 @@ def test_the_context_budget_also_sends_the_unit_to_the_summariser(monkeypatch):
     seen = []
     out = _route("Schedule 3", summary=seen, monkeypatch=monkeypatch,
                  budget={"used": 100, "limit": 110})
-    assert "summarised for this research question" in out and seen
+    assert "a summary of that retrieved text, condensed for this research question" in out
+    assert seen
 
 
 # --- what the list says when it does not give the unit ------------------------
@@ -996,3 +1001,294 @@ async def test_a_gathered_round_through_run_worker_tool_reads_one_list(monkeypat
         set_request_provider_config({})
     assert asked == ["/section/lookup"]
     assert "A fee may be refunded." in outs[0] and "Below is the whole of Schedule 3" in outs[1]
+
+
+# --- batch 10 A: a schedule too large to hand over whole, no paragraph named --
+#
+# Session 41's sweep: every Worker query named the Schedule alone, so the route
+# summarised the whole of it, and the summary kept some paragraphs and dropped
+# others. Now such a schedule goes over as its paragraph headings and the
+# paragraphs whose headings share a distinctive word with the section search's
+# query, cut by `cut_schedule_paragraph`'s rules; the summary stays where
+# nothing matches, a match cannot be cut, or the cuts exceed the bound.
+
+SCHED_5_TEXT = (
+    "SCHEDULE 5 WIDGET LICENSING Article 4\n\n"
+    "Section 1) **Registration**\n1) A widget is registered by the registrar.\n"
+    "2) A registration lasts a year.\n"
+    "Section 3) **Licences**\n1) A licence is required to sell a widget.\n"
+    "Section 4) **Suspension of licences**\n1) The registrar may suspend a licence.\n"
+    "Section 5) **Revocation of  licences**\n1) The registrar may revoke a licence.\n"
+    "Section 6) **Appeal against revocation**\n1) An appeal lies to the sheriff.\n"
+    "Section 7) ****\n1) Untitled words.\n"
+    "Section 8) **Fees for licences**\n1) The fee is a crown.\n"
+    "Section 9) **Ox carts [repealed]**\n1) Carts drawn by oxen are exempt.\n"
+)
+SCHED_5 = [_prow("article/1", "Section 1) **Citation**\ntext", "section"),
+           _prow("schedule/5", SCHED_5_TEXT)]
+_MATCHED_TAIL = ("Schedule 5 runs to {n:,} characters, longer than one result hands over whole, "
+                 "so below are its paragraph headings, in order, and then each paragraph whose "
+                 "heading shares a word with this search's query, cut from the retrieved text "
+                 "and labelled. To read another headed paragraph in its own words, name "
+                 "Schedule 5 and its number from the list below in a section search: code cuts it "
+                 "out the same way.")
+
+
+def _route5(monkeypatch, query, threshold=50, text=SCHED_5_TEXT, budget=None, seen=None):
+    _route_lex(monkeypatch, provisions=(200, [SCHED_5[0], _prow("schedule/5", text)]))
+    return _route(query, threshold=threshold, summary=seen if seen is not None else [],
+                  monkeypatch=monkeypatch, budget=budget)
+
+
+def test_a_large_schedule_named_alone_goes_as_headings_and_matched_paragraphs(monkeypatch):
+    seen = []
+    urls = set()
+    _route_lex(monkeypatch, provisions=(200, SCHED_5))
+    out = _route("Schedule 5 revocation of licences", threshold=50, summary=seen,
+                 monkeypatch=monkeypatch, urls=urls)
+    assert out.startswith("\n\n[PROVISION FETCHED BY CODE — the index holds Schedule 5 of "
+                          "ssi/1901/3 as one provision")
+    assert _MATCHED_TAIL.format(n=len(SCHED_5_TEXT)) + "]\n" in out
+    assert ("The paragraph headings of Schedule 5, in order, each after the number of the "
+            "paragraph it opens:\n1: Registration\n3: Licences\n4: Suspension of licences\n"
+            "5: Revocation of licences\n6: Appeal against revocation\n7: (untitled)\n"
+            "8: Fees for licences\n9: Ox carts (repealed)\n\n") in out
+    assert "Paragraph 5 of Schedule 5, cut at its own heading and the next one:\n" in out
+    assert "Paragraph 6 of Schedule 5, cut at its own heading and the next one:\n" in out
+    assert "may revoke a licence" in out and "appeal lies to the sheriff" in out
+    # Only the matched paragraphs' text, never the rest of the schedule.
+    for absent in ("may suspend", "lasts a year", "a crown", "oxen", "required to sell"):
+        assert absent not in out, absent
+    assert seen == []                       # the summariser was not called
+    assert out.rstrip().endswith("[/PROVISION FETCHED BY CODE]")
+    assert any(u.endswith("ssi/1901/3/schedule/5") for u in urls), urls
+    header = out.strip().split("\n", 1)[0]
+    assert header.count("[") == 1 and header.count("]") == 1, header
+    assert strip_scope_blocks("Answer." + out) == ("Answer.", 1)
+
+
+def test_a_cross_heading_over_several_paragraphs_is_cut_as_a_labelled_span(monkeypatch):
+    out = _route5(monkeypatch, "Schedule 5 registration")
+    assert ("The text of Schedule 5 from the heading of paragraph 1 to the next headed "
+            "paragraph. It runs through paragraphs 1 to 2, because the paragraphs after 1 in "
+            "it carry no heading of their own:\n") in out
+    assert "A registration lasts a year." in out and "required to sell" not in out
+
+
+@pytest.mark.parametrize("query", [
+    "Schedule 5 licences",         # in four headings: not distinctive
+    "Schedule 5 widgets",          # in no heading
+    "Schedule 5 for",              # a stop word, in one heading
+    "Schedule 5 ox",               # two letters, in one heading
+])
+def test_a_query_with_no_distinctive_heading_word_is_summarised(monkeypatch, query):
+    seen = []
+    out = _route5(monkeypatch, query, seen=seen)
+    assert seen == [len(SCHED_5_TEXT)]
+    assert (f"Code retrieved the whole of Schedule 5, {len(SCHED_5_TEXT):,} characters, and "
+            "below is a summary of that retrieved text") in out
+    assert "paragraph headings" not in out and "SUMMARY." in out
+
+
+def test_a_plural_in_the_query_matches_a_singular_heading(monkeypatch):
+    out = _route5(monkeypatch, "Schedule 5 appeals")
+    assert "Paragraph 6 of Schedule 5, cut at its own heading" in out
+    assert "may revoke" not in out
+
+
+def test_word_stems_and_distinctiveness():
+    assert su._word_stems("Penalties licences class of the OX") == {
+        "penalty", "licence", "class"}
+    heads = [("1", "Widget fees"), ("2", "Widget forms"), ("3", "Widget seals"),
+             ("4", "Gadget fees"), ("5", "Gadget forms"), ("6", "Gadget seals"),
+             ("7", "Gadget rates"), ("8", "Abc rules")]
+    unit = su.ScheduleUnit("schedule", "5")
+    assert su.heading_matches(heads, "widget", unit) == ["1", "2", "3"]     # in three: kept
+    assert su.heading_matches(heads, "gadget", unit) == []                 # in four: dropped
+    assert su.heading_matches(heads, "gadget seals", unit) == ["3", "6"]
+    # The unit's own label is never a query word.
+    assert su.heading_matches(heads, "Schedule ABC1", su.ScheduleUnit("schedule", "ABC1")) == []
+    assert su.heading_matches(heads, "abc", unit) == ["8"]
+
+
+def test_a_matched_paragraph_that_cannot_be_cut_sends_the_summary(monkeypatch):
+    twice = SCHED_5_TEXT + "Section 6) **Appeal again**\n1) Repeated.\n"
+    seen = []
+    out = _route5(monkeypatch, "Schedule 5 revocation", text=twice, seen=seen)
+    assert seen == [len(twice)] and "paragraph headings" not in out
+    assert su.matched_pieces(su.ScheduleUnit("schedule", "5"), twice, "revocation",
+                             10_000) is None
+
+
+def test_cuts_over_the_bound_send_the_summary(monkeypatch):
+    unit = su.ScheduleUnit("schedule", "5")
+    pieces = su.matched_pieces(unit, SCHED_5_TEXT, "revocation", 10_000)
+    cut = sum(len(t) for _, t in pieces[1:])
+    assert [lbl.split(",")[0] for lbl, _ in pieces[1:]] == ["Paragraph 5 of Schedule 5",
+                                                            "Paragraph 6 of Schedule 5"]
+    assert su.matched_pieces(unit, SCHED_5_TEXT, "revocation", cut) is not None
+    assert su.matched_pieces(unit, SCHED_5_TEXT, "revocation", cut - 1) is None
+    # Through the route: the bound is the threshold or MATCHED_CUTS_MIN_CHARS,
+    # whichever is larger.
+    monkeypatch.setattr(agent_shared, "MATCHED_CUTS_MIN_CHARS", 10)
+    seen = []
+    out = _route5(monkeypatch, "Schedule 5 revocation", threshold=cut - 1, seen=seen)
+    assert seen and "paragraph headings" not in out
+    out = _route5(monkeypatch, "Schedule 5 revocation", threshold=cut)
+    assert "Paragraph 5 of Schedule 5, cut at its own heading" in out
+    monkeypatch.setattr(agent_shared, "MATCHED_CUTS_MIN_CHARS", cut)
+    out = _route5(monkeypatch, "Schedule 5 revocation", threshold=10)
+    assert "Paragraph 5 of Schedule 5, cut at its own heading" in out
+
+
+def test_the_matched_block_must_fit_the_context_budget(monkeypatch):
+    unit = su.ScheduleUnit("schedule", "5")
+    pieces = su.matched_pieces(unit, SCHED_5_TEXT, "revocation", 10_000)
+    size = sum(len(lbl) + len(t) for lbl, t in pieces)
+    out = _route5(monkeypatch, "Schedule 5 revocation", budget={"used": 0, "limit": size})
+    assert "Paragraph 5 of Schedule 5, cut at its own heading" in out
+    seen = []
+    out = _route5(monkeypatch, "Schedule 5 revocation", budget={"used": 1, "limit": size},
+                  seen=seen)
+    assert seen and "paragraph headings" not in out
+
+
+def test_a_schedule_under_the_threshold_but_over_the_budget_is_summarised_as_before(monkeypatch):
+    """The lever is for a unit over the verbatim threshold. A smaller unit
+    that only the context budget sends to the summariser is summarised as
+    before, even where its matched paragraphs alone would fit."""
+    unit = su.ScheduleUnit("schedule", "5")
+    pieces = su.matched_pieces(unit, SCHED_5_TEXT, "revocation", 10_000)
+    size = sum(len(lbl) + len(t) for lbl, t in pieces)
+    assert size < len(SCHED_5_TEXT)
+    seen = []
+    out = _route5(monkeypatch, "Schedule 5 revocation", threshold=8000, seen=seen,
+                  budget={"used": 0, "limit": size + 1})
+    assert seen == [len(SCHED_5_TEXT)] and "paragraph headings" not in out
+
+
+def test_a_named_paragraph_an_annex_or_a_chapter_never_takes_the_heading_path(monkeypatch):
+    seen = []
+    # A named paragraph with no heading of its own: the whole schedule,
+    # summarised, with the reason; never the heading list.
+    out = _route5(monkeypatch, "Schedule 5 paragraph 2 revocation", seen=seen)
+    assert "Paragraph 2 has no single heading of its own in it to cut at." in out
+    assert seen and "paragraph headings" not in out
+    # An annex whose text carries the same heading lines.
+    annex = SCHED_5_TEXT.replace("SCHEDULE 5", "ANNEX III")
+    _route_lex(monkeypatch, provisions=(200, [_prow("annex/III", annex)]))
+    out = _route("Annex III revocation", threshold=50, summary=[], monkeypatch=monkeypatch)
+    assert "a summary of that retrieved text" in out and "paragraph headings" not in out
+    for unit in (su.ScheduleUnit("annex", "III"),
+                 su.ScheduleUnit("schedule", "5", paragraphs=("2",)),
+                 su.ScheduleUnit("schedule", "5", chapter="II")):
+        assert su.matched_pieces(unit, SCHED_5_TEXT, "revocation", 10_000) is None, unit
+    assert su.matched_pieces(su.ScheduleUnit("schedule", "3"), SCHED_3_TEXT, "forms",
+                             10_000) is None          # no heading line at all
+
+
+def test_the_heading_path_also_serves_the_text_fallback_and_the_sole_schedule(monkeypatch):
+    """Two forms no stored run reaches: the unit cut out of the whole text
+    after a failed provision list, and "the Schedule" with no label where it
+    is the instrument's only one."""
+    whole = SECTIONS + "\n\n" + SCHED_5_TEXT
+    _route_lex(monkeypatch, provisions=(503, {"detail": "busy"}), text=(200, _record(whole)))
+    out = _route("Schedule 5 revocation", threshold=50, summary=[], monkeypatch=monkeypatch)
+    assert "did not come back, so code cut Schedule 5 out of the instrument's whole text" in out
+    assert "Paragraph 5 of Schedule 5, cut at its own heading" in out
+    assert "The paragraph headings of Schedule 5, in order" in out
+    _route_lex(monkeypatch, provisions=(200, [SCHED_5[0], _prow("schedule", SCHED_5_TEXT)]))
+    out = _route("the Schedule revocation", threshold=50, summary=[], monkeypatch=monkeypatch)
+    assert ("The paragraph headings of the Schedule, in order" in out
+            and "Paragraph 5 of the Schedule, cut at its own heading" in out)
+    assert out.split("\n", 3)[2].endswith(
+        "It is the only schedule the index holds for ssi/1901/3.]")
+
+
+def test_a_summarised_cut_says_it_is_the_cut_that_was_summarised(monkeypatch):
+    _route_lex(monkeypatch)
+    out = _route("Schedule 2 paragraph 4", threshold=20, summary=[], monkeypatch=monkeypatch)
+    assert ("Code retrieved the whole of Schedule 2 and cut out the parts of it this search "
+            "named,") in out
+    assert "below is a summary of those retrieved parts" in out
+    assert "paragraph headings" not in out
+
+
+def test_the_heading_list_is_capped_and_cleaned():
+    long_head = "Widget " + "very " * 60 + "long"
+    text = "SCHEDULE 7 MANY\n" + "".join(
+        f"Section {n}) **{'Gizmo rules' if n == 1 else long_head if n == 2 else f'Heading {n}'}**"
+        f"\n1) Words {n}.\n" for n in range(1, 161))
+    pieces = su.matched_pieces(su.ScheduleUnit("schedule", "7"), text, "gizmo", 100_000)
+    label, body = pieces[0]
+    lines = body.split("\n")
+    assert len(lines) == 151 and lines[-1] == "and 10 more headings after paragraph 150"
+    assert lines[0] == "1: Gizmo rules" and lines[149] == "150: Heading 150"
+    assert lines[1].startswith("2: Widget very very") and len(lines[1]) == len("2: ") + 120
+    assert [lbl.split(",")[0] for lbl, _ in pieces[1:]] == ["Paragraph 1 of Schedule 7"]
+
+
+@pytest.mark.asyncio
+async def test_the_matched_block_reaches_the_worker_through_run_worker_tool(monkeypatch):
+    """The real path: the section search's own query is what the headings are
+    matched against (the research question passed beside it is not)."""
+    _route_lex(monkeypatch, provisions=(200, SCHED_5))
+    from src.agent import provider_factory
+    monkeypatch.setattr(provider_factory, "get_summarise_threshold", lambda *a, **k: 300)
+    seen = []
+
+    async def fake_summarise(text, q, model, **kw):
+        seen.append(len(text))
+        return "SUMMARY.", False
+
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
+        return _search_result("article/1")
+
+    monkeypatch.setattr(agent_shared, "summarise_for_query", fake_summarise)
+    monkeypatch.setattr(agent_shared, "execute_worker_tool", fake_exec)
+    set_request_provider_config({"_provider": "openrouter", "model": "test-model"})
+    try:
+        out = await agent_shared.run_worker_tool(
+            "search_legislation_sections",
+            {"legislation_id": LID, "query": "Schedule 5 appeal against revocation"},
+            "Which fees apply to widget licences?", None, "m", provision_fetches={},
+            context_budget={"used": 0, "limit": 250_000})
+    finally:
+        set_request_provider_config({})
+    assert out.startswith(_search_result("article/1"))
+    assert _MATCHED_TAIL.format(n=len(SCHED_5_TEXT)) in out
+    assert "appeal lies to the sheriff" in out and "a crown" not in out
+    assert seen == []
+
+
+def test_every_matched_variant_reads_as_held_to_the_schedule_grader():
+    """`replay_report.sched_unit_clauses` must class no clause of the new
+    wording as a negative (INDEX, TEXT, NEG) or a limit or offer: the unit is
+    held and was retrieved."""
+    import re
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from tools import replay_report as rr
+
+    unit = su.ScheduleUnit("schedule", "5")
+    url = f"{URI}/schedule/5"
+    texts = []
+    for source in (su.FROM_LIST, su.FROM_TEXT):
+        for reason in ("", su.sole_schedule_reason(LID),
+                       "Paragraph 2 has no single heading of its own in it to cut at."):
+            texts.append(su.fetched_block(LID, unit, url, [("", "")], su.MATCHED,
+                                          reason=reason, total_chars=92066, source=source))
+            for of in (su.WHOLE, su.CUT):
+                texts.append(su.fetched_block(LID, unit, url, [("", "")], su.SUMMARY,
+                                              reason=reason, total_chars=92066, source=source,
+                                              summary_of=of))
+    texts += [su.matched_pieces(unit, SCHED_5_TEXT, "revocation", 10_000)[0][0],
+              "and 10 more headings after paragraph 150", "7: (untitled)"]
+    unit_rx = re.compile(r"\b(?:schedules?|annex(?:es)?)\b", re.I)
+    for text in texts:
+        classes = {c for c, _, _ in rr.sched_unit_clauses(text, unit_rx)}
+        assert classes <= {""}, (classes, text)
+        assert not rr.SCHED_LIMIT.search(text), text
+        assert not rr._P312_NOT_DELIVERED.search(text), text
+        assert not re.search(r"\bnot\b[^.]{0,40}\bretriev", text, re.I), text

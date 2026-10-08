@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -79,9 +80,14 @@ __all__ = [
     "BARE_ABSENT",
     "BARE_ONE",
     "cut_pieces",
+    "paragraph_headings",
+    "heading_matches",
+    "matched_pieces",
+    "MATCHED_CUTS_MIN_CHARS",
     "CUT",
     "WHOLE",
     "SUMMARY",
+    "MATCHED",
     "FROM_LIST",
     "FROM_TEXT",
     "PARAGRAPH_CUT",
@@ -728,14 +734,144 @@ def cut_pieces(unit: ScheduleUnit, text: str) -> tuple:
     return [("", text)], WHOLE, ""
 
 
+# ---------------------------------------------------------------------------
+# Batch 10 A (P3.12's next lever, user decision 2026-10-07): a schedule too
+# large to hand over whole, whose query names no paragraph
+# ---------------------------------------------------------------------------
+#
+# Session 41's sweep: no Manager brief named the paragraphs the question needed,
+# every Worker query named the Schedule alone, so the route handed over the
+# whole 92,066-character Schedule summarised for the question, and the summary
+# kept some paragraphs and dropped others. Measured over every stored route
+# call (`notes/batch10_A.md`): every query that reached that summary on a
+# schedule with paragraph headings shares a word with the headings of the
+# paragraphs it needed. So, for such a schedule, the Worker gets its paragraph
+# headings (number and heading, in order) and the paragraphs whose heading
+# shares a distinctive word with the section search's own query, each cut by
+# `cut_schedule_paragraph`'s rules. Today's summary stays where nothing
+# matches, a matched paragraph cannot be cut, or the cuts exceed the bound.
+
+MATCHED = "matched"
+# The bound on the cut text handed over verbatim: the verbatim threshold, or
+# this, whichever is larger. At the 8,000-character fallback threshold (every
+# stored replay; any model whose context length is unknown) the largest
+# query-matched set on a stored call is 8,494 characters (six paragraphs) and
+# the smallest that must not pass, under the any-word rule this module does not
+# use, is 18,756 (fifteen paragraphs).
+MATCHED_CUTS_MIN_CHARS = 12_000
+# A query word in more of the unit's headings than this is not distinctive.
+_MAX_HEADINGS_PER_WORD = 3
+_MAX_HEADINGS_LISTED = 150
+_HEADING_CHARS = 120
+# A paragraph's heading line, "Section 4) **Widget fees**": the same line
+# `_SEC_LINE` cuts at, with the heading words between the asterisks.
+_HEADING_TEXT = re.compile(
+    r"(?m)^[ \t]*Section\s+(\d{1,3})([A-Z]{0,3})\)[ \t]*(?:\*\*([^\n]*?)\*\*)?")
+_QUERY_STOP = frozenset("""
+a an the of and or to in on for by with under from at as be is are was were any other its
+it their this that these those which where when what who how not no nor into onto upon
+about after before between within without than then there such each all some more most may
+must shall will would can could should does did has have had act acts order orders rule rules
+regulation regulations schedule schedules sch sched annex annexes paragraph paragraphs para
+paras part parts chapter chapters section sections provision provisions subparagraph article
+articles text full
+""".split())
+
+
+def paragraph_headings(text: str) -> list:
+    """[(number, heading)] for every `Section N) **heading**` line of a
+    schedule's text, in order. The heading is cleaned (no square bracket,
+    whitespace collapsed) and capped; "" where the line carries none."""
+    return [(m.group(1) + m.group(2), _clean(m.group(3) or "", _HEADING_CHARS))
+            for m in _HEADING_TEXT.finditer(str(text or ""))]
+
+
+def _word_stems(text: str, drop: frozenset = frozenset()) -> set:
+    """Lower-case words of three letters or more, stop words and `drop` out,
+    a plural ending taken off ("licences" -> "licence")."""
+    out = set()
+    for w in re.findall(r"[a-z]+", str(text or "").lower()):
+        if len(w) <= 2 or w in _QUERY_STOP or w in drop:
+            continue
+        if len(w) > 4 and w.endswith("ies"):
+            w = w[:-3] + "y"
+        elif len(w) > 3 and w.endswith("s") and not w.endswith("ss"):
+            w = w[:-1]
+        out.add(w)
+    return out
+
+
+def heading_matches(headings: list, query: Any, unit: ScheduleUnit) -> list:
+    """The numbers of the headings that share a distinctive word with `query`,
+    in order. A query word is distinctive when it is in at most
+    `_MAX_HEADINGS_PER_WORD` of the unit's headings; the unit's own label is
+    not a query word."""
+    label = frozenset(re.findall(r"[a-z]+", unit.label.lower()))
+    words = [_word_stems(h) for _, h in headings]
+    freq = Counter(w for ws in words for w in ws)
+    wanted = {w for w in _word_stems(query, label) if 1 <= freq[w] <= _MAX_HEADINGS_PER_WORD}
+    return [num for (num, _), ws in zip(headings, words) if ws & wanted]
+
+
+def _heading_list_piece(unit: ScheduleUnit, headings: list) -> tuple:
+    shown = headings[:_MAX_HEADINGS_LISTED]
+    lines = [f"{num}: {h or '(untitled)'}" for num, h in shown]
+    if len(headings) > len(shown):
+        lines.append(f"and {len(headings) - len(shown)} more headings after paragraph "
+                     f"{shown[-1][0]}")
+    label = (f"The paragraph headings of {unit.display()}, in order, each after the "
+             "number of the paragraph it opens:")
+    return label, "\n".join(lines)
+
+
+def matched_pieces(unit: ScheduleUnit, text: str, query: Any, bound: int) -> Optional[list]:
+    """`[(label, text)]` for a schedule too large to hand over whole whose
+    query names no paragraph: its heading list first, then each paragraph
+    whose heading shares a distinctive word with `query`, cut and labelled by
+    `cut_schedule_paragraph`'s rules (`paragraph_label`). None, so the caller
+    summarises as before, where the unit is not a schedule or names a
+    paragraph or a chapter, it carries no heading line, nothing matches, a
+    matched paragraph cannot be cut (its heading line is not unique), or the
+    cuts together exceed `bound`. Never raises."""
+    try:
+        if unit.kind != "schedule" or unit.paragraphs or unit.chapter:
+            return None
+        text = str(text or "")
+        headings = paragraph_headings(text)
+        if not headings:
+            return None
+        cuts = []
+        for num in heading_matches(headings, query, unit):
+            span, how, through = cut_schedule_paragraph(text, num)
+            if how == NOT_CUT:
+                return None
+            if all(span != s for _, s in cuts):
+                cuts.append((paragraph_label(unit, num, how, through), span))
+        if not cuts or sum(len(s) for _, s in cuts) > bound:
+            return None
+        return [_heading_list_piece(unit, headings)] + cuts
+    except Exception:
+        return None
+
+
 def fetched_block(lid: str, unit: ScheduleUnit, url: str, pieces: list, how: str,
-                  reason: str = "", total_chars: int = 0, source: str = FROM_LIST) -> str:
+                  reason: str = "", total_chars: int = 0, source: str = FROM_LIST,
+                  summary_of: str = WHOLE) -> str:
     """The block handed to the Worker. `pieces` is [(label, text)]. `how` is
-    CUT (each piece labelled), WHOLE (the unit verbatim) or SUMMARY (the unit,
-    or the cut, summarised for the query). `source` is FROM_LIST (the provision
-    list) or FROM_TEXT (P3.12's fallback: cut out of the whole text because the
-    provision list did not come back). `reason` says why a named sub-unit was
-    not cut. One block per unit."""
+    CUT (each piece labelled), WHOLE (the unit verbatim), MATCHED (batch 10
+    A: the heading list and the query-matched paragraphs, each labelled) or
+    SUMMARY (the unit, or with `summary_of=CUT` the cut, summarised for the
+    query). `source` is FROM_LIST (the provision list) or FROM_TEXT (P3.12's
+    fallback: cut out of the whole text because the provision list did not
+    come back). `reason` says why a named sub-unit was not cut. One block per
+    unit.
+
+    Batch 10 A: the summarised tail used to end "The summary is not the
+    statutory text: quote the provision only from retrieved text", and in
+    Session 41's sweep a Worker reported the summarised paragraphs as "not
+    retrieved". It now says that code retrieved the unit and that the summary
+    is a condensed reading of that retrieved text, with no "not" beside
+    "retrieved"."""
     lid_c, name = _clean(lid, 60), unit.display()
     where = f" (url: {_clean(url, 160)})" if url else ""
     if source == FROM_TEXT:
@@ -747,9 +883,24 @@ def fetched_block(lid: str, unit: ScheduleUnit, url: str, pieces: list, how: str
                 "search's results left it out, so code fetched it from the index's "
                 "provision list.")
     if how == SUMMARY:
-        tail = (f" Below is {name} summarised for this research question, because it "
-                f"runs to {total_chars:,} characters. The summary is not the statutory "
-                "text: quote the provision only from retrieved text.")
+        if summary_of == CUT:
+            tail = (f" Code retrieved the whole of {name} and cut out the parts of it this "
+                    f"search named, {total_chars:,} characters, and below is a summary of "
+                    "those retrieved parts, condensed for this research question.")
+        else:
+            tail = (f" Code retrieved the whole of {name}, {total_chars:,} characters, and "
+                    "below is a summary of that retrieved text, condensed for this research "
+                    "question.")
+        tail += (f" A paragraph the summary leaves out is still part of the retrieved "
+                 f"{name}. Cite {name} for what the summary says, and quote its words only "
+                 "from text shown verbatim.")
+    elif how == MATCHED:
+        tail = (f" {name} runs to {total_chars:,} characters, longer than one result hands "
+                "over whole, so below are its paragraph headings, in order, and then each "
+                "paragraph whose heading shares a word with this search's query, cut from "
+                "the retrieved text and labelled. To read another headed paragraph in its "
+                f"own words, name {name} and its number from the list below in a section "
+                "search: code cuts it out the same way.")
     elif how == WHOLE:
         tail = f" Below is the whole of {name}."
     else:
