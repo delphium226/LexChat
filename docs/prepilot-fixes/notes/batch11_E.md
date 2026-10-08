@@ -256,7 +256,9 @@ runaway case.
 - I did not measure the planner (no planner seam), nor whether a turn-4-only planner asks for clarification.
 - I did not hand-read any answer for depth or correctness; I read every gate match and every dry-run line's ids.
 - I did not commit the variant script; it is in my scratch.
-- Scratch: copied with `cp -r` to `C:/Projects/LexChat/docs/prepilot-fixes/evidence/seam/batch11/E/` (counts below).
+- Scratch: copied with `cp -r` to `C:/Projects/LexChat/docs/prepilot-fixes/evidence/seam/batch11/E/`: **31 files
+  on both sides** (`find E -type f | wc -l`). `fake_after/` (copies of two stored run files) and `mut/` were deleted
+  after use; `make_fake_after.py` and `mutants.py` rebuild them.
 
 ## 9. Decisions for the user (each self-contained; my recommendation first)
 
