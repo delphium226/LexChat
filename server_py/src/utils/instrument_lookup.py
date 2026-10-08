@@ -224,7 +224,12 @@ async def routed_lookup_block(brief: str, tool_names, run_tool) -> str:
     """
     if LOOKUP_TOOL not in set(tool_names or ()):
         return ""
-    refs = extract_instrument_citations(brief)
+    # P3.10: a Deep Research step's line naming the instruments the earlier
+    # steps' reports cite is not read here. Those reports came from the index,
+    # and five lookups would cover an arbitrary part of a longer list.
+    from .step_handover import without_handover_line
+
+    refs = extract_instrument_citations(without_handover_line(brief))
     if not refs:
         return ""
     import asyncio

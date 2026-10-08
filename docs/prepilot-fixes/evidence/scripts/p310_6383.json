@@ -1,0 +1,8 @@
+{
+  "session_id": "p310_6383",
+  "base": "6383",
+  "note": "P3.10 acceptance (replay, n=3, booked 2026-10-08): session 6383's export turn 4 only, the Deep Research turn whose plan holds a step working on an earlier step's list of SSIs (3 of 3 stored plans after P3.8). Deep Research under 'legislation_only', as recorded (export: turn 4 carries the Deep Research marker; research type from the feedback snapshot). Graded by batch 11 E's list-match script (evidence/seam/batch11/E/p310_grade.py): every step working on an earlier step's list covers every listed instrument of the class it names, its own search_legislation calls fall, no step halts, sources_kept does not fall (discovery --before). Turn text is taken from the export by index and is never stored here.",
+  "turns": [
+    {"from_turn": 4, "research_mode": "legislation_only", "chat_mode": "deep_research"}
+  ]
+}
