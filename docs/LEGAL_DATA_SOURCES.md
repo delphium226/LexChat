@@ -141,7 +141,7 @@ these judgments and restricts automated access.
 
 ### Risks
 
-1. **It is not a published contract.** The client is versioned `1.0.0-beta.1`, and SCTS reworked the judgments system in May 2025, telling RSS users to disable their feeds during the change. Ask SCTS (`enquiries@scotcourts.gov.uk`) before building on it.
+1. **It is not a published contract.** The client is versioned `1.0.0-beta.1`, and SCTS reworked the judgments system in May 2025, telling RSS users to disable their feeds during the change. Ask SCTS (`enquiries@scotcourts.gov.uk`) before building on it. **Asked (8 Oct 2026): SCTS agreed by phone, with no conditions given.** A written confirmation is still worth having, and the tool is capped and paced in code regardless.
 2. **Date metadata may be unreliable.** In 2 of 5 samples, a decision-date filter for one year returned a judgment cited from a later year: a 2012 filter returned a `[2015] HCJAC`, a 2020 filter returned a `[2021] SC GLW`. Too small a sample to call a pattern; check before trusting date filters.
 3. **Two hosts to whitelist:** `api.pa.web.scotcourts.gov.uk` (search) and `www.scotcourts.gov.uk` (PDFs).
 4. **Not Northern Ireland, and not unpublished decisions.**
