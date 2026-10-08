@@ -26,7 +26,6 @@ from ..utils.schedule_units import (
     MATCHED,
     MATCHED_CUTS_MIN_CHARS,
     SUMMARY,
-    WHOLE,
     cut_pieces,
     matched_pieces,
     cut_unit_from_text,
@@ -699,8 +698,9 @@ async def schedule_route_block(
         # names no paragraph, is handed over as its heading list and the
         # paragraphs whose headings match the section search's query, where
         # they fit the bound and the context budget; otherwise summarised.
+        # (`matched_pieces` itself refuses a cut, an annex or a named paragraph.)
         matched = None
-        if how == WHOLE and total > threshold:
+        if total > threshold:
             matched = matched_pieces(unit, text, args.get("query"),
                                      max(threshold, MATCHED_CUTS_MIN_CHARS))
             if matched is not None and context_budget is not None:

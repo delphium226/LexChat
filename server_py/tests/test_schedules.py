@@ -1090,6 +1090,16 @@ def test_a_query_with_no_distinctive_heading_word_is_summarised(monkeypatch, que
     assert "paragraph headings" not in out and "SUMMARY." in out
 
 
+def test_a_lettered_paragraph_keeps_its_letter_in_the_list_and_the_cut(monkeypatch):
+    lettered = SCHED_5_TEXT.replace("Section 7) ****", "Section 6A) **Widget tribunals**")
+    out = _route5(monkeypatch, "Schedule 5 tribunals", text=lettered)
+    assert "\n6A: Widget tribunals\n" in out
+    # 6A's next headed paragraph is 8, so the cut is labelled as a span.
+    assert ("The text of Schedule 5 from the heading of paragraph 6A to the next headed "
+            "paragraph. It runs through paragraphs 6A to 7,") in out
+    assert "Untitled words." in out and "a crown" not in out
+
+
 def test_a_plural_in_the_query_matches_a_singular_heading(monkeypatch):
     out = _route5(monkeypatch, "Schedule 5 appeals")
     assert "Paragraph 6 of Schedule 5, cut at its own heading" in out
