@@ -468,3 +468,31 @@ What to read in a draw:
    1. **(Recommended) Draw `seam_6335_r2_matched.json` and `seam_6335_r2_tail.json` first** (a few cents),
       then 6335 n=3 as booked.
    2. **Go straight to the 6335 n=3 sweep.**
+
+---
+
+## 8. Follow-up (integrator)
+
+**The gap.** In the integrator's review, one of four mutants survived all 318 tests: in `_word_stems`,
+`len(w) > 4` was changed to `len(w) > 3` on the "-ies" rule. Under it, a four-letter "-ies" word ("ties",
+"lies") is stemmed to "ty"/"ly" instead of reaching the "-s" rule ("tie"), so a plural in the query no
+longer matches a singular heading. The other three mutants were caught (10, 1 and 2 tests fail).
+
+**The fix: test only.** No product code and no wording changed. `test_word_stems_and_distinctiveness` gains
+two assertions:
+
+- `_word_stems("ties lies") == {"tie", "lie"}`;
+- `heading_matches([("1", "Widget tie"), ("2", "Widget fees")], "ties", ...) == ["1"]`.
+
+**Proved on scratch copies** (`python spec_followup.py`, then `python mutants.py spec_followup.json`, output
+`mutants_followup.txt`), with the same selection and the same two deselects as section 4:
+
+| Run | Lines changed | Result |
+|---|---|---|
+| control, no change | 0 | 316 passed |
+| the integrator's mutant | 1 | **1 failed** (`test_word_stems_and_distinctiveness`), 315 passed |
+
+On the build, the test passes.
+
+**Full suite** on `lexchat_test_a`, outbound HTTP pointed at a closed port: **2803 passed**. The count is
+unchanged because the assertions were added to an existing test (`pytest_full_followup.txt`).

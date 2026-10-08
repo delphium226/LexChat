@@ -1109,6 +1109,11 @@ def test_a_plural_in_the_query_matches_a_singular_heading(monkeypatch):
 def test_word_stems_and_distinctiveness():
     assert su._word_stems("Penalties licences class of the OX") == {
         "penalty", "licence", "class"}
+    # A four-letter "-ies" word takes the "-s" rule ("ties" -> "tie", never "ty"),
+    # so a plural in the query still matches a singular heading.
+    assert su._word_stems("ties lies") == {"tie", "lie"}
+    assert su.heading_matches([("1", "Widget tie"), ("2", "Widget fees")], "ties",
+                              su.ScheduleUnit("schedule", "5")) == ["1"]
     heads = [("1", "Widget fees"), ("2", "Widget forms"), ("3", "Widget seals"),
              ("4", "Gadget fees"), ("5", "Gadget forms"), ("6", "Gadget seals"),
              ("7", "Gadget rates"), ("8", "Abc rules")]
