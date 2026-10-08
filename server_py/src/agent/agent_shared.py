@@ -27,6 +27,7 @@ from ..utils.schedule_units import (
     MATCHED_CUTS_MIN_CHARS,
     SUMMARY,
     cut_pieces,
+    matched_numbers,
     matched_pieces,
     cut_unit_from_text,
     fetch_failed_line,
@@ -708,8 +709,10 @@ async def schedule_route_block(
                 if context_budget["used"] + pending_chars + size > context_budget["limit"]:
                     matched = None
         summary_of = how
+        numbers = ()
         if matched is not None:
             pieces, how = matched, MATCHED
+            numbers = matched_numbers(unit, text, args.get("query"))
         elif total > threshold or over_budget:
             joined = "\n\n".join((lbl + "\n" if lbl else "") + t for lbl, t in pieces)
             summary, _degraded = await summarise_for_query(
@@ -726,7 +729,8 @@ async def schedule_route_block(
         if url and retrieved_urls is not None:
             harvest_legislation_urls(json.dumps({"url": url}), into=retrieved_urls)
         block = fetched_block(lid, unit, url, pieces, how, reason=reason,
-                              total_chars=total, source=source, summary_of=summary_of)
+                              total_chars=total, source=source, summary_of=summary_of,
+                              matched=numbers)
         pending_chars += len(block)
         out.append(block)
     return "".join(out)
