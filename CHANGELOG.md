@@ -35,6 +35,13 @@ Saying honestly what was and was not found:
   a sign that the citation is wrong", which a lookup cannot establish (P4.21).
 
 Change records:
+- Where a change record lists a commencement made by another instrument, give
+  the date legislation.gov.uk's Changes to Legislation record gives for it, with
+  its qualification ("wholly in force", "for specified purposes"), read
+  through the LEX API. A date earlier than the day the commencing instrument
+  was made is refused, and the reply says when the record could not be read.
+  The date says when the provision was brought into force, never that it is in
+  force now (P3.21).
 - When listing the changes made to or by an instrument, keep each change with
   the provision that made it, and say how many changes a long list leaves out.
   The changed provisions and the provisions that changed them used to be two
@@ -47,6 +54,20 @@ Change records:
   force, not whether they have, so it is no longer treated as evidence either
   way; where no record was consulted, say neither (P3.24).
 
+Jurisdiction:
+- Where a question names no jurisdiction, answer for Scotland and say so;
+  where it asks about the UK, answer for each of England, Wales, Scotland and
+  Northern Ireland and say where the law differs. This applies to
+  conversational replies and quick lookups (P3.4).
+- The jurisdiction filter's notes no longer use letter codes the index never
+  sends, and say that most search results carry no stated extent (P3.4).
+
+Search results:
+- Keep each legislation search result's own published summary (its
+  description, cut to 600 characters), so a commencement date or enabling
+  power it states is visible at the first step. The search note says it may be
+  quoted with a citation and is not evidence of in-force status (P3.6).
+
 Quick lookups:
 - The quick-lookup research step no longer reads an instrument's whole text,
   which its own instructions forbade and which never included schedules or
@@ -56,6 +77,9 @@ Quick lookups:
   reports" sentence therefore appears on more quick-lookup replies (P3.25).
 
 Schedules and annexes:
+- When several searches in one step name schedules of different instruments
+  at the same time, fetch each instrument's provision list once and keep to the
+  per-step limit, now 8 instruments (P3.12).
 - When the research step reads an instrument's whole text, ask the index for
   its schedules and annexes too, and say which ones the text carries, or that
   the index holds none for it. Every whole-text read used to leave them out
@@ -74,6 +98,8 @@ Schedules and annexes:
   limit (P3.27, P3.12).
 
 Case law:
+- List case-law search results most relevant first, not newest first, and say
+  so in the search note. Built; its measured acceptance is not yet met (P3.22).
 - Date ranges on a case-law search now apply. They never did: the National
   Archives ignored the form we sent. A start date after the end date is
   refused rather than searched (P3.9).
@@ -118,7 +144,12 @@ schedules` checks what an answer says about a schedule or annex: a held one
 called not held, or one the index does not hold blamed on a search limit
 (P3.12, P3.27). A new `python -m tools.lgu_probe` reads legislation.gov.uk's
 dated "Changes to Legislation" effects, directly or through LEX (P3.21,
-P5.4).
+P5.4). New `replay_report` checks: `authorities` grades which case-law authorities a
+run retrieved, read and cited against a rubric (P3.22); `cmcdates` lists every
+commencement date an answer states and whether a retrieved source states it
+(P3.21); `jurisdiction` checks that a reply names its jurisdiction (P3.4); with
+two scripted replays of P3.4's opening turns. `lex_probe --caselaw`'s count
+and date checks now send the product's own request (P3.22).
 
 Planning tools only, no product change: a new `python -m tools.plan_lint`
 checks the fix plan's structure (one table cell per column, every row in the
