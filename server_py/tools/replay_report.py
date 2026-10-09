@@ -5138,6 +5138,156 @@ def _caselaw_invariant_one(before: Path, after: Path, only: Optional[list]) -> N
             print(ln)
 
 
+# --- P3.20 acceptance: Scottish judgments from SCTS ------------------------------
+#
+# With `scts_caselaw_enabled` on, `search_case_law` also searches the Scottish
+# Courts and Tribunals Service's published judgments and returns them as
+# `scottish_results`, with a `scottish` block whose `status` is "ok" when the
+# search ran. The row's acceptance, made gradable (batch 11 D, section 5):
+#   (2) a turn of 6375 cites at least one judgment an SCTS search or text fetch
+#       returned THAT turn (a scotcourts.gov.uk URL from the audit), and
+#       presents no English authority as Scots law (a hand-read: P3.3's
+#       criterion; `fcl` counts the non-UKSC Find Case Law links in the prose
+#       for the reader);
+#   (3) no footer on a turn with an ok SCTS search carries the old coverage
+#       sentence (`CASE_LAW_CODE`), which says the Court of Session is absent
+#       from the databases searched.
+# `caselaw` (P2.4) is left as it is: its `code` column keys on
+# `CASE_LAW_CODE`, so a turn carrying the new sentence reads there as
+# disclosed by the model, not by code (its "disclosed" verdict is unchanged).
+#
+# The new sentences, by their fixed openings. `search_scope.
+# SCTS_COVERAGE_BOTH_SENTENCE` / `SCTS_COVERAGE_ONLY_SENTENCE` start with them;
+# `test_scts_caselaw.py` pins that.
+SCTS_CODE_BOTH = "Between them they hold decisions of the UK Supreme Court and"
+SCTS_CODE_ONLY = ("They hold decisions of the Court of Session, the High Court of "
+                  "Justiciary and the Sheriff Appeal Court from 1998")
+_SCTS_URL = re.compile(r"https?://www\.scotcourts\.gov\.uk/[^\s)\]>\"']+?\.pdf", re.I)
+
+
+def _scts_norm(url: str) -> str:
+    return str(url or "").strip().rstrip("/").lower().replace("http://", "https://")
+
+
+def scts_rows(doc: dict) -> list:
+    """One row per answered turn: what SCTS returned, and what the answer did with it."""
+    rows = []
+    for t in doc.get("turns", []):
+        answer = t.get("answer") or ""
+        if not answer.strip():
+            continue
+        tools = [x for dg in (t.get("audit") or {}).get("delegations") or []
+                 for x in dg.get("tools") or []]
+        searched = ok = 0
+        returned = set()
+        for x in tools:
+            o = _json_or_none(x.get("raw_result"))
+            if x.get("name") == "search_case_law" and isinstance(o, dict):
+                block = o.get("scottish")
+                if not isinstance(block, dict):
+                    continue
+                searched += 1
+                if block.get("status") == "ok":
+                    ok += 1
+                for r in o.get("scottish_results") or []:
+                    if isinstance(r, dict) and r.get("url"):
+                        returned.add(_scts_norm(r["url"]))
+            elif (x.get("name") == "get_case_law_text" and isinstance(o, dict)
+                  and not o.get("error") and _SCTS_URL.fullmatch(str(o.get("url") or ""))):
+                returned.add(_scts_norm(o["url"]))
+        prose = _without_footer(answer)
+        linked = {_scts_norm(u) for u in _SCTS_URL.findall(prose)}
+        rows.append({
+            "turn": t.get("turn"),
+            "mode": t.get("chat_mode") or "",
+            "scts_searches": searched,
+            "scts_ok": ok,
+            "returned": len(returned),
+            "cited": len(linked & returned),
+            "unreturned_links": len(linked - returned),
+            "old_sentence": CASE_LAW_CODE in answer,
+            "new_sentence": SCTS_CODE_BOTH in answer or SCTS_CODE_ONLY in answer,
+            "fcl_non_uksc": len({u for u, court in _CASELAW_URL.findall(prose)
+                                 if court.lower() != "uksc"}),
+        })
+    return rows
+
+
+def scts_verdicts(row: dict, require_cite: bool = False) -> list:
+    """P3.20's findings for one answered turn ([] = nothing wrong).
+
+    "OLD_SENTENCE"   — an ok SCTS search this turn, and the footer still says the
+                       Court of Session is absent (acceptance clause 3).
+    "MISATTRIBUTED"  — the new sentence on a turn with no ok SCTS search.
+    "UNRETURNED"     — a scotcourts.gov.uk link in the prose that no SCTS search
+                       or text fetch returned this turn.
+    "UNCITED"        — (with --require-cite) an ok SCTS search this turn and no
+                       judgment it returned linked in the prose (clause 2's half
+                       that code can grade).
+    """
+    out = []
+    if row["scts_ok"] and row["old_sentence"]:
+        out.append("OLD_SENTENCE")
+    if row["new_sentence"] and not row["scts_ok"]:
+        out.append("MISATTRIBUTED")
+    if row["unreturned_links"]:
+        out.append("UNRETURNED")
+    if require_cite and row["scts_ok"] and not row["cited"]:
+        out.append("UNCITED")
+    return out
+
+
+def cmd_scts(args) -> int:
+    """P3.20 acceptance. **Exits 1 on a finding**, and when no turn ran an ok
+    SCTS search at all (the setting was off, or the wiring failed: either way
+    nothing here was graded)."""
+    docs = load_runs(Path(args.dir))
+    if not docs:
+        print(f"No run files in {args.dir}")
+        return 1
+    only = set(args.only or [])
+    docs = [d for d in docs if not only or str(d.get("session_id")) in only]
+    print(f"P3.20 acceptance over {args.dir}")
+    print("  scts     = search_case_law calls this turn that carried the Scottish list")
+    print("  ok       = of those, how many searched SCTS without error")
+    print("  returned = distinct SCTS judgments returned this turn (searches + text fetches)")
+    print("  cited    = of those, how many the prose links (footer removed)")
+    print("  old/new  = the old coverage sentence / the new one, anywhere in the answer")
+    print("  fcl      = Find Case Law links in the prose that are not UK Supreme Court")
+    print("             (for the hand-read: English authority presented as Scots law)")
+    print()
+    print(f"{'session':>8} {'rep':>3} {'turn':>4} {'mode':>13} {'scts':>4} {'ok':>3} "
+          f"{'returned':>8} {'cited':>5} {'old':>3} {'new':>3} {'fcl':>3}  verdict")
+    print("-" * 86)
+    counts, any_ok, n_rows = Counter(), 0, 0
+    for doc in sorted(docs, key=lambda d: (str(d["session_id"]), d.get("rep", 1))):
+        for row in scts_rows(doc):
+            v = scts_verdicts(row, args.require_cite)
+            any_ok += bool(row["scts_ok"])
+            for x in v:
+                counts[x] += 1
+            if not (args.all or row["scts_searches"] or v):
+                continue
+            n_rows += 1
+            yn = lambda b: "yes" if b else "-"   # noqa: E731
+            print(f"{doc['session_id']:>8} {doc.get('rep', 1):>3} {row['turn']:>4} "
+                  f"{row['mode'][:13]:>13} {row['scts_searches']:>4} {row['scts_ok']:>3} "
+                  f"{row['returned']:>8} {row['cited']:>5} {yn(row['old_sentence']):>3} "
+                  f"{yn(row['new_sentence']):>3} {row['fcl_non_uksc']:>3}  "
+                  f"{', '.join(v) or 'ok'}")
+    print()
+    print(f"turns with an ok SCTS search: {any_ok}")
+    for k in ("OLD_SENTENCE", "MISATTRIBUTED", "UNRETURNED", "UNCITED"):
+        if k != "UNCITED" or args.require_cite:
+            print(f"{k:<14}{counts[k]}")
+    if not any_ok:
+        print()
+        print("[!] No turn ran an ok SCTS search: the setting was off for this "
+              "directory, it predates P3.20, or the wiring failed. Nothing was graded.")
+        return 1
+    return 1 if sum(counts.values()) else 0
+
+
 # --- P2.7 pre-flight: the discovery distribution a budget must come from ------
 #
 # P2.7's row: "the right number must come from the distribution, not a guess".
@@ -10846,6 +10996,16 @@ def main(argv: Iterable[str] | None = None) -> int:
                          "shared sessions only")
     cl.add_argument("--only", nargs="+", metavar="SESSION",
                     help="with --before, restrict both sides to these sessions")
+    sc = sub.add_parser("scts",
+                        help="P3.20 acceptance: turns whose case-law search ran SCTS, what "
+                             "they cited from it, and the footer's coverage sentence")
+    sc.add_argument("--all", action="store_true",
+                    help="list every answered turn, not only SCTS turns and findings")
+    sc.add_argument("--require-cite", action="store_true",
+                    help="a turn with an ok SCTS search must link a judgment it returned "
+                         "(acceptance clause 2's code half; use on the 6375 reps)")
+    sc.add_argument("--only", nargs="+", metavar="SESSION",
+                    help="restrict to these sessions")
     dc = sub.add_parser("discovery",
                         help="P2.7 pre-flight: discovery calls per worker run, "
                              "halted vs completed, and what a budget of N would block")
@@ -11131,6 +11291,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "scoperecord": cmd_scoperecord,
         "nosearch": cmd_nosearch,
         "caselaw": cmd_caselaw,
+        "scts": cmd_scts,
         "discovery": cmd_discovery,
         "depth": cmd_depth,
         "modes": cmd_modes,
