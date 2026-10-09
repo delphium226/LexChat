@@ -7703,9 +7703,15 @@ def _lookup_routing(dirs: list, live: bool) -> int:
     """How far P3.7's routing reaches: over every Worker brief stored in `dirs`,
     the instruments the product's own parser would look up before round 1.
     Prints ids only, never brief text. `--live` also looks each distinct id up
-    against LEX (two small calls each, no model) and tallies the statuses."""
+    against LEX (two small calls each, no model) and tallies the statuses.
+
+    Each brief is read through `step_handover.without_handover_line`, as
+    `routed_lookup_block` reads it (P3.10, batch 12 D): the line naming the
+    earlier steps' instruments is not routed, so counting its ids would
+    overstate P3.7's reach on every run after P3.10."""
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from src.utils.instrument_lookup import extract_instrument_citations
+    from src.utils.step_handover import without_handover_line
 
     briefs = routed = 0
     per_session, ids = Counter(), Counter()
@@ -7716,7 +7722,8 @@ def _lookup_routing(dirs: list, live: bool) -> int:
             for t in doc.get("turns") or []:
                 for dg in (t.get("audit") or {}).get("delegations") or []:
                     briefs += 1
-                    refs = extract_instrument_citations(dg.get("brief") or "")
+                    refs = extract_instrument_citations(
+                        without_handover_line(dg.get("brief") or ""))
                     if refs:
                         routed += 1
                         per_session[base] += 1
@@ -10561,7 +10568,12 @@ _RAIL_LID_IN_URL = re.compile(
 _RAIL_BARE_LID = re.compile(r"^([a-z]+/\d{4}/\d+)")
 _RAIL_CASE_HOST = "caselaw.nationalarchives.gov.uk"
 _RAIL_SI_TYPES = {"ssi", "uksi", "wsi", "nisr", "nisi", "ukdsi", "sdsi"}
-_RAIL_LONGER_TITLE = re.compile(r"\s*\([^)]{1,80}\)\s*(regulations|order|rules|scheme)")
+# Batch 12 D: or "(Commencement", closed or not: a quoted, truncated search
+# query ('"Widget Act 1901 (Commencement No. 1"') names the commencement
+# instrument, not the Act (3 stored answers, each read; the product's
+# `source_naming._LONGER_TITLE` has the same alternative).
+_RAIL_LONGER_TITLE = re.compile(
+    r"\s*\((?:[^)]{1,80}\)\s*(regulations|order|rules|scheme)|commencement\b)")
 _RAIL_OLD_SI = re.compile(r"(\d{4}) No\. (\d+)")
 _RAIL_MODES = ("conversational", "research", "deep_research")
 
@@ -10751,6 +10763,11 @@ def rail_turn(t: dict, doc: Optional[dict] = None) -> dict:
     completed report references it by either test. A report turn holding an
     unvouched source shows a rail no report vouched for, which is what the
     Worker seam's fall-back-to-all produced before P4.3.
+
+    `fallback` (batch 12 D) is the detector's test: unvouched AND the answer
+    does not reference it. An unvouched source the answer cites is what P4.3's
+    lever R puts in the rail at the answer seam, not the fall-back; on every
+    stored directory before lever R the two tests flag the same turns.
     """
     doc = doc or {}
     answer = t.get("answer") if isinstance(t.get("answer"), str) else ""
@@ -10792,7 +10809,8 @@ def rail_turn(t: dict, doc: Optional[dict] = None) -> dict:
         unvouched = bool(cls == "report" and not s.get("excerpt")
                          and not rail_reader(s, *r_idx) and not _source_cited(s, rep_text))
         out["sources"].append({"src": s, "reader": reader, "token": token,
-                               "unvouched": unvouched})
+                               "unvouched": unvouched,
+                               "fallback": unvouched and not reader})
     return out
 
 
@@ -10834,7 +10852,8 @@ def cmd_rail(args) -> int:
                 n = len(g["sources"])
                 unused = sum(1 for x in g["sources"] if not x["reader"])
                 tok_unused = sum(1 for x in g["sources"] if not x["token"])
-                unv = sum(1 for x in g["sources"] if x["unvouched"])
+                unv = sum(1 for x in g["sources"] if x["fallback"])
+                ans_only = sum(1 for x in g["sources"] if x["unvouched"] and not x["fallback"])
                 for k in (m, "all"):
                     tally[(k, "turns")] += 1
                     tally[(k, "sources")] += n
@@ -10842,6 +10861,7 @@ def cmd_rail(args) -> int:
                     tally[(k, "token_unused")] += tok_unused
                     tally[(k, "fallback_turns")] += bool(unv)
                     tally[(k, "unvouched")] += unv
+                    tally[(k, "answer_only")] += ans_only
                     tally[(k, "cite_none")] += unused == n
                 agree[(bool(unv), g["fallback_counter"])] += 1
                 where = f"{d.name} {p.name} t{t.get('turn')} {m}"
@@ -10853,7 +10873,8 @@ def cmd_rail(args) -> int:
                                      f" {where}  {s.get('kind')}  {_rail_key(s)[:70]}"
                                      f"  | {(s.get('title') or '')[:args.chars]}")
                     if x["unvouched"]:
-                        drops.append(f"  {'UNVOUCHED':<22} {where}  {s.get('kind')}  "
+                        drops.append(f"  {'UNVOUCHED' if x['fallback'] else 'ANSWER-ONLY':<22} "
+                                     f"{where}  {s.get('kind')}  "
                                      f"{_rail_key(s)[:70]}  | {(s.get('title') or '')[:args.chars]}")
     print(f"rail (P4.3): {len(dirs)} director{'y' if len(dirs) == 1 else 'ies'}, {files} run files"
           + (f"  (excluded: {', '.join(sorted(exclude))})" if exclude else ""))
@@ -10878,6 +10899,8 @@ def cmd_rail(args) -> int:
               f"{tally[(k, 'cite_none')]:>6}")
     fb = tally[("all", "fallback_turns")]
     fail |= bool(fb)
+    print(f"  sources no report vouched for that the answer cites (lever R re-admits these; "
+          f"not the fall-back): {tally[('all', 'answer_only')]}")
     print(f"  reader vs token test: reader-only {tally['reader_only']}, token-only "
           f"{tally['token_only']} (--drops lists each)")
     print(f"  fall-back detector vs the product counter (timing.source_filter_fallback):"

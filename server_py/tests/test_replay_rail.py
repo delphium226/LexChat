@@ -258,3 +258,40 @@ def test_rail_does_not_read_the_code_footer():
     assert g["sources"][0]["reader"] == ""
     g = rr.rail_turn(_turn("Nothing; see ssi/1901/3.", [s], reports=("Nothing on point.",)))
     assert g["sources"][0]["reader"] == "id-text"
+
+
+# --- batch 12 D: lever R's sources are not the fall-back; the unclosed guard -------------
+
+def test_an_unvouched_source_the_answer_cites_is_not_the_fall_back():
+    cited = _leg("ssi/1901/5")                  # no report names it; the answer does
+    hit = _leg("ssi/1901/6")                    # no report names it; nor does the answer
+    g = rr.rail_turn(_turn("The record names ssi/1901/5.", [cited, hit],
+                           reports=("Nothing on point.",)))
+    assert [x["unvouched"] for x in g["sources"]] == [True, True]
+    assert [x["fallback"] for x in g["sources"]] == [False, True]
+
+
+def test_a_vouched_source_is_never_the_fall_back():
+    s = _leg("ssi/1901/3", "The Widget Order 1901")
+    g = rr.rail_turn(_turn("Nothing.", [s], reports=("The Widget Order 1901 applies.",)))
+    assert g["sources"][0]["unvouched"] is False and g["sources"][0]["fallback"] is False
+
+
+def test_rail_counts_an_answer_only_source_apart_from_the_fall_back(tmp_path, capsys):
+    t = _clean_turn()
+    t["audit"]["sources"].append(_leg("ssi/1901/5"))
+    t["answer"] += " The record names ssi/1901/5."
+    d = _write(tmp_path, "answer_only", [t])
+    rc = rr.main(["--dir", str(d), "rail", "--drops"])
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "0 (0 src)" in out
+    assert "the answer cites (lever R re-admits these; not the fall-back): 1" in out
+    assert "ANSWER-ONLY" in out and "UNVOUCHED " not in out
+
+
+def test_reader_title_heading_an_unclosed_commencement_parenthesis_is_not_a_reference():
+    s = _leg("asp/1901/3", "Widget (Scotland) Act 1901")
+    s["kind"] = "Act"
+    assert _read(s, 'searched for "Widget (Scotland) Act 1901 (Commencement No. 1".') == ""
+    assert _read(s, "the Widget (Scotland) Act 1901 (Commencements and savings)") == "title"

@@ -28,7 +28,9 @@ from ..utils.citation_links import (
     restore_dropped_siblings,
 )
 from ..utils.discovery_budget import new_search_budget
-from ..utils.instrument_lookup import routed_lookup_block, section_search_lookup
+from ..utils.instrument_lookup import (
+    LOOKUP_TOOL, parse_lookup_result, routed_lookup_block, section_search_lookup,
+)
 from ..utils.mode_change import apply_mode_change_marker, mode_change_for
 from ..utils.openers import strip_agreement_opener
 from ..utils.paragraph_restore import (
@@ -61,6 +63,7 @@ from ..utils.search_scope import (
     worker_scope_block,
 )
 from ..utils.source_naming import is_legislation, named_in, token_in
+from ..utils import rail_titles
 from ..utils.suggestions import diagnose_suggestions, extract_suggestions
 from .agent_shared import describe_agent_error, run_worker_tool
 from .federation_client import (
@@ -273,7 +276,19 @@ async def run_worker_agent(
     # hit included), so the answer seam can put back one the answer left out.
     handed_paras: list = []
 
+    # P4.24: the exact title each `lookup_legislation` in this run returned,
+    # for the Sources rail's bare-id entries. A lookup adds no rail source.
+    lookup_titles: dict = {}
+
     async def _run_tool(name: str, args: dict, result_suffix: str = "") -> str:
+        out = await _run_tool_inner(name, args, result_suffix)
+        if name == LOOKUP_TOOL:
+            got = parse_lookup_result(out)
+            if got and got.get("legislation_id") and got.get("title"):
+                lookup_titles.setdefault(got["legislation_id"], got["title"])
+        return out
+
+    async def _run_tool_inner(name: str, args: dict, result_suffix: str = "") -> str:
         out = await run_worker_tool(
             name, args, query, summarise_chunk_fn, summarise_model,
             parent_on_chunk=parent_on_chunk,
@@ -477,6 +492,11 @@ async def run_worker_agent(
             {**{k: v for k, v in src.items() if not k.startswith("_")}, "n": i + 1}
             for i, src in enumerate(kept)
         ]
+        # P4.3 lever R: everything retrieved, for the answer seam to re-admit
+        # what the answer cites and no report named (`readmit_answer_sources`).
+        result["retrieved_sources"] = retrieved_with_marks(source_accumulator, kept)
+    # P4.24: titles for the rail's bare-id entries (`title_rail_sources`).
+    result["retrieved_titles"] = dict(lookup_titles)
 
     # P2.2 (B5): hand the search scope forward, in code, to the agent that will
     # actually write the negative. The tool-result block instructs the WORKER;
@@ -558,6 +578,14 @@ def _source_is_used(src: dict, content: str) -> bool:
     """
     if src.get("excerpt"):
         return True
+    return _source_is_named(src, content)
+
+
+def _source_is_named(src: dict, content: str) -> bool:
+    """`_source_is_used` without the excerpt branch: the text references the
+    source by an identifying token or names it in words. Lever R reads the
+    answer with this, because an excerpt says the source was retrieved, not
+    that the answer cites it."""
     legislation = is_legislation(src)
     tokens = [
         src.get("_lid"),
@@ -597,6 +625,85 @@ def filter_worker_sources(source_accumulator: list, content: str,
     if kept_nothing and research_mode in _RAIL_FALLBACK_MODES:
         kept = list(source_accumulator)
     return kept, kept_nothing
+
+
+def retrieved_with_marks(source_accumulator: list, kept: list) -> list:
+    """Every source a Worker run retrieved, private keys kept, each marked
+    `_kept` if the Worker-seam filter put it in the rail. Lever R's input."""
+    kept_ids = {id(src) for src in kept}
+    return [{**src, "_kept": id(src) in kept_ids} for src in source_accumulator]
+
+
+def readmit_answer_sources(rail: list, retrieved: list, answer: str,
+                           research_mode: str) -> list:
+    """P4.3 lever R: the sources this turn retrieved that the ANSWER cites,
+    though no Worker report vouched for them. Returns them (public keys, in
+    retrieval order) for the caller to append to the rail.
+
+    The Worker-seam filter reads each report. An answer can cite what its
+    reports never named: an instrument a code scope block listed, or one an
+    earlier turn's answer linked. Before P4.3 such a source reached the rail
+    only through the fall-back to the whole accumulator, which V4 removed (6
+    answer-cited sources left the rail, and 444 instruments a Deep Research
+    synthesis names were retrieved and never in it; batch 12 D).
+
+    A source is re-admitted when it was retrieved this turn and not kept, its
+    instrument is not already in the rail (a change record's `http://.../id/`
+    URL and a search hit's `https://` URL are one instrument), and the answer
+    references it by `_source_is_named` (never the excerpt branch: retrieval
+    alone is not citation). Not on the parliamentary bots, whose filter keeps
+    its fall-back and no replay has measured. Never raises.
+    """
+    try:
+        if research_mode in _RAIL_FALLBACK_MODES:
+            return []
+        # A kept source is in the rail: its instrument by `_lid`, a case by its
+        # URL (`_is_duplicate_source` below), so it is never a candidate.
+        rail_lids = {s.get("_lid") for s in retrieved if s.get("_kept") and s.get("_lid")}
+        out: list = []
+        seen: set = set()
+        for src in retrieved:
+            lid = src.get("_lid")
+            if lid and (lid in rail_lids or lid in seen):
+                continue
+            public = {k: v for k, v in src.items() if not k.startswith("_")}
+            if _is_duplicate_source(public, rail) or _is_duplicate_source(public, out):
+                continue
+            if not _source_is_named(src, answer):
+                continue
+            out.append(public)
+            if lid:
+                seen.add(lid)
+        return out
+    except Exception as e:  # Invariant 5: the rail is never worth a failed answer
+        logger.warning("[Sources] Answer-seam re-admission skipped: %s", e)
+        return []
+
+
+async def title_rail_sources(rail: list, retrieved: list,
+                             lookup_titles: Optional[dict] = None) -> list:
+    """P4.24: the rail with each entry titled by a bare id given its title in
+    code, from the turn's own retrievals (a source's title, else a lookup's:
+    `lookup_titles`), else the made-under record
+    (`made_under_store.titles_for`, which touches no database until the
+    record is loaded), and its URL from the id where it has none. Runs after
+    lever R, which re-admits such entries. An entry with no exact title stays
+    as it is. Never raises: on any failure the rail is returned unchanged."""
+    try:
+        if not rail:
+            return rail
+        record: dict = {}
+        ids = rail_titles.untitled_ids(rail, retrieved, lookup_titles)
+        if ids:
+            from ..services.made_under_store import titles_for
+            record = await titles_for(ids)
+        out, titled, urled = rail_titles.fill_rail(rail, retrieved, record, lookup_titles)
+        if titled or urled:
+            logger.info("[Sources] Titled %d bare-id rail entr(ies), gave %d a URL", titled, urled)
+        return out
+    except Exception as e:  # Invariant 5
+        logger.warning("[Sources] Rail titles skipped: %s", e)
+        return rail
 
 
 # -----------------------------------------------------------------------
@@ -849,6 +956,10 @@ async def process_user_request(
     manager_tools = get_manager_tools(peer_descriptions)
 
     accumulated_sources: list = []
+    # P4.3 lever R: every source every delegation retrieved, marked kept or not.
+    retrieved_sources: list = []
+    # P4.24: the exact titles every delegation's lookups returned.
+    retrieved_titles: dict = {}
     # P2.2 (B5): every legislation search this turn ran, across ALL delegations,
     # and (P2.4) every case-law search. The footer describes the turn the lawyer
     # asked, not one delegation of it.
@@ -957,6 +1068,9 @@ async def process_user_request(
             for src in result.get("sources", []):
                 if not _is_duplicate_source(src, accumulated_sources):
                     accumulated_sources.append(src)
+            retrieved_sources.extend(result.get("retrieved_sources") or [])
+            for _lid, _t in (result.get("retrieved_titles") or {}).items():
+                retrieved_titles.setdefault(_lid, _t)
             if result.get("halted"):
                 halts.append({**result["halted"], "scope": "delegation"})
             if result.get("lost"):
@@ -1169,6 +1283,18 @@ async def process_user_request(
         ):
             logger.warning("[Suggestions] %s", issue)
 
+    # P4.3 lever R: a source the answer cites that no report vouched for. Read
+    # against the answer as the lawyer sees it, before the scope footer, which
+    # names searched instruments in code's words, not the answer's.
+    _readmitted = readmit_answer_sources(
+        accumulated_sources, retrieved_sources, clean, research_mode)
+    if _readmitted:
+        logger.info("[Manager] Re-admitted %d source(s) the answer cites", len(_readmitted))
+        accumulated_sources.extend(_readmitted)
+    # P4.24: after R, which re-admits change-record instruments titled by id.
+    accumulated_sources = await title_rail_sources(
+        accumulated_sources, retrieved_sources, retrieved_titles)
+
     if accumulated_sources:
         final["sources"] = [
             {**{k: v for k, v in s.items() if k != "n"}, "n": i + 1}
@@ -1357,6 +1483,10 @@ async def run_deep_research(
 
     step_findings: list = []
     accumulated_sources: list = []
+    # P4.3 lever R: every source every step retrieved, marked kept or not.
+    retrieved_sources: list = []
+    # P4.24: the exact titles every step's lookups returned.
+    retrieved_titles: dict = {}
     # Per-request tool-result memo: plan steps run as isolated workers, so two
     # steps that retrieve the same Act would each pay fetch + summarise. Exact
     # (tool_name, canonical args) repeats are served from this dict instead.
@@ -1433,6 +1563,9 @@ async def run_deep_research(
         for src in result.get("sources", []):
             if not _is_duplicate_source(src, accumulated_sources):
                 accumulated_sources.append(src)
+        retrieved_sources.extend(result.get("retrieved_sources") or [])
+        for _lid, _t in (result.get("retrieved_titles") or {}).items():
+            retrieved_titles.setdefault(_lid, _t)
         all_searches.extend(result.get("searches") or [])
 
     if cancel_event and cancel_event.is_set():
@@ -1550,6 +1683,18 @@ async def run_deep_research(
     _dr_cfg = _get_cfg()
     final["research_mode"] = _dr_cfg.get("_research_mode") or None
     final["chat_mode"] = _dr_cfg.get("_chat_mode") or None
+
+    # P4.3 lever R, as on the Manager path: the synthesis names instruments a
+    # step's scope block listed and no step report did (408 stored misses).
+    _readmitted = readmit_answer_sources(
+        accumulated_sources, retrieved_sources, _content,
+        _dr_cfg.get("_research_mode") or "legislation_only")
+    if _readmitted:
+        logger.info("[DeepResearch] Re-admitted %d source(s) the report cites", len(_readmitted))
+        accumulated_sources.extend(_readmitted)
+    # P4.24, as on the Manager path.
+    accumulated_sources = await title_rail_sources(
+        accumulated_sources, retrieved_sources, retrieved_titles)
 
     if accumulated_sources:
         final["sources"] = [
