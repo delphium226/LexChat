@@ -29,11 +29,17 @@ Worker a held/absent block for an arbitrary part of the list.
 `routed_lookup_block` therefore reads the brief through `without_handover_line`.
 An instrument the step's own text names is still looked up, as before.
 
-**Which steps get the line.** Only a step whose title or detail says it works on
-what an earlier step identified (`works_on_earlier_list`): the Session 15
-pattern, unchanged, plus the one form a hand-read found it missing ("the
-identified" followed by a class's full title). A step it misses runs exactly as
-it did before this change.
+**Which steps get the line.** Every step after the first whose earlier steps'
+report bodies cite at least one instrument (user decision, 2026-10-09). It was
+first given only to a step whose wording a pattern recognised (the Session 15
+pattern plus "the identified" followed by a class's full title); in the
+acceptance replay (`wave4_b11_sweep`) the line worked on every step it reached,
+and the one miss was a step the pattern did not recognise ("Review the
+retrieved secondary legislation ..."), which re-derived the list and dropped an
+instrument. A planner can phrase the dependency in more ways than a pattern
+can list, so there is no pattern: the line is conditional ("Where this task
+works on instruments an earlier step identified ..."), and a step that does
+not work on the list is not asked to do anything new.
 
 Pure functions only; `agent_core.run_deep_research` calls them. Never raises:
 a failure here returns "" and the step runs as it did before (Invariant 5).
@@ -49,42 +55,14 @@ from typing import Iterable
 # CONTEXT paragraph) cannot be mistaken for it: the label must open a line.
 HANDOVER_LABEL = "EARLIER STEPS' INSTRUMENTS:"
 
-# How many ids the line names. The largest list over the 148 stored post-P3.8
-# steps 2+ is 10; past the cap the line says how many more there are.
+# How many ids the line names. Over the 531 stored steps 2+ that would get a
+# line (every era, batch 12 B's dry run) the median list is 3 and the 90th
+# percentile 7; 5 lists are longer than 15 (38 to 39, every one from a step
+# that listed instruments from P3.31's made-under record). Past the cap the line
+# says how many more there are.
 MAX_HANDED_ON_IDS = 15
 
-# The Session 15 pattern (`SESSION_LOG.md`, batch 5 C's `p310_dependent.py`,
-# batch 10 D's `p310_recount.py`), copied verbatim: a step that works on what an
-# earlier step produced.
-_SESSION15 = re.compile(
-    r"\b(identified (in|by|above|earlier)|(from|in) (step|the previous|the earlier|step \d)"
-    r"|previous(ly)? (step|identified)|those (instruments|regulations|orders|acts)"
-    r"|these (instruments|regulations|orders|acts)"
-    r"|the (instruments|regulations|orders|SSIs|Acts) (identified|found|located)"
-    r"|identified SSIs|identified (instruments|regulations|orders))\b",
-    re.I,
-)
-# The form batch 10 D's hand-read found the pattern missing (one stored step
-# after P3.8): "the identified" then a class's full title, so the class word is
-# not next to "identified". Bounded to one sentence and 80 characters, and
-# limited to instrument classes: "the identified provisions" (the seven
-# provision-dependent steps the same hand-read found) is a different shape and
-# stays out.
-_IDENTIFIED_TITLED = re.compile(
-    r"\bthe identified\b[^.]{0,80}?\b(orders?|regulations|instruments|SSIs|SIs|rules)\b",
-    re.I,
-)
-
 _LINE_START = re.compile(r"^" + re.escape(HANDOVER_LABEL) + r"[^\n]*\n?", re.M)
-
-
-def works_on_earlier_list(step: dict) -> bool:
-    """Does this plan step say it works on what an earlier step identified?"""
-    try:
-        text = f"{step.get('title') or ''} {step.get('detail') or ''}"
-        return bool(_SESSION15.search(text) or _IDENTIFIED_TITLED.search(text))
-    except Exception:
-        return False
 
 
 def report_body(report: str) -> str:
