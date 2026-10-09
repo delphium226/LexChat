@@ -67,8 +67,8 @@ Session 43 entry did not change, and:
 - **The made-under record** (P3.31, done): `server_py/data/made_under/` snapshot `2026-10-09.1`, 86,744
   instruments, 68,780 with parsed powers; the Worker tool `find_instruments_made_under`; the forward fallback in
   `agent_shared.stored_enabling_note`; `tools/madeunder_probe.py`, `tools/madeunder_grade.py`.
-- **Fix Tracker v46** (Type column; P4.12 Fixed, P3.10 and P4.3 In progress, P4.25, P3.31 Fixed, P3.32 to
-  P3.44). Not yet on it: P5.4 ticked, P4.22 raised to P2 (both 2026-10-09).
+- **Fix Tracker v47** (Type column; every row through P3.44 and P4.25; P5.4 Fixed, P4.22 at P2; Next = this
+  batch).
 - Machine: no server, no pin file, no replay running, no worktree but the main checkout.
 
 ---
@@ -197,7 +197,7 @@ decided" and "Where things stand" sections apply. Notes to `notes/batch12_F.md` 
    rows failing their drop rule go `[-]` (the user confirms); put every agent's decisions to the user, grouped;
    `plan_lint` 0 errors.
 7. **Hand over:** a Session 44 entry and a handover for Session 45 (one session at a time); the memory entry
-   `project_prepilot_freeze.md`; the Fix Tracker only if the user asks (then also P5.4 Fixed and P4.22 at P2).
+   `project_prepilot_freeze.md`; the Fix Tracker only if the user asks (v47 is the base).
 
 **Carried, the user's:** SCTS's written confirmation; the SCTS whitelist request; the lawyer pack (P3.2, P3.3,
 P3.17); D23; P5.5 (the National Archives' bulk data); deploying `v2026.09.3`; the eval-harness owner (schema v6,

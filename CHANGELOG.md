@@ -19,6 +19,19 @@ where each row carries its evidence and acceptance.
 
 On `fix/prepilot-defects` since 2026.09.3, waiting for the next cut.
 
+What an instrument was made under:
+- Answer "which instruments were made under section N of this Act?" from a
+  record of what each instrument's own preamble says it was made under,
+  harvested from legislation.gov.uk: Scottish statutory instruments made
+  from 1999 and UK statutory instruments made from 1987 (86,744 instruments,
+  68,780 with their enabling powers read). A new research tool lists them
+  with the total, and every such answer says what the record covers, so an
+  empty or short list is never read as "nothing else was made under it".
+  The same record gives the enabling power of a single instrument whose
+  index record carries no preamble, including instruments the index does not
+  hold. The record loads at startup and adds newly published instruments
+  daily, through the LEX API's connection to legislation.gov.uk (P3.31).
+
 Saying honestly what was and was not found:
 - When case law was searched, say that a search can miss a judgment the
   database holds, so one missing from its results may still exist: that is not

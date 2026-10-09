@@ -377,14 +377,14 @@
 <div class="wrap">
   <header>
     <span class="eyebrow">AILA · pre-pilot defect fixes</span>
-    <h1>Pre-pilot Fix Tracker <span class="as-at" id="as-at">as at 9th Oct 2026, 1:30pm</span></h1>
+    <h1>Pre-pilot Fix Tracker <span class="as-at" id="as-at">as at 9th Oct 2026, 1:45pm</span></h1>
     <p class="lede">Every proposed fix, ours (<strong>R</strong>) and Thomas's (<strong>T</strong>), with its status,
       its row in the fix plan and its action number in Thomas's review of 10 September 2026.
       <strong>“Fixed” means built and accepted on the fix branch. The Version column says which
       release carries each fix: 2026.09.1 (22 September), 2026.09.2 (23 September) or 2026.09.3
-      (29 September), all merged for deployment to the server. Nineteen rows fixed since then, P3.16,
+      (29 September), all merged for deployment to the server. Twenty rows fixed since then, P3.16,
       P4.16, P4.15, P4.18, P4.17, P5.2, P3.19, P4.21, P3.24, P4.19, P3.23, P3.9, P3.25, P3.27, P3.21, P3.4,
-      P3.6, P3.31 and P4.12, are marked “Next release”. The fixed date is the day a fix was accepted, not the
+      P3.6, P3.31, P4.12 and P5.4, are marked “Next release”. The fixed date is the day a fix was accepted, not the
       day it reached the server.</strong></p>
   </header>
 
@@ -488,6 +488,18 @@
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.
         <strong>30 Sep</strong> marks a point from his retest of release 2026.09.3 on 30 September.</p>
+      <p><strong>9 October, later: the plan re-shaped around the new data, and one session again.</strong> We
+        checked which open problems the new data helps. <strong>P5.4</strong>, our check of legislation.gov.uk for
+        what our legislation database lacks, is complete: the record of what each instrument was made under answered
+        its main question, point-in-time versions are now their own row (<strong>P3.39</strong>), and nothing needs
+        a new address opened on the server. Three open rows gain a route through the data: <strong>P3.12</strong>
+        (fetching a schedule paragraph exactly, with its own number, from legislation.gov.uk),
+        <strong>P3.28</strong> (counting removals by the type the official record gives each change) and
+        <strong>P4.24</strong> (titles for entries in the sources list, from the record). <strong>P4.22</strong> is
+        raised from P3 to P2, because the record makes the note it concerns far more common. For the last two days
+        two working sessions ran side by side on the same work; they are now merged into one plan for the next
+        session, which also measures every data improvement before any is built, and from now on one session works at
+        a time.</p>
       <p><strong>9 October: seven more data improvements, and the parallel session's results.</strong>
         Booked, each to be measured first at no cost: reading a recent instrument our legislation database does
         not hold from legislation.gov.uk, instead of stopping at “not held” (<strong>P3.38</strong>); the law
@@ -1172,13 +1184,14 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next, by severity.</strong> <strong>P3.12</strong> first, re-checked on the research step
-        alone (about 20 cents) before anything more is built. Then <strong>P3.10</strong>'s change on every later
-        Deep Research step and its re-run (about $3.20, priced to us first), <strong>P4.3</strong>'s next
-        change (measured first at no cost), <strong>P3.20</strong>'s build (Scottish judgments; its design is
-        chosen, and its re-run priced first), <strong>P4.23</strong> and P3.22's remaining item. The data
-        improvements follow, <strong>P3.38</strong> and <strong>P3.39</strong> first, each measured before it is
-        built. Then the P3 rows. <strong>P3.2</strong>, <strong>P3.3</strong> and <strong>P3.17</strong> stay
+      <p><strong>Next, by severity.</strong> One session works through it, with several pieces running side by
+        side. <strong>P3.12</strong> first: the research step re-checked on its own (about 20 cents), and the exact
+        paragraph fetched from legislation.gov.uk tried. Then <strong>P3.10</strong>'s change on every later Deep
+        Research step and its re-run (about $3.20, priced to us first); <strong>P3.20</strong>'s build (Scottish
+        judgments; its re-run priced first); <strong>P4.3</strong>'s next change, <strong>P4.23</strong> and
+        <strong>P4.24</strong>, measured first; P3.22's remaining item, P3.4's follow-up and <strong>P4.22</strong>.
+        Beside them, every data improvement is measured at no cost, so the valuable ones can be slotted in by their
+        numbers. Then the P3 rows. <strong>P3.2</strong>, <strong>P3.3</strong> and <strong>P3.17</strong> stay
         blocked until a lawyer answers our questions.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.3, P0.4, dropped on 2 October, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
@@ -1212,8 +1225,8 @@
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
   // AS_AT: the date and time of this update, shown in the header (tracker v40, user request).
-  const AS_AT = "9th Oct 2026, 1:30pm";
-  const UPDATED = "9 October 2026, afternoon (seven more data improvements, P3.38 to P3.44; UK statutory instruments added to the made-under record; P4.12 fixed, P3.10 and P4.3 built, P4.25 added)";
+  const AS_AT = "9th Oct 2026, 1:45pm";
+  const UPDATED = "9 October 2026, afternoon, later (P5.4 fixed; P4.22 raised to P2; data routes for P3.12, P3.28 and P4.24; the next session's plan merged, one session at a time)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", type: "Measurement", t: "", added: "2026-09-22", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", type: "Measurement", t: "", added: "2026-09-22", fixed: "2026-09-23", ver: "2026.09.3" },
@@ -1282,14 +1295,14 @@
     { src: "R", fix: "Retry a case-law request refused because the service is busy, as legislation requests are", sev: "P2", status: "Fixed", ref: "P4.19", type: "Bug", t: "", added: "2026-10-02", fixed: "2026-10-05", ver: "Next release" },
     { src: "T", fix: "Name one list of the change records consulted under an answer, not two that disagree", sev: "P3", status: "Verified", ref: "P4.20", type: "Bug", t: "30 Sep", added: "2026-10-05" },
     { src: "T", fix: "Don't tell the lawyer an instrument we don't hold is “not a sign that the citation is wrong”: a lookup can't tell", sev: "P2", status: "Fixed", ref: "P4.21", type: "Issue", t: "30 Sep", added: "2026-10-05", fixed: "2026-10-05", ver: "Next release" },
-    { src: "T", fix: "Stop the answer cleaner leaving a hole where a report names the enabling-power note in a sentence", sev: "P3", status: "Verified", ref: "P4.22", type: "Bug", t: "30 Sep", added: "2026-10-05" },
+    { src: "T", fix: "Stop the answer cleaner leaving a hole where a report names the enabling-power note in a sentence", sev: "P2", status: "Verified", ref: "P4.22", type: "Bug", t: "30 Sep", added: "2026-10-05" },
     { src: "T & R", fix: "Keep the links the research gave when the chat reply names an instrument (split from P4.3)", sev: "P2", status: "Verified", ref: "P4.23", type: "Issue", t: "7", added: "2026-09-18" },
     { src: "R", fix: "Give every entry in the sources list a title and a link (some show only an identifier, or no link)", sev: "P3", status: "Verified", ref: "P4.24", type: "Bug", t: "", added: "2026-10-08" },
     { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Fixed", ref: "P4.6", type: "Issue", t: "4", added: "2026-09-18", fixed: "2026-09-23", ver: "2026.09.3" },
     { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Fixed", ref: "P4.7", type: "Issue", t: "2", added: "2026-09-18", fixed: "2026-09-24", ver: "2026.09.3" },
     { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", sev: "P3", status: "Verified", ref: "P4.8", type: "Bug", t: "", added: "2026-09-21" },
     { src: "R", fix: "Decide where Scottish case law will come from (Court of Session, Sheriff Courts); the build is P3.20", sev: "P2", status: "Fixed", ref: "P5.2", type: "Data Improvement", t: "", added: "2026-09-14", fixed: "2026-10-02", ver: "Next release" },
-    { src: "R", fix: "Check legislation.gov.uk for what our legislation database lacks (enabling powers, past versions, dated changes)", sev: "P3", status: "Verified", ref: "P5.4", type: "Data Improvement", t: "", added: "2026-10-02" },
+    { src: "R", fix: "Check legislation.gov.uk for what our legislation database lacks (enabling powers, past versions, dated changes)", sev: "P3", status: "Fixed", ref: "P5.4", type: "Data Improvement", t: "", added: "2026-10-02", fixed: "2026-10-09", ver: "Next release" },
     { src: "T", fix: "Show provider errors (credit, rate limit) clearly when planning", sev: "P3", status: "Verified", ref: "TODO B6", type: "Issue", t: "8", added: "2026-09-18" },
     { src: "T", fix: "Order case-law results by relevance (they come back newest first)", sev: "P2", status: "In progress", ref: "P3.22", type: "Issue", t: "6", added: "2026-09-18" },
     { src: "T", fix: "Reconcile summary counts with the answer's own list", sev: "P2", status: "To be verified", ref: "", type: "Issue", t: "NH2", added: "2026-09-18" },
