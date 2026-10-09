@@ -241,8 +241,19 @@ def test_a_short_form_counts_once_named_in_full_in_the_answer_or_earlier():
         _turn(3, "Widget sets the test."),                            # anchored by turn 2
     ])
     m = _ooc(doc)["mentions"]
-    assert [(e, v) for e, v, _ in m] == [(2, "PASS"), (3, "EARLIER")]
+    # The short form before the full form is a mention (the point of this
+    # test), and since batch 13 E it is the answer's FIRST statement, made
+    # before the tie, so turn 2 fails and turn 3 has no earlier pass.
+    assert [(e, v) for e, v, _ in m] == [(2, "FAIL"), (3, "FAIL")]
     assert len(m[0][2]) == 2
+    # With the tie first, the same answer passes and turn 3 is EARLIER.
+    doc2 = _run([
+        _turn(1, "Widget sets the test."),
+        _turn(2, "Cog Ltd v Example plc [1901] EAT 27 cites Widget v Gadget Sprocket "
+                 "[1899] AC 52. Widget applies."),
+        _turn(3, "Widget sets the test."),
+    ])
+    assert [(e, v) for e, v, _ in _ooc(doc2)["mentions"]] == [(2, "PASS"), (3, "EARLIER")]
 
 
 def test_a_link_labelled_with_a_retrieved_judgments_own_name_is_not_linked():
