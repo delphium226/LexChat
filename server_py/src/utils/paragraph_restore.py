@@ -298,6 +298,8 @@ def render_line(p: dict, ex: Optional[str] = None) -> str:
 
 
 # Batch 13 B: what an answer cites of each paragraph, at sub-paragraph level.
+# A range of sub-paragraphs longer than this is read as its two ends only.
+_MAX_SUB_RANGE = 12
 _FIRST_SUB = re.compile(r"(?P<n>\d{1,3}[A-Z]{0,2})(?P<p>(?:\(\w{1,6}\))*)")
 # Further sub-paragraphs after a pinpoint: "43(5) and (6)", "42(2)-(4)",
 # "43(2)-(3) and (6)", "44(1)–(2)".
@@ -319,8 +321,9 @@ def _sub_list(s: str) -> list:
     for m in re.finditer(r"(?P<sep>[ \t]*(?:to|-|–)[ \t]*)?\((?P<n>\w{1,3})\)(?:\(\w{1,4}\))*",
                          s or ""):
         n = m.group("n").upper()
-        if m.group("sep") and out and out[-1].isdigit() and n.isdigit():
-            out += [str(i) for i in range(int(out[-1]) + 1, int(n) + 1)][:12]
+        if (m.group("sep") and out and out[-1].isdigit() and n.isdigit()
+                and 0 < int(n) - int(out[-1]) <= _MAX_SUB_RANGE):
+            out += [str(i) for i in range(int(out[-1]) + 1, int(n) + 1)]
             continue
         out.append(n)
     return out

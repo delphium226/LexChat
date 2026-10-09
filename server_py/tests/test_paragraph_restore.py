@@ -484,11 +484,37 @@ def test_a_paragraph_cited_by_one_subparagraph_gets_its_uncited_operative_ones()
     ("paragraphs 7(4) and 8", {"7": (["4"], False), "8": ([], True)}),
     ("paragraph 7 and paragraph 7(4)", {"7": (["4"], True)}),
     ("paragraphs 6 to 8", {"6": ([], True), "7": ([], True), "8": ([], True)}),
+    ("paragraphs 6, 7, and 8", {"6": ([], True), "7": ([], True), "8": ([], True)}),
+    ("paragraphs 7(4) and 8(1) and (2)", {"7": (["4"], False), "8": (["1", "2"], False)}),
     ("paragraphs 7 8", {"7": ([], True), "8": ([], True)}),
 ])
 def test_what_the_answer_cites_of_each_paragraph(cites, want):
     got = pr._citations(f"Under {cites} of Schedule 5, shops are regulated.")
     assert {k: (sorted(v["subs"]), v["bare"]) for k, v in got.items()} == want
+
+
+@pytest.mark.parametrize("subs,want", [
+    ("(2)-(4)", ["2", "3", "4"]),
+    ("(1)-(13)", [str(i) for i in range(1, 14)]),
+    ("(1)-(14)", ["1", "14"]),
+    ("(4)-(2)", ["4", "2"]),
+    ("(6)-(6A)", ["6", "6A"]),
+    ("(6)(a) and (7)", ["6", "7"]),
+])
+def test_a_range_of_subparagraphs_is_expanded_only_when_short_and_ascending(subs, want):
+    assert pr._sub_list(subs) == want
+
+
+def test_an_unnumbered_opening_is_never_carried_in_the_uncited_line():
+    text = "Opening words of the paragraph. \n1) A rule. \n2) Another rule. \n"
+    assert pr.uncited_excerpt(text, ["1"], []) == "(2) Another rule."
+
+
+def test_the_subparagraph_line_follows_the_first_citation():
+    answer = ("Under paragraph 7(4) of Schedule 5, a shop may not open on a Sunday.\n\n"
+              "Paragraph 8 deals with gadget shops.\n\nAs said, paragraph 7(4) applies.")
+    new, n = _shops(answer)
+    assert n == 1 and new.split("\n\n")[1].startswith(LINE7)
 
 
 def test_more_than_half_of_the_operative_subparagraphs_cited_gets_no_line():
