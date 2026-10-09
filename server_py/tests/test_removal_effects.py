@@ -316,6 +316,7 @@ def test_the_manager_limb_names_each_class_for_its_own_instruments():
         _rec({"words omitted": 1}, lid="ssi/1901/4"),
         _rec({"repealed (prosp.)": 1}, lid="ssi/1901/5"),
         _rec({"words omitted": 1}, lid="ssi/1901/4"),
+        _rec({"repealed (prosp.)": 1}, lid="ssi/1901/5"),
     ))
     assert f" {M_WHOLE} ssi/1901/3 — a statement that those provisions, or the parts " \
            "removed, are no longer in force is supported, again without a date." in limb
@@ -327,6 +328,7 @@ def test_the_manager_limb_names_each_class_for_its_own_instruments():
     # each list names only its own instruments, once
     assert limb.count("ssi/1901/4") == limb.count(f"{M_WORDS} ssi/1901/4") + \
         limb.count("- ssi/1901/4:")
+    assert limb.count("ssi/1901/5") == limb.count(f"were retrieved for ssi/1901/5:") +         limb.count("- ssi/1901/5:")
 
 
 def test_the_manager_limb_lists_at_most_six_per_class():
@@ -335,6 +337,12 @@ def test_the_manager_limb_lists_at_most_six_per_class():
     line = limb[limb.index(M_WORDS):]
     line = line[:line.index(":")]
     assert "ssi/1901/15" in line and "ssi/1901/16" not in line
+    recs = [_rec({"omitted (temp.)": 1}, lid=f"ssi/1901/{30 + i}") for i in range(8)]
+    limb = ss._currency_limb(_log(*recs))
+    line = limb[limb.index(M_QUAL):]
+    line = line[line.index("retrieved for"):]
+    line = line[:line.index(":")]
+    assert "ssi/1901/35" in line and "ssi/1901/36" not in line
 
 
 def test_a_record_with_no_removal_of_a_provision_is_not_listed_as_one():
