@@ -268,3 +268,13 @@ def test_a_dot_inside_a_title_does_not_end_the_recital():
     t = ("The Scottish Ministers, in exercise of the powers conferred by section 7(1) of the "
          "Widget, Nicotine etc. and Care (Scotland) Act 1901. A draft has been laid.")
     assert _powers(t) == [("power", "Widget, Nicotine etc. and Care (Scotland) Act 1901", ["section/7"])]
+
+
+def test_an_offline_reparse_keeps_the_acts_the_fetch_resolved():
+    # The stored record has no preamble before its recital, so "that Act" can
+    # only resolve to what the fetch resolved; losing it lost 67 SSIs once.
+    rec = {"id": "uksi/1901/1", "window": "conferred by section 2(2) of that Act",
+           "powers": [{"act": "Widget Act 1901", "provisions": ["section/2"], "role": "power"}]}
+    got = mp.parse_powers(rec["window"], mp.reparse_context(rec))
+    assert [(p["act"], p["provisions"]) for p in got] == [("Widget Act 1901", ["section/2"])]
+    assert mp.parse_powers(rec["window"])[0]["act"] is None

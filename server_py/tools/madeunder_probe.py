@@ -314,6 +314,19 @@ def loose_candidates(records: list, act_title: str, section: str) -> list:
     return out
 
 
+def reparse_context(rec: dict) -> str:
+    """The antecedents an offline re-parse needs, from the record's own earlier parse.
+
+    A stored record keeps its recital but not the preamble before it, which is
+    where "that Act" and "the said Act" usually point. Without this, re-parsing
+    offline threw away every resolution the fetch had made: 67 of 71 recovered
+    SSI anaphors (1999-2017) and about 1,170 UK SIs were lost before it was
+    caught. The Acts the record already resolved are handed back as "the <Act>",
+    in order, so the parser can resolve to them and to nothing else.
+    """
+    return " ".join(f"the {p['act']}" for p in rec.get("powers") or [] if p.get("act"))
+
+
 def build_snapshot(outdir: Path, inputs: list, label: str, not_covered: str,
                    version: str) -> dict:
     """The committed snapshot the server loads (`services/made_under_store`).
@@ -488,7 +501,7 @@ def main(argv=None) -> int:
                     if e:
                         window = window[: e.start()].strip(" ,")
                     rec = dict(rec, window=window)
-                    powers = parse_powers(window)
+                    powers = parse_powers(window, reparse_context(rec))
                     flags = [f for f in rec.get("flags", [])
                              if f not in ("window_unparsed", "unresolved_anaphor")]
                     if not powers:
