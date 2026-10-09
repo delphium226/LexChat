@@ -190,6 +190,18 @@ def test_a_case_the_source_never_names_takes_its_list_item_and_nested_lines():
     assert out == "Relevant authorities:\n2.  **Other Ltd v Thing Ltd:** a held case."
 
 
+def test_a_later_sentence_of_a_list_item_goes_alone():
+    """The item's own first sentence is the source's; only the sentence that
+    carries the summariser's case goes, not the whole item."""
+    raw = _raw("Other Ltd v Thing Ltd")
+    summary = ("*   **Widget duty:** Section 5 imposes the duty. It follows "
+               "Gadgetry v Smallbody [1902] UKSC 2 on the test.\n"
+               "*   Held.")
+    out, recs = _strip(summary, raw)
+    assert [r["action"] for r in recs] == ["sentence"]
+    assert out == "*   **Widget duty:** Section 5 imposes the duty.\n*   Held."
+
+
 def test_a_heading_that_is_the_case_takes_its_block():
     raw = _raw("Other Ltd v Thing Ltd")
     summary = ("Intro.\n\n"
@@ -533,6 +545,14 @@ def test_a_failed_consolidation_returns_the_partials_checked(monkeypatch):
     out, degraded = asyncio.run(summ.summarise_for_query(text, "q", "m", chunk_fn=chunk_fn))
     assert len(calls) == 4 and degraded is True
     assert "[1901] AC 25" not in out and "Section 5 applies here." in out
+
+
+def test_the_wrapper_is_fail_soft_when_the_check_raises(monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("x")
+    monkeypatch.setattr(sc, "strip_unsourced_citations", boom)
+    summary = HELD + "\n" + INVENTED
+    assert summ.check_summary_citations(summary, SOURCE, "q") == summary
 
 
 def test_a_failed_summary_returns_the_raw_text_untouched():

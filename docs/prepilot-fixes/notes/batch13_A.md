@@ -288,3 +288,5 @@ never passes through `summarise_for_query`. Hence `--citations`. All estimates b
      arguable removals leave the case name.
    - (b) Keep a passage whose held citation appears nowhere else in the summary, and remove only
      the invented citation there. The invented case then stays named.
+
+**Integrator review (Session 45):** two integrator mutants survived (`_strip`'s `if a == 0:` to `if True:`; `check_summary_citations`'s `except Exception` to `except ZeroDivisionError`). Added `test_a_later_sentence_of_a_list_item_goes_alone` and `test_the_wrapper_is_fail_soft_when_the_check_raises`; both mutants now CAUGHT (harness: 56 of 56, control 79 passed); full suite on `lexchat_test_a` 3,458 passed.
