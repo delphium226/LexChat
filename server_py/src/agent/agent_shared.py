@@ -54,6 +54,12 @@ from ..utils.discovery_budget import (
     section_stop_message,
 )
 from ..utils.search_scope import (
+    CASE_LAW_BOTH_ZERO_STOP,
+    FCL_ZERO_NOTE_WITH_SCTS,
+    SCTS_ZERO_NOTE,
+    scottish_search_note,
+)
+from ..utils.search_scope import (
     amendment_search_note,
     case_law_search_note,
     currency_note,
@@ -252,6 +258,25 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
             accumulator.append({
                 "kind": "Case",
                 "title": case.get("title") or case.get("name") or "",
+                "sub": ncn,
+                "meta": ", ".join(meta_parts),
+                "cite": ncn,
+                "url": url,
+            })
+        # P3.20: the Scottish list (present only with `scts_caselaw_enabled`).
+        # Its date is the date of decision SCTS records, never a citation's year.
+        scottish = data.get("scottish_results")
+        for case in scottish if isinstance(scottish, list) else []:
+            if not isinstance(case, dict):
+                continue
+            url = case.get("url") or ""
+            if url and any(s.get("url") == url for s in accumulator):
+                continue
+            ncn = case.get("ncn") or ""
+            meta_parts = [p for p in [case.get("court") or "", case.get("decision_date") or ""] if p]
+            accumulator.append({
+                "kind": "Case",
+                "title": case.get("title") or "",
                 "sub": ncn,
                 "meta": ", ".join(meta_parts),
                 "cite": ncn,
@@ -774,6 +799,77 @@ async def stored_enabling_note(lid: str, search_log: Optional[list]) -> str:
     except Exception:
         return ""
 
+
+def _has_scottish_list(result) -> bool:
+    """P3.20: a `search_case_law` result that carries SCTS's list."""
+    try:
+        d = json.loads(result) if isinstance(result, str) else result
+        return isinstance(d, dict) and isinstance(d.get("scottish"), dict)
+    except Exception:
+        return False
+
+
+def _case_law_note_with_scottish(args: dict, result) -> str:
+    """P3.20: the notes on a `search_case_law` result with both lists.
+
+    The Find Case Law half is what it always was (its window note, or its
+    zero note without the stop rule), then the Scottish list's window note or
+    zero note, then ONE stop rule if both lists are empty, or ONE imperative
+    naming up to three judgments from each list, last, as P2.2's order puts it.
+    Never raises.
+    """
+    try:
+        data = json.loads(result) if isinstance(result, str) else result
+        fcl = data.get("results") if isinstance(data.get("results"), list) else []
+        scot = (data.get("scottish_results")
+                if isinstance(data.get("scottish_results"), list) else [])
+        block = data.get("scottish") or {}
+        note = ""
+        if fcl:
+            note += case_law_search_note(args, data)
+        elif not data.get("error"):
+            note += FCL_ZERO_NOTE_WITH_SCTS
+        if block.get("status") == "ok" and not scot:
+            note += SCTS_ZERO_NOTE
+        else:
+            note += scottish_search_note(args, data)
+        if not fcl and not scot:
+            if not data.get("error") and block.get("status") == "ok":
+                note += CASE_LAW_BOTH_ZERO_STOP
+            return note
+        lines = [f'  - url: "{r["url"]}"  ({r.get("title", "")} {r.get("ncn", "")})'
+                 for r in fcl[:3] if isinstance(r, dict) and r.get("url")]
+        for r in scot[:3]:
+            if not isinstance(r, dict) or not r.get("url"):
+                continue
+            label = ", ".join(p for p in (
+                r.get("title") or "", r.get("ncn") or "", r.get("court") or "",
+                f"decided {r['decision_date']}" if r.get("decision_date") else "") if p)
+            lines.append(f'  - url: "{r["url"]}"  ({label})')
+        url_lines = "\n".join(lines)
+        note += (
+            f"\n\n[MANDATORY NEXT STEP — DO NOT synthesise yet. "
+            f"Call get_case_law_text for the 1–3 most relevant cases below to retrieve the full judgment text "
+            f"before composing your answer. Pass the exact url field:\n{url_lines}]"
+        )
+        appeals = detect_appellate_decisions(fcl)
+        if appeals:
+            appeal_lines = "\n".join(
+                f'  - url: "{r["url"]}"  ({r.get("title", "")} {r.get("ncn", "")})'
+                for r in appeals[:3]
+            )
+            note += (
+                f"\n\n[NOTE — APPELLATE DECISION PRESENT: the results include an appeal "
+                f"of a case that also appears at a lower court level. You MUST retrieve and "
+                f"cite the appellate (higher-court) decision below via get_case_law_text — "
+                f"do not rely on the first-instance judgment alone:\n{appeal_lines}]"
+            )
+        return note
+    except Exception:
+        logger.warning("[Worker] Case-law note with the Scottish list failed", exc_info=True)
+        return ""
+
+
 async def run_worker_tool(
     name: str,
     args: dict,
@@ -1079,7 +1175,12 @@ async def run_worker_tool(
     # corpus disclosure on the answer, which fires on any turn that searched
     # case law, not only on the empty result this note handles.
     record_case_law_search(search_log, name, args, result)
-    if name == "search_case_law":
+    if name == "search_case_law" and _has_scottish_list(result):
+        # P3.20: the result carries SCTS's list beside Find Case Law's (the
+        # setting on). Its own composition, so a result without one goes
+        # through the branch below exactly as before.
+        case_law_note = _case_law_note_with_scottish(args, result)
+    elif name == "search_case_law":
         try:
             raw_data = json.loads(result)
             # P3.23: keyed on the SHOWN count, never on `total`. `total` is

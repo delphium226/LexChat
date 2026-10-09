@@ -111,6 +111,15 @@ __all__ = [
     "CASE_LAW_RESULT_ORDER",
     "case_law_scope_clause",
     "case_law_scope_footer",
+    "scottish_search_note",
+    "SCTS_COVERAGE_BOTH_SENTENCE",
+    "SCTS_COVERAGE_ONLY_SENTENCE",
+    "SCTS_ABSENCE_SENTENCE",
+    "SCTS_ERRORED_SENTENCE",
+    "SCTS_FCL_ERRORED_SENTENCE",
+    "FCL_ZERO_NOTE_WITH_SCTS",
+    "SCTS_ZERO_NOTE",
+    "CASE_LAW_BOTH_ZERO_STOP",
     "not_held_note",
     "record_not_held",
     "record_lookup",
@@ -2983,6 +2992,147 @@ def case_law_search_note(args: dict, data: Any) -> str:
     )
 
 
+# ---------------------------------------------------------------------------
+# P3.20: the Scottish Courts and Tribunals Service's judgments, a second list
+# ---------------------------------------------------------------------------
+#
+# When `scts_caselaw_enabled` is on, `search_case_law` also searches SCTS's
+# published judgments and returns them as `scottish_results`, with its own
+# counts in a `scottish` block (`agent/tools/scts.py`). **The day that search
+# runs, `CASE_LAW_COVERAGE_SENTENCE` above is false for the turn** ("not the
+# decisions of the Court of Session …" of the databases searched). So the
+# footer keys on what THIS TURN's records show ran, never on the setting: a
+# record without an `scts` key (the setting off, or any record from before
+# P3.20) gives exactly the text above, byte for byte; an ok SCTS search gives
+# the wording below, which still states what SCTS does not hold (Sheriff
+# Court decisions it does not publish, almost all criminal ones, and Northern
+# Ireland). Worded and screened against every detector that reads answers
+# (pinned by `test_scts_caselaw.py`, which renders every variant).
+
+_SCTS_DATABASE = "the Scottish Courts and Tribunals Service's published judgments"
+_CASE_LAW_DATABASES_BOTH = (
+    "the case-law databases (the National Archives' Find Case Law, and "
+    f"{_SCTS_DATABASE})"
+)
+SCTS_COVERAGE_BOTH_SENTENCE = (
+    "Between them they hold decisions of the UK Supreme Court and, from 1998, of the "
+    "Court of Session, the High Court of Justiciary and the Sheriff Appeal Court, but not "
+    "every Sheriff Court decision: the Scottish Courts and Tribunals Service publishes only "
+    "some, and almost none in criminal cases, and neither database holds decisions of the "
+    "courts of Northern Ireland."
+)
+SCTS_COVERAGE_ONLY_SENTENCE = (
+    "They hold decisions of the Court of Session, the High Court of Justiciary and the "
+    "Sheriff Appeal Court from 1998, but not every Sheriff Court decision (only some are "
+    "published, and almost none in criminal cases), not decisions of the UK Supreme Court "
+    "and not those of the courts of Northern Ireland."
+)
+SCTS_ABSENCE_SENTENCE = (
+    "A search can miss a judgment a database holds, so one missing from these results "
+    "may still exist, in these databases or elsewhere: that is not proof of absence."
+)
+SCTS_FCL_ERRORED_SENTENCE = (
+    "A search of the National Archives' Find Case Law was attempted and returned an error."
+)
+# "published decisions of those courts", not batch 11 D's "those Scottish
+# courts' decisions": SCTS publishes only some Sheriff Court decisions.
+SCTS_ERRORED_SENTENCE = (
+    f"A search of {_SCTS_DATABASE}, which hold published decisions of those courts, was "
+    "attempted and returned an error."
+)
+
+
+def _scots_query(args: dict) -> str:
+    """The Worker's query as the Scottish note shows it: in quotes, unless it
+    carries its own (a quoted phrase), which a second pair would garble
+    (`""title to sue" widget"`); square brackets as round ones, so the block
+    holds none. "" for an empty query."""
+    query = (str((args or {}).get("query") or "").strip()
+             .replace("[", "(").replace("]", ")"))[:200]
+    if not query:
+        return ""
+    return query if '"' in query else f'"{query}"'
+
+
+def scottish_search_note(args: dict, data: Any) -> str:
+    """The window statement for the Scottish list of a `search_case_law`
+    result (P3.20). "" when the result carries no `scottish` block (the
+    setting off), so the Find Case Law note is then exactly what it was.
+
+    Worker-facing, in `[SEARCH SCOPE — …]` form with no square bracket inside
+    (a neutral citation in the query is shown in round brackets, as
+    `case_law_search_note` does), so `_TOOL_BLOCK` strips an echoed copy.
+    """
+    try:
+        d = _as_dict(data)
+        block = d.get("scottish")
+        if not isinstance(block, dict):
+            return ""
+        status = block.get("status")
+        shown_q = _scots_query(args)
+        q = shown_q or "the query"
+        for_q = f" for {shown_q}" if shown_q else ""
+        dates = block.get("dates") if isinstance(block.get("dates"), dict) else {}
+        d_from, d_to = dates.get("from"), dates.get("to")
+        limits = (f" (decided {d_from} to {d_to})" if d_from and d_to
+                  else f" (decided from {d_from})" if d_from
+                  else f" (decided up to {d_to})" if d_to else "")
+        where = f"{_SCTS_DATABASE}{limits}"
+        # Worded to trip no detector: "not searched for" trips
+        # `NEGATIVE_EXPLAINED` and `NEG_TERMS`, "did not complete" `SCHED_LIMIT`.
+        if status == "error":
+            return (f"\n\n[SEARCH SCOPE — the request to {where}{for_q} returned an "
+                    "error, so it says nothing about which Scottish judgments match.]")
+        if status == "capped":
+            return (f"\n\n[SEARCH SCOPE — {_SCTS_DATABASE} had no part in this search: this "
+                    f"request has already made its {block.get('cap') or 'allowed'} searches "
+                    "of them. Work from the Scottish judgments already returned.]")
+        if status != "ok":
+            return (f"\n\n[SEARCH SCOPE — {_SCTS_DATABASE} had no part in this search: "
+                    + (f"the query {shown_q} holds" if shown_q else "the query holds")
+                    + " no word to look up in them.]")
+        shown = int(block.get("shown") or 0)
+        total = int(block.get("total") or 0)
+        if not shown:
+            return ""   # the zero note in `agent_shared` speaks for it
+        if block.get("match") == "any":
+            return (f"\n\n[SEARCH SCOPE — the first {shown} of {total:,} judgments in "
+                    f"{where} that contain any of the terms of {q}, listed most relevant "
+                    "first: a query requiring every term returned 0. One that contains only "
+                    "some of the terms may not answer the question.]")
+        if total <= shown:
+            return (f"\n\n[SEARCH SCOPE — all {shown} judgment(s) in {where} that contain "
+                    f"every term of {q}, listed {CASE_LAW_RESULT_ORDER}.]")
+        return (f"\n\n[SEARCH SCOPE — the first {shown} of {total:,} judgments in {where} "
+                f"that contain every term of {q}, listed {CASE_LAW_RESULT_ORDER}. Another "
+                f"judgment that matches can sit outside these {shown}: to reach it, search "
+                "again with narrower terms (a party's name, a court or dates) rather than "
+                "treat this list as complete.]")
+    except Exception:
+        return ""
+
+
+# The zero-result notes when the Scottish list is present. Find Case Law's
+# is today's note without its stop rule, which follows both lists once, and
+# only when both are empty: "This search returned 0 results" is false of a
+# search whose Scottish list is full. In `[SEARCH SCOPE — …]` form, unlike
+# today's zero note, so an echoed copy is stripped.
+FCL_ZERO_NOTE_WITH_SCTS = (
+    "\n\n[SEARCH SCOPE — Find Case Law returned 0 results for this search. It holds no "
+    "decisions of the Court of Session, the Sheriff Appeal Court, the Sheriff Courts or the "
+    "High Court of Justiciary; Scottish appeals decided by the UK Supreme Court are included.]"
+)
+SCTS_ZERO_NOTE = (
+    f"\n\n[SEARCH SCOPE — this search of {_SCTS_DATABASE} returned 0 results. They hold "
+    "decisions of the Court of Session, the High Court of Justiciary and the Sheriff Appeal "
+    "Court from 1998 and the Sheriff Court decisions SCTS publishes.]"
+)
+CASE_LAW_BOTH_ZERO_STOP = (
+    "\n\n[SEARCH SCOPE — both lists are empty. If you have already tried 2–3 different "
+    "queries without results, stop searching and say which searches you made.]"
+)
+
+
 def record_case_law_search(log: Optional[list], name: str, args: dict, data: Any) -> None:
     """Record one case-law search for the lawyer-facing footer. Never raises.
 
@@ -2991,18 +3141,29 @@ def record_case_law_search(log: Optional[list], name: str, args: dict, data: Any
     `Error executing tool: …` string, or JSON carrying `error`, which is what a
     rejected court code returns), so the footer never says a search ran when it
     failed.
+
+    P3.20: `ok` stays Find Case Law's. A result carrying the Scottish list adds
+    `scts` (its status: "ok", "error", "capped", "not_searched") and
+    `scts_shown`; a result without one adds nothing, so the record, and the
+    footer built from it, is what it was.
     """
     if log is None or name != CASE_LAW_TOOL:
         return
     try:
         d = _as_dict(data)
         results = d.get("results")
-        log.append({
+        rec = {
             "tool": CASE_LAW_TOOL,
             "query": str((args or {}).get("query") or "")[:200],
             "shown": len(results) if isinstance(results, list) else None,
             "ok": bool(d) and not d.get("error"),
-        })
+        }
+        block = d.get("scottish")
+        if isinstance(block, dict):
+            scot = d.get("scottish_results")
+            rec["scts"] = str(block.get("status") or "")
+            rec["scts_shown"] = len(scot) if isinstance(scot, list) else 0
+        log.append(rec)
     except Exception:
         pass
 
@@ -3014,6 +3175,11 @@ def _case_law_body(entries: Optional[list]) -> str:
     if not rows:
         return ""
     done = [e for e in rows if e.get("ok", True)]
+    # P3.20: an ok search of SCTS this turn makes the coverage sentence false.
+    scots = [e for e in rows if e.get("scts") == "ok"]
+    if scots:
+        return _case_law_body_with_scts(done, scots)
+    scots_failed = any(e.get("scts") == "error" for e in rows)
     terms, listed = _listed_terms(e.get("query") for e in (done or rows))
     if done:
         head = f"{_CASE_LAW_DATABASE} was searched" + (f" for {listed}" if terms else "")
@@ -3025,7 +3191,26 @@ def _case_law_body(entries: Optional[list]) -> str:
     # returned no results to be missing from, and no judgment for a rule to be
     # taken from.
     tail = f" {CASE_LAW_ABSENCE_SENTENCE} {CASE_LAW_DOCTRINE_SENTENCE}" if done else ""
-    return f"{head}. {CASE_LAW_COVERAGE_SENTENCE}{tail}"
+    # P3.20: the coverage sentence is still true when SCTS was attempted and
+    # failed; the lawyer is told it was attempted.
+    errored = f" {SCTS_ERRORED_SENTENCE}" if scots_failed else ""
+    return f"{head}. {CASE_LAW_COVERAGE_SENTENCE}{errored}{tail}"
+
+
+def _case_law_body_with_scts(done: list, scots: list) -> str:
+    """P3.20: the case-law statement on a turn whose SCTS search ran."""
+    if done:
+        terms, listed = _listed_terms(e.get("query") for e in done + scots)
+        head = (f"{_CASE_LAW_DATABASES_BOTH} were searched"
+                + (f" for {listed}" if terms else ""))
+        # The doctrine sentence stays: Find Case Law still returns judgments of
+        # courts outside Scotland, and a rule taken from one is still unchecked.
+        return (f"{head}. {SCTS_COVERAGE_BOTH_SENTENCE} {SCTS_ABSENCE_SENTENCE} "
+                f"{CASE_LAW_DOCTRINE_SENTENCE}")
+    terms, listed = _listed_terms(e.get("query") for e in scots)
+    head = f"{_SCTS_DATABASE} were searched" + (f" for {listed}" if terms else "")
+    return (f"{head}. {SCTS_COVERAGE_ONLY_SENTENCE} {SCTS_ABSENCE_SENTENCE} "
+            f"{SCTS_FCL_ERRORED_SENTENCE}")
 
 
 def case_law_scope_clause(entries: Optional[list]) -> str:

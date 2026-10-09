@@ -7,6 +7,7 @@ import random
 import time
 import uuid
 from typing import Callable, Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -35,6 +36,12 @@ from .caselaw import (
     case_law_date_window,
 )
 from .commencement_dates import add_commencement_dates
+from .scts import (
+    fetch_scts_judgment,
+    is_scts_judgment_url,
+    scts_enabled_for_request,
+    search_scts,
+)
 from .lex import (
     LEX_API_URL,
     _TYPE_CODES,
@@ -63,6 +70,14 @@ _MAX_SEARCH_RESULTS = 5
 # chased — see the branch for the measurements.
 _AMENDMENT_FETCH_SIZE = 2000
 _AMENDMENT_ESCALATED_SIZE = 20000
+
+# P3.20: `get_case_law_text` on a URL that is neither a Find Case Law judgment
+# nor (with the setting on) an SCTS judgment PDF. Worker-facing; no "exactly"
+# (`OPENER_VOCAB`).
+GET_CASE_LAW_TEXT_REFUSAL = (
+    "Not fetched: get_case_law_text reads only a judgment URL returned by "
+    "search_case_law. Pass the url field as the search returned it, unchanged."
+)
 
 # -----------------------------------------------------------------------
 # Retry / backoff for the (rate-limited) LEX API
@@ -763,67 +778,126 @@ async def execute_worker_tool(
                 # `caselaw.CASE_LAW_ORDER_PARAMS`.
                 params.update(CASE_LAW_ORDER_PARAMS)
 
-                await _emit(on_chunk, {
-                    "type": "api_call_start",
-                    "id": call_id,
-                    "url": url,
-                    "method": "GET",
-                    "payload": params,
-                })
-
-                t0 = time.perf_counter()
-                # P4.19: through the retry helper, as every LEX call is. The
-                # National Archives publishes a limit of 1,000 requests per
-                # rolling five minutes per IP and answers it with a 429; the
-                # target is one IP for every user, so a direct `client.get`
-                # turned a 429 into a dropped retrieval. A 400 (an invalid
-                # court code) is not in `_RETRY_STATUS` and still returns at
-                # once to the branch below. The helper also retries a timeout
-                # or transport error, which is wanted here: the only failures
-                # in 1,149 stored calls were 3 DNS transport errors, and none
-                # reached the 15 s timeout (batch 7 D's note).
-                resp = await _request_with_retry(
-                    client, "GET", url, name=name, params=params, timeout=15.0
-                )
-                elapsed_ms = (time.perf_counter() - t0) * 1000
-
-                if timing_collector:
-                    timing_collector.record_lex_api_call(name, elapsed_ms)
-
-                await _emit(on_chunk, {
-                    "type": "api_call_end",
-                    "id": call_id,
-                    "url": url,
-                    "status": resp.status_code,
-                    "response": {"preview": resp.text[:300]},
-                    "elapsed_ms": round(elapsed_ms),
-                })
-
-                if resp.status_code == 400:
-                    court = args.get("court", "")
-                    return json.dumps({
-                        "error": f"Invalid court filter '{court}'. Use only the exact court codes listed in the tool description (e.g. 'uksc', 'ewca/civ', 'ewhc/admin'). Retry without the court filter, or with a valid code.",
-                        "results": [],
-                        "total": 0,
+                async def _find_case_law() -> dict:
+                    await _emit(on_chunk, {
+                        "type": "api_call_start",
+                        "id": call_id,
+                        "url": url,
+                        "method": "GET",
+                        "payload": params,
                     })
-                resp.raise_for_status()
-                entries = _parse_case_law_atom(resp.text)
-                # P3.23: the shown count and the matching total, separately.
-                # `total` was `len(entries)`, never more than the 50-row page,
-                # so `total: 50` read as "every match seen" when the feed held
-                # thousands. `case_law_count` reads the real figure from the
-                # feed's `last` link; `shown` is what anything deciding "did
-                # this search return results" must key on.
-                return json.dumps({
-                    "results": entries,
-                    **case_law_count(resp.text, len(entries)),
-                    "query": args["query"],
-                    # P3.9: the window the search ran under, for the note.
-                    **({"dates": window["dates"]} if window["dates"] else {}),
-                })
+
+                    t0 = time.perf_counter()
+                    # P4.19: through the retry helper, as every LEX call is. The
+                    # National Archives publishes a limit of 1,000 requests per
+                    # rolling five minutes per IP and answers it with a 429; the
+                    # target is one IP for every user, so a direct `client.get`
+                    # turned a 429 into a dropped retrieval. A 400 (an invalid
+                    # court code) is not in `_RETRY_STATUS` and still returns at
+                    # once to the branch below. The helper also retries a timeout
+                    # or transport error, which is wanted here: the only failures
+                    # in 1,149 stored calls were 3 DNS transport errors, and none
+                    # reached the 15 s timeout (batch 7 D's note).
+                    resp = await _request_with_retry(
+                        client, "GET", url, name=name, params=params, timeout=15.0
+                    )
+                    elapsed_ms = (time.perf_counter() - t0) * 1000
+
+                    if timing_collector:
+                        timing_collector.record_lex_api_call(name, elapsed_ms)
+
+                    await _emit(on_chunk, {
+                        "type": "api_call_end",
+                        "id": call_id,
+                        "url": url,
+                        "status": resp.status_code,
+                        "response": {"preview": resp.text[:300]},
+                        "elapsed_ms": round(elapsed_ms),
+                    })
+
+                    if resp.status_code == 400:
+                        court = args.get("court", "")
+                        return {
+                            "error": f"Invalid court filter '{court}'. Use only the exact court codes listed in the tool description (e.g. 'uksc', 'ewca/civ', 'ewhc/admin'). Retry without the court filter, or with a valid code.",
+                            "results": [],
+                            "total": 0,
+                        }
+                    resp.raise_for_status()
+                    entries = _parse_case_law_atom(resp.text)
+                    # P3.23: the shown count and the matching total, separately.
+                    # `total` was `len(entries)`, never more than the 50-row page,
+                    # so `total: 50` read as "every match seen" when the feed held
+                    # thousands. `case_law_count` reads the real figure from the
+                    # feed's `last` link; `shown` is what anything deciding "did
+                    # this search return results" must key on.
+                    return {
+                        "results": entries,
+                        **case_law_count(resp.text, len(entries)),
+                        "query": args["query"],
+                        # P3.9: the window the search ran under, for the note.
+                        **({"dates": window["dates"]} if window["dates"] else {}),
+                    }
+
+                if not scts_enabled_for_request():
+                    return json.dumps(await _find_case_law())
+
+                # P3.20: and the Scottish Courts and Tribunals Service's
+                # judgments, searched at the same time and returned as a second
+                # list, `scottish_results`, with its own counts in `scottish`.
+                # The same date window (the model's dates intersected with the
+                # lawyer's) applies to SCTS's date of decision; the `court`
+                # argument is a Find Case Law code and is not sent to SCTS.
+                # Either half failing leaves the other: Find Case Law's failure
+                # becomes an `error` here, beside the Scottish list, instead of
+                # the whole call's error string.
+                fcl, scot = await asyncio.gather(
+                    _find_case_law(),
+                    search_scts(args["query"], window["dates"], client,
+                                on_chunk=on_chunk, call_id=call_id,
+                                timing_collector=timing_collector, tool_name=name),
+                    return_exceptions=True,
+                )
+                for part in (fcl, scot):
+                    if isinstance(part, asyncio.CancelledError):
+                        raise part
+                if isinstance(fcl, BaseException):
+                    detail = (f"HTTP {fcl.response.status_code}"
+                              if isinstance(fcl, httpx.HTTPStatusError)
+                              else type(fcl).__name__)
+                    logger.error(f"[Tool Error] {name}: Find Case Law failed: {fcl!r}")
+                    fcl = {"error": f"The Find Case Law search failed ({detail}).",
+                           "results": [], "shown": 0, "total": 0,
+                           "query": args["query"]}
+                if not isinstance(scot, dict):
+                    scot = {"results": [], "block": {
+                        "status": "error", "shown": 0, "total": 0, "total_exact": True,
+                        "match": None, "query_sent": None}}
+                fcl["scottish_results"] = scot["results"]
+                fcl["scottish"] = scot["block"]
+                return json.dumps(fcl)
 
             elif name == "get_case_law_text":
                 url = args["url"]
+
+                # P3.20: routed by host. A Scottish Courts and Tribunals
+                # Service judgment is a PDF on its site, read by
+                # `scts.fetch_scts_judgment`; a Find Case Law judgment goes the
+                # way it always has; anything else is refused here, with no
+                # call (it used to be fetched as `<url>/data.xml` from whatever
+                # host it named). Every stored call (952) was a Find Case Law
+                # https URL, so the refusal moves none of them.
+                host = (urlparse(str(url)).hostname or "").lower()
+                if is_scts_judgment_url(url) and scts_enabled_for_request():
+                    result = await fetch_scts_judgment(
+                        url, client, on_chunk=on_chunk, call_id=call_id,
+                        timing_collector=timing_collector, tool_name=name)
+                    return json.dumps(result)
+                if host != "caselaw.nationalarchives.gov.uk":
+                    return json.dumps({
+                        "error": GET_CASE_LAW_TEXT_REFUSAL,
+                        "url": url,
+                        "text": "",
+                    })
 
                 await _emit(on_chunk, {
                     "type": "api_call_start",

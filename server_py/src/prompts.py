@@ -695,7 +695,8 @@ def build_filter_constraint_block(cfg: dict) -> str:
 
     if jurisdiction:
         label = _JURISDICTION_LABELS.get(jurisdiction, jurisdiction)
-        note = _JURISDICTION_EXTENT_NOTES.get(jurisdiction, "")
+        note = apply_scts_wording(_JURISDICTION_EXTENT_NOTES.get(jurisdiction, ""),
+                                  cfg.get("_research_mode"))
         lines.append(f"- Jurisdiction: {label}. {note}")
 
     if year_from and year_to:
@@ -847,6 +848,110 @@ def _filter_constraint_block_for_mode(research_mode: str, cfg: dict) -> str:
     return build_filter_constraint_block(cfg)
 
 
+# FIX_PLAN P3.20: the case-law wording when `search_case_law` also searches
+# the Scottish Courts and Tribunals Service's published judgments
+# (`scts_caselaw_enabled`). Every site that says Find Case Law is the only
+# case-law database, or that the Court of Session is absent from the databases
+# searched, has its replacement here, as an (old, new) pair: `apply_scts_wording`
+# swaps each old text for its new one when the setting is on, and touches
+# nothing when it is off, so every prompt is then byte-identical to before
+# (pinned by `test_scts_caselaw.py`, which also checks each old text occurs
+# once in the prompt it was taken from). The new texts still say what SCTS
+# does not hold: the Sheriff Court decisions it does not publish (almost all
+# criminal ones) and Northern Ireland.
+_SCTS = "the Scottish Courts and Tribunals Service's published judgments"
+SCTS_PROMPT_WORDING = (
+    # The case-law Worker's mandate line.
+    ("These searches of the National Archives Find Case Law database did not return a "
+     "judgment that addresses this issue.",
+     "These searches of the case-law databases (Find Case Law and the Scottish Courts and "
+     "Tribunals Service's published judgments) did not return a judgment that addresses this "
+     "issue."),
+    # The case-law Worker's DATABASE COVERAGE paragraph (two lines).
+    ("The National Archives Find Case Law database covers: UK Supreme Court (uksc), Privy "
+     "Council (ukpc), Court of Appeal (ewca/civ, ewca/crim), High Court (ewhc and "
+     "subdivisions), Upper Tribunal (ukut and subdivisions), Employment Appeal Tribunal (eat), "
+     "and selected other tribunals.\nIt holds NO decisions of the Court of Session (Inner or "
+     "Outer House, CSOH/CSIH), the Sheriff Appeal Court, the Sheriff Courts or the High Court "
+     "of Justiciary; the gap is total, not partial. Scottish appeals decided by the UK Supreme "
+     "Court ARE included, so cite them where they are relevant. A search on a Scottish question "
+     "still returns results, and they may be judgments of courts outside Scotland: state which "
+     "court decided each case you cite.",
+     "`search_case_law` searches two databases and lists each one's results separately. The "
+     "National Archives Find Case Law database (`results`) covers the UK Supreme Court (uksc), "
+     "Privy Council (ukpc), Court of Appeal (ewca/civ, ewca/crim), High Court (ewhc and "
+     "subdivisions), Upper Tribunal (ukut and subdivisions), Employment Appeal Tribunal (eat) "
+     "and selected other tribunals; of the Scottish courts it holds only appeals decided by the "
+     "UK Supreme Court. The Scottish Courts and Tribunals Service's published judgments "
+     "(`scottish_results`) cover the Court of Session (Inner and Outer House), the High Court "
+     "of Justiciary, the Sheriff Appeal Court and the National Personal Injury Court from 1998, "
+     "the Upper Tribunal for Scotland, and the Sheriff Court decisions SCTS chooses to publish, "
+     "which are few and almost never criminal. Neither database holds the courts of Northern "
+     "Ireland. For a question of Scots law, cite the Scottish decisions that bear on it, state "
+     "which court decided each case you cite, and do not present a decision of a court outside "
+     "Scotland as stating Scots law."),
+    # The case-law Worker's citation protocol: a Scottish judgment may have no citation.
+    ("- Do NOT invent or guess neutral citation numbers or URLs.",
+     "- Do NOT invent or guess neutral citation numbers or URLs.\n- A judgment in "
+     "`scottish_results` may have no `ncn`: cite it by its title, court and decision date, "
+     "linked to its `url`."),
+    # The case-law Worker's PHASE 4 example of a coverage limitation.
+    ("(e.g. Scottish-only matters)",
+     "(e.g. a Sheriff Court decision SCTS has not published, or a court in Northern Ireland)"),
+    # The hybrid Worker's DATABASE COVERAGE line.
+    ("- DATABASE COVERAGE: The database covers courts of England and Wales and UK-wide courts "
+     "and tribunals (UKSC and UKPC among them). It holds NO decisions of the Court of Session, "
+     "the Sheriff Appeal Court, the Sheriff Courts or the High Court of Justiciary; Scottish "
+     "appeals decided by the UK Supreme Court ARE included. Results for a Scottish question may "
+     "be judgments of courts outside Scotland: state which court decided each case you cite.",
+     "- DATABASE COVERAGE: `search_case_law` returns judgments from two databases, listed "
+     "separately: Find Case Law (`results`: courts of England and Wales and UK-wide courts and "
+     "tribunals, UKSC and UKPC among them, with Scottish appeals decided by the UK Supreme "
+     "Court) and the Scottish Courts and Tribunals Service's published judgments "
+     "(`scottish_results`: the Court of Session, the High Court of Justiciary and the Sheriff "
+     "Appeal Court from 1998, and the Sheriff Court decisions SCTS publishes). Neither holds the "
+     "courts of Northern Ireland. For a question of Scots law, cite the Scottish decisions that "
+     "bear on it and do not present a decision of a court outside Scotland as stating Scots "
+     "law. State which court decided each case you cite."),
+    # The hybrid Worker's case-law citation form.
+    ("- Case law: [Case Name NCN](caselaw.nationalarchives.gov.uk URL)",
+     "- Case law: [Case Name NCN](the url the search returned: a caselaw.nationalarchives.gov.uk "
+     "URL, or a scotcourts.gov.uk PDF URL for a judgment in `scottish_results`, which may have "
+     "no NCN: then cite its title, court and decision date)"),
+    # The quick-lookup Worker's case-law line.
+    ("- Case law: call `search_case_law` once with focused keywords.",
+     "- Case law: call `search_case_law` once with focused keywords; it lists Scottish courts' "
+     "judgments (`scottish_results`) and Find Case Law judgments (`results`) separately. For a "
+     "question of Scots law, cite the Scottish judgments that bear on it."),
+    # The Scotland filter's note (Worker and Manager).
+    ("Note that the case law database holds no decisions of the Court of Session, the Sheriff "
+     "Appeal Court, the Sheriff Courts or the High Court of Justiciary; Scottish appeals decided "
+     "by the UK Supreme Court are included.",
+     "Case-law searches return the Scottish courts' published judgments (the Court of Session, "
+     "the High Court of Justiciary, the Sheriff Appeal Court and the Sheriff Court decisions "
+     "SCTS publishes) alongside Find Case Law, which holds Scottish appeals decided by the UK "
+     "Supreme Court."),
+    # The Deep Research synthesis: what the research searched.
+    ("court judgments, in the National Archives' Find Case Law service",
+     "court judgments, in the National Archives' Find Case Law service and " + _SCTS),
+)
+
+
+def apply_scts_wording(text: str, research_mode: str = None) -> str:
+    """`text` with every P3.20 site swapped to its SCTS wording when the
+    setting is on for this research type; `text` itself when it is off.
+    Never raises (an unexpected failure leaves the text as it was)."""
+    try:
+        from .agent.tools.scts import scts_enabled
+        if not text or not scts_enabled(research_mode):
+            return text
+        for old, new in SCTS_PROMPT_WORDING:
+            text = text.replace(old, new)
+        return text
+    except Exception:
+        return text
+
+
 def get_worker_system_prompt(research_mode: str = "legislation_only", cfg: dict = None) -> str:
     from datetime import date
     date_line = f"Today's date is {date.today().strftime('%d %B %Y')}."
@@ -856,13 +961,15 @@ def get_worker_system_prompt(research_mode: str = "legislation_only", cfg: dict 
         and cfg.get("_chat_mode") == "conversational"
         and research_mode not in ("parliamentary_records", "westminster_records")
     ):
-        return date_line + "\n\n" + WORKER_SYSTEM_PROMPT_CONVERSATIONAL
+        return date_line + "\n\n" + apply_scts_wording(WORKER_SYSTEM_PROMPT_CONVERSATIONAL,
+                                                         research_mode)
     base = {
         "case_law_only": WORKER_SYSTEM_PROMPT_CASE_LAW,
         "legislation_and_case_law": WORKER_SYSTEM_PROMPT_HYBRID,
         "parliamentary_records": PARLIAMENT_WORKER_SYSTEM_PROMPT,
         "westminster_records": WESTMINSTER_WORKER_SYSTEM_PROMPT,
     }.get(research_mode, WORKER_SYSTEM_PROMPT)
+    base = apply_scts_wording(base, research_mode)
     if cfg:
         block = _filter_constraint_block_for_mode(research_mode, cfg)
         if block:
@@ -1554,6 +1661,7 @@ def get_deep_research_synthesis_prompt(research_mode: str = "legislation_only") 
     if research_mode not in REPORT_SECTIONS or research_mode not in _SYNTHESIS_SOURCES:
         research_mode = "legislation_only"
     searched, not_searched, gap = _SYNTHESIS_SOURCES[research_mode]
+    searched = apply_scts_wording(searched, research_mode)
     sources = f"WHAT THIS RESEARCH SEARCHED: {searched}."
     if not_searched:
         sources += (

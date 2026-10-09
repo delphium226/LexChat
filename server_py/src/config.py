@@ -96,6 +96,13 @@ class Settings(BaseSettings):
     enable_westminster_video_deeplinks: bool = False
     plive_base_url: str = "https://www.parliamentlive.tv"
 
+    # FIX_PLAN P3.20: Scottish case law from the Scottish Courts and Tribunals
+    # Service's judgments search (`agent/tools/scts.py`). OFF by default and
+    # off until both SCTS hosts (`api.pa.web.scotcourts.gov.uk`,
+    # `www.scotcourts.gov.uk`) are whitelisted on the target: with it off every
+    # case-law text, prompt and footer is exactly what it was before P3.20.
+    scts_caselaw_enabled: bool = False
+
     # Proxy
     https_proxy: Optional[str] = None
 

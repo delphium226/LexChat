@@ -814,16 +814,75 @@ def is_quick_lookup_worker(research_mode: str = "legislation_only",
             and research_mode not in ("parliamentary_records", "westminster_records"))
 
 
+# FIX_PLAN P3.20: the two case-law tools' descriptions when `search_case_law`
+# also searches the Scottish Courts and Tribunals Service's published
+# judgments (`scts_caselaw_enabled`). With the setting off the tools are the
+# CASE_LAW_TOOLS objects above, untouched.
+SCTS_SEARCH_CASE_LAW_DESCRIPTION = (
+    "Search for case law in two databases at once, returned as two lists: the National "
+    "Archives Find Case Law database (`results`: courts of England & Wales and UK-wide courts "
+    "and tribunals, with Scottish appeals decided by the UK Supreme Court) and the Scottish "
+    "Courts and Tribunals Service's published judgments (`scottish_results`: the Court of "
+    "Session, the High Court of Justiciary and the Sheriff Appeal Court from 1998, and the "
+    "Sheriff Court decisions SCTS publishes). Returns titles, courts, dates, neutral citations "
+    "where known, and URLs. The `court` argument applies to Find Case Law only. In the Scottish "
+    "judgments every quoted phrase and every other word must appear in a judgment for it to "
+    "match, so keep queries to the distinctive terms."
+)
+SCTS_COURT_ARG_PREFIX = "Applies to Find Case Law (`results`) only. "
+SCTS_GET_CASE_LAW_TEXT_DESCRIPTION = (
+    "Retrieve the full text of a judgment from either database, by the exact url its search "
+    "returned (a Find Case Law url, or a scotcourts.gov.uk PDF url). "
+    "Returns the complete judgment text so you can read the reasoning, holdings, and obiter dicta "
+    "before synthesising your answer. Call this for the 1–3 most relevant cases found in Phase 1."
+)
+SCTS_URL_ARG_DESCRIPTION = (
+    "The URL of the case exactly as returned by search_case_law (e.g. "
+    "'https://caselaw.nationalarchives.gov.uk/uksc/2023/1', or a "
+    "'https://www.scotcourts.gov.uk/media/...pdf' url from `scottish_results`)."
+)
+
+
+def _with_scts_descriptions(tools: list) -> list:
+    """A copy of `tools` whose two case-law tools carry the SCTS descriptions."""
+    import copy
+
+    out = []
+    for t in tools:
+        name = t.get("function", {}).get("name")
+        if name not in ("search_case_law", "get_case_law_text"):
+            out.append(t)
+            continue
+        t = copy.deepcopy(t)
+        fn = t["function"]
+        if name == "search_case_law":
+            fn["description"] = SCTS_SEARCH_CASE_LAW_DESCRIPTION
+            court = fn["parameters"]["properties"].get("court")
+            if court:
+                court["description"] = SCTS_COURT_ARG_PREFIX + court["description"]
+        else:
+            fn["description"] = SCTS_GET_CASE_LAW_TEXT_DESCRIPTION
+            fn["parameters"]["properties"]["url"]["description"] = SCTS_URL_ARG_DESCRIPTION
+        out.append(t)
+    return out
+
+
 def get_worker_tools(research_mode: str = "legislation_only", chat_mode: str = None) -> list:
     """Return the appropriate tool set for the given research mode.
 
     `chat_mode` (P3.25): the quick-lookup Worker's list omits
     `QUICK_LOOKUP_WITHHELD_TOOLS`. Without it, or in any other chat mode, the
-    list is exactly what it was before (the same list objects)."""
+    list is exactly what it was before (the same list objects).
+
+    P3.20: with `scts_caselaw_enabled` on and a research type that searches
+    case law, the case-law tools are copies carrying the SCTS descriptions."""
     tools = _worker_tools_for(research_mode)
     if is_quick_lookup_worker(research_mode, chat_mode):
         tools = [t for t in tools
                  if t["function"]["name"] not in QUICK_LOOKUP_WITHHELD_TOOLS]
+    from .scts import scts_enabled
+    if scts_enabled(research_mode):
+        tools = _with_scts_descriptions(tools)
     return tools
 
 
