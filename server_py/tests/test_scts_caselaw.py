@@ -463,16 +463,21 @@ async def test_the_text_fetch_reads_the_pdf_off_the_event_loop(on, net, monkeypa
     assert calls == [scts._pdf_text]
     assert out["url"] == PDF_URL and out["title"] == "Widget Co v Example Ltd"
     assert out["court"] == "Court of Session" and out["decision_date"] == "2017-05-04"
-    # the text's own citation wins over the filename's
-    assert out["ncn"] == "[2017] CSIH 98"
+    # the filename's citation wins over one the text prints (a judgment can
+    # print its own citation wrongly; the filename agrees with the URL)
+    assert out["ncn"] == "[2017] CSIH 99"
     assert "reclaiming motion is refused" in out["text"]
     assert net.seen[0].headers["accept"] == "application/pdf"
 
 
-async def test_a_text_without_a_citation_falls_back_to_the_filename(on, net):
+async def test_a_descriptive_filename_takes_the_citation_from_the_text(on, net):
+    net.routes[("GET", "www.scotcourts.gov.uk")] = [
+        httpx.Response(200, content=_pdf(["OPINION", "[2017] CSIH 98"]))]
+    out = await _fetch(net, PDF_URL_OLD)
+    assert out["ncn"] == "[2017] CSIH 98" and out["title"] == ""
     net.routes[("GET", "www.scotcourts.gov.uk")] = [httpx.Response(200, content=_pdf(["No citation"]))]
-    out = await _fetch(net)
-    assert out["ncn"] == "[2017] CSIH 99" and out["title"] == ""
+    out = await _fetch(net, PDF_URL_OLD)
+    assert out["ncn"] == ""
 
 
 @pytest.mark.parametrize("response,expect", [

@@ -538,8 +538,14 @@ async def fetch_scts_judgment(url: str, client: httpx.AsyncClient, *,
     })
     if error:
         return {"error": error, "url": url, "text": ""}
+    # The filename's citation first, the text's when the filename has none:
+    # over batch 11 D's 40 stored PDFs (`pdfs_c.py`, batch 12 C), the two
+    # agree on 23 of the 24 that carry both, and the 24th is a judgment that
+    # prints its own citation a year early (the filename, the URL and the
+    # decision date agree with each other). The text supplies one for 8 with
+    # a descriptive filename. It is also the citation the search row carried.
     out = {"url": url, "title": known.get("title") or "",
-           "ncn": ncn_from_text(text) or ncn_from_filename(urlparse(url).path) or "",
+           "ncn": ncn_from_filename(urlparse(url).path) or ncn_from_text(text) or "",
            "text": text}
     if known.get("court"):
         out["court"] = known["court"]
