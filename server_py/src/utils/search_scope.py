@@ -2209,6 +2209,35 @@ _TOOL_BLOCK = re.compile(
     r"[^\[\]]*\]",
     re.I,
 )
+# P4.22: a Worker (or the synthesis) that NAMES a block in its own sentence
+# ("does not contain an `[ENABLING POWER]` block") is not echoing one, and
+# `_TOOL_BLOCK` deleting the tag left "an `` block" in three stored answers.
+# Code never writes a bare tag (every opener above carries " —" and text, every
+# closer a "/"), so a bare tag is always a model's. Inside a sentence it becomes
+# its own words without brackets ("an enabling power block", as the model
+# already writes it unbracketed in ten stored answers); used as a label (at a
+# line's start, after a sentence's end, before a capital or a link) it is
+# deleted as before, now with its backticks and one following space.
+# `SCHEDULES AND ANNEXES` is not here: `_TOOL_BLOCK` strips it only with its
+# dash.
+_BARE_TAG = re.compile(
+    r"(`?)\[(SEARCH SCOPE|ENABLING POWER|CHANGE RECORD|CURRENCY|PINPOINTS TO KEEP"
+    r"|SECTION OUTLINE|PROVISION FETCHED BY CODE)\]\1( ?)",
+    re.I,
+)
+
+
+def _bare_tag(m: "re.Match") -> str:
+    """`_BARE_TAG`'s replacement: the tag's words inside a sentence, else ""."""
+    s = m.string
+    before = s[s.rfind("\n", 0, m.start()) + 1:m.start()].rstrip()
+    nxt = s[m.end():m.end() + 1]
+    in_sentence = (
+        bool(before) and (before[-1].isalnum() or before[-1] in "(,")
+        and (nxt in ("", "\n", "\r") or nxt.islower()
+             or (nxt != "" and nxt in ".,;:)"))   # "" is `in` every str
+    )
+    return m.group(2).lower() + m.group(3) if in_sentence else ""
 
 
 def record_search(log: Optional[list], name: str, args: dict, data: Any) -> None:
@@ -3684,8 +3713,10 @@ def strip_scope_blocks(text: str) -> tuple:
     out, n1 = _PINPOINT_BLOCK.subn("", out)
     out, n3 = _OUTLINE_BLOCK.subn("", out)
     out, n4 = _FETCHED_BLOCK.subn("", out)
+    # P4.22: a bare tag a sentence names, before `_TOOL_BLOCK` would delete it.
+    out, n5 = _BARE_TAG.subn(_bare_tag, out)
     out, n2 = _TOOL_BLOCK.subn("", out)
-    n += n1 + n2 + n3 + n4
+    n += n1 + n2 + n3 + n4 + n5
     if n:
         out = re.sub(r"\n{3,}", "\n\n", out).strip()
     return out, n
