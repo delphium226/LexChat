@@ -847,7 +847,11 @@ async def test_the_note_reaches_the_worker_and_survives_the_memo():
         assert got.startswith(_NOT_FOUND_RESULT)
         assert "[SEARCH SCOPE — not held:" in got
     for log in (first, second):
-        assert [e["tool"] for e in log] == ["not_held"]
+        # P3.38: the not-held retrieval also triggers code's read of the text
+        # from legislation.gov.uk, which `conftest.py` refuses offline, so the
+        # read is recorded as failed, on the memo hit too.
+        assert [e["tool"] for e in log] == ["not_held", "published_text"]
+        assert log[1]["status"] == "failed"
 
 
 @pytest.mark.parametrize("prompt_name", [

@@ -764,6 +764,100 @@ async def schedule_route_block(
 
 
 
+async def published_text_route(
+    name: str,
+    args: dict,
+    raw_result,
+    query: str,
+    search_log: Optional[list],
+    chunk_fn: Callable = None,
+    summarise_model: str = "",
+    parent_on_chunk: Optional[Callable] = None,
+    timing_collector=None,
+    cancel_event=None,
+    pending_chars: int = 0,
+    context_budget: Optional[dict] = None,
+    retrieved_urls: Optional[set] = None,
+) -> tuple:
+    """P3.38: the text of an instrument the index lacks, from legislation.gov.uk.
+
+    Returns ``(text_for_the_worker, outcome)``: ``("", None)`` when this tool
+    result is not one P3.38 reads for (`utils.published_text.trigger`: a
+    lookup that says not held or held without text, a text read that is empty
+    or that LEX answered "Legislation not found"). Otherwise the instrument is
+    read through LEX's proxy (`agent/tools/published_text.py`: live, memoised
+    per request, bounded) and handed over in a code-written block: verbatim
+    when it fits the same threshold and context budget as any tool result,
+    else summarised for the query (never through the shared local cache); a
+    read that returns no text is one line saying why. A second trigger for an
+    instrument this worker run was already handed gets a line pointing back to
+    it. The outcome is recorded in `search_log` for the Manager's block and
+    the lawyer's footer. Exceptions propagate: the caller fails soft.
+    """
+    from ..utils import published_text as pt
+    from .tools.published_text import read_published_text
+
+    hit = pt.trigger(name, args, raw_result)
+    if not hit:
+        return "", None
+    lid, kind = hit
+    if pt.handed_in_run(search_log, lid):
+        outcome = {"status": pt.EARLIER}
+        pt.record_published(search_log, lid, kind, outcome)
+        return pt.published_line(lid, kind, outcome), outcome
+    outcome = await read_published_text(lid, on_chunk=parent_on_chunk,
+                                        timing_collector=timing_collector, tool_name=name)
+    if outcome.get("status") != pt.OK:
+        pt.record_published(search_log, lid, kind, outcome)
+        return pt.published_line(lid, kind, outcome), outcome
+    text = str(outcome.get("text") or "")
+    if retrieved_urls is not None:
+        urls = [outcome.get("url") or ""] + list(outcome.get("provision_urls") or [])
+        # A Worker may cite either form: the version's own page, or the
+        # provision without the version suffix.
+        urls += [u.rsplit("/", 1)[0] for u in urls
+                 if u.endswith("/made") or u.endswith("/enacted")]
+        harvest_legislation_urls(json.dumps({"urls": [u for u in urls if u]}),
+                                 into=retrieved_urls)
+    from .provider_factory import get_summarise_threshold
+    threshold = get_summarise_threshold()
+    over_budget = (context_budget is not None
+                   and context_budget["used"] + pending_chars + len(text) > context_budget["limit"])
+    how, body = "whole", text
+    if len(text) > threshold or over_budget:
+        summary, _degraded = await summarise_for_query(
+            text, query, summarise_model, chunk_fn=chunk_fn,
+            timing_collector=timing_collector,
+            doc_name=f"{pt.label_for(lid)} (legislation.gov.uk)", cancel_event=cancel_event)
+        if len(summary) > threshold:
+            summary = summary[:threshold]
+        if timing_collector:
+            from .summarisation import SUMMARISE_CHUNK_CHARS
+            timing_collector.record_summarisation(
+                len(text), len(summary), max(1, -(-len(text) // SUMMARISE_CHUNK_CHARS)))
+        how, body = "summary", summary
+    pt.record_published(search_log, lid, kind, outcome)
+    outcome = {**outcome, "legislation_id": lid}
+    return pt.published_block(lid, kind, outcome, how, body, total_chars=len(text)), outcome
+
+
+def _published_recital(lid: str, outcome: Optional[dict]) -> str:
+    """P3.38 with P2.3: the preamble of an instrument whose text code read
+    from legislation.gov.uk, when it carries an enabling-power recital
+    (P3.31's `recital_window` decides), else ""."""
+    try:
+        from ..utils import published_text as pt
+        from ..utils.made_under import recital_window
+        from ..utils.search_scope import _is_secondary
+
+        if not outcome or outcome.get("status") != pt.OK or not _is_secondary(lid):
+            return ""
+        preamble = str(outcome.get("preamble") or "")
+        return preamble if preamble and recital_window(preamble) else ""
+    except Exception:
+        return ""
+
+
 def _enabling_subject(name: str, args: dict, raw_result) -> str:
     """The one instrument a text read, section search or lookup was about."""
     if name == LOOKUP_TOOL:
@@ -1068,6 +1162,9 @@ async def run_worker_tool(
             # P3.7: and a memoised lookup is still this step's lookup. A model
             # repeating the lookup code ran for it is served from here.
             record_lookup(search_log, name, args, hit["raw"])
+            # P3.38: and what the read from legislation.gov.uk recorded.
+            if search_log is not None and hit.get("published_entries"):
+                search_log.extend(dict(e) for e in hit["published_entries"])
             if parent_on_chunk:
                 await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
                 await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done (cached)"})
@@ -1486,6 +1583,47 @@ async def run_worker_tool(
     # lawyer's footer. Self-gated on the tool name.
     record_lookup(search_log, name, args, raw_result)
 
+    # P3.38: where the index lacks an instrument or its text (a lookup that
+    # says not held or held without text, an empty text read, a text read LEX
+    # answered "not found"), code reads the text from legislation.gov.uk
+    # through LEX's proxy and hands it over after the not-held note. The two
+    # code texts beside it that would then be false are changed to match:
+    # P2.4's note no longer says the contents could not be checked, and P2.3's
+    # forbidding block gives way to the permitting one where the preamble read
+    # states the power. Fail-soft (Invariant 5): on any failure the result is
+    # exactly what it was.
+    published_note, _published = "", None
+    _log_start = len(search_log) if search_log is not None else 0
+    try:
+        published_note, _published = await published_text_route(
+            name, args, raw_result, query, search_log,
+            chunk_fn=chunk_fn, summarise_model=summarise_model,
+            parent_on_chunk=parent_on_chunk, timing_collector=timing_collector,
+            cancel_event=cancel_event, pending_chars=len(result),
+            context_budget=context_budget, retrieved_urls=retrieved_urls)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.warning("[Worker] legislation.gov.uk text read failed", exc_info=True)
+        published_note, _published = "", None
+    if not_held and _published and _published.get("status") in ("ok", "earlier"):
+        not_held = not_held_note(
+            args, raw_result,
+            text_read="below" if _published.get("status") == "ok" else "earlier")
+    if _published and _published.get("legislation_id"):
+        _plid = _published["legislation_id"]
+        _recital = ("" if "DOES state what" in enabling_note
+                    else _published_recital(_plid, _published))
+        if _recital:
+            from ..utils.search_scope import _enabling_stated_block
+            enabling_note = _enabling_stated_block(
+                _plid, _recital,
+                source=f"legislation.gov.uk's text of {_plid}, read by code")
+            if search_log is not None:
+                search_log.append({"tool": "enabling_power", "legislation_id": _plid[:60],
+                                   "stated": True, "source": "legislation_gov_uk"})
+    _published_entries = (list(search_log[_log_start:]) if search_log is not None else [])
+
     from .provider_factory import get_summarise_threshold
     # Two independent triggers: this result is large on its own, OR the run has
     # accumulated enough context that even a modest addition is no longer free.
@@ -1677,6 +1815,7 @@ async def run_worker_tool(
     # the model reads on a productive search.
     result += scope_note
     result += not_held
+    result += published_note
     result += enabling_note
     result += schedules_line
     result += relations_note
@@ -1694,6 +1833,11 @@ async def run_worker_tool(
 
     if tool_memo is not None and memo_key is not None:
         tool_memo[memo_key] = {"raw": raw_result, "final": result}
+        # P3.38: what this result's legislation.gov.uk read recorded, so a
+        # step served from the memo records it too (the recorders above run
+        # on a hit; this read does not run again).
+        if _published_entries:
+            tool_memo[memo_key]["published_entries"] = _published_entries
 
     # Charged after the nudges are appended: what is counted is exactly what the
     # model receives, so the budget tracks the real context growth.

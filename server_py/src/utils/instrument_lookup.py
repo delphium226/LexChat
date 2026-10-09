@@ -235,7 +235,15 @@ async def routed_lookup_block(brief: str, tool_names, run_tool) -> str:
     import asyncio
 
     results = await asyncio.gather(*(run_tool(LOOKUP_TOOL, routed_lookup_args(r)) for r in refs))
-    return lookup_brief_block(results)
+    # P3.38: the text code read from legislation.gov.uk for an instrument the
+    # index lacks rides on that lookup's result; the brief carries it on, after
+    # the lookup block that says why it is there.
+    from .published_text import blocks_in
+
+    block = lookup_brief_block(results)
+    if not block:
+        return ""
+    return block + "".join(blocks_in(r) for r in results)
 
 
 # P3.25: the code lookup the quick-lookup Worker gets in place of
@@ -292,7 +300,12 @@ async def section_search_lookup(name: str, args: Any, done: set, run_tool,
     if log is not None:
         log[start:] = [e for e in log[start:]
                        if not (e.get("tool") == LOOKUP_ENTRY and e.get("status") == HELD)]
-    return lookup_enabling_note(result)
+    # P3.38: a stub or not-held SI's text, read by code from legislation.gov.uk
+    # on that lookup, goes to the Worker with the section search it precedes
+    # (the lookup's own result is never shown to this Worker).
+    from .published_text import blocks_in
+
+    return lookup_enabling_note(result) + blocks_in(result)
 
 
 def lookup_brief_block(results: list) -> str:
@@ -304,6 +317,8 @@ def lookup_brief_block(results: list) -> str:
     answer. In `[SEARCH SCOPE — …]` form with no brackets inside, so the strip
     that removes tool blocks from an answer removes an echo of this too.
     """
+    from .published_text import has_published_text
+
     parts = []
     for raw in results or []:
         got = parse_lookup_result(raw)
@@ -314,6 +329,38 @@ def lookup_brief_block(results: list) -> str:
         status = got.get("status")
         title = _clean(got.get("title"), 200)
         named = f"{label} ({title})" if title else label
+        # P3.38: code read the text from legislation.gov.uk, and it follows
+        # this block. The two sentences below that said the text cannot be
+        # read here, or is not available here, are then said of this index
+        # only, and point at the text that follows.
+        if has_published_text(raw) and status == NOT_HELD:
+            parts.append(
+                f"{label}: NOT HELD. The index has no record of it under that type, year "
+                "and number, so a search for its title or number will not find it and its "
+                "text cannot be read from this index; code read its text from "
+                "legislation.gov.uk instead, and that text follows this block. Report it "
+                "as not held in this index, not as not found by a search, and say that its "
+                "text was read from legislation.gov.uk. That is a gap in the index: it does "
+                "not mean the instrument does not exist, and it is not an error in the "
+                "citation. What it changes can also be retrieved: legislation.gov.uk's "
+                "change records list what it commenced, amended or revoked even where the "
+                "index holds no record of it, so call get_legislation_changes with "
+                f"legislation_id {lid} and direction 'by' before you report."
+            )
+            continue
+        if has_published_text(raw) and status == HELD_WITHOUT_TEXT:
+            desc = _clean(got.get("description"))
+            parts.append(
+                f"{named}: HELD WITHOUT TEXT. The index holds its record but none of its "
+                "text, so a search inside it returns nothing; code read its text from "
+                "legislation.gov.uk instead, and that text follows this block. Report it "
+                "as a record this index holds without its text, never as not found, and "
+                "say that its text was read from legislation.gov.uk."
+                + (f" Its record describes it as: {desc}" if desc else "")
+                + " What it commences or amends can also be read from change records "
+                "(get_legislation_changes)."
+            )
+            continue
         # Both sentences end on what CAN still be retrieved. The first draft said
         # "do not search for it again", and on the first-round probe the Worker
         # then wrote at once on 4 of 5 stored briefs. At HEAD, 6409 t9 and t11

@@ -85,6 +85,7 @@ from .instrument_lookup import (
     NOT_HELD,
     parse_lookup_result,
 )
+from .published_text import published_footer_clause, published_limb
 
 __all__ = [
     "LEX_COVERAGE_SENTENCE",
@@ -2678,6 +2679,12 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     _lookup = _lookup_limb(log)
     if _lookup:
         lines.append(_lookup)
+    # P3.38. Straight after the lookup it qualifies: what code read from
+    # legislation.gov.uk for an instrument the index lacks, which only the
+    # Worker saw.
+    _published = published_limb(log)
+    if _published:
+        lines.append(_published)
     if _lookup and not searches and not sections:
         # P3.7: a step that only looked instruments up has no search terms, so
         # the rule below would demand quoting terms that are not there (P2.9's
@@ -3313,17 +3320,32 @@ def _not_held_id(args: dict, data: Any) -> str:
     return str((args or {}).get("legislation_id") or found.group(1)).strip()[:60]
 
 
-def not_held_note(args: dict, data: Any) -> str:
+def not_held_note(args: dict, data: Any, text_read: str = "") -> str:
     """The note appended to a retrieval the index answered with not-found.
 
     In `[SEARCH SCOPE — …]` form, with no brackets inside, so the strip that
     already removes tool blocks from an answer covers it unchanged. Never
     raises.
+
+    P3.38: `text_read` is "below" when code has read the instrument's text
+    from legislation.gov.uk and appends it after this note, and "earlier" when
+    this worker run was handed that text already. The clause "and that its
+    contents could not be checked here" would then be false, so it says where
+    the text came from instead. With `text_read` empty (the default) the note
+    is byte for byte what it was.
     """
     try:
         lid = _not_held_id(args, data)
         if not lid:
             return ""
+        if text_read == "below":
+            checked = ("not hold it, and that its text below was read from "
+                       "legislation.gov.uk instead. If ")
+        elif text_read == "earlier":
+            checked = ("not hold it, and that its text was read from legislation.gov.uk "
+                       "earlier in this research. If ")
+        else:
+            checked = "not hold it and that its contents could not be checked here. If "
         return (
             f"\n\n[SEARCH SCOPE — not held: this index has no record under the id "
             f"{lid}. That is a fact about the index, not about the law and not "
@@ -3333,8 +3355,8 @@ def not_held_note(args: dict, data: Any) -> str:
             "contain an error, do NOT ask the user to check, verify or confirm "
             "it, and do NOT present a different instrument (another year or "
             "number) as the one the user meant. Say plainly that this index does "
-            "not hold it and that its contents could not be checked here. If "
-            "you built this id yourself, the id format may be at fault, not the "
+            + checked
+            + "you built this id yourself, the id format may be at fault, not the "
             "user.]"
         )
     except Exception:
@@ -3464,9 +3486,13 @@ def _lookup_footer_clause(entries: Optional[list]) -> str:
     opening up to "not held in this index" is unchanged: `_EARLIER_LOOKUP`
     parses it back out of an earlier answer, old wording and new.
     """
+    # P3.38: the instruments whose text code read from legislation.gov.uk,
+    # one sentence after the lookup's, and on its own where no lookup ran
+    # (a text read the index answered "not found", or one with no text).
+    published = published_footer_clause(entries)
     rows = [e for e in _lookups(entries) if e.get("status") in (NOT_HELD, HELD_WITHOUT_TEXT)]
     if not rows:
-        return ""
+        return published
     absent = [e["label"] for e in rows if e["status"] == NOT_HELD]
     stub = [e["label"] for e in rows if e["status"] == HELD_WITHOUT_TEXT]
     bits = []
@@ -3485,7 +3511,7 @@ def _lookup_footer_clause(entries: Optional[list]) -> str:
             f"{'its record' if len(stub) == 1 else 'their records'} but not "
             f"{'its' if len(stub) == 1 else 'their'} text."
         )
-    return "".join(bits)
+    return "".join(bits) + published
 
 
 # The labels `citation_label` writes, and the two clauses above, read back out
