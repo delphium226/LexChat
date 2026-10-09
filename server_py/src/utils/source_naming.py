@@ -105,6 +105,21 @@ def norm_title(title: str) -> str:
     return t[4:] if t.startswith("the ") else t
 
 
+def nameable_title(title: str) -> bool:
+    """A title distinctive enough to name a source in words: long enough, and
+    not a bare id (a change record's source is titled with its id)."""
+    t = norm_title(title)
+    return len(t) >= MIN_TITLE_CHARS and not _BARE_LID.match(t)
+
+
+def heads_longer_title(following: str) -> bool:
+    """`following`, the text straight after a title, makes that title the head
+    of a longer instrument title ("... Act 1901 (Commencement No. 1) Order
+    1902"), so the title there does not name its own instrument. P4.23's
+    answer-seam linker reads each mention with it."""
+    return bool(_LONGER_TITLE.match(norm_text(following or "")))
+
+
 def title_named(title: str, text_n: str, longer_guard: bool = True,
                 other=None) -> bool:
     """A normalised title occurs in normalised text as a whole title.

@@ -23,6 +23,7 @@ from ..prompts import (
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import (
     enforce_provision_links,
+    link_named_instruments,
     link_sibling_pinpoints,
     pinpoint_block,
     restore_dropped_siblings,
@@ -1199,6 +1200,16 @@ async def process_user_request(
         for _cited, _meant, _ in misattributed_paragraphs(clean, handed_paras):
             logger.warning("[Manager] A sentence cites schedule paragraph %s in the "
                            "words of paragraph %s", _cited, _meant)
+        # P4.23 (user decision, 2026-10-09): an instrument the answer names in
+        # words and links nowhere gets the URL a report linked it with. After
+        # both restores (their notes are the Worker's words and are never
+        # linked here) and above P1.6's enforcement, so each added link is
+        # checked too; before lever R, which then reads the linked answer.
+        if research_mode not in _RAIL_FALLBACK_MODES:
+            clean, _linked = link_named_instruments(
+                clean, manager_inputs, retrieved_sources, retrieved_titles)
+            if _linked:
+                logger.info("[Manager] Linked %d instrument(s) named in words", _linked)
     # P1.6 (B14) belt and braces. The Worker's report was already enforced, but
     # the Manager is instructed to pass it through verbatim and is not compelled
     # to — and in conversational mode it answers in its own words. Idempotent, so
