@@ -307,3 +307,15 @@ def test_numbers_that_start_with_a_letter():
     got = mp.parse_powers("conferred by section A1(1) of, and paragraphs 31 and 33 of Schedule A1 to, "
                           "the Widget Act 1901")
     assert got[0]["provisions"] == ["section/A1", "schedule/A1/paragraph/31", "schedule/A1/paragraph/33"]
+
+
+def test_titles_do_not_start_with_act_or_swallow_a_pinpoint_list():
+    got = mp.parse_powers("conferred by section 2 of the Act in relation to the revocation of the Widget Act 1901",
+                          "under the Gadget Act 1902 (\"the Act\")")
+    assert all(p["act"] != "Act in relation to the revocation of the Widget Act 1901" for p in got)
+    got = mp.parse_powers("conferred by sections 55(1) (England and Wales), 64(1), (2) and (5) and 67(3) "
+                          "of the Widget Regulation Act 1901")
+    assert [p["act"] for p in got] == ["Widget Regulation Act 1901"]
+    # "(No. 2)" is still part of a title.
+    assert mp.parse_powers("conferred by section 1 of the Widget (No. 2) Act 1901")[0]["act"] == \
+        "Widget (No. 2) Act 1901"

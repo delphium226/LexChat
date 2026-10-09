@@ -136,11 +136,18 @@ _LIST = rf"{_NUM}(?:{_SEP}(?:{_NUM}|\([^)\s]{{1,6}}\)(?:\([^)\s]{{1,6}}\))*))*"
 _PROV_NUMBERED = (r"(?:(?:Schedule|Part|Section|Article|Regulation|Paragraph|Chapter)s?"
                   r"\s+(?:[A-Z]{0,2}\d|[IVXL]+\b)|(?:[A-Z][a-z]+\s+)?Schedule\s+to\b)")
 _TITLE = (rf"(?!{_PROV_NUMBERED})"
+          # A title never starts with the bare word "Act" ("... of the Act in
+          # relation to the revocation of the Competition Act 1998" is "the Act",
+          # then other words).
+          r"(?!Act\b)"
           # A lower-case provision word ("sections 1(1) and 4(1) of the Trade
           # Act 2021") is never part of a title: without this the title of an
           # Act cited after another instrument swallowed that instrument.
           r"[A-Z][A-Za-z'’(),.\-]*(?:\s+(?!(?:sections?|paragraphs?|articles?|regulations?|schedules?)\b)"
           rf"(?!{_PROV_NUMBERED})"
+          # Nor a pinpoint: "64(1), (2), (3) and (5) and 67(3) of the Road
+          # Traffic Regulation Act 1984" is a list, not a title. "(No. 2)" is.
+          r"(?![A-Z]{0,2}\d+[A-Z]{0,3}\()"
           r"[A-Za-z0-9'’(),.\-&]+){0,16}?\s+(?:Act|Measure)\s+\d{4}")
 # "the Act" / "the principal Act" are anaphora like "that Act": in a UK SI the
 # preamble or the interpretation has named the Act first.
