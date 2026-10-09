@@ -289,17 +289,48 @@ async def query(act: str, section: str) -> dict:
         return dict(base, status="unavailable", note="The made-under record could not be read.")
 
 
+def read_as(rows: list) -> str:
+    """The record's reading of a recital, from its power rows.
+
+    `rows`: (act_title, provision, role). A recital often points back ("section
+    2(2) of that Act"), so the words alone do not say which Act; this says what
+    the record resolved them to: "section 2 of the European Communities Act 1972".
+    """
+    by_act: dict = {}
+    for act, prov, role in rows:
+        key = (act, role)
+        by_act.setdefault(key, [])
+        label = prov.replace("schedule/", "Schedule ").replace("/paragraph/", " paragraph ")
+        label = label.replace("section/", "section ").replace("regulation/", "regulation ")
+        label = label.replace("article/", "article ").replace("paragraph/", "paragraph ")
+        if label not in by_act[key]:
+            by_act[key].append(label)
+    parts = []
+    for (act, role), provs in by_act.items():
+        lead = "" if role == "power" else f"{role} "
+        parts.append(f"{lead}{', '.join(provs[:8])}{' and others' if len(provs) > 8 else ''} of the {act}")
+    return "; ".join(parts)
+
+
 async def recital_for(legislation_id: str) -> Optional[str]:
-    """The stored recital of one instrument, or None. Never raises."""
+    """The stored recital of one instrument, with the record's reading of it
+    where the record resolved one, or None. Never raises."""
     if not _STATE["available"]:
         return None
     try:
         from ..database import async_session_maker
+        lid = str(legislation_id).strip().strip("/")
         async with async_session_maker() as session:
             row = (await session.execute(text(
                 "SELECT recital FROM made_under_instruments WHERE legislation_id = :lid"),
-                {"lid": str(legislation_id).strip().strip("/")})).first()
-        return (row[0] or None) if row else None
+                {"lid": lid})).first()
+            if not row or not row[0]:
+                return None
+            powers = (await session.execute(text(
+                "SELECT act_title, provision, role FROM made_under_powers "
+                "WHERE legislation_id = :lid ORDER BY id"), {"lid": lid})).all()
+        reading = read_as([tuple(p) for p in powers])
+        return row[0] + (f" (read by the record as: {reading})" if reading else "")
     except Exception:
         return None
 

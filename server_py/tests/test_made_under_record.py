@@ -268,3 +268,12 @@ def test_p23_grader_counts_the_made_under_record_as_evidence():
     empty = json.dumps(store.build_result("Gadget Act 1902", "1", "section/1", [], [], COV))
     assert retrieved_enabling({"audit": {"delegations": [{"tools": [
         {"name": mu.MADE_UNDER_TOOL, "raw_result": empty}]}]}}) == []
+
+
+def test_read_as_names_what_an_anaphor_resolved_to():
+    rows = [("Widget Act 1901", "section/2", "power"),
+            ("Widget Act 1901", "schedule/2/paragraph/1A", "power"),
+            ("Gadget Act 1902", "section/9", "as applied by")]
+    assert store.read_as(rows) == ("section 2, Schedule 2 paragraph 1A of the Widget Act 1901; "
+                                   "as applied by section 9 of the Gadget Act 1902")
+    assert store.read_as([]) == ""

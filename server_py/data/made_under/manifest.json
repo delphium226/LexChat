@@ -1,17 +1,18 @@
 {
- "version": "2026-10-08.1",
- "label": "Scottish statutory instruments made from 1999 to 2026",
- "not_covered": "UK statutory instruments, including every instrument made for Scotland before 1999 and UK instruments that extend to Scotland; Scottish statutory instruments published on legislation.gov.uk without their text (mostly temporary traffic orders); and any instrument published after the last refresh",
- "harvested_at": "2026-10-08",
+ "version": "2026-10-09.1",
+ "label": "Scottish statutory instruments made from 1999 to 2026 and UK statutory instruments made from 1987 to 2026",
+ "not_covered": "statutory instruments made before 1987 (held by legislation.gov.uk only as scanned images); Welsh and Northern Ireland series published separately from the UK series; instruments published on legislation.gov.uk without their text (mostly temporary traffic orders); instruments made under an EU regulation or another Order rather than an Act; and any instrument published after the last refresh",
+ "harvested_at": "2026-10-09",
  "types": [
-  "ssi"
+  "ssi",
+  "uksi"
  ],
  "years": [
-  1999,
+  1987,
   2026
  ],
- "instruments": 11451,
- "with_powers": 8518,
- "act_titles_unresolved": 5,
+ "instruments": 86744,
+ "with_powers": 68780,
+ "act_titles_unresolved": 90,
  "source": "legislation.gov.uk as-made XML preambles; tools/madeunder_probe.py (FIX_PLAN P3.31)"
 }

@@ -362,6 +362,17 @@ def build_snapshot(outdir: Path, inputs: list, label: str, not_covered: str,
             if r.get("absent") or r.get("error"):
                 continue
             recs[r["id"]] = r
+    def repair(act: str) -> str:
+        """An unresolved title that began too early ("Competition Commission
+        pursuant to the Water Industry Act 1991") becomes its tail after
+        "the"/"of"/"under"/"by"/"to", but only where that tail resolved exactly."""
+        if act in titles:
+            return act
+        for m in re.finditer(r"\b(?:the|of|under|by|to)\s+(?=[A-Z])", act):
+            if act[m.end():] in titles:
+                return act[m.end():]
+        return act
+
     rows, with_powers, unresolved = [], 0, set()
     for lid in sorted(recs, key=lambda i: (i.split("/")[0], int(i.split("/")[1]), int(i.split("/")[2]))):
         r = recs[lid]
@@ -370,6 +381,7 @@ def build_snapshot(outdir: Path, inputs: list, label: str, not_covered: str,
             act = p.get("act")
             if not act:
                 continue
+            act = repair(act)
             if act not in titles:
                 unresolved.add(act)
             powers.append({"act": act, "act_id": titles.get(act), "provisions": p.get("provisions") or [],
