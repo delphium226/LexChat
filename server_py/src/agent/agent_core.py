@@ -55,6 +55,7 @@ from ..utils.search_scope import (
     strip_scope_blocks,
     worker_scope_block,
 )
+from ..utils.source_naming import is_legislation, named_in, token_in
 from ..utils.suggestions import diagnose_suggestions, extract_suggestions
 from .agent_shared import describe_agent_error, run_worker_tool
 from .federation_client import (
@@ -452,15 +453,13 @@ async def run_worker_agent(
 
     if source_accumulator:
         content = result.get("content", "") or ""
-        kept = [src for src in source_accumulator if _source_is_used(src, content)]
-        # If filtering removed everything (e.g. the model paraphrased without
-        # citing URLs), fall back to the full list rather than showing no sources.
-        fallback = not kept
-        if fallback:
-            kept = source_accumulator
+        # P4.3: no fall-back to the whole list on the legislation bot (see
+        # `filter_worker_sources`); a report naming a source in words keeps it.
+        kept, kept_nothing = filter_worker_sources(
+            source_accumulator, content, research_mode)
         if timing_collector:
             timing_collector.record_source_stats(
-                extracted=len(source_accumulator), kept=len(kept), fallback=fallback
+                extracted=len(source_accumulator), kept=len(kept), fallback=kept_nothing
             )
         result["sources"] = [
             {**{k: v for k, v in src.items() if not k.startswith("_")}, "n": i + 1}
@@ -478,11 +477,13 @@ async def run_worker_agent(
     # fact across the lossy boundary rather than asking the model to.
     #
     # Appended LAST, after source filtering, and the order is load-bearing:
-    # `_source_is_used` matches a source on its bare `legislation_id`, and the
-    # record names the instruments that were section-searched. Appending before
-    # the filter would mark those sources as cited by our own footer and silently
-    # suppress P4.3's `turns_source_fallback` signal — a diagnostic corrupting
-    # the measurement of a different bucket.
+    # `_source_is_used` matches a source on its bare `legislation_id` (and,
+    # since P4.3, on its title and number), and the record names the
+    # instruments that were section-searched. Appending before the filter would
+    # mark those sources as cited by our own footer: every one would reach the
+    # rail, and the `source_filter_fallback` counter (the Worker vouched for
+    # none of its sources) would never fire — a diagnostic corrupting the
+    # measurement of a different bucket.
     _scope = worker_scope_block(search_log, cfg)
     if _scope:
         result["content"] = (result.get("content", "") or "") + _scope
@@ -532,20 +533,57 @@ def _source_is_used(src: dict, content: str) -> bool:
     when either:
       - it carries an excerpt (Phase 2 section/text/judgment retrieval ran), or
       - one of its identifying tokens (legislation_id, url, neutral citation)
-        appears in the answer text.
+        appears in the text, not as part of a longer one, or
+      - (P4.3, legislation and case law) the text names it in words: its
+        title, its SI or EU number, or an old SI's "YYYY No. N"
+        (`utils/source_naming.py`).
+
+    P4.3: a legislation source's `sub` is no longer a token. It holds a
+    section heading ("Interpretation") or a change-record description, so it
+    matched unrelated text and kept sources no reader would say were cited.
+    A case's `sub` is its neutral citation and stays.
     """
     if src.get("excerpt"):
         return True
+    legislation = is_legislation(src)
     tokens = [
         src.get("_lid"),
         src.get("url"),
         src.get("cite"),
-        src.get("sub"),
+        None if legislation else src.get("sub"),
     ]
     for tok in tokens:
-        if tok and len(str(tok)) >= 6 and str(tok) in content:
+        if token_in(tok, content):
             return True
-    return False
+    return named_in(src, content)
+
+
+# P4.3: the research modes whose Worker seam still falls back to the whole
+# accumulator when its filter keeps nothing. Only the parliamentary bots: no
+# stored replay ran on them, so dropping their fall-back is unmeasured.
+_RAIL_FALLBACK_MODES = frozenset({"parliamentary_records", "westminster_records"})
+
+
+def filter_worker_sources(source_accumulator: list, content: str,
+                          research_mode: str) -> tuple:
+    """The Worker seam's rail filter. Returns (kept, kept_nothing).
+
+    P4.3 (V4): on the legislation bot a report that vouches for none of its
+    sources adds none to the rail. Before, it added ALL of them, every Phase-1
+    search hit included: 90 of 1,393 post-P2.1 report turns, holding 879 of the
+    1,321 sources the answer never referenced (batch 10 C), mostly negative
+    answers. The scope line still states what was searched.
+
+    `kept_nothing` is the condition the old fall-back fired on, so the timing
+    counter `source_filter_fallback` keeps its trigger (and the Efficiency
+    tab's breach rule its meaning: the Worker vouched for none of its sources)
+    though the rail no longer falls back.
+    """
+    kept = [src for src in source_accumulator if _source_is_used(src, content)]
+    kept_nothing = not kept
+    if kept_nothing and research_mode in _RAIL_FALLBACK_MODES:
+        kept = list(source_accumulator)
+    return kept, kept_nothing
 
 
 # -----------------------------------------------------------------------
