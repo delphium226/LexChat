@@ -148,7 +148,9 @@ def test_the_line_names_every_id_up_to_the_cap_and_counts_the_rest():
     # silently lose the one id; batch 12 integrator's mutant M4).
     one_past = SH.handover_line([report(SH.MAX_HANDED_ON_IDS + 1)])
     assert f"uksi/19{9 + SH.MAX_HANDED_ON_IDS}/{SH.MAX_HANDED_ON_IDS} and 1 more." in one_past
-    assert SH.MAX_HANDED_ON_IDS >= 10   # the largest stored list (batch 11 E's dry run)
+    # A full made-under listing is handed on whole (user decision, 2026-10-09).
+    from src.utils.made_under import MAX_LISTED
+    assert SH.MAX_HANDED_ON_IDS >= MAX_LISTED
 
 
 def test_the_line_wording():
@@ -160,7 +162,7 @@ def test_the_line_wording():
         "these instruments, by legislation_id: uksi/1901/4, ssi/1902/30. Where this task "
         "works on instruments an earlier step identified, they are among these: work on "
         "each one of the kind the task names, by its legislation_id, rather than finding "
-        "the list again. Look further only if the task asks for more than the earlier "
+        "the list again, and look further only if the task asks for more than the earlier "
         "steps reported."
     )
 

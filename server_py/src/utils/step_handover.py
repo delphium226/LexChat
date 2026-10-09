@@ -58,9 +58,11 @@ HANDOVER_LABEL = "EARLIER STEPS' INSTRUMENTS:"
 # How many ids the line names. Over the 531 stored steps 2+ that would get a
 # line (every era, batch 12 B's dry run) the median list is 3 and the 90th
 # percentile 7; 5 lists are longer than 15 (38 to 39, every one from a step
-# that listed instruments from P3.31's made-under record). Past the cap the line
-# says how many more there are.
-MAX_HANDED_ON_IDS = 15
+# that listed instruments from P3.31's made-under record). At 15, one stored step
+# was handed 14 of 37 SSIs plus "and 23 more" and worked on exactly the 14, so
+# the cap is P3.31's listing limit, 40 (user decision, 2026-10-09). Past the cap
+# the line says how many more there are.
+MAX_HANDED_ON_IDS = 40
 
 _LINE_START = re.compile(r"^" + re.escape(HANDOVER_LABEL) + r"[^\n]*\n?", re.M)
 
@@ -112,8 +114,8 @@ def handover_line(reports: Iterable[str]) -> str:
             f"{HANDOVER_LABEL} the reports of the earlier steps of this plan cite these "
             f"instruments, by legislation_id: {shown}. Where this task works on instruments "
             "an earlier step identified, they are among these: work on each one of the kind "
-            "the task names, by its legislation_id, rather than finding the list again. "
-            "Look further only if the task asks for more than the earlier steps reported."
+            "the task names, by its legislation_id, rather than finding the list again, "
+            "and look further only if the task asks for more than the earlier steps reported."
         )
     except Exception:
         return ""
