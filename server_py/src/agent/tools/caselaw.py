@@ -393,3 +393,386 @@ async def _fetch_judgment_text(url: str, client: Optional[httpx.AsyncClient] = N
         title = ""
     return {"url": url, "title": title, "ncn": ncn, "text": text}
 
+
+# ---------------------------------------------------------------------------
+# P3.46: a case the query names that the search did not return
+# ---------------------------------------------------------------------------
+#
+# Batch 12 E's hand-read (P3.22's item 3): in 9 of 25 stored answer-turns an
+# answer stated what an authority the National Archives does not hold had
+# decided, as if its judgment had been read, and in one of the two sessions
+# (FIX_PLAN P3.46) every one of them followed a `search_case_law` call whose
+# query named that case and whose results did not include it. Over every
+# stored call (1,682 in 70 replay directories), 67 queries name a case and 51
+# named cases were not returned (batch 13 E's dry run). The Worker was told nothing about that: the
+# window note says how many judgments matched, not that the one it asked for
+# by name is absent from them. So the result now says so, in code (P3.7's
+# held/absent pattern, Invariant 2).
+#
+# **What it can say is narrow, and the wording keeps to it.** A case missing
+# from one search's results may still exist, may be in the database under
+# words the query did not use, or among matching judgments the page did not
+# show, and its name or citation may be accurate (P2.4's rule: never question
+# the user's citation). So the note says only that THIS search did not return
+# it, and what follows for the Worker: nothing of that judgment has been read.
+#
+# **It errs towards "returned".** A false "not returned" would tell the Worker
+# a judgment it holds is absent, which is the Invariant 1 regression. So a
+# name counts as returned when any result's title carries a distinctive word
+# of EACH party (a party with no distinctive word, "R" or "Secretary of State
+# for the Home Department", is not required), and a neutral citation counts
+# when any result carries it (as its citation, in its title or in its Find
+# Case Law URL). A case named without "v" ("In re Widget"), a name written in
+# lower case or capitals throughout, and an anonymised "A v B" are not
+# detected at all, so they get no note: the safe direction.
+#
+# **A law report citation cannot be checked.** Neither database lists judgments
+# by law report, so a case named by its report alone ("(1901) AC 9") is never
+# said to be missing: its note says the citation cannot be matched to the
+# results. A report beside a name or a neutral citation travels with it, and
+# the name or the citation decides.
+#
+# In `[SEARCH SCOPE — …]` form with no square bracket inside (a citation is
+# shown in round brackets), so `_TOOL_BLOCK` strips a copy a Worker echoes;
+# screened against every detector that reads answers (`test_named_case.py`).
+
+# Neutral-citation courts, England and Wales, the UK, Scotland (P3.20's SCTS
+# forms) and Northern Ireland. "SAC (Civ)" before "SAC"; the Court of Appeal's
+# and the Sheriff Appeal Court's divisions number separately, so they stay in
+# the key, and the High Court's and the tribunals' trailing bracket does not.
+_NAMED_NCN_COURTS = (
+    r"UKSC|UKHL|UKPC|EWCA\s+(?:Civ|Crim)|EWHC|EWCOP|EWFC|EWCC|EWCR|UKUT|UKFTT|UKEAT|EAT"
+    r"|UKAIT|UKIPTrib|UKSIAC|CSOH|CSIH|HCJAC|HCJ|SAC\s*\((?:Civ|Crim)\)|SAC|SC\s+[A-Z]{3,5}"
+    r"|UT|NICA|NIQB|NIKB|NICh|NIFam|NICC")
+_NAMED_NCN_RX = re.compile(
+    r"[\[(]\s*(?P<y>(?:19|20)\d{2})\s*[\])]\s*(?P<court>" + _NAMED_NCN_COURTS + r")\s+"
+    r"(?P<num>\d{1,5})\b(?:\s*\((?P<sub>[A-Za-z]{2,10})\))?")
+# A Find Case Law URL: court[/division]/year/number.
+_NAMED_URL_RX = re.compile(
+    r"caselaw\.nationalarchives\.gov\.uk/(?:id/)?(?P<court>[a-z]{2,8})/"
+    r"(?:(?P<sub>[a-z]{2,8})/)?(?P<y>(?:19|20)\d{2})/(?P<num>\d{1,5})\b", re.I)
+# A law report: a year in brackets, an optional volume, a series of one to
+# three capitalised words, a page ("(1901) AC 9", "[1901] 2 All ER 7"); or a
+# Scottish series after a bare year ("1901 SLT 7"). Tried after the neutral
+# citation, so a court is never read as a series.
+_NAMED_REPORT_RX = re.compile(
+    r"[\[(]\s*(?:1[5-9]|20)\d{2}\s*[\])]\s*(?:\d{1,3}\s+)?"
+    r"[A-Z][A-Za-z.&'’]{0,9}(?:\s+[A-Z][A-Za-z.&'’]{0,9}){0,2}\s+\d{1,5}\b"
+    r"|\b(?:1[89]|20)\d{2}\s+(?:SC|SLT|SCLR|JC|SCCR|S\.C\.|S\.L\.T\.)"
+    r"(?:\s*\([A-Za-z .]{2,12}\))?\s+\d{1,5}\b")
+# Words that join a party's name without being it.
+_NAMED_JOINERS = {"of", "the", "and", "&", "for", "on", "in", "at", "de", "la", "le", "du",
+                  "van", "von", "der", "da", "application", "ex", "parte", "re"}
+# Words that are not a distinctive part of a party's name: the appeal
+# detector's list, and the corporate and procedural words.
+_NAMED_NOT_DISTINCTIVE = _PARTY_STOPWORDS | {
+    "and", "the", "for", "ltd", "limited", "plc", "llp", "inc", "anor", "ors", "others",
+    "another", "son", "sons", "application", "parte", "intervener", "interveners",
+}
+_NAMED_TOKEN_RX = re.compile(r"[\"“”‘’]|[^\s\"“”]+")
+
+
+def _named_words(text: str) -> set:
+    """Distinctive words of a party name, lower-cased: letters only, three or
+    more of them, not a generic word, and not a short all-capitals acronym
+    ("SSHD", "HMRC"), which a title spells out."""
+    out = set()
+    for raw in re.findall(r"[A-Za-z][A-Za-z'’]*", text or ""):
+        w = raw.replace("'", "").replace("’", "")
+        if len(w) < 3 or (w.isupper() and len(w) <= 5):
+            continue
+        if w.lower() not in _NAMED_NOT_DISTINCTIVE:
+            out.add(w.lower())
+    return out
+
+
+def _is_name_token(tok: str) -> bool:
+    core = tok.strip("(),;:")
+    return bool(core) and (core[0].isupper() or core.lower() in _NAMED_JOINERS
+                           or core == "&")
+
+
+def _side(tokens: list, start: int, step: int, bound: int) -> tuple:
+    """(first index, last index) of the party name running from `start` in
+    direction `step`, never past `bound`: capitalised words and the joiners
+    between them, stopped by a quote, a citation, or any other word. None if
+    empty."""
+    i, last = start, None
+    while 0 <= i < len(tokens) and (i <= bound if step > 0 else i >= bound):
+        tok = tokens[i]
+        if tok in "\"“”‘’" or tok[:1] in "[" or tok[:1].isdigit() or not _is_name_token(tok):
+            break
+        # A clause break: a comma or a colon ends the left party where it
+        # follows a word ("liability: Widget v ...").
+        if step < 0 and tok.rstrip().endswith((":", ";")):
+            break
+        last = i
+        if step > 0 and tok.rstrip().endswith((";", ":")):
+            break
+        i += step
+    if last is None:
+        return None
+    lo, hi = (start, last) if step > 0 else (last, start)
+    # Trim joiners at either end ("of Widget" -> "Widget").
+    while lo <= hi and tokens[lo].strip("(),;:").lower() in _NAMED_JOINERS:
+        lo += 1
+    while hi >= lo and tokens[hi].strip("(),;:").lower() in _NAMED_JOINERS:
+        hi -= 1
+    return (lo, hi) if lo <= hi else None
+
+
+def _ncn_key(y: str, court: str, num: str) -> str:
+    c = re.sub(r"[^A-Z]", "", court.upper())
+    return f"{y} {c} {int(num)}"
+
+
+def _url_ncn_key(m) -> str:
+    court, sub = m.group("court").upper(), (m.group("sub") or "").upper()
+    # The Court of Appeal's division is part of its citation; a tribunal's or
+    # the High Court's is not.
+    return _ncn_key(m.group("y"), court + (sub if court == "EWCA" else ""), m.group("num"))
+
+
+def _shown(text: str) -> str:
+    """A query span as the note shows it: one line, no quotes, round brackets."""
+    s = re.sub(r"\s+", " ", text or "").strip().strip("\"“”'‘’ ,;:")
+    return s.replace("[", "(").replace("]", ")")[:120].strip()
+
+
+def named_cases(query: str) -> list:
+    """The cases a `search_case_law` query names, in query order:
+    `[{"shown", "a", "b", "ncn", "report"}]`. `a` and `b` are the parties'
+    distinctive words (an empty set where a party has none: "R"); `ncn` the
+    neutral citation's key; `report` True where the case is named by a law
+    report alone (it cannot be matched). Never raises."""
+    try:
+        q = str(query or "")
+        cases = []
+        cites = []
+        for m in _NAMED_NCN_RX.finditer(q):
+            cites.append({"start": m.start(), "end": m.end(), "text": m.group(0),
+                          "ncn": _ncn_key(m.group("y"), m.group("court"), m.group("num"))})
+        for m in _NAMED_REPORT_RX.finditer(q):
+            if any(c["start"] <= m.start() < c["end"] or m.start() <= c["start"] < m.end()
+                   for c in cites):
+                continue
+            cites.append({"start": m.start(), "end": m.end(), "text": m.group(0), "ncn": None})
+        cites.sort(key=lambda c: c["start"])
+
+        spans = [(m.start(), m.end(), m.group(0)) for m in _NAMED_TOKEN_RX.finditer(q)]
+        toks = [t for _, _, t in spans]
+        vs = [i for i, tok in enumerate(toks) if tok in ("v", "v.", "vs", "vs.")]
+        # Two names in a row ("Widget v Gadget and Gizmo v Sprocket"): the
+        # words between their "v"s are split at the last "and" or comma, or,
+        # with neither, the second name's first party is its last word.
+        bounds = {i: [0, len(toks) - 1] for i in vs}
+        for i, j in zip(vs, vs[1:]):
+            between = range(i + 1, j)
+            cut = next((k for k in reversed(between)
+                        if toks[k].lower() in ("and", "&", "or") or toks[k].endswith(",")),
+                       None)
+            if cut is None:
+                bounds[i][1], bounds[j][0] = j - 2, j - 1
+            elif toks[cut].endswith(","):
+                bounds[i][1], bounds[j][0] = cut, cut + 1
+            else:
+                bounds[i][1], bounds[j][0] = cut - 1, cut + 1
+        for i in vs:
+            left = _side(toks, i - 1, -1, bounds[i][0])
+            right = _side(toks, i + 1, 1, bounds[i][1])
+            if not left or not right:
+                continue
+            a = _named_words(" ".join(toks[left[0]:left[1] + 1]))
+            b = _named_words(" ".join(toks[right[0]:right[1] + 1]))
+            # A name with no distinctive word ("R (X) v Secretary of State for
+            # ...") cannot be matched; it is kept only to show with a citation
+            # that follows it, and dropped below if none does.
+            start, end = spans[left[0]][0], spans[right[1]][1]
+            case = {"start": start, "end": end, "shown": _shown(q[start:end]),
+                    "a": a, "b": b, "ncn": None, "report": False}
+            # A citation right after the name is that case's (a second one
+            # after it, a parallel citation, too).
+            attached = False
+            for c in cites:
+                if not c.get("used") and 0 <= c["start"] - end <= 3 \
+                        and not q[end:c["start"]].strip(" ,"):
+                    c["used"] = attached = True
+                    case["shown"] = _shown(q[start:c["end"]])
+                    case["end"] = c["end"]
+                    if c["ncn"]:
+                        case["ncn"] = c["ncn"]
+                    end = c["end"]
+            if not a and not b:
+                if not attached:
+                    continue
+                # Named by a law report beside a name that cannot be matched.
+                case["report"] = case["ncn"] is None
+            cases.append(case)
+        for c in cites:
+            if c.get("used"):
+                continue
+            shown = _shown(c["text"])
+            cases.append({"start": c["start"], "end": c["end"],
+                          "shown": f"the judgment cited as {shown}" if c["ncn"] else shown,
+                          "a": set(), "b": set(), "ncn": c["ncn"],
+                          "report": c["ncn"] is None})
+        cases.sort(key=lambda c: c["start"])
+        out, seen = [], set()
+        for c in cases:
+            k = c["shown"].lower()
+            if k in seen:
+                continue
+            seen.add(k)
+            out.append({k2: c[k2] for k2 in ("shown", "a", "b", "ncn", "report")})
+        return out
+    except Exception:
+        return []
+
+
+def _row_ncn_keys(row: dict) -> set:
+    keys = set()
+    text = " ".join(str(row.get(f) or "") for f in ("ncn", "title"))
+    for m in _NAMED_NCN_RX.finditer(text):
+        keys.add(_ncn_key(m.group("y"), m.group("court"), m.group("num")))
+    for m in _NAMED_URL_RX.finditer(str(row.get("url") or "")):
+        keys.add(_url_ncn_key(m))
+    return keys
+
+
+def _row_title_words(row: dict) -> set:
+    return {w.replace("'", "").replace("’", "").lower()
+            for w in re.findall(r"[A-Za-z][A-Za-z'’]*", str(row.get("title") or ""))}
+
+
+def case_returned(case: dict, rows: list) -> Optional[bool]:
+    """True when one of `rows` is the named case, False when none is, None
+    when it cannot be told (a law report alone). Errs towards True."""
+    if case.get("report"):
+        return None
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if case.get("ncn") and case["ncn"] in _row_ncn_keys(row):
+            return True
+        if case.get("a") or case.get("b"):
+            words = _row_title_words(row)
+            if (not case["a"] or case["a"] & words) and (not case["b"] or case["b"] & words):
+                return True
+    return False
+
+
+def _join(items: list, word: str) -> str:
+    if len(items) <= 1:
+        return "".join(items)
+    return ", ".join(items[:-1]) + f" {word} " + items[-1]
+
+
+NAMED_CASE_FCL = "Find Case Law"
+NAMED_CASE_SCTS = "the Scottish Courts and Tribunals Service's published judgments"
+NAMED_CASE_BOTH = f"{NAMED_CASE_FCL} or {NAMED_CASE_SCTS}"
+
+
+def _not_among(names: list, n: int) -> str:
+    """The opening sentence: which named cases the n judgments returned are not."""
+    one = len(names) == 1
+    if n == 0:
+        return ("this search returned 0 judgments, so "
+                + ("a case it names is" if one else "the cases it names are")
+                + f" not among them: {_join(names, 'and')}.")
+    head = ("a case this search names is not among its results" if one else
+            "cases this search names are not among its results")
+    if n == 1:
+        what = (f"is not {names[0]}" if one else
+                f"is neither {names[0]} nor {names[1]}" if len(names) == 2 else
+                f"is none of {_join(names, 'or')}")
+        return f"{head}: the 1 judgment it returned {what}."
+    return f"{head}: none of the {n} judgments it returned is {_join(names, 'or')}."
+
+
+def named_case_note(args: dict, data) -> str:
+    """The note on a `search_case_law` result whose query names a case the
+    results do not include (P3.46), "" otherwise. Reads Find Case Law's
+    `results` and, when the setting is on, `scottish_results`; a list whose
+    search did not run (an error, SCTS capped or off) counts for nothing.
+    Never raises."""
+    try:
+        import json as _json
+        d = _json.loads(data) if isinstance(data, str) else data
+        if not isinstance(d, dict):
+            return ""
+        cases = named_cases((args or {}).get("query") or d.get("query") or "")
+        if not cases:
+            return ""
+        fcl_ran = not d.get("error")
+        block = d.get("scottish") if isinstance(d.get("scottish"), dict) else None
+        scts_ran = bool(block) and block.get("status") == "ok"
+        if not fcl_ran and not scts_ran:
+            return ""
+        rows, partial = [], False
+        if fcl_ran:
+            fcl = d.get("results") if isinstance(d.get("results"), list) else []
+            rows += fcl
+            partial = partial or (bool(fcl) and not (
+                d.get("total_exact") and d.get("total") == len(fcl)))
+        if scts_ran:
+            scot = (d.get("scottish_results")
+                    if isinstance(d.get("scottish_results"), list) else [])
+            rows += scot
+            partial = partial or (bool(scot) and int(block.get("total") or 0) > len(scot))
+        verdicts = [(c, case_returned(c, rows)) for c in cases]
+        missing = [c["shown"] for c, v in verdicts if v is False]
+        unmatched = [c["shown"] for c, v in verdicts if v is None]
+        if not missing and not unmatched:
+            return ""
+        db = (NAMED_CASE_BOTH if fcl_ran and scts_ran else
+              NAMED_CASE_FCL if fcl_ran else NAMED_CASE_SCTS)
+        n = len(rows)
+        parts = []
+        if missing:
+            one = len(missing) == 1
+            it = "it" if one else "them"
+            parts.append(_not_among(missing, n))
+            where = (f"{db} may hold {it} among the matching judgments not shown or under "
+                     "words this search did not use" if partial else
+                     f"{db} may hold {it} under words this search did not use")
+            parts.append(
+                "That is all it shows: the judgment" + ("" if one else "s")
+                + f" may well exist, {where}, and it is no sign that the "
+                + ("name or citation is" if one else "names or citations are") + " wrong.")
+        if unmatched:
+            one = len(unmatched) == 1
+            lists = "list" if db == NAMED_CASE_BOTH else "lists"
+            parts.append(
+                ("This search also names " if missing else "This search names ")
+                + ("a law report, " if one else "law reports, ") + _join(unmatched, "and")
+                + f", which cannot be matched to its results: {db} {lists} judgments by title "
+                  "and neutral citation, not by law report, so none of the judgments returned "
+                  "is shown to be " + ("the case reported there." if one else
+                                       "a case reported there."))
+        several = len(missing) + len(unmatched) > 1
+        it, they = ("them", "they") if several else ("it", "it")
+        were = "they were" if several else "it was"
+        # What the Worker may say of them: "not among" only of a case found
+        # missing, "could not be matched" only of a law report.
+        say = (f"{were} not among, or could not be matched to," if missing and unmatched else
+               f"{were} not among" if missing else
+               f"{they} could not be matched to")
+        if missing:
+            # Scoped to THIS search: another search in the same run may have
+            # returned the case and the Worker read it, so the conditional.
+            parts.append(
+                f"Unless another search returns {it} and you retrieve {it}, "
+                + ("their" if several else "its") + " text has not been read: do not state "
+                f"what {they} decided as though you had read {it}.")
+        else:
+            parts.append(
+                "Unless a judgment you retrieve proves to be "
+                + ("one of those cases" if several else "that case")
+                + f", do not state what {they} decided as though you had read {it}.")
+        parts.append(
+            f"Say instead that {say} the judgments returned, or attribute what you say about "
+            f"{it} to a retrieved judgment that cites {it}, and name that judgment.")
+        text = " ".join(parts)
+        return "\n\n[SEARCH SCOPE — " + text[0].lower() + text[1:] + "]"
+    except Exception:
+        return ""

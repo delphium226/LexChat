@@ -88,6 +88,7 @@ from .tools import (
     detect_appellate_decisions,
     _PARLIAMENT_TOOL_NAMES,
 )
+from .tools.caselaw import named_case_note
 
 logger = logging.getLogger("agent")
 
@@ -1237,6 +1238,13 @@ async def run_worker_tool(
                     )
         except Exception:
             pass
+    # P3.46: a case the query names that the results do not include, said in
+    # code. Ahead of the notes above, so the imperative stays the last thing
+    # the Worker reads (P2.2's order); on both branches, so a result carrying
+    # the Scottish list (P3.20) gets it too. "" when the query names no case
+    # or every case it names was returned; never raises.
+    if name == "search_case_law":
+        case_law_note = named_case_note(args, result) + case_law_note
 
     # For search_scottish_parliament: the results are excerpt-only (TheyWorkForYou
     # exposes no full-text retrieval endpoint for Holyrood plenary content), so nudge
