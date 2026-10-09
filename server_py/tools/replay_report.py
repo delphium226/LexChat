@@ -10419,7 +10419,7 @@ _RAIL_BARE_LID = re.compile(r"^([a-z]+/\d{4}/\d+)")
 _RAIL_CASE_HOST = "caselaw.nationalarchives.gov.uk"
 _RAIL_SI_TYPES = {"ssi", "uksi", "wsi", "nisr", "nisi", "ukdsi", "sdsi"}
 # Batch 12 D: or "(Commencement", closed or not: a quoted, truncated search
-# query ('"... Act 2025 (Commencement No. 1"') names the commencement
+# query ('"Widget Act 1901 (Commencement No. 1"') names the commencement
 # instrument, not the Act (3 stored answers, each read; the product's
 # `source_naming._LONGER_TITLE` has the same alternative).
 _RAIL_LONGER_TITLE = re.compile(
