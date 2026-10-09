@@ -335,6 +335,53 @@ async def recital_for(legislation_id: str) -> Optional[str]:
         return None
 
 
+def majority_act_titles(rows) -> dict:
+    """`{act_id: title}` from `(act_id, act_title, count)` rows: the spelling
+    most of the record's recital rows use. Recitals misspell an Act now and
+    then (106 of 2,215 resolved Acts carry a second spelling, the larger one
+    nearly always by far); a tie gives no title rather than a guess."""
+    by: dict = {}
+    for act_id, title, n in rows or []:
+        if act_id and title:
+            by.setdefault(act_id, []).append((int(n or 0), str(title)))
+    out = {}
+    for act_id, cands in by.items():
+        cands.sort(reverse=True)
+        if len(cands) == 1 or cands[0][0] > cands[1][0]:
+            out[act_id] = cands[0][1]
+    return out
+
+
+async def titles_for(legislation_ids) -> dict:
+    """P4.24: `{legislation_id: title}` from the record, for the Sources rail.
+    An instrument's own title where the record holds the instrument, else an
+    Act's title as the record's recitals resolved it (`majority_act_titles`).
+    Like `recital_for`, no database until the record is loaded; never raises."""
+    if not _STATE["available"]:
+        return {}
+    ids = sorted({str(i).strip().strip("/") for i in legislation_ids or () if i})
+    if not ids:
+        return {}
+    try:
+        from ..database import async_session_maker
+        async with async_session_maker() as session:
+            rows = (await session.execute(text(
+                "SELECT legislation_id, title FROM made_under_instruments "
+                "WHERE legislation_id = ANY(:ids)"), {"ids": ids})).all()
+            out = {r[0]: r[1] for r in rows if r[1]}
+            rest = [i for i in ids if i not in out]
+            acts = []
+            if rest:
+                acts = (await session.execute(text(
+                    "SELECT act_id, act_title, COUNT(*) FROM made_under_powers "
+                    "WHERE act_id = ANY(:ids) GROUP BY act_id, act_title"),
+                    {"ids": rest})).all()
+        out.update(majority_act_titles([tuple(a) for a in acts]))
+        return out
+    except Exception:
+        return {}
+
+
 # ---------------------------------------------------------------------------
 # Daily refresh
 # ---------------------------------------------------------------------------
