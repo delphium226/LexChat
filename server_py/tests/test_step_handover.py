@@ -5,8 +5,8 @@ a later step told to "check the identified Orders" was never given them and
 re-derived the list with its own searches; measured after P3.8, every such step
 did (12 of 12), and 5 of 12 worked on a different list. Now `_build_step_brief`
 adds one code-written line naming the instruments the earlier steps' report
-BODIES cite, for a step that says it works on what an earlier step identified,
-and P3.7's routed lookups do not read that line.
+BODIES cite, to every step after the first (batch 12 B: a wording gate missed a
+step that worked on the list), and P3.7's routed lookups do not read that line.
 
 Every instrument here is synthetic.
 """
@@ -58,39 +58,36 @@ STEP1_REPORT = (
 
 
 # --- which steps get the line -----------------------------------------------
+#
+# Every step after the first whose earlier reports cite an instrument, whatever
+# its wording (user decision, 2026-10-09). The wording gate this replaces
+# missed "Review the retrieved secondary legislation ..." in the acceptance
+# replay, and that step dropped an instrument.
 
-@pytest.mark.parametrize("text", [
-    "Review the full text of the SSIs identified in the previous step",
-    "Check the commencement of the identified SSIs",
-    "Extract offices from the identified Orders and Schedules",
-    "For the instruments identified above, check amendments",
-    "Check those regulations for revocation",
-    # The form the Session 15 pattern misses: the class word is not next to
-    # "identified" (batch 10 D's hand-read).
-    "Check the amendment status of the identified Widget Administration (Offices) Orders",
+@pytest.mark.parametrize("title, detail", [
+    # Forms the old gate recognised.
+    ("Review the SSIs", "Review the full text of the SSIs identified in the previous step"),
+    ("Check status", "Check the amendment status of the identified Widget Administration "
+                     "(Offices) Orders"),
+    # The form it missed (`wave4_b11_sweep`): works on the list, names no
+    # "identified" and no step.
+    ("Compile the list of constituent bodies",
+     "Review the retrieved secondary legislation to extract and compile a list of the bodies."),
+    # A step that does not work on the list at all; the line is conditional.
+    ("Find the penalties", "Identify the penalty provisions in the Widget Act 1901."),
+    # A provision-dependent step (batch 10 D's other shape).
+    ("Extract deadlines", "Extract the deadlines from the identified provisions in both Acts"),
+    # No detail at all.
+    ("Widgets", None),
 ])
-def test_a_step_working_on_an_earlier_list_is_recognised(text):
-    assert SH.works_on_earlier_list({"title": "Step", "detail": text})
-
-
-@pytest.mark.parametrize("text", [
-    "Identify the Widget Act 1901 and its key provisions",
-    # Provision-dependent steps are a different shape (batch 10 D) and stay out.
-    "Review the identified definitional provisions in the Widget Act 1901",
-    "Extract the deadlines from the identified provisions in both Acts",
-    # The bound: one sentence. A later sentence's class word is not the
-    # identified thing.
-    "Review the identified provisions. Then list any Orders made under them.",
-    # And 80 characters.
-    "Review the identified " + "very " * 20 + "long list of Orders",
-])
-def test_other_steps_are_not(text):
-    assert not SH.works_on_earlier_list({"title": "Step", "detail": text})
-
-
-def test_a_malformed_step_is_not_recognised_and_does_not_raise():
-    assert SH.works_on_earlier_list({"title": None, "detail": None}) is False
-    assert SH.works_on_earlier_list(None) is False
+def test_every_later_step_gets_the_line_whatever_its_wording(title, detail):
+    step = {"title": title, "detail": detail}
+    brief = _build_step_brief(step, PLAN, QUESTION, [STEP1_REPORT])
+    parts = brief.split("\n\n")
+    assert parts[-2] == SH.handover_line([STEP1_REPORT])
+    assert parts[-1].startswith("CONTEXT: This task is one step")
+    # Without it, the brief is exactly what it was before P3.10.
+    assert brief.replace("\n\n" + parts[-2], "") == _build_step_brief(step, PLAN, QUESTION)
 
 
 # --- what the line names --------------------------------------------------------
@@ -175,14 +172,48 @@ def test_a_dependent_step_gets_the_line_before_the_context_sentence():
     assert brief.replace("\n\n" + parts[-2], "") == _build_step_brief(DEPENDENT, PLAN, QUESTION)
 
 
-def test_other_steps_and_the_first_step_are_unchanged():
-    before = _build_step_brief(INDEPENDENT, PLAN, QUESTION)
-    assert _build_step_brief(INDEPENDENT, PLAN, QUESTION, [STEP1_REPORT]) == before
-    first = _build_step_brief(DEPENDENT, PLAN, QUESTION)
-    assert _build_step_brief(DEPENDENT, PLAN, QUESTION, []) == first
-    assert SH.HANDOVER_LABEL not in first
-    # Earlier reports citing nothing: no line, not an empty one.
-    assert _build_step_brief(DEPENDENT, PLAN, QUESTION, ["Nothing cited."]) == first
+def test_the_first_step_and_a_step_whose_earlier_reports_cite_nothing_are_unchanged():
+    for step in (DEPENDENT, INDEPENDENT):
+        first = _build_step_brief(step, PLAN, QUESTION)
+        assert SH.HANDOVER_LABEL not in first
+        # No earlier reports (the first step): no line.
+        assert _build_step_brief(step, PLAN, QUESTION, []) == first
+        assert _build_step_brief(step, PLAN, QUESTION, None) == first
+        # Earlier reports citing nothing (a lost step, a case-law-only step):
+        # no line, not an empty paragraph.
+        assert _build_step_brief(step, PLAN, QUESTION, ["Nothing cited.", ""]) == first
+
+
+def test_a_case_law_report_hands_on_only_the_legislation_it_links():
+    """No stored Deep Research turn ran case law only (batch 12 B's dry run), so
+    this form is synthetic. A judgment's link and neutral citation are not
+    instruments; a legislation.gov.uk link inside a case-law report is."""
+    judgments = ("## Key Cases\n- [Widget Co v Example Ltd [1901] UKSC 4]"
+                 "(https://caselaw.nationalarchives.gov.uk/uksc/1901/4)\n")
+    assert _build_step_brief(INDEPENDENT, PLAN, QUESTION, [judgments]) == \
+        _build_step_brief(INDEPENDENT, PLAN, QUESTION)
+    with_act = judgments + "- Applying " + LINK.format(t="s.2", i="ukpga/1901/7/section/2") + "\n"
+    assert "by legislation_id: ukpga/1901/7." in _build_step_brief(
+        INDEPENDENT, PLAN, QUESTION, [with_act])
+
+
+def test_a_failure_reading_the_reports_leaves_the_brief_as_it_was(monkeypatch):
+    """Fail-soft (Invariant 5): every step 2+ now goes through the line, so an
+    error reading the earlier reports must cost the line and nothing else."""
+    def broken(reports):
+        raise ValueError("unreadable report")
+
+    monkeypatch.setattr(SH, "handed_on_ids", broken)
+    assert SH.handover_line([STEP1_REPORT]) == ""
+    assert _build_step_brief(INDEPENDENT, PLAN, QUESTION, [STEP1_REPORT]) == \
+        _build_step_brief(INDEPENDENT, PLAN, QUESTION)
+
+
+def test_a_step_with_no_question_still_gets_the_line_last():
+    """No CONTEXT sentence (no user question): the line closes the brief."""
+    brief = _build_step_brief(INDEPENDENT, PLAN, "", [STEP1_REPORT])
+    assert brief.split("\n\n")[-1] == SH.handover_line([STEP1_REPORT])
+    assert "CONTEXT:" not in brief
 
 
 @pytest.fixture
@@ -211,6 +242,39 @@ async def test_run_deep_research_hands_step_two_the_list_step_one_reported(_dr_c
     assert SH.HANDOVER_LABEL not in briefs[0]
     assert "by legislation_id: uksi/1901/4, ssi/1902/30." in briefs[1]
     assert "uksi/1909/99" not in briefs[1]
+
+
+@pytest.mark.asyncio
+async def test_run_deep_research_hands_every_later_step_what_all_earlier_steps_cite(_dr_cfg):
+    """Steps 2 and 3 are worded as independent tasks; both get the line. Step 3's
+    names step 1's instruments and then step 2's, each once."""
+    briefs = []
+    reports = [STEP1_REPORT,
+               "## Findings\n- " + LINK.format(t="The Widget Rules 1903", i="ssi/1903/12") + "\n"
+               "- SSI 1902/30 again.\n" + _scope_block("ssi/1909/98"),
+               "Step three."]
+    plan = {"scope_note": "Widgets.", "steps": [
+        INDEPENDENT,
+        {"title": "Find the Widget Rules", "detail": "Identify rules made under the Widget Act 1901."},
+        {"title": "Find the penalties", "detail": "Identify the penalty provisions."},
+    ]}
+
+    async def worker(query, model, cancel_event, num_ctx, parent_on_chunk=None,
+                     emit_tool_details=False, timing_collector=None, tool_memo=None,
+                     retrieved_urls=None):
+        briefs.append(query)
+        return {"content": reports[len(briefs) - 1], "sources": []}
+
+    async def synthesis(messages, *a, **k):
+        return {"role": "assistant", "content": "Report."}
+
+    await run_deep_research(synthesis, worker, plan, [{"role": "user", "content": QUESTION}],
+                            "m", None, None, 0)
+    assert len(briefs) == 3
+    assert SH.HANDOVER_LABEL not in briefs[0]
+    assert "by legislation_id: uksi/1901/4, ssi/1902/30. Where" in briefs[1]
+    assert "by legislation_id: uksi/1901/4, ssi/1902/30, ssi/1903/12. Where" in briefs[2]
+    assert "1909/9" not in briefs[1] + briefs[2]
 
 
 # --- P3.7: the line is not looked up ----------------------------------------------

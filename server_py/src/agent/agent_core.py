@@ -1216,11 +1216,15 @@ def _build_step_brief(step: dict, approved_plan: dict, user_query: str,
     Identifiers in the step text are passed through verbatim (NO SPECULATION —
     the planner was instructed to copy them exactly as the user gave them).
 
-    P3.10: `earlier_reports` are the reports of the steps already run. A step
-    that says it works on what an earlier step identified gets one code-written
-    line naming the instruments those reports cite (`utils/step_handover.py`),
-    instead of re-deriving the list with its own searches. It sits before the
-    CONTEXT sentence, which stays the brief's last word.
+    P3.10: `earlier_reports` are the reports of the steps already run. Every
+    step after the first gets one code-written line naming the instruments
+    those reports cite (`utils/step_handover.py`), so a step that works on an
+    earlier step's list is handed it instead of re-deriving it with its own
+    searches. The line is conditional, so it adds nothing to a step that does
+    not. It goes to every such step, not only to steps whose wording a pattern
+    recognises: the pattern missed a step that worked on the list
+    (`wave4_b11_sweep`), and that step dropped an instrument. It sits before
+    the CONTEXT sentence, which stays the brief's last word.
     """
     parts = [f"RESEARCH TASK: {step['title']}"]
     detail = step.get("detail") or ""
@@ -1230,12 +1234,11 @@ def _build_step_brief(step: dict, approved_plan: dict, user_query: str,
     if scope_note:
         parts.append(f"SCOPE: {scope_note}")
     if earlier_reports:
-        from ..utils.step_handover import handover_line, works_on_earlier_list
+        from ..utils.step_handover import handover_line
 
-        if works_on_earlier_list(step):
-            line = handover_line(earlier_reports)
-            if line:
-                parts.append(line)
+        line = handover_line(earlier_reports)
+        if line:
+            parts.append(line)
     if user_query:
         parts.append(
             "CONTEXT: This task is one step of a wider research plan answering the "
