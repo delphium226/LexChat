@@ -1326,6 +1326,10 @@ are tagged retroactively. Four things were left open deliberately:
   (and `build`) on the audit event (schema v7, `AUDIT_TRACE.md`, harness owner told), an
   additive `request_timings.app_version` column, and `runtime_state.app_version` in replay
   run files beside `git_head`.
+  **Also for schema v7 (added 2026-10-10, Session 45, user decision on P3.45):** an additive
+  per-tool `citations_removed` field on the audit trace, the count (and kinds) of case citations
+  `summarisation.check_summary_citations` removed from that tool's summary, so an eval harness
+  sees the check act; until then the removals are in the INFO log by count only.
 - **A lint error that predates this work:** `client/src/hooks/useBotIdentity.js:64`, a plain
   helper named `useSvgLogo` trips `react-hooks/rules-of-hooks`. Renaming it (for example
   `loadSvgLogo`) clears it; it does not affect the build.

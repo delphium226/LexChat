@@ -49,6 +49,10 @@ Saying honestly what was and was not found:
   say that it is not held in this index, which is incomplete, and that this
   does not show whether the number is accurate. It used to say this was "not
   a sign that the citation is wrong", which a lookup cannot establish (P4.21).
+- Remove a case citation that a document summary carries and the document
+  itself does not, together with the passage built on it where the document
+  never names the case. A summary served from the shared cache is checked
+  the same way (P3.45).
 
 Change records:
 - Where a change record lists a commencement made by another instrument, give
@@ -69,6 +73,14 @@ Change records:
   instrument's own commencement provision says how its provisions come into
   force, not whether they have, so it is no longer treated as evidence either
   way; where no record was consulted, say neither (P3.24).
+- Read what a change record removes by the kind of change: a provision
+  repealed, revoked, omitted or ceasing to have effect, wholly or in part;
+  words or entries removed, which amend a provision that stays; and a removal
+  that is prospective, temporary, conditional, for specified purposes or for
+  part of the UK only. Say a provision is no longer in force only for the
+  first kind. The count used to miss "omitted" and "ceases to have effect"
+  and counted "words repealed" as a provision repealed. Built; the research
+  step's own standing rule is still to be brought into line (P3.28).
 
 Jurisdiction:
 - Where a question names no jurisdiction, answer for Scotland and say so;
@@ -81,6 +93,10 @@ Jurisdiction:
   legislation made for that jurisdiction alone (P3.4).
 - The jurisdiction filter's notes no longer use letter codes the index never
   sends, and say that most search results carry no stated extent (P3.4).
+- Keep a search result whose stated extent the filter does not recognise,
+  as one whose extent is unknown, instead of dropping it under every filter;
+  read "N.I." as Northern Ireland, and England, Wales, Scotland and Northern
+  Ireland named one by one as the whole UK (P3.26).
 
 Search results:
 - Keep each legislation search result's own published summary (its
@@ -95,6 +111,13 @@ Quick lookups:
   text is up to date to, now come from the index record, looked up before the
   SI is searched. The existing "in-force status is not something this index
   reports" sentence therefore appears on more quick-lookup replies (P3.25).
+
+Instruments the index lacks:
+- When an instrument is not in the index, or the index has no text for it,
+  read its text from legislation.gov.uk (the version as made or enacted,
+  with its schedules) through the LEX API, hand it to the research step,
+  and say in the reply that it was read from there. Nothing is stored.
+  Built; its acceptance replay has not been run (P3.38).
 
 Schedules and annexes:
 - When several searches in one step name schedules of different instruments
@@ -131,6 +154,13 @@ Schedules and annexes:
   out another paragraph it was handed, add the omitted paragraph's heading
   and opening words after it, quoted from the statute. Built; its measured
   acceptance is not yet met (P3.12).
+- In that added paragraph, quote the rule first and then when it applies,
+  never a bare "This paragraph applies to ..." line. Where a reply cites only
+  some sub-paragraphs of a paragraph it was handed, add the operative
+  sub-paragraphs it left out. Where one named paragraph of a large schedule
+  cannot be cut out cleanly, still hand over the ones that can, and say which
+  could not. Measured: 2 of 3 replays now carry the three paragraphs asked
+  for; the acceptance is 3 of 3 (P3.12).
 
 Deep Research:
 - Hand every step after the first the instruments the earlier steps'
@@ -147,6 +177,9 @@ Sources:
 - Show a source listed under a bare identifier by its title, taken from the
   research's own results or the made-under record, and give a source with
   no link its legislation.gov.uk address (P4.24).
+- When a reply names an instrument in words and links it nowhere, link it to
+  the address the research report gave it; link a provision's address only
+  where the reply names that provision beside the instrument (P4.23).
 
 Reliability and cost:
 - When the final answer comes back empty after research is already in hand,
@@ -170,6 +203,11 @@ Case law:
   list says what was searched (P3.23).
 - Retry a case-law search or judgment fetch that hits the National Archives'
   rate limit, as legislation calls already are (P4.19).
+- When a case-law search names a case and the results do not include it,
+  tell the research step so, and that what the case decided must not be
+  stated as if its judgment had been read. A case cited only by a law report
+  is said to be one that cannot be matched to the results. Built; its
+  acceptance replay has not been run (P3.46).
 
 Interpretation. P3.17 and P3.3 stay open: P3.17's change fixed the turn it
 aimed at but has not met its acceptance.
@@ -220,6 +258,12 @@ section-search result (P3.24); `commencements` grades scripted replays
 A new `replay_report rail` grades the sources rail with a careful-reader
 test, and the older rail counters are labelled as the token test's (P4.3);
 two scripted replays of P3.10's Deep Research turns (P3.10).
+`authorities` grades an answer by the first sentence that states what an
+out-of-collection authority decided, reads "this principle" pointing back to
+it, and skips a bare listing (P3.46); `depth` reads "wind up" (P3.12);
+`summary_probe redraw --citations` re-summarises stored results and reports
+the case citations the check removes (P3.45). Session 45 measured a
+corpus-wide definition search over the LEX index for P3.34 (notes only).
 
 Planning tools only, no product change: a new `python -m tools.plan_lint`
 checks the fix plan's structure (one table cell per column, every row in the
