@@ -295,3 +295,271 @@ the scope footer ("an index that is known to be incomplete …").
    in the nation, UK-wide included; results with no stated extent kept, except "UK-wide only"; case
    law not filtered), and correct "comprehensive coverage" in the data-sources box (wording to you;
    a client build); (b) leave.
+
+---
+
+## 6. Follow-up: P3.4's research-mode rule built (user decisions, 2026-10-09)
+
+The user's decisions on sections 1-5: 1 (a) (P4.22 as built; reviewed by the integrator, merging
+after the running replay); 3 (a) and 4 (a) (the integrator books both rows); **6 (a): build the
+default-jurisdiction rule into the research Manager and the Deep Research planner, in the
+conversational wording already approved.** 6 (b) was not chosen: the OUTPUT STRUCTURE extent line is
+untouched. This section is based on `8ad6ba3`. Nothing pushed or merged.
+
+### 6.1 The change (`server_py/src/prompts.py`)
+
+- **One text, never retyped.** `DEFAULT_JURISDICTION_SECTION` is read out of `_MANAGER_CONV_BODY` by
+  `_one_span` ("JURISDICTION:\n" up to "\n\nWHEN USING delegate_research"). The conversational body's
+  triple-quoted literal is byte-identical, so `seam_replay --without-fix` still swaps it.
+  `_one_span` raises if the start is not there exactly once or no end follows it.
+- **The research Manager:** `_RESEARCH_MANAGER_BODY` is `_MANAGER_BODY` with the section placed
+  before "RESEARCH BRIEF CONSTRUCTION:". `_insert_before` raises unless the anchor is there exactly
+  once. `get_manager_system_prompt`'s research branch uses it, and so does `MANAGER_SYSTEM_PROMPT`.
+  That merged constant moved below the conversational body, with a pointer comment left where it was.
+- **The planner:** `PLANNER_JURISDICTION_SECTION` is the same section. Its last bullet's clause "Put
+  the jurisdiction in every `delegate_research` brief" becomes "Put the jurisdiction in the
+  `scope_note`, which every step's brief and the final report carry" (`_for_the_planner`, which
+  raises unless the clause is there exactly once). **This one clause is the only new wording**
+  (decision 8). `get_planner_system_prompt` places it before "RESPECT ACTIVE FILTERS:" for every
+  research mode except `parliamentary_records` and `westminster_records`. `PLANNER_SYSTEM_PROMPT`
+  itself is unchanged.
+- **Dispatch, checked branch by branch** (`get_manager_system_prompt`):
+  - parliament and Westminster return early: no section;
+  - conversational: the conversational body, with the section once;
+  - every other chat mode (none, `research`, `deep_research`, an unknown one) and every research
+    type: the research body, with the section once;
+  - `CONSULTED_PEER_BLOCK` is still appended on all three returns, so a consulted request now gets
+    the section and the block (decision 10).
+  - The Deep Research run uses the planner, not the Manager. The synthesis gets no rule; it reads
+    the `scope_note` (decision 11).
+
+### 6.2 Other prompt text on jurisdiction beside it
+
+| Text | Contradicts? |
+|---|---|
+| Research Manager, RESEARCH BRIEF CONSTRUCTION: "Any jurisdiction constraints (e.g., England and Wales only, Scotland)" | No: the section's last bullet makes it concrete |
+| Research Manager, NO SPECULATION: the example "… its implications for Scotland" | No |
+| Research Manager, PASS-THROUGH ACCURACY ("present their findings exactly as structured") against "say in your answer that this is the position in Scotland" | Mild tension: the Manager must add a line to a report it is told to pass through. The research Worker reads the brief's "for Scotland" and has its own Jurisdiction & Status section, so the sentence can come from either |
+| Research Manager chips and planner `options` rules: jurisdiction offered as a clarification choice | Tension, not contradiction (the conversational Manager carries the same pair, approved): with no jurisdiction named, the rule says answer for Scotland rather than ask |
+| Planner: "Never answer the question directly" against the section's "answer it for Scotland … say in your answer" | **Wording tension** (decision 8) |
+| Planner RESPECT ACTIVE FILTERS | No: the section's third bullet defers to a filter |
+| **Hybrid research Worker, JURISDICTION SCOPE: "retrieve sections ONLY for that jurisdiction's legislation. For a Scotland question, do not pull English, Welsh, or Northern Irish instruments …"** | **Partial contradiction.** The brief now says "for Scotland" on every Legislation & case law question that names none, and "that jurisdiction's legislation" can be read to exclude UK Acts that extend to Scotland, which the rule includes. No stored Research-mode turn ran hybrid, so neither the dry run nor the priced after-column reaches it (decision 9) |
+| Research Workers' extent notes (filter block only) | No: they travel with a filter, and the third bullet defers to the filter |
+| Case-law Worker, DATABASE COVERAGE (no Scottish courts) | No contradiction. Watch: a "for Scotland" brief on a case-law question may lean on the gap (batch 9 D's watch item, now for Research mode too; 6385 is case-law only) |
+| Deep Research synthesis: no general rule applied in a jurisdiction without a cited source | No |
+| Agent A's unmerged P3.12 line for the quick-lookup Worker ("A jurisdiction … selects the law that applies there, not the provisions to report") | No: the same "applies in" reading. Its wording would also fit the hybrid line (decision 9) |
+
+### 6.3 Dry run with the BUILT code
+
+`cd server_py; python ../E/p34r_dryrun.py ../E/oldpkg <RP> ../E/p34r_dryrun.txt`. For every stored
+turn run in Research or Deep Research chat mode, it rebuilds the system prompt that drew the first
+brief (research Manager) or the plan (planner), with the turn's own request config
+(`seam_replay.manager_cfg`), at `8ad6ba3` (an aliased scratch copy) and BUILT:
+
+| Seat | Research type | Filter | Payloads | Moved | Of which only by the section |
+|---|---|---|---|---|---|
+| research Manager | legislation_only | none | 409 | 409 | 409 |
+| research Manager | case_law_only | none | 8 | 8 | 8 |
+| planner | legislation_only | none / Scotland | 93 / 95 | all | all |
+| planner | legislation_and_case_law | none / Scotland | 54 / 3 | all | all |
+
+**662 payloads, 662 move, every one by exactly the inserted section; 0 unchanged, 0 other changes, 0
+errors.** Sessions: the research Manager's are 6333, 6334, 6335, 6338, 6340, 6341, 6343, 6345, 6346,
+6347, 6348, 6350, 6385; the planner's are 6341, 6346, 6347, 6357, 6363, 6365, 6367, 6374, 6375, 6382,
+6383, 6384, 6389, 6406, 6407, 6408, 6409. No stored Research-mode turn ran hybrid. **What a first
+brief or plan then says cannot be dry-run.** It is a model output, and a first-round probe is a paid
+draw (P3.13's lesson: a Manager edit moves the first brief). So this change moves every Research-mode
+first brief and every Deep Research plan of the legislation bot, in the mode P3.2 and P3.3 are
+measured in (batch 9 D's caution, decision 2).
+
+### 6.4 Screen
+
+The section's text is the approved conversational section. P3.4's
+`test_the_new_wording_trips_no_detector` already screens it, unchanged. The one new clause is
+screened in `test_the_scope_note_clause_trips_no_detector` against `NEG_ASSERTED`, `NOT_FOUND`,
+`NEG_TERMS`, `NEG_LIMITS`, `NEGATIVE_EXPLAINED`, `NEG_BLAMED_INDEX`, `NEG_BLAMED_USER`,
+`IN_FORCE_CLAIM`, `_CUR_DISCLOSED`, `_CUR_DATED`, `SCOTS_CASELAW_GAP`, the three halt detectors,
+`OPENER_VOCAB`, `SCHED_LIMIT`, `derivation_claims`, `caselaw_gap_statements`, `_currency_asserted`,
+`negcurrency_claim` and `sched_clause_class`: 0 trips.
+
+### 6.5 Tests, revert, mutants, suite
+
+- New `server_py/tests/test_default_jurisdiction_research.py`, **81 tests**:
+  - the section is the conversational body's own;
+  - the planner's copy differs only in its last bullet;
+  - the research Manager carries it once, after SCOPE and before RESEARCH BRIEF CONSTRUCTION, for
+    every research type, chat mode and flag set (consulted and filtered included);
+  - the merged constant is the old body plus the section only;
+  - the conversational Manager still has it once;
+  - the bots never get it;
+  - the planner carries its copy once, before RESPECT ACTIVE FILTERS (an unknown research mode
+    included), and the planner constant is unchanged;
+  - each guard raises;
+  - the new clause trips no detector.
+- `server_py/tests/test_default_jurisdiction.py` updated (15 lines added, 5 changed): the reach
+  test now expects the rule in the research Manager and the planner for the legislation types, and
+  `MANAGER_SYSTEM_PROMPT` leaves the "carry none" list.
+- **Revert** (`prompts.py` at `8ad6ba3` in the scratch copy; the change is **61 lines added, 2
+  changed**): the new file fails at collection (its module-level `DEFAULT_JURISDICTION_SECTION`), so
+  all 81 fail. The updated P3.4 file: **60 of 131 fail**.
+- **15 single-site mutants, 15 caught** (`python E/p34r_mutants.py`, output `E/p34r_mutants.txt`):
+  1. the research branch on the old body;
+  2. the merged constant from the old body;
+  3. the section at another anchor;
+  4. the planner gate removed;
+  5. the planner insertion removed;
+  6. the planner given the Manager's section;
+  7. the planner section at another anchor;
+  8. `_one_span`'s count guard weakened;
+  9. `_one_span`'s end guard removed;
+  10. `_insert_before`'s guard weakened;
+  11. `_for_the_planner`'s guard weakened;
+  12. Westminster not excluded;
+  13. Holyrood not excluded;
+  14. the end anchor taking the blank line;
+  15. the scope-note clause shortened.
+- **Full suite on `lexchat_test_e`: 3,127 passed** (3,046 + 81).
+
+### 6.6 The after-column, priced (not run)
+
+**Before-column, same mode** (`cd server_py; python ../E/p34_research_before.py . <RP>
+../E/p34_before_p46.txt wave4_p46 wave4_p46_pre`, the BUILT `jx_verdict`, Research chat mode, no
+filter):
+- 6335: 7 of 24 turns PASS. Each pass is t2, on an incidental mention which I read as FAIL by hand
+  (section 3.1).
+- 6350: 0 of 4. 6385: 0 of 8.
+- The first brief names a nation in 0 of 38.
+
+These are the existing scripts (`evidence/scripts/p46_6335.json`, `p46_6350.json`,
+`p46_6385.json`): Research chat mode, `legislation_only` / `legislation_only` / `case_law_only`, the
+same turns. **No new script is needed.** Reusing them puts the same input under both conditions.
+
+Commands (the integrator's, after the usual `replay check` and `replay pin` and the server start;
+`<EV>` = `C:/Projects/LexChat/docs/prepilot-fixes/evidence`; run from `server_py`):
+```
+python -m tools.replay run --script <EV>/scripts/p46_6335.json --reps 3 --out-dir <EV>/replay/wave4_b12_p34r --max-spend 2.00
+python -m tools.replay run --script <EV>/scripts/p46_6385.json --reps 3 --out-dir <EV>/replay/wave4_b12_p34r --max-spend 6.00
+python -m tools.replay run --script <EV>/scripts/p46_6350.json --reps 1 --out-dir <EV>/replay/wave4_b12_p34r --max-spend 1.00
+python -m tools.replay_report --dir <EV>/replay/wave4_b12_p34r modes
+python ../docs/prepilot-fixes/evidence/seam/batch12/E/p34_research_before.py . <EV>/replay <out> wave4_b12_p34r
+```
+The last command is the grade: each turn's `jx_verdict` against the question, and whether the first
+brief names a nation. `replay_report jurisdiction` would need rubric entries for the three bases, and
+rubrics are the integrator's. Then a hand-read, as section 3.1 did.
+
+**Price** (stored costs are `wave4_p46` and `wave4_p46_pre`, head `9ba8ee8` / `d860675`. Today's
+tool volume is higher, so I apply batch 11's measured 1.35 times for the expected cost, and 1.6 times
+the stored maximum for the worst case, the capped-runaway lesson):
+
+| Session (verdict) | Stored per rep | Expected per rep | Worst per rep | n (Invariant 4) | Expected | Worst |
+|---|---|---|---|---|---|---|
+| 6335 (FAIL) | $0.26-0.32 (6 reps, mean $0.29) | $0.40 | $0.50 | 3 | $1.19 | $1.51 |
+| 6385 (FAIL) | $0.41-1.14 (2 reps, mean $0.78) | $1.05 | $1.83 | 3 | $3.15 | $5.48 |
+| 6350 (DEFECT) | $0.31-0.35 (2 reps) | $0.45 | $0.56 | 1 | $0.45 | $0.56 |
+| **Total** | | | | **3 / 3 / 1** | **about $4.80** | **about $7.55** |
+
+At n=1 each, the total is **about $1.90 expected and $2.90 worst** (decision 11). The `--max-spend`
+caps above are per command and checked between reps, so one rep can overrun its cap (FIX_PLAN's
+P3.13 lesson). Keep the running total by hand against the figure the user agrees.
+
+**What this column does not measure:** the planner (the three scripts run Research mode only; a Deep
+Research turn would add about $0.71 a turn, `wave2`'s average), and the hybrid Worker's line
+(decision 9).
+
+### 6.7 Decisions for the user (recommendation first; numbering continues)
+
+8. **The planner's wording.**
+   - (a) **As built:** the approved bullets unchanged, and the last bullet pointed at the
+     `scope_note`, which reaches every step and the synthesis.
+   - (b) Also turn "answer it for … say in your answer" into "plan it for … say in the `scope_note`"
+     for the planner. Its prompt says "Never answer the question directly", but the change is more
+     new words.
+9. **The hybrid research Worker's JURISDICTION SCOPE line.**
+   - (a) **Reword "that jurisdiction's legislation" as "the legislation that applies in that
+     jurisdiction (UK legislation that extends there included)"**, in this branch's next build,
+     screened, wording to you. It now meets a "for Scotland" brief on every Legislation & case law
+     question that names no jurisdiction.
+   - (b) Leave it, and add a hybrid Research-mode turn to the after-column to watch.
+   - (c) Leave it.
+10. **Consulted requests** (another bot asking this one, no `_chat_mode`) now get the rule.
+    - (a) **Keep it:** the legislation bot defaults to Scotland on every route, and a named
+      instrument or jurisdiction still wins.
+    - (b) Exclude `_consulted` (one gate, tested).
+11. **The after-column.**
+    - (a) **n=3 for 6335 and 6385, n=1 for 6350** (Invariant 4): about $4.80, worst about $7.55;
+      compared with `wave4_p46` and `wave4_p46_pre`.
+    - (b) n=1 each: about $1.90, worst about $2.90; a smoke, not an acceptance.
+    - (c) As (a), plus one Deep Research turn for the planner (for example 6389 t1, about $0.71
+      more), and a fresh before-column at this head without the change for the cleanest comparison
+      (doubles the cost).
+
+**Decided (user, 2026-10-09):** 8 (a), the planner wording as built; 9 (a), reword the hybrid
+Worker's line (built in 6.8); 10 (a), keep the rule for consulted requests; 11 (a), the
+after-column at n=3/3/1, which the integrator runs after merging. P4.22 (to `8ad6ba3`) is already
+merged into `fix/prepilot-defects`.
+
+### 6.8 Decision 9 (a) built: the hybrid research Worker's JURISDICTION SCOPE line
+
+**The change** (one line in `WORKER_SYSTEM_PROMPT_HYBRID`'s triple-quoted literal, so
+`seam_replay`'s constant reader still sees one literal; 1 line changed):
+- before: "… retrieve sections ONLY for that jurisdiction's legislation."
+- **as built: "… retrieve sections ONLY for the legislation that applies in that jurisdiction
+  (UK legislation that extends there included)."** This is the user's wording, verbatim.
+- The line's other two sentences are unchanged: "For a Scotland question, do not pull English,
+  Welsh, or Northern Irish instruments even if they appear in Phase 1 results." and "If a judgment
+  you have read cites legislation across several jurisdictions, follow up only on the legislation
+  for the jurisdiction the brief asks about."
+
+**Other prompt text on jurisdiction beside it:**
+
+| Text | Contradicts? |
+|---|---|
+| The research Manager's and planner's section ("the law that applies in Scotland, including UK legislation that extends there") | No: now the same reading |
+| Sentence 2 of the same line (no English, Welsh or Northern Irish instruments for a Scotland question) | No: instruments made for another part are still out; UK legislation is in |
+| Sentence 3 ("the legislation for the jurisdiction the brief asks about") | No contradiction, but it keeps the old, looser phrasing. I left it, because the decision named one phrase; aligning it would add new words |
+| The hybrid Worker's OUTPUT STRUCTURE "Jurisdiction & Status: Geographic scope from the metadata" | No (untouched, as 6 (b) was not chosen) |
+| The hybrid Worker's DATABASE COVERAGE (no Scottish courts) | No: that is about case law |
+| The filter block's extent notes ("the filter keeps those too … has not thereby been shown to apply") | No: they describe rows with no stated extent; the line now asks for what applies, which those notes say is unshown |
+| The legislation-only and case-law research Workers, the quick-lookup Worker, the parliament and Westminster Workers | They carry no JURISDICTION SCOPE line (tested). Agent A's unmerged P3.12 line for the quick-lookup Worker ("selects the law that applies there") reads the same way |
+
+**Dry run with the BUILT code** (`cd server_py; python ../E/hyb_dryrun.py ../E/oldpkg2 <RP>
+../E/hyb_dryrun.txt`). For every stored delegation, it rebuilds the Worker prompt it ran under
+(`get_worker_system_prompt` with the turn's own config), at `7f7ac8c` and BUILT:
+- **220 delegations move, all `legislation_and_case_law` in Deep Research** (57 turns: 6363, 6375,
+  6407, and the `p41_6346_dr` script). Each moves by exactly the phrase.
+- 2,518 do not move: every conversational one (the quick-lookup Worker), every `legislation_only`,
+  every `case_law_only`, and every Research-mode one.
+- No stored Research-mode turn ran hybrid, so the reworded line reaches stored runs only through
+  Deep Research steps.
+- **Invariant 3 watch:** 6375 is in P3.20's acceptance set, and 6363 in P3.22's columns. If this
+  merges before P3.20's acceptance sweep, that sweep's hybrid Deep Research Workers carry the new line.
+
+**Screen** (`python ../E/hyb_screen.py ../E/oldpkg2`, sentence by sentence, before and after):
+0 trips on all three sentences, over `HALT_AS_TIMEOUT`, `HALT_LITERAL`, `HALT_PARAPHRASE`,
+`IN_FORCE_CLAIM`, `NEG_ASSERTED`, `NEG_BLAMED_INDEX`, `NEG_BLAMED_USER`, `NEG_LIMITS`, `NEG_TERMS`,
+`NEGATIVE_EXPLAINED`, `NOT_FOUND`, `OPENER_VOCAB`, `SCHED_LIMIT`, `SCOTS_CASELAW_GAP`, `_CUR_DATED`,
+`_CUR_DISCLOSED`, `MD_LINK`, `derivation_claims`, `caselaw_gap_statements`, `_currency_asserted`,
+`negcurrency_claim`, `sched_clause_class` and the commencement-denied pair. Pinned in a test.
+
+**Tests:** 7 added to `test_default_jurisdiction_research.py` (88 there now):
+- the new phrase and the two unchanged sentences;
+- the line matches the Manager's reading;
+- the built hybrid prompt carries it in each chat mode;
+- no other Worker prompt has a scope line;
+- the detector screen, sentence by sentence, with the sentence count pinned at 3.
+
+**Revert** (`prompts.py` at `7f7ac8c`, the 1 changed line): 5 of 88 fail.
+**Mutants** (`python E/hyb_mutants.py`, output `E/hyb_mutants.txt`; failing tests named per
+mutant): **8 of 8 caught**:
+- the parenthesis dropped;
+- "applies in" turned to "made for";
+- sentence 2 changed;
+- sentence 3 changed;
+- a negative clause added to the phrase;
+- a fourth sentence added (the count guard);
+- a negative inside sentence 1, which only the detector loop catches;
+- the line also given to the legislation Worker.
+
+A first draft of the "detector loop only" mutant ("when nothing was found") tripped no detector,
+so it was not a real mutant of the screen. It was replaced.
+**Full suite on `lexchat_test_e`: 3,134 passed** (3,127 + 7).

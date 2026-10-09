@@ -13,7 +13,9 @@ Two changes, both in `src/prompts.py`:
 2. **A default-jurisdiction rule** in the two prompts P3.4's acceptance
    sessions run on, the conversational Manager and the quick-lookup Worker, and
    in no other: no jurisdiction named means Scotland, said so; "the UK" means
-   each of the four parts, with divergence flagged.
+   each of the four parts, with divergence flagged. (Since P3.4's research-mode
+   follow-up, batch 12 E, the research Manager and the Deep Research planner
+   carry the same section: `test_default_jurisdiction_research.py`.)
 
 Every test here fails with `prompts.py` restored to the commit before P3.4.
 """
@@ -114,7 +116,7 @@ _EXTRAS = (
 @pytest.mark.parametrize("extra", _EXTRAS)
 @pytest.mark.parametrize("chat_mode", (None, "research", "conversational", "deep_research"))
 @pytest.mark.parametrize("research_mode", RESEARCH_TYPES + BOT_MODES)
-def test_the_rule_reaches_exactly_the_conversational_manager_and_quick_lookup_worker(
+def test_the_rule_reaches_the_managers_planner_and_quick_lookup_worker_only(
         research_mode, chat_mode, extra):
     """Every dispatch branch of the three prompt builders (the parliament and
     Westminster branch returns early, P0.5's lesson), every flag that swaps
@@ -124,13 +126,18 @@ def test_the_rule_reaches_exactly_the_conversational_manager_and_quick_lookup_wo
         cfg["_chat_mode"] = chat_mode
     cfg = cfg or None
     quick = chat_mode == "conversational" and research_mode not in BOT_MODES
+    # P3.4's research-mode follow-up (batch 12 E): the research Manager and the
+    # Deep Research planner carry the Manager rule too, for the three legislation
+    # research types; the bots never do, and no research Worker does.
+    legislation_bot = research_mode not in BOT_MODES
     manager = prompts.get_manager_system_prompt(research_mode, cfg)
     worker = prompts.get_worker_system_prompt(research_mode, cfg)
     planner = prompts.get_planner_system_prompt(research_mode, cfg)
-    assert (MANAGER_RULE in manager) is quick
+    assert (MANAGER_RULE in manager) is legislation_bot
     assert (WORKER_RULE in worker) is quick
     assert WORKER_RULE not in manager and MANAGER_RULE not in worker
-    assert MANAGER_RULE not in planner and WORKER_RULE not in planner
+    assert (MANAGER_RULE in planner) is legislation_bot
+    assert WORKER_RULE not in planner
 
 
 @pytest.mark.parametrize("research_mode", RESEARCH_TYPES + BOT_MODES)
@@ -140,7 +147,10 @@ def test_the_rule_is_not_in_the_deep_research_synthesis(research_mode):
 
 
 def test_the_research_prompts_carry_no_default_jurisdiction():
-    for name in ("MANAGER_SYSTEM_PROMPT", "WORKER_SYSTEM_PROMPT", "WORKER_SYSTEM_PROMPT_HYBRID",
+    # MANAGER_SYSTEM_PROMPT carries it since P3.4's research-mode follow-up
+    # (`test_default_jurisdiction_research.py`); PLANNER_SYSTEM_PROMPT does not:
+    # the planner builder inserts it for the legislation research types only.
+    for name in ("WORKER_SYSTEM_PROMPT", "WORKER_SYSTEM_PROMPT_HYBRID",
                  "WORKER_SYSTEM_PROMPT_CASE_LAW", "PLANNER_SYSTEM_PROMPT",
                  "PARLIAMENT_MANAGER_SYSTEM_PROMPT", "WESTMINSTER_MANAGER_SYSTEM_PROMPT"):
         text = getattr(prompts, name)
