@@ -99,6 +99,13 @@ def test_a_qualified_removal_carries_its_qualifier(effect, qualifier):
     assert classify_removal(effect) == (QUALIFIED, qualifier)
 
 
+def test_words_win_over_part_where_both_are_named():
+    """No stored type names both; "words only" is the reading that does not
+    permit "no longer in force", so it wins."""
+    assert classify_removal("entry repealed in part") == (WORDS_ONLY, "")
+    assert classify_removal("words omitted in part") == (WORDS_ONLY, "")
+
+
 def test_a_lower_case_bracket_is_not_a_territory():
     """The territory codes are capitals; "(s)" is a plural, "(a)" a paragraph."""
     assert classify_removal("word(s) repealed")[0] == WORDS_ONLY
@@ -126,7 +133,7 @@ def test_nothing_else_is_a_removal_of_the_subject(effect):
 def test_counts_from_an_effect_histogram():
     eff = {"repealed": 3, "repealed in part": 2, "omitted": 1, "words omitted": 4,
            "repealed (prosp.)": 1, "power to repeal conferred": 5,
-           "coming into force": 9, "odd": "x"}
+           "coming into force": 9, "odd": "x", "omitted (temp.)": "2", "revoked": None}
     assert counts_from_effects(eff) == {PROVISION_KEY: 6, WORDS_ONLY_KEY: 4,
                                         QUALIFIED_KEY: 1}
     assert counts_from_effects(None) == {PROVISION_KEY: 0, WORDS_ONLY_KEY: 0,

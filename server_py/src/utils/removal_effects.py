@@ -53,13 +53,15 @@ QUALIFIED_KEY = "qualified_removal_relations"
 LEGACY_KEY = "repeal_or_revocation_relations"
 
 # A removal word that does not remove anything from the subject: a power
-# conferred, a removal of an EARLIER amending or commencing provision (the
-# subject's text is untouched by it), an expiry or saving for one, functions
-# that cease to be exercisable. Each matched a naive widening on the stored
-# vocabulary (14 "omitted in earlier amending provision" types alone).
+# conferred, a removal or expiry of an EARLIER amending or commencing provision
+# (the subject's text is untouched by it), a saving for one. Each matched a
+# naive widening on the stored vocabulary (14 "omitted in earlier amending
+# provision" types alone). Batch 12 G's rule also named "expiry of" and
+# "functions cease": every stored "expiry of" type is "of earlier affecting
+# provision" or a "saving for" one, and no "functions ..." type carries a
+# removal word, so neither alternative excluded anything the others do not.
 _NOT_SUBJECT = re.compile(
-    r"conferred|earlier\s+(?:affecting|amending|commencing)|^\s*saving\s+for"
-    r"|^\s*expiry\s+of|functions\s+cease", re.I)
+    r"conferred|earlier\s+(?:affecting|amending|commencing)|^\s*saving\s+for", re.I)
 
 # The removal families. "rev" is legislation.gov.uk's abbreviation in older
 # entries ("rev (saving)", "rev. (saving)", "rev in pt (...)").
@@ -96,10 +98,12 @@ def classify_removal(effect: Any) -> tuple:
     for name, rx in _QUALIFIERS:
         if rx.search(t):
             return QUALIFIED, name
-    if _IN_PART.search(t):
-        return PROVISION_IN_PART, ""
+    # Words before part: no stored type carries both, and of the two readings
+    # "words only" is the one that does not permit "no longer in force".
     if _WORDS.search(t):
         return WORDS_ONLY, ""
+    if _IN_PART.search(t):
+        return PROVISION_IN_PART, ""
     return PROVISION, ""
 
 
