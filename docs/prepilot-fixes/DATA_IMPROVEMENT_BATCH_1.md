@@ -1,5 +1,7 @@
 # Data-improvement batch 1: size every "measure first" data improvement in one pass
 
+> **MERGED INTO `PARALLEL_BATCH_12.md` (2026-10-09, user decision): do not run this file on its own.** Its agents A and C are batch 12's agent F; its agents B and D are batch 12's agent G (D's item 3 is batch 12's agent A, D's item 5 batch 12's agent D). Its sections are given verbatim from here.
+
 **Set up on 2026-10-09, at the user's request** ("is it worth re-planning with the data improvements in mind?"
 ... "yes"), after P3.31 (the made-under record) was built and the data-improvement rows P3.32 to P3.44 were
 booked. It follows the parallel-batch pattern (`PARALLEL_BATCH_1.md` to `_11.md`): agents in git worktrees, the
