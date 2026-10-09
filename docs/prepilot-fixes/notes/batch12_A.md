@@ -1,4 +1,4 @@
-# Parallel batch 12, agent A: P3.12, the seam relay read, the wrong-pinpoint rate, the exact-paragraph route probed, and a jurisdiction candidate ($0)
+# Parallel batch 12, agent A: P3.12, the seam relay read, the wrong-pinpoint rate, the exact-paragraph route probed, a jurisdiction candidate (not taken), and the answer-seam lever ($0)
 
 **Branch:** `worktree-agent-aff4f776be97c42f5`. **Base:** `<INTEGRATOR_HEAD>` = `a99e4d4`. The worktree came up
 on `main` (`a6b4a76`) with no commits, so I ran `git reset --hard a99e4d4` before anything else. No other
@@ -10,7 +10,10 @@ commit reached my branch while I worked.
 - `560cf8e` fix(prepilot): P3.12 candidate, a jurisdiction selects the law, not the provisions (quick-lookup
   Worker prompt + tests), built after the integrator's second relay (section 10), **not merged: its wording is
   the user's** (decision 11.2);
-- this commit: the note, sections 10 and 11 added.
+- `1b2b41b`: the note, sections 10 and 11 added;
+- `349cfd6`: revert of `560cf8e` (relay 3: W1 not taken; the branch carries no W1);
+- `3e3dce9` fix(prepilot): P3.12 lever, code-written schedule paragraph lines at the answer seam (`utils/paragraph_restore.py`, wiring in `agent_core.py`, 51 tests), **not merged: the line's content and wording are the user's** (section 13);
+- this commit: the note, sections 12 and 13 added.
 
 **Spend:** $0 in model spend. No model call, seam draw, replay or server. The seam draws this note reads were
 the integrator's (relayed by message: four composition-seam draws, $0.1866; then eight as-sent draws, $0.3677). **Live calls: 12 of the 20 agreed** (10 through LEX's
@@ -20,8 +23,8 @@ each logged (method, URL, status, bytes, time) in `call_log.jsonl`. Every stored
 `google/gemini-3.1-pro-preview` and was summarised at the 8,000-character fallback; no number comes from
 `glm-5.2:cloud`.
 
-**Tests:** full suite **3043 passed** on `lexchat_test_a` with `TEST_DATABASE_URL` set (`pytest_full2.txt`;
-3017 at the base, `pytest_full.txt`, plus the candidate's 26).
+**Tests:** full suite **3068 passed** on `lexchat_test_a` with `TEST_DATABASE_URL` set (`pytest_full3.txt`:
+3017 at the base, plus the lever's 51; W1's 26 went with its revert).
 
 **Scratch:** my worktree's gitignored `docs/prepilot-fixes/evidence/seam/batch12/A/` (`git check-ignore -v`:
 `.gitignore:113`), copied at the end to `C:/Projects/LexChat/docs/prepilot-fixes/evidence/seam/batch12/A/`.
@@ -267,6 +270,9 @@ pattern).
   no grader, seam tool or other prompt changed. The `wind up` grader fix and the `_paragraphs` /
   all-or-nothing finding are decisions, not edits.
 - I did not draw the prompt-swapped payloads or the first-round probe; I built and dry-ran them.
+- (Relay 3) I did not build the sub-paragraph line (decision 13.3; prototype only), a correcting line for the
+  wrong pinpoint (decision 13.4), or the lever on the research-mode Manager or the Deep Research synthesis
+  (decision 13.5). No grader changed. No further live call (12 in all).
 - I did not draw the as-sent payloads; I built and dry-ran them (`--dry-run`).
 - I did not edit FIX_PLAN, SESSION_LOG, a rubric, the tracker, CLAUDE.md or a memory file. No push, no merge.
 
@@ -484,7 +490,7 @@ nothing outside the question appears (rep 1's block carries a span from paragrap
 "Scotland"; the sentence must not pull it in). In noscot rep 1, whether the brief alone flips rep 1 as it flipped
 rep 3.
 
-## 11. Decisions for the user (revised after relay 2; supersedes section 9)
+## 11. Decisions for the user (revised after relay 2; superseded by section 13)
 
 Section 9's decision 1 was approved and drawn (section 10.1). The others are restated here as they now stand.
 
@@ -526,6 +532,226 @@ Section 9's decision 1 was approved and drawn (section 10.1). The others are res
       shortfalls; the composition seam reproduced none, and two earlier levers moved it and not the live runs.
    2. **Keep both**, the composition seam for a cheap first look. It costs the same per draw, so there is little
       to save.
+
+## 12. Relay 3: W1 not taken; the answer-seam lever built
+
+**The candidate draws (the integrator's, $0.4366 with the first-round probe; outputs gitignored in
+`evidence/seam/batch12/integrator/swap/`), read by hand; the integrator's read holds:**
+
+| Payload | Draws | By hand |
+|---|---|---|
+| W1 swapped in, sweep rep 1 | 2, byte-identical | 42 **still absent** (43's limbs and 44 present) |
+| W1, sweep rep 2 | 2, identical | DELIVERED (42(2)-(4), 43(2), (5), (6), 44 with its trigger) |
+| W1, sweep rep 3 | 2, distinct | one full (42, 43, 44); one with **44 absent** |
+| rep 1 with " for Scotland" removed (recorded prompt) | 1 answered, 1 tool call | full: 42, 43 and 44, each with its sub-paragraphs |
+| first round, candidate against main checkout, reps 1 and 3 | 1 each side | the same 2 calls (`search_legislation`, `search_case_law`) on both sides: no drift |
+
+So W1 fixed 1 of the 2 failing payloads (rep 3, in 1 of 2 draws), and the brief change fixed both (rep 3 in
+relay 2, rep 1 here). **User decision (2026-10-09): the lever is code-written lines at the answer seam; W1 is not
+taken.** `560cf8e` is reverted (`349cfd6`); the branch carries no W1.
+
+### 12.1 What was built (`3e3dce9`, not merged)
+
+`server_py/src/utils/paragraph_restore.py` (new) and three wiring sites in `server_py/src/agent/agent_core.py`:
+
+- **`handed_paragraphs(tool_result)`** reads the route's own PROVISION FETCHED BY CODE blocks back out of a tool
+  result: each paragraph the route cut **exactly** (its label "Paragraph N of <unit>, cut at its own heading and
+  the next one:"), from a block that handed over named paragraphs (CUT) or query-matched ones (MATCHED), with the
+  instrument, the unit, the unit's URL (where the provision list gave one), the heading and the cut text. Never a
+  span, a to-the-end piece, the heading list, an annex chapter, a whole unit or a summary. A piece whose text does
+  not open with its own "Section N)" line is skipped.
+- **`run_worker_agent`** applies it to every tool result its Worker receives (a memo hit included) and returns the
+  records as `result["handed_paragraphs"]`; **`process_user_request`** collects them across delegations.
+- **`restore_dropped_paragraphs(answer, records)`**, at the conversational Manager's answer seam, straight after
+  P3.13's `restore_dropped_siblings` and before P1.6's link enforcement (so the line's link is checked too), under
+  the same gate (conversational, the answer not failed). A paragraph goes back when **all** of:
+  1. the answer cites its number nowhere (after a paragraph word; lists, ranges and sub-paragraph pinpoints
+     count: "paragraphs 42 to 44", "para 43(5)");
+  2. the answer mentions its unit ("Schedule B1", "Sch B1", or the unit's URL);
+  3. the answer cites a **sibling** by number: a paragraph handed in the same block, every paragraph of a block
+     the query named, and in a query-matched block one whose heading shares a word with this one's (so a
+     paragraph matched on another query word, like batch 10's paragraphs 6, 15 and 23, is never added);
+  4. the answer does not already say what the excerpt says (60% of its content words in one sentence);
+  5. once per paragraph however many blocks handed it; at most **3** lines.
+  The line goes after the answer paragraph (the blank-line block) holding the first sibling citation, so it is
+  never the answer's first sentence.
+- **`misattributed_paragraphs(answer, records)`**: a sentence that cites exactly one handed paragraph P, shares no
+  distinctive word (five letters or more, in P's text and no other handed paragraph's) of P's and at least 3 of
+  another's, Q's. **Reported only**: the seam logs a warning; nothing in the answer changes (decision 13.4).
+
+**The line, as built (option B):**
+
+> Also in [Schedule 5](http://www.legislation.gov.uk/ssi/1901/3/schedule/5), paragraph 2 (Widget fees): "(1) This paragraph applies where a licence is sought and— (a) the dealer is new, or (b) the licence has lapsed. (2) The fee is set by the Minister."
+
+(Rendered by the BUILT code on the tests' synthetic Schedule; the four lines the stored answers would gain
+are in the gitignored `dryrun_restore.txt`: 559, 376, 559 and 376 characters for the row's paragraphs 42
+and 44.)
+
+The excerpt is whole sub-paragraphs from the first operative one, within 450 characters: a bare "This paragraph
+applies to <X>." line is skipped (a paragraph that is nothing else keeps it); an application line with limbs is
+operative and kept (paragraph 44's (1)); items are joined to their sub-paragraph as "(a) ...". Where the first
+operative sub-paragraph alone is over 450 characters, the line carries the heading only. Square brackets in the
+statutory text become round ones (a markdown link or a tool block must not open inside the quote). Template words
+only; every statutory word is the route's cut, never generated.
+
+**The three content options for the user (how much statutory text a line carries).** Each is the one constant
+`MAX_EXCERPT_CHARS`; rendered on the stored payload's three paragraphs (`screen_restore.txt`):
+
+| Option | Constant | Paragraph 42 | 43 | 44 | What it gives the lawyer |
+|---|---|---|---|---|---|
+| **B (recommended, built)**: heading + opening operative sub-paragraphs, whole, within 450 | 450 | 559 chars, (2)-(4) | 492, (2)-(3) | 376, (1) | the paragraph's operative rule in its own words; `depth` reads 42 and 44 at depth |
+| A: the heading only (a pointer) | 0 | 132 | 129 | 114 | where to look, no content; `depth` would not read the paragraph as delivered |
+| C: the whole paragraph | 2,500 | 746 | 1,463 | 2,007 | everything, at up to 2K characters a line in a conversational answer |
+
+### 12.2 Dry run with the BUILT code (every stored answer it could touch)
+
+`python <scratch>/dryrun_restore.py > dryrun_restore.txt` from `server_py/`: every turn in **all 68 replay
+directories** (two were added during this batch: the integrator's `wave4_b12_p310` and `wave4_b12_p320`) whose
+Worker was handed any FETCHED block, plus every 6335 turn 7: **36 turns read; 5 carry an exactly cut paragraph
+(the other 31 blocks are whole units, summaries, annex chapters or negatives); 4 answers move, all conversational,
+all 6335 turn 7; 0 non-conversational answers would move; 1 misattribution reported, the known true case.**
+
+| Answer | Paragraphs handed | Lines added | `depth` (42, 43, 44) before -> after |
+|---|---|---|---|
+| `wave4_b10_sweep` 6335 rep 1 turn 7 | 42, 43, 44 (matched) | 42 (559 chars), 44 (376) | coarse, coarse, coarse -> **deep**, coarse, **deep** (SHALLOW -> PARTIAL) |
+| `wave4_b11_sweep` rep 1 | 42, 43, 44 (matched) | 42 | coarse, coarse, deep -> **deep**, coarse, deep (PARTIAL) |
+| `wave4_b11_sweep` rep 2 | 42-44 (matched and cut) | 44 | deep, coarse, coarse -> deep, coarse, **deep** (PARTIAL); misattribution reported (43's words under "paragraph 42") |
+| `wave4_b11_sweep` rep 3 | 42, 43, 44 (matched) | 42, 44 | coarse x3 -> **deep**, coarse, **deep** (SHALLOW -> PARTIAL) |
+| `wave4_b8_sweep` rep 3 | 42 (cut, alone) | none: no sibling handed | PARTIAL unchanged |
+
+Read by hand: each line lands after the paragraph citing 43, before the case-law paragraph; each reads as the
+paragraph's own words, and none repeats what the answer says. **43 stays coarse on all four**, because the
+answers cite 43 (by its (5) or (6)) and the lever restores only a paragraph the answer names nowhere; P3.12's
+acceptance needs 43's security limb too, which none of the four answers states. A $0 prototype of one more line,
+the uncited operative sub-paragraphs of a paragraph the answer cites only at sub-paragraph level (P3.13's sibling
+rule one level down; `proto_subs.py`, scratch, not product code), takes **2 of the 4 to DELIVERED** by `depth`
+(399 characters more) and leaves 2 PARTIAL (decision 13.3).
+
+On the stored **seam draws** of this turn (as answers, with the paragraphs of the payload they were drawn from):
+as-sent rep 1 PARTIAL -> **DELIVERED**; as-sent rep 3, 2 draws, PARTIAL -> **DELIVERED**; W1 rep 1 PARTIAL ->
+PARTIAL (42 added; 43 there coarse); W1 rep 3 draw 1 PARTIAL -> **DELIVERED**; the three that already delivered or
+named every paragraph, untouched.
+
+**Input forms no stored run holds, tested on synthetic input** (`tests/test_paragraph_restore.py`, every block
+built by the product's own `cut_pieces`, `matched_pieces` and `fetched_block`): a lettered paragraph ("2A"); a
+headed line with no heading words (the line then has no parenthesis); an unlabelled unit ("the Schedule", which
+opens a line as "The Schedule"); the text fallback (no URL, so no link); an annex chapter (never read); a span and
+a to-the-end piece (never read); a whole or summarised unit (never read); a paragraph with no sub-paragraphs; a
+lone application line; a first sub-paragraph over the cap (heading only); square brackets; one paragraph handed in
+two blocks (one line); two units (no cross-unit siblings); a sub-paragraph pinpoint in the answer ("para 1(3)"
+counts 1 as cited); a matched block mixing two query words (only the cited paragraph's heading group). **The value
+class "a paragraph in an annex"**: the route cuts an annex by chapter, never by paragraph, so there is no annex
+paragraph to restore; an annex chapter block yields no record (tested), and that is the design (P3.2's criterion
+(v) is met by the chapter handover itself).
+
+### 12.3 Screens (BUILT code)
+
+- `python <scratch>/screen_restore.py` (the integrator's `b9_screen`, every answer-reading detector whole and per
+  sentence): **16 texts** (7 synthetic value classes, and options A, B and C on the stored payload's three
+  paragraphs). **2 trips, both `OPENER_VOCAB` on one word of paragraph 43's own statutory text** (a word the
+  detector's agreement-opener stem matches), options B and C. Not a real trip: `OPENER_VOCAB` reads only the answer's first
+  sentence (`replay_report` line 8108), and a restored line is never first
+  (`test_a_line_is_never_the_answers_first_sentence`). The template's own words trip nothing.
+- `test_every_line_variant_trips_no_detector` (in the product's tests): the 7 synthetic variants against
+  `NEG_ASSERTED`, `NOT_FOUND`, `NEG_TERMS`, `NEG_BLAMED_INDEX`, `NEG_BLAMED_USER`, `NEG_LIMITS`,
+  `NEGATIVE_EXPLAINED`, `IN_FORCE_CLAIM`, `_CUR_DISCLOSED`, `_CUR_DATED`, `SCOTS_CASELAW_GAP`, the halt detectors,
+  `OPENER_VOCAB`, `SCHED_LIMIT`, `SCHED_INDEX_NEG`, `_P312_NOT_DELIVERED`, `derivation_claims`,
+  `caselaw_gap_statements`, `sched_unit_clauses`, and per sentence `_CMC_*`, `_currency_asserted`,
+  `negcurrency_claim`, `sched_clause_class`; `_scripted_counts` 0; no "ranked" or "cut short"; the only square
+  brackets are the unit's own link.
+- **The statutory text varies with the instrument**, so a restored line can carry words a grader reads (here
+  that word; elsewhere a "not" in a provision). That is true of every answer that quotes a provision; the
+  graders that read answers whole should be read with it in mind (decision 13.6).
+
+**Other code texts beside it** (the lesson): P3.13's "Also in s.N:" notes (the same seam, the same "Also in"
+form, never for a schedule URL: `_section_key` refuses one, so the two never write about the same provision);
+the scope footer (appended later, after the line); P1.6's link enforcement (runs after, so the unit link is
+checked against the URLs tools returned: the route harvests the unit's URL, `retrieved_urls`); P4.14's
+footer-echo strip and P3.2's opener strip (run before; the line is not an opener). None contradicts it. The
+Worker-facing FETCHED tail (batch 11 A) is unchanged.
+
+### 12.4 Tests, revert, mutants
+
+`server_py/tests/test_paragraph_restore.py`, **51 tests** (reading the blocks, the excerpt, restoring, the
+misattribution report, the wiring through `run_worker_agent` and `process_user_request` in all three chat modes,
+the detector screen).
+
+**Revert:** restoring `agent_core.py` to `349cfd6` and removing `paragraph_restore.py` on a scratch copy (`revert_restore.py`) removes **351 lines** (the module's 325 and the wiring's 26 net); the restore's test file then fails at collection (1 error: the module is gone), P3.13's 46 pass. A revert that fails only at import proves little, so every guard and every wiring site has its own mutant below.
+
+**Single-site mutants** (`mutants_restore.py`, each on a scratch copy, running this file and P3.13's
+`test_manager_siblings.py`): **29 of 29 caught**, the control passing (97) (`mutants_restore.txt`): reading (any block kind read; a label naming another unit read; the heading-line check dropped; other labels not ending a piece; the URL not read), the excerpt (the bare application line kept; a lone one dropped; no cap; items not joined; brackets not cleaned; the heading-only fallback not taken), restoring (a cited paragraph restored again; the unit need not be mentioned; no cited sibling needed; every matched paragraph a sibling; no restatement guard; restatement on any shared word; no dedupe; no line cap; inserted at the end; lists and ranges not read as cited), the report (two-number sentences judged; own words not clearing; shared words counted as distinctive; one shared word enough), and the wiring (the Worker run not recording; its result not carrying them; the Manager not collecting them; the restore outside the conversational gate). **Two corrections on the way:** the first mutant run copied no `pytest.ini`, so every test errored, the control included, and it proved nothing (fixed and rerun); and one guard survived ("a unit with one handed paragraph is not judged"), because the comparison already finds no other paragraph to match, so it only restated the rule and was removed. The report's stop list was also cut to generic words: a word every handed paragraph shares is removed by the comparison itself.
+
+**Full suite:** **3068 passed** on `lexchat_test_a` (3017 + 51; `pytest_full3.txt`). The report re-checked with the built code over all 64 stored turn-7 texts (answers, reports, every seam draw) with paragraphs 42-44 as handed: 2 flags, the known case in its answer and its report; 0 others (`misattr_all.txt`).
+
+### 12.5 The seams: the conversational Manager, and Deep Research
+
+- **Conversational Manager: built**, where P3.13's restore runs. All four moved stored answers are there.
+- **Research-mode Manager: not built.** It is told to pass the Worker's report through; no stored research-mode
+  turn had a paragraph cut by the route (every research-mode 6335 turn 7 predates it). One line moves the call
+  outside the gate if wanted (mutant x4 shows the tests pin the gate).
+- **Deep Research synthesis: not built, not needed on the evidence.** 0 of the 18 stored Deep Research turns that
+  carry a FETCHED block carry an exactly cut paragraph (their blocks are whole units, annex chapters and
+  negatives). If wanted, the same function applies to the synthesis output with the step records
+  (`run_deep_research` already holds each step's worker result).
+
+### 12.6 A draw to check it?
+
+**None needed.** The lever is code after the model has written: the dry run above applies the BUILT function to
+the stored answers and payloads exactly as the product would, and a seam draw would only redraw the Manager's
+answer, whose variation the dry run already spans (4 stored answers, 8 seam draws). What a draw cannot show either
+is the live rate of misattribution, which only a sweep measures. The acceptance for P3.12 is a 6335 n=3 replay
+(about $1.95 at `wave4_b11_sweep`'s cost), priced by the integrator; on the dry run's evidence expect 42 and 44
+delivered and 43 depending on the Manager's own sentence unless decision 13.3's sub-paragraph line is added.
+
+## 13. Decisions for the user (after relay 3; supersedes sections 9 and 11)
+
+The user's decision of relay 3 stands: the lever is code-written lines at the answer seam, and W1 is not taken
+(section 11's decisions 2.1-2.4 are closed by it). Open now:
+
+1. **Merge the lever (`3e3dce9`)**, wording and content the user's.
+   1. **(Recommended) Merge as built**: option B lines, conversational Manager only, at most 3 lines, the
+      misattribution reported in the log only. Moves 4 stored answers (all P3.12's turn), 42 and 44 to depth on
+      each; nothing else moves.
+   2. **Merge with option A** (the heading only, `MAX_EXCERPT_CHARS = 0`): the shortest line, a pointer; it does
+      not give the paragraph's content, so P3.12's acceptance (each paragraph "with its facts") cannot be met by it.
+   3. **Merge with option C** (the whole paragraph, `MAX_EXCERPT_CHARS` 2,500): every limb, up to 2,007
+      characters a line on this turn, three such lines in a conversational answer.
+2. **The line's template words** (Worker-free, lawyer-facing): "Also in <unit>, paragraph <N> (<heading>):
+   "<statutory text>"" (or "...(<heading>)." with no excerpt).
+   1. **(Recommended) As built**, P3.13's "Also in" form, so the two restore lines read alike.
+   2. **Say where it came from**, e.g. "Also retrieved, <unit>, paragraph <N> ...". Clearer provenance, one more
+      word; screen again before merge.
+3. **A paragraph the answer cites only in part** (43 by its (5) or (6)), which keeps P3.12's turn at PARTIAL.
+   1. **(Recommended) Build the sub-paragraph line next, measured first**: for a handed paragraph the answer cites
+      only at sub-paragraph level, the uncited operative sub-paragraphs as one more line (P3.13's sibling rule one
+      level down). The scratch prototype takes 2 of the 4 stored answers to DELIVERED (+399 characters). Its own
+      guards (what counts as cited, restatements) need building and testing as these did.
+   2. **Leave it**, and judge P3.12 on 42 and 44 restored, 43 as the Manager wrote it.
+4. **The wrong pinpoint.**
+   1. **(Recommended) Report only, as built** (a log warning per sentence): 1 true case in the stored answers, 0
+      false, but one case and one Schedule are not enough to put a correction in front of a lawyer. Count it over
+      the next sweep.
+   2. **Add a line** ("Paragraph N of <unit> is <heading>; the words above are in paragraph M") where it fires. A
+      false positive would put a wrong correction in an answer.
+   3. **Also count it on the audit trace** (a new optional key; an audit-schema change, so the eval harness owner
+      is told).
+5. **Other seams.**
+   1. **(Recommended) Conversational Manager only**, as built; no stored research-mode or Deep Research turn had a
+      paragraph cut by the route.
+   2. **Also the research-mode Manager** (one line moved outside the gate).
+   3. **Also the Deep Research synthesis** (the step workers' records, applied to the synthesis output).
+6. **Graders that read answers whole, now that answers quote more statutory text.** A restored line carries
+   statute (here a word `OPENER_VOCAB` matches, though it reads only the first sentence).
+   1. **(Recommended) Note it in the hand-read rubric** for the next sweep: a grader trip inside an "Also in" line
+      is the statute's word, not the model's.
+   2. **Have `replay_report` strip "Also in" lines before the negative and opener graders**, as it strips the
+      footer. A grader change, the integrator's file.
+7. **Carried unchanged from sections 9 and 11:** the all-or-nothing paragraph cut and the comma-list misread
+   (recommended: hand over the paragraphs that cut, state the rest); the `depth` 42 regex ("wind up";
+   recommended: extend it); the exact-paragraph route (recommended: book it under P3.38); the as-sent seam as the
+   instrument for Worker-facing levers (recommended).
+8. **The acceptance run** (the integrator's, priced first): 6335 n=3 with the lever merged, about $1.95 at
+   `wave4_b11_sweep`'s cost, up to about $3 with a capped runaway. No seam draw is needed first (section 12.6).
 
 ---
 
