@@ -71,6 +71,27 @@ SUMMARY_GLOSS_RULE = (
 )
 
 
+def check_summary_citations(summary: str, source, query: str = "") -> str:
+    """P3.45: the summary with every case citation its source does not hold
+    removed (`utils.summary_citations.strip_unsourced_citations`, which says
+    what goes and why). Run on every summary the Worker is handed: a fresh
+    one here, and a local-cache hit in `run_worker_tool`, so a row stored
+    before this check is checked when it is served. Fail-soft: the summary
+    comes back unchanged on any error."""
+    try:
+        from ..utils.summary_citations import strip_unsourced_citations
+        checked, removed = strip_unsourced_citations(summary, source, query)
+    except Exception as e:   # Invariant 5
+        logger.warning(f"[SummaryCheck] skipped: {type(e).__name__}")
+        return summary
+    if removed:
+        actions = ", ".join(sorted({r["action"] for r in removed}))
+        logger.info(f"[SummaryCheck] removed {len(removed)} case citation(s) the summarised "
+                    f"text does not hold ({actions}; {len(summary) - len(checked)} chars)")
+        logger.debug(f"[SummaryCheck] removed: {[r['citation'] for r in removed]}")
+    return checked
+
+
 def summarise_prompt(text: str, query: str) -> str:
     return (
         "You are summarising a piece of UK legislation to assist with a legal research question.\n\n"
@@ -126,7 +147,7 @@ async def summarise_for_query(
         if result is None:
             logger.warning("[Summarise] Single-chunk summarisation failed, returning original text")
             return text, True
-        return result, False
+        return check_summary_citations(result, text, query), False
 
     # Split into chunks and summarise each.
     chunks = [
@@ -169,8 +190,8 @@ async def summarise_for_query(
         final = await chunk_fn(combined, query, model, timing_collector=timing_collector)
         if final is None:
             logger.warning("[Summarise] Final consolidation failed — returning combined partials")
-            return combined, True
+            return check_summary_citations(combined, text, query), True
         logger.info(f"[Summarise] Consolidated to {len(final)} chars")
-        return final, degraded
+        return check_summary_citations(final, text, query), degraded
 
-    return combined, degraded
+    return check_summary_citations(combined, text, query), degraded
