@@ -222,6 +222,12 @@ def test_a_document_with_no_body_is_no_text_and_names_its_scan():
     p = pt.parse_published(_doc(body=False))
     assert p["text"] == "" and p["pdf"] == f"https://www.legislation.gov.uk/{LID}/pdfs/x.pdf"
     assert pt.parse_published(_doc(body=False, pdf=False))["pdf"] == ""
+    # a scan's stub can carry its prelims (number, title) and still no body:
+    # that is no text, not a one-line instrument
+    prelims_only = (f'<Legislation {NS} DocumentURI="{LEG}/{LID}/made"><Secondary>'
+                    "<SecondaryPrelims><Number>1901 No. 3</Number><Title>The Widget Order "
+                    "1901</Title></SecondaryPrelims></Secondary></Legislation>")
+    assert pt.parse_published(prelims_only)["text"] == ""
 
 
 @pytest.mark.parametrize("page", [
@@ -381,6 +387,21 @@ def test_the_block_says_where_the_text_came_from_and_carries_it():
            "schedule)" in b2
     assert "below is a summary of that retrieved text" in b2
     assert pt.has_published_text(b) and pt.has_published_text(b2)
+    # what the version read cannot show, per version
+    assert "The version as made shows no later amendment or revocation and says nothing " \
+           "about the instrument's status today." in b
+    assert "This text by itself says nothing about the instrument's status today." in b2
+    assert "because the index lacks it." in b and "because the index holds none of its " \
+           "text." in b2
+
+
+def test_a_bracket_in_a_title_cannot_end_the_blocks_header_early():
+    outcome = dict(_ok(), title="The Widget [Amendment] Order 1901")
+    b = pt.published_block(LID, pt.KIND_NOT_HELD, outcome, "whole", "1. Text [sic].", 5)
+    header = b.strip().split("]\n", 1)[0]
+    assert header.startswith("[PROVISION FETCHED BY CODE — ")
+    assert "[" not in header[1:] and "(Amendment)" in header
+    assert pt.blocks_in(b) == b
 
 
 def test_the_block_never_matches_a_handed_schedule_paragraph():
@@ -418,6 +439,17 @@ def test_blocks_in_finds_only_this_rows_blocks_in_order():
     p312 = f"\n\n{FETCHED_OPEN}the index holds Schedule 2 of ssi/1901/3 as one provision.]\nx\n{FETCHED_CLOSE}"
     got = pt.blocks_in('{"tool": "lookup_legislation"}' + b + p312 + line)
     assert got == b + line
+    # P3.12's real block names a legislation.gov.uk URL in its header: still not ours
+    from src.utils import schedule_units as su
+    real = su.fetched_block(LID, su.ScheduleUnit("schedule", "2"),
+                            "https://www.legislation.gov.uk/ssi/1901/3/schedule/2",
+                            [("", "1) text")], su.WHOLE, total_chars=7)
+    absent = su.unit_absent_line(LID, su.ScheduleUnit("schedule", "7"),
+                                 [{"uri": "https://www.legislation.gov.uk/ssi/1901/3/schedule/2"}],
+                                 True)
+    assert "legislation.gov.uk" in real.split("]", 1)[0]
+    assert pt.blocks_in(real + absent) == ""
+    assert not pt.has_published_text(real)
     assert pt.blocks_in(None) == "" and pt.blocks_in("no blocks") == ""
 
 
@@ -446,6 +478,8 @@ def test_a_read_after_a_failed_one_wins_in_the_limb():
     limb = pt.published_limb(log)
     assert "SSI 1901/3 (the version as made)" in limb and "none was read" not in limb
     assert pt.handed_in_run(log, LID) and not pt.handed_in_run(log, "ssi/1901/4")
+    # only a read that handed text over counts: a failed one is tried again
+    assert not pt.handed_in_run(log[:1], LID)
     assert pt.published_footer_clause(log).count("SSI 1901/3") == 1
 
 
@@ -501,6 +535,19 @@ def test_a_not_held_lookup_hands_the_worker_the_text(monkeypatch):
     assert "legislation.gov.uk/ssi/1901/3/article/1/made" in urls
     assert "legislation.gov.uk/ssi/1901/3/article/1" in urls
     assert "legislation.gov.uk/ssi/1901/3/made" in urls
+
+
+def test_a_recital_the_index_record_already_states_is_left_as_it_is(monkeypatch):
+    raw = json.dumps({"legislation": {"description": "The Scottish Ministers make this Order "
+                                      "in exercise of the powers conferred by section 1 of the "
+                                      "Widget (Scotland) Act 1901."},
+                      "full_text": ""})
+    log = []
+    out, _ = _run("get_legislation_text", {"legislation_id": LID}, raw, monkeypatch,
+                  {f"{LID}/made/data.xml": (200, _doc())}, log)
+    assert "[ENABLING POWER — this record DOES state what ssi/1901/3" in out
+    assert "legislation.gov.uk's text of ssi/1901/3, read by code" not in out
+    assert not [e for e in log if e.get("source") == "legislation_gov_uk"]
 
 
 def test_a_preamble_without_a_recital_permits_nothing(monkeypatch):
@@ -667,6 +714,7 @@ def test_the_routed_brief_carries_the_text_after_its_block():
     assert "SSI 1901/3: NOT HELD." in head and "and that text follows this block" in head
     assert "SSI 1901/4 (" not in head  # the lookup result here carries no title
     assert "SSI 1901/4: HELD WITHOUT TEXT." in head
+    assert "Report it as a record this index holds without its text" in head
     # a failed read: the sentence as it was, and the failure line after the block
     assert "SSI 1901/5: NOT HELD. The index has no record of it under that type, year and " \
            "number, so a search for its title or number will not find it and its text " \
@@ -682,6 +730,16 @@ def test_the_brief_is_unchanged_without_a_read():
     for status in ("not_held", "held_without_text", "held"):
         plain = lookup_brief_block([_lookup(status)])
         assert "legislation.gov.uk instead" not in plain
+
+
+def test_the_text_less_variant_keeps_the_records_description():
+    from src.utils.instrument_lookup import lookup_brief_block
+    got = json.loads(_lookup("held_without_text"))
+    got["description"] = "These Regulations bring a Widget Act into force."
+    block = lookup_brief_block([json.dumps(got) + _final("held_without_text")[len(_lookup(
+        "held_without_text")):]])
+    assert "and that text follows this block" in block
+    assert "Its record describes it as: These Regulations bring a Widget Act into force." in block
 
 
 def test_the_quick_lookup_suffix_carries_the_text():
