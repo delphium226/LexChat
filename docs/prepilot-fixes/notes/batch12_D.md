@@ -147,9 +147,15 @@ Every line that moves: Conversational reader-unused 1,100 to 1,102 (the 2 reader
 fall-back turns **82 / 3 / 2, unchanged** (87 in all); fall-back sources 845 to 840 and 877 to 872 (the 5
 answer-cited ones, now on the new line "sources no report vouched for that the answer cites ... : 5", and
 relabelled `ANSWER-ONLY` in `--drops`: exactly the 5 true (iii) cases); reader-only 580 to 579, token-only
-16 to 17 (the same 2 verdicts). Nothing else. **Identity over all 66 directories** (`identity.py`, batch 11
-C's, repointed: the 16 exit-1 graders, six others and `rail`, base `a99e4d4` against built): see section 9's
-command; result in the addendum line at the end of this section.
+16 to 17 (the same 2 verdicts). Nothing else. **Identity over every replay directory** (`identity.py`, batch
+11 C's, repointed: the 16 exit-1 graders, six others and `rail`, base `a99e4d4` against built): **67
+directories x 23 graders, 1,474 identical, 67 differ, all `rail`, 0 in the exit-1 set.** `moves_check.py`: 62
+differ only by the new answer-only line; the other 5 carry exactly the moves above (`wave2_p22` the 2 reader
+verdicts; `wave4_p315_pre`, `wave4_p37`, `wave4_p37c` the 5 answer-only sources) plus one answer-only source
+in the pre-P2.1 `baseline`; fall-back turn counts unchanged in all 67. Check: passes. **A 67th replay
+directory, `wave4_b12_p310`, appeared while I worked** (not a commit; presumably the integrator's P3.10
+sweep): the identity run includes it, every other count in this note (1,853 turns, 64 post-P2.1 directories)
+predates it and excludes it. Re-run `rb.py` and `cmp_r.py` on the merged tree to cover it.
 
 ## 5. `lookup --routing` reads each brief as the product routes it
 
