@@ -177,6 +177,30 @@ def test_a_clause_break_ends_the_first_party():
     assert c["shown"] == "Widget v Example"
 
 
+def test_joiners_at_either_end_of_a_party_are_trimmed():
+    assert _one("liability of Widget v Example")["shown"] == "Widget v Example"
+    assert _one("Widget v Example and duty")["shown"] == "Widget v Example"
+    assert _one("Widget v Example and duty")["b"] == {"example"}
+
+
+def test_a_colon_ends_the_second_party_on_the_word_that_carries_it():
+    c = _one("Widget v Example: Duty Of Care")
+    assert c["shown"] == "Widget v Example" and c["b"] == {"example"}
+
+
+def test_a_citation_is_a_names_only_when_nothing_but_a_space_or_comma_parts_them():
+    c = _one("Widget v Example,  [1901] UKSC 9")
+    assert c["ncn"] == "1901 UKSC 9"
+    for q in ("Widget v Example and [1901] UKSC 9", "Widget v Example; [1901] UKSC 9",
+              "Widget v Example duty [1901] UKSC 9"):
+        cases = named_cases(q)
+        assert [c["ncn"] for c in cases] == [None, "1901 UKSC 9"], q
+    # A citation BEFORE a name is never that name's.
+    cases = named_cases("[1901] UKSC 9 Widget v Example")
+    assert [(c["shown"], c["ncn"]) for c in cases] == [
+        ("the judgment cited as (1901) UKSC 9", "1901 UKSC 9"), ("Widget v Example", None)]
+
+
 def test_acronyms_and_corporate_words_are_not_distinctive():
     c = _one("Widget HMRC Ltd v Example plc")
     assert c["a"] == {"widget"} and c["b"] == {"example"}
@@ -472,4 +496,5 @@ async def test_another_tools_result_gets_no_note():
         out = await run_worker_tool("get_case_law_text", {"url": U + "uksc/1901/4",
                                                           "query": "Widget v Example"},
                                     "brief", chunk, "test-model")
-    assert "this search names" not in out
+    assert "this search names" not in out and "a case it names" not in out
+    assert named_case_note({"query": "Widget v Example"}, {"results": []})   # it would fire

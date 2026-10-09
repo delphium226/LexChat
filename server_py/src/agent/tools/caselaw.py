@@ -487,9 +487,10 @@ def _named_words(text: str) -> set:
 
 
 def _is_name_token(tok: str) -> bool:
+    """A capitalised word or a joiner. A quote (its own token), a citation
+    ("[1901]", "(1901)") and a number are none of these, so they end a name."""
     core = tok.strip("(),;:")
-    return bool(core) and (core[0].isupper() or core.lower() in _NAMED_JOINERS
-                           or core == "&")
+    return bool(core) and (core[0].isupper() or core.lower() in _NAMED_JOINERS)
 
 
 def _side(tokens: list, start: int, step: int, bound: int) -> tuple:
@@ -500,10 +501,11 @@ def _side(tokens: list, start: int, step: int, bound: int) -> tuple:
     i, last = start, None
     while 0 <= i < len(tokens) and (i <= bound if step > 0 else i >= bound):
         tok = tokens[i]
-        if tok in "\"“”‘’" or tok[:1] in "[" or tok[:1].isdigit() or not _is_name_token(tok):
+        if not _is_name_token(tok):
             break
-        # A clause break: a comma or a colon ends the left party where it
-        # follows a word ("liability: Widget v ...").
+        # A clause break: a colon or a semicolon ends the first party where
+        # it follows a word ("Liability: Widget v ..."), and the second where
+        # the word carries it ("Widget v Example: Duty Of Care").
         if step < 0 and tok.rstrip().endswith((":", ";")):
             break
         last = i
@@ -587,14 +589,17 @@ def named_cases(query: str) -> list:
             # A name with no distinctive word ("R (X) v Secretary of State for
             # ...") cannot be matched; it is kept only to show with a citation
             # that follows it, and dropped below if none does.
-            start, end = spans[left[0]][0], spans[right[1]][1]
+            # The name ends before a comma, colon or semicolon its last word
+            # carries, so a citation after one is not read as this case's.
+            start = spans[left[0]][0]
+            end = spans[right[1]][0] + len(toks[right[1]].rstrip(",;:"))
             case = {"start": start, "end": end, "shown": _shown(q[start:end]),
                     "a": a, "b": b, "ncn": None, "report": False}
             # A citation right after the name is that case's (a second one
             # after it, a parallel citation, too).
             attached = False
             for c in cites:
-                if not c.get("used") and 0 <= c["start"] - end <= 3 \
+                if not c.get("used") and c["start"] >= end \
                         and not q[end:c["start"]].strip(" ,"):
                     c["used"] = attached = True
                     case["shown"] = _shown(q[start:c["end"]])
