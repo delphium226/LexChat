@@ -1208,6 +1208,9 @@ def test_footer_trips_no_detector():
     # P3.12: every header, piece label and line of the PROVISION FETCHED BY
     # CODE block, on synthetic labels with no statutory text in the body.
     screened += _fetched_wording_variants()
+    # P3.38: every block, line, limb, footer clause and changed note of the
+    # legislation.gov.uk text read, on synthetic ids with an empty body.
+    screened += _published_wording_variants()
     # Batch 8 A2: P3.1's cap on an instrument whose complete provision list
     # code read, every new sentence: the refusal's two fields (Worker-facing),
     # the limb (Manager-facing) and the footer's added sentence (lawyer-facing).
@@ -1236,6 +1239,28 @@ def test_footer_trips_no_detector():
             assert not _currency_asserted(s), s
             assert negcurrency_claim(s)[0] is None, s
 
+    # P3.38: the two notes it rewords trip no detector their originals did not.
+    def _trips(text):
+        found = set()
+        for rx in (NEG_ASSERTED, NOT_FOUND, IN_FORCE_CLAIM, _CUR_DISCLOSED, NEG_TERMS,
+                   NEG_LIMITS, NEG_BLAMED_INDEX, NEG_BLAMED_USER, HALT_LITERAL,
+                   HALT_PARAPHRASE, HALT_AS_TIMEOUT, OPENER_VOCAB):
+            if rx.search(text):
+                found.add(rx.pattern[:30])
+        if derivation_claims(text)[0]:
+            found.add("derivation")
+        for s in _sentences(text):
+            if _CMC_CONTEXT.search(s) and _CMC_DENIED.search(s):
+                found.add("cmc")
+            if _currency_asserted(s):
+                found.add("currency")
+            if negcurrency_claim(s)[0] is not None:
+                found.add("negcurrency")
+        return found
+
+    for after, before in _published_changed_notes():
+        assert _trips(after) <= _trips(before), (_trips(after) - _trips(before), after)
+
 
 def _schedule_line_variants() -> list:
     """Every wording `schedule_units.schedules_note` can produce, on synthetic
@@ -1261,6 +1286,87 @@ def _schedule_line_variants() -> list:
     ]
     assert all(variants) and len(set(variants)) == len(variants), variants
     return variants
+
+
+def _published_wording_variants() -> list:
+    """Every wording P3.38's read can write (`utils/published_text.py`, and
+    the two notes it changes), on synthetic ids, for the screen. Each value
+    class: not held, held without text, an empty or not-found text read; a
+    version as made, as enacted or current; schedules present or absent; the
+    block whole or summarised; every no-text outcome and failure reason."""
+    from src.utils import published_text as pt
+
+    texts = []
+    ids = ("ssi/1901/3", "ukpga/1901/4", "ukpga/Vict/1-2/99")
+    for lid in ids:
+        for kind in (pt.KIND_NOT_HELD, pt.KIND_NO_TEXT, pt.KIND_READ_NOT_FOUND):
+            for version in ("made", "enacted", "current"):
+                for sched in (True, False):
+                    for title in ("The Widget Order 1901", ""):
+                        outcome = {"status": pt.OK, "version": version, "title": title,
+                                   "has_schedules": sched, "url": ""}
+                        for how in ("whole", "summary"):
+                            texts.append(pt.published_block(
+                                lid, kind, outcome, how, "", total_chars=12345).strip())
+            for outcome in ({"status": pt.NOT_PUBLISHED},
+                            {"status": pt.PDF_ONLY, "pdf": "https://www.legislation.gov.uk/x.pdf"},
+                            {"status": pt.PDF_ONLY},
+                            {"status": pt.FAILED, "reason": "no_reply"},
+                            {"status": pt.FAILED, "reason": "too_large"},
+                            {"status": pt.FAILED, "reason": "unreadable"},
+                            {"status": pt.FAILED, "reason": "error"},
+                            {"status": pt.LIMIT, "limit": 8},
+                            {"status": pt.EARLIER}):
+                texts.append(pt.published_line(lid, kind, outcome).strip())
+    log = []
+    for i, status in enumerate((pt.OK, pt.OK, pt.EARLIER, pt.FAILED, pt.NOT_PUBLISHED)):
+        pt.record_published(log, f"ssi/1901/{10 + i}", pt.KIND_NOT_HELD,
+                            {"status": status, "version": ("made", "current")[i % 2]})
+    texts.append(pt.published_limb(log))
+    texts.append(pt.published_limb(log[:1]))
+    texts.append(pt.published_limb(log[3:]))
+    for n in (1, 2, 3):
+        texts.append(pt.published_footer_clause([
+            {"tool": pt.PUBLISHED_ENTRY, "legislation_id": f"ssi/1901/{k}",
+             "label": f"SSI 1901/{k}", "status": pt.OK, "version": v}
+            for k, v in zip(range(n), ("made", "enacted", "current"))]).strip())
+    assert all(texts), texts
+    return texts
+
+
+def _published_changed_notes() -> list:
+    """P3.38's variants of two Worker-facing notes that were never clean of
+    the answer detectors (P2.4's not-held note and P3.7's lookup brief block
+    say "no record" and "NOT HELD" by design), each paired with the note as it
+    was, so the screen can require that a variant adds no trip of its own."""
+    import json as _json
+
+    from src.utils import published_text as pt
+    from src.utils.instrument_lookup import lookup_brief_block
+    from src.utils.search_scope import not_held_note
+
+    pairs = []
+    err = 'Error executing tool: {"detail":"Legislation not found: ssi 1901 No. 3"}'
+    before = not_held_note({"legislation_id": "ssi/1901/3"}, err)
+    for read in ("below", "earlier"):
+        pairs.append((not_held_note({"legislation_id": "ssi/1901/3"}, err, text_read=read),
+                      before))
+    block = pt.published_block("ssi/1901/3", pt.KIND_NOT_HELD,
+                               {"status": pt.OK, "version": "made"}, "whole", "")
+    for status, desc in (("not_held", ""), ("held_without_text", ""),
+                         ("held_without_text", "These Regulations bring a Widget Act into force.")):
+        got = {"tool": "lookup_legislation", "legislation_id": "ssi/1901/3",
+               "label": "SSI 1901/3", "status": status, "title": "The Widget Order 1901",
+               "description": desc}
+        pairs.append((lookup_brief_block([_json.dumps(got) + block]),
+                      lookup_brief_block([_json.dumps(got)])))
+    # P3.7's limb, "here" become "in this index" beside P3.38's limb
+    from src.utils.search_scope import LOOKUP_ENTRY, _lookup_limb
+    limb = _lookup_limb([{"tool": LOOKUP_ENTRY, "legislation_id": "ssi/1901/3",
+                          "label": "SSI 1901/3", "status": "held_without_text"}])
+    pairs.append((limb, limb.replace("available in this index, never", "available here, never")))
+    assert all(a and b and a != b for a, b in pairs), pairs
+    return pairs
 
 
 def _section_cap_held_variants() -> list:

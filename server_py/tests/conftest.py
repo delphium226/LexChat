@@ -167,6 +167,25 @@ def _commencement_dates_offline(monkeypatch):
     monkeypatch.setattr(_cd, "_MADE_CACHE", {})
 
 
+@pytest.fixture(autouse=True)
+def _published_text_offline(monkeypatch):
+    """FIX_PLAN P3.38: no test reaches legislation.gov.uk through the text
+    read either. By default the read's client refuses every request, so a not-
+    held lookup or an empty text read in any test gets the one-line "did not
+    complete" note; `tests/test_published_text.py` serves synthetic documents
+    through `_client` itself."""
+    import httpx as _httpx
+
+    from src.agent.tools import published_text as _pt
+
+    def _refuse(request):
+        raise _httpx.ConnectError("network disabled in tests", request=request)
+
+    monkeypatch.setattr(
+        _pt, "_client",
+        lambda: _httpx.AsyncClient(transport=_httpx.MockTransport(_refuse)))
+
+
 @pytest_asyncio.fixture
 async def db_session():
     """Provide a DB session for each test."""
