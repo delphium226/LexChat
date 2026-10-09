@@ -305,6 +305,23 @@ def test_an_answer_sharing_some_words_is_not_a_restatement():
     assert n == 2 and "paragraph 1 (Widget licences)" in new
 
 
+@pytest.mark.parametrize("sentence,blocked", [
+    # 4 of the excerpt's 6 content words (widget, sold, licence, lasts): 67%.
+    ("Each widget sold needs a licence that lasts.", True),
+    # 2 of 6 (widget, licence): 33%.
+    ("A widget licence costs money.", False),
+])
+def test_the_restatement_threshold_sits_between_a_third_and_two_thirds(sentence, blocked):
+    """Paragraph 1's excerpt is "(2) No widget may be sold without a licence. (3) A
+    licence lasts one year.": six content words. The guard blocks a line when one
+    answer sentence holds 60% of them."""
+    answer = ANSWER.replace("Minister.\n\n", f"Minister. {sentence}\n\n")
+    new, n = _restore(answer, _cut_block())
+    assert ("paragraph 1 (Widget licences)" in new) is (not blocked)
+    assert "paragraph 3 (Widget inspections)" in new
+    assert n == (1 if blocked else 2)
+
+
 def test_a_line_is_never_the_answers_first_sentence():
     import sys
     from pathlib import Path
