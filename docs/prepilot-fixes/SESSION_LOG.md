@@ -9178,3 +9178,131 @@ in `batch11/scratchpad_s43/` (integrator tools: `review_branch.sh`, `grade_b8.sh
 **State:** branch `fix/prepilot-defects` pushed; `main` at `a6b4a76`; `plan_status` 61 of 97, 4 in progress, 9 of 14; `plan_lint` 0; 3,017 tests; 66 replay directories; no server, no pin, no worktree but the main checkout. **Fix Tracker v47** (P5.4 Fixed, P4.22 at P2, the re-plan note, Next = batch 12). **The second session's working scripts** (harvest, re-parse, title, snapshot, smoke, tracker and plan scripts; the Lex Graph probes) are in the gitignored `evidence/seam/madeunder_s42b/`; the harvest files in `evidence/madeunder/`. **Lasting docs updated for P3.31:** CHANGELOG *Unreleased*, CLAUDE.md (the Worker notes), `docs/LEGAL_DATA_SOURCES.md` (the enabling-power gap), and the local `external-apis` (legislation.gov.uk routes) and `repo-map` skills.
 
 **Carried, the user's:** SCTS's written confirmation and whitelist request; the lawyer pack; D23; P5.5 (the National Archives' bulk data); deploying `v2026.09.3`; the eval-harness owner; D19; the next cut (`v2026.10.1`, which would now also carry P3.31 and P4.12); Tesseract (P3.35); and Session 43's other carried items.
+
+## Session 44 — 2026-10-09 — parallel batch 12: P3.10, P3.20, P3.22, P4.3, P4.22 and P4.24 done; P3.12 built, not met; the data rows sized ($14.11)
+
+**Done:**
+- **Ran `PARALLEL_BATCH_12.md` (user decisions at launch: A to G as set out; live reads A up to 20, C up to 40
+  SCTS, G up to 60 LEX and 200 legislation.gov.uk, agreed; P3.12's seam draws, agreed; merge order B, A, E, C,
+  D, F, G, the branch pushed after each clean merge).** The session was opened with a stale prompt for batch 1
+  (Session 33's); the state check found batch 1 merged on 2026-09-29 and the user redirected to batch 12. Step
+  1's checks held at `a99e4d4`: equal to `origin`; `main` at `a6b4a76`; `plan_status` 61 of 97, 4 in progress, 9
+  of 14; `plan_lint` 0, 0; 66 replay directories; no python process, port 8000 free, no pin file; test databases
+  `_f` and `_g` created; baseline suite **3,017** (`python -m pytest -q`). Every worktree came up on `main`
+  again; each agent reset to `a99e4d4`. The shared brief sections (batch 11's rules, lessons and setup with the
+  substitutions, batch 12's lessons and decisions, the data-improvement sections) were generated verbatim into
+  the gitignored `evidence/seam/batch12/briefs/` and each agent read them from there.
+- **P3.12's seams ($0.9909 in all; `seam_replay worker`, outputs in the gitignored
+  `evidence/seam/batch12/integrator/`):**
+  - **Default seam (4 draws, $0.1866):** every draw named 43 and 44, 3 of 4 named 42, so the stored shortfall
+    did not reproduce.
+  - **`--as-sent --at-rev recorded --date recorded --max-tokens 32000` (8 draws, $0.3677):** 42 dropped on rep 1
+    and rep 3 (44 too on rep 3), rep 2 delivered 2 of 2. Two pairs were byte-identical (provider reuse), so the
+    effective n was 4. Rep 3 with only " for Scotland" removed from the brief gave every sub-paragraph of 42-44
+    (1 answer, 1 tool call).
+  - **A's Worker-prompt sentence W1 swapped into the same payloads, plus rep 1 without " for Scotland" and a
+    first-round probe (12 calls, $0.4366):** W1 fixed rep 3 in 1 of 2 and left rep 1 unchanged (2 identical);
+    rep 1 without the phrase gave every sub-paragraph; the first round was unchanged (2 searches both sides).
+  - **The user chose code lines at the answer seam (P3.13's pattern); W1 was reverted.**
+- **Reviews** (each: the base contained; the note and diff read; added lines grepped with `review_branch.sh`;
+  my own single-site mutants, one per guard, on the agent's worktree and test database; the full suite on
+  `lexchat_test` after each merge):
+  - **B (P3.10):** revert 29 lines, 7 fail; integrator mutants 6 of 7, the survivor (the cap boundary,
+    `more > 0` to `more > 1`) then caught by a test of mine (`6f4660d`). The user's two changes applied
+    (`57ce30c`): the limit folded into the condition, the cap 15 to 40; screened with the built code, 0 trips
+    over 13 renderings. Suite 3,015 (the gate's 2 tests went with it).
+  - **E (P4.22, then P3.4's follow-up and the hybrid line):** revert 32 lines, 23 of 29 fail; integrator
+    mutants 10 of 10 on `_bare_tag`, then 6 of 6 on the P3.4 commits. Merged in two parts (`ddda3d0` at `8ad6ba3`;
+    `16227f1`). Suites 3,044 and 3,304.
+  - **C (P3.20):** integrator mutants 12 of 14; the survivors (a reported total below the rows; real fetches
+    counted toward the PDF cap) got tests from C (`b5cbc3f`). Synthetic "Widget" fixtures only. Merged `df43d1c`,
+    suite 3,163.
+  - **A (P3.12):** integrator mutants 9 of 10; the survivor (the restatement threshold, 0.6 to 0.95) got a
+    boundary test from A (`8ed478b`), which also catches 0.3. Merged `f971ff2`, suite 3,216.
+  - **D (P4.3 lever R, then P4.24):** integrator mutants 10 of 10 on R and 10 of 10 on P4.24. The merge
+    conflicted in `run_worker_agent` (A's handed-paragraph recorder and D's lookup-title wrapper around the same
+    `run_worker_tool` call); resolved by keeping both, D's `_run_tool` wrapping `_run_tool_inner`, which records
+    A's paragraphs. Merged `ab12a88`, suite **3,379**.
+  - **F and G (notes only):** diffs touch only the note; G's logs hold 47 LEX and 155 legislation.gov.uk calls,
+    A's 12 (10 LEX proxy, 2 direct), C's 27 SCTS. F's census check re-run (9 of 9 present). Merged `9d9d686`,
+    `3291b4d`.
+- **The sweeps (pinned Gemini; `replay check`, `replay pin`, uvicorn and the keep-awake helper by
+  `Start-Process -PassThru`; `replay restore` and both processes stopped after each block; no commit while a
+  replay ran):**
+  - **P3.10, `wave4_b12_p310` (6374 n=3 scripted, served by `57ce30c`, $3.0394):** by hand, every dependent
+    step covers its list (3 of 3), 0 own searches, 0 halts, `sources_kept` 25.7 against 22.2; Orders cited per
+    answer 9, 10, 9. **Ticked.** Watch item: discovery steps stopped searching too (mean 0.14 against 7.8).
+  - **P3.20, `wave4_b12_p320` (6375 n=3, 6370 and 6380 n=1, served by `df43d1c` with `SCTS_CASELAW_ENABLED=true`
+    added to the dev box's `server_py/.env` and removed after, $5.4538, 108 SCTS calls):** `replay_report scts`
+    cites a returned Scottish judgment in 3 of 3 reps (5 of 6 turns), OLD_SENTENCE 0; controls clean; the
+    exit-1 graders pass. English authority by hand: reps 1 and 3 pass, rep 2 borderline (recorded on P3.3).
+    **Ticked; deploys only after the whitelist.** The background command exited 1 although both logs show every
+    run written and ok (not traced).
+  - **P3.4's after-column, `wave4_b12_p34r` (Research mode, scripts `p46_6335` and `p46_6385` n=3, `p46_6350`
+    n=1, served by `16227f1`, $2.8420):** E's grader 15 of 26 PASS (before 0 of 36 by hand); delegated turns 15
+    of 16, every brief naming Scotland; the 10 failures are follow-ups answered from the conversation. **Met on
+    delegated turns (user decision).**
+  - **P3.12, `wave4_b12_p312` (6335 n=3, served by `16227f1`, $1.7811):** DELIVERED 0 of 3 by hand (`depth`
+    PARTIAL 3). The line fired in reps 1 and 3 and put 44 back, quoting 44(1)'s conditions of application, not
+    44(5); rep 2 cited "Paragraphs 40-43" and never reached 43(5) or 43(6).
+- **Decisions put to the user** (all as recommended): the launch; the P3.12 draws twice and the lever; P3.10's
+  wording, cap, scope, run and tick; E's words, the summariser row, P3.22's split, P3.4's build, wording,
+  consulted scope, hybrid line, run and bar; C's wording, settings, run and tick; P4.3 merged with P4.24 and
+  ticked; A's option B, the sub-paragraph follow-up, run and other items; F's and G's rows; the smaller items.
+- **Folded into FIX_PLAN.md** (byte script `fold_s44.py` in the session scratch; LF kept, as the file is LF in
+  index and tree): ticked **P3.10, P3.20, P3.22, P4.3, P4.22, P4.24**; annotated P3.12, P3.4, P3.3, P4.23,
+  P3.38, P3.39, P3.34, P3.28, P3.26, P3.33, P3.32, P3.42; dropped **P3.30, P3.41, P3.43** (P3.41 moved to the
+  no-bucket line: a dropped row in a bucket keeps it open under `bucket_state`); new rows **P3.45** (P1),
+  **P3.46**, **P4.26**, **P4.27**; the bucket index; a new top order line. `plan_lint` 0, 0; `plan_status` **67
+  of 101, 1 in progress, 9 of 14** (B8 now partial).
+- **Spend: $14.11** (seams $0.9909; sweeps $3.0394 + $5.4538 + $2.8420 + $1.7811; three `replay check` probes
+  $0.0033). Agents $0 in model spend.
+
+**Surprises:**
+- **The default Worker seam does not reproduce a composition shortfall that `--as-sent` does** (P3.12: 0 of 4
+  against 2 of 3 payloads). For a Worker-facing lever, draw `--as-sent --at-rev recorded --date recorded`.
+- **A brief phrase the Manager writes by rule (" for Scotland", P3.4) narrowed the Worker's report**, and a
+  Worker-side sentence only half undid it.
+- **The restored line can quote the wrong sub-paragraph**: "the opening operative sub-paragraph" took 44(1)'s
+  conditions of application, because only a bare "This paragraph applies to X." is skipped.
+- **A mutant harness that names a missing test file reports every mutant CAUGHT** (pytest exits non-zero on the
+  path). Check the control run passes before reading any verdict (it happened here on D's first run).
+- **Text reads keep the body in `full_text`; `legislation.text` is always empty** (F's first pass read every
+  stored text as empty). Read `full_text` in any grader of `get_legislation_text` results.
+- **A summariser invents case citations** (50 of 5,615 stored summaries; P3.45, P1).
+
+## Session 44 — handover for Session 45 (2026-10-09)
+
+**One session works the branch at a time.** Read this handover, then FIX_PLAN's top order line ("end of Session
+44"). A brief for the next batch is not written yet; write it from the order line if the user asks for a
+parallel batch.
+
+**Take next, by severity:**
+1. **P1: P3.45** (the summariser's invented case citations): measure first ($0) over every stored summary, then
+   the code check (drop or flag a citation the raw source lacks).
+2. **P1: P3.12:** skip an application line with conditions as well as a bare one (the 44(1) case); then the
+   sub-paragraph line for a partly cited paragraph (prototype 2 of 4 to DELIVERED), measured first; hand over the
+   paragraphs that cut when another named one fails; widen `depth`'s 42 pattern; then 6335 n=3 (about $1.80),
+   priced first. Iterate at `--as-sent` for anything Worker-facing.
+3. **P2:** P3.38's build (trigger and acceptance on its row; the regnal-id 404 and the exact-paragraph route
+   noted there); P4.23's linker (decided on its row); P3.46's code note (wording to the user); P3.28 (both
+   levers); P3.34's corpus-wide definition search, measured first.
+4. **P3:** P3.26 with "N.I."; P3.33 after P3.28; P4.24's search-hit heading title; P4.25, P4.26, P4.27; and
+   the rest of the order line.
+
+**State:** branch `fix/prepilot-defects` pushed (this handover's commit); `main` at `a6b4a76`; `plan_status` 67
+of 101, 1 in progress, 9 of 14; `plan_lint` 0; **3,379 tests**; **70 replay directories** (`wave4_b12_p310`,
+`_p320`, `_p34r`, `_p312` new); no server, no pin, the dev box's `.env` restored (no `SCTS_CASELAW_ENABLED`);
+the seven agent worktrees under `.claude/worktrees/` are merged and can be removed. Integrator scratch
+(mutant scripts, the fold, the decision record `s44_decisions.md`, suites) is copied to the gitignored
+`evidence/seam/batch12/scratchpad_s44/`; draws and grades are in `evidence/seam/batch12/integrator/`.
+
+**Watch items:** P3.10's discovery steps that stop searching; P3.4's follow-up turns that do not restate the
+jurisdiction; P3.20's rep 2 (on P3.3); P4.3's three bars re-graded on the next sweep; `rail` to join the exit-1
+set after it.
+
+**Carried, the user's:** the SCTS whitelist request (P3.20 is built but off until both hosts are whitelisted;
+then `NETWORK_AND_DEPENDENCIES.md`, `test_apis.ps1`, the offline bundle's pdfplumber and the lasting docs) and
+SCTS's written confirmation; the lawyer pack (P3.2, P3.3, P3.17); D23; P5.5; deploying `v2026.09.3`; the
+eval-harness owner; D19; the next cut (`v2026.10.1`, which would now carry P3.31, P4.12 and this batch); Tesseract
+(P3.35); the Fix Tracker (v47 is the base; not updated this session).
