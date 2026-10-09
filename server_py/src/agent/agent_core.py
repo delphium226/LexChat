@@ -31,6 +31,11 @@ from ..utils.discovery_budget import new_search_budget
 from ..utils.instrument_lookup import routed_lookup_block, section_search_lookup
 from ..utils.mode_change import apply_mode_change_marker, mode_change_for
 from ..utils.openers import strip_agreement_opener
+from ..utils.paragraph_restore import (
+    handed_paragraphs,
+    misattributed_paragraphs,
+    restore_dropped_paragraphs,
+)
 from ..utils.empty_completion import (
     LOST_ANSWER_NOTICE,
     fallback_from_reports,
@@ -263,8 +268,13 @@ async def run_worker_agent(
     # sections`, which both have (the quick-lookup Worker has no whole text).
     provision_fetches: dict = {}
 
+    # P3.12 (answer seam, batch 12 A): every schedule paragraph code handed
+    # this Worker cut exactly, read back from its own tool results (a memo
+    # hit included), so the answer seam can put back one the answer left out.
+    handed_paras: list = []
+
     async def _run_tool(name: str, args: dict, result_suffix: str = "") -> str:
-        return await run_worker_tool(
+        out = await run_worker_tool(
             name, args, query, summarise_chunk_fn, summarise_model,
             parent_on_chunk=parent_on_chunk,
             timing_collector=timing_collector,
@@ -280,6 +290,8 @@ async def run_worker_agent(
             result_suffix=result_suffix,
             provision_fetches=provision_fetches,
         )
+        handed_paras.extend(handed_paragraphs(out))
+        return out
 
     # P3.25: the statutory instruments this quick-lookup run has looked up in
     # code, so each is looked up once.
@@ -491,6 +503,7 @@ async def run_worker_agent(
     # One worker run is one delegation or one plan step; the caller accumulates
     # across them, because the footer describes the whole turn.
     result["searches"] = list(search_log)
+    result["handed_paragraphs"] = list(handed_paras)
 
     if _audit:
         _audit.end_delegation(
@@ -883,6 +896,9 @@ async def process_user_request(
     # P3.13 (B10): every report as handed to the Manager (sibling links
     # included), read once the answer is written.
     manager_inputs: list = []
+    # P3.12 (answer seam): every schedule paragraph code handed any Worker of
+    # this turn cut exactly, read once the answer is written.
+    handed_paras: list = []
 
     async def manager_tool_executor(name: str, args: dict) -> str:
         if name == "delegate_research":
@@ -951,6 +967,7 @@ async def process_user_request(
                 else ("partial" if result["halted"].get("written_up") else "halted")
                 if result.get("halted") else "complete")
             all_searches.extend(result.get("searches") or [])
+            handed_paras.extend(result.get("handed_paragraphs") or [])
             # P4.5: a lost report is a label, not research, so P4.2's fallback
             # must not reproduce it to the lawyer as findings.
             if (result.get("content") or "").strip() and not result.get("lost"):
@@ -1059,6 +1076,15 @@ async def process_user_request(
         clean, _restored = restore_dropped_siblings(clean, manager_inputs)
         if _restored:
             logger.info("[Manager] Restored %d dropped sibling subsection(s)", _restored)
+        # P3.12 (user decision, 2026-10-09): a schedule paragraph code cut
+        # and handed to the Worker, a sibling of one the answer cites, and
+        # named nowhere in the answer goes back in, verbatim from the cut.
+        clean, _paras = restore_dropped_paragraphs(clean, handed_paras)
+        if _paras:
+            logger.info("[Manager] Restored %d dropped schedule paragraph(s)", _paras)
+        for _cited, _meant, _ in misattributed_paragraphs(clean, handed_paras):
+            logger.warning("[Manager] A sentence cites schedule paragraph %s in the "
+                           "words of paragraph %s", _cited, _meant)
     # P1.6 (B14) belt and braces. The Worker's report was already enforced, but
     # the Manager is instructed to pass it through verbatim and is not compelled
     # to — and in conversational mode it answers in its own words. Idempotent, so
