@@ -517,6 +517,21 @@ def test_the_subparagraph_line_follows_the_first_citation():
     assert n == 1 and new.split("\n\n")[1].startswith(LINE7)
 
 
+def test_the_subparagraph_line_lands_after_the_answer_paragraph_citing_it():
+    # The first citation is in the second answer paragraph: the line goes
+    # right after that paragraph, not after the answer's first break.
+    answer = ("Schedule 5 to the Widget Order 1901 regulates widget dealers.\n\n"
+              "Under paragraph 7(4) of Schedule 5, a shop may not open on a Sunday.\n\n"
+              "Paragraph 8 deals with gadget shops.")
+    new, n = _shops(answer)
+    blocks = new.split("\n\n")
+    assert n == 1
+    assert blocks[0] == "Schedule 5 to the Widget Order 1901 regulates widget dealers."
+    assert blocks[1].startswith("Under paragraph 7(4)")
+    assert blocks[2].startswith(LINE7)
+    assert blocks[3] == "Paragraph 8 deals with gadget shops."
+
+
 def test_more_than_half_of_the_operative_subparagraphs_cited_gets_no_line():
     # Operative: 2-6 (five). Three cited is more than half; two is not.
     assert _shops(SHOP_ANSWER.replace("7(4)", "7(2)-(4)"))[1] == 0

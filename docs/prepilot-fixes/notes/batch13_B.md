@@ -283,3 +283,5 @@ session's instrument (paragraph numbers are the row's, as FIX_PLAN gives them; t
 tests' "Widget" schedule). The staged diffs were grepped for session numbers, instrument ids and matter words before
 each commit; the only hits are the `DEPTH_TRUTH["6335"]` tests in `test_replay_schedules.py`, the standing exception,
 beside that file's existing ones.
+
+**Integrator review (2026-10-09):** a surviving mutant (the sub-paragraph line's break searched from 0, not from the first citation) is now caught by `test_the_subparagraph_line_lands_after_the_answer_paragraph_citing_it` (citation in the second answer paragraph; fails under the mutant, passes on the built code; harness `s24`, 1 failed of 419); full suite on `lexchat_test_b` **3,451 passed**.
