@@ -1299,7 +1299,7 @@ def _published_wording_variants() -> list:
     texts = []
     ids = ("ssi/1901/3", "ukpga/1901/4", "ukpga/Vict/1-2/99")
     for lid in ids:
-        for kind in (pt.KIND_NOT_HELD, pt.KIND_NO_TEXT):
+        for kind in (pt.KIND_NOT_HELD, pt.KIND_NO_TEXT, pt.KIND_READ_NOT_FOUND):
             for version in ("made", "enacted", "current"):
                 for sched in (True, False):
                     for title in ("The Widget Order 1901", ""):

@@ -817,7 +817,9 @@ async def published_text_route(
         # provision without the version suffix.
         urls += [u.rsplit("/", 1)[0] for u in urls
                  if u.endswith("/made") or u.endswith("/enacted")]
-        harvest_legislation_urls(json.dumps({"urls": [u for u in urls if u]}),
+        # A dict of strings: the harvest reads string VALUES of a dict, not
+        # the members of a list.
+        harvest_legislation_urls(json.dumps({str(i): u for i, u in enumerate(urls) if u}),
                                  into=retrieved_urls)
     from .provider_factory import get_summarise_threshold
     threshold = get_summarise_threshold()

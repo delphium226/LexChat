@@ -55,11 +55,16 @@ TEXT_TOOL = "get_legislation_text"
 PUBLISHED_ENTRY = "published_text"
 SOURCE = "legislation.gov.uk"
 
-# The three trigger kinds. `not_held` and `no_text` are the index states the
-# Worker's sentences distinguish; `read_not_found` is a text read LEX answered
-# "Legislation not found", which is the not-held state reached another way.
+# The three trigger kinds, one per state of the index the Worker is told:
+# a lookup that found no record (`not_held`); a record without text, by lookup
+# or by an empty text read (`no_text`); and a text read LEX answered
+# "Legislation not found" (`read_not_found`). The last is said as what the read
+# returned, never as "the index lacks it": LEX's text endpoint 404s on the
+# regnal ids its own search returns for records it holds (batch 12 F: 2 Acts,
+# 4 reads).
 KIND_NOT_HELD = "not_held"
 KIND_NO_TEXT = "no_text"
+KIND_READ_NOT_FOUND = "read_not_found"
 
 # Outcomes of a read (`agent/tools/published_text.py`).
 OK = "ok"
@@ -165,7 +170,7 @@ def trigger(name: str, args: Any, raw_result: Any) -> Optional[tuple]:
             return None
         if isinstance(raw_result, str) and raw_result.startswith("Error executing tool") \
                 and _LEX_NOT_FOUND.search(raw_result):
-            return lid, KIND_NOT_HELD
+            return lid, KIND_READ_NOT_FOUND
         body = _text_body(raw_result)
         if body is not None and _is_stub_body(body):
             return lid, KIND_NO_TEXT
@@ -394,14 +399,17 @@ def label_for(lid: str) -> str:
     return citation_label(ref) if ref else lid
 
 
-def _index_state(lid: str, kind: str) -> str:
-    """The index's state, as the lead's opening clause."""
-    label = label_for(lid)
+def _index_state(lid: str, kind: str, title: str = "") -> str:
+    """The index's state, as the lead's opening clause; `title` (the one
+    legislation.gov.uk gave) goes straight after the instrument's label."""
+    label = label_for(lid) + (f" ({title})" if title else "")
     # "lacks", not "does not hold": every sentence here is screened against
     # the answer detectors (`test_footer_trips_no_detector`), and "index does
     # not hold" is `NEG_ASSERTED`'s and `NEG_BLAMED_INDEX`'s own phrase.
     if kind == KIND_NO_TEXT:
         return f"this index holds the record of {label} but none of its text"
+    if kind == KIND_READ_NOT_FOUND:
+        return f"this index's text read gave no text for {label} under that id"
     return f"this index lacks {label}"
 
 
@@ -428,6 +436,14 @@ def _currency_sentence(version: str) -> str:
     return "This text by itself says nothing about the instrument's status today."
 
 
+# Why the text was read elsewhere, per kind, for the block's instruction.
+_WHY = {
+    KIND_NOT_HELD: "the index lacks it",
+    KIND_NO_TEXT: "the index holds none of its text",
+    KIND_READ_NOT_FOUND: "the index's text read gave none",
+}
+
+
 # The opening every block and line shares, and what the recorder parses back.
 _READ_LEAD = "so code read its text from legislation.gov.uk"
 
@@ -442,13 +458,17 @@ def published_block(lid: str, kind: str, outcome: dict, pieces_how: str = "whole
     """
     version = outcome.get("version") or "current"
     title = _clean(outcome.get("title"), 200)
-    named = f" ({title})" if title else ""
     url = _clean(outcome.get("url") or page_url(lid, version), 160)
     sched = (" with its schedules" if outcome.get("has_schedules")
              else " (it has no schedule)")
-    lead = (f"{_index_state(lid, kind)}{named}, {_READ_LEAD}, the official "
+    # The title check is P3.7's, for the same reason: an id a model built can
+    # name a different instrument (a stored run's SSI read under `uksi/`, a
+    # number legislation.gov.uk publishes as an unrelated UK SI; batch 13 C's
+    # dry run).
+    lead = (f"{_index_state(lid, kind, title)}, {_READ_LEAD}, the official "
             f"publisher, through the LEX API: {_version_words(version)}{sched}, "
-            f"{total_chars:,} characters.")
+            f"{total_chars:,} characters. Check that its title is the instrument the "
+            "question is about before relying on it.")
     if pieces_how == "summary":
         how = (" It is longer than one result hands over whole, so below is a summary of "
                "that retrieved text, condensed for this research question. A provision "
@@ -458,7 +478,8 @@ def published_block(lid: str, kind: str, outcome: dict, pieces_how: str = "whole
         how = " Below is the whole of it."
     cite = (f" This text comes from legislation.gov.uk, a different source from the index: "
             f"cite it as {url}, and say in the report that it was read from "
-            f"legislation.gov.uk because the index lacks it. {_currency_sentence(version)}")
+            f"legislation.gov.uk because {_WHY.get(kind, _WHY[KIND_NOT_HELD])}. "
+            f"{_currency_sentence(version)}")
     return (f"\n\n{FETCHED_OPEN}{lead}{how}{cite}]\n{str(body or '').strip()}\n"
             f"{FETCHED_CLOSE}")
 
@@ -534,7 +555,7 @@ def handed_in_run(log: Optional[list], lid: str) -> bool:
 
 
 # Every lead opens with `_index_state`, which no P3.12 lead does.
-_OPENING = r"this index (?:lacks|holds the record of) "
+_OPENING = r"this index(?: lacks|'s text read gave no text for| holds the record of) "
 _BLOCK_RE = re.compile(
     re.escape(FETCHED_OPEN) + _OPENING + r"[^\]]*" + re.escape(_READ_LEAD) + r"[^\]]*\]"
     r"[\s\S]*?" + re.escape(FETCHED_CLOSE))
