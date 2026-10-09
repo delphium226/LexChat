@@ -62,7 +62,16 @@ _WINDOW_START = re.compile(
     r"|in pursuance of (?:the )?powers?(?: (?:in|under|conferred by))?"
     r"|by virtue of (?:the )?powers?"
     # An Act of Sederunt: "makes this Act of Sederunt under the powers ...".
-    r"|under (?:the )?powers?",
+    r"|under (?:the )?powers?"
+    # Older forms: "In pursuance of paragraph 3 of Schedule 5 to ...", "having
+    # power under section 2 of the Civil Procedure Act 1997 ...".
+    r"|\bin pursuance of\b"
+    r"|\bhaving powers? (?:under|conferred by)"
+    # Modern drafting, which names no "powers" at all: "makes the following
+    # Order under section 32(1) of ...", "The Treasury, under section 118 of
+    # ..., and the Secretary of State, under section 277 of ... make".
+    r"|\b(?:Regulations|Order|Rules|Scheme|Byelaws)\s+under(?=\s+(?:sections?|paragraphs?|articles?|regulations?|Schedule)\s)"
+    r"|,\s+under(?=\s+(?:sections?|paragraphs?|articles?|regulations?|Schedule)\s)",
     re.I)
 _WINDOW_END = re.compile(
     r"\band (?:of )?(?:all|every) other (?:powers?|enabling)"
@@ -73,7 +82,13 @@ _WINDOW_END = re.compile(
     r"|\bin accordance with section\b"
     r"|\b(?:a )?draft of (?:this|these|the) (?:instrument|regulations|order|rules|scheme)"
     r"|\bhereby\b|\bmakes? the following\b|\bmake(?:s)? this\b"
-    r"|[:;]",
+    r"|[:;]"
+    # The end of the recital's sentence ("... Act 2013. In accordance with
+    # section 58(4) of that Act, a draft ..."). Not an abbreviation's dot:
+    # "No. 178/2002" and "etc. (Scotland)" are not followed by a capital.
+    # Case-sensitive inside a case-insensitive pattern, or "Nicotine etc. and
+    # Care" ends the title at "etc." (ssi/2017/422).
+    r"|(?-i:\.\s+(?=[A-Z]))|\.$",
     re.I)
 
 
@@ -125,7 +140,11 @@ _TITLE = (rf"(?!{_PROV_NUMBERED})"
           r"[A-Z][A-Za-z'’(),.\-]*(?:\s+(?!(?:sections?|paragraphs?|articles?|regulations?|schedules?)\b)"
           rf"(?!{_PROV_NUMBERED})"
           r"[A-Za-z0-9'’(),.\-&]+){0,16}?\s+(?:Act|Measure)\s+\d{4}")
-_ACT_REF = rf"(?P<title>{_TITLE})|(?P<that>that Act|the said Act|that Measure)|the (?P<year>\d{{4}}) Act"
+# "the Act" / "the principal Act" are anaphora like "that Act": in a UK SI the
+# preamble or the interpretation has named the Act first.
+_ACT_REF = (rf"(?P<title>{_TITLE})"
+            r"|(?P<that>that Act|the said Act|that Measure|(?<=the )Act\b|(?<=the )principal Act\b)"
+            r"|the (?P<year>\d{4}) Act")
 _CHUNK = re.compile(
     rf"(?P<prov>(?:{_KIND})\s+{_NUM}.*?)"
     rf",?\s+(?:of|to|in),?\s+(?:the\s+)?(?:{_ACT_REF})(?![A-Za-z])",
@@ -221,6 +240,7 @@ def parse_powers(window: str, before: str = "") -> list:
     # designated ...") that are not a title.
     titles = [_clean_title(m.group(1))
               for m in re.finditer(r"\bthe\s+(" + _TITLE + ")", before or "")]
+    window = _normalise_window(window)
     for m in _CHUNK.finditer(window):
         prov = m.group("prov")
         # A chunk's provision text must not itself contain an Act title: if it
@@ -237,14 +257,59 @@ def parse_powers(window: str, before: str = "") -> list:
         elif m.group("year"):
             anaphor = f"the {m.group('year')} Act"
             act = next((t for t in reversed(titles) if t.endswith(m.group("year"))), None)
-        before = window[: m.start()].rstrip(" ,")
+        preceding = window[: m.start()].rstrip(" ,")
         role = "power"
-        r = _ROLE.search(before)
+        r = _ROLE.search(preceding)
         if r:
             role = r.group(0).strip().lower()
         out.append({"act": act, "anaphor": anaphor, "provisions": provisions(prov),
                     "role": role, "text": m.group(0)[:300]})
+    if not out:
+        out = _section_anaphora(window, before or "", titles)
     return out
+
+
+def _normalise_window(window: str) -> str:
+    """Repairs the source text before parsing: a missing space ("section2(3)",
+    "191of the"), and "subsection (4) of section 17" read as section 17(4)."""
+    w = re.sub(r"\b(sections?|regulations?|articles?|paragraphs?)(\d)", r"\1 \2", window)
+    w = re.sub(r"(\d|\))(of|to)\b", r"\1 \2", w)
+    w = re.sub(r"\bsub-?sections?\s+((?:\([^)\s]{1,6}\)(?:\s*(?:,|and|or)\s*)?)+)\s*of\s+(section\s+\d+[A-Z]*)",
+               lambda m: m.group(2) + re.sub(r"\s*(?:,|and|or)\s*", "", m.group(1)), w)
+    return w
+
+
+# "... a Minister designated for the purposes of section 2(2) of the European
+# Communities Act 1972 ... in exercise of the powers conferred on him by that
+# section". The most common UK SI recital before 2020 and the largest class of
+# unparsed UK SI recitals (P3.31, 1987-2026 harvest): the provision is named
+# before the recital opens, and the recital points back at it.
+_SECTION_ANAPHOR = re.compile(
+    rf"\b(?:that|those|the said|the same)\s+(?P<kind>sections?|paragraphs?|articles?)"
+    rf"(?:\s+(?P<list>{_LIST}))?(?!\s+(?:of|to)\s)",
+    re.I)
+
+
+def _section_anaphora(window: str, before: str, titles: list) -> list:
+    m = _SECTION_ANAPHOR.search(window)
+    if not m:
+        return []
+    prior = list(_CHUNK.finditer(_normalise_window(before)))
+    if not prior:
+        return []
+    last = prior[-1]
+    if last.group("title"):
+        act = _clean_title(last.group("title"))
+    elif last.group("year"):
+        act = next((t for t in reversed(titles) if t.endswith(last.group("year"))), None)
+    else:
+        act = titles[-1] if titles else None
+    if m.group("list"):
+        provs = provisions(f"{m.group('kind')} {m.group('list')}")
+    else:
+        provs = provisions(last.group("prov"))
+    return [{"act": act, "anaphor": m.group(0), "provisions": provs, "role": "power",
+             "text": (last.group(0) + " ... " + m.group(0))[:300]}]
 
 
 _TITLE_LEAD = re.compile(r"^(?:and|or|of|to|the|by|in|under|with)\s+", re.I)

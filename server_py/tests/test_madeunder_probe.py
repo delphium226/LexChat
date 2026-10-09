@@ -211,3 +211,60 @@ def test_unnumbered_and_ordinal_schedules_are_not_titles():
              f"{sched} to the Widget (Scotland) Act 1901, make the following Regulations:")
         (role, act, provs), = _powers(t)
         assert act == "Widget (Scotland) Act 1901", sched
+
+
+def test_that_section_points_back_before_the_recital():
+    # uksi/2005/556's shape: the EC Act designation names the provision first.
+    pre = ("The Secretary of State, being a Minister designated for the purposes of section 2(2) "
+           "of the Widget Act 1901 in relation to measures in the veterinary field, in exercise "
+           "of the powers conferred on him by that section, after consultation, makes:")
+    w = mp.recital_window(pre)
+    assert [(p["act"], p["provisions"]) for p in mp.parse_powers(w, mp.text_before_window(pre))] == [
+        ("Widget Act 1901", ["section/2"])]
+    pre2 = ("The Secretary of State, being designated for the purposes of section 2(2) of the "
+            "Widget Act 1901, in exercise of the powers conferred on him by the said section 2(2) "
+            "and of all other powers enabling him, hereby makes:")
+    w2 = mp.recital_window(pre2)
+    assert mp.parse_powers(w2, mp.text_before_window(pre2))[0]["act"] == "Widget Act 1901"
+
+
+def test_modern_and_older_openings():
+    # uksi/2016/612, uksi/2021/1048, uksi/1991/2592 and uksi/2001/2792's shapes.
+    cases = [
+        ("The Lord Chancellor, with the concurrence of the Lord Chief Justice, makes the following "
+         "Order under section 32(1) of the Widget Act 1901. In accordance with section 58(4) of "
+         "that Act, a draft of this Order was laid.", [("Widget Act 1901", ["section/32"])]),
+        ("The Treasury, under section 118 of the Widget Act 1901, and the Secretary of State, "
+         "under section 277 of the Gadget Act 1902 make the following Order.",
+         [("Widget Act 1901", ["section/118"]), ("Gadget Act 1902", ["section/277"])]),
+        ("In pursuance of paragraph 3 of Schedule 5 to the Widget Act 1901, I hereby make the "
+         "following Order:", [("Widget Act 1901", ["schedule/5/paragraph/3"])]),
+        ("The Rule Committee, having power under section 2 of the Widget Act 1901 to make rules, "
+         "after consulting, make the following Rules:", [("Widget Act 1901", ["section/2"])]),
+    ]
+    for pre, want in cases:
+        w = mp.recital_window(pre)
+        got = [(p["act"], p["provisions"]) for p in mp.parse_powers(w, mp.text_before_window(pre))]
+        assert got[: len(want)] == want, (pre[:60], got)
+
+
+def test_the_act_and_source_spacing_and_subsections():
+    # uksi/2000/3106's shape: "the Act" defined before the recital opens.
+    pre = ("Whereas a draft of these Regulations has been approved under the Widget Act 1901 "
+           "(\"the Act\"); now, therefore, the Secretary of State, in exercise of the powers "
+           "conferred by sections 2(1), (3) and (4) and 5(4) of the Act, hereby makes:")
+    w = mp.recital_window(pre)
+    got = mp.parse_powers(w, mp.text_before_window(pre))
+    assert [(p["act"], p["provisions"]) for p in got] == [
+        ("Widget Act 1901", ["section/2", "section/5"])]
+    assert _powers("In exercise of the powers conferred on them by section2(3) and 191of the "
+                   "Widget Act 1901 and all other powers, hereby make:")[0][2] == [
+        "section/2", "section/191"]
+    assert _powers("In exercise of the powers conferred by subsection (4) of section 17 of the "
+                   "Widget Act 1901, hereby make:")[0][2] == ["section/17"]
+
+
+def test_a_dot_inside_a_title_does_not_end_the_recital():
+    t = ("The Scottish Ministers, in exercise of the powers conferred by section 7(1) of the "
+         "Widget, Nicotine etc. and Care (Scotland) Act 1901. A draft has been laid.")
+    assert _powers(t) == [("power", "Widget, Nicotine etc. and Care (Scotland) Act 1901", ["section/7"])]

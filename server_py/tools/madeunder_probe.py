@@ -74,7 +74,7 @@ USER_AGENT = "AILA-research-probe (FIX_PLAN P3.31; read-only; paced)"
 DEFAULT_GAP_S = 0.3
 
 from src.utils.made_under import (  # noqa: E402  the one parser, shared with the server
-    _WINDOW_START, _WS, parse_powers, preamble_text, recital_window, text_before_window,
+    _WINDOW_END, _WINDOW_START, _WS, parse_powers, preamble_text, recital_window, text_before_window,
 )
 
 # --------------------------------------------------------------------------
@@ -472,13 +472,23 @@ def main(argv=None) -> int:
         refetched = 0
         with dst.open("w", encoding="utf-8") as fh:
             for rec in load_records(src):
-                if rec.get("absent") or rec.get("preamble") not in ("ok",):
+                flagged = {"no_recital_window", "window_unparsed", "unresolved_anaphor"}
+                if rec.get("absent") or rec.get("error") or rec.get("preamble") not in ("ok",):
                     pass
-                elif "no_recital_window" in rec.get("flags", []) and rec.get("version") == "made":
+                elif flagged & set(rec.get("flags", [])) and rec.get("version") == "made":
+                    # These need the preamble again: a new opening, or the
+                    # text before the recital that an anaphor points into.
                     rec = fetch_record(client, rec["id"], a.via) or rec
                     refetched += 1
                 elif rec.get("window"):
-                    powers = parse_powers(rec["window"])
+                    # The stored window was cut at the older end; the end has
+                    # only gained stops, so the new cut is a prefix of it.
+                    window = rec["window"]
+                    e = _WINDOW_END.search(window)
+                    if e:
+                        window = window[: e.start()].strip(" ,")
+                    rec = dict(rec, window=window)
+                    powers = parse_powers(window)
                     flags = [f for f in rec.get("flags", [])
                              if f not in ("window_unparsed", "unresolved_anaphor")]
                     if not powers:
