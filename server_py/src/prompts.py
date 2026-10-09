@@ -127,7 +127,9 @@ CLARIFYING QUESTIONS — OFFER THE OPTIONS:
 When you ask a clarifying question, put the QUESTION ONLY in the body, then follow it with a <suggestions> block containing EVERY option you are offering — up to 4, one per line, phrased as the user would answer. The options are rendered to the user as clickable buttons, so listing them in the body as well shows the same list twice: do NOT write them out as prose, bullets, or a numbered list. Write "could you narrow this down?" in the body, not "for example, are you looking for: - X - Y - Z". Every option you want the user to see MUST be inside the block — an option that appears only in the body is invisible to them. Note this overrides the 2-3 guidance above: a clarification may offer up to 4. Offer only options grounded in the conversation or in tool results — scope choices (jurisdiction, in-force vs as-enacted, a section already named by the user). NEVER list specific Acts, SIs or cases you have not retrieved via a tool: your training data is out of date and a plausible-looking wrong option is worse than no option."""
 
 
-MANAGER_SYSTEM_PROMPT = _MANAGER_BODY + "\n\n" + _MANAGER_CHIPS
+# `MANAGER_SYSTEM_PROMPT` (the merged research Manager) is built further down,
+# after `_MANAGER_CONV_BODY`: since P3.4's research-mode follow-up it carries
+# the JURISDICTION section that body holds (`_RESEARCH_MANAGER_BODY`).
 
 # P2.3 (B3b) — *made under* is the one B3 relation nothing retrieves.
 #
@@ -511,6 +513,59 @@ When you ask a clarifying question, put the QUESTION ONLY in the body, then foll
 
 
 MANAGER_SYSTEM_PROMPT_CONVERSATIONAL = _MANAGER_CONV_BODY + "\n\n" + _MANAGER_CONV_CHIPS
+
+
+# FIX_PLAN P3.4's research-mode follow-up (batch 12 E; user decision 2026-10-09):
+# the default-jurisdiction rule also in the research Manager and the Deep
+# Research planner, in the wording approved for the conversational Manager.
+# ONE text: the section is READ OUT of `_MANAGER_CONV_BODY`, never retyped, and
+# that body's triple-quoted literal stays whole (`seam_replay --without-fix`
+# swaps the literal). The parliament and Westminster bots never get it: their
+# Manager branch returns early, and the planner adds it only for the three
+# legislation research types.
+def _one_span(text: str, start: str, end: str) -> str:
+    """`text` from `start` (present exactly once) up to the next `end`."""
+    if text.count(start) != 1 or end not in text[text.index(start):]:
+        raise RuntimeError(f"prompts: anchor {start!r} / {end!r} not found exactly once")
+    i = text.index(start)
+    return text[i:text.index(end, i)]
+
+
+DEFAULT_JURISDICTION_SECTION = _one_span(
+    _MANAGER_CONV_BODY, "JURISDICTION:\n", "\n\nWHEN USING delegate_research")
+
+
+def _insert_before(text: str, anchor: str, insert: str) -> str:
+    """`insert` and a blank line placed before `anchor` (present exactly once)."""
+    if text.count(anchor) != 1:
+        raise RuntimeError(f"prompts: anchor {anchor!r} not found exactly once")
+    return text.replace(anchor, insert + "\n\n" + anchor, 1)
+
+
+# The research Manager: before RESEARCH BRIEF CONSTRUCTION, whose "Any
+# jurisdiction constraints" line the section's last bullet makes concrete.
+_RESEARCH_MANAGER_BODY = _insert_before(
+    _MANAGER_BODY, "RESEARCH BRIEF CONSTRUCTION:\n", DEFAULT_JURISDICTION_SECTION)
+MANAGER_SYSTEM_PROMPT = _RESEARCH_MANAGER_BODY + "\n\n" + _MANAGER_CHIPS
+
+# The planner writes no `delegate_research` brief. Its `scope_note` is what
+# reaches every step's brief (`agent_core._build_step_brief`) and the synthesis
+# (`build_synthesis_messages`), so the last bullet names it instead; the rest of
+# the section is the approved text unchanged.
+_BRIEF_CLAUSE = "Put the jurisdiction in every `delegate_research` brief"
+_SCOPE_NOTE_CLAUSE = ("Put the jurisdiction in the `scope_note`, which every step's brief and "
+                      "the final report carry")
+
+
+def _for_the_planner(section: str) -> str:
+    """The section with its brief clause (present exactly once) pointed at the plan."""
+    if section.count(_BRIEF_CLAUSE) != 1:
+        raise RuntimeError("prompts: the jurisdiction section's brief clause has changed")
+    return section.replace(_BRIEF_CLAUSE, _SCOPE_NOTE_CLAUSE, 1)
+
+
+PLANNER_JURISDICTION_SECTION = _for_the_planner(DEFAULT_JURISDICTION_SECTION)
+_PARLIAMENT_RESEARCH_MODES = ("parliamentary_records", "westminster_records")
 
 # FIX_PLAN P3.17 (B11): a general rule is retrieved by its application
 # provision, not only by its definition. Measured on the row's stored sweeps:
@@ -977,7 +1032,7 @@ def get_manager_system_prompt(research_mode: str = "legislation_only", cfg: dict
         return date_line + "\n\n" + base + consulted_suffix
 
     mode_note = get_manager_mode_note(research_mode, cfg)
-    mgr = _manager_base(_MANAGER_BODY, _MANAGER_CHIPS, chips_enabled)
+    mgr = _manager_base(_RESEARCH_MANAGER_BODY, _MANAGER_CHIPS, chips_enabled)
     base = (mode_note + "\n\n" + mgr) if mode_note else mgr
     return date_line + "\n\n" + base + consulted_suffix
 
@@ -1338,6 +1393,10 @@ def get_planner_system_prompt(research_mode: str = "legislation_only", cfg: dict
         "{options_rule}",
         _PLANNER_OPTIONS_RULE if chips_enabled else _PLANNER_OPTIONS_RULE_NO_CHIPS,
     )
+    # P3.4's research-mode follow-up: the legislation research types only.
+    if research_mode not in _PARLIAMENT_RESEARCH_MODES:
+        planner_prompt = _insert_before(
+            planner_prompt, "RESPECT ACTIVE FILTERS:\n", PLANNER_JURISDICTION_SECTION)
 
     mode_note = _PLANNER_MODE_NOTES.get(research_mode, _PLANNER_MODE_NOTES["legislation_only"])
     parts = [date_line, planner_prompt, mode_note]
