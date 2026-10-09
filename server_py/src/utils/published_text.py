@@ -508,7 +508,7 @@ def published_line(lid: str, kind: str, outcome: dict) -> str:
                 f"as a scanned PDF{where}, which code cannot read, so its text could not be "
                 "checked here.]")
     if status == FAILED:
-        reason = _REASON_WORDS.get(str(outcome.get("reason") or ""), "the read did not complete")
+        reason = _REASON_WORDS.get(str(outcome.get("reason") or ""), "an error")
         return (f"\n\n{FETCHED_OPEN}{state}, and code's read of its text from "
                 f"legislation.gov.uk did not complete ({reason}), so its text could not be "
                 "checked here. That says nothing about the instrument.]")

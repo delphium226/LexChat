@@ -415,7 +415,7 @@ def test_the_block_never_matches_a_handed_schedule_paragraph():
     ({"status": pt.NOT_PUBLISHED}, "returned no document under ssi/1901/3 either"),
     ({"status": pt.PDF_ONLY, "pdf": "https://x/y.pdf"}, "only as a scanned PDF (https://x/y.pdf)"),
     ({"status": pt.FAILED, "reason": "no_reply"}, "did not complete (no reply)"),
-    ({"status": pt.FAILED, "reason": "http_500"}, "did not complete (the read did not complete)"),
+    ({"status": pt.FAILED, "reason": "http_500"}, "did not complete (an error)"),
     ({"status": pt.LIMIT, "limit": 8}, "already read 8 instruments from there"),
     ({"status": pt.EARLIER}, "earlier in this research"),
 ])
@@ -603,7 +603,7 @@ def test_a_failed_read_leaves_the_not_held_note_as_it_was(monkeypatch):
     out, _ = _run("get_legislation_text", {"legislation_id": LID}, raw, monkeypatch, {
         f"{LID}/made/data.xml": (500, "boom")}, log)
     assert "its contents could not be checked here" in out
-    assert "did not complete (the read did not complete)" in out
+    assert "did not complete (an error)" in out
     assert [e["status"] for e in log if e["tool"] == pt.PUBLISHED_ENTRY] == [pt.FAILED]
 
 
@@ -724,7 +724,7 @@ def test_the_routed_brief_carries_the_text_after_its_block():
            "number, so a search for its title or number will not find it and its text " \
            "cannot be read here." in head
     assert block.count("[/PROVISION FETCHED BY CODE]") == 2
-    assert block.rstrip().endswith("did not complete (the read did not complete), so its text "
+    assert block.rstrip().endswith("did not complete (an error), so its text "
                                    "could not be checked here. That says nothing about the "
                                    "instrument.]")
 
@@ -768,6 +768,9 @@ def test_the_managers_block_and_the_footer_say_where_the_text_came_from():
     assert "Read from legislation.gov.uk by code, because the index lacks the text: " \
            "SSI 1901/3 (the version as made)." in block
     assert block.index("Looked up by number") < block.index("Read from legislation.gov.uk")
+    # P3.7's limb says "in this index", not "here", beside the read
+    assert "Report one held without text as held with no text available in this index, " \
+           "never as not found." in block and "available here" not in block
     footer = lookup_scope_footer(log)
     assert "SSI 1901/3 was looked up by its number and is not held in this index" in footer
     assert footer.rstrip("*").endswith(

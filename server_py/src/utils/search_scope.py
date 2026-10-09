@@ -3462,7 +3462,7 @@ def _lookup_limb(log: Optional[list]) -> str:
         "itself: not merely that its text is unavailable, which reads as if its record "
         "were held, and not that a search did not find it. Never suggest an error in "
         "the user's citation. Report one held without text as held with no text "
-        "available here, never as not found."
+        "available in this index, never as not found."
     )
 
 

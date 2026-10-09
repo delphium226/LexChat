@@ -445,3 +445,33 @@ condensed for the question. 6409's two instruments (2.6 K and 5.8 K) go whole.
    (a) **Recommended:** `p37_6409`, `p37_6373`, 6410 and `p37r_6383`, n=3 each, about $3.60 (up to about $5.40),
    graded by the exit-1 set and by hand against the row's bar.
    (b) Swap `p37r_6383` for 6382 t1: about $2–3 more, and four of its six instruments are summarised at 8,000.
+
+## 10. The user's decisions applied (C5, C6)
+
+The user approved the wording with changes 5 and 6 and took every other recommendation (C1–C4, C7, C8). The
+acceptance run is not being run this session.
+
+- **C5, the failed line's fallback reason** (`published_line`, used for an HTTP error):
+  - before: "… code's read of its text from legislation.gov.uk did not complete (the read did not complete), so its
+    text could not be checked here. That says nothing about the instrument.]"
+  - after: "[PROVISION FETCHED BY CODE — this index lacks SSI 1901/3, and code's read of its text from
+    legislation.gov.uk did not complete (an error), so its text could not be checked here. That says nothing about
+    the instrument.]"
+- **C6, one sentence of `_lookup_limb`** (`search_scope.py`):
+  - before: "Report one held without text as held with no text available here, never as not found."
+  - after: "Report one held without text as held with no text available in this index, never as not found."
+
+**Tests.** Three assertions in `test_published_text.py` now pin "did not complete (an error)". A new assertion
+pins the limb sentence (none did before). `_published_changed_notes` gains the limb pair, so the detector screen
+covers the change.
+
+**Checks, all with the built code** (`TEST_DATABASE_URL=…/lexchat_test_c`, `PYTHONIOENCODING=utf-8`):
+- **Wording screen** (`screen.py`): 303 renderings, **0 trips**.
+- **Changed notes:** 6 before/after pairs (the limb now among them), **no detector tripped by a variant that its
+  original did not trip**.
+- **Mutants** (`mutants.py`, control first: 411 passed): **63 of 63 caught**, 0 survived. That is the 61 before plus:
+  - `q06`: the limb says "here" again;
+  - `u28`: the old fallback reason.
+
+  Each mutant's failing count is in `mutants_c56.txt`.
+- **Suite:** **3,464 passed**.

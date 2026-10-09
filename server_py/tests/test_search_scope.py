@@ -1360,6 +1360,11 @@ def _published_changed_notes() -> list:
                "description": desc}
         pairs.append((lookup_brief_block([_json.dumps(got) + block]),
                       lookup_brief_block([_json.dumps(got)])))
+    # P3.7's limb, "here" become "in this index" beside P3.38's limb
+    from src.utils.search_scope import LOOKUP_ENTRY, _lookup_limb
+    limb = _lookup_limb([{"tool": LOOKUP_ENTRY, "legislation_id": "ssi/1901/3",
+                          "label": "SSI 1901/3", "status": "held_without_text"}])
+    pairs.append((limb, limb.replace("available in this index, never", "available here, never")))
     assert all(a and b and a != b for a, b in pairs), pairs
     return pairs
 
