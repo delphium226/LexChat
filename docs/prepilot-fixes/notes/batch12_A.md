@@ -1,22 +1,27 @@
-# Parallel batch 12, agent A: P3.12, the seam relay read, the wrong-pinpoint rate, the exact-paragraph route probed ($0)
+# Parallel batch 12, agent A: P3.12, the seam relay read, the wrong-pinpoint rate, the exact-paragraph route probed, and a jurisdiction candidate ($0)
 
 **Branch:** `worktree-agent-aff4f776be97c42f5`. **Base:** `<INTEGRATOR_HEAD>` = `a99e4d4`. The worktree came up
 on `main` (`a6b4a76`) with no commits, so I ran `git reset --hard a99e4d4` before anything else. No other
 commit reached my branch while I worked.
 
-**Commits:** this note only. **No product code was built** (section 6 says why: the evidence does not yet
-point at one candidate, and the integrator's relay said to build only if it did).
+**Commits:**
 
-**Spend:** $0 in model spend. No model call, seam draw, replay or server. The four seam draws this note reads
-were the integrator's (relayed by message, $0.1866). **Live calls: 12 of the 20 agreed** (10 through LEX's
+- `9c74183` this note, first version (no product code: section 6 says why);
+- `560cf8e` fix(prepilot): P3.12 candidate, a jurisdiction selects the law, not the provisions (quick-lookup
+  Worker prompt + tests), built after the integrator's second relay (section 10), **not merged: its wording is
+  the user's** (decision 11.2);
+- this commit: the note, sections 10 and 11 added.
+
+**Spend:** $0 in model spend. No model call, seam draw, replay or server. The seam draws this note reads were
+the integrator's (relayed by message: four composition-seam draws, $0.1866; then eight as-sent draws, $0.3677). **Live calls: 12 of the 20 agreed** (10 through LEX's
 `GET /legislation/proxy`, 2 direct to legislation.gov.uk), every one a GET, at least 0.6 s apart (minimum gap
 measured 0.600 s), capped at 20 in code (`lgucall.py` refuses the 21st, redirect hops counted; none occurred),
 each logged (method, URL, status, bytes, time) in `call_log.jsonl`. Every stored run read here ran on the pinned
 `google/gemini-3.1-pro-preview` and was summarised at the 8,000-character fallback; no number comes from
 `glm-5.2:cloud`.
 
-**Tests:** full suite **3017 passed** on `lexchat_test_a` with `TEST_DATABASE_URL` set (`pytest_full.txt`),
-unchanged from the base (no product or test file changed).
+**Tests:** full suite **3043 passed** on `lexchat_test_a` with `TEST_DATABASE_URL` set (`pytest_full2.txt`;
+3017 at the base, `pytest_full.txt`, plus the candidate's 26).
 
 **Scratch:** my worktree's gitignored `docs/prepilot-fixes/evidence/seam/batch12/A/` (`git check-ignore -v`:
 `.gitignore:113`), copied at the end to `C:/Projects/LexChat/docs/prepilot-fixes/evidence/seam/batch12/A/`.
@@ -25,8 +30,11 @@ Commands below run from that folder unless they say `server_py/`, with `PYTHONIO
 statutory text (`compare_b12.txt`, `dump_pinpoints.txt`, `para_requests.*`, `tally_route.txt`,
 `pin_detector.txt`, `raw/`, `schB1_lex.txt`) are scratch only.
 
-**Built shape against the brief.** The brief allowed a build of the one candidate the seam result points at. It
-does not point at one (section 6), so I built nothing and wrote two things the brief did not name: a $0
+**Built shape against the brief.** The first relay's draws did not point at one candidate (section 6), so the
+first version built nothing; the second relay's as-sent draws pointed at the brief's jurisdiction phrase and the
+integrator asked for a Worker-prompt line, built in `560cf8e` (section 10). The prompt-swapped payloads are
+built by a scratch driver (`draw_swap.py`), not by `--at-rev`, because `--at-rev` on the candidate would also
+carry P3.31's prompt and tool changes (section 10.3). Also not named by the brief: a $0
 prototype of a wrong-pinpoint check (scratch only, section 4.2) and a one-field diagnostic payload for a further
 draw (`seam_b12_rep3_noscot.json`, decision 1).
 
@@ -229,7 +237,7 @@ composition. It would fix retrieval on the other shapes above (P3.22's session's
 lettered paragraphs, about 21% of live paragraphs by batch 7 B's 348 of 440 clean cuts; a named sub-paragraph),
 and the all-or-nothing summary. It is P3.38's route and P5.4 (d)'s fallback.
 
-## 6. Which candidate the evidence points at, and why nothing is built
+## 6. Which candidate the evidence points at, and why nothing is built (first version; relay 2 in section 10)
 
 | Candidate | What the evidence says |
 |---|---|
@@ -255,14 +263,16 @@ pattern).
 ## 8. What I did NOT do
 
 - No model call, seam draw, replay or server; no LEX `POST` (only the 12 GETs above).
-- No product, test, grader or prompt change; nothing under `server_py/` changed. The `wind up` grader fix and the
-  `_paragraphs` / all-or-nothing finding are decisions, not edits.
+- (First version) no product change. Relay 2's candidate (`560cf8e`) changes `prompts.py` and adds one test file;
+  no grader, seam tool or other prompt changed. The `wind up` grader fix and the `_paragraphs` /
+  all-or-nothing finding are decisions, not edits.
+- I did not draw the prompt-swapped payloads or the first-round probe; I built and dry-ran them.
 - I did not draw the as-sent payloads; I built and dry-ran them (`--dry-run`).
 - I did not edit FIX_PLAN, SESSION_LOG, a rubric, the tracker, CLAUDE.md or a memory file. No push, no merge.
 
 ---
 
-## 9. Decisions for the user (and the integrator)
+## 9. Decisions for the user (first list; decision 1 approved and drawn; superseded by section 11)
 
 1. **The next draw on this row** (the integrator's; priced first; one attempt per draw with the product's
    `max_tokens` 32,000, so a runaway costs at most about $0.41 a draw; expected about $0.04-0.06 a draw, like
@@ -314,6 +324,208 @@ pattern).
       and sub-paragraph forms served.
    2. **Build it into `schedule_route_block` now as the primary route** for a named paragraph. More text a call
       (11-71 KB a read, one read a paragraph) for no gain on this row's acceptance.
+
+## 10. Relay 2: the as-sent draws, and the candidate they point at
+
+The user approved decision 1 of the first list and the integrator drew it: 8 as-sent draws (`seam_replay worker
+--run <f> --turn 7 --as-sent --at-rev recorded --date recorded --max-tokens 32000`), $0.3677, outputs gitignored in
+`evidence/seam/batch12/integrator/assent/`. The integrator asked me to check its hand-read, build the candidate
+the draws point at (unmerged), and prepare the payloads to test it.
+
+### 10.1 The 8 draws, read by hand (the integrator's read checked)
+
+| Payload | Draws | 42 | 43 | 44 | By hand | `depth` |
+|---|---|---|---|---|---|---|
+| sweep rep 1 | 2, **byte-identical** (1,944 completion tokens, 1,694 chars) | **absent** | (5), (6), and a clause for the other limbs | named, with its trigger, no sub-paragraph | PARTIAL | PARTIAL (42 coarse) |
+| sweep rep 2 | 2, distinct | (2)-(3), (4) | (6), (5), and a clause for the other limbs | named with its trigger / (1) and (5) | **DELIVERED 2 of 2** | DELIVERED 2 of 2 |
+| sweep rep 3 | 2, **byte-identical** (2,405 tokens, 1,252 chars) | **absent** | "(1)-(4)" for the security, repossession and forfeiture limbs (loose: (1) is the paragraph's application line), (5), (6) | **absent** | PARTIAL | PARTIAL (42, 44 coarse) |
+| `seam_b12_rep3_noscot` (rep 3, " for Scotland" removed from the brief) | 1 answered, 1 tool call (`get_legislation_changes`, no text) | (1)-(5), each | (1)-(8), each | (1)-(7), each | **DELIVERED** | DELIVERED |
+
+- **The integrator's read holds**, with three additions. (i) **Rep 2's brief also names Scotland** ("Jurisdiction:
+  for Scotland") and delivered 2 of 2, so the phrase is not sufficient on its own: rep 2's payload differs in
+  that the Worker's own second section search named the three paragraphs (a CUT block, not only the MATCHED
+  one) and a change-record round followed. (ii) As-sent reproduces the live shortfall on reps 1 and 3 (live: 43(6)
+  and 44; 43(6) alone), not rep 2's live wrong pinpoint (0 of 2). (iii) No draw has a wrong pinpoint; one is
+  loose (rep 3's "(1)-(4)").
+- **Effective n:** the two identical pairs make 4 distinct answers on the recorded briefs; the two payloads with
+  a Scotland brief and no named-paragraph search (reps 1 and 3) give 2 distinct answers, both without 42; and 1
+  answered draw on the one-field payload. **The jurisdiction pointer rests on that one draw**, plus the 6 of 6 against 2 of 7 pattern
+  over the composition-seam draws (section 2, point 2). It is a pointer, not a measurement.
+- **The as-sent seam is the instrument from here**: it reproduced two of the three live shortfalls, where the
+  composition seam reproduced none.
+
+### 10.2 The candidate (`560cf8e`, on this branch, not merged)
+
+**What:** one sentence, `prompts._JURISDICTION_SELECTS_LAW`, joined at the end of the quick-lookup Worker's
+existing Jurisdiction bullet (`WORKER_SYSTEM_PROMPT_CONVERSATIONAL`, YOUR MANDATE), after P3.4's three rules,
+which are unchanged byte for byte. Nothing else in any prompt moves.
+
+**The built bullet's new tail**, exactly as the Worker reads it:
+
+> ... If the brief names a jurisdiction, answer for that one. **A jurisdiction, whether the brief names it or it is
+> the default, selects the law that applies there, not the provisions to report: give each provision on the
+> question that applies there, including those that also apply elsewhere in the UK, not only those that name
+> that jurisdiction or apply only there.**
+
+**Why each part.** "Whether the brief names it or it is the default": the bullet's own default is Scotland, so
+a brief with no jurisdiction is answered for Scotland too; the sentence makes the two cases read the same. "Selects the law ..., not the provisions to
+report": the failure is a Worker treating "for Scotland" as a filter on provisions. "Including those that also
+apply elsewhere in the UK": the dropped paragraphs are UK-wide provisions that extend to Scotland. "Not only those
+that name that jurisdiction or apply only there": names the narrowing seen (43(5) and 43(6) are the limbs that
+name Scotland or its procedure). "On the question": keeps the mandate's "Do not broaden the scope" (the sentence
+does not license reporting unrelated provisions, such as rep 1's paragraph-112 span).
+
+**Where it reaches (decided for this candidate, open to the user, decision 2.3):** the quick-lookup Worker only,
+in every research type, with or without a filter; not the research Workers, the Manager, the planner, the Deep
+Research synthesis or the parliamentary bots (`test_the_sentence_reaches_exactly_the_quick_lookup_worker`, 20
+dispatch cases x 2 configurations). The evidence is all from the quick-lookup Worker; the research Workers'
+reports carry a full Statutory Framework and no stored research-mode turn 7 ran after the route existed.
+
+**Wording options for the user** (each screened, below):
+
+1. **(Recommended, built) W1**, as above.
+2. **W2, shorter:** "Answering for a jurisdiction means giving the law that applies there on the question,
+   including provisions that also apply elsewhere in the UK, and not only the provisions made for it alone."
+   Drops the default clause and the "not the provisions to report" contrast.
+3. **W3, an instruction about placement:** "Where a provision on the question applies in that jurisdiction, report
+   it whether or not it names the jurisdiction, and give any provision made only for that jurisdiction beside
+   it, not in its place." Names the failure most directly; says nothing about the default.
+
+**Screens (BUILT code, all pass):**
+
+- `python <scratch>/screen_b12.py` from `server_py/` (the integrator's `b9_screen.screen`, copied from batch 11 A,
+  every answer-reading detector whole and per sentence, "ranked", brackets): **6 texts (W1 sentence, W1 bullet,
+  W2, W3, W2 and W3 in the bullet), 0 trips** (`screen_b12.txt`).
+- `test_the_sentence_trips_no_detector` (in the product's tests): the sentence and the whole bullet against
+  `NEG_ASSERTED`, `NOT_FOUND`, `NEG_TERMS`, `NEG_BLAMED_INDEX`, `NEG_BLAMED_USER`, `NEG_LIMITS`,
+  `NEGATIVE_EXPLAINED`, `IN_FORCE_CLAIM`, `_CUR_DISCLOSED`, `_CUR_DATED`, `SCOTS_CASELAW_GAP`, the three halt
+  detectors, `OPENER_VOCAB`, `SCHED_LIMIT`, `SCHED_INDEX_NEG`, `_P312_NOT_DELIVERED`, `derivation_claims`,
+  `caselaw_gap_statements`, `sched_unit_clauses`, per sentence `_CMC_*`, `_currency_asserted`,
+  `negcurrency_claim` and `sched_clause_class`, and `_scripted_counts` (0); no "ranked", "cut short", bracket or
+  "retriev".
+- P3.4's own screen (`test_the_new_wording_trips_no_detector`, which reads the whole bullet) still passes.
+
+**Other code texts that speak of the same thing** (the lesson), none contradicting it:
+- **P3.4's conversational Manager JURISDICTION rule** ("answer it for Scotland (the law that applies in Scotland,
+  including UK legislation that extends there)"; "Put the jurisdiction in every `delegate_research` brief"): the
+  sentence says on the Worker's side what the Manager's parenthesis already says. The Manager is unchanged.
+- **P3.4's bullet itself** ("find the legislation that applies in Scotland (UK legislation that extends there
+  included)"): the default case already said it; the sentence extends it to a named jurisdiction.
+- **The hybrid research Worker's JURISDICTION SCOPE** ("retrieve sections ONLY for that jurisdiction's
+  legislation"): about which instruments to retrieve, in a prompt this candidate does not touch. "That
+  jurisdiction's legislation" could be read the same narrow way; decision 2.3.
+- **The filter block's extent notes**: never given to the quick-lookup Worker (P3.14); unaffected.
+- **The FETCHED block's MATCHED tail** (batch 11 A: "each of those paragraphs that bears on the question gets a
+  sentence or bullet of its own"): consistent; the sentence removes a reason the Worker gave for treating the
+  general paragraphs as not bearing on a Scotland question.
+
+**What it moves (dry run over every stored input it reads):** the quick-lookup Worker's system prompt, +304
+characters, on all **1,585** stored quick-lookup delegations (394 run files, 57 directories); nothing else, by
+construction (`test_the_prompt_is_its_parent_plus_the_sentence_alone`, and `draw_swap.py`'s assertion that the
+candidate's built prompt is its parent's plus the sentence and nothing else). 140 of those 1,585 briefs name a
+jurisdiction (most stored runs predate P3.4, which now has the Manager name one in every brief). **What a prompt
+line moves is behaviour, which no dry run shows**: it reaches every quick-lookup Worker call, including its
+first round (what it searches), so a first-round probe belongs before any sweep (decision 2.2).
+
+**Tests:** `server_py/tests/test_jurisdiction_selects_law.py`, 26 tests. **Revert** (`mutants_b12.py`, a scratch
+copy, the constant, its comment and the join removed): **17 lines** of `prompts.py`, **8 tests fail**. **Single-site
+mutants, 10 of 10 caught** (`mutants_b12.txt`): the sentence not joined (6 fail); joined as a block after the
+mandate instead of in the bullet (3); also joined into the research legislation Worker (4); also into the
+conversational Manager (4); joined twice (2); the default clause dropped (7); "not only those that name" dropped
+(7); "also apply elsewhere in the UK" dropped (7); "on the question" dropped (7); a detector-tripping phrase
+substituted (9). The two "also joined into" mutants first raised a NameError at import (the constant is defined
+below those prompts) and so proved nothing; rewritten to insert the literal sentence, they fail on behaviour.
+**Full suite: 3043 passed** on `lexchat_test_a` (3017 + 26; `pytest_full2.txt`).
+
+### 10.3 The payloads to test it (not drawn)
+
+**Why not `--at-rev 560cf8e`:** between the recorded head (`9632b53`) and this candidate's base (`a99e4d4`),
+P3.31 changed the quick-lookup Worker's ENABLING POWER rule and added a tool. `seam_replay worker --run
+wave4_b11_sweep/6335_rep3.json --turn 7 --as-sent --at-rev 560cf8e --date recorded --max-tokens 32000 --dry-run`
+gives sent_chars **44,214** and offers `find_instruments_made_under`, against 43,549 recorded: 665 characters and
+a tool more, of which the sentence is 304. Three changes, not one.
+
+**So `draw_swap.py`** (scratch) builds the payload with the product's own builders exactly as `--as-sent --at-rev
+recorded --date recorded` does, inserts the candidate sentence (read from `560cf8e` with `git show`) at the end of
+the recorded prompt's bullet, and asserts: (1) `560cf8e`'s built prompt is its parent's plus " " + sentence at that
+anchor and nothing else; (2) the swapped payload equals the recorded one in every message but the system prompt,
+and the system prompt differs only by that insertion; the tools offered are the recorded ones; (3) sent_chars
+grows by exactly 304. Each draw is one attempt with `max_tokens` 32,000 through `seam_replay.run_as_sent`, printed
+and graded as `--as-sent` prints them. **Dry runs (all assertions pass):**
+
+| Payload | Recorded sent_chars (matches the integrator's draws) | Swapped |
+|---|---|---|
+| sweep rep 1 | 52,045 | 52,349 |
+| sweep rep 2 | 68,100 | 68,404 |
+| sweep rep 3 | 43,549 | 43,853 |
+| `seam_b12_rep1_noscot.json` (new: rep 1 with " for Scotland" removed, one field asserted, 250 to 237 chars) | 52,032 | 52,336 |
+| `seam_b12_rep3_noscot.json` (rebuilt: byte-identical to the one drawn, sha1 `fc0e2240`) | 43,536 | 43,840 |
+
+**Commands** (from `server_py/` of the main checkout; `tools/seam_replay.py` is the same at `a99e4d4` and on this
+branch; `S=$PREPILOT_EVIDENCE/seam/batch12/A`):
+
+```
+# the candidate, prompt swapped, on the three sweep payloads (n=2 each)
+python $S/draw_swap.py --run $PREPILOT_EVIDENCE/replay/wave4_b11_sweep/6335_rep1.json --reps 2 --out <dir>/swap_rep1
+python $S/draw_swap.py --run $PREPILOT_EVIDENCE/replay/wave4_b11_sweep/6335_rep2.json --reps 2 --out <dir>/swap_rep2
+python $S/draw_swap.py --run $PREPILOT_EVIDENCE/replay/wave4_b11_sweep/6335_rep3.json --reps 2 --out <dir>/swap_rep3
+# the brief alone, on rep 1 (recorded prompt, no candidate), n=2
+python -m tools.seam_replay worker --run $S/seam_b12_rep1_noscot.json --turn 7 --as-sent --at-rev recorded --date recorded --max-tokens 32000 --reps 2 --print --out <dir>/noscot_rep1
+```
+
+8 draws. **Expected about $0.40** (the 8 relay-2 draws cost $0.3677, $0.023-0.063 each); **worst case about $3.30**
+(each one attempt, capped at 32,000 output tokens, about $0.41 at the runaway). Two of relay 2's pairs came back
+byte-identical, so n=2 may give one distinct answer per payload; a third draw on a payload whose pair is identical
+adds nothing.
+
+**What to read:** in the swapped draws, whether 42 and 44 appear with their facts on reps 1 and 3 (the shortfall),
+that rep 2 still delivers, that 43(5) and 43(6) are still there (they are what "for Scotland" asks for), and that
+nothing outside the question appears (rep 1's block carries a span from paragraph 112, matched on the word
+"Scotland"; the sentence must not pull it in). In noscot rep 1, whether the brief alone flips rep 1 as it flipped
+rep 3.
+
+## 11. Decisions for the user (revised after relay 2; supersedes section 9)
+
+Section 9's decision 1 was approved and drawn (section 10.1). The others are restated here as they now stand.
+
+1. **The next draws** (the integrator's; priced first).
+   1. **(Recommended) The 8 draws of section 10.3**: the candidate prompt-swapped on the three sweep payloads, n=2
+      each, and rep 1's brief alone, n=2. About $0.40 expected, $3.30 at worst. Tells whether the sentence
+      recovers 42 and 44 on reps 1 and 3 without losing rep 2 or the Scots limbs, and whether the brief alone
+      flips rep 1 as it flipped rep 3.
+   2. **The three swapped payloads only** (6 draws, about $0.30, $2.50 at worst). Skips the second brief-only
+      check, so the pointer would still rest on one answered draw.
+   3. **Also draw the candidate on both noscot payloads** (2 more, about $0.10): checks the sentence does not
+      hurt the case that already delivers.
+2. **The candidate itself** (`560cf8e`, Worker-facing wording; the user's before merge).
+   1. **Wording: (Recommended) W1 as built**; or W2 (shorter, no default clause); or W3 (placement instruction).
+      All three screened, 0 trips (section 10.2). Choosing W2 or W3 is a one-constant change plus its tests.
+   2. **Before any sweep: (Recommended) a first-round probe**, because a Worker-prompt line reaches the Worker's
+      first round (what it searches) as well as its write-up (FIX_PLAN's P3.13 lesson). From `server_py/` of
+      **this worktree** (whose working tree carries the candidate): `python -m tools.seam_replay worker --run
+      $PREPILOT_EVIDENCE/replay/wave4_b11_sweep/6335_rep{1,3}.json --turn 7 --first-round --reps 1`, and the same
+      from the main checkout for the before-column: 4 calls, each stopped at the first tool call, about $0.02 each.
+      Dry-run checked: the probe uses the working tree's prompt (12,427 characters here, the main checkout's
+      12,123 + 304) and today's tools on both sides, so the A/B differs by the sentence alone; this brief names no
+      instrument by number, so P3.7's lookup block adds nothing to it.
+   3. **Scope: (Recommended) the quick-lookup Worker only**, as built; or **also the research Workers**, as a
+      clause in the hybrid Worker's JURISDICTION SCOPE and a bullet in the legislation Worker (no evidence from
+      research mode yet: every stored research-mode turn 7 ran before the route).
+   4. **If the swapped draws do not recover 42 and 44:** drop the candidate and return to the answer-seam lines
+      (section 9's former decision 2.1, unchanged), which do not depend on what the Worker composes.
+3. **The all-or-nothing paragraph cut and the comma-list misread** (section 9's decision 3, unchanged): hand over
+   the paragraphs that cut and state the ones that do not (recommended); or also fix `_paragraphs`; or leave both
+   until P3.38.
+4. **The `depth` grader's paragraph-42 fact regex** (section 9's decision 4, unchanged): extend it to
+   `wind(?:ing)?[- ]?up` (recommended; 1 of 48 stored texts moves, to the hand verdict); or leave it.
+5. **The exact-paragraph route** (section 9's decision 5, unchanged): book it under P3.38 with section 5's numbers
+   (recommended); or build it into `schedule_route_block` now.
+6. **The instrument for P3.12's lever choices from now on.**
+   1. **(Recommended) The as-sent seam** (`--as-sent --at-rev recorded --date recorded --max-tokens 32000`, or
+      `draw_swap.py` for a prompt candidate), not the default composition seam: as-sent reproduced 2 of the 3 live
+      shortfalls; the composition seam reproduced none, and two earlier levers moved it and not the live runs.
+   2. **Keep both**, the composition seam for a cheap first look. It costs the same per draw, so there is little
+      to save.
 
 ---
 
