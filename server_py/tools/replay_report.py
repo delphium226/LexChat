@@ -9406,16 +9406,73 @@ def p322_mention_class(sentence: str, mention, carriers=(), window: str = "") ->
     return "UNQUALIFIED", "named as if read"
 
 
-def p322_answer_verdict(classes: list, qualified_before: bool) -> str:
-    """Item 3 for one answer naming an out-of-corpus authority: FAIL on a
-    LINKED sentence; PASS where any of its sentences is SECOND_HAND or
-    NOT_HELD (the answer qualifies it); EARLIER where none does but an earlier
-    answer of the same run did (reported, not failed); FAIL otherwise."""
+def p322_answer_verdict(classes: list, qualified_before: bool, bare=None) -> str:
+    """Item 3 for one answer naming an out-of-corpus authority, by the
+    FIRST-STATEMENT RULE (batch 13 E; batch 12 E's hand-read, the user's
+    decision): FAIL on a LINKED sentence anywhere; PASS where any sentence
+    says the judgment is not held (NOT_HELD), or where the FIRST sentence that
+    says something of the authority is SECOND_HAND (tied to the judgment it
+    came through); otherwise EARLIER where an earlier answer of the same run
+    passed (reported, not failed), else FAIL. A tie written only after the
+    authority's holding was first stated on its own terms does not save the
+    answer: a lawyer has already read the holding as read. `bare` marks each
+    sentence that only lists the authority (a reference-list entry, see
+    `p322_is_bare`), which is not a statement and is skipped; an answer that
+    only lists it is judged on its first listing. Until batch 13 the rule was
+    "PASS where ANY sentence is SECOND_HAND", which passed the holding-first
+    shape (3 of 25 answer-turns against the hand-read)."""
     if "LINKED" in classes:
         return "FAIL"
-    if {"SECOND_HAND", "NOT_HELD"} & set(classes):
+    if "NOT_HELD" in classes:
+        return "PASS"
+    bare = list(bare) if bare is not None else [False] * len(classes)
+    stated = [c for c, b in zip(classes, bare) if not b] or classes[:1]
+    if stated and stated[0] == "SECOND_HAND":
         return "PASS"
     return "EARLIER" if qualified_before else "FAIL"
+
+
+# --- The back-reference and the bare listing (batch 13 E) ------------------------
+#
+# A sentence that names no authority but points back to one named in the
+# sentence before ("Gadget Ltd applied this principle to ...") speaks of it:
+# a demonstrative and a rule-word, with a citing word. It is classified like
+# any mention (SECOND_HAND where the judgment it came through is named), and
+# marked as a back-reference. Under the first-statement rule it can never be
+# the first statement (the authority is named before it), so it never turns a
+# FAIL into a PASS; it records the tie the hand-read saw.
+_P322_BACKREF = re.compile(
+    r"\b(?:this|that|these|those|the\s+same)\s+(?:[\w'’-]+\s+){0,2}?"
+    r"(?:principles?|tests?|approach(?:es)?|rules?|reasoning|doctrine|standard|guidance"
+    r"|framework|line\s+of\s+authority)\b", re.I)
+# A bare listing: once the authority's own name and any link target are
+# taken out, no lower-case word of four or more letters is left (nor a first
+# word of four or more outside the name): "*   *Widget v Gadget Sprocket*
+# [1899] AC 52 (HL)". Names, citations and court tags are capitalised; a
+# statement carries a lower-case word.
+_P322_BARE_STRIP = re.compile(r"\[([^\[\]]{0,200})\]\((?:https?://[^)\s]+)\)|https?://\S+")
+
+
+def p322_is_bare(sentence: str, auth: dict) -> bool:
+    """True when the sentence only lists the authority (see above)."""
+    s = _P322_BARE_STRIP.sub(lambda m: m.group(1) or " ", sentence or "")
+    spans = []
+    for rx in list(auth.get("full_rx") or []) + (
+            [auth["mention_rx"]] if auth.get("mention_rx") else []):
+        spans += [(m.start(), m.end()) for m in rx.finditer(s)]
+    if not spans:
+        return False
+    keep = []
+    for i, ch in enumerate(s):
+        keep.append(" " if any(a <= i < b for a, b in spans) else ch)
+    rest = "".join(keep)
+    words = re.findall(r"[A-Za-z][A-Za-z'’]*", rest)
+    if any(len(w) >= 4 and w[0].islower() for w in words):
+        return False
+    lead = re.match(r"[\s*_#>\-\d.)]*([A-Za-z][A-Za-z'’]*)", s)
+    if lead and not any(a <= lead.start(1) < b for a, b in spans) and len(lead.group(1)) >= 4:
+        return False
+    return True
 
 
 def _p322_auths(entry: dict) -> list:
@@ -9673,17 +9730,30 @@ def p322_run(doc: dict, entry: dict) -> dict:
                 # Anchored: named in full in this answer or an earlier one.
                 anchored = anchored or any(
                     p322_names_ooc(s, a, False, t["titles"])[1] for s in all_s)
+                bares, named_prev = [], False
                 for s in all_s:
-                    if p322_names_ooc(s, a, anchored, t["titles"])[0]:
+                    named = p322_names_ooc(s, a, anchored, t["titles"])[0]
+                    # Batch 13 E: "... applied this principle", the sentence
+                    # after one that names it.
+                    backref = (not named and named_prev and bool(_P322_BACKREF.search(s))
+                               and bool(_P322_SECOND.search(s)))
+                    if named or backref:
                         mention = _P322OocMention(a, _p322_cited_titles(s, t["titles"]))
                         cls, why = p322_mention_class(s, mention, carriers,
                                                       " ".join(back))
+                        bare = named and p322_is_bare(s, a)
+                        if backref:
+                            why += "; a back-reference to the sentence before"
+                        elif bare:
+                            why += "; a bare listing, not a statement"
                         sents.append((cls, why, s))
+                        bares.append(bare)
+                    named_prev = named
                     back = (back + [s])[-2:]
                 if sents:
                     before = any(v == "PASS" for _, v, _ in row["mentions"])
                     row["mentions"].append((t["export_turn"], p322_answer_verdict(
-                        [c for c, _, _ in sents], before), sents))
+                        [c for c, _, _ in sents], before, bares), sents))
             elif a["mention_rx"] and not hit and a["mention_rx"].search(t["prose"]):
                 row["named_only"].append(t["export_turn"])
         if a.get("carrier"):

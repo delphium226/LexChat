@@ -127,7 +127,12 @@ def test_named_as_if_read_is_unqualified():
 
 
 def test_the_answer_verdict_reads_every_sentence_and_the_earlier_answers():
-    assert rr.p322_answer_verdict(["UNQUALIFIED", "SECOND_HAND"], False) == "PASS"
+    # Batch 13 E: the FIRST statement decides; a tie written after the
+    # holding was stated on its own terms no longer passes the answer.
+    assert rr.p322_answer_verdict(["UNQUALIFIED", "SECOND_HAND"], False) == "FAIL"
+    assert rr.p322_answer_verdict(["SECOND_HAND", "UNQUALIFIED"], False) == "PASS"
+    # NOT_HELD and LINKED still read every sentence.
+    assert rr.p322_answer_verdict(["UNQUALIFIED", "NOT_HELD"], False) == "PASS"
     assert rr.p322_answer_verdict(["NOT_HELD"], False) == "PASS"
     assert rr.p322_answer_verdict(["UNQUALIFIED"], True) == "EARLIER"
     assert rr.p322_answer_verdict(["UNQUALIFIED"], False) == "FAIL"
