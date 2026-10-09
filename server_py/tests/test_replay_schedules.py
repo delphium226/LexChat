@@ -19,6 +19,8 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
+
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
@@ -109,6 +111,22 @@ def test_6335_the_paragraphs_named_but_not_delivered_is_shallow():
            "searching was cut short by a limit. Enforcing security and legal process "
            "need the permission of the court, and no order for winding up may be made.")
     assert rr.depth_verdict("6335", ans)[0] == "SHALLOW"
+
+
+@pytest.mark.parametrize("phrase,deep", [
+    ("no order may be made to wind up the company", True),
+    ("no order may be made to wind-up the company", True),
+    ("no resolution may be passed for its winding up", True),
+    ("no winding-up order may be made", True),
+    ("no order may be made for the company to be wound up", False),
+    ("no order may be made against the company", False),
+])
+def test_6335_paragraph_42_reads_wind_up_as_well_as_winding_up(phrase, deep):
+    """Batch 13 B: a draw that wrote "an order to wind up a company" was read
+    as coarse (batch 12 A's hand-read: delivered)."""
+    p42 = f"Under paragraph 42 of Schedule B1 to the Insolvency Act 1986, {phrase}."
+    _, graded = rr.depth_verdict("6335", "\n\n".join((p42, _P43, _P44)))
+    assert graded[0][1] == ("deep" if deep else "coarse"), phrase
 
 
 def test_6335_paragraph_43_needs_all_three_of_its_facts():

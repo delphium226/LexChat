@@ -477,6 +477,46 @@ def test_no_marker_hands_over_the_whole_unit_verbatim_or_summarised(monkeypatch)
     assert "Form B." not in big and seen == [len(SCHED_3_TEXT)]
 
 
+def test_a_named_paragraph_that_cuts_is_handed_over_when_another_does_not(monkeypatch):
+    """Batch 13 B (P3.12): past the threshold, the named paragraphs that cut go
+    over, cut, and the one that does not is named; before, the whole schedule
+    went to the summariser and paragraph 4 was lost with it."""
+    _route_lex(monkeypatch)
+    seen = []
+    out = _route("Schedule 2 paragraph 4, 30", threshold=100, summary=seen,
+                 monkeypatch=monkeypatch)
+    assert seen == []
+    assert ("Below is the part of it this search named, labelled. Paragraph 30 has no single "
+            "heading of its own in it to cut at, so it is not among the parts below.") in out
+    assert "Paragraph 4 of Schedule 2, cut at its own heading and the next one:" in out
+    assert "A fee may be refunded." in out and "one shilling" not in out
+
+
+def test_within_the_threshold_the_whole_schedule_still_goes_when_one_does_not_cut(monkeypatch):
+    # An un-headed paragraph named beside a headed one is in the whole text.
+    _route_lex(monkeypatch)
+    out = _route("Schedule 2 paragraph 4, 30", monkeypatch=monkeypatch)
+    assert ("Below is the whole of Schedule 2. Paragraph 30 has no single heading of its own "
+            "in it to cut at.") in out
+    assert "one shilling" in out and "A fee may be refunded." in out
+
+
+def test_the_partial_cut_needs_the_whole_over_the_limit_and_a_paragraph_that_cuts():
+    unit = su.ScheduleUnit("schedule", "2", paragraphs=("4", "30"))
+    n = len(SCHED_2_TEXT)
+    assert su.cut_pieces(unit, SCHED_2_TEXT, whole_limit=n)[1] == su.WHOLE
+    assert su.cut_pieces(unit, SCHED_2_TEXT, whole_limit=n - 1)[1] == su.CUT
+    assert su.cut_pieces(unit, SCHED_2_TEXT)[1] == su.WHOLE
+    none_cut = su.ScheduleUnit("schedule", "2", paragraphs=("30", "31"))
+    pieces, how, reason = su.cut_pieces(none_cut, SCHED_2_TEXT, whole_limit=1)
+    assert how == su.WHOLE and pieces == [("", SCHED_2_TEXT)]
+    assert reason == "Paragraphs 30 and 31 have no single heading of their own in it to cut at."
+    two = su.ScheduleUnit("schedule", "2", paragraphs=("4", "30", "31"))
+    assert su.cut_pieces(two, SCHED_2_TEXT, whole_limit=1)[2] == (
+        "Paragraphs 30 and 31 have no single heading of their own in it to cut at, so they "
+        "are not among the parts below.")
+
+
 def test_the_context_budget_also_sends_the_unit_to_the_summariser(monkeypatch):
     _route_lex(monkeypatch)
     seen = []

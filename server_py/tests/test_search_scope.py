@@ -1330,6 +1330,17 @@ def _fetched_wording_variants() -> list:
                     texts.append(su.fetched_block(lid, unit, url, [("", "")], su.MATCHED,
                                                   reason=reason, total_chars=92066,
                                                   source=source, matched=matched).strip())
+    # Batch 13 B (P3.12): a partial cut's reason, one paragraph and several
+    # not cut, alone and in its block from either source.
+    part = "Section 4) **Widget fees**\n1) Text.\nSection 5) **Widget forms**\n1) Text.\n"
+    for paras in (("4", "30"), ("4", "30", "31")):
+        reason = su.cut_pieces(su.ScheduleUnit("schedule", "2", paragraphs=paras), part,
+                               whole_limit=1)[2]
+        assert reason.endswith("not among the parts below."), reason
+        texts.append(reason)
+        for source in (su.FROM_LIST, su.FROM_TEXT):
+            texts.append(su.fetched_block(lid, sch, url, [("", "")], su.CUT, reason=reason,
+                                          source=source).strip())
     # Batch 10 A: the heading list's label, an untitled heading and the cap's
     # last line (the headings themselves are statutory text, like a cut).
     headed = ("SCHEDULE 5 WIDGETS\nSection 1) **Widget fees**\n1) Text.\n"

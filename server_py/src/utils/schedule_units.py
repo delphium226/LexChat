@@ -698,15 +698,26 @@ CUT, WHOLE, SUMMARY = "cut", "whole", "summary"
 FROM_LIST, FROM_TEXT = "list", "text"
 
 
-def cut_pieces(unit: ScheduleUnit, text: str) -> tuple:
-    """`(pieces, how, reason)` for one unit's text, before any size rule.
+def cut_pieces(unit: ScheduleUnit, text: str, whole_limit: Optional[int] = None) -> tuple:
+    """`(pieces, how, reason)` for one unit's text.
 
     * an annex chapter, cut at its heading (`cut_annex`): CUT;
-    * schedule paragraphs, each cut by `cut_schedule_paragraph`: CUT, only
-      when every named paragraph has a unique heading line; one that has none
-      sends the whole schedule instead, with the reason said;
+    * schedule paragraphs, each cut by `cut_schedule_paragraph`: CUT, when
+      every named paragraph has a unique heading line; one that has none
+      sends the whole schedule instead, with the reason said, unless the
+      whole is longer than `whole_limit` (batch 13 B, below);
     * anything else (the unit alone, a schedule Part, a chapter heading the
       annex lacks): WHOLE.
+
+    Batch 13 B (P3.12, user decision 2026-10-09): where some named
+    paragraphs cut and another does not, and the whole schedule is longer
+    than `whole_limit` (the caller's verbatim threshold, so it would only be
+    summarised), the paragraphs that cut are handed over, CUT, and the
+    reason names the one that did not. A query naming "paragraph 43, 130",
+    where 130 was a section of the Act, sent the whole Schedule to the
+    summariser and lost paragraph 43, which cut exactly (`notes/batch12_A.md`
+    section 5). A schedule within the limit still goes whole, verbatim, so an
+    un-headed paragraph named beside a headed one is not lost.
     """
     text = str(text or "")
     if unit.kind == "annex" and unit.chapter:
@@ -730,6 +741,11 @@ def cut_pieces(unit: ScheduleUnit, text: str) -> tuple:
         reason = (f"Paragraph {names} has no single heading of its own in it to cut at."
                   if len(uncut) == 1 else
                   f"Paragraphs {names} have no single heading of their own in it to cut at.")
+        if pieces and whole_limit is not None and len(text) > whole_limit:
+            reason = reason[:-1] + (", so it is not among the parts below."
+                                    if len(uncut) == 1 else
+                                    ", so they are not among the parts below.")
+            return pieces, CUT, reason
         return [("", text)], WHOLE, reason
     return [("", text)], WHOLE, ""
 
