@@ -27,11 +27,11 @@ route cut them.
   range too), and does not already say what its excerpt says
   (a restatement: 60% of its content words in one answer sentence);
 * once per paragraph however many blocks handed it, at most `max_lines`;
-* the excerpt is whole sub-paragraphs from the first operative one (the
-  leading "This paragraph applies ..." lines, bare or with conditions, and a
-  sub-paragraph that only qualifies one of them, are skipped: batch 13 B),
-  within `MAX_EXCERPT_CHARS`; where the first one alone is longer, the line
-  carries the heading only.
+* the excerpt is whole sub-paragraphs within `MAX_EXCERPT_CHARS`, the rule
+  first: the first operative one, then the leading "This paragraph applies
+  ..." lines that carry conditions (a bare one never), with a qualifier only
+  beside its line, then the further operative ones (batch 13 B, B1); where the
+  first operative one alone is longer, the line carries the heading only.
 
 **The sub-paragraph line (batch 13 B, user decision 2026-10-09: measured
 first).** A handed paragraph the answer cites only by some of its
@@ -106,6 +106,9 @@ _ITEM = re.compile(r"^(?P<n>[a-z]{1,2}|[ivx]{1,5})\)[ \t]*(?P<t>.*)$")
 _APPLIES = re.compile(
     r"^This paragraph (?:also |only )?applies (?:only )?"
     r"(?:to|where|if|in|from|for|while|during|when|until|so far as)\b")
+# The bare form (no conditions): never carried in a line (batch 12 A), where
+# a line with conditions is carried after the rule (batch 13 B, B1).
+_BARE_APPLIES = re.compile(r"^This paragraph (?:also )?applies to [^—:;]*\.$")
 # A sub-paragraph that only qualifies an application line already skipped
 # ("Sub-paragraph (2) has effect in relation to a notice ... only if ...").
 _QUALIFIES = re.compile(
@@ -214,18 +217,46 @@ def _application_run(subs: list) -> int:
 
 
 def excerpt(text: str, cap: int = MAX_EXCERPT_CHARS) -> str:
-    """Whole sub-paragraphs from the first operative one, while they fit
-    `cap`; "" when the first alone does not (the line then carries the
-    heading only). The leading application lines (bare or with conditions)
-    and their qualifiers are skipped (`_application_run`)."""
+    """Whole sub-paragraphs within `cap`, the rule first: the first operative
+    sub-paragraph ("" when it alone does not fit: the line then carries the
+    heading only); then the leading application lines that carry conditions
+    (`_application_run`; a bare "applies to X." line is never carried), in
+    order, while they fit, stopping at the first that does not, with a
+    qualifier only beside every line it qualifies; then the further operative
+    sub-paragraphs, in order, while they fit.
+
+    Batch 13 B (B1, user decision 2026-10-09): skipping the conditions left a
+    paragraph's line saying what its rule does and not when it applies; with
+    the rule first and the conditions after it, the stored line carries both."""
     subs = _subparagraphs(text)
-    subs = subs[_application_run(subs):]
-    parts = []
-    for n, t in subs:
+    run = _application_run(subs)
+    lead, rest = subs[:run], subs[run:]
+    parts: list = []
+
+    def take(n, t) -> bool:
         piece = f"({n}) {t}" if n else t
         if len(" ".join(parts + [piece])) > cap:
-            break
+            return False
         parts.append(piece)
+        return True
+
+    if not rest or not take(*rest[0]):
+        return ""
+    taken: set = set()
+    for n, t in lead:
+        if _BARE_APPLIES.match(t):
+            continue
+        q = None if _APPLIES.match(t) else _QUALIFIES.match(t)
+        if q:
+            if set(re.findall(r"\((\w{1,3})\)", q.group("refs"))) <= taken and take(n, t):
+                taken.add(n)
+            continue
+        if not take(n, t):
+            break
+        taken.add(n)
+    for n, t in rest[1:]:
+        if not take(n, t):
+            break
     return " ".join(parts)
 
 

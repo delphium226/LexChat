@@ -285,3 +285,35 @@ each commit; the only hits are the `DEPTH_TRUTH["6335"]` tests in `test_replay_s
 beside that file's existing ones.
 
 **Integrator review (2026-10-09):** a surviving mutant (the sub-paragraph line's break searched from 0, not from the first citation) is now caught by `test_the_subparagraph_line_lands_after_the_answer_paragraph_citing_it` (citation in the second answer paragraph; fails under the mutant, passes on the built code; harness `s24`, 1 failed of 419); full suite on `lexchat_test_b` **3,451 passed**.
+
+## 11. B1 built (user decision, 2026-10-09): the rule first, then the conditions
+
+**User decisions relayed by the integrator:** B1 as recommended (built here); B2 on, as built; B3 kept as built; B4
+measured in the next batch; the partial-cut clause approved as built.
+
+**The rule (`excerpt`, `utils/paragraph_restore.py`; the line template unchanged).** Whole sub-paragraphs within
+`MAX_EXCERPT_CHARS`, in this order: the first operative sub-paragraph (none fits: the heading only, as before);
+then the leading application lines that carry conditions, in order, while they fit, stopping at the first that does
+not (a bare "This paragraph [also] applies to X." line is never carried, as batch 12 A decided; a qualifier is
+carried only beside every line it qualifies); then the further operative sub-paragraphs, in order, while they fit.
+`_BARE_APPLIES` is back for the bare test. The sub-paragraph line (`uncited_excerpt`) is unchanged.
+
+**Rendered (synthetic, BUILT code, `screen_b1.txt`):**
+> Also in [Schedule 5](http://www.legislation.gov.uk/ssi/1901/3/schedule/5), paragraph 2 (Widget fees): "(2) The fee is set by the Minister. (1) This paragraph applies where a licence is sought and— (a) the dealer is new, or (b) the licence has lapsed."
+
+**Dry run with the BUILT code** (`dryrun_b1.py` against the module at `a622ad6`, all 70 replay directories,
+`dryrun_b1.txt`): 1 of the 3 distinct handed paragraphs changes, **paragraph 44: (5) and (6), 431 characters ->
+(5) then (1), 376** (what the interim moratorium does, then the first case in which it runs; its notice cases (2)
+and (4) do not fit). **The paragraph-44 line changes in 5 stored answers** (`wave4_b10_sweep` rep 1,
+`wave4_b11_sweep` reps 2 and 3, `wave4_b12_p312` reps 1 and 3) and 3 stored seam draws; nothing else moves; `depth`
+verdicts unchanged on every one (44 deep before and after; now the trigger is in the line itself). Paragraphs 42 and
+43 open with the bare form: unchanged. Screen (`screen_b1.py`, 21 texts): the same single `OPENER_VOCAB` non-trip
+inside paragraph 43's statute as section 5; the new 44 line and both synthetic variants trip nothing.
+
+**Tests:** five excerpt tests rewritten to the new order (conditions after the rule; every opening; the leading run;
+`INTERIM` at the cap and uncapped) and six added (conditions stop at the first that does not fit; a further rule
+still follows; a qualifier only beside its line; a bare "also applies to" line; an empty paragraph; a first rule over
+the cap with a later one that fits). **Mutants (control 425 passed first): 59 of 59 caught** (`mutants_b1.txt`),
+the 8 new ones: conditions never carried; a bare line carried; the bare "also" form carried; a qualifier without its
+line; conditions not stopping; no further rule after them; the empty guard; a first rule over the cap. (Mutant a8
+was rewritten to the new code: `run = 0`.) **Full suite on `lexchat_test_b`: 3,457 passed.**

@@ -161,11 +161,14 @@ def test_the_excerpt_skips_a_bare_application_line_and_keeps_whole_subparagraphs
         "(2) No widget may be sold without a licence. (3) A licence lasts one year.")
 
 
-def test_an_application_line_with_conditions_is_skipped_as_a_bare_one_is():
-    # Batch 13 B (user decision): the `wave4_b12_p312` line quoted a
-    # paragraph's conditions of application, not its rule.
+def test_an_application_line_with_conditions_follows_the_rule():
+    # Batch 13 B (user decisions): the `wave4_b12_p312` line quoted a
+    # paragraph's conditions of application, not its rule (item 1); the rule
+    # now comes first and the conditions after it, where they fit (B1).
     p2 = pr.handed_paragraphs(_cut_block())[1]
-    assert pr.excerpt(p2["text"]) == "(2) The fee is set by the Minister."
+    assert pr.excerpt(p2["text"]) == (
+        "(2) The fee is set by the Minister. (1) This paragraph applies where a licence is "
+        "sought and— (a) the dealer is new, or (b) the licence has lapsed.")
 
 
 # A paragraph shaped like the one the stored line got wrong: three application
@@ -184,9 +187,67 @@ INTERIM = (
 )
 
 
-def test_the_leading_application_lines_and_their_qualifier_are_all_skipped():
-    assert pr.excerpt(INTERIM) == (
-        "(5) Paragraphs 1 and 3 shall apply to the dealer. (6) The Minister may waive the fee.")
+_RULE5 = "(5) Paragraphs 1 and 3 shall apply to the dealer."
+_COND1 = ("(1) This paragraph applies where a widget licence has been sought and— (a) the "
+          "application has not been decided, or (b) the licence has been granted but has not "
+          "taken effect.")
+_COND2 = ("(2) This paragraph also applies from the time when a notice is filed until— (a) the "
+          "licence takes effect, or (b) five days pass.")
+_QUAL3 = "(3) Sub-paragraph (2) has effect only if the notice is in the prescribed form."
+_COND4 = "(4) This paragraph also applies while an appeal is pending."
+_RULE6 = "(6) The Minister may waive the fee."
+
+
+def test_the_rule_comes_first_then_the_conditions_then_the_rest_within_the_cap():
+    # Batch 13 B (B1): the first operative sub-paragraph, then the leading
+    # conditions in order with the qualifier beside its line, then the rest.
+    assert pr.excerpt(INTERIM, cap=2000) == " ".join(
+        (_RULE5, _COND1, _COND2, _QUAL3, _COND4, _RULE6))
+    # At the 450 cap (4) does not fit, so the conditions stop there, and (6)
+    # does not fit either.
+    assert pr.excerpt(INTERIM) == " ".join((_RULE5, _COND1, _COND2, _QUAL3))
+
+
+def test_the_conditions_stop_at_the_first_that_does_not_fit():
+    # (2) alone would fit after the rule; it is never carried without (1).
+    cap = len(" ".join((_RULE5, _COND2))) + 1
+    assert len(" ".join((_RULE5, _COND1))) > cap
+    # The further rule (6) still follows.
+    assert pr.excerpt(INTERIM, cap=cap) == " ".join((_RULE5, _RULE6))
+
+
+def test_a_further_rule_still_follows_conditions_that_did_not_fit():
+    text = ("1) This paragraph applies where a widget licence has been sought and— \n"
+            "\ta) the dealer is new. \n"
+            "2) The fee is set by the Minister. \n"
+            "3) The Minister may waive the fee. \n")
+    cap = len("(2) The fee is set by the Minister. (3) The Minister may waive the fee.")
+    assert pr.excerpt(text, cap=cap) == (
+        "(2) The fee is set by the Minister. (3) The Minister may waive the fee.")
+
+
+def test_a_qualifier_is_carried_only_beside_the_line_it_qualifies():
+    # (2) qualifies a bare line, which is never carried, so (2) is not either.
+    text = ("1) This paragraph applies to a widget dealer. \n"
+            "2) Sub-paragraph (1) has effect only in the county. \n"
+            "3) The fee is set by the Minister. \n")
+    assert pr.excerpt(text) == "(3) The fee is set by the Minister."
+
+
+def test_a_bare_line_with_also_is_never_carried():
+    text = ("1) This paragraph applies to a widget dealer. \n"
+            "2) This paragraph also applies to a gadget dealer. \n"
+            "3) The fee is set by the Minister. \n")
+    assert pr.excerpt(text) == "(3) The fee is set by the Minister."
+
+
+def test_an_empty_paragraph_gives_no_excerpt():
+    assert pr.excerpt("") == ""
+
+
+def test_a_first_rule_over_the_cap_gives_no_excerpt_even_when_later_ones_fit():
+    text = "1) A dealer must " + "keep records " * 40 + "\n2) A short rule. \n"
+    assert pr.excerpt(text) == ""
 
 
 def test_a_qualifier_of_an_operative_subparagraph_is_kept():
@@ -212,13 +273,14 @@ def test_a_qualifier_of_an_application_line_and_an_operative_one_is_kept():
     assert pr.excerpt(text).startswith("(2) Sub-paragraphs (1) and (3) have effect")
 
 
-def test_only_the_leading_run_is_skipped():
-    # An application line after the rule stays with the whole sub-paragraphs.
+def test_only_the_leading_run_is_moved_after_the_rule():
+    # An application line after the rule stays in its place.
     text = ("1) This paragraph applies where a licence is sought. \n"
             "2) The fee is set by the Minister. \n"
             "3) This paragraph also applies to a renewal. \n")
     assert pr.excerpt(text) == (
-        "(2) The fee is set by the Minister. (3) This paragraph also applies to a renewal.")
+        "(2) The fee is set by the Minister. (1) This paragraph applies where a licence is "
+        "sought. (3) This paragraph also applies to a renewal.")
 
 
 @pytest.mark.parametrize("opening", [
@@ -228,9 +290,9 @@ def test_only_the_leading_run_is_skipped():
     "This paragraph applies until", "This paragraph applies for", "This paragraph applies during",
     "This paragraph applies so far as",
 ])
-def test_every_application_opening_is_skipped(opening):
+def test_every_application_opening_is_carried_after_the_rule(opening):
     text = f"1) {opening} a widget is sold. \n2) The fee is set by the Minister. \n"
-    assert pr.excerpt(text) == "(2) The fee is set by the Minister."
+    assert pr.excerpt(text) == f"(2) The fee is set by the Minister. (1) {opening} a widget is sold."
 
 
 def test_a_paragraph_that_applies_other_provisions_is_operative():
@@ -831,8 +893,8 @@ def _rendered_variants() -> dict:
         *cut_pieces(ScheduleUnit("schedule", "5", paragraphs=("7",)), SHOPS)[:2]))[0]
     return {
         "labelled, excerpt": pr.render_line(cut[0]),
-        "labelled, application line with limbs skipped": pr.render_line(cut[1]),
-        "labelled, application lines and a qualifier skipped": pr.render_line(
+        "labelled, conditions after the rule": pr.render_line(cut[1]),
+        "labelled, rule then conditions and a qualifier": pr.render_line(
             dict(cut[1], text=INTERIM)),
         "sub-paragraph line (batch 13 B)": pr.render_line(
             shop, pr.uncited_excerpt(shop["text"], ["4"], [])),
