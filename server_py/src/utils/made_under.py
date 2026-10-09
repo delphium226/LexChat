@@ -152,6 +152,9 @@ _TITLE = (rf"(?!{_PROV_NUMBERED})"
 # "the Act" / "the principal Act" are anaphora like "that Act": in a UK SI the
 # preamble or the interpretation has named the Act first.
 _ACT_REF = (rf"(?P<title>{_TITLE})"
+            # "the said Act of 2003" names its year: the 2003 Act, not the last
+            # Act mentioned (uksi/2003/3194 in the 1999-2008 hand-check).
+            r"|(?:the )?said Act of (?P<year2>\d{4})"
             r"|(?P<that>that Act|the said Act|that Measure|(?<=the )Act\b|(?<=the )principal Act\b)"
             r"|the (?P<year>\d{4}) Act")
 _CHUNK = re.compile(
@@ -279,9 +282,10 @@ def parse_powers(window: str, before: str = "") -> list:
         elif m.group("that"):
             anaphor = m.group("that")
             act = titles[-1] if titles else None
-        elif m.group("year"):
-            anaphor = f"the {m.group('year')} Act"
-            act = next((t for t in reversed(titles) if t.endswith(m.group("year"))), None)
+        elif m.group("year") or m.group("year2"):
+            year = m.group("year") or m.group("year2")
+            anaphor = f"the {year} Act"
+            act = next((t for t in reversed(titles) if t.endswith(year)), None)
         preceding = window[: m.start()].rstrip(" ,")
         role = "power"
         r = _ROLE.search(preceding)

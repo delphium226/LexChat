@@ -341,3 +341,12 @@ def test_schedule_then_paragraph_form():
                           "Schedule 8 to, the Widget Act 1901")
     assert got[0]["provisions"] == ["schedule/2/paragraph/1", "schedule/2/paragraph/2",
                                     "schedule/2/paragraph/6", "schedule/8/paragraph/2"]
+
+
+def test_the_said_act_of_a_year():
+    # uksi/2003/3194's shape: the 2003 Act, not the last Act named.
+    got = mp.parse_powers("conferred by paragraph 1(1) of the Schedule to the Widget Act 1901 (as modified "
+                          "by section 334 of the said Act of 1903)",
+                          "under the Gadget Act 1903, and")
+    assert [(p["act"], p["role"]) for p in got] == [("Widget Act 1901", "power"),
+                                                     ("Gadget Act 1903", "as modified by")]
