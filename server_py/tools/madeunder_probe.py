@@ -324,7 +324,21 @@ def reparse_context(rec: dict) -> str:
     caught. The Acts the record already resolved are handed back as "the <Act>",
     in order, so the parser can resolve to them and to nothing else.
     """
-    return " ".join(f"the {p['act']}" for p in rec.get("powers") or [] if p.get("act"))
+    # Each resolved power is handed back as a provision of its Act, so that
+    # "that section" (which needs the provision, not only the Act) re-parses too.
+    parts = []
+    for p in rec.get("powers") or []:
+        if not p.get("act"):
+            continue
+        for key in p.get("provisions") or [None]:
+            bits = (key or "").split("/")
+            if len(bits) == 2:
+                parts.append(f"{bits[0]} {bits[1]} of the {p['act']};")
+            elif len(bits) == 4 and bits[0] == "schedule":
+                parts.append(f"paragraph {bits[3]} of Schedule {bits[1]} to the {p['act']};")
+            else:
+                parts.append(f"the {p['act']};")
+    return " ".join(parts)
 
 
 def build_snapshot(outdir: Path, inputs: list, label: str, not_covered: str,

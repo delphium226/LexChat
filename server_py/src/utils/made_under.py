@@ -114,7 +114,9 @@ def recital_window(preamble: str) -> str:
 
 _KIND = (r"(?i:sections?|ss?\.|paragraphs?|paras?\.|articles?|arts?\.|regulations?|regs?\."
          r"|rules?|r\.|Schedules?|Sch\.|Parts?)")
-_NUM = r"\d+[A-Z]{0,3}(?:\([^)\s]{1,6}\))*"
+# A number may start with letters: "section A1(1) of the Damages Act 1996",
+# "Schedule A1 to the Mental Capacity Act 2005", "section ZA1".
+_NUM = r"[A-Z]{0,2}\d+[A-Z]{0,3}(?:\([^)\s]{1,6}\))*"
 # A list item may be a bare pinpoint of the previous number ("85(2)(g) and (5)
 # and 95"), and the separator may be ", and" ("79(1), and 95"): missing either
 # dropped s.95 from two of the 37 s.95 instruments in the first harvest.
@@ -132,7 +134,7 @@ _LIST = rf"{_NUM}(?:{_SEP}(?:{_NUM}|\([^)\s]{{1,6}}\)(?:\([^)\s]{{1,6}}\))*))*"
 # So does an unnumbered or ordinal schedule ("the Schedule to the ... Act",
 # "the First Schedule to the ... Act").
 _PROV_NUMBERED = (r"(?:(?:Schedule|Part|Section|Article|Regulation|Paragraph|Chapter)s?"
-                  r"\s+(?:\d|[IVXL]+\b)|(?:[A-Z][a-z]+\s+)?Schedule\s+to\b)")
+                  r"\s+(?:[A-Z]{0,2}\d|[IVXL]+\b)|(?:[A-Z][a-z]+\s+)?Schedule\s+to\b)")
 _TITLE = (rf"(?!{_PROV_NUMBERED})"
           # A lower-case provision word ("sections 1(1) and 4(1) of the Trade
           # Act 2021") is never part of a title: without this the title of an
@@ -273,6 +275,10 @@ def _normalise_window(window: str) -> str:
     """Repairs the source text before parsing: a missing space ("section2(3)",
     "191of the"), and "subsection (4) of section 17" read as section 17(4)."""
     w = re.sub(r"\b(sections?|regulations?|articles?|paragraphs?)(\d)", r"\1 \2", window)
+    # "84 (2)" is 84(2), and "122 123 and 140" is a list missing its comma
+    # (uksi/2025/1147, uksi/2024/796: both lost sections in the hand-check).
+    w = re.sub(r"(\d[A-Z]*)\s+\(", r"\1(", w)
+    w = re.sub(r"(?<=\d)\s+(?=\d)", ", ", w)
     w = re.sub(r"(\d|\))(of|to)\b", r"\1 \2", w)
     w = re.sub(r"\bsub-?sections?\s+((?:\([^)\s]{1,6}\)(?:\s*(?:,|and|or)\s*)?)+)\s*of\s+(section\s+\d+[A-Z]*)",
                lambda m: m.group(2) + re.sub(r"\s*(?:,|and|or)\s*", "", m.group(1)), w)

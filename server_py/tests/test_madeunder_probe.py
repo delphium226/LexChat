@@ -278,3 +278,32 @@ def test_an_offline_reparse_keeps_the_acts_the_fetch_resolved():
     got = mp.parse_powers(rec["window"], mp.reparse_context(rec))
     assert [(p["act"], p["provisions"]) for p in got] == [("Widget Act 1901", ["section/2"])]
     assert mp.parse_powers(rec["window"])[0]["act"] is None
+
+
+def test_source_spacing_inside_a_section_list():
+    # uksi/2025/1147 and uksi/2024/796: sections lost in the 2009-2026 hand-check.
+    assert mp.parse_powers("conferred by sections 4, 84 (2) and 86 (5) of the Widget Act 1901")[0][
+        "provisions"] == ["section/4", "section/84", "section/86"]
+    assert mp.parse_powers("conferred by sections 114, 115, 120, 122 123 and 140 of the Widget Act 1901")[0][
+        "provisions"] == ["section/114", "section/115", "section/120", "section/122", "section/123",
+                          "section/140"]
+
+
+def test_a_lettered_schedule_is_not_a_title():
+    # uksi/2009/783's shape: "Schedule A1 to, the ... Act" was read as a title.
+    got = mp.parse_powers("conferred by section 65 of, and paragraphs 31 and 33 of Schedule A1 to, "
+                          "the Widget Capacity Act 1901")
+    assert [p["act"] for p in got] == ["Widget Capacity Act 1901"]
+
+
+def test_an_offline_reparse_keeps_that_section():
+    rec = {"id": "uksi/1901/2", "window": "conferred by that section",
+           "powers": [{"act": "Widget Act 1901", "provisions": ["section/2"], "role": "power"}]}
+    got = mp.parse_powers(rec["window"], mp.reparse_context(rec))
+    assert [(p["act"], p["provisions"]) for p in got] == [("Widget Act 1901", ["section/2"])]
+
+
+def test_numbers_that_start_with_a_letter():
+    got = mp.parse_powers("conferred by section A1(1) of, and paragraphs 31 and 33 of Schedule A1 to, "
+                          "the Widget Act 1901")
+    assert got[0]["provisions"] == ["section/A1", "schedule/A1/paragraph/31", "schedule/A1/paragraph/33"]
