@@ -507,6 +507,45 @@ async def test_the_text_cap_makes_no_call(on, net):
     assert net.seen == [] and out["text"] == "" and "limit" in out["error"]
 
 
+async def test_real_fetches_count_toward_the_text_cap(on, net):
+    """The counter, not a seeded value: SCTS_MAX_PDF_CALLS real fetches, then
+    the next is refused with no call made."""
+    net.routes[("GET", "www.scotcourts.gov.uk")] = [httpx.Response(200, content=_pdf(["[2017] CSIH 99"]))]
+    for _ in range(scts.SCTS_MAX_PDF_CALLS):
+        assert not (await _fetch(net)).get("error")
+    assert len(net.seen) == scts.SCTS_MAX_PDF_CALLS
+    out = await _fetch(net)
+    assert "limit" in out["error"] and len(net.seen) == scts.SCTS_MAX_PDF_CALLS
+    assert scts.request_state()["pdf_calls"] == scts.SCTS_MAX_PDF_CALLS
+
+
+async def test_real_searches_count_toward_the_search_cap(on, net):
+    net.routes[("POST", "api.pa.web.scotcourts.gov.uk")] = [httpx.Response(200, json=_body([_row()]))]
+    for _ in range(scts.SCTS_MAX_SEARCH_CALLS):
+        assert (await _search(net, "widget"))["block"]["status"] == "ok"
+    assert len(net.seen) == scts.SCTS_MAX_SEARCH_CALLS
+    out = await _search(net, "widget")
+    assert out["block"]["status"] == "capped" and len(net.seen) == scts.SCTS_MAX_SEARCH_CALLS
+    # a fallback is a call too: it counts toward the same cap
+    scts.request_state()["search_calls"] = 0
+    net.routes[("POST", "api.pa.web.scotcourts.gov.uk")] = [httpx.Response(200, json=_body([]))]
+    await _search(net, "widget gizmo")
+    assert scts.request_state()["search_calls"] == 2
+
+
+async def test_a_reported_total_below_the_rows_shown_is_raised_to_them(on, net):
+    """A body whose `total` is below the rows it carries (an inconsistent
+    count) never reports fewer judgments than were shown."""
+    rows = [_row(link=f"/media/x/2017csih{i}-w.pdf") for i in range(15)]
+    net.routes[("POST", "api.pa.web.scotcourts.gov.uk")] = [httpx.Response(200, json=_body(rows, total=11))]
+    out = await _search(net, "widget gizmo")
+    assert out["block"]["shown"] == 15 and out["block"]["total"] == 15
+    net.routes[("POST", "api.pa.web.scotcourts.gov.uk")] = [httpx.Response(200, json={
+        "results": [_row()], "pagination": {}})]
+    out = await _search(net, "widget gizmo")
+    assert out["block"]["shown"] == 1 and out["block"]["total"] == 1
+
+
 # ---------------------------------------------------------------------------
 # 5. The executor
 # ---------------------------------------------------------------------------
