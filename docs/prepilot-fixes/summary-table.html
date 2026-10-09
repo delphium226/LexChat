@@ -377,14 +377,14 @@
 <div class="wrap">
   <header>
     <span class="eyebrow">AILA · pre-pilot defect fixes</span>
-    <h1>Pre-pilot Fix Tracker <span class="as-at" id="as-at">as at 9th Oct 2026, 7:55am</span></h1>
+    <h1>Pre-pilot Fix Tracker <span class="as-at" id="as-at">as at 9th Oct 2026, 1:30pm</span></h1>
     <p class="lede">Every proposed fix, ours (<strong>R</strong>) and Thomas's (<strong>T</strong>), with its status,
       its row in the fix plan and its action number in Thomas's review of 10 September 2026.
       <strong>“Fixed” means built and accepted on the fix branch. The Version column says which
       release carries each fix: 2026.09.1 (22 September), 2026.09.2 (23 September) or 2026.09.3
-      (29 September), all merged for deployment to the server. Eighteen rows fixed since then, P3.16,
+      (29 September), all merged for deployment to the server. Nineteen rows fixed since then, P3.16,
       P4.16, P4.15, P4.18, P4.17, P5.2, P3.19, P4.21, P3.24, P4.19, P3.23, P3.9, P3.25, P3.27, P3.21, P3.4,
-      P3.6 and P3.31, are marked “Next release”. The fixed date is the day a fix was accepted, not the
+      P3.6, P3.31 and P4.12, are marked “Next release”. The fixed date is the day a fix was accepted, not the
       day it reached the server.</strong></p>
   </header>
 
@@ -449,7 +449,7 @@
       <h2>Status</h2>
       <dl>
         <dt>Fixed</dt><dd>Built and accepted on the fix branch. Every Fixed row with a release number is merged to <code>main</code> for deployment to the target: release 2026.09.1 on 22 September, 2026.09.2 (P3.13) on 23 September and 2026.09.3 (twelve rows) on 29 September. A row fixed after a release is marked “Next release” and is on the fix branch only, until the next release carries it. P5.2 is a decision, not a change to the system: it is fixed because the decision is made.</dd>
-        <dt>In progress</dt><dd>Built, and not yet passed. P3.12 (a schedule paragraph asked for by number) and P3.22 (case-law results by relevance) are built; their latest re-runs did not yet pass, and the next step for each is chosen (see 8 October, later, below).</dd>
+        <dt>In progress</dt><dd>Built, and not yet passed. P3.12 (a schedule paragraph asked for by number), P3.22 (case-law results by relevance), P3.10 (a Deep Research step handed the list an earlier step found) and P4.3 (the sources list matching the answer) are built; their latest checks did not yet pass, and the next step for each is chosen.</dd>
         <dt>Partial</dt><dd>A fix was attempted, and we decided to defer it and come back to it later. No fix is Partial now: P4.10 was, until its last check was run on 25 September.</dd>
         <dt>Verified</dt><dd>The problem is confirmed in our replays, the code or a live test, but no fix is built yet.</dd>
         <dt>Blocked</dt><dd>Confirmed, and parked until something outside our control happens; the reason is in the row's description. Since 5 October, P3.2, P3.3 and P3.17 wait on a lawyer answering our questions about the readings of the law their tests use. Since 9 October, two data improvements wait on the National Archives: P3.35 (its bulk data) and P3.36 (a licence).</dd>
@@ -488,6 +488,18 @@
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
         first and second points of his closing section, “What is deliberately not here”.
         <strong>30 Sep</strong> marks a point from his retest of release 2026.09.3 on 30 September.</p>
+      <p><strong>9 October: seven more data improvements, and the parallel session's results.</strong>
+        Booked, each to be measured first at no cost: reading a recent instrument our legislation database does
+        not hold from legislation.gov.uk, instead of stopping at “not held” (<strong>P3.38</strong>); the law
+        as it stood on a past date (<strong>P3.39</strong>), the change with the strongest published evidence
+        that it improves answers; explanatory notes and Scottish policy notes, which say what a provision is for
+        (<strong>P3.40</strong>); which instrument amended a particular subsection (<strong>P3.41</strong>);
+        where each provision applies, not only the Act as a whole (<strong>P3.42</strong>); statutory guidance
+        and codes of practice (<strong>P3.43</strong>); and the Welsh and Northern Ireland series, only if
+        questions need them (<strong>P3.44</strong>). The same day, the session working through the planned
+        fixes finished <strong>P4.12</strong> (the cost and wait of a lost chat reply), built
+        <strong>P3.10</strong> and <strong>P4.3</strong> (not yet passed), and found one small new problem,
+        <strong>P4.25</strong>: an answer with no sources of its own can show the previous answer's sources.</p>
       <p><strong>8 and 9 October: a record of what each regulation was made under.</strong> Asked which
         regulations were made under a given section of an Act, the system could only run a keyword search: in
         the pre-pilot it found about one in forty of them, or named instruments that were not made under the
@@ -498,8 +510,10 @@
         the true count, a full list named every instrument, and no answer said an instrument was made under a
         provision without the record saying so. Where the record holds nothing, the answer says what the
         record covers rather than that nothing exists. The same record answers what a single instrument was
-        made under, even for instruments our legislation database does not hold. UK statutory instruments from
-        1987 are being added. We looked first at a ready-made map of UK legislation published by the
+        made under, even for instruments our legislation database does not hold. On 9 October UK statutory
+        instruments from 1987 were added: the record now holds about 87,000 instruments, and a check of 200 of
+        them by hand found the right Act in 199 (the one error, and the smaller gaps the check found, are
+        fixed). We looked first at a ready-made map of UK legislation published by the
         Government's AI incubator, and did not use it: it stops in 2022, holds about one in five of the
         instruments, and does not record what an instrument was made under.</p>
       <p><strong>A new column, Type, and six data improvements.</strong> Each row now says whether it is a
@@ -1158,16 +1172,14 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next, by severity.</strong> <strong>P3.12</strong> first: the research step re-checked on
-        its own on the stored run (a few cents), then a change if needed and three re-runs, priced to us
-        first. Then the no-cost builds for <strong>P4.12</strong> and <strong>P4.3</strong>,
-        <strong>P3.10</strong>'s change and its re-run (priced first), and the first measurements for
-        <strong>P4.23</strong> and P3.22's remaining item. <strong>P3.20</strong>'s first measurement runs
-        beside P3.12, now that SCTS has agreed; the build follows. The UK statutory instruments are added to
-        P3.31's record, then the data improvements <strong>P3.32</strong> and <strong>P3.33</strong>, each
-        measured first. Then the P3 rows. <strong>P3.2</strong>,
-        <strong>P3.3</strong> and <strong>P3.17</strong> stay blocked until a lawyer answers our
-        questions.</p>
+      <p><strong>Next, by severity.</strong> <strong>P3.12</strong> first, re-checked on the research step
+        alone (about 20 cents) before anything more is built. Then <strong>P3.10</strong>'s change on every later
+        Deep Research step and its re-run (about $3.20, priced to us first), <strong>P4.3</strong>'s next
+        change (measured first at no cost), <strong>P3.20</strong>'s build (Scottish judgments; its design is
+        chosen, and its re-run priced first), <strong>P4.23</strong> and P3.22's remaining item. The data
+        improvements follow, <strong>P3.38</strong> and <strong>P3.39</strong> first, each measured before it is
+        built. Then the P3 rows. <strong>P3.2</strong>, <strong>P3.3</strong> and <strong>P3.17</strong> stay
+        blocked until a lawyer answers our questions.</p>
       <p>Not listed: the other measurement and tooling rows (P0.1–P0.3, P0.4, dropped on 2 October, P1.5, and the Wave 2 re-baseline),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
         and three items from <code>docs/TODO.md</code> D16 (the impossible year window, always
@@ -1200,8 +1212,8 @@
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
   // AS_AT: the date and time of this update, shown in the header (tracker v40, user request).
-  const AS_AT = "9th Oct 2026, 7:55am";
-  const UPDATED = "9 October 2026 (a Type column; P3.31 fixed, a record of what each regulation was made under; P5.5 and six data improvements, P3.32 to P3.37, added)";
+  const AS_AT = "9th Oct 2026, 1:30pm";
+  const UPDATED = "9 October 2026, afternoon (seven more data improvements, P3.38 to P3.44; UK statutory instruments added to the made-under record; P4.12 fixed, P3.10 and P4.3 built, P4.25 added)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", type: "Measurement", t: "", added: "2026-09-22", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", type: "Measurement", t: "", added: "2026-09-22", fixed: "2026-09-23", ver: "2026.09.3" },
@@ -1231,7 +1243,7 @@
     { src: "R", fix: "Test whether an instrument is held, by its number", sev: "P2", status: "Fixed", ref: "P3.7", type: "Feature", t: "", added: "2026-09-15", fixed: "2026-09-24", ver: "2026.09.3" },
     { src: "T & R", fix: "Stop a step looping on instruments it already has; write up findings at the cap", sev: "P2", status: "Fixed", ref: "P3.8", type: "Issue", t: "3", added: "2026-09-17", fixed: "2026-09-21", ver: "2026.09.1" },
     { src: "T", fix: "Make the case-law date filter work", sev: "P2", status: "Fixed", ref: "P3.9", type: "Bug", t: "6", added: "2026-09-18", fixed: "2026-10-05", ver: "Next release" },
-    { src: "T", fix: "Hand a Deep Research step the list an earlier step found (it searches for it again, and dropped instruments from it in 4 of 12 steps)", sev: "P2", status: "Verified", ref: "P3.10", type: "Issue", t: "3", added: "2026-09-18" },
+    { src: "T", fix: "Hand a Deep Research step the list an earlier step found (it searches for it again, and dropped instruments from it in 4 of 12 steps)", sev: "P2", status: "In progress", ref: "P3.10", type: "Issue", t: "3", added: "2026-09-18" },
     { src: "R", fix: "Say what a cited subsection's sibling subsections provide", sev: "P2", status: "Fixed", ref: "P3.11", type: "Issue", t: "", added: "2026-09-18", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Reach a Schedule paragraph asked for by number (LEX holds the Schedule as one provision)", sev: "P2", status: "In progress", ref: "P3.12", type: "Feature", t: "", added: "2026-09-21" },
     { src: "R", fix: "Stop the chat reply dropping a subsection the research step had already written", sev: "P2", status: "Fixed", ref: "P3.13", type: "Issue", t: "", added: "2026-09-22", fixed: "2026-09-23", ver: "2026.09.2" },
@@ -1254,13 +1266,13 @@
     { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", sev: "P1", status: "Fixed", ref: "P4.1", type: "Issue", t: "9", added: "2026-09-14", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Show a change of mode or research type in the conversation itself", sev: "P3", status: "Verified", ref: "P4.9", type: "Feature", t: "", added: "2026-09-22" },
     { src: "R", fix: "Never show a blank or lost reply", sev: "P1", status: "Fixed", ref: "P4.2", type: "Bug", t: "", added: "2026-09-14", fixed: "2026-09-16", ver: "2026.09.1" },
-    { src: "R", fix: "Make the sources list match the answer: stop listing every search result when the research cites none", sev: "P2", status: "Verified", ref: "P4.3", type: "Issue", t: "", added: "2026-09-14" },
+    { src: "R", fix: "Make the sources list match the answer: stop listing every search result when the research cites none", sev: "P2", status: "In progress", ref: "P4.3", type: "Issue", t: "", added: "2026-09-14" },
     { src: "R", fix: "Remove the unused case-law court filter", sev: "P2", status: "Fixed", ref: "P4.4", type: "Bug", t: "", added: "2026-09-15", fixed: "2026-09-15", ver: "2026.09.1" },
     { src: "T & R", fix: "Report a lost research step as lost, not “no results”", sev: "P1", status: "Fixed", ref: "P4.5", type: "Issue", t: "3", added: "2026-09-17", fixed: "2026-09-24", ver: "2026.09.3" },
     { src: "T", fix: "Label incomplete Deep Research steps as incomplete in progress messages", sev: "P3", status: "Fixed", ref: "P4.5", type: "Issue", t: "3", added: "2026-09-18", fixed: "2026-09-24", ver: "2026.09.3" },
     { src: "R", fix: "Cut the cost and the wait of a lost reply (about 63,000 reasoning tokens per failed attempt)", sev: "P2", status: "Fixed", ref: "P4.10", type: "Issue", t: "", added: "2026-09-24", fixed: "2026-09-25", ver: "2026.09.3" },
     { src: "R", fix: "Cut the wait when the model's provider stops responding mid-reply (two to three minutes per failed attempt)", sev: "P2", status: "Fixed", ref: "P4.11", type: "Issue", t: "", added: "2026-09-25", fixed: "2026-09-25", ver: "2026.09.3" },
-    { src: "R", fix: "Cut the cost and the wait of a lost chat reply, when the provider stops responding or the model runs on and writes nothing (no second research request is behind it)", sev: "P2", status: "Verified", ref: "P4.12", type: "Issue", t: "", added: "2026-09-25" },
+    { src: "R", fix: "Cut the cost and the wait of a lost chat reply, when the provider stops responding or the model runs on and writes nothing (no second research request is behind it)", sev: "P2", status: "Fixed", ref: "P4.12", type: "Issue", t: "", added: "2026-09-25", fixed: "2026-10-09", ver: "Next release" },
     { src: "R", fix: "Remove every agreement opener, including one that thanks the lawyer for challenging an earlier answer", sev: "P3", status: "Fixed", ref: "P4.13", type: "Issue", t: "", added: "2026-09-29", fixed: "2026-09-29", ver: "2026.09.3" },
     { src: "R", fix: "Show one search-scope line, not two, when the model copies an earlier one", sev: "P3", status: "Fixed", ref: "P4.14", type: "Bug", t: "", added: "2026-09-29", fixed: "2026-09-29", ver: "2026.09.3" },
     { src: "R", fix: "Say that a case-law search finding nothing is not proof there is none", sev: "P2", status: "Fixed", ref: "P4.15", type: "Issue", t: "", added: "2026-09-29", fixed: "2026-10-01", ver: "Next release" },
@@ -1283,7 +1295,7 @@
     { src: "T", fix: "Reconcile summary counts with the answer's own list", sev: "P2", status: "To be verified", ref: "", type: "Issue", t: "NH2", added: "2026-09-18" },
     { src: "T", fix: "Scan whole instruments for a literal “£”", sev: "P3", status: "To be verified", ref: "", type: "Feature", t: "4", added: "2026-09-18" },
     { src: "T", fix: "Add an enabling-power rule to the synthesis prompt", sev: "P2", status: "To be verified", ref: "P2.3", type: "Issue", t: "1", added: "2026-09-18" },
-    { src: "R", fix: "Answer “what was made under section N of an Act?” from a record of what each instrument's own opening words say it was made under (Scottish statutory instruments 1999–2026; UK statutory instruments from 1987 being added)", sev: "P1", status: "Fixed", ref: "P3.31", type: "Data Improvement", t: "", added: "2026-10-08", fixed: "2026-10-08", ver: "Next release" },
+    { src: "R", fix: "Answer “what was made under section N of an Act?” from a record of what each instrument's own opening words say it was made under (Scottish statutory instruments 1999–2026 and UK statutory instruments 1987–2026, about 87,000)", sev: "P1", status: "Fixed", ref: "P3.31", type: "Data Improvement", t: "", added: "2026-10-08", fixed: "2026-10-08", ver: "Next release" },
     { src: "R", fix: "Ask the National Archives for access to its bulk legislation data and query service, now by invitation only", sev: "P3", status: "Verified", ref: "P5.5", type: "Data Improvement", t: "", added: "2026-10-08" },
     { src: "R", fix: "Record each regulation's own dates (made, laid, in force), how Parliament approved it, and whom Ministers consulted", sev: "P2", status: "Verified", ref: "P3.32", type: "Data Improvement", t: "", added: "2026-10-09" },
     { src: "R", fix: "Say which instruments in a “made under” list have since been revoked", sev: "P2", status: "Verified", ref: "P3.33", type: "Data Improvement", t: "", added: "2026-10-09" },
@@ -1291,6 +1303,14 @@
     { src: "R", fix: "Add instruments made before 1987 to the “made under” record. Blocked: waits on the National Archives' bulk data, or a decision to read scanned pages by OCR", sev: "P3", status: "Blocked", ref: "P3.35", type: "Data Improvement", t: "", added: "2026-10-09" },
     { src: "R", fix: "Index which judgments cite a provision. Blocked: needs the National Archives' licence for computational use of its judgments, and the Scottish Courts' agreement to the same use", sev: "P3", status: "Blocked", ref: "P3.36", type: "Data Improvement", t: "", added: "2026-10-09" },
     { src: "R", fix: "Build a general map of cross-references between provisions (not recommended for now: little evidence that it helps)", sev: "P3", status: "To be verified", ref: "P3.37", type: "Data Improvement", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Stop an answer with no sources of its own showing the previous answer's sources", sev: "P3", status: "Verified", ref: "P4.25", type: "Bug", t: "", added: "2026-10-09" },
+    { src: "R", fix: "When our legislation database does not hold a recent instrument, read it from legislation.gov.uk instead of stopping at “not held”", sev: "P2", status: "Verified", ref: "P3.38", type: "Data Improvement", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Answer what the law said on a past date, from the versions as they stood on that date", sev: "P2", status: "Verified", ref: "P3.39", type: "Data Improvement", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Use explanatory notes and Scottish policy notes to say what a provision or instrument is for", sev: "P2", status: "Verified", ref: "P3.40", type: "Data Improvement", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Say which instrument amended a particular subsection, not only that the Act was amended", sev: "P2", status: "Verified", ref: "P3.41", type: "Data Improvement", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Say where each provision applies (its territorial extent), not only the Act as a whole", sev: "P2", status: "Verified", ref: "P3.42", type: "Data Improvement", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Find statutory guidance and codes of practice made under a section (to be measured first)", sev: "P3", status: "Verified", ref: "P3.43", type: "Data Improvement", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Add the Welsh and Northern Ireland series to the “made under” record (only if questions need them)", sev: "P3", status: "To be verified", ref: "P3.44", type: "Data Improvement", t: "", added: "2026-10-09" },
   ];
   // ---- End of data. ----
 
