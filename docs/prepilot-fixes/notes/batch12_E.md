@@ -492,3 +492,74 @@ Research turn would add about $0.71 a turn, `wave2`'s average), and the hybrid W
     - (c) As (a), plus one Deep Research turn for the planner (for example 6389 t1, about $0.71
       more), and a fresh before-column at this head without the change for the cleanest comparison
       (doubles the cost).
+
+**Decided (user, 2026-10-09):** 8 (a), the planner wording as built; 9 (a), reword the hybrid
+Worker's line (built in 6.8); 10 (a), keep the rule for consulted requests; 11 (a), the
+after-column at n=3/3/1, which the integrator runs after merging. P4.22 (to `8ad6ba3`) is already
+merged into `fix/prepilot-defects`.
+
+### 6.8 Decision 9 (a) built: the hybrid research Worker's JURISDICTION SCOPE line
+
+**The change** (one line in `WORKER_SYSTEM_PROMPT_HYBRID`'s triple-quoted literal, so
+`seam_replay`'s constant reader still sees one literal; 1 line changed):
+- before: "… retrieve sections ONLY for that jurisdiction's legislation."
+- **as built: "… retrieve sections ONLY for the legislation that applies in that jurisdiction
+  (UK legislation that extends there included)."** This is the user's wording, verbatim.
+- The line's other two sentences are unchanged: "For a Scotland question, do not pull English,
+  Welsh, or Northern Irish instruments even if they appear in Phase 1 results." and "If a judgment
+  you have read cites legislation across several jurisdictions, follow up only on the legislation
+  for the jurisdiction the brief asks about."
+
+**Other prompt text on jurisdiction beside it:**
+
+| Text | Contradicts? |
+|---|---|
+| The research Manager's and planner's section ("the law that applies in Scotland, including UK legislation that extends there") | No: now the same reading |
+| Sentence 2 of the same line (no English, Welsh or Northern Irish instruments for a Scotland question) | No: instruments made for another part are still out; UK legislation is in |
+| Sentence 3 ("the legislation for the jurisdiction the brief asks about") | No contradiction, but it keeps the old, looser phrasing. I left it, because the decision named one phrase; aligning it would add new words |
+| The hybrid Worker's OUTPUT STRUCTURE "Jurisdiction & Status: Geographic scope from the metadata" | No (untouched, as 6 (b) was not chosen) |
+| The hybrid Worker's DATABASE COVERAGE (no Scottish courts) | No: that is about case law |
+| The filter block's extent notes ("the filter keeps those too … has not thereby been shown to apply") | No: they describe rows with no stated extent; the line now asks for what applies, which those notes say is unshown |
+| The legislation-only and case-law research Workers, the quick-lookup Worker, the parliament and Westminster Workers | They carry no JURISDICTION SCOPE line (tested). Agent A's unmerged P3.12 line for the quick-lookup Worker ("selects the law that applies there") reads the same way |
+
+**Dry run with the BUILT code** (`cd server_py; python ../E/hyb_dryrun.py ../E/oldpkg2 <RP>
+../E/hyb_dryrun.txt`). For every stored delegation, it rebuilds the Worker prompt it ran under
+(`get_worker_system_prompt` with the turn's own config), at `7f7ac8c` and BUILT:
+- **220 delegations move, all `legislation_and_case_law` in Deep Research** (57 turns: 6363, 6375,
+  6407, and the `p41_6346_dr` script). Each moves by exactly the phrase.
+- 2,518 do not move: every conversational one (the quick-lookup Worker), every `legislation_only`,
+  every `case_law_only`, and every Research-mode one.
+- No stored Research-mode turn ran hybrid, so the reworded line reaches stored runs only through
+  Deep Research steps.
+- **Invariant 3 watch:** 6375 is in P3.20's acceptance set, and 6363 in P3.22's columns. If this
+  merges before P3.20's acceptance sweep, that sweep's hybrid Deep Research Workers carry the new line.
+
+**Screen** (`python ../E/hyb_screen.py ../E/oldpkg2`, sentence by sentence, before and after):
+0 trips on all three sentences, over `HALT_AS_TIMEOUT`, `HALT_LITERAL`, `HALT_PARAPHRASE`,
+`IN_FORCE_CLAIM`, `NEG_ASSERTED`, `NEG_BLAMED_INDEX`, `NEG_BLAMED_USER`, `NEG_LIMITS`, `NEG_TERMS`,
+`NEGATIVE_EXPLAINED`, `NOT_FOUND`, `OPENER_VOCAB`, `SCHED_LIMIT`, `SCOTS_CASELAW_GAP`, `_CUR_DATED`,
+`_CUR_DISCLOSED`, `MD_LINK`, `derivation_claims`, `caselaw_gap_statements`, `_currency_asserted`,
+`negcurrency_claim`, `sched_clause_class` and the commencement-denied pair. Pinned in a test.
+
+**Tests:** 7 added to `test_default_jurisdiction_research.py` (88 there now):
+- the new phrase and the two unchanged sentences;
+- the line matches the Manager's reading;
+- the built hybrid prompt carries it in each chat mode;
+- no other Worker prompt has a scope line;
+- the detector screen, sentence by sentence, with the sentence count pinned at 3.
+
+**Revert** (`prompts.py` at `7f7ac8c`, the 1 changed line): 5 of 88 fail.
+**Mutants** (`python E/hyb_mutants.py`, output `E/hyb_mutants.txt`; failing tests named per
+mutant): **8 of 8 caught**:
+- the parenthesis dropped;
+- "applies in" turned to "made for";
+- sentence 2 changed;
+- sentence 3 changed;
+- a negative clause added to the phrase;
+- a fourth sentence added (the count guard);
+- a negative inside sentence 1, which only the detector loop catches;
+- the line also given to the legislation Worker.
+
+A first draft of the "detector loop only" mutant ("when nothing was found") tripped no detector,
+so it was not a real mutant of the screen. It was replaced.
+**Full suite on `lexchat_test_e`: 3,134 passed** (3,127 + 7).

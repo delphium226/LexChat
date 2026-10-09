@@ -183,3 +183,77 @@ def test_the_scope_note_clause_trips_no_detector():
         assert not _currency_asserted(s), s
         assert negcurrency_claim(s)[0] is None, s
         assert sched_clause_class(s) == "", s
+
+
+# --- decision 9(a): the hybrid research Worker's JURISDICTION SCOPE line ---------
+#
+# Since the follow-up, every Legislation & case law question that names no
+# jurisdiction reaches this Worker with "for Scotland" in its brief; "that
+# jurisdiction's legislation" could be read to exclude UK Acts that extend there,
+# which the rule includes. Reworded to the rule's own reading (user decision
+# 2026-10-09).
+
+NEW_PHRASE = ("retrieve sections ONLY for the legislation that applies in that jurisdiction "
+              "(UK legislation that extends there included).")
+OLD_PHRASE = "retrieve sections ONLY for that jurisdiction's legislation."
+
+
+def _scope_line(text: str) -> str:
+    lines = [ln for ln in text.split("\n") if ln.startswith("- JURISDICTION SCOPE:")]
+    assert len(lines) == 1
+    return lines[0]
+
+
+def test_the_hybrid_line_reads_applies_in_with_uk_legislation_included():
+    line = _scope_line(prompts.WORKER_SYSTEM_PROMPT_HYBRID)
+    assert NEW_PHRASE in line
+    assert OLD_PHRASE not in prompts.WORKER_SYSTEM_PROMPT_HYBRID
+    # The line's other two sentences are unchanged.
+    assert ("For a Scotland question, do not pull English, Welsh, or Northern Irish instruments "
+            "even if they appear in Phase 1 results.") in line
+    assert ("If a judgment you have read cites legislation across several jurisdictions, follow "
+            "up only on the legislation for the jurisdiction the brief asks about.") in line
+
+
+def test_the_line_matches_the_managers_reading():
+    # The research Manager's section says the same thing in its own words.
+    assert "including UK legislation that extends there" in SECTION
+    assert "UK legislation that extends there included" in _scope_line(
+        prompts.WORKER_SYSTEM_PROMPT_HYBRID)
+
+
+@pytest.mark.parametrize("chat_mode", (None, "research", "deep_research"))
+def test_the_hybrid_worker_prompt_carries_the_new_line(chat_mode):
+    cfg = {"_chat_mode": chat_mode} if chat_mode else None
+    assert NEW_PHRASE in prompts.get_worker_system_prompt("legislation_and_case_law", cfg)
+
+
+def test_no_other_worker_prompt_has_a_scope_line():
+    for name in ("WORKER_SYSTEM_PROMPT", "WORKER_SYSTEM_PROMPT_CASE_LAW",
+                 "WORKER_SYSTEM_PROMPT_CONVERSATIONAL", "PARLIAMENT_WORKER_SYSTEM_PROMPT",
+                 "WESTMINSTER_WORKER_SYSTEM_PROMPT"):
+        text = getattr(prompts, name)
+        assert "JURISDICTION SCOPE" not in text, name
+        assert NEW_PHRASE not in text, name
+
+
+def test_the_hybrid_line_trips_no_detector_sentence_by_sentence():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import tools.replay_report as rr
+    names = ("HALT_AS_TIMEOUT", "HALT_LITERAL", "HALT_PARAPHRASE", "IN_FORCE_CLAIM",
+             "NEG_ASSERTED", "NEG_BLAMED_INDEX", "NEG_BLAMED_USER", "NEG_LIMITS", "NEG_TERMS",
+             "NEGATIVE_EXPLAINED", "NOT_FOUND", "OPENER_VOCAB", "SCHED_LIMIT",
+             "SCOTS_CASELAW_GAP", "_CUR_DATED", "_CUR_DISCLOSED", "MD_LINK")
+    sentences = list(rr._sentences(_scope_line(prompts.WORKER_SYSTEM_PROMPT_HYBRID)))
+    assert len(sentences) == 3
+    for s in sentences:
+        for n in names:
+            assert not getattr(rr, n).search(s), (n, s)
+        assert rr.derivation_claims(s)[0] == [], s
+        assert rr.caselaw_gap_statements(s) == [], s
+        assert not rr._currency_asserted(s), s
+        assert rr.negcurrency_claim(s)[0] is None, s
+        assert rr.sched_clause_class(s) == "", s
+        assert not (rr._CMC_CONTEXT.search(s) and rr._CMC_DENIED.search(s)), s
