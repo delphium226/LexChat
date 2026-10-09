@@ -717,7 +717,9 @@ async def schedule_route_block(
                 out.append(fetch_failed_line(lid, unit))
                 continue
             source = FROM_TEXT
-        pieces, how, reason = cut_pieces(unit, text)
+        # Batch 13 B: past the threshold, the named paragraphs that cut are
+        # handed over even where another named one does not cut.
+        pieces, how, reason = cut_pieces(unit, text, whole_limit=threshold)
         reason = " ".join(r for r in (sole_reason, reason) if r)
         total = sum(len(t) for _, t in pieces)
         over_budget = (context_budget is not None and

@@ -5945,9 +5945,11 @@ _P312_NOT_DELIVERED = re.compile(
     r"|\bwas(?:n['’]t| not) (?:fully )?retrieved\b|\bcould not\b|\bunable to\b"
     r"|\bno results\b|\bcut short\b|\bdid not (?:return|retrieve)\b",
     re.I)
+# Batch 13 B: "wind up" as well as "winding up" ("an order to wind up a
+# company"; batch 12 A's hand-read of a draw this read as coarse).
 _P312_WINDING_UP = re.compile(
-    r"\b(?:resolution|order)s?\b[^.\n]{0,80}?\bwinding[- ]?up\b"
-    r"|\bwinding[- ]?up\b[^.\n]{0,60}?\b(?:resolution|order)s?\b", re.I)
+    r"\b(?:resolution|order)s?\b[^.\n]{0,80}?\bwind(?:ing)?[- ]?up\b"
+    r"|\bwind(?:ing)?[- ]?up\b[^.\n]{0,60}?\b(?:resolution|order)s?\b", re.I)
 _P312_SECURITY = re.compile(
     r"\benforc\w*\b[^.\n]{0,40}?\bsecurit(?:y|ies)\b"
     r"|\bsecurit(?:y|ies)\b[^.\n]{0,40}?\benforc\w*", re.I)

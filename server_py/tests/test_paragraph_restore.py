@@ -161,11 +161,91 @@ def test_the_excerpt_skips_a_bare_application_line_and_keeps_whole_subparagraphs
         "(2) No widget may be sold without a licence. (3) A licence lasts one year.")
 
 
-def test_an_application_line_with_limbs_is_operative_and_kept_with_its_items():
+def test_an_application_line_with_conditions_is_skipped_as_a_bare_one_is():
+    # Batch 13 B (user decision): the `wave4_b12_p312` line quoted a
+    # paragraph's conditions of application, not its rule.
     p2 = pr.handed_paragraphs(_cut_block())[1]
-    assert pr.excerpt(p2["text"]) == (
-        "(1) This paragraph applies where a licence is sought and— (a) the dealer is new, "
-        "or (b) the licence has lapsed. (2) The fee is set by the Minister.")
+    assert pr.excerpt(p2["text"]) == "(2) The fee is set by the Minister."
+
+
+# A paragraph shaped like the one the stored line got wrong: three application
+# lines with conditions, a sub-paragraph qualifying one of them, then the rule.
+INTERIM = (
+    "1) This paragraph applies where a widget licence has been sought and— \n"
+    "\ta) the application has not been decided, or \n"
+    "\tb) the licence has been granted but has not taken effect. \n"
+    "2) This paragraph also applies from the time when a notice is filed until— \n"
+    "\ta) the licence takes effect, or \n"
+    "\tb) five days pass. \n"
+    "3) Sub-paragraph (2) has effect only if the notice is in the prescribed form. \n"
+    "4) This paragraph also applies while an appeal is pending. \n"
+    "5) Paragraphs 1 and 3 shall apply to the dealer. \n"
+    "6) The Minister may waive the fee. \n"
+)
+
+
+def test_the_leading_application_lines_and_their_qualifier_are_all_skipped():
+    assert pr.excerpt(INTERIM) == (
+        "(5) Paragraphs 1 and 3 shall apply to the dealer. (6) The Minister may waive the fee.")
+
+
+def test_a_qualifier_of_an_operative_subparagraph_is_kept():
+    # "Sub-paragraph (2)" here qualifies the fee rule, not an application line.
+    text = ("1) This paragraph applies to a widget dealer. \n"
+            "2) The fee is set by the Minister. \n"
+            "3) Sub-paragraph (2) has effect subject to paragraph 4. \n")
+    assert pr.excerpt(text) == (
+        "(2) The fee is set by the Minister. (3) Sub-paragraph (2) has effect subject to "
+        "paragraph 4.")
+
+
+def test_a_qualifier_with_no_application_line_before_it_is_kept():
+    text = ("1) Sub-paragraph (2) has effect only in the county. \n"
+            "2) The fee is set by the Minister. \n")
+    assert pr.excerpt(text).startswith("(1) Sub-paragraph (2) has effect only in the county.")
+
+
+def test_a_qualifier_of_an_application_line_and_an_operative_one_is_kept():
+    text = ("1) This paragraph applies where a licence is sought. \n"
+            "2) Sub-paragraphs (1) and (3) have effect only in the county. \n"
+            "3) The fee is set by the Minister. \n")
+    assert pr.excerpt(text).startswith("(2) Sub-paragraphs (1) and (3) have effect")
+
+
+def test_only_the_leading_run_is_skipped():
+    # An application line after the rule stays with the whole sub-paragraphs.
+    text = ("1) This paragraph applies where a licence is sought. \n"
+            "2) The fee is set by the Minister. \n"
+            "3) This paragraph also applies to a renewal. \n")
+    assert pr.excerpt(text) == (
+        "(2) The fee is set by the Minister. (3) This paragraph also applies to a renewal.")
+
+
+@pytest.mark.parametrize("opening", [
+    "This paragraph applies where", "This paragraph also applies from", "This paragraph applies if",
+    "This paragraph only applies to", "This paragraph applies only where",
+    "This paragraph applies in relation", "This paragraph applies while", "This paragraph applies when",
+    "This paragraph applies until", "This paragraph applies for", "This paragraph applies during",
+    "This paragraph applies so far as",
+])
+def test_every_application_opening_is_skipped(opening):
+    text = f"1) {opening} a widget is sold. \n2) The fee is set by the Minister. \n"
+    assert pr.excerpt(text) == "(2) The fee is set by the Minister."
+
+
+def test_a_paragraph_that_applies_other_provisions_is_operative():
+    text = ("1) This paragraph applies the provisions of paragraph 2 to gadgets. \n"
+            "2) The fee is set by the Minister. \n")
+    assert pr.excerpt(text).startswith("(1) This paragraph applies the provisions")
+
+
+def test_a_paragraph_of_application_lines_alone_is_quoted():
+    text = ("1) This paragraph applies where a licence is sought and— \n"
+            "\ta) the dealer is new. \n"
+            "2) This paragraph also applies to a renewal. \n")
+    assert pr.excerpt(text) == (
+        "(1) This paragraph applies where a licence is sought and— (a) the dealer is new. "
+        "(2) This paragraph also applies to a renewal.")
 
 
 def test_the_excerpt_stops_at_a_whole_subparagraph_within_the_cap():
@@ -224,7 +304,9 @@ def test_nothing_is_added_unless_the_answer_cites_a_sibling():
 
 
 @pytest.mark.parametrize("cites", [
-    "paragraphs 1, 2 and 3", "paragraphs 1 to 3", "paras 1-3", "para 1(2), para 2 and para 3",
+    # (batch 13 B: "para 1(2)" alone now gets 1's uncited (3) as a sub-paragraph
+    # line, so the pinpoint form here cites both of 1's operative ones)
+    "paragraphs 1, 2 and 3", "paragraphs 1 to 3", "paras 1-3", "para 1(2)-(3), para 2 and para 3",
     "paragraph 2 and paragraph 1 and paragraph 3",
 ])
 def test_a_paragraph_the_answer_cites_in_any_form_is_not_repeated(cites):
@@ -288,9 +370,14 @@ def test_a_headed_line_with_no_heading_words_gives_a_line_without_one():
 
 
 def test_a_subparagraph_pinpoint_in_the_answer_counts_its_paragraph_as_cited():
+    # Paragraph 1 is cited by its (3): no paragraph line for it, but the
+    # sub-paragraph line (batch 13 B) carries its uncited (2). Paragraph 2 is
+    # cited by its only operative sub-paragraph: nothing for it.
     answer = ANSWER.replace("paragraph 2 of", "paragraph 2(2) of") + " See also para 1(3)."
     new, n = _restore(answer, _cut_block())
-    assert n == 1 and "paragraph 3 (" in new
+    assert n == 2 and "paragraph 3 (" in new
+    assert "paragraph 1 (Widget licences): \"(2) No widget may be sold without a licence.\"" in new
+    assert "paragraph 2 (" not in new
 
 
 def test_a_bare_application_line_alone_is_quoted():
@@ -336,6 +423,210 @@ def test_restore_is_fail_soft():
     assert pr.restore_dropped_paragraphs("", pr.handed_paragraphs(_cut_block())) == ("", 0)
     assert pr.restore_dropped_paragraphs(ANSWER, []) == (ANSWER, 0)
     assert pr.restore_dropped_paragraphs(ANSWER, [{"bad": 1}]) == (ANSWER, 0)
+
+
+# --- the sub-paragraph line (batch 13 B) ---------------------------------------
+#
+# A paragraph the answer cites only by some of its sub-paragraphs gets one line
+# of the operative sub-paragraphs it does not cite (P3.13's sibling rule one
+# level down). Paragraph 7 has five operative sub-paragraphs after a bare
+# application line.
+
+SHOPS = SCHED + (
+    "\nSection 7) **Widget shops**\n\n"
+    "1) This paragraph applies to a widget shop. \n"
+    "2) A shop must display its licence. \n"
+    "3) A shop must keep a register of sales. \n"
+    "4) A shop may not open on a Sunday except— \n"
+    "\ta) with the consent of the council, or \n"
+    "\tb) with the permission of the sheriff. \n"
+    "5) A shop must keep its accounts for six years. \n"
+    "6) In this paragraph “shop” includes a stall. \n\n"
+    "Section 8) **Gadget shops**\n\n"
+    "1) A gadget shop must display its register. \n\n"
+    "Section 9) **Commencement**\n\n"
+    "1) This Schedule comes into force on 1 April. \n")
+LINE7 = f"Also in [Schedule 5]({URL}), paragraph 7 (Widget shops): "
+
+
+def _shops(answer, paras=("7", "8"), **kw):
+    unit = ScheduleUnit("schedule", "5", paragraphs=tuple(paras))
+    pieces, how, reason = cut_pieces(unit, SHOPS)
+    assert how == CUT
+    recs = pr.handed_paragraphs(fetched_block(LID, unit, URL, pieces, how, reason=reason))
+    return pr.restore_dropped_paragraphs(answer, recs, **kw)
+
+
+SHOP_ANSWER = ("Under paragraph 7(4) of Schedule 5 to the Widget Order 1901, a shop may not "
+               "open on a Sunday without consent.\n\nParagraph 8 deals with gadget shops.")
+
+
+def test_a_paragraph_cited_by_one_subparagraph_gets_its_uncited_operative_ones():
+    new, n = _shops(SHOP_ANSWER)
+    assert n == 1
+    first, rest = new.split("\n\nParagraph 8", 1)
+    assert first.endswith(
+        "without consent.\n\n" + LINE7 + "\"(2) A shop must display its licence. (3) A shop must "
+        "keep a register of sales. (5) A shop must keep its accounts for six years. (6) In this "
+        "paragraph “shop” includes a stall.\"")
+
+
+@pytest.mark.parametrize("cites,want", [
+    ("paragraph 7(4)", {"7": (["4"], False)}),
+    ("para 7(4)(a)", {"7": (["4"], False)}),
+    ("paragraph 7(4) and (5)", {"7": (["4", "5"], False)}),
+    ("para 7(2)-(4)", {"7": (["2", "3", "4"], False)}),
+    ("para 7(2)–(3) and (5)", {"7": (["2", "3", "5"], False)}),
+    ("paragraph 7(4), (5)", {"7": (["4", "5"], False)}),
+    ("paragraph 7(2) to (3)", {"7": (["2", "3"], False)}),
+    ("sub-paragraph (4) of paragraph 7", {"7": (["4"], False)}),
+    ("sub-paragraphs (2) and (3) of para 7", {"7": (["2", "3"], False)}),
+    ("paragraphs 7(4) and 8", {"7": (["4"], False), "8": ([], True)}),
+    ("paragraph 7 and paragraph 7(4)", {"7": (["4"], True)}),
+    ("paragraphs 6 to 8", {"6": ([], True), "7": ([], True), "8": ([], True)}),
+    ("paragraphs 7 8", {"7": ([], True), "8": ([], True)}),
+])
+def test_what_the_answer_cites_of_each_paragraph(cites, want):
+    got = pr._citations(f"Under {cites} of Schedule 5, shops are regulated.")
+    assert {k: (sorted(v["subs"]), v["bare"]) for k, v in got.items()} == want
+
+
+def test_more_than_half_of_the_operative_subparagraphs_cited_gets_no_line():
+    # Operative: 2-6 (five). Three cited is more than half; two is not.
+    assert _shops(SHOP_ANSWER.replace("7(4)", "7(2)-(4)"))[1] == 0
+    new, n = _shops(SHOP_ANSWER.replace("7(4)", "7(2)-(3)"))
+    assert n == 1 and LINE7 + "\"(4) A shop may not open" in new
+
+
+def test_half_of_the_operative_subparagraphs_cited_still_gets_a_line():
+    text = "1) A rule. \n2) Another rule. \n3) A third rule. \n4) A fourth rule. \n"
+    assert pr.cited_in_part(text, ["1", "2"]) is True
+    assert pr.cited_in_part(text, ["1", "2", "3"]) is False
+    assert pr.cited_in_part(text, []) is False
+    assert pr.cited_in_part("A paragraph with no sub-paragraphs. \n", ["1"]) is False
+
+
+def test_an_application_line_cited_alone_is_not_a_cited_operative_one():
+    new, n = _shops(SHOP_ANSWER.replace("7(4)", "7(1)"))
+    assert n == 1 and LINE7 + "\"(2) A shop must display its licence." in new
+
+
+def test_the_uncited_line_skips_application_lines_and_their_qualifiers_anywhere():
+    assert pr.uncited_excerpt(INTERIM, ["5"], []) == "(6) The Minister may waive the fee."
+
+
+def test_a_subparagraph_the_answer_already_says_is_left_out_of_the_line():
+    answer = SHOP_ANSWER.replace("without consent.", "without consent. A shop must display its "
+                                 "licence.")
+    new, n = _shops(answer)
+    assert n == 1 and LINE7 + "\"(3) A shop must keep a register" in new
+
+
+SEIZURES = (
+    "1) No widget may be seized except— \n\ta) with the consent of the council, or \n"
+    "\tb) with the permission of the sheriff. \n"
+    "2) No gadget may be sold except— \n\ta) with the consent of the council, or \n"
+    "\tb) with the permission of the sheriff. \n"
+    "3) No stall may be closed except— \n\ta) with the consent of the council, or \n"
+    "\tb) with the permission of the sheriff. \n"
+)
+
+
+def test_the_limbs_every_subparagraph_shares_are_not_a_restatement():
+    # The answer states (3), whose closing limbs (1) and (2) share word for word.
+    said = [set(pr._CONTENT_WORD.findall(
+        "no stall may be closed except with the consent of the council or the permission of "
+        "the sheriff"))]
+    assert pr.uncited_excerpt(SEIZURES, ["3"], said).startswith(
+        "(1) No widget may be seized except— (a) with the consent")
+    # ... but a sub-paragraph whose own words the answer gives is still left out.
+    said.append(set(pr._CONTENT_WORD.findall("no widget may be seized")))
+    assert pr.uncited_excerpt(SEIZURES, ["3"], said).startswith("(2) No gadget may be sold")
+
+
+def test_two_shared_subparagraphs_are_not_boilerplate():
+    # A word in two sub-paragraphs only still counts toward a restatement.
+    two = SEIZURES.split("3) ")[0]
+    said = [set(pr._CONTENT_WORD.findall(
+        "no gadget may be sold except with the consent of the council or the permission of "
+        "the sheriff"))]
+    assert pr.uncited_excerpt(two, ["2"], said) == ""
+
+
+def test_nothing_is_added_when_every_uncited_subparagraph_is_already_said():
+    said = [set(pr._CONTENT_WORD.findall(s)) for s in (
+        "a shop must display its licence", "a shop must keep a register of sales",
+        "a shop must keep its accounts for six years", "in this paragraph shop includes a stall")]
+    p7 = [r for r in pr.handed_paragraphs(fetched_block(
+        LID, ScheduleUnit("schedule", "5", paragraphs=("7",)), URL,
+        *cut_pieces(ScheduleUnit("schedule", "5", paragraphs=("7",)), SHOPS)[:2]))][0]
+    assert pr.uncited_excerpt(p7["text"], ["4"], said) == ""
+
+
+def test_the_uncited_line_keeps_whole_subparagraphs_within_the_cap():
+    p7 = pr.handed_paragraphs(fetched_block(
+        LID, ScheduleUnit("schedule", "5", paragraphs=("7",)), URL,
+        *cut_pieces(ScheduleUnit("schedule", "5", paragraphs=("7",)), SHOPS)[:2]))[0]
+    assert pr.uncited_excerpt(p7["text"], ["4"], [], cap=80) == (
+        "(2) A shop must display its licence. (3) A shop must keep a register of sales.")
+    assert pr.uncited_excerpt(p7["text"], ["4"], [], cap=20) == ""
+
+
+def test_a_paragraph_also_cited_whole_follows_the_setting(monkeypatch):
+    answer = SHOP_ANSWER.replace("Paragraph 8 deals", "Paragraph 7 and paragraph 8 deal")
+    assert _shops(answer)[1] == 1
+    monkeypatch.setattr(pr, "SUB_LINE_WITH_BARE", False)
+    assert _shops(answer) == (answer, 0)
+    # Cited by a sub-paragraph alone, the setting does not matter.
+    assert _shops(SHOP_ANSWER)[1] == 1
+
+
+def test_no_subparagraph_line_unless_the_answer_mentions_the_unit():
+    answer = SHOP_ANSWER.replace(" of Schedule 5", "")
+    assert _shops(answer) == (answer, 0)
+
+
+@pytest.mark.parametrize("order", [("7", "8"), ("8", "7")])
+def test_the_subparagraph_and_paragraph_lines_share_the_cap(order):
+    answer = SHOP_ANSWER.replace("Paragraph 8 deals", "It deals")
+    # Paragraph 8 is now a dropped sibling and 7 is cited in part: two lines,
+    # or one under a cap of one, whichever kind comes first.
+    assert _shops(answer, paras=order)[1] == 2
+    assert _shops(answer, paras=order, max_lines=1)[1] == 1
+
+
+def test_no_line_when_the_answer_already_says_every_uncited_subparagraph():
+    answer = SHOP_ANSWER.replace("without consent.", (
+        "without consent. A shop must display its licence. It must keep a register of sales. "
+        "It must keep its accounts for six years. In this paragraph a shop includes a stall."))
+    assert _shops(answer) == (answer, 0)
+
+
+def test_a_subparagraph_of_boilerplate_alone_is_judged_on_all_its_words():
+    text = ("1) Consent of the council is needed. \n"
+            "2) Consent of the council is needed for a widget. \n"
+            "3) Consent of the council is needed for a gadget. \n")
+    said = [set(pr._CONTENT_WORD.findall("consent of the council is needed"))]
+    assert pr.uncited_excerpt(text, ["3"], said) == (
+        "(2) Consent of the council is needed for a widget.")
+
+
+def test_a_subparagraph_line_is_never_the_answers_first_sentence():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from tools.replay_report import first_sentence
+    for answer in (SHOP_ANSWER, SHOP_ANSWER.replace("\n\n", " ")):
+        new, n = _shops(answer)
+        assert n and first_sentence(new) == first_sentence(answer)
+
+
+def test_a_paragraph_cited_in_part_in_a_matched_block_gets_its_line():
+    block = _matched_block("shops", text=SHOPS)
+    recs = pr.handed_paragraphs(block)
+    assert [r["para"] for r in recs] == ["7", "8"]
+    new, n = pr.restore_dropped_paragraphs(SHOP_ANSWER, recs)
+    assert n == 1 and LINE7 + "\"(2) A shop must display its licence." in new
 
 
 # --- the wrong pinpoint (reported, not changed) --------------------------------
@@ -455,6 +746,33 @@ async def test_every_other_chat_mode_is_left_alone(_cfg, mode):
     assert "Also in [Schedule 5]" not in final["content"]
 
 
+@pytest.mark.asyncio
+async def test_the_conversational_answer_gets_the_subparagraph_line(_cfg):
+    from src.agent.agent_core import process_user_request
+    _cfg("conversational")
+
+    async def worker(query, model, cancel_event, num_ctx, on_chunk, **kw):
+        kw["retrieved_urls"].add(URL)
+        unit = ScheduleUnit("schedule", "5", paragraphs=("7", "8"))
+        block = fetched_block(LID, unit, URL, *cut_pieces(unit, SHOPS)[:2])
+        return {"content": "Report.", "sources": [], "searches": [],
+                "handed_paragraphs": pr.handed_paragraphs(block)}
+
+    final = await process_user_request(_manager(SHOP_ANSWER), worker,
+                                       [{"role": "user", "content": "q"}], "test-model", None, None, 0)
+    assert LINE7 + "\"(2) A shop must display its licence." in final["content"]
+
+
+def test_a_partial_cut_block_is_read_as_cut():
+    # Batch 13 B: paragraph 30 does not cut; past the limit, 2 and 3 are
+    # handed over alone, and the restore reads them as a named cut.
+    unit = ScheduleUnit("schedule", "5", paragraphs=("2", "30", "3"))
+    pieces, how, reason = cut_pieces(unit, SCHED, whole_limit=10)
+    assert how == CUT and "Paragraph 30 has no single heading" in reason
+    recs = pr.handed_paragraphs(fetched_block(LID, unit, URL, pieces, how, reason=reason))
+    assert [(r["para"], r["how"]) for r in recs] == [("2", "cut"), ("3", "cut")]
+
+
 # --- the wording against every detector -----------------------------------------
 
 
@@ -467,9 +785,18 @@ def _rendered_variants() -> dict:
     head_only = dict(cut[0], text="1) " + "keep records " * 60)
     lettered = dict(cut[2], para="2A")
     no_heading = dict(cut[2], heading="")
+    shop = pr.handed_paragraphs(fetched_block(
+        LID, ScheduleUnit("schedule", "5", paragraphs=("7",)), URL,
+        *cut_pieces(ScheduleUnit("schedule", "5", paragraphs=("7",)), SHOPS)[:2]))[0]
     return {
         "labelled, excerpt": pr.render_line(cut[0]),
-        "labelled, application line with limbs": pr.render_line(cut[1]),
+        "labelled, application line with limbs skipped": pr.render_line(cut[1]),
+        "labelled, application lines and a qualifier skipped": pr.render_line(
+            dict(cut[1], text=INTERIM)),
+        "sub-paragraph line (batch 13 B)": pr.render_line(
+            shop, pr.uncited_excerpt(shop["text"], ["4"], [])),
+        "sub-paragraph line, unlabelled unit, no url": pr.render_line(
+            dict(shop, unit="the Schedule", url=""), pr.uncited_excerpt(shop["text"], ["2"], [])),
         "unlabelled unit": pr.render_line(unl[0]),
         "text fallback (no url)": pr.render_line(txt[0]),
         "heading only": pr.render_line(head_only),
