@@ -462,7 +462,11 @@ def test_the_record_drives_the_managers_limb_and_the_lawyers_footer():
     limb = pt.published_limb(log)
     assert "Read from legislation.gov.uk by code, because the index lacks the text: " \
            "SSI 1901/3 (the version as made)." in limb
-    assert "Asked legislation.gov.uk for the text, and none was read: SSI 1901/4." in limb
+    assert "Asked legislation.gov.uk for the text, and none was read: SSI 1901/4. Its text " \
+           "could not be checked here." in limb
+    two = pt.published_limb(log + [dict(log[1], legislation_id="ssi/1901/6",
+                                        label="SSI 1901/6")])
+    assert "none was read: SSI 1901/4, SSI 1901/6. Their text could not" in two
     assert pt.published_footer_clause(log) == (
         " The text of SSI 1901/3 (as made) was read from legislation.gov.uk.")
     assert pt.published_limb([]) == "" and pt.published_footer_clause([]) == ""

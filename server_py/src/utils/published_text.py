@@ -613,8 +613,8 @@ def published_limb(log: Optional[list]) -> str:
     if unread:
         listed = ", ".join(e["label"] for e in unread[:8])
         out.append(
-            f"Asked legislation.gov.uk for the text, and none was read: {listed}. Their "
-            "text could not be checked here.")
+            f"Asked legislation.gov.uk for the text, and none was read: {listed}. "
+            f"{'Its' if len(unread) == 1 else 'Their'} text could not be checked here.")
     return " ".join(out)
 
 
