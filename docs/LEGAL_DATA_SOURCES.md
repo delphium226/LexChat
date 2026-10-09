@@ -115,12 +115,16 @@ By decision year: 1997: 2, 1998: 160, 1999: 590, then roughly 330–590 a year t
 general rule … published unless there is a requirement, or otherwise good reason, not to"),
 so it is a fraction of decisions, and criminal sheriff decisions are almost absent.
 
+**Re-probed 2026-10-08 (FIX_PLAN P3.20's measurement, batch 11 D, 134 calls):** 13,222 judgments; `/web/definition/1414` lists 13 court values, and the table above omits four Upper Tribunal chambers (General Regulatory Chamber 41, Health and Education 23, Local Taxation 48, Tax 5).
+
 ### Search behaviour
 
 - **Full text, not titles.** `Wednesbury` returns 528 results, and none of the top three has the word in its title.
 - **Quoted phrases work.** `"title to sue"` gives 354; `"Wednesbury unreasonable"` 123; `"Interpretation and Legislative Reform (Scotland) Act 2010"` 27.
 - **Unquoted multi-word queries behave like OR.** The unquoted ILRA title matched 12,703 of 13,213. A tool must quote phrases.
 - **Paging works:** `limit=500` returned 500 rows, and the total is exact.
+- **A leading `+` makes a term or quoted phrase required (AND)** (re-probed 2026-10-08): `+"title to sue" +Wednesbury` gives 16. `AND`/`and` are not operators, a required stopword is ignored, `*` is a prefix wildcard, and `-` broadens rather than excludes.
+- **Rows can repeat:** `"title to sue"` paged to 354 rows holds 352 distinct `documentLink`s, so a tool dedupes on it. A query lists by relevance; an empty query lists newest published first. Searching for a neutral citation is not a lookup (the judgment itself came third).
 
 ### Text
 
@@ -142,7 +146,7 @@ these judgments and restricts automated access.
 ### Risks
 
 1. **It is not a published contract.** The client is versioned `1.0.0-beta.1`, and SCTS reworked the judgments system in May 2025, telling RSS users to disable their feeds during the change. Ask SCTS (`enquiries@scotcourts.gov.uk`) before building on it. **Asked (8 Oct 2026): SCTS agreed by phone, with no conditions given.** A written confirmation is still worth having, and the tool is capped and paced in code regardless.
-2. **Date metadata may be unreliable.** In 2 of 5 samples, a decision-date filter for one year returned a judgment cited from a later year: a 2012 filter returned a `[2015] HCJAC`, a 2020 filter returned a `[2021] SC GLW`. Too small a sample to call a pattern; check before trusting date filters.
+2. ~~**Date metadata may be unreliable.** In 2 of 5 samples, a decision-date filter for one year returned a judgment cited from a later year: a 2012 filter returned a `[2015] HCJAC`, a 2020 filter returned a `[2021] SC GLW`. Too small a sample to call a pattern; check before trusting date filters.~~ **Measured 2026-10-08 (40 PDFs):** `additionalDate` is the date printed in the judgment in 36 of 40, 1 has a mistyped year. A neutral citation's later year (21 of 297 rows, mostly the High Court of Justiciary) is the year of publication, not a metadata error: that is what the 2026-10-02 samples showed. So `additionalDate` is usable as the date of decision; never take a date from the citation. pdfplumber extracted 40 of 40 (median 24,777 characters, 0.46 s); the citation is in the opening text of 31 of the 34 decided from 2005.
 3. **Two hosts to whitelist:** `api.pa.web.scotcourts.gov.uk` (search) and `www.scotcourts.gov.uk` (PDFs).
 4. **Not Northern Ireland, and not unpublished decisions.**
 

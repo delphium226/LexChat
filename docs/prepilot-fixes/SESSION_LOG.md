@@ -9035,3 +9035,126 @@ information" and "update the tracker"). The handover above stands.**
 **Eighth addendum to Session 42 (2026-10-08, night): P3.31's acceptance MET and the row ticked.** User-approved replay at a $10 cap, `wave4_p331`, $5.54 (6383 n=3 $1.80, 6382 n=3 $2.86, 6340 n=3 $0.15, 6409 n=1 $0.73), on a port-8001 server at `7031642` (the port-8000 server and the existing pin belong to another session and were left alone; no `restore` run). Reverse made-under: the tool on 13 of 13 turns, the true count stated on every list-type turn, 37 of 37 on the Deep Research turn 3 of 3, and 6382's compound question answered (17 of the 37 carry a pound sign); forward: SSI 2024/311 confirmed 3 of 3; 0 of 13 made-under claims unverified; guards clean. New `tools/madeunder_grade.py`; P2.3's `retrieved_enabling` now reads the record's two routes (without it, 13 correct claims graded unverified). 2,946 tests pass. **Surprises:** the grader gap above; 2 of 3 6382 runs lost a Deep Research step to an empty completion (P4.12's shape, labelled correctly). **Carried:** UK SIs from 1987 (about 70,000 reads, 7 to 8 hours) on the user's decision; P5.5; Tesseract; whether to cut. 59 of 83 rows; B3 now has no open row but P3.28 and P4.22. Fix Tracker not updated (not asked).
 
 **Session 42 addendum, 2026-10-09 (morning): data improvements booked; the tracker gains a Type column.** At the user's request, the suggestions that followed P3.31 are booked as P3.32 to P3.37, each typed "Data Improvement" on the tracker: an SI's own dates and procedure (P3.32), revocation of listed instruments (P3.33), a definitions index (P3.34, measure first), pre-1987 SIs (P3.35, Blocked on P5.5 or OCR), judgments citing a provision (P3.36, Blocked on D23's licence and SCTS's terms), and a general citation graph (P3.37, not recommended now). **Correction to what the user was told:** P3.32 was described as needing no extra harvest; the data is in the files the harvest downloads, but the harvester keeps only the title and recital, so it needs a further pass. The UK SI harvest for P3.31 runs on (about 80% at 07:20). Tracker v45: a Type column for every row (Bug, Issue, Feature, Data Improvement, Measurement), P3.31 Fixed, P5.5 and the six new rows added. 59 of 89 rows.
+
+
+---
+
+## Session 43 — 2026-10-08/09 — parallel batch 11: P4.12 done; P3.12, P3.10 and P4.3 built, not met; P3.20 measured and designed ($7.09)
+
+**Done:**
+- **Ran `PARALLEL_BATCH_11.md` (user decisions at launch: A, B, C, D and E as set out; D up to 150 SCTS calls,
+  agreed; P3.12's two seam draws, agreed; merge order B, A, E, the sweep on the user's go-ahead, C, D; the
+  branch pushed after each clean merge).** Step 1's checks held at `024e396`: equal to `origin`; `main` at
+  `a6b4a76`; `plan_status` 58 of 81, 2 in progress, 9 of 14; `plan_lint` 0, 0; the five rubric sha1s; 64 replay
+  directories; the six test databases; no python process, port 8000 free, no pin file; baseline suite **2833**.
+  `<INTEGRATOR_HEAD>` was `024e396`. Every worktree came up on `main` again; each agent reset to its base.
+- **P3.12's seam first ($0.0865):** `wave4_b10_sweep` rep 1's turn-7 payload as recorded, NOT DELIVERED 2 of 2
+  (SHALLOW, PARTIAL): the payload was the cause; relayed to A, which then built its candidate.
+- **Reviews** (each: the base contained, the note and diff read, the added lines grepped with `matter_grep.py`,
+  the full suite on `lexchat_test`, a headline re-run from a copy of the agent's script, the scratch compared):
+  - **A (P3.12):** revert 46 lines, 10 fail; the integrator's 5 mutants caught (the empty-number filter, the
+    8-character cap, the singular branch, fail-soft, the route guard); the built wording screened, 0 trips over
+    44 texts, rendered for "Schedule 5" and "the Schedule"; suite 2838; `dryrun_b11` + `compare_b11` identical
+    (265 firing calls, 17 move in the tail only), and identical again on the merged tree; scratch 57 = 57. Seam
+    on A's payloads ($0.1298): rep 1 with the tail DELIVERED 1 of 2; r2 1 of 1. **The user approved the
+    wording as built.**
+  - **B (P4.12):** revert 145 lines, 33 of 84 fail; the integrator's 8 mutants caught (the retry count, the
+    `>=` boundary, the fail-soft helper, the gate in `should_retry_empty` and in `agent_core`, the cap, the idle
+    counter, the Ollama forwarding); `worker_reports` excludes lost reports, so the gate is sound; suite 2872;
+    `p412_dryrun` identical (10 attempts removed, about $2.30 and 36 minutes, 0 recoveries given up); scratch
+    25 = 25. Merged `663bb7c` (2872); **ticked at the user's confirmation**.
+  - **E (P3.10):** wiring revert 25 lines, 5 fail; the integrator's 8 mutants caught (the titled-form window,
+    the 15-id cap, the dedupe, the body cut, the emptiness check, the gate, the lookup exclusion, the
+    line-start anchor); the built line screened, 0 trips; suite 2856; `dryrun_p310` identical, and on the merged
+    tree; scratch 31 = 31. **The user approved the wording and shape** (flagged steps only, not read by P3.7).
+  - **C (P4.3):** the integrator's 9 mutants caught (the title and token length floors, the trailing
+    boundary, the longer-title guard, the comma cleaning, the legislation fall-back guard, the `sub` token, the
+    case look-ahead, the empty-text guard); suite 2890; scratch 407 = 407; after its merge `rebuild.py` on the
+    merged tree gave 1,797 of 1,797 rows identical to C's.
+  - **D (P3.20, notes only):** 134 SCTS calls (cap 150), every one through its door, all 200; nothing under
+    `server_py/`; matter hits at FIX_PLAN's level; scratch 260 = 260.
+- **Merged** B `663bb7c`, A `e958fad` (2877), E `9632b53` (2900), each `--no-ff` and pushed; after the sweep
+  C `bccdb47` (3007, with the other session's P3.31 tests) and D `7b7c38b`, pushed. `git diff 9632b53 HEAD --
+  server_py/src` held C's change and the other session's P3.31 work only; `agent_core.py`'s hunks were C's.
+- **The sweep (`wave4_b11_sweep`, served by `9632b53`, build `v2026.09.3-185-g9632b53`; cap $7.50, raised to
+  $9.00 by the user when `--max-spend` stopped `p310_6374` at n=2):** `replay check` ($0.001092), `replay pin`,
+  uvicorn PID 18040 and the keep-awake helper PID 12372 by `Start-Process -PassThru`. 6335 n=3 $1.95;
+  `p310_6374` n=3 $3.16; `p310_6383` n=3 $1.76; **$6.87**. 7 empty completions, all rate limits, all
+  recovered. `replay restore`, PID 18040 stopped; no pin file, port 8000 free. Hand-read: gitignored
+  `evidence/rubrics/handread_wave4_b11_sweep.md`. **P3.12 0 of 3** (rep 2 cited the right text under the
+  wrong paragraph numbers); **P3.10** 7 of 7 lined steps cover their list with no search of their own, 6383 3 of
+  3, but a gate miss on 6374 rep 2 dropped an instrument; `derivations`' one exit read as a false positive.
+- **Decisions put to the user** (seven calls; all as recommended except the SCTS email: "nothing further"
+  beyond the written confirmation already carried): the launch; A's and E's wording; the 6374 script (turn 4
+  alone); the sweep and its cap; P4.12's tick; P3.20's design (two lists in `search_case_law`, the any-term
+  fallback, `AdditionalDate` as the date of decision, a per-request cap and concurrency limit, no pypdf, the
+  acceptance with controls, the grader in the build); P3.12 next (measure first at the seam); P3.10 next (the
+  line on every step 2+); B's two choices kept; E's `lookup --routing` fix; P4.3's (ii) re-booked as the rail's
+  own noise (met), lever R next for (iii), and C's smaller choices (new row **P4.25**).
+- **Applied:** `fold_s43.py` (P3.12, P4.12 ticked, P4.3 and P3.10 to `[~]`, P3.20, new P4.25, the Bucket index,
+  the top order line; 86 bold markers added) and the counts. **`plan_lint` 0 errors, 0 warnings;
+  `plan_status` 60 of 90 rows, 4 in progress, 9 of 14 buckets.** `docs_s43.py`: CHANGELOG *Unreleased*,
+  `AUDIT_TRACE.md` (the Manager's records under P4.12), CLAUDE.md (the LLM stream retry paragraph; P3.10's
+  handover and P4.3's rail filter), `docs/LEGAL_DATA_SOURCES.md` §3 (D's re-probe and the date measurement).
+
+**Surprises / deviations:**
+- **Another session worked in the same checkout overnight.** It booked and built **P3.31** (raised to P1,
+  ticked on its own sweep `wave4_p331` on a separate port-8001 server), booked P3.32 to P3.37 and P5.5, and
+  published Fix Tracker v45, committing between this session's merges (`a6cee16`, `074a3f1..beffefc`, `20cd3a3`,
+  `f429b27`). It left this session's server and pin alone, and no merge conflicted (it also edited
+  `replay_report.py`, C's file; git merged them). **The `git_head` of `p310_6374_rep3` and `p310_6383_rep1-3`
+  reads `beffefc`, the checkout's head when they ran; the code that served them is `9632b53`.**
+- **A named tail moved the seam and not the live runs** (seam 1 of 2, live 0 of 3), and **one live Worker
+  cited the right text under the wrong paragraph numbers**: P3.12's gap is now composition under a broad brief.
+- **The P3.10 line worked wherever it fired** (7 of 7 steps worked on exactly the list, no search of their
+  own); the only miss was a step the regex gate did not recognise.
+- **V4 overshot P4.3's (ii)** because naming in words adds real sources the Manager then drops (P4.23's
+  defect); re-booked on the rail's own noise.
+- **`p310_6374` reps cost about 1.35 times their stored turn 4** (tool volume, no runaway), so the per-command
+  cap stopped at n=2; the user raised the sweep cap.
+- **SCTS:** a leading `+` is AND; rows can repeat; `additionalDate` is sound (36 of 40), and 2026-10-02's
+  date "errors" were publication-year citations.
+
+**State:** branch `fix/prepilot-defects`, pushed (head after this commit); `main` untouched at `a6b4a76`. 3007
+tests. Session spend **$7.09** (P3.12 seams $0.2163, the sweep $6.87, the probe $0.001). Agents $0 in model
+spend; 134 SCTS calls (D).
+
+---
+
+## Session 43 — handover for Session 44 (2026-10-09)
+
+**Take next, by severity (FIX_PLAN's top order line, "end of Session 43"):**
+1. **P1: P3.12, measure first at the seam** (about $0.20, priced to the user; the default Worker seam is
+   uncapped, so price at the runaway case): A's `evidence/seam/batch11/A/seam_b11_rep1_r2brief.json` (rep 1 with
+   r2's narrow brief, no lever) and `wave4_b11_sweep/6335_rep{1,2,3}.json` turn 7, to separate the brief, the
+   block and the quick-lookup Worker's 2-5-sentence budget, and to size the wrong-pinpoint rate (rep 2). The
+   candidates (not decided): code-written paragraph lines at the answer seam (P3.13's pattern); the concision
+   rule relaxed for a code-fetched unit. (P3.31, raised to P1, was ticked by the other session.)
+2. **P2:** P3.10's line on every step 2+ (user decision), then 6374 n=3 (about $3.20, priced first); P4.3's
+   lever R (measure first, $0); **P3.20's build** (the design decided on its row, D's note section 5; its
+   acceptance 6375 n=3 + 6370, 6380 n=1, about $4.90 to $8 and about 135 SCTS calls, priced first); P4.23
+   (measure first); P3.22's item 3; P3.4's research-mode follow-up.
+3. **P3:** `replay_report lookup --routing` read through `without_handover_line` (user decision); P4.24, P4.25,
+   P4.8, P4.20, P4.22, P3.26, P3.28, P3.29, P3.30, P3.14, P4.9, P5.4's other leads, P0.7, TODO B6; P3.32 to
+   P3.37 as their rows say.
+
+**Watch items carried:** the wrong-pinpoint composition (P3.12, rep 2); `derivations` reading a description of
+searches as a claim (`p310_6383` r3); `p310_6374`'s cost; a clean-stop (c) Manager empty still retried (P4.12,
+unbooked); `source_filter_fallback`'s Efficiency-tab text to relabel (P4.3); `rail` to join the exit-1 set after
+the next sweep (P4.3); and Session 42's (P3.22's carrier, the failed-turn rail, `commencements`' title scope,
+`negcurrency`'s definitional false positive, P3.27, P3.21, P3.4, P3.24).
+
+**Decisions open with the user (carried):** the written confirmation from SCTS; the whitelist request for
+`api.pa.web.scotcourts.gov.uk` and `www.scotcourts.gov.uk`; the lawyer pack (unblocks P3.2, P3.3, P3.17); D23;
+deploying `v2026.09.3`; telling the eval-harness owner about schema v6, the new `api_calls` and request keys,
+and P4.12's Manager records; D19; the next cut (`v2026.10.1`); D20, D21/D22; batch 1's three items; the
+p37_6373 substitution; the Fix Tracker when asked (if asked: P4.12 Fixed, `fixed` 2026-10-08, "Next release";
+P3.10 and P4.3 In progress; new row P4.25, P3, Verified, `added` 2026-10-09; P3.20's text measured and designed;
+the other session's v45 is the base).
+
+**Machine state:** no server, no pin file, no replay running, no worktree but the main checkout. **66 replay
+directories** (new: `wave4_b11_sweep`, 9 files; and the other session's `wave4_p331`). Hand-read
+`handread_wave4_b11_sweep.md`. Agents' scratch in `evidence/seam/batch11/{A,B,C,D,E}/`, the session scratchpad
+in `batch11/scratchpad_s43/` (integrator tools: `review_branch.sh`, `grade_b8.sh`, `route_trace.py`,
+`s43_mut{A,B,C,E}.py`, `s43_screen{A,E}.py`, `dump_t7.py`, `r2s4.py`, `fold_s43.py`, `docs_s43.py`,
+`s43_decisions.md`).

@@ -103,6 +103,31 @@ Schedules and annexes:
   and a search limit within that instrument is then reached, say what that
   list holds, so a schedule the index does not hold is not put down to the
   limit (P3.27, P3.12).
+- When paragraphs of a large schedule are handed over because their headings
+  match the search, name them, and ask the research step to report each one
+  that bears on the question in its own sentence, cited by its number and
+  taken from its own words. Built; its measured acceptance is not yet met
+  (P3.12).
+
+Deep Research:
+- When a step works on instruments an earlier step identified, hand it the
+  instruments the earlier steps' reports cite, so it works on that list
+  rather than searching for it again. Built; its measured acceptance is not
+  yet met (P3.10).
+
+Sources:
+- When a research step's report vouches for none of the sources it
+  retrieved, show none, instead of every search result; keep a source the
+  report names by its title or number; stop counting a section heading, or
+  a citation that is only the start of a longer one, as a mention. Built;
+  one part of its acceptance is not yet met (P4.3).
+
+Reliability and cost:
+- When the final answer comes back empty after research is already in hand,
+  fall back to that research sooner: an empty answer after long reasoning is
+  not retried, an upstream timeout is retried once instead of twice, and the
+  answer call's output is capped as research calls already are. With no
+  research in hand the retries are kept (P4.12).
 
 Case law:
 - List case-law search results most relevant first, not newest first, and say
@@ -162,6 +187,9 @@ party names, never by one surname, and reads a link whose label holds a
 bracketed citation (P3.22); `negcurrency` reads both stored shapes of a
 section-search result (P3.24); `commencements` grades scripted replays
 (P3.21); `corpus`'s description labels are true before and after P3.6.
+A new `replay_report rail` grades the sources rail with a careful-reader
+test, and the older rail counters are labelled as the token test's (P4.3);
+two scripted replays of P3.10's Deep Research turns (P3.10).
 
 Planning tools only, no product change: a new `python -m tools.plan_lint`
 checks the fix plan's structure (one table cell per column, every row in the
