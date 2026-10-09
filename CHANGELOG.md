@@ -33,6 +33,9 @@ What an instrument was made under:
   daily, through the LEX API's connection to legislation.gov.uk (P3.31).
 
 Saying honestly what was and was not found:
+- When a research report names one of the notes code adds ("an enabling
+  power block") in its own sentence, keep those words instead of leaving a
+  gap in the sentence (P4.22).
 - When case law was searched, say that a search can miss a judgment the
   database holds, so one missing from its results may still exist: that is not
   proof of absence (P4.15).
@@ -71,7 +74,11 @@ Jurisdiction:
 - Where a question names no jurisdiction, answer for Scotland and say so;
   where it asks about the UK, answer for each of England, Wales, Scotland and
   Northern Ireland and say where the law differs. This applies to
-  conversational replies and quick lookups (P3.4).
+  conversational replies, quick lookups, research replies and Deep
+  Research plans (P3.4).
+- When a research step is asked about one jurisdiction, it reads the law
+  that applies there, UK legislation that extends there included, not only
+  legislation made for that jurisdiction alone (P3.4).
 - The jurisdiction filter's notes no longer use letter codes the index never
   sends, and say that most search results carry no stated extent (P3.4).
 
@@ -119,21 +126,27 @@ Schedules and annexes:
 - When paragraphs of a large schedule are handed over because their headings
   match the search, name them, and ask the research step to report each one
   that bears on the question in its own sentence, cited by its number and
-  taken from its own words. Built; its measured acceptance is not yet met
-  (P3.12).
+  taken from its own words (P3.12).
+- When a reply cites one paragraph of a schedule fetched for it and leaves
+  out another paragraph it was handed, add the omitted paragraph's heading
+  and opening words after it, quoted from the statute. Built; its measured
+  acceptance is not yet met (P3.12).
 
 Deep Research:
-- When a step works on instruments an earlier step identified, hand it the
-  instruments the earlier steps' reports cite, so it works on that list
-  rather than searching for it again. Built; its measured acceptance is not
-  yet met (P3.10).
+- Hand every step after the first the instruments the earlier steps'
+  reports cite (up to 40), so a step that works on an earlier step's list
+  works on that list rather than searching for it again (P3.10).
 
 Sources:
 - When a research step's report vouches for none of the sources it
   retrieved, show none, instead of every search result; keep a source the
   report names by its title or number; stop counting a section heading, or
-  a citation that is only the start of a longer one, as a mention. Built;
-  one part of its acceptance is not yet met (P4.3).
+  a citation that is only the start of a longer one, as a mention (P4.3).
+- Put back in the sources list a source the research retrieved and the
+  answer cites, even when no research report named it (P4.3).
+- Show a source listed under a bare identifier by its title, taken from the
+  research's own results or the made-under record, and give a source with
+  no link its legislation.gov.uk address (P4.24).
 
 Reliability and cost:
 - When the final answer comes back empty after research is already in hand,
@@ -144,7 +157,11 @@ Reliability and cost:
 
 Case law:
 - List case-law search results most relevant first, not newest first, and say
-  so in the search note. Built; its measured acceptance is not yet met (P3.22).
+  so in the search note (P3.22).
+- Search the Scottish Courts and Tribunals Service's published judgments
+  beside Find Case Law, and read a Scottish judgment's text, so a Scots-law
+  question can cite Court of Session and Sheriff Appeal Court decisions.
+  Switched off until the server can reach the Scottish Courts site (P3.20).
 - Date ranges on a case-law search now apply. They never did: the National
   Archives ignored the form we sent. A start date after the end date is
   refused rather than searched (P3.9).

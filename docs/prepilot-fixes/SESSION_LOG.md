@@ -9306,3 +9306,24 @@ then `NETWORK_AND_DEPENDENCIES.md`, `test_apis.ps1`, the offline bundle's pdfplu
 SCTS's written confirmation; the lawyer pack (P3.2, P3.3, P3.17); D23; P5.5; deploying `v2026.09.3`; the
 eval-harness owner; D19; the next cut (`v2026.10.1`, which would now carry P3.31, P4.12 and this batch); Tesseract
 (P3.35); the Fix Tracker (v47 is the base; not updated this session).
+
+**Addendum to Session 44 (2026-10-09, evening, at the user's request: "make sure we're not going to lose any
+pertinent information ... update the tracker ... provide a prompt to kick off the next piece of work").**
+- **Session 45 runs `docs/prepilot-fixes/PARALLEL_BATCH_13.md`**, which supersedes "A brief for the next batch is not
+  written yet" in the handover above. Seven $0 agents: A P3.45 (P1), B P3.12 (P1), C P3.38's build, D P4.23's
+  linker, E P3.46, F P3.28 then P3.26, G P3.34's measurement (notes only). Merge order A, B, C, D, E, F, G.
+- **Lasting docs updated for batch 12:** CHANGELOG *Unreleased* (P3.4's research-mode rule and the hybrid line,
+  P3.10, P3.12's lines, P3.20, P3.22, P4.3's lever R, P4.22, P4.24); CLAUDE.md's Worker notes (P3.10, P4.3 with
+  P4.24, P3.12's answer seam, P3.20 in the case-law notes, the external-API count); `docs/LEGAL_DATA_SOURCES.md`
+  (SCTS in the table of what we call, and §3); `docs/api/AUDIT_TRACE.md` (P3.20's `api_calls` and `raw_result`
+  keys); the local `external-apis` and `repo-map` skills.
+- **The hand-reads behind every Session 44 number** are in the gitignored `evidence/rubrics/handread_batch12.md`;
+  the session's scripts (mutants, fold, docs, tracker, the brief generator `mkcommon.py`) in
+  `evidence/seam/batch12/scratchpad_s44/`.
+- **Fix Tracker v48** (user request; repo source byte-identical to the live body before the edit, all 1,570 lines
+  read; `tracker_v48.py`): P3.10, P3.20, P3.22, P4.3, P4.22, P4.24 Fixed (`fixed: "2026-10-09"`, Next release; the
+  lede now lists twenty-six Next-release rows); P3.45 (P1), P3.46, P4.26, P4.27 added (Verified); P3.30, P3.41,
+  P3.43 removed and named in the Not-listed line (the tracker has no Dropped status); P3.32, P3.39, P3.42 marked
+  parked in their text; P3.12 the only In-progress row; a plain-language note and "Next"; AS_AT "9th Oct 2026,
+  7:05pm". 97 rows: 63 Fixed, 1 In progress, 23 Verified, 5 Blocked, 5 To be verified. `node --check` only.
+- **For the user:** P3.12's tracker severity is P2 while the briefs since batch 11 have called it P1; left as P2.

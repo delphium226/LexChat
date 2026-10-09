@@ -21,6 +21,7 @@ endpoint traps for the APIs we call are in the `external-apis` skill
 |---|---|---|
 | **LEX API** (`lex.lab.i.ai.gov.uk`) | UK legislation: search, section search, full text, amendment/commencement/repeal relations (P3.5), held/absent lookup (P3.7). 6 of its 13 documented endpoints | `search_legislation`, `search_legislation_sections`, `get_legislation_text`, `get_legislation_changes`, `lookup_legislation` |
 | **The National Archives — Find Case Law** (`caselaw.nationalarchives.gov.uk`) | England & Wales and UK-wide judgments; Scottish appeals to the UK Supreme Court. 42 court codes, none Scottish or Northern Irish. **Licence question open (§4): TNA requires a free licence for AI/LLM products** | `search_case_law`, `get_case_law_text` |
+| **SCTS judgments** (`api.pa.web.scotcourts.gov.uk`, PDFs on `www.scotcourts.gov.uk`) | Scottish judgments from 1998: Court of Session, Sheriff Appeal Court, High Court of Justiciary, Sheriff Courts (published decisions only), the Scottish tribunals (§3) | `search_case_law` (`scottish_results`), `get_case_law_text` (a Scottish PDF), **behind `SCTS_CASELAW_ENABLED`, off until the target whitelists both hosts** (P3.20, Session 44, branch only) |
 
 One older fix shaped every coverage number below. Until **P1.1** (2026-09-14) the
 jurisdiction filter dropped every legislation result whose territorial extent was stated, so
@@ -65,6 +66,8 @@ honest about a gap. Only the SCTS lead in §3 would actually fill one.
 ---
 
 ## 3. SCTS judgments API — probed 2026-10-02
+
+**Called by the product since P3.20 (Session 44, 2026-10-09, branch only), behind `SCTS_CASELAW_ENABLED`, off by default until the target whitelists both hosts** (`agent/tools/scts.py`): every term sent `+`-required (`a OR b` as `+(a | b)`, confirmed live), one any-term fallback on zero results, `AdditionalDate` as the date of decision, rows deduped on `documentLink`, PDF text by pdfplumber, the neutral citation from the filename first (filename and text agree 23 of 24; the filename's is taken first). Acceptance run `wave4_b12_p320`: 108 calls (84 searches, 24 PDFs) over 5 runs. The measurements below are unchanged.
 
 The Scottish Courts and Tribunals Service runs a JSON search API behind the judgments search
 page on scotcourts.gov.uk. It isn't documented or published as an API. It was found by
