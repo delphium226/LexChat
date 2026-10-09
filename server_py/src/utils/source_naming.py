@@ -40,8 +40,14 @@ _OLD_SI = re.compile(r"(\d{4}) No\. ?(\d+)", re.I)
 # parenthesis, then "Regulations"/"Order"/"Rules"/"Scheme" (English) or a year
 # (Welsh titles put the instrument word first: "Gorchymyn Deddf ... 1901
 # (Cychwyn Rhif 1) 1902").
+# Batch 12 D: or "(Commencement" with or without its closing parenthesis. An
+# answer quoting a truncated search query ('"Widget Act 1901 (Commencement
+# No. 1"') names the commencement instrument it searched for, never the Act:
+# 3 stored answers, every one read; 0 of 53,768 stored title tests at the
+# Worker seam move.
 _LONGER_TITLE = re.compile(
-    r"\s*\([^)]{1,80}\)\s*(?:regulations|order|rules|scheme|\d{4}(?!\d))"
+    r"\s*\((?:[^)]{1,80}\)\s*(?:regulations|order|rules|scheme|\d{4}(?!\d))"
+    r"|commencement\b)"
 )
 _STRIP_CHARS = re.compile(r"[*_`,]")
 # Line breaks are kept: a case named in one bullet is not cited by the next

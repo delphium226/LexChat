@@ -465,6 +465,9 @@ async def run_worker_agent(
             {**{k: v for k, v in src.items() if not k.startswith("_")}, "n": i + 1}
             for i, src in enumerate(kept)
         ]
+        # P4.3 lever R: everything retrieved, for the answer seam to re-admit
+        # what the answer cites and no report named (`readmit_answer_sources`).
+        result["retrieved_sources"] = retrieved_with_marks(source_accumulator, kept)
 
     # P2.2 (B5): hand the search scope forward, in code, to the agent that will
     # actually write the negative. The tool-result block instructs the WORKER;
@@ -545,6 +548,14 @@ def _source_is_used(src: dict, content: str) -> bool:
     """
     if src.get("excerpt"):
         return True
+    return _source_is_named(src, content)
+
+
+def _source_is_named(src: dict, content: str) -> bool:
+    """`_source_is_used` without the excerpt branch: the text references the
+    source by an identifying token or names it in words. Lever R reads the
+    answer with this, because an excerpt says the source was retrieved, not
+    that the answer cites it."""
     legislation = is_legislation(src)
     tokens = [
         src.get("_lid"),
@@ -584,6 +595,59 @@ def filter_worker_sources(source_accumulator: list, content: str,
     if kept_nothing and research_mode in _RAIL_FALLBACK_MODES:
         kept = list(source_accumulator)
     return kept, kept_nothing
+
+
+def retrieved_with_marks(source_accumulator: list, kept: list) -> list:
+    """Every source a Worker run retrieved, private keys kept, each marked
+    `_kept` if the Worker-seam filter put it in the rail. Lever R's input."""
+    kept_ids = {id(src) for src in kept}
+    return [{**src, "_kept": id(src) in kept_ids} for src in source_accumulator]
+
+
+def readmit_answer_sources(rail: list, retrieved: list, answer: str,
+                           research_mode: str) -> list:
+    """P4.3 lever R: the sources this turn retrieved that the ANSWER cites,
+    though no Worker report vouched for them. Returns them (public keys, in
+    retrieval order) for the caller to append to the rail.
+
+    The Worker-seam filter reads each report. An answer can cite what its
+    reports never named: an instrument a code scope block listed, or one an
+    earlier turn's answer linked. Before P4.3 such a source reached the rail
+    only through the fall-back to the whole accumulator, which V4 removed (6
+    answer-cited sources left the rail, and 444 instruments a Deep Research
+    synthesis names were retrieved and never in it; batch 12 D).
+
+    A source is re-admitted when it was retrieved this turn and not kept, its
+    instrument is not already in the rail (a change record's `http://.../id/`
+    URL and a search hit's `https://` URL are one instrument), and the answer
+    references it by `_source_is_named` (never the excerpt branch: retrieval
+    alone is not citation). Not on the parliamentary bots, whose filter keeps
+    its fall-back and no replay has measured. Never raises.
+    """
+    try:
+        if research_mode in _RAIL_FALLBACK_MODES:
+            return []
+        # A kept source is in the rail: its instrument by `_lid`, a case by its
+        # URL (`_is_duplicate_source` below), so it is never a candidate.
+        rail_lids = {s.get("_lid") for s in retrieved if s.get("_kept") and s.get("_lid")}
+        out: list = []
+        seen: set = set()
+        for src in retrieved:
+            lid = src.get("_lid")
+            if lid and (lid in rail_lids or lid in seen):
+                continue
+            public = {k: v for k, v in src.items() if not k.startswith("_")}
+            if _is_duplicate_source(public, rail) or _is_duplicate_source(public, out):
+                continue
+            if not _source_is_named(src, answer):
+                continue
+            out.append(public)
+            if lid:
+                seen.add(lid)
+        return out
+    except Exception as e:  # Invariant 5: the rail is never worth a failed answer
+        logger.warning("[Sources] Answer-seam re-admission skipped: %s", e)
+        return []
 
 
 # -----------------------------------------------------------------------
@@ -836,6 +900,8 @@ async def process_user_request(
     manager_tools = get_manager_tools(peer_descriptions)
 
     accumulated_sources: list = []
+    # P4.3 lever R: every source every delegation retrieved, marked kept or not.
+    retrieved_sources: list = []
     # P2.2 (B5): every legislation search this turn ran, across ALL delegations,
     # and (P2.4) every case-law search. The footer describes the turn the lawyer
     # asked, not one delegation of it.
@@ -941,6 +1007,7 @@ async def process_user_request(
             for src in result.get("sources", []):
                 if not _is_duplicate_source(src, accumulated_sources):
                     accumulated_sources.append(src)
+            retrieved_sources.extend(result.get("retrieved_sources") or [])
             if result.get("halted"):
                 halts.append({**result["halted"], "scope": "delegation"})
             if result.get("lost"):
@@ -1143,6 +1210,15 @@ async def process_user_request(
         ):
             logger.warning("[Suggestions] %s", issue)
 
+    # P4.3 lever R: a source the answer cites that no report vouched for. Read
+    # against the answer as the lawyer sees it, before the scope footer, which
+    # names searched instruments in code's words, not the answer's.
+    _readmitted = readmit_answer_sources(
+        accumulated_sources, retrieved_sources, clean, research_mode)
+    if _readmitted:
+        logger.info("[Manager] Re-admitted %d source(s) the answer cites", len(_readmitted))
+        accumulated_sources.extend(_readmitted)
+
     if accumulated_sources:
         final["sources"] = [
             {**{k: v for k, v in s.items() if k != "n"}, "n": i + 1}
@@ -1328,6 +1404,8 @@ async def run_deep_research(
 
     step_findings: list = []
     accumulated_sources: list = []
+    # P4.3 lever R: every source every step retrieved, marked kept or not.
+    retrieved_sources: list = []
     # Per-request tool-result memo: plan steps run as isolated workers, so two
     # steps that retrieve the same Act would each pay fetch + summarise. Exact
     # (tool_name, canonical args) repeats are served from this dict instead.
@@ -1404,6 +1482,7 @@ async def run_deep_research(
         for src in result.get("sources", []):
             if not _is_duplicate_source(src, accumulated_sources):
                 accumulated_sources.append(src)
+        retrieved_sources.extend(result.get("retrieved_sources") or [])
         all_searches.extend(result.get("searches") or [])
 
     if cancel_event and cancel_event.is_set():
@@ -1521,6 +1600,15 @@ async def run_deep_research(
     _dr_cfg = _get_cfg()
     final["research_mode"] = _dr_cfg.get("_research_mode") or None
     final["chat_mode"] = _dr_cfg.get("_chat_mode") or None
+
+    # P4.3 lever R, as on the Manager path: the synthesis names instruments a
+    # step's scope block listed and no step report did (408 stored misses).
+    _readmitted = readmit_answer_sources(
+        accumulated_sources, retrieved_sources, _content,
+        _dr_cfg.get("_research_mode") or "legislation_only")
+    if _readmitted:
+        logger.info("[DeepResearch] Re-admitted %d source(s) the report cites", len(_readmitted))
+        accumulated_sources.extend(_readmitted)
 
     if accumulated_sources:
         final["sources"] = [
