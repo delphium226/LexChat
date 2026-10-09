@@ -85,6 +85,12 @@ from .instrument_lookup import (
     NOT_HELD,
     parse_lookup_result,
 )
+from .removal_effects import (
+    PROVISION_KEY,
+    QUALIFIED_KEY,
+    WORDS_ONLY_KEY,
+    removal_counts,
+)
 
 __all__ = [
     "LEX_COVERAGE_SENTENCE",
@@ -1505,7 +1511,6 @@ def _relation_currency_limb(d: dict) -> str:
     """
     commenced = d.get("provisions_commenced")
     orders = d.get("commencement_orders_of_amendments")
-    repeals = d.get("repeal_or_revocation_relations")
     bits = []
     if isinstance(commenced, int) and commenced:
         # P3.24 (batch 7 A, extension decided by the user): P2.5's sentence
@@ -1525,15 +1530,7 @@ def _relation_currency_limb(d: dict) -> str:
             "Do NOT name any of those instruments as having commenced this "
             "legislation or any of its provisions."
         )
-    if isinstance(repeals, int) and repeals:
-        # P3.21: "either" assumed the commencements were undated too; where
-        # code dated them, the repeal half stands without it.
-        bits.append(
-            f" {repeals} relation(s) are repeals or revocations: those establish "
-            "that the named provision is no longer in force, and you may state "
-            "them the same way. The record gives no date for them"
-            + ("." if _commencement_dates(d)["dated"] else " either.")
-        )
+    bits.append(_relation_removal_bits(d))
     if isinstance(commenced, int) and not commenced:
         bits.append(
             " NO relation here is a `coming into force` relation for this "
@@ -1546,6 +1543,54 @@ def _relation_currency_limb(d: dict) -> str:
         " Whatever this record shows, it CANNOT establish that this legislation "
         "is in force as a whole, as at today. Do not write that it is."
     )
+    return "".join(bits)
+
+
+def _relation_removal_bits(d: dict) -> str:
+    """P3.28: the removal sentences on a change record, one per class present.
+
+    P2.5's one sentence said of every relation whose effect held "repeal",
+    "revok" or "revoc" that the named provision "is no longer in force". That
+    over-claimed on "words repealed" (the provision stays, its text amended)
+    and on "repealed (prosp.)" (not yet in effect), and the count missed
+    "omitted", "ceases to have effect" and the other removal families, so a
+    record removing whole provisions was handed over as holding no repeal
+    (batch 12 G: 12 answer sentences denying a removal the record held). The
+    classes come from `removal_effects.removal_counts`, which reads a stored
+    record's effect histogram where the slimmer's counts are absent.
+    """
+    counts = removal_counts(d)
+    whole, words, qualified = (counts[PROVISION_KEY], counts[WORDS_ONLY_KEY],
+                               counts[QUALIFIED_KEY])
+    bits = []
+    if whole:
+        bits.append(
+            f" {whole} relation(s) remove a provision, wholly or in part (their "
+            "groups are marked `removal: provision` or `removal: provision_in_part`): "
+            "those establish that the named provision, or the part of it removed, "
+            "is no longer in force, and you may state them the same way."
+        )
+    if words:
+        bits.append(
+            f" {words} relation(s) remove words or entries only (marked `removal: "
+            "words_only`): each amends the text of the named provision, which "
+            "stays, so state it as the text amended, never as a provision removed."
+        )
+    if qualified:
+        bits.append(
+            f" {qualified} relation(s) remove something with a qualification in "
+            "their effect (marked `removal: qualified`, with a `qualifier`: "
+            "prospective, temporary, conditional, for specified purposes, or for "
+            "part of the United Kingdom only): state each only with its "
+            "qualification, never as a provision removed outright."
+        )
+    if bits:
+        # P3.21: "either" assumed the commencements were undated too; where
+        # code dated them, the removal half stands without it.
+        bits.append(
+            " The record gives no date for these removals"
+            + ("." if _commencement_dates(d)["dated"] else " either.")
+        )
     return "".join(bits)
 
 
@@ -1635,13 +1680,19 @@ def record_currency(log: Optional[list], name: str, args: dict, data: Any) -> No
                 })
         elif name == "get_legislation_changes":
             lid = str(d.get("legislation_id") or args.get("legislation_id") or "")[:60]
+            # P3.28: `repeals` now counts only the removals of a provision,
+            # wholly or in part; the words-only and qualified ones are kept
+            # apart, for `_currency_limb`'s lines and the footer's gate.
+            removals = removal_counts(d)
             log.append({
                 "tool": "currency",
                 "kind": "relations",
                 "legislation_id": lid,
                 "commenced": d.get("provisions_commenced") or 0,
                 "orders": d.get("commencement_orders_of_amendments") or 0,
-                "repeals": d.get("repeal_or_revocation_relations") or 0,
+                "repeals": removals[PROVISION_KEY],
+                "words_only_removals": removals[WORDS_ONLY_KEY],
+                "qualified_removals": removals[QUALIFIED_KEY],
                 # P3.24: which of those commencements another instrument made,
                 # for the per-instrument line in `_currency_limb`.
                 **_commencement_split(d),
@@ -1886,6 +1937,7 @@ def _currency_limb(log: Optional[list]) -> str:
         return ""
 
     marked, repealed, valid = [], [], []
+    words_only, qualified = [], []
     for e in rows:
         kind = e.get("kind")
         if kind == "title_marker":
@@ -1897,6 +1949,12 @@ def _currency_limb(log: Optional[list]) -> str:
             lid = e.get("legislation_id") or "?"
             if e.get("repeals") and lid not in repealed:
                 repealed.append(lid)
+            # P3.28: the two removal classes that do not take a provision
+            # out of force.
+            if e.get("words_only_removals") and lid not in words_only:
+                words_only.append(lid)
+            if e.get("qualified_removals") and lid not in qualified:
+                qualified.append(lid)
         elif kind == "valid_date":
             label = f"{e.get('legislation_id') or '?'} to {e.get('valid_date')}"
             if label not in valid:
@@ -1915,11 +1973,31 @@ def _currency_limb(log: Optional[list]) -> str:
         # P3.21: "again" pointed back at commencements that carried no date;
         # where code dated them, the repeal half stands without it.
         any_dated = any(e.get("kind") == "relations" and e.get("dated") for e in rows)
+        # P3.28: only removals of a provision, wholly or in part, now reach
+        # this list ("omitted" and "ceases to have effect" among them; "words
+        # repealed" and "repealed (prosp.)" no longer).
         parts.append(
-            " Repeal or revocation relations were retrieved for "
-            f"{', '.join(repealed[:6])} — a statement that those provisions are no "
-            "longer in force is supported, "
+            " Relations removing a provision wholly or in part (repealed, "
+            "revoked, omitted or ceasing to have effect, for example) were "
+            "retrieved for "
+            f"{', '.join(repealed[:6])} — a statement that those provisions, or "
+            "the parts removed, are no longer in force is supported, "
             + ("without a date." if any_dated else "again without a date.")
+        )
+    if words_only:
+        parts.append(
+            " Relations removing words or entries only were retrieved for "
+            f"{', '.join(words_only[:6])}: each amends the text of the provision "
+            "it names, which stays, so state it as the text amended, never as a "
+            "provision removed."
+        )
+    if qualified:
+        parts.append(
+            " Removals with a qualification in their effect (prospective, "
+            "temporary, conditional, for specified purposes, or for part of the "
+            f"United Kingdom only) were retrieved for {', '.join(qualified[:6])}: "
+            "state each only with its qualification, never as a provision removed "
+            "outright."
         )
     if marked:
         parts.append(
@@ -1993,7 +2071,13 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
         if e.get("kind") == "relations":
             consulted = True
             lid = e.get("legislation_id") or ""
-            if lid and (e.get("commenced") or e.get("repeals")) and lid not in sourced:
+            # P3.28: a record whose only removals are words-only or qualified
+            # ones still lists a removal, so P4.18's "list neither a
+            # commencement nor a repeal" would be false of it: it is sourced.
+            # One whose only "repeal" was a power conferred no longer is.
+            if lid and (e.get("commenced") or e.get("repeals")
+                        or e.get("words_only_removals")
+                        or e.get("qualified_removals")) and lid not in sourced:
                 sourced.append(lid)
             if lid and e.get("dated") and lid not in dated:
                 dated.append(lid)
