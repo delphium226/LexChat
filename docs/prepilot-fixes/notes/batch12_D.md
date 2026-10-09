@@ -15,6 +15,11 @@ re-admission the build removes): **P4.3 (iii) is 0 in every chat mode** (from 5 
 guard fix it needed and the `rail` grader changes it needs. `lookup --routing` fixed. P4.23 and P4.24
 measured, not built. Decisions 1 to 6.
 
+**Second round (the integrator's request, after the user chose decision 2(a): merge R with P4.24's title
+fill): P4.24 built, section 12.** On the built rails (V4 + R + the fill, the record queried for real),
+bare-id titles fall from 1,696 to 52 and entries with no URL from 640 to 0. The re-runs of section 2 and 4
+now include the 67th directory.
+
 ## 1. What I changed, function by function (the collision list asks for all of them)
 
 **`server_py/src/agent/agent_core.py`:**
@@ -322,3 +327,145 @@ no rail source).
 the main checkout's same path (counts in the reply). It holds the scripts, the rebuilds, the `.out` files and
 the read files (`read_r_*.txt`, `p423.list`, `p424.list`, `rb_*.list`, `guard_census.list`), which quote
 answers and stay gitignored. This note cites sessions by number and names no instrument.
+
+## 12. Second round: P4.24 built (the integrator's request, 2026-10-09)
+
+**User decision:** 2(a), R merges together with P4.24's title fill. Built on this branch as `cb0a9e9`, on top of
+R; not rebased onto the integrator's branch (B's, E's and C's changes are the integrator's to merge).
+
+### 12.1 What I built
+
+A rail entry titled with a bare id gets a title in code, with no external call, from, in order:
+1. **the same turn's retrievals**: the first real title a source this turn retrieved for the id carries (in
+   practice a search hit), **else the title a `lookup_legislation` for it returned**. The second was needed:
+   a routed lookup adds no rail source, and 317 of the built fills come from it (EU instruments above all);
+   without it 233 EU entries stayed untitled;
+2. **the made-under record** (`made_under_instruments.title`): an SSI's or UK SI's own title, else an Act's
+   title as the record's recitals resolved it (`made_under_powers.act_title` by `act_id`), the spelling most
+   recital rows use, and **none on a tie** (recitals misspell some Acts: 106 of 2,215 resolved Acts carry a
+   second spelling; the majority rule titles 2,212 and leaves 3 tied).
+
+**Nothing is invented** (`rail_titles.exact_title`): a title must be non-empty, not itself an id, not cut
+short (the record ends a title over 300 characters with an ellipsis) and must name a year. The year rule came
+from checking 12.4's one (iii) row: **LEX titled one old Act's search hit with a section heading** ("Short
+title, commencement, and extent."), and the first build put it on the rail; of the 1,644 titles the built
+rails take, it was the only one with no year, and with the rule the record titles that Act correctly. An entry
+with no exact title keeps its id. An entry with no URL gets legislation.gov.uk's identifier URI for its id
+(`https://www.legislation.gov.uk/id/<id>`); an id is recognised only in the forms `type/YYYY/N` and the regnal
+`type/Reign/session/N`.
+
+**Functions changed or added:**
+- new `server_py/src/utils/rail_titles.py`: `bare_id`, `id_url`, `exact_title`, `in_turn_titles`,
+  `untitled_ids`, `fill_rail` (pure; entries copied, never mutated; order kept; nothing added or removed);
+- `server_py/src/services/made_under_store.py`: new `majority_act_titles` (pure) and `titles_for` (async;
+  `_STATE`-gated like `recital_for`, so no database until the record is loaded; the Act query runs only for
+  the ids the instrument query did not title; never raises);
+- `agent_core.py`: new `title_rail_sources` (asks the record only for ids the turn cannot title; fail-soft,
+  returns the rail unchanged); `run_worker_agent`: `_run_tool` now wraps `_run_tool_inner` and records each
+  lookup's title, and the result carries `retrieved_titles`; `process_user_request` and `run_deep_research`
+  collect `retrieved_titles` (first per id) and call `title_rail_sources` right after R; one import line
+  widened (`LOOKUP_TOOL`, `parse_lookup_result` from `instrument_lookup`).
+
+Not done: no change to `_extract_sources_inner` (agent C's `agent_shared.py`), so a later search hit for an
+id a change record added first is still skipped there; the lookup route covers most of what that loses.
+
+### 12.2 The dry run with the BUILT code, the record queried for real
+
+`p424_built.py`: `DATABASE_URL` pointed at my own `lexchat_test_d` (asserted), the two made-under tables
+created there and filled from the committed snapshot with the built `_store` (86,744 instruments), `_STATE`
+set as `load_snapshot` does; then every answered post-P2.1 turn's rail rebuilt as `rb.py RB_R=built` does
+(V4, the merge, R), and the built `title_rail_sources` run over it, with the lookup titles read from the
+recorded tool results by the built `parse_lookup_result`. Also run over the STORED rails. **65 directories:
+the 67th (`wave4_b12_p310`, complete since 14:47) is in; a 68th, `wave4_b12_p320`, was being written during
+this round (files at 15:24 and 15:33) and is excluded from every count here.** Each changed entry is checked
+to differ only in `title` and `url`, and every URL given equals the id's URI (asserted).
+
+| | built rails (V4 + R + fill) | stored rails |
+|---|---|---|
+| entries | 5,299 | 5,201 |
+| bare-id title: before / **after** | 1,696 / **52** | 1,021 / **32** |
+| no URL: before / **after** | 640 / **0** | 627 / **0** |
+| titled from a search hit (same turn) | 119 | 98 |
+| titled from a lookup (same turn) | 317 | 314 |
+| titled from the record, an instrument | 826 | 414 |
+| titled from the record, an Act | 382 | 163 |
+| left with their id (no exact title anywhere) | 52: EU 31, asp 12, Welsh 4, asc 2, NI 2, ukpga 1 | 32 |
+
+**Validated against LEX** (`act_titles_check.py`, `titles_check.py`): every title the fill took from the
+record or a lookup, against the titles LEX itself returned for the same id anywhere in the stored runs.
+Record Acts: 73 distinct, LEX agrees 40, differs 1 (the heading case: the record's title is right and LEX's
+is the heading), LEX never returned 32. Record instruments: 157 distinct, agrees 67, differs 0, never returned
+90. Lookups: 25 distinct, agrees 25.
+
+**Hand-read: a seeded sample of 40 titled built entries** (`p424_built_sample.txt`, seed 24, gitignored):
+40 of 40 carry the right title for their id (instrument titles from the record, EU titles from lookups, Act
+titles such as the Employment Rights Act 1996 or the Coronavirus (Scotland) Act 2020). The heading case was
+not in the sample; it was found by reading 12.4's one (iii) row.
+
+### 12.3 Tests, the revert, the mutants, the suite
+
+- `tests/test_rail_titles.py`, 38 tests: every helper, the year rule and its two boundaries, the record helpers
+  against a stand-in session (the queries asked; the Act query skipped when nothing is left), `titles_for`
+  touching no database before the record is loaded (the stub records a touch, because a raising stub would be
+  swallowed by the fail-soft), the capture of lookup titles through `run_worker_agent` (a non-lookup tool's
+  lookup-shaped result is not read), and both answer seams. Synthetic ids and titles only (a regnal id in
+  1901's form).
+- **Revert** (`mutants2.py`, a scratch copy): `agent_core.py` and `made_under_store.py` back to the commit
+  before P4.24, `rail_titles.py` deleted: **214 lines removed**. The new tests then fail at collection and the
+  R and made-under tests pass (29 and 28), so behaviour is shown by the mutants.
+- **Single-site mutants: 42 of 42 caught**, each by a failing test. The first run left 2 survivors and 1 bad
+  anchor, each a gap in my tests, now closed: the `_STATE` gate (the stub raised, and `titles_for`'s own
+  fail-soft swallowed it) and the `name == LOOKUP_TOOL` check (kept: it also spares a parse of every large
+  result; now pinned by a non-lookup tool returning lookup-shaped JSON); a mis-shaped start-anchor mutant
+  rewritten. The fixtures were also given years, so the ellipsis and ordering mutants are not caught for the
+  wrong reason.
+- **Full suite** on `lexchat_test_d`: **3,092 passed** (3,054 + 38), run on the committed tree.
+
+### 12.4 Sections 2 and 4 re-run with the 67th directory (`wave4_b12_p320` excluded, being written)
+
+`rb.py` (now with `RB_TITLES=1`, the built fill as in 12.2) and `cmp_r.py`, 1,856 answered turns (1,853 + 3):
+
+| report turns | Conversational | Research | Deep Research |
+|---|---|---|---|
+| turns | 1,117 | 193 | 141 |
+| (iii): V4 / V4+R / V4+R+fill | 5 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 1* |
+| retrieved, the answer cites it, not in the rail: V4 / V4+R | 11 / 0 | 23 / 0 | 456 / 0 |
+| re-admitted by R (the reader agrees) | 11 (11) | 23 (23) | 456 (456) |
+| rail sources, V4+R | 2,088 | 747 | 1,806 |
+| (ii) re-booked: V4+R / V4+R+fill | 170 (8.1%) / 143 (6.8%) | 94 / 93 | 113 / 111 |
+| reader-unused: V4+R / V4+R+fill | 333 / 286 | 94 / 93 | 126 / 123 |
+| fall-back turns (answer-cited sources exempt) | 0 | 0 | 0 |
+
+\* **An artifact of my comparison script's instrument key, not a removal:** the entry (a regnal-year Act with
+no URL before the fill) is in the after rail. My `key()` falls back to the cite where an entry has no URL and
+no `type/YYYY/N` id, and the fill gives it a URL, so the same entry gets a different key (checked by reading
+both rails). The product and the `rail` grader are not involved. Titling lowers the reader-unused counts,
+because a titled entry now matches the name the answer uses. `wave4_b12_p310`'s stored rails equal the V4
+rebuild on 3 of 3 turns (it ran on code that has V4).
+
+**Identity on the 67th directory** (`ONLY=wave4_b12_p310 python identity.py <worktree>`): 22 of 23 graders
+identical; `rail` differs only by the new answer-only line; 0 in the exit-1 set. `replay_report.py` is
+unchanged since section 4's 67-directory run.
+
+### 12.5 Commands (from `$S`; the first two write the made-under tables in `lexchat_test_d`)
+
+| number | command |
+|---|---|
+| 12.2's table, the sample, the list | `python p424_built.py $R` |
+| validation against LEX | `python act_titles_check.py`; `python titles_check.py "record: instrument"`; `python titles_check.py "in-turn: a lookup"` |
+| which sources give same-turn titles | `python intitle_kinds.py` |
+| 12.4's rebuilds | `RB_SERVER_PY=... python rb.py $R rb_<x>.jsonl baseline,wave1,wave4_b12_p320` (`prev`, `v4`, built with `RB_R=built`, and `RB_R=built RB_TITLES=1` for `rb_built_t.jsonl`) |
+| 12.4's table | `GRADER_SERVER_PY=<worktree>/server_py python cmp_r.py $R rb_prev.jsonl rb_<v4,built,built_t>.jsonl` |
+| revert and mutants | `python mutants2.py` |
+| identity, the 67th | `ONLY=wave4_b12_p310 python identity.py <worktree>`; `python moves_check.py` |
+
+### 12.6 Decisions
+
+Decision 2 is taken (2(a)). The others (1, 3 to 6) stand as in section 11. One more:
+
+**7. A search hit's title from LEX can be wrong** (one stored case: a section heading for an old Act). The fill
+now refuses a title with no year and the record titles that Act, but **the hit itself shows the heading as its
+rail title wherever it is kept, today and before this change** (the fill only touches id-titled entries).
+- **(a) Recommended:** a P3 note on P4.24 (or a new row) to apply `exact_title`'s year rule to search-hit titles
+  too, with the record or a lookup as the fallback, measured first.
+- (b) Leave it: one stored case.
