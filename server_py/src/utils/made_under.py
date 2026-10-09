@@ -205,29 +205,45 @@ def provisions(prov: str) -> list:
     """
     # "Regulations 2016" / "Order 2015" is an instrument's title, not
     # regulation 2016: a capitalised plural kind followed by a year is skipped.
-    pieces = [(_kind_name(m.group("kind")), _numbers(m.group("list")))
-              for m in _PIECE.finditer(prov)
-              if not (m.group("kind")[:1].isupper() and m.group("kind").endswith("s")
-                      and re.match(r"(?:1[6-9]|20)\d\d\b", m.group("list")))]
+    matches = [m for m in _PIECE.finditer(prov)
+               if not (m.group("kind")[:1].isupper() and m.group("kind").endswith("s")
+                       and re.match(r"(?:1[6-9]|20)\d\d\b", m.group("list")))]
+    pieces = [(_kind_name(m.group("kind")), _numbers(m.group("list"))) for m in matches]
     keys = []
-    sched = None
-    for kind, nums in pieces:
+    # A paragraph belongs to the schedule named AFTER it ("paragraph 12 of
+    # Schedule 1 and paragraph 9 of Schedule 1B"): pairing every paragraph with
+    # one schedule put paragraph 12 in Schedule 1B (uksi/1993/2953, uksi/1993/994
+    # in the 1987-1998 hand-check).
+    scheds = [None] * len(pieces)
+    following = None
+    for idx in range(len(pieces) - 1, -1, -1):
+        kind, nums = pieces[idx]
         if kind == "schedule" and nums:
-            sched = re.sub(r"\(.*", "", nums[0])
-    for kind, nums in pieces:
+            following = re.sub(r"\(.*", "", nums[0])
+        scheds[idx] = following
+    # ... except the reversed form, "Schedule 1, paragraph 11" (ssi/1999/57,
+    # uksi/2009/16): a paragraph straight after "Schedule N," is in Schedule N.
+    for idx in range(1, len(pieces)):
+        prev_kind, prev_nums = pieces[idx - 1]
+        if (pieces[idx][0] == "paragraph" and prev_kind == "schedule" and prev_nums
+                and re.fullmatch(r"\s*,\s*", prov[matches[idx - 1].end():matches[idx].start()])):
+            scheds[idx] = re.sub(r"\(.*", "", prev_nums[0])
+    covered = set()
+    for (kind, nums), sched in zip(pieces, scheds):
         for n in nums:
             base = re.sub(r"\(.*", "", n)
             if kind == "schedule":
                 key = f"schedule/{base}"
             elif kind == "paragraph" and sched:
                 key = f"schedule/{sched}/paragraph/{base}"
+                covered.add(sched)
             else:
                 key = f"{kind}/{base}"
             if key not in keys:
                 keys.append(key)
     # A bare "Schedule 2" that also named paragraphs is covered by them.
-    if sched and any(k.startswith(f"schedule/{sched}/") for k in keys):
-        keys = [k for k in keys if k != f"schedule/{sched}"]
+    keys = [k for k in keys if not (k.count("/") == 1 and k.startswith("schedule/")
+                                    and k.split("/")[1] in covered)]
     return keys
 
 

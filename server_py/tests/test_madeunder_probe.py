@@ -319,3 +319,25 @@ def test_titles_do_not_start_with_act_or_swallow_a_pinpoint_list():
     # "(No. 2)" is still part of a title.
     assert mp.parse_powers("conferred by section 1 of the Widget (No. 2) Act 1901")[0]["act"] == \
         "Widget (No. 2) Act 1901"
+
+
+def test_each_paragraph_pairs_with_the_schedule_named_after_it():
+    # uksi/1993/2953 and uksi/1993/994's shapes.
+    got = mp.parse_powers("conferred on them by paragraph 12 of Schedule 1 and paragraph 9 of Schedule 1B "
+                          "to the Widget Act 1901")
+    assert got[0]["provisions"] == ["schedule/1/paragraph/12", "schedule/1B/paragraph/9"]
+    got = mp.parse_powers("conferred by sections 105(7) and 108(1) of, and paragraphs 5 and 6 of Schedule 1 "
+                          "and paragraphs 7 and 8 of Schedule 5 to, the Widget Act 1901")
+    assert got[0]["provisions"] == ["section/105", "section/108", "schedule/1/paragraph/5",
+                                    "schedule/1/paragraph/6", "schedule/5/paragraph/7",
+                                    "schedule/5/paragraph/8"]
+
+
+def test_schedule_then_paragraph_form():
+    # ssi/1999/57 and uksi/2009/16: "Schedule 1, paragraph 11".
+    got = mp.parse_powers("conferred by section 18(1)(b) and Schedule 2, paragraph 1 of the Widget Act 1901")
+    assert got[0]["provisions"] == ["section/18", "schedule/2/paragraph/1"]
+    got = mp.parse_powers("conferred by paragraphs 1(1), 2(2) and 6 of Schedule 2 and paragraph 2(2) of "
+                          "Schedule 8 to, the Widget Act 1901")
+    assert got[0]["provisions"] == ["schedule/2/paragraph/1", "schedule/2/paragraph/2",
+                                    "schedule/2/paragraph/6", "schedule/8/paragraph/2"]

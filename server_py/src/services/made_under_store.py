@@ -53,8 +53,9 @@ MANIFEST_FILE = "manifest.json"
 SETTING_KEY = "made_under.snapshot"
 
 # The refresh: legislation.gov.uk paths, read through LEX's proxy.
-NEW_FEED_PATHS = ("new/ssi/data.feed",)
-REFRESH_PAGES = 3
+# UK SIs joined the record on 2026-10-09 (SSIs from 1999, UK SIs from 1987).
+NEW_FEED_PATHS = ("new/ssi/data.feed", "new/uksi/data.feed")
+REFRESH_PAGES = 5
 REFRESH_TIMEOUT_S = 20.0
 REFRESH_MAX_FETCHES = 120
 REFRESH_GAP_S = 0.5
@@ -66,7 +67,7 @@ REFRESH_GAP_S = 0.5
 _STATE = {"available": False}
 
 
-_FEED_ID = re.compile(r"<id>http://www\.legislation\.gov\.uk/id/((?:ssi)/\d{4}/\d+)</id>")
+_FEED_ID = re.compile(r"<id>http://www\.legislation\.gov\.uk/id/((?:ssi|uksi)/\d{4}/\d+)</id>")
 
 
 # ---------------------------------------------------------------------------
