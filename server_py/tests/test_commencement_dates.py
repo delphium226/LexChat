@@ -607,7 +607,7 @@ def _with_repeal(rec):
     rec = json.loads(json.dumps(rec))
     rec["related"].append(_group(inst="ssi/1901/7", effect="repealed",
                                  changes=[{"by": "reg. 5", "changed": ["s. 8"]}]))
-    rec["repeal_or_revocation_relations"] = 1
+    rec["effects"]["repealed"] = rec["effects"].get("repealed", 0) + 1
     rec["relations"] += 1
     rec["by_other_legislation"] += 1
     return rec
@@ -656,7 +656,7 @@ def test_the_worker_note_is_unchanged_where_no_hop_ran_or_it_dated_nothing():
         note = _note(rec)
         assert note.endswith(OLD_CLOSING), note[-400:]
         assert "added by code" not in note and "could not this time" not in note
-        assert "The record gives no date for them either." in note
+        assert "The record gives no date for these removals either." in note
 
 
 def test_the_worker_note_says_where_a_date_came_from_and_what_it_is_not():
@@ -668,8 +668,8 @@ def test_the_worker_note_says_where_a_date_came_from_and_what_it_is_not():
     assert "never evidence of in-force status today" in note
     assert "Do not give a date for a relation listed without `in_force`." in note
     # the repeal half stays undated, without "either"
-    assert "The record gives no date for them." in note
-    assert "for them either" not in note
+    assert "The record gives no date for these removals." in note
+    assert "for these removals either" not in note
     assert note.endswith("says nothing about any instrument's enabling power.]")
 
 
@@ -835,9 +835,9 @@ def test_the_dropped_words_add_no_detector_hit():
     rx_type = type(rr.NEG_ASSERTED)
     pats = {k: v for k, v in vars(rr).items() if isinstance(v, rx_type)}
     old_r, new_r = ss._relation_currency_limb(_undated()), ss._relation_currency_limb(_dated())
-    assert old_r.replace(" for them either.", " for them.") == new_r
+    assert old_r.replace(" for these removals either.", " for these removals.") == new_r
     old_c, new_c = ss._currency_limb(_logs(_undated())), ss._currency_limb(_logs(_dated()))
-    rep = re.compile(r" Repeal or revocation relations were retrieved for [^.]*\.")
+    rep = re.compile(r" Relations removing a provision wholly or in part [^.]*\.")
     assert rep.search(old_c).group(0).replace("again without", "without") == rep.search(
         new_c).group(0)
     # outside the commencement lines (screened above), nothing else moved

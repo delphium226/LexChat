@@ -4,6 +4,11 @@ import re
 from urllib.parse import urlparse
 
 from ...config import settings
+from ...utils.removal_effects import (
+    QUALIFIED,
+    classify_removal,
+    counts_from_effects,
+)
 
 
 def _slim_search_results(resp_json: dict) -> dict:
@@ -149,7 +154,22 @@ _TERRITORY_ALIASES = {
     "northern ireland": "NI",
     "united kingdom": "UK",
     "great britain": "GB",
+    # FIX_PLAN P3.26: legislation.gov.uk's own extent code for Northern
+    # Ireland ("E+W+S+N.I.", "N.I."), which LEX does not emit today (0 of
+    # 39,133 stored rows) but legislation.gov.uk's per-provision extent does
+    # (735 of 10,846 provision extents read in batch 12 G).
+    "n.i.": "NI",
+    "n.i": "NI",
 }
+
+# FIX_PLAN P3.26: every token `_extent_tokens` can produce that names a
+# territory. Anything else it produces (a value upper-cased because no alias
+# knew it) is unrecognised, and an unrecognised token makes the extent UNKNOWN
+# for the filter, never a territory no filter accepts: before P3.26 such a row
+# was dropped under every filter, against the rule that an unknown extent is
+# admitted (Invariant 1).
+_KNOWN_TERRITORY_TOKENS = frozenset({"E", "W", "S", "NI", "UK", "GB"})
+_FOUR_NATIONS = frozenset({"E", "W", "S", "NI"})
 
 # Which territory tokens satisfy each filter value. UK (and GB, where it appears)
 # count for their constituent nations: a UK-wide Act applies in Scotland, so a
@@ -234,6 +254,12 @@ def _matches_jurisdiction(
        admitted there, because "UK-wide only" is an explicit narrowing and a row
        that does not say it is UK-wide does not satisfy it.
 
+    **P3.26:** a token no alias recognises is not a territory no filter
+    accepts, which dropped the row under every filter: it makes the extent
+    unknown (rule 2), unless a recognised token already matches. "N.I." is
+    Northern Ireland, and the four nations named one by one are the United
+    Kingdom (legislation.gov.uk's own codes, "E+W+S+N.I.").
+
     Scored against the 17,560 baseline rows, this drops **0%** of unambiguously
     Scottish rows and admits **0** rows that are clearly not Scottish. The old
     implementation dropped 97.5% of the Scottish ones.
@@ -243,10 +269,18 @@ def _matches_jurisdiction(
         return True  # unknown filter value: never silently narrow
 
     tokens = _extent_tokens(extent)
-    if tokens:
-        return bool(tokens & accepts)
-
-    # Extent unknown from here on.
+    # P3.26: only the tokens that name a territory decide. All four nations
+    # named one by one ("E+W+S+N.I.") is the United Kingdom, so a UK-wide
+    # filter keeps it.
+    known = set(tokens & _KNOWN_TERRITORY_TOKENS)
+    if _FOUR_NATIONS <= known:
+        known.add("UK")
+    if known & accepts:
+        return True
+    if tokens and tokens <= _KNOWN_TERRITORY_TOKENS:
+        return False
+    # Extent unknown from here on: none stated, or (P3.26) a token the filter
+    # does not recognise, which could name the territory filtered for.
     if jurisdiction == "uk_wide":
         return False
 
@@ -512,14 +546,12 @@ def _https(url) -> str:
 _COMMENCEMENT_OF_SUBJECT = "coming into force"
 _COMMENCEMENT_ORDER_EFFECT = "commencement order"
 
-# The repeal/revocation family, matched on the effect string. Deliberately a
-# substring test rather than a fixed set: the vocabulary has 2,912 distinct
-# values over the same sample and the family spans `repealed` (2,957), `words
-# repealed` (1,182), `revoked` (525), `word repealed` (376), `repealed in part`
-# (210), `repeal` (194), `entry repealed`, `repealed (1.1.1996)` and more. A
-# fixed set would silently miss the tail, and missing a repeal is the direction
-# this row exists to stop.
-_REPEAL_EFFECT_TOKENS = ("repeal", "revok", "revoc")
+# FIX_PLAN P3.28: removals are classified by effect type in
+# `utils/removal_effects.py` (whole provision, part of one, words only, or
+# qualified), not counted on the tokens "repeal", "revok" and "revoc", which
+# missed "omitted", "ceases to have effect" and the rest of the removal
+# families and counted "words repealed" and "power to repeal conferred" as
+# removals of a provision.
 
 
 def _effect_is_commencement_of_subject(effect: str) -> bool:
@@ -530,12 +562,6 @@ def _effect_is_commencement_of_subject(effect: str) -> bool:
 def _effect_is_commencement_order(effect: str) -> bool:
     """True for a `Commencement Order` row — a commencement of an AMENDMENT."""
     return str(effect or "").strip().lower() == _COMMENCEMENT_ORDER_EFFECT
-
-
-def _effect_is_repeal(effect: str) -> bool:
-    """True for anything in the repeal/revocation family. See `_REPEAL_EFFECT_TOKENS`."""
-    low = str(effect or "").lower()
-    return any(tok in low for tok in _REPEAL_EFFECT_TOKENS)
 
 
 def _slim_amendment_results(resp_json, legislation_id: str, direction: str) -> dict:
@@ -604,19 +630,27 @@ def _slim_amendment_results(resp_json, legislation_id: str, direction: str) -> d
         effect = item.get("type_of_effect") or "not stated"
         effects[effect] = effects.get(effect, 0) + 1
         other = _short_legislation_id(item.get(other_key) or "")
-        g = groups.setdefault((other, effect), {
-            "legislation_id": other,
-            "url": _https(item.get(other_url_key)),
-            "self": bool(other) and other == lid,
-            "type_of_effect": effect,
-            # P2.5: `Commencement Order` rows do not commence the subject — see
-            # the note above. Emitted only on those rows, so a group without the
-            # key is not thereby asserted to commence anything.
-            **({"commences_this_legislation": False}
-               if _effect_is_commencement_order(effect) else {}),
-            "count": 0,
-            "changes": [],
-        })
+        if (other, effect) not in groups:
+            # P3.28: the group's removal class, from its effect type. Emitted
+            # only on a removal, as `commences_this_legislation` is only on a
+            # `Commencement Order`, so a group without it asserts nothing.
+            removal, qualifier = classify_removal(effect)
+            groups[(other, effect)] = {
+                "legislation_id": other,
+                "url": _https(item.get(other_url_key)),
+                "self": bool(other) and other == lid,
+                "type_of_effect": effect,
+                # P2.5: `Commencement Order` rows do not commence the subject —
+                # see the note above. Emitted only on those rows, so a group
+                # without the key is not thereby asserted to commence anything.
+                **({"commences_this_legislation": False}
+                   if _effect_is_commencement_order(effect) else {}),
+                **({"removal": removal} if removal else {}),
+                **({"qualifier": qualifier} if removal == QUALIFIED else {}),
+                "count": 0,
+                "changes": [],
+            }
+        g = groups[(other, effect)]
         g["count"] += 1
         # P3.19: the pair, never the two sides separately. A provision the
         # record leaves empty stays in the pair as None (JSON null) so the
@@ -709,9 +743,13 @@ def _slim_amendment_results(resp_json, legislation_id: str, direction: str) -> d
         "commencement_orders_of_amendments": sum(
             v for k, v in effects.items() if _effect_is_commencement_order(k)
         ),
-        "repeal_or_revocation_relations": sum(
-            v for k, v in effects.items() if _effect_is_repeal(k)
-        ),
+        # P3.28: removals by effect type, in three counts, in place of
+        # `repeal_or_revocation_relations`. Only the first may be read as a
+        # provision no longer in force (whole or in part); the second removes
+        # words only, so the text is amended and the provision stays; the third
+        # carries a qualification in its effect (prospective, temporary,
+        # conditional, specified purposes, part of the UK).
+        **counts_from_effects(effects),
         "related_instruments": len(related),
         "related": related[:_MAX_RELATED_INSTRUMENTS],
     }

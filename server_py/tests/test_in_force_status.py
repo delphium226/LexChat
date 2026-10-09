@@ -59,10 +59,10 @@ from src.agent.agent_shared import _extract_sources_inner
 from src.agent.tools.lex import (
     _effect_is_commencement_of_subject,
     _effect_is_commencement_order,
-    _effect_is_repeal,
     _slim_amendment_results,
     _slim_search_results,
 )
+from src.utils.removal_effects import classify_removal
 from src.prompts import (
     DEEP_RESEARCH_SYNTHESIS_PROMPT,
     WORKER_SYSTEM_PROMPT,
@@ -240,8 +240,9 @@ def test_the_two_commencement_effects_are_not_the_same_relation():
 def test_the_repeal_family_is_matched_on_the_token_not_a_fixed_set(effect):
     """2,912 distinct effect strings over the sample and the repeal family spans
     at least eight spellings. A fixed set would silently miss the tail, and
-    missing a repeal is the direction this row exists to stop."""
-    assert _effect_is_repeal(effect)
+    missing a repeal is the direction this row exists to stop. P3.28: each is
+    still a removal; which class it is lives in `test_removal_effects.py`."""
+    assert classify_removal(effect)[0] is not None
 
 
 @pytest.mark.parametrize("effect", [
@@ -249,7 +250,7 @@ def test_the_repeal_family_is_matched_on_the_token_not_a_fixed_set(effect):
     "modified", None, "",
 ])
 def test_nothing_else_is_read_as_a_repeal(effect):
-    assert not _effect_is_repeal(effect)
+    assert classify_removal(effect)[0] is None
 
 
 def test_a_commencement_order_row_is_flagged_as_not_commencing_the_subject():
@@ -291,7 +292,7 @@ def test_the_three_counts_are_separated_where_an_act_carries_all_of_them():
         "ukpga/1998/46", "to")
     assert slim["provisions_commenced"] == 1
     assert slim["commencement_orders_of_amendments"] == 1
-    assert slim["repeal_or_revocation_relations"] == 1
+    assert slim["provision_removal_relations"] == 1
     assert slim["relations"] == 4, "the http/https twins must still collapse"
 
 
