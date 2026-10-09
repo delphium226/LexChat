@@ -212,8 +212,9 @@ class SourceIndex:
 
     def word_held(self, word: str) -> bool:
         """A distinctive word of a case name occurs in the source as a word,
-        in its own capitalisation or in capitals; an acronym ("WCL", "GHL") also as the initials of consecutive capitalised words, skipping
-        joining words ("Widget Components and Gadget Holdings Limited")."""
+        in its own capitalisation or in capitals; an acronym ("WCL", "GHL")
+        also as the initials of consecutive capitalised words, skipping joining
+        words ("Widget Components and Gadget Holdings Limited")."""
         w = word.strip("'’")
         if not w:
             return False
@@ -284,6 +285,8 @@ def name_before(text: str, c: Citation) -> str:
         t = _clean_token(tok)
         if tok.endswith(":") or tok.endswith(";"):
             break
+        if tok.rstrip("*_").endswith(".") and not _ABBREV.search(tok.rstrip("*_")):
+            break       # the end of the sentence before the name ("Intro. Widget v ...")
         if not t:
             break
         # "on" joins a name only as "(on the application of"; "in" never does
@@ -566,7 +569,8 @@ def _contentless(line: str) -> bool:
 def strip_unsourced_citations(summary: str, raw, query: str = "") -> tuple[str, list[dict]]:
     """The summary with every citation the source does not hold removed, as
     described in the module docstring, and one record per removal:
-    {"citation", "name", "action": "citation" | "item" | "block" | "sentence"}.
+    {"citation", "name", "action": "citation" | "case" | "item" | "block" | "sentence"}
+    ("case": the case and its citation, out of a list of authorities in one line).
 
     Unchanged (and []) where nothing is unheld, and on any error."""
     try:

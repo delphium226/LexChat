@@ -168,11 +168,13 @@ def test_a_public_office_does_not_vouch_for_a_case():
 
 
 def test_an_acronym_is_held_by_the_initials_of_the_source_name():
-    raw = json.dumps({"text": "Widget Components Limited v Gadget Holdings Ltd (Respondents)"})
-    summary = "3.  **WCL v Gadget Holdings Ltd [1901] UKSC 39:** the intersection of the two codes."
+    """The other party is not in the source: the acronym alone holds the name."""
+    raw = json.dumps({"text": "Widget Components Limited (Appellant)"})
+    summary = "3.  **WCL v Gadgetry [1901] UKSC 39:** the intersection of the two codes."
     out, recs = _strip(summary, raw)
     assert recs[0]["action"] == "citation"
-    assert out == "3.  **WCL v Gadget Holdings Ltd:** the intersection of the two codes."
+    assert out == "3.  **WCL v Gadgetry:** the intersection of the two codes."
+    assert _strip(summary, json.dumps({"text": "Widget Holdings Limited"}))[0] == ""
 
 
 def test_a_case_the_source_never_names_takes_its_list_item_and_nested_lines():
@@ -282,6 +284,17 @@ def test_inside_a_sentence_the_case_is_not_cut_out_of_it():
     out, recs = _strip("Intro. The test from Gadgetry v Smallbody [1902] UKSC 2 applies, "
                        "as in Widget Co v Example Ltd [1901] UKSC 1.", raw)
     assert out == "Intro." and recs[0]["action"] == "sentence"
+    # the case stands before a comma, but prose runs into it from the left
+    out, recs = _strip("Intro. Courts follow Gadgetry v Smallbody [1902] UKSC 2, "
+                       "as in Widget Co v Example Ltd [1901] UKSC 1.", raw)
+    assert out == "Intro." and recs[0]["action"] == "sentence"
+
+
+def test_a_long_bold_line_is_a_sentence_not_a_heading():
+    raw = _raw("Other Ltd v Thing Ltd")
+    out, recs = _strip("Intro.\n**Gadgetry v Smallbody [1902] UKSC 2 is the leading authority on all "
+                       "widget questions in this field**\nNext para.", raw)
+    assert recs[0]["action"] == "sentence" and out == "Intro.\nNext para."
 
 
 def test_a_link_and_a_comma_left_behind_are_tidied():
@@ -326,6 +339,33 @@ def test_the_name_read_before_a_citation():
     assert nb("the court said in 1901 [1901] UKSC 3") == ""
 
 
+def test_a_lower_case_common_word_does_not_vouch_for_a_party():
+    """A party's word counts only as the source writes a name: capitalised
+    (or in capitals), not as a common word in its prose."""
+    idx = SourceIndex(json.dumps({"text": "the widget bank was dissolved"}))
+    assert name_held("Widget Bank v Smallbody", idx) is False
+    idx = SourceIndex(json.dumps({"text": "WIDGET BANK v OTHER"}))
+    assert name_held("Widget Bank v Smallbody", idx) is True
+
+
+def test_prose_after_the_v_is_not_a_name():
+    def nb(text):
+        return name_before(text, find_citations(text)[-1])
+    assert nb("Widget v Gadget regarding standing [1901] UKSC 3") == ""
+
+
+def test_an_abbreviation_does_not_end_a_sentence():
+    raw = _raw("Other Ltd v Thing Ltd")
+    out, recs = _strip("Intro. Gadgetry Co. Ltd v Smallbody [1902] UKSC 2 applies here. Rest.", raw)
+    assert recs[0]["action"] == "sentence" and out == "Intro. Rest."
+    assert recs[0]["name"] == "Gadgetry Co. Ltd v Smallbody"       # "Intro." ends a sentence
+
+
+def test_an_emphasis_left_empty_goes():
+    raw = _raw("Other Ltd v Thing Ltd")
+    assert _strip("Held **[1902] UKSC 2** here.", raw)[0] == "Held here."
+
+
 def test_name_held_is_none_without_a_distinctive_word():
     idx = SourceIndex(json.dumps({"text": "nothing"}))
     assert name_held("", idx) is None
@@ -354,6 +394,25 @@ def test_a_citation_the_research_question_carries_is_kept():
     assert _strip(summary, raw, query="the effect of Widget Co v Example Ltd [1901] AC 49") == \
         (summary, [])
     assert _strip(summary, raw, query="the effect of Widget Co [1901] UKSC 47")[1] != []
+
+
+def test_a_neutral_citation_the_research_question_carries_is_kept():
+    raw = _raw("Other Ltd v Thing Ltd")
+    summary = "*   **Widget Co v Example Ltd [1901] UKSC 47:** the question's own case."
+    assert _strip(summary, raw, query="does Widget Co v Example Ltd [1901] UKSC 47 apply") == \
+        (summary, [])
+
+
+def test_a_heading_with_more_left_under_it_stays():
+    raw = _raw("Other Ltd v Thing Ltd")
+    summary = ("### Authorities\n"
+               "*Keywords: widgets*\n"
+               "1.  **Gadgetry v Smallbody [1902] UKSC 2:** invented.\n"
+               "Section 5 imposes the duty.\n"
+               "Section 6 qualifies it.")
+    out, _ = _strip(summary, raw)
+    assert out == ("### Authorities\n*Keywords: widgets*\n"
+                   "Section 5 imposes the duty.\nSection 6 qualifies it.")
 
 
 def test_only_the_line_with_the_unheld_citation_changes():
@@ -452,11 +511,48 @@ def test_a_multi_chunk_summary_is_checked_against_the_whole_text(monkeypatch):
     assert "[1901] UKSC 3" in out and "[1901] AC 25" not in out and len(calls) >= 2
 
 
+def test_combined_partials_are_checked(monkeypatch):
+    """Two chunks whose partials fit one chunk: no consolidation pass."""
+    monkeypatch.setattr(summ, "SUMMARISE_CHUNK_CHARS", 40)
+    text = "Section 5 defines widget. " + "y" * 30
+
+    async def chunk_fn(t, q, m, timing_collector=None):
+        return "S5 [1901] AC 25"
+    out, degraded = asyncio.run(summ.summarise_for_query(text, "q", "m", chunk_fn=chunk_fn))
+    assert "[1901] AC 25" not in out and "S5" in out and degraded is False
+
+
+def test_a_failed_consolidation_returns_the_partials_checked(monkeypatch):
+    monkeypatch.setattr(summ, "SUMMARISE_CHUNK_CHARS", 40)
+    text = "Section 5 defines widget. " + "y" * 60
+    calls = []
+
+    async def chunk_fn(t, q, m, timing_collector=None):
+        calls.append(t)
+        return None if len(calls) > 3 else "Section 5 applies here. Gadgetry v Smallbody [1901] AC 25 too."
+    out, degraded = asyncio.run(summ.summarise_for_query(text, "q", "m", chunk_fn=chunk_fn))
+    assert len(calls) == 4 and degraded is True
+    assert "[1901] AC 25" not in out and "Section 5 applies here." in out
+
+
 def test_a_failed_summary_returns_the_raw_text_untouched():
     async def failing(t, q, m, timing_collector=None):
         return None
     raw = "Widget Co v Example Ltd [1901] UKSC 3"
     assert asyncio.run(summ.summarise_for_query(raw, "q", "m", chunk_fn=failing)) == (raw, True)
+
+
+def test_the_probe_counts_what_the_check_removes_and_keeps():
+    """`summary_probe redraw --citations` reads each fresh draw through the
+    product's check: unheld before and after, held before and after."""
+    import tools.summary_probe as sp
+    raw = _raw("Other Ltd v Thing Ltd [1901] UKSC 7")
+    draw = ("*   **Other Ltd v Thing Ltd [1901] UKSC 7:** held.\n"
+            "*   **Gadgetry v Smallbody [1902] UKSC 2:** invented.")
+    assert sp.citation_check(summ, raw, draw, "") == {
+        "unheld_before": 1, "unheld_after": 0, "held_before": 1, "held_after": 1,
+        "drawn_with_unheld": 1}
+    assert sp.citation_check(summ, raw, "Nothing cited.", "")["drawn_with_unheld"] == 0
 
 
 @pytest.fixture
