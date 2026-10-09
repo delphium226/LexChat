@@ -144,6 +144,10 @@ def test_the_line_names_every_id_up_to_the_cap_and_counts_the_rest():
     past = SH.handover_line([report(SH.MAX_HANDED_ON_IDS + 3)])
     assert f"uksi/19{9 + SH.MAX_HANDED_ON_IDS}/{SH.MAX_HANDED_ON_IDS} and 3 more." in past
     assert f"uksi/19{10 + SH.MAX_HANDED_ON_IDS}/" not in past
+    # One past the cap: the boundary (an off-by-one would drop "and 1 more" and
+    # silently lose the one id; batch 12 integrator's mutant M4).
+    one_past = SH.handover_line([report(SH.MAX_HANDED_ON_IDS + 1)])
+    assert f"uksi/19{9 + SH.MAX_HANDED_ON_IDS}/{SH.MAX_HANDED_ON_IDS} and 1 more." in one_past
     assert SH.MAX_HANDED_ON_IDS >= 10   # the largest stored list (batch 11 E's dry run)
 
 
