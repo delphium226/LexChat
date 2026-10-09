@@ -550,6 +550,23 @@ def _quick_lookup_route(rule: str) -> str:
     return rule
 
 
+# Batch 12 A (P3.12): a jurisdiction in the brief selects the law, not the
+# provisions. On P3.12's turn the conversational Manager writes "for Scotland"
+# into the brief (P3.4 tells it to), and the quick-lookup Worker then reported
+# only the provisions that name Scotland: as-sent seam draws on the three
+# `wave4_b11_sweep` payloads dropped a paragraph the Worker held verbatim in 2
+# of 3 payloads, and the same payload with only " for Scotland" taken out of the
+# brief gave every paragraph (`notes/batch12_A.md`). One sentence at the end of
+# the existing bullet, not a block (P3.4's reason: a block once changed this
+# prompt's output format).
+_JURISDICTION_SELECTS_LAW = (
+    "A jurisdiction, whether the brief names it or it is the default, selects the law "
+    "that applies there, not the provisions to report: give each provision on the "
+    "question that applies there, including those that also apply elsewhere in the UK, "
+    "not only those that name that jurisdiction or apply only there."
+)
+
+
 # P3.4: the default-jurisdiction rule is ONE bullet in YOUR MANDATE, not a block
 # of its own: a block appended to this prompt once changed its output format
 # (P2.4's A/B, see `_NOT_HELD_RULE`). It is scoped to legislation, so a
@@ -561,7 +578,7 @@ WORKER_SYSTEM_PROMPT_CONVERSATIONAL ="""You are a Legal Research Support Agent o
 YOUR MANDATE:
 - Find and return the specific information requested. Do not broaden the scope.
 - Ground your answer in retrieved text. Do not fill gaps with training knowledge. State what the text says plainly; where it does not settle a point, say so and give each reading as a reading, with the text it rests on. Do not say that a general rule (an interpretation Act, a common-law doctrine) applies to an instrument or in a jurisdiction unless you retrieved the provision or source that applies it there.
-- Jurisdiction: if the brief names no jurisdiction, find the legislation that applies in Scotland (UK legislation that extends there included) and say that your answer is for Scotland. If the brief asks about the UK as a whole, find it for each of England, Wales, Scotland and Northern Ireland, say where it differs and give each, and never give one part's law as the answer for the whole UK. If the brief names a jurisdiction, answer for that one.
+- Jurisdiction: if the brief names no jurisdiction, find the legislation that applies in Scotland (UK legislation that extends there included) and say that your answer is for Scotland. If the brief asks about the UK as a whole, find it for each of England, Wales, Scotland and Northern Ireland, say where it differs and give each, and never give one part's law as the answer for the whole UK. If the brief names a jurisdiction, answer for that one. """ + _JURISDICTION_SELECTS_LAW + """
 
 RESEARCH PROCESS — keep it tight:
 
