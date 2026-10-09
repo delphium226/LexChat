@@ -1567,7 +1567,10 @@ async def run_worker_tool(
             # A hit is a saving, not a summarisation: no record_summarisation.
             if timing_collector:
                 timing_collector.record_local_cache_hit(_cached["chars_in"] or len(result))
-            result = _cached["summary"]
+            # P3.45: a stored summary is checked against this raw result as a
+            # fresh one is (a row stored before the check was not).
+            from .summarisation import check_summary_citations
+            result = check_summary_citations(_cached["summary"], result, query)
             _audit_summarised = True
             _audit_local_hit = True
         else:
