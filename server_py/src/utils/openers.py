@@ -29,6 +29,11 @@ answers) was read before wiring (Session 32):
 P4.13 widened the object of the bare and thanks formulas to the bot's own
 earlier answer ("You are correct to challenge my earlier statement."): one new
 edit over the 1,708 non-Deep-Research answers stored at the time, read.
+P4.16 widened the bare formula's VERB to "highlight" ("You are correct to
+highlight this."): the only challenge verb other than "challenge" that opens a
+stored answer in this formula, and the thanks formula's verbs needed nothing
+(every stored "Thank you for" opener thanks the lawyer for a citation or a
+title). One new edit over the 1,783 non-Deep-Research answers stored, read.
 Fail-soft: any error returns the answer unchanged.
 """
 
@@ -53,7 +58,7 @@ _MY_EARLIER = (r"my\s+(?:earlier|previous|last|original)\s+"
 _FORMULAS = (
     ("bare", False, re.compile(
         r"^" + _YOU_ARE + r"(?:\s+to\s+(?:challenge|question|query|push\s+back\s+on|"
-        r"press\s+(?:me\s+)?on|flag|raise|pick\s+up\s+on)\s+(?:this|that|me|the\s+point|"
+        r"press\s+(?:me\s+)?on|flag|raise|highlight|pick\s+up\s+on)\s+(?:this|that|me|the\s+point|"
         + _MY_EARLIER + r")(?:\s+point)?)?", re.I)),
     ("praise", False, re.compile(
         r"^you(?:'ve|\s+have)?\s+(?:make|made|raise|raised|hit\s+on|highlight|highlighted)\s+"

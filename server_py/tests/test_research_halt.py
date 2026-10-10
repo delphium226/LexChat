@@ -156,7 +156,8 @@ def _halting_chat_loop(halt_after_tools=True, manager_answer=None):
     state = {"calls": 0}
 
     async def chat_loop(messages, model, cancel_event, num_ctx, tools, tool_executor,
-                        on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False):
+                        on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False,
+                        manager_call=False, manager_report_in_hand=None):
         state["calls"] += 1
         return {"role": "assistant", "content": RAW, "halted": dict(HALT)}
 

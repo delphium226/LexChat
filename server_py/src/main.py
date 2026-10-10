@@ -185,6 +185,13 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(background_plenary_crawl_loop(86400)),
         ]
 
+    # P3.31: the made-under record, for the legislation research bots only (a
+    # parliament or Westminster bot has no legislation Worker to read it).
+    # Loads the committed snapshot, then refreshes daily, staggered.
+    if _s.research_mode not in ("parliamentary_records", "westminster_records"):
+        from .services.made_under_store import background_made_under_loop
+        crawl_tasks.append(asyncio.create_task(background_made_under_loop()))
+
     logger.info(f"[Main] Server running on {_listen_url()}")
     yield
     # Shutdown

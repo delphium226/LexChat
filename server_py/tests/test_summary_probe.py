@@ -95,6 +95,21 @@ def test_a_note_about_the_summary_is_not_a_gloss_but_a_gloss_from_absence_is():
     assert [g["marker"] for g in sp.glosses_in(RAW, absence)] == ["suggesting"]
 
 
+def test_a_note_that_the_text_does_not_provide_something_is_not_a_gloss():
+    # Batch 2 (agent A): the note names the supplied text before the marker
+    # and "it" after it; neither alone is enough.
+    note = ("The provided text does not contain section 7 or the Schedule; therefore, "
+            "it does not provide a definition of 'cog' or say whether section 7 covers sprockets.")
+    assert sp.glosses_in(RAW, note) == []
+    # The same consequence drawn about the ORDER is a gloss from absence: counted.
+    absence = ("The provided text does not contain section 7; therefore, "
+               "the Order does not provide any appeal against a marking decision.")
+    assert [g["marker"] for g in sp.glosses_in(RAW, absence)] == ["therefore"]
+    # "it" after the marker with no supplied-text subject before it: counted.
+    own = "Section 5 is silent on cogs; therefore, it does not provide any route for sprocket appeals."
+    assert [g["marker"] for g in sp.glosses_in(RAW, own)] == ["therefore"]
+
+
 def test_statutory_suggests_and_effectively_as_manner_are_not_glosses():
     assert sp.glosses_in(RAW, "Ministers act if information suggests a widget is unmarked.") == []
     assert sp.glosses_in(RAW, "The grant must be used economically, efficiently and effectively.") == []

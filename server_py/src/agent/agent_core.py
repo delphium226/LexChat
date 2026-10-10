@@ -23,14 +23,22 @@ from ..prompts import (
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import (
     enforce_provision_links,
+    link_named_instruments,
     link_sibling_pinpoints,
     pinpoint_block,
     restore_dropped_siblings,
 )
 from ..utils.discovery_budget import new_search_budget
-from ..utils.instrument_lookup import routed_lookup_block
+from ..utils.instrument_lookup import (
+    LOOKUP_TOOL, parse_lookup_result, routed_lookup_block, section_search_lookup,
+)
 from ..utils.mode_change import apply_mode_change_marker, mode_change_for
 from ..utils.openers import strip_agreement_opener
+from ..utils.paragraph_restore import (
+    handed_paragraphs,
+    misattributed_paragraphs,
+    restore_dropped_paragraphs,
+)
 from ..utils.empty_completion import (
     LOST_ANSWER_NOTICE,
     fallback_from_reports,
@@ -47,6 +55,7 @@ from ..utils.research_halt import (
 from ..utils.search_scope import (
     answer_scope_footer,
     carried_scope_footer,
+    section_scope_footer,
     lookup_scope_footer,
     case_law_scope_footer,
     strip_answer_footer,
@@ -54,6 +63,8 @@ from ..utils.search_scope import (
     strip_scope_blocks,
     worker_scope_block,
 )
+from ..utils.source_naming import is_legislation, named_in, token_in
+from ..utils import rail_titles
 from ..utils.suggestions import diagnose_suggestions, extract_suggestions
 from .agent_shared import describe_agent_error, run_worker_tool
 from .federation_client import (
@@ -63,7 +74,14 @@ from .federation_client import (
 )
 from .learning import format_learning_context, get_relevant_examples
 from .summarisation import WORKER_CONTEXT_BUDGET_CHARS, call_chunk
-from .tools import get_manager_tools, get_planner_tools, get_worker_tools
+from .tools import (
+    QUICK_LOOKUP_WITHHELD_TOOLS,
+    get_manager_tools,
+    get_planner_tools,
+    get_worker_tools,
+    is_quick_lookup_worker,
+    withheld_tool_result,
+)
 
 logger = logging.getLogger("agent")
 
@@ -218,7 +236,9 @@ async def run_worker_agent(
         {"role": "user", "content": query},
     ]
 
-    worker_tools = get_worker_tools(research_mode)
+    # P3.25: the quick-lookup Worker's list omits `get_legislation_text`.
+    worker_tools = get_worker_tools(research_mode, cfg.get("_chat_mode"))
+    quick_lookup = is_quick_lookup_worker(research_mode, cfg.get("_chat_mode"))
     source_accumulator: list = []
     # Limit discovery searches so the model proceeds to Phase 2 instead of looping.
     # Parliamentary modes: three calls to the SP search tools / search_hansard (see
@@ -246,8 +266,31 @@ async def run_worker_agent(
     # step's report.
     search_log: list = []
 
-    async def worker_tool_executor(name: str, args: dict) -> str:
-        return await run_worker_tool(
+    # P3.12: the provision lists code fetched in this run, one call per
+    # instrument. Every legislation Worker gets it, the research and the
+    # quick-lookup Worker alike: the route hangs off `search_legislation_
+    # sections`, which both have (the quick-lookup Worker has no whole text).
+    provision_fetches: dict = {}
+
+    # P3.12 (answer seam, batch 12 A): every schedule paragraph code handed
+    # this Worker cut exactly, read back from its own tool results (a memo
+    # hit included), so the answer seam can put back one the answer left out.
+    handed_paras: list = []
+
+    # P4.24: the exact title each `lookup_legislation` in this run returned,
+    # for the Sources rail's bare-id entries. A lookup adds no rail source.
+    lookup_titles: dict = {}
+
+    async def _run_tool(name: str, args: dict, result_suffix: str = "") -> str:
+        out = await _run_tool_inner(name, args, result_suffix)
+        if name == LOOKUP_TOOL:
+            got = parse_lookup_result(out)
+            if got and got.get("legislation_id") and got.get("title"):
+                lookup_titles.setdefault(got["legislation_id"], got["title"])
+        return out
+
+    async def _run_tool_inner(name: str, args: dict, result_suffix: str = "") -> str:
+        out = await run_worker_tool(
             name, args, query, summarise_chunk_fn, summarise_model,
             parent_on_chunk=parent_on_chunk,
             timing_collector=timing_collector,
@@ -260,7 +303,38 @@ async def run_worker_agent(
             audit_delegation=_audit_delegation,
             retrieved_urls=retrieved_urls,
             search_log=search_log,
+            result_suffix=result_suffix,
+            provision_fetches=provision_fetches,
         )
+        handed_paras.extend(handed_paragraphs(out))
+        return out
+
+    # P3.25: the statutory instruments this quick-lookup run has looked up in
+    # code, so each is looked up once.
+    section_lookups: set = set()
+
+    async def worker_tool_executor(name: str, args: dict) -> str:
+        if not quick_lookup:
+            return await _run_tool(name, args)
+        # P3.25. The tool is not offered to this Worker; a call naming it
+        # anyway (a model echoing a tool description that mentions it) is
+        # answered here and never reaches LEX.
+        if name in QUICK_LOOKUP_WITHHELD_TOOLS:
+            logger.info(f"[Worker] '{name}' is not offered in quick-lookup mode — not run")
+            return withheld_tool_result(name)
+        # P3.25. Before searching within a statutory instrument, look it up
+        # once, so its recital (P2.3's permitted branch) and `valid_date`
+        # still have a source now that the whole text does not. Fail-soft
+        # (Invariant 5): without the block the search runs as before.
+        suffix = ""
+        try:
+            suffix = await section_search_lookup(name, args, section_lookups, _run_tool,
+                                                 log=search_log)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning("[Worker] Code lookup before a section search failed", exc_info=True)
+        return await _run_tool(name, args, result_suffix=suffix)
 
     # P3.7 (B5): every instrument the brief names by number is looked up in
     # code before the Worker's first round, and the outcome goes into the
@@ -407,20 +481,23 @@ async def run_worker_agent(
 
     if source_accumulator:
         content = result.get("content", "") or ""
-        kept = [src for src in source_accumulator if _source_is_used(src, content)]
-        # If filtering removed everything (e.g. the model paraphrased without
-        # citing URLs), fall back to the full list rather than showing no sources.
-        fallback = not kept
-        if fallback:
-            kept = source_accumulator
+        # P4.3: no fall-back to the whole list on the legislation bot (see
+        # `filter_worker_sources`); a report naming a source in words keeps it.
+        kept, kept_nothing = filter_worker_sources(
+            source_accumulator, content, research_mode)
         if timing_collector:
             timing_collector.record_source_stats(
-                extracted=len(source_accumulator), kept=len(kept), fallback=fallback
+                extracted=len(source_accumulator), kept=len(kept), fallback=kept_nothing
             )
         result["sources"] = [
             {**{k: v for k, v in src.items() if not k.startswith("_")}, "n": i + 1}
             for i, src in enumerate(kept)
         ]
+        # P4.3 lever R: everything retrieved, for the answer seam to re-admit
+        # what the answer cites and no report named (`readmit_answer_sources`).
+        result["retrieved_sources"] = retrieved_with_marks(source_accumulator, kept)
+    # P4.24: titles for the rail's bare-id entries (`title_rail_sources`).
+    result["retrieved_titles"] = dict(lookup_titles)
 
     # P2.2 (B5): hand the search scope forward, in code, to the agent that will
     # actually write the negative. The tool-result block instructs the WORKER;
@@ -433,11 +510,13 @@ async def run_worker_agent(
     # fact across the lossy boundary rather than asking the model to.
     #
     # Appended LAST, after source filtering, and the order is load-bearing:
-    # `_source_is_used` matches a source on its bare `legislation_id`, and the
-    # record names the instruments that were section-searched. Appending before
-    # the filter would mark those sources as cited by our own footer and silently
-    # suppress P4.3's `turns_source_fallback` signal — a diagnostic corrupting
-    # the measurement of a different bucket.
+    # `_source_is_used` matches a source on its bare `legislation_id` (and,
+    # since P4.3, on its title and number), and the record names the
+    # instruments that were section-searched. Appending before the filter would
+    # mark those sources as cited by our own footer: every one would reach the
+    # rail, and the `source_filter_fallback` counter (the Worker vouched for
+    # none of its sources) would never fire — a diagnostic corrupting the
+    # measurement of a different bucket.
     _scope = worker_scope_block(search_log, cfg)
     if _scope:
         result["content"] = (result.get("content", "") or "") + _scope
@@ -445,6 +524,7 @@ async def run_worker_agent(
     # One worker run is one delegation or one plan step; the caller accumulates
     # across them, because the footer describes the whole turn.
     result["searches"] = list(search_log)
+    result["handed_paragraphs"] = list(handed_paras)
 
     if _audit:
         _audit.end_delegation(
@@ -487,20 +567,144 @@ def _source_is_used(src: dict, content: str) -> bool:
     when either:
       - it carries an excerpt (Phase 2 section/text/judgment retrieval ran), or
       - one of its identifying tokens (legislation_id, url, neutral citation)
-        appears in the answer text.
+        appears in the text, not as part of a longer one, or
+      - (P4.3, legislation and case law) the text names it in words: its
+        title, its SI or EU number, or an old SI's "YYYY No. N"
+        (`utils/source_naming.py`).
+
+    P4.3: a legislation source's `sub` is no longer a token. It holds a
+    section heading ("Interpretation") or a change-record description, so it
+    matched unrelated text and kept sources no reader would say were cited.
+    A case's `sub` is its neutral citation and stays.
     """
     if src.get("excerpt"):
         return True
+    return _source_is_named(src, content)
+
+
+def _source_is_named(src: dict, content: str) -> bool:
+    """`_source_is_used` without the excerpt branch: the text references the
+    source by an identifying token or names it in words. Lever R reads the
+    answer with this, because an excerpt says the source was retrieved, not
+    that the answer cites it."""
+    legislation = is_legislation(src)
     tokens = [
         src.get("_lid"),
         src.get("url"),
         src.get("cite"),
-        src.get("sub"),
+        None if legislation else src.get("sub"),
     ]
     for tok in tokens:
-        if tok and len(str(tok)) >= 6 and str(tok) in content:
+        if token_in(tok, content):
             return True
-    return False
+    return named_in(src, content)
+
+
+# P4.3: the research modes whose Worker seam still falls back to the whole
+# accumulator when its filter keeps nothing. Only the parliamentary bots: no
+# stored replay ran on them, so dropping their fall-back is unmeasured.
+_RAIL_FALLBACK_MODES = frozenset({"parliamentary_records", "westminster_records"})
+
+
+def filter_worker_sources(source_accumulator: list, content: str,
+                          research_mode: str) -> tuple:
+    """The Worker seam's rail filter. Returns (kept, kept_nothing).
+
+    P4.3 (V4): on the legislation bot a report that vouches for none of its
+    sources adds none to the rail. Before, it added ALL of them, every Phase-1
+    search hit included: 90 of 1,393 post-P2.1 report turns, holding 879 of the
+    1,321 sources the answer never referenced (batch 10 C), mostly negative
+    answers. The scope line still states what was searched.
+
+    `kept_nothing` is the condition the old fall-back fired on, so the timing
+    counter `source_filter_fallback` keeps its trigger (and the Efficiency
+    tab's breach rule its meaning: the Worker vouched for none of its sources)
+    though the rail no longer falls back.
+    """
+    kept = [src for src in source_accumulator if _source_is_used(src, content)]
+    kept_nothing = not kept
+    if kept_nothing and research_mode in _RAIL_FALLBACK_MODES:
+        kept = list(source_accumulator)
+    return kept, kept_nothing
+
+
+def retrieved_with_marks(source_accumulator: list, kept: list) -> list:
+    """Every source a Worker run retrieved, private keys kept, each marked
+    `_kept` if the Worker-seam filter put it in the rail. Lever R's input."""
+    kept_ids = {id(src) for src in kept}
+    return [{**src, "_kept": id(src) in kept_ids} for src in source_accumulator]
+
+
+def readmit_answer_sources(rail: list, retrieved: list, answer: str,
+                           research_mode: str) -> list:
+    """P4.3 lever R: the sources this turn retrieved that the ANSWER cites,
+    though no Worker report vouched for them. Returns them (public keys, in
+    retrieval order) for the caller to append to the rail.
+
+    The Worker-seam filter reads each report. An answer can cite what its
+    reports never named: an instrument a code scope block listed, or one an
+    earlier turn's answer linked. Before P4.3 such a source reached the rail
+    only through the fall-back to the whole accumulator, which V4 removed (6
+    answer-cited sources left the rail, and 444 instruments a Deep Research
+    synthesis names were retrieved and never in it; batch 12 D).
+
+    A source is re-admitted when it was retrieved this turn and not kept, its
+    instrument is not already in the rail (a change record's `http://.../id/`
+    URL and a search hit's `https://` URL are one instrument), and the answer
+    references it by `_source_is_named` (never the excerpt branch: retrieval
+    alone is not citation). Not on the parliamentary bots, whose filter keeps
+    its fall-back and no replay has measured. Never raises.
+    """
+    try:
+        if research_mode in _RAIL_FALLBACK_MODES:
+            return []
+        # A kept source is in the rail: its instrument by `_lid`, a case by its
+        # URL (`_is_duplicate_source` below), so it is never a candidate.
+        rail_lids = {s.get("_lid") for s in retrieved if s.get("_kept") and s.get("_lid")}
+        out: list = []
+        seen: set = set()
+        for src in retrieved:
+            lid = src.get("_lid")
+            if lid and (lid in rail_lids or lid in seen):
+                continue
+            public = {k: v for k, v in src.items() if not k.startswith("_")}
+            if _is_duplicate_source(public, rail) or _is_duplicate_source(public, out):
+                continue
+            if not _source_is_named(src, answer):
+                continue
+            out.append(public)
+            if lid:
+                seen.add(lid)
+        return out
+    except Exception as e:  # Invariant 5: the rail is never worth a failed answer
+        logger.warning("[Sources] Answer-seam re-admission skipped: %s", e)
+        return []
+
+
+async def title_rail_sources(rail: list, retrieved: list,
+                             lookup_titles: Optional[dict] = None) -> list:
+    """P4.24: the rail with each entry titled by a bare id given its title in
+    code, from the turn's own retrievals (a source's title, else a lookup's:
+    `lookup_titles`), else the made-under record
+    (`made_under_store.titles_for`, which touches no database until the
+    record is loaded), and its URL from the id where it has none. Runs after
+    lever R, which re-admits such entries. An entry with no exact title stays
+    as it is. Never raises: on any failure the rail is returned unchanged."""
+    try:
+        if not rail:
+            return rail
+        record: dict = {}
+        ids = rail_titles.untitled_ids(rail, retrieved, lookup_titles)
+        if ids:
+            from ..services.made_under_store import titles_for
+            record = await titles_for(ids)
+        out, titled, urled = rail_titles.fill_rail(rail, retrieved, record, lookup_titles)
+        if titled or urled:
+            logger.info("[Sources] Titled %d bare-id rail entr(ies), gave %d a URL", titled, urled)
+        return out
+    except Exception as e:  # Invariant 5
+        logger.warning("[Sources] Rail titles skipped: %s", e)
+        return rail
 
 
 # -----------------------------------------------------------------------
@@ -753,6 +957,10 @@ async def process_user_request(
     manager_tools = get_manager_tools(peer_descriptions)
 
     accumulated_sources: list = []
+    # P4.3 lever R: every source every delegation retrieved, marked kept or not.
+    retrieved_sources: list = []
+    # P4.24: the exact titles every delegation's lookups returned.
+    retrieved_titles: dict = {}
     # P2.2 (B5): every legislation search this turn ran, across ALL delegations,
     # and (P2.4) every case-law search. The footer describes the turn the lawyer
     # asked, not one delegation of it.
@@ -800,6 +1008,9 @@ async def process_user_request(
     # P3.13 (B10): every report as handed to the Manager (sibling links
     # included), read once the answer is written.
     manager_inputs: list = []
+    # P3.12 (answer seam): every schedule paragraph code handed any Worker of
+    # this turn cut exactly, read once the answer is written.
+    handed_paras: list = []
 
     async def manager_tool_executor(name: str, args: dict) -> str:
         if name == "delegate_research":
@@ -858,6 +1069,9 @@ async def process_user_request(
             for src in result.get("sources", []):
                 if not _is_duplicate_source(src, accumulated_sources):
                     accumulated_sources.append(src)
+            retrieved_sources.extend(result.get("retrieved_sources") or [])
+            for _lid, _t in (result.get("retrieved_titles") or {}).items():
+                retrieved_titles.setdefault(_lid, _t)
             if result.get("halted"):
                 halts.append({**result["halted"], "scope": "delegation"})
             if result.get("lost"):
@@ -868,6 +1082,7 @@ async def process_user_request(
                 else ("partial" if result["halted"].get("written_up") else "halted")
                 if result.get("halted") else "complete")
             all_searches.extend(result.get("searches") or [])
+            handed_paras.extend(result.get("handed_paragraphs") or [])
             # P4.5: a lost report is a label, not research, so P4.2's fallback
             # must not reproduce it to the lawyer as findings.
             if (result.get("content") or "").strip() and not result.get("lost"):
@@ -906,21 +1121,31 @@ async def process_user_request(
 
         return f"Error: Unknown manager tool {name}"
 
+    # P4.12: a Manager call carries the Worker's output cap, and while a
+    # usable worker report is in hand (the very list P4.2's fallback below
+    # reads, so the two cannot disagree) its heavy empty is not retried and
+    # its idle timeout is retried once, not twice: the fallback with those
+    # reports is what the lawyer would get anyway, minutes later. With none in
+    # hand the retries are kept, so a reply lost before any research is never
+    # served the bare notice sooner than it was.
     final = await chat_loop_fn(
         final_messages, model, cancel_event, num_ctx,
         manager_tools, manager_tool_executor, on_chunk,
         emit_tool_details=emit_tool_details,
         timing_collector=timing_collector,
+        manager_call=True,
+        manager_report_in_hand=lambda: bool(worker_reports),
     )
 
     # P4.2 (B13). Last line of defence, above every strip below - all of which
     # are no-ops on an empty body, so without this the scope footer is appended
     # to nothing and the lawyer is shown a footer with no answer above it. That
     # is the exact shape of all nine blank turns measured across the replay
-    # directories. `chat_loop` has already retried three times by the time this
-    # runs, so reaching here means the provider returned nothing on every
-    # attempt; the choice is between the research already in hand, labelled, and
-    # a blank screen.
+    # directories. `chat_loop` has already retried by the time this runs (up to
+    # three attempts; since P4.12 fewer after a heavy empty or an idle timeout
+    # with a worker report in hand), so reaching here means the provider
+    # returned nothing on every attempt it was given; the choice is between the
+    # research already in hand, labelled, and a blank screen.
     if is_empty_completion(final.get("content"), None):
         logger.error(
             "[Manager] Empty completion returned as the answer - "
@@ -966,6 +1191,25 @@ async def process_user_request(
         clean, _restored = restore_dropped_siblings(clean, manager_inputs)
         if _restored:
             logger.info("[Manager] Restored %d dropped sibling subsection(s)", _restored)
+        # P3.12 (user decision, 2026-10-09): a schedule paragraph code cut
+        # and handed to the Worker, a sibling of one the answer cites, and
+        # named nowhere in the answer goes back in, verbatim from the cut.
+        clean, _paras = restore_dropped_paragraphs(clean, handed_paras)
+        if _paras:
+            logger.info("[Manager] Restored %d dropped schedule paragraph(s)", _paras)
+        for _cited, _meant, _ in misattributed_paragraphs(clean, handed_paras):
+            logger.warning("[Manager] A sentence cites schedule paragraph %s in the "
+                           "words of paragraph %s", _cited, _meant)
+        # P4.23 (user decision, 2026-10-09): an instrument the answer names in
+        # words and links nowhere gets the URL a report linked it with. After
+        # both restores (their notes are the Worker's words and are never
+        # linked here) and above P1.6's enforcement, so each added link is
+        # checked too; before lever R, which then reads the linked answer.
+        if research_mode not in _RAIL_FALLBACK_MODES:
+            clean, _linked = link_named_instruments(
+                clean, manager_inputs, retrieved_sources, retrieved_titles)
+            if _linked:
+                logger.info("[Manager] Linked %d instrument(s) named in words", _linked)
     # P1.6 (B14) belt and braces. The Worker's report was already enforced, but
     # the Manager is instructed to pass it through verbatim and is not compelled
     # to — and in conversational mode it answers in its own words. Idempotent, so
@@ -1050,6 +1294,18 @@ async def process_user_request(
         ):
             logger.warning("[Suggestions] %s", issue)
 
+    # P4.3 lever R: a source the answer cites that no report vouched for. Read
+    # against the answer as the lawyer sees it, before the scope footer, which
+    # names searched instruments in code's words, not the answer's.
+    _readmitted = readmit_answer_sources(
+        accumulated_sources, retrieved_sources, clean, research_mode)
+    if _readmitted:
+        logger.info("[Manager] Re-admitted %d source(s) the answer cites", len(_readmitted))
+        accumulated_sources.extend(_readmitted)
+    # P4.24: after R, which re-admits change-record instruments titled by id.
+    accumulated_sources = await title_rail_sources(
+        accumulated_sources, retrieved_sources, retrieved_titles)
+
     if accumulated_sources:
         final["sources"] = [
             {**{k: v for k, v in s.items() if k != "n"}, "n": i + 1}
@@ -1075,6 +1331,14 @@ async def process_user_request(
     # conversation, so it cannot restate an earlier turn's negative.
     if not _footer and not scope_unknown:
         _footer = carried_scope_footer(messages, all_searches)
+    # P4.17 (B5): a turn that searched only WITHIN instruments (section search,
+    # no `search_legislation`) gets neither line above. This one states the
+    # section searches it ran and carries the fresh footer's clauses, the
+    # lookup clause included, so the lookup line below does not also fire.
+    # Not suppressed by `scope_unknown`: like the fresh footer, it states only
+    # searches this turn recorded, and those ran.
+    if not _footer:
+        _footer = section_scope_footer(all_searches)
     # P3.7 (B5): a turn that looked an instrument up and ran no ranked search,
     # with no earlier search to carry. (The carried line above states the
     # lookup itself when there is one: placing this line first dropped the
@@ -1106,13 +1370,24 @@ def _last_user_content(messages: list) -> str:
     return ""
 
 
-def _build_step_brief(step: dict, approved_plan: dict, user_query: str) -> str:
+def _build_step_brief(step: dict, approved_plan: dict, user_query: str,
+                      earlier_reports: Optional[list] = None) -> str:
     """Build a self-contained worker brief for one approved plan step.
 
     The Worker has no access to the conversation or the rest of the plan, so the
     brief carries the original question and the plan's scope note as context.
     Identifiers in the step text are passed through verbatim (NO SPECULATION —
     the planner was instructed to copy them exactly as the user gave them).
+
+    P3.10: `earlier_reports` are the reports of the steps already run. Every
+    step after the first gets one code-written line naming the instruments
+    those reports cite (`utils/step_handover.py`), so a step that works on an
+    earlier step's list is handed it instead of re-deriving it with its own
+    searches. The line is conditional, so it adds nothing to a step that does
+    not. It goes to every such step, not only to steps whose wording a pattern
+    recognises: the pattern missed a step that worked on the list
+    (`wave4_b11_sweep`), and that step dropped an instrument. It sits before
+    the CONTEXT sentence, which stays the brief's last word.
     """
     parts = [f"RESEARCH TASK: {step['title']}"]
     detail = step.get("detail") or ""
@@ -1121,6 +1396,12 @@ def _build_step_brief(step: dict, approved_plan: dict, user_query: str) -> str:
     scope_note = approved_plan.get("scope_note") or ""
     if scope_note:
         parts.append(f"SCOPE: {scope_note}")
+    if earlier_reports:
+        from ..utils.step_handover import handover_line
+
+        line = handover_line(earlier_reports)
+        if line:
+            parts.append(line)
     if user_query:
         parts.append(
             "CONTEXT: This task is one step of a wider research plan answering the "
@@ -1213,6 +1494,10 @@ async def run_deep_research(
 
     step_findings: list = []
     accumulated_sources: list = []
+    # P4.3 lever R: every source every step retrieved, marked kept or not.
+    retrieved_sources: list = []
+    # P4.24: the exact titles every step's lookups returned.
+    retrieved_titles: dict = {}
     # Per-request tool-result memo: plan steps run as isolated workers, so two
     # steps that retrieve the same Act would each pay fetch + summarise. Exact
     # (tool_name, canonical args) repeats are served from this dict instead.
@@ -1250,7 +1535,10 @@ async def run_deep_research(
         if timing_collector:
             timing_collector.record_delegation()
 
-        brief = _build_step_brief(step, approved_plan, user_query)
+        # P3.10: the steps already run, so a step that works on their list is
+        # handed it. A lost step's content is its label and names no instrument.
+        brief = _build_step_brief(step, approved_plan, user_query,
+                                  [f["content"] for f in step_findings])
         logger.info(f"[DeepResearch] Step {i}/{len(steps)}: {title}")
         # run_worker_agent opens the audit delegation, but only this loop knows
         # the step number and the approved title — hand them over first.
@@ -1286,6 +1574,9 @@ async def run_deep_research(
         for src in result.get("sources", []):
             if not _is_duplicate_source(src, accumulated_sources):
                 accumulated_sources.append(src)
+        retrieved_sources.extend(result.get("retrieved_sources") or [])
+        for _lid, _t in (result.get("retrieved_titles") or {}).items():
+            retrieved_titles.setdefault(_lid, _t)
         all_searches.extend(result.get("searches") or [])
 
     if cancel_event and cancel_event.is_set():
@@ -1404,6 +1695,18 @@ async def run_deep_research(
     final["research_mode"] = _dr_cfg.get("_research_mode") or None
     final["chat_mode"] = _dr_cfg.get("_chat_mode") or None
 
+    # P4.3 lever R, as on the Manager path: the synthesis names instruments a
+    # step's scope block listed and no step report did (408 stored misses).
+    _readmitted = readmit_answer_sources(
+        accumulated_sources, retrieved_sources, _content,
+        _dr_cfg.get("_research_mode") or "legislation_only")
+    if _readmitted:
+        logger.info("[DeepResearch] Re-admitted %d source(s) the report cites", len(_readmitted))
+        accumulated_sources.extend(_readmitted)
+    # P4.24, as on the Manager path.
+    accumulated_sources = await title_rail_sources(
+        accumulated_sources, retrieved_sources, retrieved_titles)
+
     if accumulated_sources:
         final["sources"] = [
             {**{k: v for k, v in s.items() if k != "n"}, "n": i + 1}
@@ -1416,9 +1719,12 @@ async def run_deep_research(
     # P2.4 (B12): the case-law disclosure rides the same `searches` record
     # across steps, and joins the legislation line when there is one. 6375's
     # failing turn is this path: 18-30 case-law searches and no disclosure.
+    # P4.17 (B5): a report whose steps searched only within instruments gets
+    # the section line, straight after the fresh footer it stands in for.
     final["content"] = strip_answer_footer(
         final.get("content") or ""
     ) + (answer_scope_footer(all_searches, _get_cfg())
+         or section_scope_footer(all_searches)
          or lookup_scope_footer(all_searches)
          or case_law_scope_footer(all_searches))
 

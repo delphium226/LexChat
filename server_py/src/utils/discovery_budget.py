@@ -283,13 +283,20 @@ def section_budget_blocks(budget: Optional[dict], name: str, args) -> bool:
         return False
 
 
-def section_stop_message(budget: Optional[dict], args=None) -> str:
+def section_stop_message(budget: Optional[dict], args=None, held: Optional[dict] = None) -> str:
     """The tool result a refused `search_legislation_sections` call returns.
 
     A limit, stated as one: no `results` or `total` key, and an instruction
     that a provision this step did not reach must be reported as not retrieved
     because searching within the instrument was limited, never as absent from
     it (Invariant 1; the P2.2 hazard P2.7's stop was written against).
+
+    **Batch 8 A2: `held`**, what code's COMPLETE read of the instrument's
+    provision list in this worker run established
+    (`schedule_units.provision_list_facts`). The limit cannot have left a
+    provision outside that list unfound, so the message says what the list
+    holds and tells the Worker to put such a provision down to the index, not
+    to the limit. None (every other case) returns exactly the message above.
     """
     try:
         limit = int((budget or {}).get("section_limit") or SECTION_SEARCH_ROUNDS)
@@ -299,7 +306,7 @@ def section_stop_message(budget: Optional[dict], args=None) -> str:
         lid = str((args or {}).get("legislation_id") or "this instrument")[:80]
     except Exception:
         lid = "this instrument"
-    return json.dumps({
+    msg = {
         "notice": (
             f"Section-search limit reached: this research step has already "
             f"searched within {lid} in {limit} rounds, the most one step may use "
@@ -307,6 +314,8 @@ def section_stop_message(budget: Optional[dict], args=None) -> str:
         ),
         "searched": False,
         "legislation_id": lid,
+    }
+    msg.update(_held_stop_fields(lid, held) or {
         "instruction": (
             "Do not call search_legislation_sections for this legislation_id "
             "again in this step. Work from the provisions your earlier searches "
@@ -317,3 +326,47 @@ def section_stop_message(budget: Optional[dict], args=None) -> str:
             "instrument does not contain it."
         ),
     })
+    return json.dumps(msg)
+
+
+def _held_stop_fields(lid: str, held: Optional[dict]) -> Optional[dict]:
+    """Batch 8 A2: the `provision_list` and `instruction` a refusal carries
+    when code has read the instrument's complete provision list. None when
+    `held` is not usable, so the caller keeps the message as it was. Never
+    raises.
+
+    Screened in `test_search_scope.py::test_footer_trips_no_detector`: no
+    "not" before "index" in one sentence (`NEG_BLAMED_INDEX`), no "no
+    provision" (`NEG_ASSERTED`), and the clause naming the schedules reads as
+    an index fact, never as a limit (`replay_report.sched_clause_class`).
+    """
+    if not held:
+        return None
+    try:
+        from .schedule_units import provision_list_sentence
+        lid = str(lid).replace("[", "(").replace("]", ")")
+        fact = provision_list_sentence(lid, held)
+        if not fact:
+            return None
+        n = int(held["provisions"])
+        return {
+            "provision_list": (
+                "Code has already read the index's complete provision list for "
+                f"{lid} in this step: {fact}."
+            ),
+            "instruction": (
+                "Do not call search_legislation_sections for this legislation_id "
+                "again in this step. Work from the provisions your earlier searches "
+                "of it returned, then write your report. The index holds only the "
+                f"{n:,} provisions in that list for {lid}, so this limit kept nothing "
+                "outside that list from you: if your report speaks of a provision "
+                f"outside that list, say what the index holds for {lid}, and do not "
+                "put it down to this limit. If a provision you need is in that list "
+                "and your earlier searches did not return it, say that searching "
+                "within this instrument was cut short by a limit before it was "
+                "reached, and name it. State what the index holds, never that the "
+                "instrument itself lacks a provision."
+            ),
+        }
+    except Exception:
+        return None

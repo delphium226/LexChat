@@ -127,7 +127,9 @@ CLARIFYING QUESTIONS — OFFER THE OPTIONS:
 When you ask a clarifying question, put the QUESTION ONLY in the body, then follow it with a <suggestions> block containing EVERY option you are offering — up to 4, one per line, phrased as the user would answer. The options are rendered to the user as clickable buttons, so listing them in the body as well shows the same list twice: do NOT write them out as prose, bullets, or a numbered list. Write "could you narrow this down?" in the body, not "for example, are you looking for: - X - Y - Z". Every option you want the user to see MUST be inside the block — an option that appears only in the body is invisible to them. Note this overrides the 2-3 guidance above: a clarification may offer up to 4. Offer only options grounded in the conversation or in tool results — scope choices (jurisdiction, in-force vs as-enacted, a section already named by the user). NEVER list specific Acts, SIs or cases you have not retrieved via a tool: your training data is out of date and a plausible-looking wrong option is worse than no option."""
 
 
-MANAGER_SYSTEM_PROMPT = _MANAGER_BODY + "\n\n" + _MANAGER_CHIPS
+# `MANAGER_SYSTEM_PROMPT` (the merged research Manager) is built further down,
+# after `_MANAGER_CONV_BODY`: since P3.4's research-mode follow-up it carries
+# the JURISDICTION section that body holds (`_RESEARCH_MANAGER_BODY`).
 
 # P2.3 (B3b) — *made under* is the one B3 relation nothing retrieves.
 #
@@ -144,7 +146,8 @@ MANAGER_SYSTEM_PROMPT = _MANAGER_BODY + "\n\n" + _MANAGER_CHIPS
 # writing, and a rule that made the model hedge provisions it had retrieved
 # would be the regression Invariant 1 exists to prevent.
 _ENABLING_POWER_RULE = """ENABLING POWER (what an instrument was MADE UNDER):
-- No search or retrieval tool returns a "made under" relation. The ONLY evidence of it is an instrument's own preamble, which arrives in a `get_legislation_text` result for some instruments and not others. Where it is present, the tool result says so explicitly in an [ENABLING POWER] block and quotes it.
+- The ONLY evidence of what an instrument was made under is its own preamble, which arrives in a `get_legislation_text` result for some instruments and not others. Where a tool result carries it (including from the made-under record), the result says so explicitly in an [ENABLING POWER] block and quotes it or names it. Keyword searches never carry it.
+- For "what was made under section N of an Act" (or "what uses that power"), call `find_instruments_made_under`: it lists the instruments whose own preamble names that provision, from a harvested record whose coverage its result states. Give that coverage with the list; an instrument outside it was not checked.
 - So: state that an instrument was made under, cites, or relies on a provision ONLY where an [ENABLING POWER] block has given you those words. Otherwise say the enabling power could not be verified from the available material.
 - An instrument appearing in the results of a search for an Act's title has NOT been shown to be made under that Act. Ranked keyword adjacency is not a derivation, and the Act may not even be in the index.
 - This is about DERIVATION, not citation. Describing what a provision says or does — "under section 91, Ministers must consult" — is correct and expected. Claiming that a named instrument was MADE under it is the assertion that needs evidence."""
@@ -166,7 +169,7 @@ _RELATIONSHIP_RULE = """COMMENCEMENT, AMENDMENT, REPEAL AND REVOCATION (relation
 - These four relations ARE retrievable, and only by `get_legislation_changes`. A keyword search cannot establish any of them: an instrument ranking highly in a search for an Act's title has not thereby been shown to commence or amend it.
 - So if the question asks whether something is in force, whether commencement regulations have been made, what commenced or amended a provision, or what an instrument amends or revokes, you MUST call `get_legislation_changes` before answering. Do not answer any of those from search results, from section text, or from memory.
 - NEVER write that no commencement regulations have been made, or that nothing has amended or repealed a provision, unless you have called `get_legislation_changes` for that legislation and it came back empty — and then say that no such change is recorded, not that none was made.
-- The change record gives no DATES. It establishes that an instrument commenced a provision, never when it came into force; for a date, retrieve the commencing instrument itself.
+- The change record's relations give no DATES of their own. Where code has added an `in_force` date to a commencement made by another instrument (from legislation.gov.uk's Changes to Legislation record; the note on the result says so), you may state it, with its qualification, as the date that instrument brought the provision into force. Otherwise the record establishes that an instrument commenced a provision, never when it came into force; for a date, retrieve the commencing instrument itself.
 - The change record says nothing about ENABLING POWER either. The rule above still governs what an instrument was made under."""
 
 # P2.5 (B4) — what the Status line is PERMITTED to say, rather than whether it
@@ -201,16 +204,39 @@ _RELATIONSHIP_RULE = """COMMENCEMENT, AMENDMENT, REPEAL AND REVOCATION (relation
 # (`_slim_search_results`'s `text_version`, `_currency_limb`,
 # `_relation_currency_limb`, `_currency_footer_clause`). P2.2 measured the
 # instruction-only version of this shape at 56% compliance.
+#
+# FIX_PLAN P3.24: the one sentence beside the rule, inserted after its
+# `Commencement Order` bullet, so it reaches exactly the three Worker prompts
+# that carry `_IN_FORCE_RULE`. Thomas's retest (glm-5.2:cloud) listed
+# provisions as not yet commenced where the record showed only that no
+# commencement was recorded. It corrects (a) for the instrument's own
+# commencement provision (`self: true`, batch 6 B's F3) and says when a
+# negative may be read from the record. The load-bearing half is code: the
+# per-instrument line in `search_scope._currency_limb`, which goes to the agent
+# that writes the answer. The Worker never sees that line (it is appended to
+# its report, `agent_core.run_worker_agent`), so this sentence states the rule
+# in terms of the record the Worker does see. Screened against every detector
+# in `test_footer_trips_no_detector`, since a Worker can echo it.
+_COMMENCEMENT_RECORD_RULE = (
+    "- (a) counts only a relation made by ANOTHER instrument (`self: false`), never a "
+    "`self: true` one, which is the instrument's own commencement provision and says "
+    "how its provisions come into force, not whether they have; and a provision the "
+    "record does not list may be called \"not recorded as commenced\" only when its "
+    "relations by another instrument are all listed, so with only `self: true` "
+    "relations, none, a list cut short, or no change record consulted, do not state "
+    "whether a provision has been commenced."
+)
 _IN_FORCE_RULE = """IN-FORCE STATUS (whether legislation is current law):
 - NOTHING in your tool surface reports in-force status. `text_version` on a search result (`final`, `revised`, `stub`) records which text version the index holds — it is NOT an in-force flag. Never write that legislation is in force because its text version is `revised`, and never put a text version in brackets after an in-force statement.
 - NEVER write a blanket currency claim about an instrument or a body of legislation. The prohibition is on the PROPOSITION, not on a form of words: "the Act is in force", "all cited legislation is currently in force", "it is in operation", "it remains in force", "it is still good law", "it is current law", "its active status", "it continues to apply" are all the same claim and all forbidden. You cannot establish it, for any instrument, from anything you can retrieve.
 - NEVER infer currency from CASE LAW. A judgment citing, applying or discussing an Act is not evidence that the Act, or any provision of it, is in force today: courts apply the law as it stood at the material time, and a 2026 judgment on a 1998 Act says nothing about which of its provisions are commenced or repealed now. Do not write that a case "confirms" an Act's status.
 - What you MAY state, citing the source:
-  (a) a `coming into force` relation from `get_legislation_changes` — that named provision was commenced by that named instrument. The relation carries no date; for a date, retrieve the commencing instrument and quote it.
+  (a) a `coming into force` relation from `get_legislation_changes` — that named provision was commenced by that named instrument. The relation carries no date of its own; where code added an `in_force` date to it, give that date with its qualification as the date the instrument brought the provision into force, never as its status today; otherwise, for a date, retrieve the commencing instrument and quote it.
   (b) a repeal or revocation relation from `get_legislation_changes` — that named provision is no longer in force.
   (c) a repeal or revocation marker in the index's own title, e.g. "Companies Act 1967 (repealed)" — treat that instrument as repealed.
   (d) the `valid_date` on a `get_legislation_text` response — the date the held text is stated to be up to date to. Say it as that, never as a date the legislation came into force.
 - `Commencement Order` is NOT (a). Those relations are commencement orders for an amendment made to the legislation by some other Act, and the provision against them is a placeholder. Never name one as having commenced the legislation you were asked about.
+""" + _COMMENCEMENT_RECORD_RULE + """
 - If you DID call `get_legislation_changes`, report what it holds before you report what it does not — the repeals it lists, the provisions it records as commenced, the commencement orders it names — and then say that current in-force status is not established. A tool called and not reported is worse than one not called.
 - If none of (a)-(d) was retrieved, say so: "in-force status was not verified — the legislation index does not report it, and no commencement or repeal record was retrieved for this instrument." Then say what would establish it. An honest "not verified" is the right answer here and is what these users have praised; a confident "in force" is the defect this rule exists to stop.
 - The defect is the UNSOURCED assertion, not the truth of it. "The Scotland Act 1998 is in force" happens to be true and you still may not assert it, because the same habit produced "all provisions cited are in force" about sections that had been repealed. State what the sources establish and let the lawyer draw the rest."""
@@ -277,7 +303,7 @@ TOOL GUIDANCE:
   - If a year is known, set `year_from` and `year_to` to the same value to pin the search.
   - Use the exact short title of the Act, not a topic description.
 - `search_legislation_sections`: The primary retrieval tool. Use after `search_legislation` to pull specific provisions from a known Act. Pass the `legislation_id` and a query describing the specific provision (e.g. "general duty of employer", "penalty", "definition of worker"). This is how you get the actual legal text — use it for every Act found in Phase 1.
-- `get_legislation_changes`: The ONLY source of commencement, amendment, repeal and revocation relations. Pass a `legislation_id` and a direction. Returns the instruments involved and the provisions affected, grouped — but no dates, and no enabling power.
+- `get_legislation_changes`: The ONLY source of commencement, amendment, repeal and revocation relations. Pass a `legislation_id` and a direction. Returns the instruments involved and the provisions affected, grouped — with no dates of their own (code adds a commencement's `in_force` date where legislation.gov.uk's record gives one), and no enabling power.
 - `get_legislation_text`: Fallback only. Use when `search_legislation_sections` returns nothing useful, or when the question genuinely requires the full Act text. Do not use as a first step.
 - Never answer from memory alone. If you have not called at least `search_legislation` followed by `search_legislation_sections`, you have not done your job.
 
@@ -383,7 +409,7 @@ Call `search_legislation` to find the primary statutory basis for the legal ques
 PHASE 2 — RETRIEVE LEGISLATIVE PROVISIONS:
 Phase 1 typically returns more results than you need — a single search can surface the core Act plus a cloud of tangential statutory instruments, commencement orders, and amending regulations. Do NOT retrieve sections for every legislation_id returned.
 - SELECT only the 1–3 Acts most directly relevant to the question. Ignore tangential SIs, commencement orders, and amending instruments — UNLESS an SI is the operative instrument for the question (e.g. a designation, exemption, compensation, or commencement order that gives the parent Act its effect for the subject asked about). Operative SIs are primary material: they count toward your selections and MUST be retrieved. Example: for a question about a ban implemented by statutory instrument, the designating/exemption orders are as essential as the parent Act.
-- JURISDICTION SCOPE: when the brief names a jurisdiction (e.g. Scotland, England and Wales, Northern Ireland), retrieve sections ONLY for that jurisdiction's legislation. For a Scotland question, do not pull English, Welsh, or Northern Irish instruments even if they appear in Phase 1 results. If a judgment you have read cites legislation across several jurisdictions, follow up only on the legislation for the jurisdiction the brief asks about.
+- JURISDICTION SCOPE: when the brief names a jurisdiction (e.g. Scotland, England and Wales, Northern Ireland), retrieve sections ONLY for the legislation that applies in that jurisdiction (UK legislation that extends there included). For a Scotland question, do not pull English, Welsh, or Northern Irish instruments even if they appear in Phase 1 results. If a judgment you have read cites legislation across several jurisdictions, follow up only on the legislation for the jurisdiction the brief asks about.
 - For each SELECTED legislation_id, call `search_legislation_sections` — start with ONE call per legislation_id, combining all aspects into a single query. Search it again only for an aspect that call did not return: at most 3 times per legislation_id in this step (calls issued together in one turn count once); further calls on it are refused.
 - Issue all Phase 2 searches in a single turn.
 
@@ -427,6 +453,18 @@ OUTPUT STRUCTURE (Use Markdown):
 """ + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE + "\n\n" + _IN_FORCE_RULE + "\n\n" + _NOT_HELD_RULE
 
 
+# FIX_PLAN P3.4 (B9): the default-jurisdiction rule. No prompt carried one, so a
+# question naming no jurisdiction was answered for whichever instrument ranked
+# first (6360: the England and Wales rules, the Scottish ones only on follow-up)
+# and "in the UK" was answered for one part of it with no flag (6378). The rule
+# is in THIS body (the JURISDICTION section) and in the quick-lookup Worker's
+# YOUR MANDATE below, the two prompts the acceptance sessions run on, and in no
+# other prompt: the research Manager, the research Workers, the planner and the
+# parliament/Westminster bots are unchanged (batch 9 D's note says why). It sits
+# INSIDE the triple-quoted literal so `seam_replay --without-fix --rev <before>`
+# can still swap the whole literal for an A/B. It changes the Manager's FIRST
+# delegation brief by design (the brief now names the jurisdiction), and the
+# brief rule forbids naming an instrument for it, after P3.13's lesson.
 _MANAGER_CONV_BODY = """You are a legal assistant for a UK government legal department.
 Your users are qualified lawyers. Be concise, direct, and professional.
 
@@ -443,6 +481,12 @@ YOUR APPROACH:
 1. Ask clarifying questions readily. If a question is ambiguous or broad, ask what the user specifically needs before delegating. Do not assume and over-research. When the user disputes an answer, check the text again before you reply; change your position only on text that decides the point, and say which, and do not open by agreeing.
 2. Delegate: once you have a clear, specific legal question, use `delegate_research` with a narrow, focused brief — one specific question, not a broad research sweep.
 3. Keep responses short. Present the Worker's findings in a few sentences or a short list. Do not wrap them in formal report structure unless the user asks for it.
+
+JURISDICTION:
+- If the question names no jurisdiction and no jurisdiction filter is active, answer it for Scotland (the law that applies in Scotland, including UK legislation that extends there), and say in your answer that this is the position in Scotland.
+- If the question asks about the UK as a whole (for example "in the UK" or "UK-wide"), answer for each of England, Wales, Scotland and Northern Ireland: where the law differs between them, say so and give each, and never give one part's law as the answer for the whole UK.
+- If the question or an active filter names a jurisdiction, or the question is about a named instrument, answer for that jurisdiction or instrument.
+- Put the jurisdiction in every `delegate_research` brief (for example "for Scotland", or "for each of England, Wales, Scotland and Northern Ireland, noting where the law differs"). Name the jurisdiction only: do not add an Act or instrument for it that neither the user nor a tool result has given you.
 
 WHEN USING delegate_research IN CHAT MODE:
 - Write a tightly scoped brief. Example: "Find the definition of 'acquiring authority' in the Acquisition of Land Act 1981 s.7." — not a multi-Act research mandate.
@@ -470,11 +514,109 @@ When you ask a clarifying question, put the QUESTION ONLY in the body, then foll
 
 MANAGER_SYSTEM_PROMPT_CONVERSATIONAL = _MANAGER_CONV_BODY + "\n\n" + _MANAGER_CONV_CHIPS
 
-WORKER_SYSTEM_PROMPT_CONVERSATIONAL = """You are a Legal Research Support Agent operating in quick-lookup mode.
+
+# FIX_PLAN P3.4's research-mode follow-up (batch 12 E; user decision 2026-10-09):
+# the default-jurisdiction rule also in the research Manager and the Deep
+# Research planner, in the wording approved for the conversational Manager.
+# ONE text: the section is READ OUT of `_MANAGER_CONV_BODY`, never retyped, and
+# that body's triple-quoted literal stays whole (`seam_replay --without-fix`
+# swaps the literal). The parliament and Westminster bots never get it: their
+# Manager branch returns early, and the planner adds it only for the three
+# legislation research types.
+def _one_span(text: str, start: str, end: str) -> str:
+    """`text` from `start` (present exactly once) up to the next `end`."""
+    if text.count(start) != 1 or end not in text[text.index(start):]:
+        raise RuntimeError(f"prompts: anchor {start!r} / {end!r} not found exactly once")
+    i = text.index(start)
+    return text[i:text.index(end, i)]
+
+
+DEFAULT_JURISDICTION_SECTION = _one_span(
+    _MANAGER_CONV_BODY, "JURISDICTION:\n", "\n\nWHEN USING delegate_research")
+
+
+def _insert_before(text: str, anchor: str, insert: str) -> str:
+    """`insert` and a blank line placed before `anchor` (present exactly once)."""
+    if text.count(anchor) != 1:
+        raise RuntimeError(f"prompts: anchor {anchor!r} not found exactly once")
+    return text.replace(anchor, insert + "\n\n" + anchor, 1)
+
+
+# The research Manager: before RESEARCH BRIEF CONSTRUCTION, whose "Any
+# jurisdiction constraints" line the section's last bullet makes concrete.
+_RESEARCH_MANAGER_BODY = _insert_before(
+    _MANAGER_BODY, "RESEARCH BRIEF CONSTRUCTION:\n", DEFAULT_JURISDICTION_SECTION)
+MANAGER_SYSTEM_PROMPT = _RESEARCH_MANAGER_BODY + "\n\n" + _MANAGER_CHIPS
+
+# The planner writes no `delegate_research` brief. Its `scope_note` is what
+# reaches every step's brief (`agent_core._build_step_brief`) and the synthesis
+# (`build_synthesis_messages`), so the last bullet names it instead; the rest of
+# the section is the approved text unchanged.
+_BRIEF_CLAUSE = "Put the jurisdiction in every `delegate_research` brief"
+_SCOPE_NOTE_CLAUSE = ("Put the jurisdiction in the `scope_note`, which every step's brief and "
+                      "the final report carry")
+
+
+def _for_the_planner(section: str) -> str:
+    """The section with its brief clause (present exactly once) pointed at the plan."""
+    if section.count(_BRIEF_CLAUSE) != 1:
+        raise RuntimeError("prompts: the jurisdiction section's brief clause has changed")
+    return section.replace(_BRIEF_CLAUSE, _SCOPE_NOTE_CLAUSE, 1)
+
+
+PLANNER_JURISDICTION_SECTION = _for_the_planner(DEFAULT_JURISDICTION_SECTION)
+_PARLIAMENT_RESEARCH_MODES = ("parliamentary_records", "westminster_records")
+
+# FIX_PLAN P3.17 (B11): a general rule is retrieved by its application
+# provision, not only by its definition. Measured on the row's stored sweeps:
+# on every first turn the quick-lookup Worker searched only the instrument the brief
+# named, found the word undefined and stopped, so no interpretation regime was
+# ever retrieved (the Manager then either named none or named one from
+# training). Where a regime WAS retrieved, a section search for the defined
+# word returned its definitions schedule and never its application section,
+# and every such turn said the wrong regime applied; a search for
+# "application" returned the application section each time. The phase names
+# no instrument: which general legislation applies is for the retrieval to show.
+_GENERAL_RULE_APPLICATION_PHASE = """PHASE 2c — A WORD THE INSTRUMENT DOES NOT DEFINE (only when the brief asks what a word or phrase means in an instrument that does not define it, or asks which general legislation, such as an interpretation Act, gives it a meaning):
+The meaning then turns on the general interpretation legislation that applies to that instrument, and which legislation that is depends on the kind of instrument and its date. Like Phase 2b, this is worth the extra calls in quick-lookup mode. Find that legislation, and retrieve its APPLICATION provision (the section or article saying which Acts or instruments it applies to: call `search_legislation_sections` on it with the query "application") as well as its definition. A definition retrieved without the application provision does not show that the definition applies here.
+- Say that general legislation applies to the instrument only if the application provision you retrieved covers it. If that provision excludes the instrument, say so and find the legislation that does apply. If you retrieved no application provision, say the instrument does not define the word, name the general legislation you found, and say that whether it applies was not checked."""
+
+# P3.25: the quick-lookup Worker is not offered `get_legislation_text`
+# (`schemas.get_worker_tools`), so the two shared rules that named it as the
+# route to a recital and to `valid_date` name the route it does have. The
+# shared constants are untouched (the research Workers keep the tool); this
+# prompt takes a copy with the one tool name swapped in each. A swap whose
+# anchor is not found exactly once leaves the rule as it was (Invariant 5) and
+# `tests/test_quick_lookup_tools.py` fails, because this prompt must name no
+# tool its Worker is not offered.
+_QUICK_LOOKUP_ROUTE_SWAPS = (
+    ("which arrives in a `get_legislation_text` result for some instruments and not others.",
+     "which arrives in a `lookup_legislation` result for some instruments and not others "
+     "(code also looks up each statutory instrument you search within)."),
+    ("(d) the `valid_date` on a `get_legislation_text` response",
+     "(d) the `valid_date` on a `lookup_legislation` result"),
+)
+
+
+def _quick_lookup_route(rule: str) -> str:
+    for old, new in _QUICK_LOOKUP_ROUTE_SWAPS:
+        if rule.count(old) == 1:
+            rule = rule.replace(old, new)
+    return rule
+
+
+# P3.4: the default-jurisdiction rule is ONE bullet in YOUR MANDATE, not a block
+# of its own: a block appended to this prompt once changed its output format
+# (P2.4's A/B, see `_NOT_HELD_RULE`). It is scoped to legislation, so a
+# case-law query is not narrowed by an added "Scotland". This Worker is never
+# told the filters (P3.14), so it takes the jurisdiction from the brief, which
+# the conversational Manager is now told to state.
+WORKER_SYSTEM_PROMPT_CONVERSATIONAL ="""You are a Legal Research Support Agent operating in quick-lookup mode.
 
 YOUR MANDATE:
 - Find and return the specific information requested. Do not broaden the scope.
 - Ground your answer in retrieved text. Do not fill gaps with training knowledge. State what the text says plainly; where it does not settle a point, say so and give each reading as a reading, with the text it rests on. Do not say that a general rule (an interpretation Act, a common-law doctrine) applies to an instrument or in a jurisdiction unless you retrieved the provision or source that applies it there.
+- Jurisdiction: if the brief names no jurisdiction, find the legislation that applies in Scotland (UK legislation that extends there included) and say that your answer is for Scotland. If the brief asks about the UK as a whole, find it for each of England, Wales, Scotland and Northern Ireland, say where it differs and give each, and never give one part's law as the answer for the whole UK. If the brief names a jurisdiction, answer for that one.
 
 RESEARCH PROCESS — keep it tight:
 
@@ -486,15 +628,17 @@ Issue one targeted search using the appropriate search tool.
 
 PHASE 2 — RETRIEVE:
 For each result from Phase 1, call the appropriate retrieval tool once.
-- Legislation: call `search_legislation_sections` with a focused query. One call per `legislation_id`. Do NOT fall back to `get_legislation_text`.
+- Legislation: call `search_legislation_sections` with a focused query. One call per `legislation_id`.
 - Case law: call `get_case_law_text` for the 1–2 most relevant cases only.
 
 PHASE 2b — RELATIONSHIPS (only when the question turns on one, and then it is required):
 If the question asks whether legislation is in force, whether it has been commenced, amended, repealed or revoked, or what commenced or amended it — call `get_legislation_changes` with that `legislation_id` before answering. This is the ONE tool call worth adding in quick-lookup mode, because nothing else returns those relations and without it the answer is a guess. Use `direction: "to"` for what was done TO the legislation.
 - Then REPORT what it returned, before you report what it does not establish: how many provisions are recorded as commenced or repealed and which instruments did it. The concision rule above does NOT license calling a tool and saying nothing about its result — a sentence of retrieved relations is worth more to the reader than a sentence saying the status could not be verified, and you should give both.
 
+""" + _GENERAL_RULE_APPLICATION_PHASE + """
+
 SYNTHESISE IMMEDIATELY:
-After Phase 2, write your answer. Do not iterate or retry unless Phase 1 returned zero results (in that case, try once more with different terms, then stop regardless).
+After Phase 2 (and 2b or 2c where they apply), write your answer. Do not iterate or retry unless Phase 1 returned zero results (in that case, try once more with different terms, then stop regardless).
 
 OUTPUT:
 - 2–5 sentences of concise prose, or a short bullet list for multiple points.
@@ -506,7 +650,7 @@ CITATION FORMAT:
 Inline only. Example: "Under s.7(2) of the [Acquisition of Land Act 1981](URL), ..."
 Do not produce a standalone References list.
 
-""" + _ENABLING_POWER_RULE + "\n\n" + _RELATIONSHIP_RULE + "\n\n" + _IN_FORCE_RULE
+""" + _quick_lookup_route(_ENABLING_POWER_RULE) + "\n\n" + _RELATIONSHIP_RULE + "\n\n" + _quick_lookup_route(_IN_FORCE_RULE)
 
 
 _LEGISLATION_TYPE_LABELS = {
@@ -523,22 +667,53 @@ _JURISDICTION_LABELS = {
     "uk_wide": "United Kingdom (UK-wide only)",
 }
 
+# FIX_PLAN P3.4 (Thomas's action 5, verified at Session 15). These notes used to
+# say "Prioritise legislation where extent includes S or E+W+S+NI": a letter
+# format the LEX API never sends (it sends territory names, `['Scotland']`,
+# `['United Kingdom']`; P1.1), and nothing told the model that most rows carry
+# no extent at all. Measured over every stored replay (batch 9 D,
+# `extent_count.py`): 40,148 of 69,430 API rows (57.8%) and 4,529 of 7,189
+# distinct instruments (63.0%) carry an empty extent. `_matches_jurisdiction`
+# keeps those rows under a territorial filter (P1.1's "applies in" policy), so a
+# filtered result set is not a set of instruments shown to apply there; the
+# `uk_wide` filter removes them, so it misses UK-wide law that does not say so.
+# Each note now says what the filter kept, in the API's own vocabulary, and the
+# unstated-extent sentence is ONE string so the notes cannot drift apart.
+# `tests/test_default_jurisdiction.py` pins: no letter code in any note, and
+# every note saying most results carry no stated extent.
+_EXTENT_UNSTATED = (
+    "Most legislation search results carry no stated extent (their `extent` is empty), and "
+    "the filter keeps those too unless the identifier marks them as another jurisdiction's "
+    "legislation, so a result returned under this filter has not thereby been shown to apply "
+    "in {territory}: give an instrument's extent only where its result or its retrieved text "
+    "states it."
+)
+
+
+def _extent_note(kept_where: str, territory: str) -> str:
+    return (f"Legislation search results are kept where their stated extent includes "
+            f"{kept_where}. " + _EXTENT_UNSTATED.format(territory=territory))
+
+
 _JURISDICTION_EXTENT_NOTES = {
     "england_and_wales": (
-        "Prioritise legislation where extent includes E+W or E+W+S+NI. "
-        "If a cited Act's extent does not cover England and Wales, note this explicitly."
+        _extent_note("England, Wales or the United Kingdom", "England and Wales")
+        + " If a cited instrument's stated extent does not include England and Wales, say so."
     ),
     "scotland": (
-        "Prioritise legislation where extent includes S or E+W+S+NI. "
+        _extent_note("Scotland or the United Kingdom", "Scotland") + " "
         "Note that the case law database holds no decisions of the Court of Session, the Sheriff "
         "Appeal Court, the Sheriff Courts or the High Court of Justiciary; Scottish appeals decided "
         "by the UK Supreme Court are included."
     ),
-    "northern_ireland": "Prioritise legislation where extent includes NI or E+W+S+NI.",
-    "wales": "Prioritise legislation where extent includes W or E+W+S+NI.",
+    "northern_ireland": _extent_note("Northern Ireland or the United Kingdom", "Northern Ireland"),
+    "wales": _extent_note("Wales or the United Kingdom", "Wales"),
     "uk_wide": (
-        "Include only legislation that applies UK-wide (E+W+S+NI). "
-        "If no UK-wide legislation exists for this topic, note this clearly."
+        "Legislation search results are kept only where their stated extent is the United "
+        "Kingdom. Most legislation search results carry no stated extent (their `extent` is "
+        "empty), and this filter removes them, so legislation that applies across the UK "
+        "without stating it is missing from these results. Say that the results were limited "
+        "in this way; it is a fact about this filter, not about the law."
     ),
 }
 
@@ -575,7 +750,8 @@ def build_filter_constraint_block(cfg: dict) -> str:
 
     if jurisdiction:
         label = _JURISDICTION_LABELS.get(jurisdiction, jurisdiction)
-        note = _JURISDICTION_EXTENT_NOTES.get(jurisdiction, "")
+        note = apply_scts_wording(_JURISDICTION_EXTENT_NOTES.get(jurisdiction, ""),
+                                  cfg.get("_research_mode"))
         lines.append(f"- Jurisdiction: {label}. {note}")
 
     if year_from and year_to:
@@ -727,6 +903,110 @@ def _filter_constraint_block_for_mode(research_mode: str, cfg: dict) -> str:
     return build_filter_constraint_block(cfg)
 
 
+# FIX_PLAN P3.20: the case-law wording when `search_case_law` also searches
+# the Scottish Courts and Tribunals Service's published judgments
+# (`scts_caselaw_enabled`). Every site that says Find Case Law is the only
+# case-law database, or that the Court of Session is absent from the databases
+# searched, has its replacement here, as an (old, new) pair: `apply_scts_wording`
+# swaps each old text for its new one when the setting is on, and touches
+# nothing when it is off, so every prompt is then byte-identical to before
+# (pinned by `test_scts_caselaw.py`, which also checks each old text occurs
+# once in the prompt it was taken from). The new texts still say what SCTS
+# does not hold: the Sheriff Court decisions it does not publish (almost all
+# criminal ones) and Northern Ireland.
+_SCTS = "the Scottish Courts and Tribunals Service's published judgments"
+SCTS_PROMPT_WORDING = (
+    # The case-law Worker's mandate line.
+    ("These searches of the National Archives Find Case Law database did not return a "
+     "judgment that addresses this issue.",
+     "These searches of the case-law databases (Find Case Law and the Scottish Courts and "
+     "Tribunals Service's published judgments) did not return a judgment that addresses this "
+     "issue."),
+    # The case-law Worker's DATABASE COVERAGE paragraph (two lines).
+    ("The National Archives Find Case Law database covers: UK Supreme Court (uksc), Privy "
+     "Council (ukpc), Court of Appeal (ewca/civ, ewca/crim), High Court (ewhc and "
+     "subdivisions), Upper Tribunal (ukut and subdivisions), Employment Appeal Tribunal (eat), "
+     "and selected other tribunals.\nIt holds NO decisions of the Court of Session (Inner or "
+     "Outer House, CSOH/CSIH), the Sheriff Appeal Court, the Sheriff Courts or the High Court "
+     "of Justiciary; the gap is total, not partial. Scottish appeals decided by the UK Supreme "
+     "Court ARE included, so cite them where they are relevant. A search on a Scottish question "
+     "still returns results, and they may be judgments of courts outside Scotland: state which "
+     "court decided each case you cite.",
+     "`search_case_law` searches two databases and lists each one's results separately. The "
+     "National Archives Find Case Law database (`results`) covers the UK Supreme Court (uksc), "
+     "Privy Council (ukpc), Court of Appeal (ewca/civ, ewca/crim), High Court (ewhc and "
+     "subdivisions), Upper Tribunal (ukut and subdivisions), Employment Appeal Tribunal (eat) "
+     "and selected other tribunals; of the Scottish courts it holds only appeals decided by the "
+     "UK Supreme Court. The Scottish Courts and Tribunals Service's published judgments "
+     "(`scottish_results`) cover the Court of Session (Inner and Outer House), the High Court "
+     "of Justiciary, the Sheriff Appeal Court and the National Personal Injury Court from 1998, "
+     "the Upper Tribunal for Scotland, and the Sheriff Court decisions SCTS chooses to publish, "
+     "which are few and almost never criminal. Neither database holds the courts of Northern "
+     "Ireland. For a question of Scots law, cite the Scottish decisions that bear on it, state "
+     "which court decided each case you cite, and do not present a decision of a court outside "
+     "Scotland as stating Scots law."),
+    # The case-law Worker's citation protocol: a Scottish judgment may have no citation.
+    ("- Do NOT invent or guess neutral citation numbers or URLs.",
+     "- Do NOT invent or guess neutral citation numbers or URLs.\n- A judgment in "
+     "`scottish_results` may have no `ncn`: cite it by its title, court and decision date, "
+     "linked to its `url`."),
+    # The case-law Worker's PHASE 4 example of a coverage limitation.
+    ("(e.g. Scottish-only matters)",
+     "(e.g. a Sheriff Court decision SCTS has not published, or a court in Northern Ireland)"),
+    # The hybrid Worker's DATABASE COVERAGE line.
+    ("- DATABASE COVERAGE: The database covers courts of England and Wales and UK-wide courts "
+     "and tribunals (UKSC and UKPC among them). It holds NO decisions of the Court of Session, "
+     "the Sheriff Appeal Court, the Sheriff Courts or the High Court of Justiciary; Scottish "
+     "appeals decided by the UK Supreme Court ARE included. Results for a Scottish question may "
+     "be judgments of courts outside Scotland: state which court decided each case you cite.",
+     "- DATABASE COVERAGE: `search_case_law` returns judgments from two databases, listed "
+     "separately: Find Case Law (`results`: courts of England and Wales and UK-wide courts and "
+     "tribunals, UKSC and UKPC among them, with Scottish appeals decided by the UK Supreme "
+     "Court) and the Scottish Courts and Tribunals Service's published judgments "
+     "(`scottish_results`: the Court of Session, the High Court of Justiciary and the Sheriff "
+     "Appeal Court from 1998, and the Sheriff Court decisions SCTS publishes). Neither holds the "
+     "courts of Northern Ireland. For a question of Scots law, cite the Scottish decisions that "
+     "bear on it and do not present a decision of a court outside Scotland as stating Scots "
+     "law. State which court decided each case you cite."),
+    # The hybrid Worker's case-law citation form.
+    ("- Case law: [Case Name NCN](caselaw.nationalarchives.gov.uk URL)",
+     "- Case law: [Case Name NCN](the url the search returned: a caselaw.nationalarchives.gov.uk "
+     "URL, or a scotcourts.gov.uk PDF URL for a judgment in `scottish_results`, which may have "
+     "no NCN: then cite its title, court and decision date)"),
+    # The quick-lookup Worker's case-law line.
+    ("- Case law: call `search_case_law` once with focused keywords.",
+     "- Case law: call `search_case_law` once with focused keywords; it lists Scottish courts' "
+     "judgments (`scottish_results`) and Find Case Law judgments (`results`) separately. For a "
+     "question of Scots law, cite the Scottish judgments that bear on it."),
+    # The Scotland filter's note (Worker and Manager).
+    ("Note that the case law database holds no decisions of the Court of Session, the Sheriff "
+     "Appeal Court, the Sheriff Courts or the High Court of Justiciary; Scottish appeals decided "
+     "by the UK Supreme Court are included.",
+     "Case-law searches return the Scottish courts' published judgments (the Court of Session, "
+     "the High Court of Justiciary, the Sheriff Appeal Court and the Sheriff Court decisions "
+     "SCTS publishes) alongside Find Case Law, which holds Scottish appeals decided by the UK "
+     "Supreme Court."),
+    # The Deep Research synthesis: what the research searched.
+    ("court judgments, in the National Archives' Find Case Law service",
+     "court judgments, in the National Archives' Find Case Law service and " + _SCTS),
+)
+
+
+def apply_scts_wording(text: str, research_mode: str = None) -> str:
+    """`text` with every P3.20 site swapped to its SCTS wording when the
+    setting is on for this research type; `text` itself when it is off.
+    Never raises (an unexpected failure leaves the text as it was)."""
+    try:
+        from .agent.tools.scts import scts_enabled
+        if not text or not scts_enabled(research_mode):
+            return text
+        for old, new in SCTS_PROMPT_WORDING:
+            text = text.replace(old, new)
+        return text
+    except Exception:
+        return text
+
+
 def get_worker_system_prompt(research_mode: str = "legislation_only", cfg: dict = None) -> str:
     from datetime import date
     date_line = f"Today's date is {date.today().strftime('%d %B %Y')}."
@@ -736,13 +1016,15 @@ def get_worker_system_prompt(research_mode: str = "legislation_only", cfg: dict 
         and cfg.get("_chat_mode") == "conversational"
         and research_mode not in ("parliamentary_records", "westminster_records")
     ):
-        return date_line + "\n\n" + WORKER_SYSTEM_PROMPT_CONVERSATIONAL
+        return date_line + "\n\n" + apply_scts_wording(WORKER_SYSTEM_PROMPT_CONVERSATIONAL,
+                                                         research_mode)
     base = {
         "case_law_only": WORKER_SYSTEM_PROMPT_CASE_LAW,
         "legislation_and_case_law": WORKER_SYSTEM_PROMPT_HYBRID,
         "parliamentary_records": PARLIAMENT_WORKER_SYSTEM_PROMPT,
         "westminster_records": WESTMINSTER_WORKER_SYSTEM_PROMPT,
     }.get(research_mode, WORKER_SYSTEM_PROMPT)
+    base = apply_scts_wording(base, research_mode)
     if cfg:
         block = _filter_constraint_block_for_mode(research_mode, cfg)
         if block:
@@ -857,7 +1139,7 @@ def get_manager_system_prompt(research_mode: str = "legislation_only", cfg: dict
         return date_line + "\n\n" + base + consulted_suffix
 
     mode_note = get_manager_mode_note(research_mode, cfg)
-    mgr = _manager_base(_MANAGER_BODY, _MANAGER_CHIPS, chips_enabled)
+    mgr = _manager_base(_RESEARCH_MANAGER_BODY, _MANAGER_CHIPS, chips_enabled)
     base = (mode_note + "\n\n" + mgr) if mode_note else mgr
     return date_line + "\n\n" + base + consulted_suffix
 
@@ -1218,6 +1500,10 @@ def get_planner_system_prompt(research_mode: str = "legislation_only", cfg: dict
         "{options_rule}",
         _PLANNER_OPTIONS_RULE if chips_enabled else _PLANNER_OPTIONS_RULE_NO_CHIPS,
     )
+    # P3.4's research-mode follow-up: the legislation research types only.
+    if research_mode not in _PARLIAMENT_RESEARCH_MODES:
+        planner_prompt = _insert_before(
+            planner_prompt, "RESPECT ACTIVE FILTERS:\n", PLANNER_JURISDICTION_SECTION)
 
     mode_note = _PLANNER_MODE_NOTES.get(research_mode, _PLANNER_MODE_NOTES["legislation_only"])
     parts = [date_line, planner_prompt, mode_note]
@@ -1434,6 +1720,7 @@ def get_deep_research_synthesis_prompt(research_mode: str = "legislation_only") 
     if research_mode not in REPORT_SECTIONS or research_mode not in _SYNTHESIS_SOURCES:
         research_mode = "legislation_only"
     searched, not_searched, gap = _SYNTHESIS_SOURCES[research_mode]
+    searched = apply_scts_wording(searched, research_mode)
     sources = f"WHAT THIS RESEARCH SEARCHED: {searched}."
     if not_searched:
         sources += (

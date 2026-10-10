@@ -226,3 +226,80 @@ def test_id_prefix_map_only_names_devolved_jurisdictions():
     }
     for uk_level in ("ukpga", "uksi", "ukla", "eur", "ukdsi"):
         assert uk_level not in _ID_PREFIX_JURISDICTION
+
+
+# --- P3.26: an unrecognised token is unknown, not a territory no filter accepts
+
+
+@pytest.mark.parametrize("jurisdiction", [
+    "england_and_wales", "scotland", "northern_ireland", "wales",
+])
+def test_an_unrecognised_extent_is_admitted_as_unknown(jurisdiction):
+    """Before P3.26 an extent no alias knew was upper-cased into a token no
+    filter accepted, so the row was dropped under EVERY filter, against rule 2
+    (an unknown extent is admitted). Latent on LEX's vocabulary (0 of 39,133
+    stored rows) but not on legislation.gov.uk's codes."""
+    assert _matches_jurisdiction(["Atlantis"], jurisdiction, "ukpga/1901/1") is True
+
+
+def test_an_unrecognised_extent_still_meets_the_id_prefix_and_uk_wide_rules():
+    """Unknown means rule 2 and rule 3 apply, not "admit everything"."""
+    assert _matches_jurisdiction(["Atlantis"], "scotland", "nisr/1901/1") is False
+    assert _matches_jurisdiction(["Atlantis"], "uk_wide", "ukpga/1901/1") is False
+
+
+def test_a_recognised_token_still_decides_beside_an_unrecognised_one():
+    """A stated territory that matches is enough; one that does not match
+    leaves the row unknown only because the other token might name the
+    territory filtered for."""
+    assert _matches_jurisdiction(["Scotland", "Atlantis"], "scotland") is True
+    assert _matches_jurisdiction(["England", "Atlantis"], "scotland", "ukpga/1901/1") is True
+    assert _matches_jurisdiction(["England", "Atlantis"], "scotland", "nisr/1901/1") is False
+
+
+def test_a_fully_recognised_extent_that_does_not_match_is_still_excluded():
+    """The P1.1 exclusion stands wherever every token is understood."""
+    assert _matches_jurisdiction(["England", "Wales"], "scotland", "ukpga/1901/1") is False
+    assert _matches_jurisdiction(["N.I."], "scotland", "ukpga/1901/1") is False
+    assert _matches_jurisdiction(["E+W"], "northern_ireland", "ukpga/1901/1") is False
+
+
+@pytest.mark.parametrize("extent", [["N.I."], ["E+W+S+N.I."], ["n.i."], ["N.I"]])
+def test_ni_is_northern_ireland(extent):
+    """legislation.gov.uk's code. Before P3.26 a Northern Ireland filter
+    dropped "E+W+S+N.I." and "N.I." (batch 12 G's dry run)."""
+    assert _matches_jurisdiction(extent, "northern_ireland") is True
+    assert _extent_tokens(extent) <= {"E", "W", "S", "NI"}
+    assert "NI" in _extent_tokens(extent)
+
+
+def test_the_four_nations_named_one_by_one_are_uk_wide():
+    """"E+W+S+N.I." is the United Kingdom, so a UK-wide filter keeps it; three
+    of the four are not."""
+    assert _matches_jurisdiction(["E+W+S+N.I."], "uk_wide") is True
+    assert _matches_jurisdiction(["E+W+S+NI"], "uk_wide") is True
+    assert _matches_jurisdiction(["England", "Wales", "Scotland", "Northern Ireland"],
+                                 "uk_wide") is True
+    assert _matches_jurisdiction(["E+W+S"], "uk_wide") is False
+    assert _matches_jurisdiction(["E+W+N.I."], "uk_wide") is False
+
+
+def test_p326_moves_no_verdict_on_the_live_vocabulary():
+    """P1.1's scoring stands: every live extent value, under every filter and
+    for each id prefix, gets the verdict it got before P3.26."""
+    before = {
+        ("",): (True, True, True, True, False),
+        ("United Kingdom",): (True, True, True, True, True),
+        ("Scotland",): (False, True, False, False, False),
+        (): (True, True, True, True, False),
+        ("England", "Wales"): (True, False, False, True, False),
+        ("Northern Ireland",): (False, False, True, False, False),
+        ("England", "Wales", "Scotland"): (True, True, False, True, False),
+        ("England",): (True, False, False, False, False),
+        ("England", "Wales", "Northern Ireland"): (True, False, True, True, False),
+        ("Wales",): (True, False, False, True, False),
+    }
+    assert set(before) == set(LIVE_EXTENT_VOCABULARY)
+    for extent, verdicts in before.items():
+        got = tuple(_matches_jurisdiction(list(extent), j, "ukpga/1901/1") for j in ALL_FILTERS)
+        assert got == verdicts, extent

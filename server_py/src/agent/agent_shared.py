@@ -6,14 +6,47 @@ execute the tool, optionally summarise large results, append a Phase 2 nudge for
 search_legislation calls.  This module owns that logic once so future changes only
 need to happen here.
 """
+import asyncio
 import json
 import logging
 import uuid
-from typing import Callable, Optional
+from typing import Awaitable, Callable, Optional
 
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import harvest_legislation_urls, provision_url_block
 from ..utils.section_outline import subsection_outline
+from ..utils.schedule_units import (
+    BARE_ABSENT,
+    BARE_ONE,
+    bare_schedule_action,
+    row_unit,
+    sole_schedule_reason,
+    FROM_LIST,
+    FROM_TEXT,
+    MATCHED,
+    MATCHED_CUTS_MIN_CHARS,
+    SUMMARY,
+    cut_pieces,
+    matched_numbers,
+    matched_pieces,
+    cut_unit_from_text,
+    fetch_failed_line,
+    fetched_block,
+    instrument_without_text_line,
+    named_units,
+    pick_provision,
+    provision_list_facts,
+    schedules_note,
+    unit_absent_line,
+    unit_in_results,
+    unit_without_text_line,
+)
+from ..utils.instrument_lookup import lookup_args
+from ..utils.instrument_lookup import legislation_id as lookup_legislation_id
+from .tools.executor import fetch_provision_list, fetch_text_with_schedules
+from ..utils.instrument_lookup import LOOKUP_TOOL
+from ..utils.made_under import MADE_UNDER_TOOL, made_under_note
+from ..utils.search_scope import record_made_under
 from ..utils.discovery_budget import (
     legislation_budget_blocks,
     legislation_stop_message,
@@ -21,10 +54,18 @@ from ..utils.discovery_budget import (
     section_stop_message,
 )
 from ..utils.search_scope import (
+    CASE_LAW_BOTH_ZERO_STOP,
+    FCL_ZERO_NOTE_WITH_SCTS,
+    SCTS_ZERO_NOTE,
+    scottish_search_note,
+)
+from ..utils.search_scope import (
     amendment_search_note,
+    case_law_search_note,
     currency_note,
     enabling_power_note,
     legislation_search_note,
+    lookup_enabling_note,
     not_held_note,
     record_budget_stop,
     record_section_budget_stop,
@@ -47,6 +88,7 @@ from .tools import (
     detect_appellate_decisions,
     _PARLIAMENT_TOOL_NAMES,
 )
+from .tools.caselaw import named_case_note
 
 logger = logging.getLogger("agent")
 
@@ -217,6 +259,25 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
             accumulator.append({
                 "kind": "Case",
                 "title": case.get("title") or case.get("name") or "",
+                "sub": ncn,
+                "meta": ", ".join(meta_parts),
+                "cite": ncn,
+                "url": url,
+            })
+        # P3.20: the Scottish list (present only with `scts_caselaw_enabled`).
+        # Its date is the date of decision SCTS records, never a citation's year.
+        scottish = data.get("scottish_results")
+        for case in scottish if isinstance(scottish, list) else []:
+            if not isinstance(case, dict):
+                continue
+            url = case.get("url") or ""
+            if url and any(s.get("url") == url for s in accumulator):
+                continue
+            ncn = case.get("ncn") or ""
+            meta_parts = [p for p in [case.get("court") or "", case.get("decision_date") or ""] if p]
+            accumulator.append({
+                "kind": "Case",
+                "title": case.get("title") or "",
                 "sub": ncn,
                 "meta": ", ".join(meta_parts),
                 "cite": ncn,
@@ -476,6 +537,438 @@ def _worker_tool_key_arg(args: dict) -> Optional[str]:
     return key_arg
 
 
+# P3.12: at most this many instruments' provision lists fetched by code in one
+# worker run. Each is one call (memoised for the run); a unit named on a
+# further instrument is left to the Worker. Batch 9 A (user decision,
+# 2026-10-06): its own constant, 8, no longer P3.7's MAX_ROUTED_LOOKUPS (5,
+# which P3.7's lookups keep). The bound now holds within a round (see
+# `_fetch_once`); at 5 it would have cut a Deep Research step that read six
+# lists in one round in Session 40's sweep. No stored worker run reaches 8:
+# the most instruments the route fires on in one run is 6.
+MAX_PROVISION_FETCHES = 8
+
+
+def provision_fetch_key(args) -> str:
+    """The key `provision_fetches` holds an instrument under: the canonical
+    id where the argument parses, else the argument as given. One definition,
+    so the route that fills the dict and the cap that reads it agree."""
+    ref = lookup_args({"legislation_id": args.get("legislation_id")})
+    return lookup_legislation_id(ref) if ref else str(args.get("legislation_id") or "").strip()
+
+
+async def _fetch_once(holder: dict, key, fetch: Callable[[], Awaitable],
+                      bound: Optional[int] = None):
+    """`holder[key]`, fetched by `fetch()` once however many calls of one
+    round ask for it at the same time; None when `bound` refuses a new key.
+
+    Batch 9 A (P3.12): `chat_loop` runs a round's tool calls as concurrent
+    tasks, and the route used to check its per-run bound and memo before the
+    fetch's await and write the result after it, so every call of a batched
+    round passed the check (one Deep Research step in the Session 40 sweep
+    read 6 provision lists against a bound of 5, and one instrument could be
+    fetched twice). Here the slot is reserved, and counted against `bound`,
+    before the await: while the fetch is in flight `holder[key]` is a
+    Future, and every other call for that key waits on it (shielded, so a
+    waiter cancelled mid-fetch takes nothing from the others). A Future is
+    not a dict, so `provision_list_facts` never reads an in-flight slot as a
+    complete list. A value `fetch()` returns, a failed outcome included, is
+    recorded in the slot. A fetch that raises (a cancelled round) releases
+    the slot, establishing nothing, and the calls waiting on it get None.
+    With calls made one at a time nothing differs from before: no call ever
+    finds a slot in flight."""
+    if key in holder:
+        value = holder[key]
+        if isinstance(value, asyncio.Future):
+            value = await asyncio.shield(value)
+        return value
+    if bound is not None and len(holder) >= bound:
+        return None
+    slot = asyncio.get_running_loop().create_future()
+    holder[key] = slot
+    try:
+        value = await fetch()
+    except BaseException:
+        del holder[key]
+        slot.set_result(None)
+        raise
+    holder[key] = value
+    slot.set_result(value)
+    return value
+
+
+def held_provision_list(fetches: Optional[dict], args) -> Optional[dict]:
+    """Batch 8 A2: what code's COMPLETE read of this instrument's provision
+    list, earlier in the same worker run, established
+    (`schedule_units.provision_list_facts`), or None: no dict, no read yet
+    (or one still in flight), a list cut short, failed or without text.
+    Never raises."""
+    try:
+        if not fetches or not isinstance(args, dict):
+            return None
+        return provision_list_facts(fetches.get(provision_fetch_key(args)))
+    except Exception:
+        return None
+
+
+async def schedule_route_block(
+    name: str,
+    args: dict,
+    raw_result,
+    query: str,
+    fetches: Optional[dict],
+    chunk_fn: Callable = None,
+    summarise_model: str = "",
+    parent_on_chunk: Optional[Callable] = None,
+    timing_collector=None,
+    cancel_event=None,
+    pending_chars: int = 0,
+    context_budget: Optional[dict] = None,
+    retrieved_urls: Optional[set] = None,
+) -> str:
+    """P3.12: the block for a schedule or annex unit a section search's query
+    names and its results left out ("" when there is none).
+
+    Fetches the instrument's provision list once per worker run (`fetches`,
+    lid -> outcome, or a Future while that fetch is in flight: `_fetch_once`;
+    None disables the route), picks the unit by `uri` and hands
+    it over: cut where it cuts cleanly (`schedule_units.cut_pieces`), else
+    whole, summarised for the query when it is larger than a result the Worker
+    would be handed verbatim (the same threshold, and the same context budget,
+    as any tool result). Batch 10 A: a whole schedule over that threshold
+    whose query names no paragraph goes first as its paragraph headings and
+    the paragraphs whose headings share a distinctive word with the section
+    search's query (`schedule_units.matched_pieces`), where they fit; only
+    otherwise is it summarised. A unit the complete list does not hold is said in
+    code: a true negative, attributed to the index. On a failed list, the
+    instrument's whole text with its schedules (P3.27's flag) is cut at the
+    unit's heading; failing that, a line says the question is open.
+    Exceptions propagate: the caller fails soft.
+    """
+    if name != "search_legislation_sections" or fetches is None or not isinstance(args, dict):
+        return ""
+    units = [u for u in named_units(args.get("query"))
+             if unit_in_results(raw_result, u) is False]
+    if not units:
+        return ""
+    lid = provision_fetch_key(args)
+    if not lid:
+        return ""
+    # Batch 9 A: the slot is reserved (and counted against the bound) before
+    # the await, so the bound and the one-fetch-per-instrument memo hold
+    # across a round whose section searches run concurrently.
+    outcome = await _fetch_once(
+        fetches, lid,
+        lambda: fetch_provision_list(lid, on_chunk=parent_on_chunk,
+                                     timing_collector=timing_collector),
+        bound=MAX_PROVISION_FETCHES)
+    if outcome is None:
+        return ""
+
+    from .provider_factory import get_summarise_threshold
+    threshold = get_summarise_threshold()
+    out = []
+    for unit in units:
+        source, url, text = FROM_LIST, "", None
+        sole_reason = ""
+        if not unit.label:
+            # Decision 1 (user, 2026-10-06): "the Schedule" with no label. Act
+            # only on a provision list that holds no schedule or annex (the
+            # true negative) or exactly one schedule (handed over whole, cut
+            # nothing); with two or more the query does not say which, so
+            # nothing is appended. No fallback on a failed list.
+            if outcome.get("status") != "ok":
+                continue
+            action, row = bare_schedule_action(outcome.get("rows"),
+                                               bool(outcome.get("complete")))
+            if action == BARE_ABSENT:
+                out.append(unit_absent_line(lid, unit, outcome.get("rows") or [], True))
+                continue
+            if action != BARE_ONE:
+                continue
+            unit = row_unit(row)
+            url = str(row.get("uri") or row.get("id") or "")
+            text = str(row.get("text") or "")
+            if not text.strip():
+                out.append(unit_without_text_line(lid, unit))
+                continue
+            sole_reason = sole_schedule_reason(lid)
+        elif outcome.get("status") == "ok":
+            row = pick_provision(outcome.get("rows"), unit)
+            if row is None:
+                out.append(unit_absent_line(lid, unit, outcome.get("rows") or [],
+                                            bool(outcome.get("complete"))))
+                continue
+            url = str(row.get("uri") or row.get("id") or "")
+            text = str(row.get("text") or "")
+            if not text.strip():
+                out.append(unit_without_text_line(lid, unit))
+                continue
+        elif outcome.get("status") == "no_text":
+            out.append(instrument_without_text_line(lid, unit))
+            continue
+        else:
+            # The fallback's whole text is fetched once per instrument too,
+            # by the same reservation, however many calls of a round need it.
+            whole = await _fetch_once(
+                outcome, "text",
+                lambda: fetch_text_with_schedules(lid, on_chunk=parent_on_chunk,
+                                                  timing_collector=timing_collector))
+            text = cut_unit_from_text(whole or "", unit)
+            if not text:
+                out.append(fetch_failed_line(lid, unit))
+                continue
+            source = FROM_TEXT
+        # Batch 13 B: past the threshold, the named paragraphs that cut are
+        # handed over even where another named one does not cut.
+        pieces, how, reason = cut_pieces(unit, text, whole_limit=threshold)
+        reason = " ".join(r for r in (sole_reason, reason) if r)
+        total = sum(len(t) for _, t in pieces)
+        over_budget = (context_budget is not None and
+                       context_budget["used"] + pending_chars + total > context_budget["limit"])
+        # Batch 10 A: a whole schedule over the verbatim threshold, whose query
+        # names no paragraph, is handed over as its heading list and the
+        # paragraphs whose headings match the section search's query, where
+        # they fit the bound and the context budget; otherwise summarised.
+        # (`matched_pieces` itself refuses a cut, an annex or a named paragraph.)
+        matched = None
+        if total > threshold:
+            matched = matched_pieces(unit, text, args.get("query"),
+                                     max(threshold, MATCHED_CUTS_MIN_CHARS))
+            if matched is not None and context_budget is not None:
+                size = sum(len(lbl) + len(t) for lbl, t in matched)
+                if context_budget["used"] + pending_chars + size > context_budget["limit"]:
+                    matched = None
+        summary_of = how
+        numbers = ()
+        if matched is not None:
+            pieces, how = matched, MATCHED
+            numbers = matched_numbers(unit, text, args.get("query"))
+        elif total > threshold or over_budget:
+            joined = "\n\n".join((lbl + "\n" if lbl else "") + t for lbl, t in pieces)
+            summary, _degraded = await summarise_for_query(
+                joined, query, summarise_model, chunk_fn=chunk_fn,
+                timing_collector=timing_collector,
+                doc_name=f"{unit.display()} of {lid}", cancel_event=cancel_event)
+            if len(summary) > threshold:
+                summary = summary[:threshold]
+            if timing_collector:
+                from .summarisation import SUMMARISE_CHUNK_CHARS
+                timing_collector.record_summarisation(
+                    total, len(summary), max(1, -(-total // SUMMARISE_CHUNK_CHARS)))
+            pieces, how = [("", summary)], SUMMARY
+        if url and retrieved_urls is not None:
+            harvest_legislation_urls(json.dumps({"url": url}), into=retrieved_urls)
+        block = fetched_block(lid, unit, url, pieces, how, reason=reason,
+                              total_chars=total, source=source, summary_of=summary_of,
+                              matched=numbers)
+        pending_chars += len(block)
+        out.append(block)
+    return "".join(out)
+
+
+
+async def published_text_route(
+    name: str,
+    args: dict,
+    raw_result,
+    query: str,
+    search_log: Optional[list],
+    chunk_fn: Callable = None,
+    summarise_model: str = "",
+    parent_on_chunk: Optional[Callable] = None,
+    timing_collector=None,
+    cancel_event=None,
+    pending_chars: int = 0,
+    context_budget: Optional[dict] = None,
+    retrieved_urls: Optional[set] = None,
+) -> tuple:
+    """P3.38: the text of an instrument the index lacks, from legislation.gov.uk.
+
+    Returns ``(text_for_the_worker, outcome)``: ``("", None)`` when this tool
+    result is not one P3.38 reads for (`utils.published_text.trigger`: a
+    lookup that says not held or held without text, a text read that is empty
+    or that LEX answered "Legislation not found"). Otherwise the instrument is
+    read through LEX's proxy (`agent/tools/published_text.py`: live, memoised
+    per request, bounded) and handed over in a code-written block: verbatim
+    when it fits the same threshold and context budget as any tool result,
+    else summarised for the query (never through the shared local cache); a
+    read that returns no text is one line saying why. A second trigger for an
+    instrument this worker run was already handed gets a line pointing back to
+    it. The outcome is recorded in `search_log` for the Manager's block and
+    the lawyer's footer. Exceptions propagate: the caller fails soft.
+    """
+    from ..utils import published_text as pt
+    from .tools.published_text import read_published_text
+
+    hit = pt.trigger(name, args, raw_result)
+    if not hit:
+        return "", None
+    lid, kind = hit
+    if pt.handed_in_run(search_log, lid):
+        outcome = {"status": pt.EARLIER}
+        pt.record_published(search_log, lid, kind, outcome)
+        return pt.published_line(lid, kind, outcome), outcome
+    outcome = await read_published_text(lid, on_chunk=parent_on_chunk,
+                                        timing_collector=timing_collector, tool_name=name)
+    if outcome.get("status") != pt.OK:
+        pt.record_published(search_log, lid, kind, outcome)
+        return pt.published_line(lid, kind, outcome), outcome
+    text = str(outcome.get("text") or "")
+    if retrieved_urls is not None:
+        urls = [outcome.get("url") or ""] + list(outcome.get("provision_urls") or [])
+        # A Worker may cite either form: the version's own page, or the
+        # provision without the version suffix.
+        urls += [u.rsplit("/", 1)[0] for u in urls
+                 if u.endswith("/made") or u.endswith("/enacted")]
+        # A dict of strings: the harvest reads string VALUES of a dict, not
+        # the members of a list.
+        harvest_legislation_urls(json.dumps({str(i): u for i, u in enumerate(urls) if u}),
+                                 into=retrieved_urls)
+    from .provider_factory import get_summarise_threshold
+    threshold = get_summarise_threshold()
+    over_budget = (context_budget is not None
+                   and context_budget["used"] + pending_chars + len(text) > context_budget["limit"])
+    how, body = "whole", text
+    if len(text) > threshold or over_budget:
+        summary, _degraded = await summarise_for_query(
+            text, query, summarise_model, chunk_fn=chunk_fn,
+            timing_collector=timing_collector,
+            doc_name=f"{pt.label_for(lid)} (legislation.gov.uk)", cancel_event=cancel_event)
+        if len(summary) > threshold:
+            summary = summary[:threshold]
+        if timing_collector:
+            from .summarisation import SUMMARISE_CHUNK_CHARS
+            timing_collector.record_summarisation(
+                len(text), len(summary), max(1, -(-len(text) // SUMMARISE_CHUNK_CHARS)))
+        how, body = "summary", summary
+    pt.record_published(search_log, lid, kind, outcome)
+    outcome = {**outcome, "legislation_id": lid}
+    return pt.published_block(lid, kind, outcome, how, body, total_chars=len(text)), outcome
+
+
+def _published_recital(lid: str, outcome: Optional[dict]) -> str:
+    """P3.38 with P2.3: the preamble of an instrument whose text code read
+    from legislation.gov.uk, when it carries an enabling-power recital
+    (P3.31's `recital_window` decides), else ""."""
+    try:
+        from ..utils import published_text as pt
+        from ..utils.made_under import recital_window
+        from ..utils.search_scope import _is_secondary
+
+        if not outcome or outcome.get("status") != pt.OK or not _is_secondary(lid):
+            return ""
+        preamble = str(outcome.get("preamble") or "")
+        return preamble if preamble and recital_window(preamble) else ""
+    except Exception:
+        return ""
+
+
+def _enabling_subject(name: str, args: dict, raw_result) -> str:
+    """The one instrument a text read, section search or lookup was about."""
+    if name == LOOKUP_TOOL:
+        try:
+            return str((json.loads(raw_result) or {}).get("legislation_id") or "")
+        except Exception:
+            return ""
+    return str((args or {}).get("legislation_id") or "")
+
+
+async def stored_enabling_note(lid: str, search_log: Optional[list]) -> str:
+    """P2.3's permitting ENABLING POWER block from the made-under record (P3.31),
+    or "". Once per instrument per run; never raises."""
+    try:
+        from ..utils.search_scope import _enabling_stated_block, _is_secondary
+        lid = str(lid or "").strip().strip("/")
+        if not lid or not _is_secondary(lid):
+            return ""
+        if any(e.get("tool") == "enabling_power" and e.get("legislation_id") == lid[:60]
+               and e.get("stated") for e in (search_log or [])):
+            return ""
+        from ..services.made_under_store import recital_for
+        recital = await recital_for(lid)
+        if not recital:
+            return ""
+        if search_log is not None:
+            search_log.append({"tool": "enabling_power", "legislation_id": lid[:60],
+                               "stated": True, "source": "made_under_record"})
+        return _enabling_stated_block(
+            lid, "... " + recital,
+            source=f"the made-under record (the as-made preamble of {lid}, harvested from "
+                   "legislation.gov.uk)")
+    except Exception:
+        return ""
+
+
+def _has_scottish_list(result) -> bool:
+    """P3.20: a `search_case_law` result that carries SCTS's list."""
+    try:
+        d = json.loads(result) if isinstance(result, str) else result
+        return isinstance(d, dict) and isinstance(d.get("scottish"), dict)
+    except Exception:
+        return False
+
+
+def _case_law_note_with_scottish(args: dict, result) -> str:
+    """P3.20: the notes on a `search_case_law` result with both lists.
+
+    The Find Case Law half is what it always was (its window note, or its
+    zero note without the stop rule), then the Scottish list's window note or
+    zero note, then ONE stop rule if both lists are empty, or ONE imperative
+    naming up to three judgments from each list, last, as P2.2's order puts it.
+    Never raises.
+    """
+    try:
+        data = json.loads(result) if isinstance(result, str) else result
+        fcl = data.get("results") if isinstance(data.get("results"), list) else []
+        scot = (data.get("scottish_results")
+                if isinstance(data.get("scottish_results"), list) else [])
+        block = data.get("scottish") or {}
+        note = ""
+        if fcl:
+            note += case_law_search_note(args, data)
+        elif not data.get("error"):
+            note += FCL_ZERO_NOTE_WITH_SCTS
+        if block.get("status") == "ok" and not scot:
+            note += SCTS_ZERO_NOTE
+        else:
+            note += scottish_search_note(args, data)
+        if not fcl and not scot:
+            if not data.get("error") and block.get("status") == "ok":
+                note += CASE_LAW_BOTH_ZERO_STOP
+            return note
+        lines = [f'  - url: "{r["url"]}"  ({r.get("title", "")} {r.get("ncn", "")})'
+                 for r in fcl[:3] if isinstance(r, dict) and r.get("url")]
+        for r in scot[:3]:
+            if not isinstance(r, dict) or not r.get("url"):
+                continue
+            label = ", ".join(p for p in (
+                r.get("title") or "", r.get("ncn") or "", r.get("court") or "",
+                f"decided {r['decision_date']}" if r.get("decision_date") else "") if p)
+            lines.append(f'  - url: "{r["url"]}"  ({label})')
+        url_lines = "\n".join(lines)
+        note += (
+            f"\n\n[MANDATORY NEXT STEP — DO NOT synthesise yet. "
+            f"Call get_case_law_text for the 1–3 most relevant cases below to retrieve the full judgment text "
+            f"before composing your answer. Pass the exact url field:\n{url_lines}]"
+        )
+        appeals = detect_appellate_decisions(fcl)
+        if appeals:
+            appeal_lines = "\n".join(
+                f'  - url: "{r["url"]}"  ({r.get("title", "")} {r.get("ncn", "")})'
+                for r in appeals[:3]
+            )
+            note += (
+                f"\n\n[NOTE — APPELLATE DECISION PRESENT: the results include an appeal "
+                f"of a case that also appears at a lower court level. You MUST retrieve and "
+                f"cite the appellate (higher-court) decision below via get_case_law_text — "
+                f"do not rely on the first-instance judgment alone:\n{appeal_lines}]"
+            )
+        return note
+    except Exception:
+        logger.warning("[Worker] Case-law note with the Scottish list failed", exc_info=True)
+        return ""
+
+
 async def run_worker_tool(
     name: str,
     args: dict,
@@ -493,6 +986,8 @@ async def run_worker_tool(
     audit_delegation: Optional[dict] = None,
     retrieved_urls: Optional[set] = None,
     search_log: Optional[list] = None,
+    result_suffix: str = "",
+    provision_fetches: Optional[dict] = None,
 ) -> str:
     """Execute a single Worker tool call and return the (possibly summarised) result.
 
@@ -534,6 +1029,20 @@ async def run_worker_tool(
             synthesis — never sees a tool result. Run-scoped, not request-scoped,
             unlike `retrieved_urls`: "what this step searched for" is a statement
             about one step. None disables the record.
+        result_suffix: Text the caller appends to this result, last, so the
+            memo, the context budget and the audit's `final_result` all see
+            exactly what the model receives (P3.25: the quick-lookup Worker's
+            recital block from a code lookup). Not applied to a memo hit or a
+            refused call, which return what they returned before. "" (the
+            default) changes nothing.
+        provision_fetches: Per-WORKER-RUN dict, legislation_id -> the outcome
+            of code's `/legislation/section/lookup` for it (P3.12). When a
+            section search's query names a schedule or annex unit its results
+            left out, `schedule_route_block` fetches the instrument's
+            provisions once, picks the unit by `uri` and appends it. A slot
+            holds a Future while its fetch is in flight, so the calls of one
+            round share it (`_fetch_once`). None (the default) disables the
+            route.
     """
     activity_id = uuid.uuid4().hex[:8]
 
@@ -565,8 +1074,12 @@ async def run_worker_tool(
             refusal = (legislation_stop_message(search_budget),
                        "Discovery budget spent", "Search limit reached")
         elif section_budget_blocks(search_budget, name, args):
-            record_section_budget_stop(search_log, name, args, search_budget)
-            refusal = (section_stop_message(search_budget, args),
+            # Batch 8 A2: where code has read this instrument's complete
+            # provision list in this run, the refusal, the scope record and
+            # the footer say what it holds (None: exactly as before).
+            held = held_provision_list(provision_fetches, args)
+            record_section_budget_stop(search_log, name, args, search_budget, held=held)
+            refusal = (section_stop_message(search_budget, args, held=held),
                        "Section budget spent for this instrument",
                        "Section-search limit reached")
     if refusal is not None:
@@ -654,6 +1167,9 @@ async def run_worker_tool(
             # P3.7: and a memoised lookup is still this step's lookup. A model
             # repeating the lookup code ran for it is served from here.
             record_lookup(search_log, name, args, hit["raw"])
+            # P3.38: and what the read from legislation.gov.uk recorded.
+            if search_log is not None and hit.get("published_entries"):
+                search_log.extend(dict(e) for e in hit["published_entries"])
             if parent_on_chunk:
                 await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
                 await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done (cached)"})
@@ -761,10 +1277,21 @@ async def run_worker_tool(
     # corpus disclosure on the answer, which fires on any turn that searched
     # case law, not only on the empty result this note handles.
     record_case_law_search(search_log, name, args, result)
-    if name == "search_case_law":
+    if name == "search_case_law" and _has_scottish_list(result):
+        # P3.20: the result carries SCTS's list beside Find Case Law's (the
+        # setting on). Its own composition, so a result without one goes
+        # through the branch below exactly as before.
+        case_law_note = _case_law_note_with_scottish(args, result)
+    elif name == "search_case_law":
         try:
             raw_data = json.loads(result)
-            n = raw_data.get("total", 0)
+            # P3.23: keyed on the SHOWN count, never on `total`. `total` is
+            # now the matching total read from the feed's `last` link (an
+            # estimate, and for a full page an upper bound), so it need not be
+            # 0 when nothing was shown; P1.3 kept `returned` apart from
+            # `total_matched` for legislation for the same reason.
+            _cl_results = raw_data.get("results")
+            n = len(_cl_results) if isinstance(_cl_results, list) else 0
             if n == 0 and not raw_data.get("error"):
                 # P2.4 (B12): "does not comprehensively index" was false; the
                 # gap is total (TNA rejects `court=csoh` with a 400). The UKSC
@@ -784,7 +1311,9 @@ async def run_worker_tool(
                     for r in results[:3]
                     if r.get("url")
                 )
-                case_law_note = (
+                # P3.23: the window first, so the imperative stays last (P2.2's
+                # order for the legislation scope block).
+                case_law_note = case_law_search_note(args, raw_data) + (
                     f"\n\n[MANDATORY NEXT STEP — DO NOT synthesise yet. "
                     f"Call get_case_law_text for the 1–3 most relevant cases below to retrieve the full judgment text "
                     f"before composing your answer. Pass the exact url field:\n{url_lines}]"
@@ -810,6 +1339,13 @@ async def run_worker_tool(
                     )
         except Exception:
             pass
+    # P3.46: a case the query names that the results do not include, said in
+    # code. Ahead of the notes above, so the imperative stays the last thing
+    # the Worker reads (P2.2's order); on both branches, so a result carrying
+    # the Scottish list (P3.20) gets it too. "" when the query names no case
+    # or every case it names was returned; never raises.
+    if name == "search_case_law":
+        case_law_note = named_case_note(args, result) + case_law_note
 
     # For search_scottish_parliament: the results are excerpt-only (TheyWorkForYou
     # exposes no full-text retrieval endpoint for Holyrood plenary content), so nudge
@@ -994,8 +1530,32 @@ async def run_worker_tool(
     # instrument gets summarised and the summariser drops the preamble, so by
     # the time the model reads the text the evidence has gone.
     enabling_note = ""
+    # P3.27: which schedules and annexes this whole text carries, or that the
+    # index holds none for the instrument. From the RAW result (the executor
+    # stamped where the schedule text starts), appended after summarisation:
+    # a summary of a 1.2M-character Act keeps neither the boundary nor the
+    # headings, and the Worker must know what the text it read contains.
+    schedules_line = ""
     if name == "get_legislation_text":
         enabling_note = enabling_power_note(args, raw_result)
+        schedules_line = schedules_note(args, raw_result)
+    elif name == LOOKUP_TOOL:
+        # P3.25: the lookup record carries the same `description`, where most
+        # recitals sit. Only the permitting block, and only where it has one.
+        enabling_note = lookup_enabling_note(raw_result)
+    elif name == MADE_UNDER_TOOL:
+        # P3.31: the reverse question, answered from the made-under record.
+        enabling_note = made_under_note(raw_result)
+        record_made_under(search_log, raw_result)
+    # P3.31, the forward question: where the record read here carries no
+    # recital (0 of 28 SSIs at `/legislation/text`, P2.3), the made-under
+    # record may hold the instrument's as-made preamble. Only the permitting
+    # block is ever built from it, once per instrument per run, and it
+    # replaces P2.3's forbidding block for that instrument only.
+    if name in ("get_legislation_text", "search_legislation_sections", LOOKUP_TOOL)             and "DOES state what" not in enabling_note:
+        stored = await stored_enabling_note(_enabling_subject(name, args, raw_result), search_log)
+        if stored:
+            enabling_note = stored
     record_enabling_power(search_log, name, args, raw_result)
 
     # P3.5 (B3): the other four relations of the bucket, which ARE retrievable.
@@ -1019,7 +1579,9 @@ async def run_worker_tool(
     # this point `raw_result` is still the executor's own output — summarisation
     # is below — so the two calls would see identical data and record the page
     # twice. One seam per tool.
-    if name in ("get_legislation_changes", "get_legislation_text"):
+    # P3.25: and `valid_date` off a lookup record, the route that replaces the
+    # whole text for the quick-lookup Worker.
+    if name in ("get_legislation_changes", "get_legislation_text", LOOKUP_TOOL):
         record_currency(search_log, name, args, raw_result)
 
     # P2.4 (6373): a retrieval by id that the index answered with not-found.
@@ -1032,6 +1594,47 @@ async def run_worker_tool(
     # P3.7: the lookup's definite outcome, for the worker's block and the
     # lawyer's footer. Self-gated on the tool name.
     record_lookup(search_log, name, args, raw_result)
+
+    # P3.38: where the index lacks an instrument or its text (a lookup that
+    # says not held or held without text, an empty text read, a text read LEX
+    # answered "not found"), code reads the text from legislation.gov.uk
+    # through LEX's proxy and hands it over after the not-held note. The two
+    # code texts beside it that would then be false are changed to match:
+    # P2.4's note no longer says the contents could not be checked, and P2.3's
+    # forbidding block gives way to the permitting one where the preamble read
+    # states the power. Fail-soft (Invariant 5): on any failure the result is
+    # exactly what it was.
+    published_note, _published = "", None
+    _log_start = len(search_log) if search_log is not None else 0
+    try:
+        published_note, _published = await published_text_route(
+            name, args, raw_result, query, search_log,
+            chunk_fn=chunk_fn, summarise_model=summarise_model,
+            parent_on_chunk=parent_on_chunk, timing_collector=timing_collector,
+            cancel_event=cancel_event, pending_chars=len(result),
+            context_budget=context_budget, retrieved_urls=retrieved_urls)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.warning("[Worker] legislation.gov.uk text read failed", exc_info=True)
+        published_note, _published = "", None
+    if not_held and _published and _published.get("status") in ("ok", "earlier"):
+        not_held = not_held_note(
+            args, raw_result,
+            text_read="below" if _published.get("status") == "ok" else "earlier")
+    if _published and _published.get("legislation_id"):
+        _plid = _published["legislation_id"]
+        _recital = ("" if "DOES state what" in enabling_note
+                    else _published_recital(_plid, _published))
+        if _recital:
+            from ..utils.search_scope import _enabling_stated_block
+            enabling_note = _enabling_stated_block(
+                _plid, _recital,
+                source=f"legislation.gov.uk's text of {_plid}, read by code")
+            if search_log is not None:
+                search_log.append({"tool": "enabling_power", "legislation_id": _plid[:60],
+                                   "stated": True, "source": "legislation_gov_uk"})
+    _published_entries = (list(search_log[_log_start:]) if search_log is not None else [])
 
     from .provider_factory import get_summarise_threshold
     # Two independent triggers: this result is large on its own, OR the run has
@@ -1046,7 +1649,10 @@ async def run_worker_tool(
     _audit_summarised = False
     _audit_local_hit = False
     _audit_truncated = False
-    if len(result) > get_summarise_threshold() or _over_budget:
+    # P3.31: the made-under list is bounded by construction (`MAX_LISTED`,
+    # compact rows), and a summary that dropped instruments from it would
+    # undo the tool, so it always reaches the Worker whole.
+    if (len(result) > get_summarise_threshold() or _over_budget) and name != MADE_UNDER_TOOL:
         if _over_budget and len(result) <= get_summarise_threshold():
             logger.info(
                 f"[Worker] Context budget reached "
@@ -1111,7 +1717,10 @@ async def run_worker_tool(
             # A hit is a saving, not a summarisation: no record_summarisation.
             if timing_collector:
                 timing_collector.record_local_cache_hit(_cached["chars_in"] or len(result))
-            result = _cached["summary"]
+            # P3.45: a stored summary is checked against this raw result as a
+            # fresh one is (a row stored before the check was not).
+            from .summarisation import check_summary_citations
+            result = check_summary_citations(_cached["summary"], result, query)
             _audit_summarised = True
             _audit_local_hit = True
         else:
@@ -1197,6 +1806,23 @@ async def run_worker_tool(
     if _audit_summarised:
         result += summarised_result_blocks(name, raw_result)
 
+    # P3.12: a schedule or annex unit the query named and the results left
+    # out, fetched by code from the instrument's provision list. After the
+    # result's own summarisation, so the unit is never folded into that
+    # summary; fail-soft (Invariant 5), so a failure here leaves the search
+    # result exactly as it was.
+    fetched_note = ""
+    try:
+        fetched_note = await schedule_route_block(
+            name, args, raw_result, query, provision_fetches,
+            chunk_fn=chunk_fn, summarise_model=summarise_model,
+            parent_on_chunk=parent_on_chunk, timing_collector=timing_collector,
+            cancel_event=cancel_event, pending_chars=len(result),
+            context_budget=context_budget, retrieved_urls=retrieved_urls)
+    except Exception:
+        logger.warning("[Worker] Schedule route after a section search failed", exc_info=True)
+        fetched_note = ""
+
     # Append phase nudges after summarisation so they are not discarded
     # by the summariser and remain visible in the message the model receives.
     # P2.2's scope block goes on before the Phase-2 nudge, so the imperative
@@ -1204,20 +1830,29 @@ async def run_worker_tool(
     # the model reads on a productive search.
     result += scope_note
     result += not_held
+    result += published_note
     result += enabling_note
+    result += schedules_line
     result += relations_note
+    result += fetched_note
     result += phase2_note
     result += sp_phase2_note
     result += sp_committee_phase2_note
     result += sp_plenary_phase2_note
     result += hansard_phase2_note
     result += case_law_note
+    result += result_suffix
 
     if parent_on_chunk:
         await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done"})
 
     if tool_memo is not None and memo_key is not None:
         tool_memo[memo_key] = {"raw": raw_result, "final": result}
+        # P3.38: what this result's legislation.gov.uk read recorded, so a
+        # step served from the memo records it too (the recorders above run
+        # on a hit; this read does not run again).
+        if _published_entries:
+            tool_memo[memo_key]["published_entries"] = _published_entries
 
     # Charged after the nudges are appended: what is counted is exactly what the
     # model receives, so the budget tracks the real context growth.

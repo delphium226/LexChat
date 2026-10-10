@@ -330,6 +330,12 @@ rate limits and outages (retry later); never forward the provider's raw response
 `ConnectionError` → 503 as it is. **Test:** simulate a provider 402 and 429 at the planner
 boundary; a connection failure must still read as a connectivity failure.
 
+**Reproduced by Thomas on 30 September 2026** (his retest of `v2026.09.3`, his severity 3):
+once the provider hit its rate limit, 12 of 12 Deep Research attempts got `502` from
+`/api/research/plan`, seconds after the chat stream had reported "HTTP 429". Still on the Fix
+Tracker as "TODO B6", P3 (recorded 2026-10-05; FIX_PLAN "External review — Thomas, 30 September
+2026").
+
 Outside the pre-pilot fix plan (not a pre-pilot defect), so it can go straight to `main`.
 
 ### B5. Add a 'Data coverage' tab to the parliament bot (feature; added 2026-07-24, unscoped)
@@ -1302,23 +1308,28 @@ limit live.
 Calendar versions (`vYYYY.MM.N`) were adopted on 2026-09-24 (user decision) and set up on
 `main` in `b2a3fd8`: `VERSION`, `server_py/src/version.py`, the version in `/api/bot-info`,
 the About box and the startup log, `CHANGELOG.md`, and a *Releases* section in CLAUDE.md
-(on `main` only until the next cut). `v2026.09.1` (`d8fd73b`) and `v2026.09.2` (`c77e779`)
+(~~on `main` only until the next cut~~ on the fix branch too since the third cut's
+fast-forward, 2026-09-29). `v2026.09.1` (`d8fd73b`) and `v2026.09.2` (`c77e779`)
 are tagged retroactively. Four things were left open deliberately:
 
-- **Push the two tags.** They exist only in the dev machine's repo until
-  `git push origin v2026.09.1 v2026.09.2` (the user confirms first: pushing publishes them).
-  Until then `git describe` on the target falls back to a bare hash, and `/api/bot-info`
-  shows `build` without a release name.
+- ~~**Push the two tags.**~~ **DONE 2026-09-29 (user confirmed):** `v2026.09.1` and
+  `v2026.09.2` pushed, together with the third cut's `v2026.09.3` (`a6b4a76`, the first
+  release tagged at cut time).
 - **Deploy by tag, not by the head of `main`** (proposed, not adopted). Unrelated work
   commits straight to `main`, so its head can sit past the last release. Deploying
   `git fetch --tags` then `git checkout vYYYY.MM.N` makes each deploy and rollback an
   explicit version. It changes CLAUDE.md's *Deployment Workflow*, so it is the user's call.
 - **Stamp the version on the audit event, `request_timings` and replay run files.** Deferred
   until after the next cut, because `main`'s audit schema is v5 and the fix branch's is v6:
-  bumping on `main` now would create two different v6s. When done: a top-level `app_version`
+  bumping on `main` now would create two different v6s. **Unblocked 2026-09-29:** the third
+  cut (`v2026.09.3`) put schema v6 on `main`, so both lines now agree. When done: a top-level `app_version`
   (and `build`) on the audit event (schema v7, `AUDIT_TRACE.md`, harness owner told), an
   additive `request_timings.app_version` column, and `runtime_state.app_version` in replay
   run files beside `git_head`.
+  **Also for schema v7 (added 2026-10-10, Session 45, user decision on P3.45):** an additive
+  per-tool `citations_removed` field on the audit trace, the count (and kinds) of case citations
+  `summarisation.check_summary_citations` removed from that tool's summary, so an eval harness
+  sees the check act; until then the removals are in the INFO log by count only.
 - **A lint error that predates this work:** `client/src/hooks/useBotIdentity.js:64`, a plain
   helper named `useSvgLogo` trips `react-hooks/rules-of-hooks`. Renaming it (for example
   `loadSvgLogo`) clears it; it does not affect the build.
@@ -1399,3 +1410,18 @@ every request, as Claude Code reads a CLAUDE.md. Not scoped or decided; noted so
     --date recorded`) and compare links and citations before shipping.
   - The drafting bot's data rules (its user input is unpublished text) and log redaction.
   - A UI for writing and viewing it, and the admin's view of it.
+
+### D23. The National Archives case-law licence (booked 2026-10-02, user decision, Session 37)
+
+The Open Justice Licence that covers the National Archives' Find Case Law feed excludes
+"computational analysis", which TNA defines to include "building services or products using
+AI or large language models (LLMs)". AILA searches the feed programmatically and processes
+judgment text with an LLM, so it reads as in scope. **The licence is free**
+(`caselawlicence@nationalarchives.gov.uk`); no application is on record. Full reading:
+`docs/LEGAL_DATA_SOURCES.md` §4.
+
+- **Action: apply for the free licence.** The user's or the deploying organisation's action,
+  not an engineering row (found by the 2026-10-02 data-source review; recorded by batch 5
+  agent C, decision C3).
+- **It does not block** the four open rows that build further on the feed (FIX_PLAN P3.9,
+  P3.22, P3.23, P4.19); each row notes it.

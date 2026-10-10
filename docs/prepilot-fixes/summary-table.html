@@ -23,6 +23,8 @@
     --partial-soft: #f8e9f3;
     --verified: oklch(0.34 0.09 255);
     --verified-soft: oklch(0.94 0.03 240);
+    --blocked: #7a5a00;
+    --blocked-soft: #fbf1d6;
     --tbv: #465277;
     --focus: oklch(0.50 0.10 240);
     /* Bar fills for the progress summary: the chip hues re-stepped into the mark band
@@ -32,11 +34,22 @@
        from the navy by lightness, because a violet of the same weight collapses into
        it under protanopia (ΔE 5.4). Re-validated with it in place: the worst adjacent
        pair is still green/brown (light 16.1, dark 9.2); its fill is 3.16:1 on --paper
-       light and 4.23:1 dark; its count label is 5.5:1 light and 4.8:1 dark. */
+       light and 4.23:1 dark; its count label is 5.5:1 light and 4.8:1 dark.
+       Blocked (added in v34, user decision 2026-10-05) sits after Verified. About 25
+       candidates were run through the validator, all pairs (a bar skips empty statuses,
+       so Blocked can meet any fill): only an amber passes every pair in both themes
+       (light worst pair involving it ΔE 18.3 normal; dark 15.9, against the brown).
+       A brick red collapses into the brown under protanopia (ΔE 3.2), teal and violet
+       into the green, mauve or navy. Two accepted costs, chosen by the user: light
+       fill 2.24:1 on --paper (labels, legend and table carry it, as for To be
+       verified), and the dark fill sits above the dark lightness band (L 0.81 against
+       0.67), so it reads brighter than the others; every in-band dark gold is within
+       ΔE 15 of the brown. Count label 7.7:1 light, 9.7:1 dark. */
     --bar-fixed: #46a16b;    --bar-fixed-ink: #111a2e;
     --bar-wip: #81520a;      --bar-wip-ink: #ffffff;
     --bar-partial: #c975b0;  --bar-partial-ink: #111a2e;
     --bar-verified: #085491; --bar-verified-ink: #ffffff;
+    --bar-blocked: #d4a72c;  --bar-blocked-ink: #111a2e;
     --bar-tbv: #c3cbdd;      --bar-tbv-ink: #111a2e;   /* neutral: sub-3:1 by design, label + table carry it */
     --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-serif: 'Source Serif 4', Georgia, serif;
@@ -63,12 +76,15 @@
       --partial-soft: #3a2238;
       --verified: oklch(0.82 0.08 250);
       --verified-soft: oklch(0.26 0.06 240);
+      --blocked: #e8c75a;
+      --blocked-soft: #2f2810;
       --tbv: #a8b0c8;
       --focus: oklch(0.70 0.12 240);
       --bar-fixed: #4ca871;    --bar-fixed-ink: #0f1830;
       --bar-wip: #c8800d;      --bar-wip-ink: #0f1830;
       --bar-partial: #c65a9a;  --bar-partial-ink: #0a1020;
       --bar-verified: #488acb; --bar-verified-ink: #0f1830;
+      --bar-blocked: #e2bd4a;  --bar-blocked-ink: #0f1830;
       --bar-tbv: #313f5c;      --bar-tbv-ink: #e4e8f2;
     }
   }
@@ -92,12 +108,15 @@
     --partial-soft: #3a2238;
     --verified: oklch(0.82 0.08 250);
     --verified-soft: oklch(0.26 0.06 240);
+    --blocked: #e8c75a;
+    --blocked-soft: #2f2810;
     --tbv: #a8b0c8;
     --focus: oklch(0.70 0.12 240);
     --bar-fixed: #4ca871;    --bar-fixed-ink: #0f1830;
     --bar-wip: #c8800d;      --bar-wip-ink: #0f1830;
     --bar-partial: #c65a9a;  --bar-partial-ink: #0a1020;
     --bar-verified: #488acb; --bar-verified-ink: #0f1830;
+    --bar-blocked: #e2bd4a;  --bar-blocked-ink: #0f1830;
     --bar-tbv: #313f5c;      --bar-tbv-ink: #e4e8f2;
   }
 
@@ -133,6 +152,8 @@
     color: var(--ink);
     text-wrap: balance;
   }
+  h1 .as-at { font-family: var(--font-ui); font-weight: 500; font-size: 0.5em; color: var(--ink-soft);
+    white-space: nowrap; }
   .lede { margin: 0; color: var(--ink-soft); max-width: 68ch; }
   .lede strong { color: var(--ink); font-weight: 600; }
 
@@ -176,6 +197,7 @@
   [data-status="In progress"]    { --seg: var(--bar-wip);      --seg-ink: var(--bar-wip-ink); }
   [data-status="Partial"]        { --seg: var(--bar-partial);  --seg-ink: var(--bar-partial-ink); }
   [data-status="Verified"]       { --seg: var(--bar-verified); --seg-ink: var(--bar-verified-ink); }
+  [data-status="Blocked"]        { --seg: var(--bar-blocked);  --seg-ink: var(--bar-blocked-ink); }
   [data-status="To be verified"] { --seg: var(--bar-tbv);      --seg-ink: var(--bar-tbv-ink); }
   .seg {
     position: relative;
@@ -271,7 +293,7 @@
     border-radius: 12px;
     overflow-x: auto;
   }
-  table { width: 100%; border-collapse: collapse; min-width: 900px; }
+  table { width: 100%; border-collapse: collapse; min-width: 1180px; }
   thead th {
     position: sticky;
     top: 0;
@@ -293,13 +315,14 @@
   }
   tbody tr:last-child td { border-bottom: 0; }
   tbody tr.group-start td { border-top: 1px solid var(--rule-strong); }
-  td.fix { color: var(--ink); max-width: 46ch; }
+  td.fix { color: var(--ink); min-width: 32ch; max-width: 46ch; }
   td.ref, td.tref {
     font-family: var(--font-mono);
     font-size: 12.5px;
     color: var(--ink-soft);
     white-space: nowrap;
   }
+  td.type { min-width: 8ch; font-size: 13px; color: var(--ink-soft); }
   td.fdate { white-space: nowrap; font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
   td.ver { white-space: nowrap; font-size: 13px; font-variant-numeric: tabular-nums; }
   td.ver.ver-next { color: var(--ink-soft); font-style: italic; }
@@ -321,6 +344,7 @@
   .st-wip { background: var(--wip-soft); color: var(--wip); }
   .st-partial { background: var(--partial-soft); color: var(--partial); }
   .st-verified { background: var(--verified-soft); color: var(--verified); }
+  .st-blocked { background: var(--blocked-soft); color: var(--blocked); }
   .st-tbv { background: transparent; color: var(--tbv); border: 1px dashed var(--rule-strong); }
 
   .sev { display: inline-block; min-width: 2.4em; text-align: center; padding: 1px 8px; border-radius: 4px;
@@ -353,15 +377,14 @@
 <div class="wrap">
   <header>
     <span class="eyebrow">AILA · pre-pilot defect fixes</span>
-    <h1>Pre-pilot Fix Tracker</h1>
+    <h1>Pre-pilot Fix Tracker <span class="as-at" id="as-at">as at 9th Oct 2026, 7:05pm</span></h1>
     <p class="lede">Every proposed fix, ours (<strong>R</strong>) and Thomas's (<strong>T</strong>), with its status,
       its row in the fix plan and its action number in Thomas's review of 10 September 2026.
       <strong>“Fixed” means built and accepted on the fix branch. The Version column says which
-      release carries each fix: 2026.09.1 (22 September) or 2026.09.2 (23 September), both merged
-      for deployment to the server, or “Next release” for P0.6, P4.6, P3.7, P4.7, P4.5, P4.10,
-      P3.15 and P4.11, fixed since and waiting for the next one (P0.6 changes only our test tooling, and
-      P3.15 was closed without a change to the system). The fixed date is
-      the day a fix was accepted, not the day it reached the server.</strong></p>
+      release carries each fix: 2026.09.1 (22 September), 2026.09.2 (23 September), 2026.09.3
+      (29 September) or 2026.10.1 (10 October, 30 fixes), all merged for deployment to the server.
+      No fixed row is waiting for a release. The fixed date is the day a fix was accepted, not the
+      day it reached the server.</strong></p>
   </header>
 
   <section class="progress" aria-label="Progress summary">
@@ -394,6 +417,9 @@
     <div class="filter-row" id="source-filters">
       <span class="filter-label">Source</span>
     </div>
+    <div class="filter-row" id="type-filters">
+      <span class="filter-label">Type</span>
+    </div>
   </div>
 
   <div class="table-box">
@@ -402,8 +428,10 @@
         <tr>
           <th scope="col">Plan ref</th>
           <th scope="col">Fix</th>
+          <th scope="col">Type</th>
           <th scope="col">Status</th>
-          <th scope="col">Fixed date</th>
+          <th scope="col">Date added</th>
+          <th scope="col">Date fixed</th>
           <th scope="col">Version</th>
           <th scope="col">Severity</th>
           <th scope="col">Source</th>
@@ -419,10 +447,11 @@
     <div>
       <h2>Status</h2>
       <dl>
-        <dt>Fixed</dt><dd>Built and accepted on the fix branch. Fixed rows with a version number are merged to <code>main</code> for deployment to the target: release 2026.09.1 on 22 September and 2026.09.2 (P3.13) on 23 September. Rows marked “Next release” (P0.6, P4.6, P3.7, P4.7, P4.5, P4.10, P3.15, P4.11) stay on the branch until then.</dd>
-        <dt>In progress</dt><dd>Under way. P5.2 is waiting on an external decision.</dd>
+        <dt>Fixed</dt><dd>Built and accepted on the fix branch. Every Fixed row with a release number is merged to <code>main</code> for deployment to the target: release 2026.09.1 on 22 September, 2026.09.2 (P3.13) on 23 September 2026.09.3 (twelve rows) on 29 September and 2026.10.1 (30 fixes) on 10 October. A row fixed after a release is marked “Next release” and is on the fix branch only, until the next release carries it. P5.2 is a decision, not a change to the system: it is fixed because the decision is made.</dd>
+        <dt>In progress</dt><dd>Built, and not yet passed. P3.12 (a schedule paragraph asked for by number): two of three re-runs put the paragraph back, and the next step is chosen. P3.38 (reading an instrument from legislation.gov.uk) and P3.46 (a leading case the search did not return) are built and their re-runs are priced but not yet run. P3.28 (counting every kind of removal) is built and waits for one instruction to the research step to match it.</dd>
         <dt>Partial</dt><dd>A fix was attempted, and we decided to defer it and come back to it later. No fix is Partial now: P4.10 was, until its last check was run on 25 September.</dd>
         <dt>Verified</dt><dd>The problem is confirmed in our replays, the code or a live test, but no fix is built yet.</dd>
+        <dt>Blocked</dt><dd>Confirmed, and parked until something outside our control happens; the reason is in the row's description. Since 5 October, P3.2, P3.3 and P3.17 wait on a lawyer answering our questions about the readings of the law their tests use. Since 9 October, two data improvements wait on the National Archives: P3.35 (its bulk data) and P3.36 (a licence).</dd>
         <dt>To be verified</dt><dd>Proposed, not yet confirmed or agreed.</dd>
       </dl>
       <h2 style="margin-top:16px">Severity</h2>
@@ -432,19 +461,449 @@
         <dt>P3</dt><dd>Presentation, wording no lawyer has yet seen, or our own measurement and tooling.</dd>
       </dl>
       <p style="margin-top:8px">Severity grades the defect, not the fix, and is a first-pass judgement from the transcripts and replays. Not to be confused with plan refs such as P1.1, which are rows in the fix plan.</p>
+      <h2 style="margin-top:16px">Type</h2>
+      <dl>
+        <dt>Bug</dt><dd>The code did the wrong thing: a filter that did not filter, a count that was wrong, a step that dropped what it had found.</dd>
+        <dt>Issue</dt><dd>What an answer says or does needed changing: its wording, what it discloses about its own limits, or how the model behaves.</dd>
+        <dt>Feature</dt><dd>A new capability: something the system could not do at all before.</dd>
+        <dt>Data Improvement</dt><dd>New or better source data for the system to answer from, such as a record harvested from legislation.gov.uk or a new court's judgments.</dd>
+        <dt>Measurement</dt><dd>Our own measurement and tooling: nothing a lawyer sees changes.</dd>
+      </dl>
     </div>
     <div>
       <h2>References</h2>
       <p><strong>Plan ref</strong> is the row in <code>docs/prepilot-fixes/FIX_PLAN.md</code>.
         <code>TODO B6</code> is in <code>docs/TODO.md</code>, outside the plan.</p>
-      <p><strong>Fixed date</strong> is the day the fix was accepted on the fix branch, taken from the
+      <p><strong>Date added</strong> is the day the problem was booked: for our own rows, the day its row
+        entered the fix plan; for Thomas's, the day his point was first listed here (his review of
+        10 September was added on 18 September, his retest of 30 September on 5 October). Both are
+        taken from the history of the fix plan and of this page.</p>
+      <p><strong>Date fixed</strong> is the day the fix was accepted on the fix branch, taken from the
         history of the fix plan. It is not the day it was deployed: that is the release date above.</p>
       <p><strong>Version</strong> is the release that carries the fix. Releases are numbered by
         date, year.month.number: 2026.09.2 is the second release of September 2026. Each one is
         listed in <code>CHANGELOG.md</code>. The app shows the version it is running in its About
         box (Settings, then About), so a problem report can say which release it was.</p>
       <p><strong>Thomas ref</strong> is his action number. <strong>NH1</strong> and <strong>NH2</strong> are the
-        first and second points of his closing section, “What is deliberately not here”.</p>
+        first and second points of his closing section, “What is deliberately not here”.
+        <strong>30 Sep</strong> marks a point from his retest of release 2026.09.3 on 30 September.</p>
+      <p><strong>10 October: release 2026.10.1.</strong> Everything fixed since 2026.09.3 is now merged for deployment to the server as release 2026.10.1 (30 fixes, from P3.16 on 1 October to P3.33 today). It takes effect when the server is updated and restarted.</p>
+      <p><strong>10 October: which “made under” instruments have been revoked (P3.33, fixed).</strong> A list of instruments made under a power now says, for each one, whether legislation.gov.uk records it as revoked in whole (with the revoking instrument and the date, or that no date is recorded), revoked in part, or not at all, and the day that was checked. It never turns “no revocation recorded” into “in force”, and a revocation dated after today is given with its date, not as done. The record covers every instrument in the made-under record (about 87,000), read in one pass of legislation.gov.uk's record of changes at no model cost, and checked against each instrument's own record on a sample of 177 (all agreed). When more than 40 instruments are found, the list leads with those not revoked in whole. The record is refreshed by re-reading it and updating the system, and every statement carries the date it was checked. In the first re-run one long answer gave the counts without naming the revoked instrument; after one sentence was added to the research step's instructions, every answer that named it said it was revoked (4 of 4), with no wrong statement and no claim that anything is in force ($9.18 for both re-runs). Short chat answers still leave partial revocations unmarked (<strong>P3.48</strong>, added). We also corrected the record's description: Welsh instruments and Northern Ireland Orders in Council are included, under their UK numbers.</p>
+      <p><strong>9 and 10 October: three more fixes and three built.</strong> <strong>P3.45</strong> is fixed: a case citation that a condensed summary adds and its source does not contain is now removed before the research step reads it (37 of about 5,800 stored summaries change). <strong>P4.23</strong> is fixed: when a chat reply names an instrument the research linked, the reply now carries the research's link. <strong>P3.26</strong> is fixed: a search result whose territorial extent the filter does not recognise is kept, not dropped, and “N.I.” is read as Northern Ireland. <strong>P3.38</strong>, <strong>P3.46</strong> and <strong>P3.28</strong> are built, with their re-runs still to come. <strong>P3.12</strong> put the missing schedule paragraph back in two of three re-runs. A new row: summaries can also name a case their source does not mention, without a citation (<strong>P3.47</strong>).</p>
+      <p><strong>9 October, evening: six more fixes, one Scottish source built, and every data improvement measured.</strong> Seven pieces of work ran side by side at no model cost, with free, capped requests to the legislation database, legislation.gov.uk and the Scottish Courts; then four agreed re-runs and a few short checks of one research step were paid for ($14.11 in all). <strong>P3.10</strong> is fixed: every Deep Research step after the first is now handed the instruments the earlier steps found (up to 40). In the re-run, every step that worked on that list covered all of it without searching again, and the answers named more of the instruments than before; steps that should look further also searched less, which cost nothing here and is being watched. <strong>P3.20</strong> is fixed and switched off: the system can now search the Scottish Courts and Tribunals Service's published judgments beside the National Archives, and read a Scottish judgment. With it switched on for the re-run, every answer to the Scottish freedom-of-information question cited a Court of Session decision the search returned, and none said the Court of Session was missing; one of three gave an English decision as its only authority for one point, with its court named, which we record against P3.3. It works on the server once two SCTS addresses are opened. <strong>P4.3</strong> and <strong>P4.24</strong> are fixed: the sources list now keeps every source the answer cites, and shows each by its title rather than an identifier (on every stored answer, no cited source is missing and identifier-only titles fell from about 1,700 to 52). <strong>P4.22</strong> is fixed: a report that names one of the system's notes in a sentence keeps its words. <strong>P3.22</strong> is fixed on relevance ordering; its remaining item, an answer stating a leading case the National Archives does not hold as if it had been read, is now its own row (<strong>P3.46</strong>). Where a question names no jurisdiction, research replies and Deep Research plans now also answer for Scotland and say so (<strong>P3.4</strong>; in the re-run, 15 of 16 answers that ran research did, against none before).</p>
+      <p><strong>Built, not yet passed: P3.12.</strong> When an answer cites one paragraph of a schedule the system fetched and leaves out another it was handed, the system now adds the missing paragraph's heading and opening words, quoted from the statute. In the re-run it put back the missing paragraph twice in three, but quoted the paragraph's conditions of application rather than the rule itself, and one answer still left out two sub-paragraphs that matter for Scotland. Both are the next step. We also found that the phrase “for Scotland” in the research request narrowed what the research reported.</p>
+      <p><strong>The data improvements, measured.</strong> Reading an instrument our legislation database lacks from legislation.gov.uk (<strong>P3.38</strong>) would have changed 10 answers in 5 sessions, and goes ahead. Counting every kind of removal in the record of changes (<strong>P3.28</strong>) found 12 sentences wrongly saying nothing was removed, and goes ahead, followed by the filter fix <strong>P3.26</strong> and which instruments in a “made under” list have been revoked (<strong>P3.33</strong>). Definitions (<strong>P3.34</strong>) are re-scoped to questions asking for every definition of a term (9 such questions). Three are parked because no pre-pilot question needed them (<strong>P3.32</strong>, <strong>P3.39</strong>, <strong>P3.42</strong>), and three are dropped: no question asked for guidance or codes of practice (P3.43) or for which instrument amended a particular subsection (P3.41), and the made-under record already does what P3.30 proposed. One new serious problem: the step that condenses long search results sometimes writes in a case citation its source does not contain, about 1 summary in 200, and some reached answers (<strong>P3.45</strong>). Two small rows were added (<strong>P4.26</strong>, <strong>P4.27</strong>).</p>
+      <p><strong>9 October, later: the plan re-shaped around the new data, and one session again.</strong> We
+        checked which open problems the new data helps. <strong>P5.4</strong>, our check of legislation.gov.uk for
+        what our legislation database lacks, is complete: the record of what each instrument was made under answered
+        its main question, point-in-time versions are now their own row (<strong>P3.39</strong>), and nothing needs
+        a new address opened on the server. Three open rows gain a route through the data: <strong>P3.12</strong>
+        (fetching a schedule paragraph exactly, with its own number, from legislation.gov.uk),
+        <strong>P3.28</strong> (counting removals by the type the official record gives each change) and
+        <strong>P4.24</strong> (titles for entries in the sources list, from the record). <strong>P4.22</strong> is
+        raised from P3 to P2, because the record makes the note it concerns far more common. For the last two days
+        two working sessions ran side by side on the same work; they are now merged into one plan for the next
+        session, which also measures every data improvement before any is built, and from now on one session works at
+        a time.</p>
+      <p><strong>9 October: seven more data improvements, and the parallel session's results.</strong>
+        Booked, each to be measured first at no cost: reading a recent instrument our legislation database does
+        not hold from legislation.gov.uk, instead of stopping at “not held” (<strong>P3.38</strong>); the law
+        as it stood on a past date (<strong>P3.39</strong>), the change with the strongest published evidence
+        that it improves answers; explanatory notes and Scottish policy notes, which say what a provision is for
+        (<strong>P3.40</strong>); which instrument amended a particular subsection (<strong>P3.41</strong>);
+        where each provision applies, not only the Act as a whole (<strong>P3.42</strong>); statutory guidance
+        and codes of practice (<strong>P3.43</strong>); and the Welsh and Northern Ireland series, only if
+        questions need them (<strong>P3.44</strong>). The same day, the session working through the planned
+        fixes finished <strong>P4.12</strong> (the cost and wait of a lost chat reply), built
+        <strong>P3.10</strong> and <strong>P4.3</strong> (not yet passed), and found one small new problem,
+        <strong>P4.25</strong>: an answer with no sources of its own can show the previous answer's sources.</p>
+      <p><strong>8 and 9 October: a record of what each regulation was made under.</strong> Asked which
+        regulations were made under a given section of an Act, the system could only run a keyword search: in
+        the pre-pilot it found about one in forty of them, or named instruments that were not made under the
+        section at all. <strong>P3.31</strong> is fixed. The system now holds a record, read from
+        legislation.gov.uk, of what every Scottish statutory instrument since 1999 says in its own opening
+        words it was made under (about 11,500 instruments), and a new research tool answers the question from
+        it, saying what the record covers. In the re-run ($5.54), every such question used it, every list gave
+        the true count, a full list named every instrument, and no answer said an instrument was made under a
+        provision without the record saying so. Where the record holds nothing, the answer says what the
+        record covers rather than that nothing exists. The same record answers what a single instrument was
+        made under, even for instruments our legislation database does not hold. On 9 October UK statutory
+        instruments from 1987 were added: the record now holds about 87,000 instruments, and a check of 200 of
+        them by hand found the right Act in 199 (the one error, and the smaller gaps the check found, are
+        fixed). We looked first at a ready-made map of UK legislation published by the
+        Government's AI incubator, and did not use it: it stops in 2022, holds about one in five of the
+        instruments, and does not record what an instrument was made under.</p>
+      <p><strong>A new column, Type, and six data improvements.</strong> Each row now says whether it is a
+        bug, an issue, a feature, a data improvement or measurement (defined under Type, above). Six data
+        improvements are booked: each regulation's own dates and how Parliament approved it
+        (<strong>P3.32</strong>), which instruments in a “made under” list have since been revoked
+        (<strong>P3.33</strong>), where terms are defined (<strong>P3.34</strong>, measured first),
+        instruments made before 1987 (<strong>P3.35</strong>) and which judgments cite a provision
+        (<strong>P3.36</strong>), both waiting on the National Archives, and a general map of cross-references
+        (<strong>P3.37</strong>), not recommended for now. <strong>P5.5</strong>: we are asking the National
+        Archives for access to its bulk legislation data, which is now by invitation only.</p>
+      <p><strong>8 October, later still: Scottish case law can go ahead.</strong> The Scottish Courts and
+        Tribunals Service has agreed to our use of its published judgments search, which holds about 13,000
+        Scottish judgments from 1998, most of them from the Court of Session and the High Court of
+        Justiciary. That was the one thing <strong>P3.20</strong> waited on outside our control. Two small
+        steps remain before it can work on the server: a written confirmation from SCTS, and two of its
+        addresses opened on the server's firewall. Its first measurement, how many of our stored Scottish
+        questions the search would have answered, runs next session.</p>
+      <p><strong>8 October, later: one fix built and re-run, three rows re-planned, two added.</strong> Five
+        pieces of work again ran side by side at no model cost, with 134 free, capped requests to the
+        National Archives; then four short checks of one research step and one re-run were paid for ($1.17
+        in all). <strong>P3.12</strong>, built, not yet passed: when the system fetches a schedule too long
+        to hand over whole, and the request names no paragraph, it now hands over the schedule's paragraph
+        headings and, word for word, the paragraphs whose headings match the request, instead of a
+        condensed version; where it still condenses one, it now says the schedule was retrieved, so a
+        paragraph it leaves out no longer reads as missing. On every stored request of that kind the three
+        paragraphs the lawyer needed are now handed over exactly. In the re-run they reached the research
+        step word for word for the first time, but its answer used only one sub-paragraph of them, so the
+        test is not yet passed. We stopped after one of three runs, because that run cost more than
+        expected (the model ran on in an earlier turn, a known problem that is already capped). The next
+        step is to re-check that one research step on its own, which costs a few cents.</p>
+      <p><strong>P3.22, narrowed to one open item.</strong> Re-running the case-law searches from both
+        test sessions both ways showed that ordering by relevance lost none of the authorities the lawyers
+        needed: the two found in fewer re-runs before were missed because the system ran different
+        searches. That part of the test is now met. What remains: in two answers the system named a leading
+        case that is not in the National Archives' collection as if it had read it (once by linking its
+        name to a different judgment), as answers did before the change of order too. That is the next
+        thing to look at. Our check had also mistaken a different case sharing a surname for that leading
+        case; it now matches full names or citations only.</p>
+      <p><strong>Three rows re-planned.</strong> <strong>P4.3</strong>: most sources in the list beside an
+        answer that the answer never mentions come from one rule, which lists every search result when the
+        research cites none (mostly on answers saying something was not found). The fix will drop that
+        rule and keep any source the research names, tested on every stored answer at no cost.
+        <strong>P3.10</strong>: Deep Research steps that depend on an earlier step no longer stop early,
+        but each searches again for the list it should have been given, and a third of them dropped
+        instruments from it. The fix will hand each such step the earlier step's list.
+        <strong>P4.12</strong>: when the chat's own reply is lost, the system will stop retrying where a
+        retry has never helped, and cap how long the model may run on; on our stored cases that would have
+        saved about $2.30 and 36 minutes, and lost nothing. Two new rows: <strong>P4.23</strong>,
+        Thomas's point that the chat reply drops links the research gave, now its own row (on our test
+        model it keeps about four links in five, and 110 instruments were named without the link the
+        research gave); and <strong>P4.24</strong>, entries in the sources list titled only with an
+        identifier, or with no link.</p>
+      <p><strong>6 to 8 October: four more fixes, two built and not yet passed.</strong> Five pieces of
+        work ran side by side at no model cost, with a few free, capped requests to the National Archives
+        and the legislation database, then four agreed re-runs were paid for ($29.40 in all; one cost
+        more than planned because the model ran on without answering in one turn, a known problem,
+        P4.12). <strong>P3.27</strong> is fixed: where the database holds no schedule for an
+        instrument, the answers now say so, and none puts it down to a search limit alone (before, all
+        four re-run answers did). One answer still mentions the limit alongside the true reason, so
+        we are watching it. <strong>P3.21</strong> is fixed: when the research reads the official
+        record of changes to an Act, each commencement made by another instrument now carries the date
+        legislation.gov.uk records for it, with its wording such as “for specified purposes”, and a
+        date earlier than the day the commencing instrument was made is refused. In the re-run the
+        answer about an Act's commencement gave both commencing instruments with their dates every
+        time; before, the second was never dated. <strong>P3.4</strong> is fixed: where a question names
+        no jurisdiction, the answer is now for Scotland and says so, and where it asks about the UK it
+        covers each of the four parts and says where the law differs. Before, one test question named
+        no jurisdiction in any of three re-runs; now it does in all three. <strong>P3.6</strong> is
+        fixed: each legislation search result now keeps the instrument's own short published summary
+        (up to 600 characters), which often states when it came into force, without making searches
+        slower to process.</p>
+      <p><strong>Built, not yet passed.</strong> <strong>P3.12</strong>: the system now fetches the
+        schedule a search names, but in this re-run no request named the paragraph numbers, so the
+        whole schedule (about 92,000 characters) was condensed, and some paragraphs were dropped in
+        the condensing; once, the answer then called them not retrieved. The next step is to hand over
+        a long schedule's paragraph headings and the paragraphs that match the question, instead of a
+        summary, measured first at no cost. <strong>P3.22</strong>: case-law results now come back
+        most relevant first. The leading cases two sessions needed were still found every time, but two
+        others were found in fewer re-runs than before; reading them by hand, that came from the system
+        running different searches, not from the new order, so the next check runs the same searches
+        both ways. One new small row, <strong>P3.30</strong>: many instruments' published summaries
+        quote the powers they were made under, and the system cannot yet use that.</p>
+      <p><strong>6 October: one more fix, two built, and two choices made.</strong> Four pieces of work ran
+        side by side at no model cost, with free, capped requests to the legislation database, the
+        National Archives and legislation.gov.uk, then one agreed re-run of seven sessions was paid
+        for ($9.55). <strong>P3.25</strong> is fixed: in the re-run no quick research step fetched a
+        whole instrument, and the answer that had relied on it, a list of which sections of an Act
+        have been brought into force, still gave the list in full. One of its checks was changed, at
+        our decision: it asked every re-run to state what an instrument was made under, but the
+        earlier re-runs in the same chat mode never did either, and every new answer said correctly
+        what it could not confirm.</p>
+      <p><strong>P3.27 and P3.12, built, not yet passed.</strong> Reading an instrument's whole text
+        now includes its schedules and annexes, with a line written by the system saying which ones
+        it carries, or that the database holds none (<strong>P3.27</strong>). When a search inside an
+        instrument asks for a schedule or annex and its results leave it out, the system now fetches
+        that schedule itself and hands over the part asked for, cut at its own heading where that is
+        safe (<strong>P3.12</strong>). In the re-run, the annex chapter one lawyer needed was handed
+        over every time and no answer called it not held, where before it never arrived; a schedule
+        paragraph asked for by number was delivered in every re-run, but two neighbouring paragraphs
+        were not. Two causes were found and fixed the same day: a list of paragraph numbers separated
+        only by spaces was read as its first number, and where the database really holds no schedule
+        for an instrument, a second line about a search limit led every answer to blame the limit
+        rather than the database. That second line now says what the database holds. Both will be
+        re-run next.</p>
+      <p><strong>Two choices made.</strong> Case-law results will be ordered by relevance
+        (<strong>P3.22</strong>). Re-running every stored search both ways (1,241 requests to the
+        National Archives, no model cost) showed that the same judgments are searched either way, the
+        first three results change about seven times in ten, and recent judgments fall from about two
+        thirds of the first three to about a quarter; against a list of the authorities two sessions
+        needed, relevance lost none. Some of the oldest leading cases are not in the National
+        Archives' collection at all, so no ordering can find them, and a lawyer is asked to confirm
+        that list. The date a provision came into force (<strong>P3.21</strong>) will come from
+        legislation.gov.uk's own dated record of changes, which dates 8,144 of the 8,180
+        commencements in our stored research and can be reached through our legislation database's
+        existing connection, so the server needs no new internet access. One new small row,
+        <strong>P3.29</strong>: the check that spots an appeal of a case in the results often links
+        unrelated cases that share a single word.</p>
+      <p><strong>5 October, evening: four more fixes, and two chosen.</strong> Four pieces of work ran side by
+        side at no cost, and one agreed re-run of two sessions was paid for ($1.24).
+        <strong>P3.24</strong> is fixed: for each instrument whose official record of changes the
+        research consulted, the system now writes a line saying what may be said about its
+        provisions coming into force. A provision may be called “not recorded as commenced” only
+        where the record lists, in full, the commencements made by other instruments; an
+        instrument's own commencement provision says how its provisions come into force, not
+        whether they have, so it no longer counts either way. The research step's own copy of the
+        record now says the same, and its instructions gained one matching sentence. In the
+        re-run, three times each, no answer made an unsupported claim that a provision is not yet
+        commenced or remains in force, and the true “no other commencement order is recorded” was
+        still stated. On our test model this problem had not appeared since mid-September, so the
+        re-run shows that true statements survive; Thomas's model is where it was seen. Three
+        small things to watch are recorded on the row.</p>
+      <p><strong>Three case-law fixes.</strong> <strong>P4.19</strong>: a case-law search or
+        judgment fetch refused because the service is busy is now tried again, as legislation
+        requests are. <strong>P3.23</strong>: the system is now told how many judgments matched a
+        search, not only how many it was shown, and that they are listed newest first. Checking
+        the service live showed its count of pages is always in tens, whatever page size is asked
+        for, so the figures we had noted (about 26,000 for a common surname) were five times too
+        high. <strong>P3.9</strong>: case-law date ranges now work. They never did: the service
+        ignored the form we sent, and the form that works is not in its published documentation.
+        Checked live, every judgment returned for a one-year window fell in that year.</p>
+      <p><strong>P3.25, built, waiting for its re-run.</strong> The quick research step can no
+        longer fetch a whole instrument; its two uses for one, an instrument's enabling-power
+        recital and the date its text is up to date to, now come from the direct lookup, which the
+        system runs itself before searching inside a regulation. Tried on every stored answer, the
+        line under an answer saying that in-force status is not something the database reports
+        now appears on about 250 more quick answers, and nothing else a lawyer sees changes.</p>
+      <p><strong>P3.27 and P3.12, measured and chosen.</strong> Checking the legislation database
+        live (156 requests, no model cost): asked to, it returns every schedule and annex with an
+        instrument's text, for all 60 instruments we have ever read whole. In our stored re-runs, 98
+        answers read an instrument whose schedules were left out, and 14 told the lawyer a
+        provision in one was not held or could not be retrieved when the database holds it. The
+        fix chosen: always ask for the schedules, with a line written by the system saying which
+        schedules the text includes, or that the database holds none. For a schedule paragraph
+        asked for by number (<strong>P3.12</strong>), the system will fetch the schedule itself and
+        cut out the paragraph where its numbering makes that safe. One instrument's schedule really
+        is missing from the database, and the answers that say so must keep saying so; that is now
+        part of the test.</p>
+      <p><strong>5 October, later: two fixes, and three problems measured.</strong> Four pieces of
+        work ran side by side, at no cost and with no re-run. <strong>P3.19</strong> is fixed: when
+        the system reads the official record of changes to an instrument, each change now stays with
+        the provision that made it, and a long list says how many changes it leaves out. Before,
+        the changes and the provisions that made them were two separate lists, and the second was
+        cut at six without saying so. Tried on all 1,216 stored readings of the record, every change
+        listed now names the provision its own record entry names, and nothing the old output
+        showed is hidden. In the session it came from, the provision that inserted the section is
+        now paired correctly in 8 of 8 stored readings, against none before.
+        <strong>P4.21</strong> is fixed, with wording we approved: when an instrument cited by
+        number is not in the database, the line under the answer now says it “is not held in this
+        index, which is incomplete; that does not show whether the number is accurate”, instead of
+        saying this is not a sign that the citation is wrong. Rebuilt on all 69 stored answers that
+        carried the old line, it changed the result of none of our checks.</p>
+      <p><strong>P3.24, measured.</strong> We built a check that finds every sentence saying a
+        provision is not yet commenced, not in force or remains in force, and asks whether the
+        research behind it supports it. On the model we test with, it found 32 unsupported
+        statements, all from before the record of changes was added in mid-September, and none in
+        the 907 answers since. Thomas saw them on a different model. We will still add a line,
+        written by the system, telling the research step for each instrument whether its record of
+        changes can support such a statement, with a matching instruction, and then re-run the two
+        sessions three times each (up to $1.31, agreed).</p>
+      <p><strong>P3.12 and P3.25, measured, and a new serious problem.</strong> Reading the whole
+        text of an instrument has never included its schedules or annexes: the database leaves them
+        out unless asked, and we never asked. So a provision in a schedule could be reported as not
+        held when the research had fetched the instrument (new row <strong>P3.27</strong>). For a
+        schedule paragraph asked for by number (<strong>P3.12</strong>), the system will fetch the
+        schedule and cut out the paragraph where it can, once we have checked what the database
+        returns. The quick research step will no longer be able to fetch whole instruments
+        (<strong>P3.25</strong>); the two things it used them for, an instrument's enabling-power
+        recital and the date its text is up to date to, will come from the direct lookup instead.
+        One smaller problem was also found: the count of repeals under an answer misses changes
+        worded as “omitted” or “ceases to have effect” (<strong>P3.28</strong>).</p>
+      <p><strong>5 October: Thomas's retest of 30 September, booked.</strong> Thomas re-asked our
+        pre-pilot questions on release 2026.09.3, on a different model from ours, and found five
+        problems he had first reported on 23 September that had no row: his report of that day
+        never reached our plan. We checked each against the code and our stored re-runs, and
+        all five are real. Three also happen on the model we test with: the quick research step
+        fetches whole Acts in about 1 conversational answer in 9 (<strong>P3.25</strong>), the
+        line under an answer can name two lists of change records that disagree (in about 1
+        stored answer in 4 that names both, <strong>P4.20</strong>), and a report that names the
+        enabling-power note in a sentence loses those words (<strong>P4.22</strong>). The most
+        serious, <strong>P3.24</strong>, an answer calling provisions “not yet commenced” when the
+        research found only that no commencement is recorded, is one our own checks were built not
+        to count, so it is measured first. <strong>P4.21</strong> rewords a line that tells the
+        lawyer a citation is not wrong, which a lookup cannot know. A sixth,
+        <strong>P3.26</strong>, is a filter rule that would drop a result with an unfamiliar
+        territorial extent; none has appeared yet. His other points were already rows; his new
+        evidence is added to them.</p>
+      <p><strong>5 October: three rows blocked.</strong> We are taking the remaining serious
+        problems in order of severity. Two of the three, <strong>P3.2</strong> and
+        <strong>P3.17</strong>, and the related <strong>P3.3</strong>, cannot be finished until a
+        lawyer confirms the readings of the law their tests use, so they are now marked
+        <em>Blocked</em>, with the reason in each row, rather than waiting in the queue. The
+        third, <strong>P3.19</strong>, is next.</p>
+      <p><strong>2 October, later: the plan checked against itself.</strong> Before building
+        anything more, we checked the fix plan for consistency, at no cost and with no re-run. Four
+        pieces of work ran side by side: a tool that checks the plan's structure (every row listed
+        once under its problem group, every fixed row marked as fixed, no table row broken in two),
+        a correction to our automatic checks for the wordings the last re-run showed they
+        misread, and two reviews of every open row against the code. The reviews checked each row's
+        premise, whether its test can still be met, and how it relates to other rows. They found
+        28 counts and references that had gone stale, now corrected, and a set of choices we have
+        now made.</p>
+      <p><strong>Decided.</strong> <strong>P5.2</strong> is decided: Scottish judgments are to come
+        from the Scottish Courts and Tribunals Service's own judgments search, subject to its
+        confirming that we may use it that way. Asking it is our next step, and <strong>P3.20</strong>
+        builds the connection. The four case-law rows will be built together, in this order: try a
+        busy service again (<strong>P4.19</strong>), tell the system how many results there really
+        were (<strong>P3.23</strong>), make the date filter work (<strong>P3.9</strong>), and last,
+        order results by relevance (<strong>P3.22</strong>), the one we will measure with a re-run.
+        The review also found that the National Archives' licence asks anyone using its judgments
+        with an AI system to apply for a free permission. None is on record, so applying is now on
+        our list; it does not hold up the work.</p>
+      <p><strong>A test that contradicted its own fix.</strong> In the wrong-Act session, our
+        instruction to the chat asks it to give a point the text does not settle as a reading, but
+        our test counted such a reading as wrong. Rather than change the test after seeing the
+        results, we will let a lawyer decide: the questions now carry a second extra question,
+        whether the newer interpretation Act may be offered as one possible reading. Changes to
+        three other tests are recorded before anything is built on them: <strong>P3.4</strong>'s
+        test now also checks the corrected filter note, and <strong>P3.10</strong> and
+        <strong>P4.3</strong> get new tests first. <strong>P4.8</strong>, the internal label
+        showing in answers, will now be built rather than waiting for a full re-run.
+        <strong>P0.4</strong>, a measurement row, is dropped: it could not reach the questions it
+        was meant for, and P0.7 now covers them.</p>
+      <p><strong>2 October: two more fixes, and a re-run.</strong> Four more pieces of work were
+        built side by side at no cost, then two sessions were re-run (6 re-runs, $9.88).
+        <strong>P4.17</strong> is fixed: an answer whose research only searched inside particular
+        instruments now gets a line saying which instruments were searched and for what, and that a
+        provision missing from such a search may still be in the instrument. Tried on every stored
+        answer first, the line landed on exactly the 37 answers of that kind and on no other. In the
+        re-run it appeared on all 4 answers of that kind and on no other answer, and every “not
+        found” on them was read by hand. <strong>P4.18</strong> is fixed: the line under an answer
+        could say both that the record of changes to an Act was consulted and that it was not (28
+        stored answers). It now says what is true, and no stored answer carries both.</p>
+      <p><strong>P3.17, traced, not yet fixed.</strong> In the wrong-Act session, the reading that
+        the consultation must come first is added by the chat's own reply, not by the research, and
+        it comes from our own instruction to give a point the text does not settle as a reading. It
+        had also appeared in two earlier re-runs, which our checks had passed. So the questions for
+        a lawyer now also ask whether a reading like that is acceptable when the answer says plainly
+        that the Act sets no order. Nothing more will be built on it until a lawyer answers. Checking
+        the official record of changes also showed that the section in that session was inserted by
+        a 2024 Act, not by the 2019 Act our reading named; our reading and the questions are
+        corrected. The questions are ready to send.</p>
+      <p><strong>P3.2 and P3.3, re-checked.</strong> Our automatic checks were corrected first, and
+        now give the same result as the last reading by hand. In the disputed-reading session, one
+        re-run in three passed for the first time: it gave every reading as a reading and said the
+        text does not settle the point. Statements given as settled fell to about 4 in all, against
+        about 15 last time. The pushback test still fails in all three re-runs. The re-run found
+        three more wordings our checks misread, to be corrected before the next one.</p>
+      <p><strong>Seven new rows.</strong> <strong>P3.19</strong>: the tool that reads the record of
+        changes loses which provision made which change, so one answer cited the wrong subsection as
+        the one that inserted a section. A review of legal data sources added <strong>P3.20</strong>
+        (Scottish judgments, from the Scottish Courts and Tribunals Service's own judgments search),
+        <strong>P3.21</strong> (the date a provision came into force, not only the instrument that
+        commenced it) and <strong>P5.4</strong> (checking legislation.gov.uk for what our legislation
+        database lacks). A review of the National Archives case-law service added
+        <strong>P3.22</strong> (case-law results come back newest first, not most relevant: Thomas's
+        action 6, now confirmed), <strong>P3.23</strong> (the system is told it saw every case-law
+        match when it saw at most 50) and <strong>P4.19</strong> (a case-law request refused because
+        the service is busy is not tried again).</p>
+      <p><strong>1 October, later: one more fix, and a combined re-run.</strong> Four more pieces
+        of work were built side by side at no cost, then the affected sessions were re-run once
+        (15 re-runs, $17). <strong>P4.15</strong> is fixed: the line under any answer that searched
+        case law now also says that a search can miss a judgment the database holds, so one
+        missing from its results may still exist. In the re-run, no “not found” in the session it
+        came from was left without that explanation (none of 15), and each one explained only by
+        the line was read by hand. Our check of such sentences now also credits the system's own
+        “a search of the database returned no results”.</p>
+      <p><strong>P3.17, re-run, not yet fixed.</strong> In the wrong-Act session, the first answer
+        now names the right interpretation order in all three re-runs, where none did before. But
+        two re-runs now say, as one possible reading, that the consultation must come before the
+        draft plan is laid, which the Act does not say, and one offers the newer interpretation Act
+        as a possible reading. So one of three passes. The extra research makes each re-run of
+        that session cost about 50 cents rather than 34.</p>
+      <p><strong>P3.2 and P3.3, re-checked, still not fixed.</strong> The disputed-reading session
+        still states readings as settled in every re-run (about 15, against about 6 last time). One
+        Deep Research report in the Scottish doctrine session again said English doctrine is highly
+        persuasive across the UK (two of three pass, against three of three). The pushback test
+        still fails in all three re-runs. Plain statements of the law gained no hedges and no
+        blanket caveats. Our automatic checks again missed some wordings in both directions; they
+        will be corrected before the next re-run.</p>
+      <p><strong>Questions for a lawyer.</strong> A short set of yes/no questions now asks a lawyer
+        to confirm the four readings of the law our P3.2 and P3.3 tests use. One point from the
+        re-run will be added before it is sent: which Act inserted the section in the wrong-Act
+        session. Nothing more will be built on P3.2 until the readings are confirmed.
+        <strong>P4.17</strong> was measured: a line saying which sections were searched is
+        recommended, and is still to be decided.</p>
+      <p><strong>1 October: two more fixes, one built and waiting for its re-run, and our checks
+        corrected.</strong> Four pieces of work were again built side by side, checked and
+        combined. No re-run of sessions was paid for this time; the work cost $2.50 in all.
+        <strong>P3.16</strong> is now fixed: our check of the condensing step now agrees with the
+        reading by hand, and finds no added conclusions in the two sessions that matter.
+        <strong>P4.16</strong>: the opener check now also removes “You are correct to highlight
+        this”. Across every stored answer that was the only such wording it had missed, and removing
+        it changed no other answer.</p>
+      <p><strong>Our automatic checks now agree with the reading by hand.</strong> The last
+        combined re-run found seven wordings they missed or misread. All seven are corrected, and on
+        the four sets of re-runs we read by hand for P3.2 and P3.3 the checks now give the same pass
+        or fail as the reading by hand.</p>
+      <p><strong>P3.17, built, not yet re-run.</strong> In the wrong-Act session, the first answer
+        named no rule because the research never looked for one: it found the word was not defined
+        in the Act and stopped. The quick research step is now told, when an instrument does not
+        define a word, to find the general interpretation legislation, fetch the section saying
+        which Acts it applies to, and say it applies only if that section covers the Act. Run on the
+        stored questions, it found the right rule in 4 of 5 first answers and the wrong one in none
+        of 7. It makes such a step two to three times as expensive (about 15 cents). The chat's own
+        instructions are unchanged, and a check of its first research requests found none moving to
+        a different Act. The full re-run comes next.</p>
+      <p><strong>P4.15, measured and decided.</strong> The line under an answer that searched case
+        law will also say that a search finding nothing is not proof there is none. Tried on every
+        stored answer first, it changes only the results it was meant to change, and it also covers
+        four answers outside the original session, one of them a Deep Research report saying that a
+        decision was never appealed. It will be built and re-run together with P3.17.</p>
+      <p><strong>P3.2, waiting on a lawyer.</strong> We traced where the pushback session goes
+        wrong. The passage of the regulation that decides the question was retrieved every time the
+        system contradicted it (15 of 15), but survived the condensing step only 7 times and reached
+        the part that writes the answer once. Making the system research again before answering a
+        challenge would not have helped: it had already done so all 15 times. Every fix tried so far
+        tests our reading of that regulation, which is still to be confirmed by a lawyer, so nothing
+        more will be built on P3.2 until it is. One new row, <strong>P4.17</strong>: an answer whose
+        research used only section searches gets no line saying what was searched (8 stored
+        answers).</p>
+      <p><strong>29 September: release 2026.09.3, and three more fixes.</strong> Everything fixed
+        so far is now merged for deployment as release 2026.09.3, including the eight fixes that
+        were waiting (P0.6, P4.6, P3.7, P4.7, P4.5, P4.10, P3.15, P4.11) and the partial
+        improvements to P3.2, P3.3 and P3.16 below. Three rows were fixed on the day.
+        <strong>P3.18</strong>: a Deep Research report no longer says that English case law applies
+        in Scotland, or is persuasive there, without a source that says so. It names the courts the
+        decisions come from instead. In three re-runs of the session it came from, none made the
+        claim; before this fix one of three still did. <strong>P4.13</strong>: the check that
+        removes an opening “You are absolutely right” now also removes “You are correct to challenge
+        my earlier statement”. <strong>P4.14</strong>: when the system copied the previous answer's
+        search-scope line, the lawyer could see two; now there is one, and none of the new re-runs
+        showed two.</p>
+      <p><strong>How the work was done.</strong> Four pieces of work were built side by side, each
+        tested on its own, then checked, combined and re-run together once (15 re-runs, $16).
+        Every answer was also read by hand, because our automatic checks missed some wordings
+        again; they will be corrected before the next re-run.</p>
+      <p><strong>The condensing step (P3.16).</strong> We built a check that compares each summary
+        with the text it condenses and lists what the summary added. Across all our stored re-runs
+        it found 205 real additions in 3,618 summaries, mostly the step's own conclusions (“and
+        therefore…”). A new instruction tells the step to leave out any conclusion the text does
+        not state. In the combined re-run it added none in the two sessions that matter, against
+        two before. The check itself counted one, which was a note that a passage was missing, not
+        an addition. It is built; whether to call it fixed is still to be decided.</p>
+      <p><strong>Still not fixed: P3.2 and P3.3.</strong> With all of these changes, the Scottish
+        doctrine session passes in 3 of 3 re-runs. In the wrong-Act session, the wrong Act was
+        claimed once in nine answers (three times before these changes, nine at the start), and every re-run's
+        second answer now names the right order; each still fails because its first answer names no
+        rule at all (P3.17). In the disputed reading, statements given as settled fell only slightly,
+        from about 7 to about 6. The pushback test (P3.2) still fails in all three re-runs: each still states a reading
+        the regulation contradicts at least once. In one of three, the transport session's guard
+        found the provision the lawyer needed, for the first time in any re-run. Plain statements
+        of the law gained no hedges and no blanket caveats.</p>
       <p><strong>P3.2 and P3.3, taken together, were built and measured, and neither is fixed
         yet.</strong> P3.2 is an answer that changes under pushback; P3.3 is keeping what the law
         says separate from a reading of it. Three sessions test P3.3. In one, the system applied
@@ -483,7 +942,7 @@
         report still asserting that English doctrine applies in Scotland), P4.13 and P4.14 (two
         small presentation defects) and P4.15 (a case-law “not found” without the line saying the
         database is incomplete). Our readings of the law behind these tests are to be confirmed by
-        a lawyer. None of this has reached the server.</p>
+        a lawyer. These changes are in release 2026.09.3 (29 September).</p>
       <p><strong>Earlier, P3.2</strong>, an answer that changes under pushback, was measured before
         anything was built. In the session it comes from, the system took a position on how two defined terms
         in an assimilated EU regulation relate, defended it, then reversed it when the lawyer
@@ -649,7 +1108,8 @@
         instrument is held; it is held but its text is not; or it is not held. When it is not held,
         a line under the answer says so, written by the system itself rather than left to the
         model: “SSI 2025/377 was looked up by its number and is not held in this index; that is a
-        gap in the index, not a sign that the citation is wrong.” The official record of changes
+        gap in the index, not a sign that the citation is wrong.” (Reworded on 5 October:
+        see P4.21.) The official record of changes
         still says what an unheld instrument does, so the answer still reports that, for example,
         SSI 2025/377 brings section 18 of the Act into force.</p>
       <p><strong>How it was tested.</strong> We re-ran the two sessions where lawyers asked about
@@ -729,13 +1189,9 @@
         were re-run. <strong>P0.6</strong> and <strong>P3.13</strong> came from that work and are
         fixed. <strong>P3.14</strong> (the quick-lookup step is not told which filters are active)
         remains open.</p>
-      <p><strong>Next.</strong> <strong>P3.16</strong>, the condensing step's glosses, measured
-        first, since it lies behind both P3.2 and P3.3. Then <strong>P3.17</strong> and
-        <strong>P3.18</strong>, the two small presentation fixes (<strong>P4.13</strong>,
-        <strong>P4.14</strong>) and a decision on <strong>P4.15</strong>. The other open groups
-        remain: <strong>P3.4</strong> (the Scottish jurisdiction default), <strong>P4.3</strong>
-        (the sources list) and <strong>P4.12</strong>.</p>
-      <p>Not listed: the other measurement and tooling rows (P0.1–P0.4, P1.5, and the Wave 2 re-baseline),
+      <p><strong>Next, by severity.</strong> One session at a time. <strong>P3.12</strong> first: an answer that names the paragraph by number but not its words, then a re-run (about $1.80, priced to us first). Then the re-runs of <strong>P3.38</strong> and <strong>P3.46</strong>, the definitions search (<strong>P3.34</strong>), and the one instruction <strong>P3.28</strong> waits for; then <strong>P3.47</strong> and the P3 rows, <strong>P3.48</strong> among them. <strong>P3.2</strong>, <strong>P3.3</strong> and <strong>P3.17</strong> stay blocked until a lawyer answers our questions.</p>
+      <p>Not listed: the other measurement and tooling rows (P0.1–P0.3, P0.4, dropped on 2 October, P1.5, and the Wave 2 re-baseline),
+        three rows dropped on 9 October after measurement (P3.30, P3.41, P3.43: see the note of that evening),
         questions already answered by the LEX team (P5.1, P5.3), P2.10, which was folded into P2.8,
         and three items from <code>docs/TODO.md</code> D16 (the impossible year window, always
         over-fetching search results, checking a returned title against the Act named), which were
@@ -748,85 +1204,138 @@
 
 <script>
   // ---- Update here at the end of a session, when the user asks. ----
-  // status: "Fixed" | "In progress" | "Partial" | "Verified" | "To be verified"
+  // status: "Fixed" | "In progress" | "Partial" | "Verified" | "Blocked" | "To be verified"
+  //         Blocked: confirmed and parked on an external event (user decision, v34); the
+  //         row's fix text ends "Blocked: <reason>".
   //         Partial: a fix was attempted and deferred, to be revisited. Set only by the
   //         user's decision; FIX_PLAN.md has no ledger marker for it.
   // sev:    "P1" | "P2" | "P3"  (see the Severity notes; grades the defect, not the fix)
+  // type:   "Bug" | "Issue" | "Feature" | "Data Improvement" | "Measurement" on EVERY row
+  //         (tracker v45, user request; defined in the Type notes).
   // src:    "T" | "R" | "T & R"
+  // added:  "YYYY-MM-DD" on EVERY row (tracker v41, user request): the day the problem was booked.
+  //         R rows: the first commit in which FIX_PLAN.md's ledger has the row ("| **<ref>** |";
+  //         git log --reverse -S). T rows: the row's first appearance on this page (its git history).
+  //         T & R rows: the earlier of the two. A new row gets the date it is added.
   // fixed:  "YYYY-MM-DD" on a Fixed row only: the first commit in which FIX_PLAN.md shows the
   //         row ticked [x] (git log -- docs/prepilot-fixes/FIX_PLAN.md). Not a deployment date.
   // ver:    on a Fixed row only: the release that carries it ("2026.09.1", the git tag
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
-  const UPDATED = "29 September 2026, end of Session 32 (P3.2 and P3.3 built and measured together, better but not yet passing; six new rows; next: P3.16)";
+  // AS_AT: the date and time of this update, shown in the header (tracker v40, user request).
+  const AS_AT = "10th Oct 2026, 1:30pm";
+  const UPDATED = "10 October 2026 (Sessions 45 and 46: P3.45, P4.23, P3.26 and P3.33 fixed; release 2026.10.1; P3.47 and P3.48 added)";
   const ROWS = [
-    { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", t: "", fixed: "2026-09-22", ver: "2026.09.1" },
-    { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", t: "", fixed: "2026-09-23", ver: "Next release" },
-    { src: "R", fix: "Confirm from the server's own request log which research filter and mode each pre-pilot question ran under", sev: "P3", status: "Verified", ref: "P0.7", t: "" },
-    { src: "T & R", fix: "Make the jurisdiction filter work", sev: "P1", status: "Fixed", ref: "P1.1", t: "5", fixed: "2026-09-14", ver: "2026.09.1" },
-    { src: "R", fix: "Stop the “current only” filter implying in-force status", sev: "P1", status: "Fixed", ref: "P1.2", t: "", fixed: "2026-09-14", ver: "2026.09.1" },
-    { src: "T & R", fix: "Report the search's true match count", sev: "P2", status: "Fixed", ref: "P1.3", t: "4", fixed: "2026-09-14", ver: "2026.09.1" },
-    { src: "R", fix: "Link citations to the provision, not the Act", sev: "P3", status: "Fixed", ref: "P1.4", t: "", fixed: "2026-09-14", ver: "2026.09.1" },
-    { src: "R", fix: "Enforce provision links in code", sev: "P3", status: "Fixed", ref: "P1.6", t: "", fixed: "2026-09-15", ver: "2026.09.1" },
-    { src: "T & R", fix: "Disclose a research halt as a limit, not a finding", sev: "P1", status: "Fixed", ref: "P2.1", t: "3", fixed: "2026-09-15", ver: "2026.09.1" },
-    { src: "T & R", fix: "Explain every “not found”: what was searched, and its limits", sev: "P1", status: "Fixed", ref: "P2.2", t: "4", fixed: "2026-09-15", ver: "2026.09.1" },
-    { src: "T & R", fix: "Verify the enabling power", sev: "P1", status: "Fixed", ref: "P2.3", t: "1", fixed: "2026-09-16", ver: "2026.09.1" },
-    { src: "R", fix: "Disclose the Scottish case-law corpus gap", sev: "P1", status: "Fixed", ref: "P2.4", t: "", fixed: "2026-09-17", ver: "2026.09.1" },
-    { src: "R", fix: "Stop asserting in-force status", sev: "P1", status: "Fixed", ref: "P2.5", t: "", fixed: "2026-09-16", ver: "2026.09.1" },
-    { src: "T & R", fix: "Don't reformat a halted step into an empty report", sev: "P2", status: "Fixed", ref: "P2.6", t: "3", fixed: "2026-09-15", ver: "2026.09.1" },
-    { src: "R", fix: "Cap how long a step may keep searching", sev: "P2", status: "Fixed", ref: "P2.7", t: "", fixed: "2026-09-17", ver: "2026.09.1" },
-    { src: "R", fix: "Re-qualify a “not found” repeated from an earlier turn", sev: "P2", status: "Fixed", ref: "P2.8", t: "", fixed: "2026-09-17", ver: "2026.09.1" },
-    { src: "R", fix: "Record memo-served searches in the search scope", sev: "P3", status: "Fixed", ref: "P2.9", t: "", fixed: "2026-09-16", ver: "2026.09.1" },
-    { src: "R", fix: "Cite the provision at the subsection asked for, not the whole section", sev: "P2", status: "Fixed", ref: "P3.1", t: "", fixed: "2026-09-18", ver: "2026.09.1" },
-    { src: "R", fix: "Allow up to three section searches per Act, capped in code", sev: "P2", status: "Fixed", ref: "P3.1", t: "", fixed: "2026-09-18", ver: "2026.09.1" },
-    { src: "R", fix: "Stop an answer changing back and forth under pushback: check the law before agreeing or holding firm", sev: "P1", status: "Verified", ref: "P3.2", t: "" },
-    { src: "T & R", fix: "Separate retrieval from interpretation", sev: "P2", status: "Verified", ref: "P3.3", t: "NH1" },
-    { src: "T & R", fix: "Default to Scottish jurisdiction; flag UK-wide divergence", sev: "P2", status: "Verified", ref: "P3.4", t: "NH1" },
-    { src: "T", fix: "Correct the jurisdiction filter note in the prompt", sev: "P3", status: "Verified", ref: "P3.4", t: "5" },
-    { src: "R", fix: "Retrieve amendment and commencement relations", sev: "P1", status: "Fixed", ref: "P3.5", t: "", fixed: "2026-09-16", ver: "2026.09.1" },
-    { src: "R", fix: "Keep the description field, which carries relationships", sev: "P2", status: "Verified", ref: "P3.6", t: "" },
-    { src: "R", fix: "Test whether an instrument is held, by its number", sev: "P2", status: "Fixed", ref: "P3.7", t: "", fixed: "2026-09-24", ver: "Next release" },
-    { src: "T & R", fix: "Stop a step looping on instruments it already has; write up findings at the cap", sev: "P2", status: "Fixed", ref: "P3.8", t: "3", fixed: "2026-09-21", ver: "2026.09.1" },
-    { src: "T", fix: "Make the case-law date filter work", sev: "P2", status: "Verified", ref: "P3.9", t: "6" },
-    { src: "T", fix: "Keep dependent Deep Research steps in one step", sev: "P2", status: "Verified", ref: "P3.10", t: "3" },
-    { src: "R", fix: "Say what a cited subsection's sibling subsections provide", sev: "P2", status: "Fixed", ref: "P3.11", t: "", fixed: "2026-09-22", ver: "2026.09.1" },
-    { src: "R", fix: "Reach a Schedule paragraph asked for by number (LEX holds the Schedule as one provision)", sev: "P2", status: "Verified", ref: "P3.12", t: "" },
-    { src: "R", fix: "Stop the chat reply dropping a subsection the research step had already written", sev: "P2", status: "Fixed", ref: "P3.13", t: "", fixed: "2026-09-23", ver: "2026.09.2" },
-    { src: "R", fix: "Tell the quick-lookup step which research filters are active", sev: "P3", status: "Verified", ref: "P3.14", t: "" },
-    { src: "R", fix: "In a follow-up answered without new research, say the instrument itself is not held, not just its text", sev: "P3", status: "Fixed", ref: "P3.15", t: "", fixed: "2026-09-25", ver: "Next release" },
-    { src: "R", fix: "Stop the step that condenses search results adding its own interpretation (one reached a lawyer as a quotation)", sev: "P1", status: "Verified", ref: "P3.16", t: "" },
-    { src: "R", fix: "Fetch the section that says where a general rule applies, not only its definitions", sev: "P1", status: "Verified", ref: "P3.17", t: "" },
-    { src: "R", fix: "Stop the Deep Research report asserting that an English doctrine applies in Scotland without a Scottish source", sev: "P1", status: "Verified", ref: "P3.18", t: "" },
-    { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", sev: "P1", status: "Fixed", ref: "P4.1", t: "9", fixed: "2026-09-22", ver: "2026.09.1" },
-    { src: "R", fix: "Show a change of mode or research type in the conversation itself", sev: "P3", status: "Verified", ref: "P4.9", t: "" },
-    { src: "R", fix: "Never show a blank or lost reply", sev: "P1", status: "Fixed", ref: "P4.2", t: "", fixed: "2026-09-16", ver: "2026.09.1" },
-    { src: "T & R", fix: "Make the sources list and inline links match the answer", sev: "P2", status: "Verified", ref: "P4.3", t: "7" },
-    { src: "R", fix: "Remove the unused case-law court filter", sev: "P2", status: "Fixed", ref: "P4.4", t: "", fixed: "2026-09-15", ver: "2026.09.1" },
-    { src: "T & R", fix: "Report a lost research step as lost, not “no results”", sev: "P1", status: "Fixed", ref: "P4.5", t: "3", fixed: "2026-09-24", ver: "Next release" },
-    { src: "T", fix: "Label incomplete Deep Research steps as incomplete in progress messages", sev: "P3", status: "Fixed", ref: "P4.5", t: "3", fixed: "2026-09-24", ver: "Next release" },
-    { src: "R", fix: "Cut the cost and the wait of a lost reply (about 63,000 reasoning tokens per failed attempt)", sev: "P2", status: "Fixed", ref: "P4.10", t: "", fixed: "2026-09-25", ver: "Next release" },
-    { src: "R", fix: "Cut the wait when the model's provider stops responding mid-reply (two to three minutes per failed attempt)", sev: "P2", status: "Fixed", ref: "P4.11", t: "", fixed: "2026-09-25", ver: "Next release" },
-    { src: "R", fix: "Recover a chat reply lost when the model's provider stops responding (no second research request is behind it)", sev: "P2", status: "Verified", ref: "P4.12", t: "" },
-    { src: "R", fix: "Remove every agreement opener, including one that thanks the lawyer for challenging an earlier answer", sev: "P3", status: "Verified", ref: "P4.13", t: "" },
-    { src: "R", fix: "Show one search-scope line, not two, when the model copies an earlier one", sev: "P3", status: "Verified", ref: "P4.14", t: "" },
-    { src: "R", fix: "Say that a case-law search finding nothing is not proof there is none, when no legislation search ran", sev: "P2", status: "Verified", ref: "P4.15", t: "" },
-    { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Fixed", ref: "P4.6", t: "4", fixed: "2026-09-23", ver: "Next release" },
-    { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Fixed", ref: "P4.7", t: "2", fixed: "2026-09-24", ver: "Next release" },
-    { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", sev: "P3", status: "Verified", ref: "P4.8", t: "" },
-    { src: "R", fix: "Source Scottish case law (Court of Session, Sheriff Courts)", sev: "P2", status: "In progress", ref: "P5.2", t: "" },
-    { src: "T", fix: "Show provider errors (credit, rate limit) clearly when planning", sev: "P3", status: "Verified", ref: "TODO B6", t: "8" },
-    { src: "T", fix: "Order case-law results by relevance", sev: "P3", status: "To be verified", ref: "", t: "6" },
-    { src: "T", fix: "Reconcile summary counts with the answer's own list", sev: "P2", status: "To be verified", ref: "", t: "NH2" },
-    { src: "T", fix: "Scan whole instruments for a literal “£”", sev: "P3", status: "To be verified", ref: "", t: "4" },
-    { src: "T", fix: "Add an enabling-power rule to the synthesis prompt", sev: "P2", status: "To be verified", ref: "P2.3", t: "1" },
+    { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", type: "Measurement", t: "", added: "2026-09-22", fixed: "2026-09-22", ver: "2026.09.1" },
+    { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", type: "Measurement", t: "", added: "2026-09-22", fixed: "2026-09-23", ver: "2026.09.3" },
+    { src: "R", fix: "Confirm from the server's own request log which research filter and mode each pre-pilot question ran under", sev: "P3", status: "Verified", ref: "P0.7", type: "Measurement", t: "", added: "2026-09-23" },
+    { src: "T & R", fix: "Make the jurisdiction filter work", sev: "P1", status: "Fixed", ref: "P1.1", type: "Bug", t: "5", added: "2026-09-14", fixed: "2026-09-14", ver: "2026.09.1" },
+    { src: "R", fix: "Stop the “current only” filter implying in-force status", sev: "P1", status: "Fixed", ref: "P1.2", type: "Issue", t: "", added: "2026-09-14", fixed: "2026-09-14", ver: "2026.09.1" },
+    { src: "T & R", fix: "Report the search's true match count", sev: "P2", status: "Fixed", ref: "P1.3", type: "Bug", t: "4", added: "2026-09-14", fixed: "2026-09-14", ver: "2026.09.1" },
+    { src: "R", fix: "Link citations to the provision, not the Act", sev: "P3", status: "Fixed", ref: "P1.4", type: "Issue", t: "", added: "2026-09-14", fixed: "2026-09-14", ver: "2026.09.1" },
+    { src: "R", fix: "Enforce provision links in code", sev: "P3", status: "Fixed", ref: "P1.6", type: "Issue", t: "", added: "2026-09-15", fixed: "2026-09-15", ver: "2026.09.1" },
+    { src: "T & R", fix: "Disclose a research halt as a limit, not a finding", sev: "P1", status: "Fixed", ref: "P2.1", type: "Issue", t: "3", added: "2026-09-14", fixed: "2026-09-15", ver: "2026.09.1" },
+    { src: "T & R", fix: "Explain every “not found”: what was searched, and its limits", sev: "P1", status: "Fixed", ref: "P2.2", type: "Issue", t: "4", added: "2026-09-14", fixed: "2026-09-15", ver: "2026.09.1" },
+    { src: "T & R", fix: "Verify the enabling power", sev: "P1", status: "Fixed", ref: "P2.3", type: "Issue", t: "1", added: "2026-09-14", fixed: "2026-09-16", ver: "2026.09.1" },
+    { src: "R", fix: "Disclose the Scottish case-law corpus gap", sev: "P1", status: "Fixed", ref: "P2.4", type: "Issue", t: "", added: "2026-09-14", fixed: "2026-09-17", ver: "2026.09.1" },
+    { src: "R", fix: "Stop asserting in-force status", sev: "P1", status: "Fixed", ref: "P2.5", type: "Issue", t: "", added: "2026-09-14", fixed: "2026-09-16", ver: "2026.09.1" },
+    { src: "T & R", fix: "Don't reformat a halted step into an empty report", sev: "P2", status: "Fixed", ref: "P2.6", type: "Bug", t: "3", added: "2026-09-14", fixed: "2026-09-15", ver: "2026.09.1" },
+    { src: "R", fix: "Cap how long a step may keep searching", sev: "P2", status: "Fixed", ref: "P2.7", type: "Issue", t: "", added: "2026-09-15", fixed: "2026-09-17", ver: "2026.09.1" },
+    { src: "R", fix: "Re-qualify a “not found” repeated from an earlier turn", sev: "P2", status: "Fixed", ref: "P2.8", type: "Issue", t: "", added: "2026-09-16", fixed: "2026-09-17", ver: "2026.09.1" },
+    { src: "R", fix: "Record memo-served searches in the search scope", sev: "P3", status: "Fixed", ref: "P2.9", type: "Bug", t: "", added: "2026-09-16", fixed: "2026-09-16", ver: "2026.09.1" },
+    { src: "R", fix: "Cite the provision at the subsection asked for, not the whole section", sev: "P2", status: "Fixed", ref: "P3.1", type: "Issue", t: "", added: "2026-09-14", fixed: "2026-09-18", ver: "2026.09.1" },
+    { src: "R", fix: "Allow up to three section searches per Act, capped in code", sev: "P2", status: "Fixed", ref: "P3.1", type: "Issue", t: "", added: "2026-09-14", fixed: "2026-09-18", ver: "2026.09.1" },
+    { src: "R", fix: "Stop an answer changing back and forth under pushback: check the law before agreeing or holding firm. Blocked: its test rests on our reading of the regulation, which a lawyer must confirm first (questions ready, not yet sent)", sev: "P1", status: "Blocked", ref: "P3.2", type: "Issue", t: "", added: "2026-09-14" },
+    { src: "T & R", fix: "Separate retrieval from interpretation. Blocked: its tests rest on readings of the law a lawyer must confirm first, and it includes P3.2's test", sev: "P2", status: "Blocked", ref: "P3.3", type: "Issue", t: "NH1", added: "2026-09-14" },
+    { src: "T & R", fix: "Default to Scottish jurisdiction; flag UK-wide divergence", sev: "P2", status: "Fixed", ref: "P3.4", type: "Issue", t: "NH1", added: "2026-09-14", fixed: "2026-10-08", ver: "2026.10.1" },
+    { src: "T", fix: "Correct the jurisdiction filter note in the prompt", sev: "P3", status: "Fixed", ref: "P3.4", type: "Issue", t: "5", added: "2026-09-18", fixed: "2026-10-08", ver: "2026.10.1" },
+    { src: "R", fix: "Retrieve amendment and commencement relations", sev: "P1", status: "Fixed", ref: "P3.5", type: "Feature", t: "", added: "2026-09-15", fixed: "2026-09-16", ver: "2026.09.1" },
+    { src: "R", fix: "Keep the description field, which carries relationships", sev: "P2", status: "Fixed", ref: "P3.6", type: "Data Improvement", t: "", added: "2026-09-15", fixed: "2026-10-08", ver: "2026.10.1" },
+    { src: "R", fix: "Test whether an instrument is held, by its number", sev: "P2", status: "Fixed", ref: "P3.7", type: "Feature", t: "", added: "2026-09-15", fixed: "2026-09-24", ver: "2026.09.3" },
+    { src: "T & R", fix: "Stop a step looping on instruments it already has; write up findings at the cap", sev: "P2", status: "Fixed", ref: "P3.8", type: "Issue", t: "3", added: "2026-09-17", fixed: "2026-09-21", ver: "2026.09.1" },
+    { src: "T", fix: "Make the case-law date filter work", sev: "P2", status: "Fixed", ref: "P3.9", type: "Bug", t: "6", added: "2026-09-18", fixed: "2026-10-05", ver: "2026.10.1" },
+    { src: "T", fix: "Hand every later Deep Research step the list the earlier steps found (it searched for it again, and dropped instruments from it in 4 of 12 steps)", sev: "P2", status: "Fixed", ref: "P3.10", type: "Issue", t: "3", added: "2026-09-18", fixed: "2026-10-09", ver: "2026.10.1" },
+    { src: "R", fix: "Say what a cited subsection's sibling subsections provide", sev: "P2", status: "Fixed", ref: "P3.11", type: "Issue", t: "", added: "2026-09-18", fixed: "2026-09-22", ver: "2026.09.1" },
+    { src: "R", fix: "Reach a Schedule paragraph asked for by number (LEX holds the Schedule as one provision), and keep each paragraph the answer needs", sev: "P1", status: "In progress", ref: "P3.12", type: "Feature", t: "", added: "2026-09-21" },
+    { src: "R", fix: "Stop the chat reply dropping a subsection the research step had already written", sev: "P2", status: "Fixed", ref: "P3.13", type: "Issue", t: "", added: "2026-09-22", fixed: "2026-09-23", ver: "2026.09.2" },
+    { src: "R", fix: "Tell the quick-lookup step which research filters are active", sev: "P3", status: "Verified", ref: "P3.14", type: "Issue", t: "", added: "2026-09-22" },
+    { src: "R", fix: "In a follow-up answered without new research, say the instrument itself is not held, not just its text", sev: "P3", status: "Fixed", ref: "P3.15", type: "Issue", t: "", added: "2026-09-24", fixed: "2026-09-25", ver: "2026.09.3" },
+    { src: "R", fix: "Stop the step that condenses search results adding its own interpretation (one reached a lawyer as a quotation)", sev: "P1", status: "Fixed", ref: "P3.16", type: "Issue", t: "", added: "2026-09-29", fixed: "2026-10-01", ver: "2026.10.1" },
+    { src: "R", fix: "Fetch the section that says where a general rule applies, not only its definitions. Blocked: the fix is built; whether it passes turns on a lawyer saying if a reading offered as one possibility is acceptable", sev: "P1", status: "Blocked", ref: "P3.17", type: "Issue", t: "", added: "2026-09-29" },
+    { src: "R", fix: "Stop the Deep Research report asserting that an English doctrine applies in Scotland without a Scottish source", sev: "P1", status: "Fixed", ref: "P3.18", type: "Issue", t: "", added: "2026-09-29", fixed: "2026-09-29", ver: "2026.09.3" },
+    { src: "R", fix: "Keep which provision made which change when reading the record of changes (a wrong inserting subsection reached an answer)", sev: "P1", status: "Fixed", ref: "P3.19", type: "Bug", t: "", added: "2026-10-02", fixed: "2026-10-05", ver: "2026.10.1" },
+    { src: "R", fix: "Retrieve Scottish judgments from the Scottish Courts and Tribunals Service's judgments search (built and switched off: it works once the server has two SCTS addresses opened)", sev: "P2", status: "Fixed", ref: "P3.20", type: "Data Improvement", t: "", added: "2026-10-02", fixed: "2026-10-09", ver: "2026.10.1" },
+    { src: "R", fix: "Retrieve the date a provision came into force, not only the instrument that commenced it", sev: "P2", status: "Fixed", ref: "P3.21", type: "Data Improvement", t: "", added: "2026-10-02", fixed: "2026-10-08", ver: "2026.10.1" },
+    { src: "R", fix: "Tell the system how many case-law results there were, not how many it was shown (at most 50)", sev: "P2", status: "Fixed", ref: "P3.23", type: "Bug", t: "", added: "2026-10-02", fixed: "2026-10-05", ver: "2026.10.1" },
+    { src: "T", fix: "Don't say a provision is “not yet commenced” or “remains in force” when the research found only that no commencement or repeal is recorded", sev: "P1", status: "Fixed", ref: "P3.24", type: "Issue", t: "30 Sep", added: "2026-10-05", fixed: "2026-10-05", ver: "2026.10.1" },
+    { src: "T", fix: "Stop the quick research step fetching whole Acts, which its own instructions forbid (about 1 conversational answer in 9)", sev: "P2", status: "Fixed", ref: "P3.25", type: "Issue", t: "30 Sep", added: "2026-10-05", fixed: "2026-10-06", ver: "2026.10.1" },
+    { src: "T", fix: "Include, not drop, a search result whose territorial extent the jurisdiction filter does not recognise (such as legislation.gov.uk's “N.I.”)", sev: "P3", status: "Fixed", ref: "P3.26", type: "Bug", t: "30 Sep", added: "2026-10-05", fixed: "2026-10-10", ver: "2026.10.1" },
+    { src: "R", fix: "Include schedules and annexes when reading an instrument's whole text (they were always left out, so a provision in one could be called not held)", sev: "P1", status: "Fixed", ref: "P3.27", type: "Bug", t: "", added: "2026-10-05", fixed: "2026-10-08", ver: "2026.10.1" },
+    { src: "R", fix: "Count every kind of removal in the record of changes (“omitted”, “ceases to have effect”), not only repeals and revocations", sev: "P3", status: "In progress", ref: "P3.28", type: "Bug", t: "", added: "2026-10-05" },
+    { src: "R", fix: "Stop the check that spots a case's appeal linking unrelated cases that share one word of a party's name", sev: "P3", status: "Verified", ref: "P3.29", type: "Bug", t: "", added: "2026-10-06" },
+    { src: "T & R", fix: "Fix the research-mode dead-end and mode-switch wording", sev: "P1", status: "Fixed", ref: "P4.1", type: "Issue", t: "9", added: "2026-09-14", fixed: "2026-09-22", ver: "2026.09.1" },
+    { src: "R", fix: "Show a change of mode or research type in the conversation itself", sev: "P3", status: "Verified", ref: "P4.9", type: "Feature", t: "", added: "2026-09-22" },
+    { src: "R", fix: "Never show a blank or lost reply", sev: "P1", status: "Fixed", ref: "P4.2", type: "Bug", t: "", added: "2026-09-14", fixed: "2026-09-16", ver: "2026.09.1" },
+    { src: "R", fix: "Make the sources list match the answer: stop listing every search result when the research cites none, and keep every source the answer cites", sev: "P2", status: "Fixed", ref: "P4.3", type: "Issue", t: "", added: "2026-09-14", fixed: "2026-10-09", ver: "2026.10.1" },
+    { src: "R", fix: "Remove the unused case-law court filter", sev: "P2", status: "Fixed", ref: "P4.4", type: "Bug", t: "", added: "2026-09-15", fixed: "2026-09-15", ver: "2026.09.1" },
+    { src: "T & R", fix: "Report a lost research step as lost, not “no results”", sev: "P1", status: "Fixed", ref: "P4.5", type: "Issue", t: "3", added: "2026-09-17", fixed: "2026-09-24", ver: "2026.09.3" },
+    { src: "T", fix: "Label incomplete Deep Research steps as incomplete in progress messages", sev: "P3", status: "Fixed", ref: "P4.5", type: "Issue", t: "3", added: "2026-09-18", fixed: "2026-09-24", ver: "2026.09.3" },
+    { src: "R", fix: "Cut the cost and the wait of a lost reply (about 63,000 reasoning tokens per failed attempt)", sev: "P2", status: "Fixed", ref: "P4.10", type: "Issue", t: "", added: "2026-09-24", fixed: "2026-09-25", ver: "2026.09.3" },
+    { src: "R", fix: "Cut the wait when the model's provider stops responding mid-reply (two to three minutes per failed attempt)", sev: "P2", status: "Fixed", ref: "P4.11", type: "Issue", t: "", added: "2026-09-25", fixed: "2026-09-25", ver: "2026.09.3" },
+    { src: "R", fix: "Cut the cost and the wait of a lost chat reply, when the provider stops responding or the model runs on and writes nothing (no second research request is behind it)", sev: "P2", status: "Fixed", ref: "P4.12", type: "Issue", t: "", added: "2026-09-25", fixed: "2026-10-09", ver: "2026.10.1" },
+    { src: "R", fix: "Remove every agreement opener, including one that thanks the lawyer for challenging an earlier answer", sev: "P3", status: "Fixed", ref: "P4.13", type: "Issue", t: "", added: "2026-09-29", fixed: "2026-09-29", ver: "2026.09.3" },
+    { src: "R", fix: "Show one search-scope line, not two, when the model copies an earlier one", sev: "P3", status: "Fixed", ref: "P4.14", type: "Bug", t: "", added: "2026-09-29", fixed: "2026-09-29", ver: "2026.09.3" },
+    { src: "R", fix: "Say that a case-law search finding nothing is not proof there is none", sev: "P2", status: "Fixed", ref: "P4.15", type: "Issue", t: "", added: "2026-09-29", fixed: "2026-10-01", ver: "2026.10.1" },
+    { src: "R", fix: "Remove an opening “You are correct to highlight this”, which the opener check missed", sev: "P3", status: "Fixed", ref: "P4.16", type: "Issue", t: "", added: "2026-10-01", fixed: "2026-10-01", ver: "2026.10.1" },
+    { src: "R", fix: "Say what was searched under an answer whose research used only section searches (it gets no search-scope line)", sev: "P2", status: "Fixed", ref: "P4.17", type: "Issue", t: "", added: "2026-10-01", fixed: "2026-10-02", ver: "2026.10.1" },
+    { src: "R", fix: "Stop the line under an answer saying no record of changes was consulted when one was", sev: "P3", status: "Fixed", ref: "P4.18", type: "Bug", t: "", added: "2026-10-02", fixed: "2026-10-02", ver: "2026.10.1" },
+    { src: "R", fix: "Retry a case-law request refused because the service is busy, as legislation requests are", sev: "P2", status: "Fixed", ref: "P4.19", type: "Bug", t: "", added: "2026-10-02", fixed: "2026-10-05", ver: "2026.10.1" },
+    { src: "T", fix: "Name one list of the change records consulted under an answer, not two that disagree", sev: "P3", status: "Verified", ref: "P4.20", type: "Bug", t: "30 Sep", added: "2026-10-05" },
+    { src: "T", fix: "Don't tell the lawyer an instrument we don't hold is “not a sign that the citation is wrong”: a lookup can't tell", sev: "P2", status: "Fixed", ref: "P4.21", type: "Issue", t: "30 Sep", added: "2026-10-05", fixed: "2026-10-05", ver: "2026.10.1" },
+    { src: "T", fix: "Stop the answer cleaner leaving a hole where a report names the enabling-power note in a sentence", sev: "P2", status: "Fixed", ref: "P4.22", type: "Bug", t: "30 Sep", added: "2026-10-05", fixed: "2026-10-09", ver: "2026.10.1" },
+    { src: "T & R", fix: "Keep the links the research gave when the chat reply names an instrument (split from P4.3)", sev: "P2", status: "Fixed", ref: "P4.23", type: "Issue", t: "7", added: "2026-09-18", fixed: "2026-10-10", ver: "2026.10.1" },
+    { src: "R", fix: "Give every entry in the sources list a title and a link (some show only an identifier, or no link)", sev: "P3", status: "Fixed", ref: "P4.24", type: "Bug", t: "", added: "2026-10-08", fixed: "2026-10-09", ver: "2026.10.1" },
+    { src: "T", fix: "Remove prompt wording that says the whole database lacks something", sev: "P2", status: "Fixed", ref: "P4.6", type: "Issue", t: "4", added: "2026-09-18", fixed: "2026-09-23", ver: "2026.09.3" },
+    { src: "T & R", fix: "Don't say “no case law found” when case law wasn't searched", sev: "P1", status: "Fixed", ref: "P4.7", type: "Issue", t: "2", added: "2026-09-18", fixed: "2026-09-24", ver: "2026.09.3" },
+    { src: "R", fix: "Strip the internal “[Research Agent Result]” label from answers", sev: "P3", status: "Verified", ref: "P4.8", type: "Bug", t: "", added: "2026-09-21" },
+    { src: "R", fix: "Decide where Scottish case law will come from (Court of Session, Sheriff Courts); the build is P3.20", sev: "P2", status: "Fixed", ref: "P5.2", type: "Data Improvement", t: "", added: "2026-09-14", fixed: "2026-10-02", ver: "2026.10.1" },
+    { src: "R", fix: "Check legislation.gov.uk for what our legislation database lacks (enabling powers, past versions, dated changes)", sev: "P3", status: "Fixed", ref: "P5.4", type: "Data Improvement", t: "", added: "2026-10-02", fixed: "2026-10-09", ver: "2026.10.1" },
+    { src: "T", fix: "Show provider errors (credit, rate limit) clearly when planning", sev: "P3", status: "Verified", ref: "TODO B6", type: "Issue", t: "8", added: "2026-09-18" },
+    { src: "T", fix: "Order case-law results by relevance (they came back newest first)", sev: "P2", status: "Fixed", ref: "P3.22", type: "Issue", t: "6", added: "2026-09-18", fixed: "2026-10-09", ver: "2026.10.1" },
+    { src: "T", fix: "Reconcile summary counts with the answer's own list", sev: "P2", status: "To be verified", ref: "", type: "Issue", t: "NH2", added: "2026-09-18" },
+    { src: "T", fix: "Scan whole instruments for a literal “£”", sev: "P3", status: "To be verified", ref: "", type: "Feature", t: "4", added: "2026-09-18" },
+    { src: "T", fix: "Add an enabling-power rule to the synthesis prompt", sev: "P2", status: "To be verified", ref: "P2.3", type: "Issue", t: "1", added: "2026-09-18" },
+    { src: "R", fix: "Answer “what was made under section N of an Act?” from a record of what each instrument's own opening words say it was made under (Scottish statutory instruments 1999–2026 and UK statutory instruments 1987–2026, about 87,000)", sev: "P1", status: "Fixed", ref: "P3.31", type: "Data Improvement", t: "", added: "2026-10-08", fixed: "2026-10-08", ver: "2026.10.1" },
+    { src: "R", fix: "Ask the National Archives for access to its bulk legislation data and query service, now by invitation only", sev: "P3", status: "Verified", ref: "P5.5", type: "Data Improvement", t: "", added: "2026-10-08" },
+    { src: "R", fix: "Record each regulation's own dates (made, laid, in force), how Parliament approved it, and whom Ministers consulted (parked: no pre-pilot question asked for them)", sev: "P2", status: "Verified", ref: "P3.32", type: "Data Improvement", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Say which instruments in a “made under” list legislation.gov.uk records as revoked (in whole, with the revoking instrument and date, or in part), and the day that was checked", sev: "P2", status: "Fixed", ref: "P3.33", type: "Data Improvement", t: "", added: "2026-10-09", fixed: "2026-10-10", ver: "2026.10.1" },
+    { src: "R", fix: "Find every statutory definition of a term across the legislation, for questions asking for all of them (re-scoped 9 October; measured first)", sev: "P2", status: "Verified", ref: "P3.34", type: "Data Improvement", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Add instruments made before 1987 to the “made under” record. Blocked: waits on the National Archives' bulk data, or a decision to read scanned pages by OCR", sev: "P3", status: "Blocked", ref: "P3.35", type: "Data Improvement", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Index which judgments cite a provision. Blocked: needs the National Archives' licence for computational use of its judgments, and the Scottish Courts' agreement to the same use", sev: "P3", status: "Blocked", ref: "P3.36", type: "Data Improvement", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Build a general map of cross-references between provisions (not recommended for now: little evidence that it helps)", sev: "P3", status: "To be verified", ref: "P3.37", type: "Data Improvement", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Stop an answer with no sources of its own showing the previous answer's sources", sev: "P3", status: "Verified", ref: "P4.25", type: "Bug", t: "", added: "2026-10-09" },
+    { src: "R", fix: "When our legislation database does not hold a recent instrument, read it from legislation.gov.uk instead of stopping at “not held”", sev: "P2", status: "In progress", ref: "P3.38", type: "Data Improvement", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Answer what the law said on a past date, from the versions as they stood on that date (parked: no pre-pilot question needed it; re-opened if the pilot shows two or more)", sev: "P2", status: "Verified", ref: "P3.39", type: "Data Improvement", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Use explanatory notes and Scottish policy notes to say what a provision or instrument is for", sev: "P2", status: "Verified", ref: "P3.40", type: "Data Improvement", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Say where each provision applies (its territorial extent), not only the Act as a whole (parked: no pre-pilot answer turned on it)", sev: "P2", status: "Verified", ref: "P3.42", type: "Data Improvement", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Add the Welsh and Northern Ireland series to the “made under” record (only if questions need them)", sev: "P3", status: "To be verified", ref: "P3.44", type: "Data Improvement", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Stop the step that condenses search results writing in a case citation its source does not contain (about 1 summary in 200; some reached answers)", sev: "P1", status: "Fixed", ref: "P3.45", type: "Issue", t: "", added: "2026-10-09", fixed: "2026-10-10", ver: "2026.10.1" },
+    { src: "R", fix: "Don't state a leading case the National Archives does not hold as if it had been read (split from P3.22)", sev: "P2", status: "In progress", ref: "P3.46", type: "Issue", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Stop the step that condenses search results naming a case its source does not contain, without a citation (P3.45 catches only citations)", sev: "P1", status: "Verified", ref: "P3.47", type: "Issue", t: "", added: "2026-10-10" },
+    { src: "R", fix: "In a short chat answer listing instruments made under a power, say which are partly revoked (the full lists do)", sev: "P3", status: "Verified", ref: "P3.48", type: "Issue", t: "", added: "2026-10-10" },
+    { src: "R", fix: "List in the sources an instrument the answer took from a direct lookup or a “made under” list", sev: "P3", status: "Verified", ref: "P4.26", type: "Bug", t: "", added: "2026-10-09" },
+    { src: "R", fix: "Say under the jurisdiction filter what it keeps, and correct “comprehensive coverage” in the data-sources box", sev: "P3", status: "Verified", ref: "P4.27", type: "Issue", t: "", added: "2026-10-09" },
   ];
   // ---- End of data. ----
 
-  const STATUSES = ["Fixed", "In progress", "Partial", "Verified", "To be verified"];
-  const STATUS_CLASS = { "Fixed": "st-fixed", "In progress": "st-wip", "Partial": "st-partial", "Verified": "st-verified", "To be verified": "st-tbv" };
+  const STATUSES = ["Fixed", "In progress", "Partial", "Verified", "Blocked", "To be verified"];
+  const STATUS_CLASS = { "Fixed": "st-fixed", "In progress": "st-wip", "Partial": "st-partial", "Verified": "st-verified", "Blocked": "st-blocked", "To be verified": "st-tbv" };
   const SOURCES = [["all", "All"], ["T", "Thomas"], ["R", "Us"], ["T & R", "Both"]];
   let statusFilter = "all";
   let sourceFilter = "all";
+  // Type (tracker v45, user request): what kind of work a row is.
+  const TYPES = ["Bug", "Issue", "Feature", "Data Improvement", "Measurement"];
+  let typeFilter = "all";
 
   function el(tag, cls, text) {
     const e = document.createElement(tag);
@@ -862,24 +1371,31 @@
     body.textContent = "";
     let shown = 0;
     let lastGroup = null;
-    // Severity first (P1 at the top), then status (Fixed first), then fixed date (oldest
-    // first); rows with no fixed date, and ties, keep plan order.
+    // Unfinished rows first (tracker v40, user request), then severity (P1 at the top), then
+    // status (In progress, Partial, Verified, Blocked, To be verified; Fixed last), then fixed
+    // date (oldest first); rows with no fixed date, and ties, keep plan order. So unfinished P1
+    // rows lead the table and the Fixed rows follow, again P1 first.
+    const isFixed = r => (r.status === "Fixed" ? 1 : 0);
     const ordered = ROWS.map((r, i) => [r, i]).sort((a, b) =>
+      isFixed(a[0]) - isFixed(b[0]) ||
       a[0].sev.localeCompare(b[0].sev) ||
       STATUSES.indexOf(a[0].status) - STATUSES.indexOf(b[0].status) ||
       (a[0].fixed || "").localeCompare(b[0].fixed || "") || a[1] - b[1]).map(x => x[0]);
     for (const row of ordered) {
       if (statusFilter !== "all" && row.status !== statusFilter) continue;
       if (!matchesSource(row)) continue;
+      if (typeFilter !== "all" && row.type !== typeFilter) continue;
       const tr = el("tr");
       const group = row.sev + "|" + row.status;  // a rule between severity/status bands
       if (lastGroup !== null && group !== lastGroup) tr.className = "group-start";
       lastGroup = group;
       tr.append(el("td", "ref", row.ref || "—"));
       tr.append(el("td", "fix", row.fix));
+      tr.append(el("td", "type", row.type || "—"));
       const st = el("td");
       st.append(el("span", "status " + STATUS_CLASS[row.status], row.status));
       tr.append(st);
+      tr.append(el("td", "fdate", row.added ? fmtDate(row.added) : "—"));
       tr.append(el("td", "fdate", row.fixed ? fmtDate(row.fixed) : "—"));
       // A release number plain; "Next release" muted, like a date not yet reached.
       tr.append(el("td", row.ver && !/^\d/.test(row.ver) ? "ver ver-next" : "ver",
@@ -924,6 +1440,22 @@
         render();
       });
       src.append(b);
+    }
+    const tf = document.getElementById("type-filters");
+    const typeButtons = [["all", "All", ROWS.length],
+                         ...TYPES.map(t => [t, t, ROWS.filter(r => r.type === t).length])];
+    for (const [value, label, n] of typeButtons) {
+      const b = el("button", "chip-btn");
+      b.type = "button";
+      b.id = "type-" + value.replace(/\s+/g, "-").toLowerCase();
+      b.setAttribute("aria-pressed", String(value === typeFilter));
+      b.append(el("span", "", label), el("span", "n", String(n)));
+      b.addEventListener("click", () => {
+        typeFilter = value;
+        tf.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+        render();
+      });
+      tf.append(b);
     }
   }
 
@@ -987,7 +1519,7 @@
     document.getElementById("hero-of").textContent = "of " + total + " fixes";
     document.getElementById("hero-sub").textContent =
       counts["In progress"] + " in progress · " + counts["Partial"] + " partial · " + counts["Verified"] + " verified, not yet built · " +
-      counts["To be verified"] + " to be verified";
+      counts["Blocked"] + " blocked · " + counts["To be verified"] + " to be verified";
     buildBar(document.getElementById("bar-all"), ROWS, false);
     const legend = document.getElementById("legend");
     legend.textContent = "";
@@ -1030,6 +1562,7 @@
   buildFilters();
   render();
   renderProgress();
+  document.getElementById("as-at").textContent = "as at " + AS_AT;
   document.getElementById("stamp").textContent =
     "Last updated " + UPDATED + ". Source: docs/prepilot-fixes/summary-table.html on the fix branch.";
 </script>

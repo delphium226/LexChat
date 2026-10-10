@@ -1,0 +1,69 @@
+{
+ "version": "2026-10-10.1",
+ "label": "Scottish statutory instruments made from 1999 to 2026 and UK statutory instruments made from 1987 to 2026",
+ "not_covered": "statutory instruments made before 1987 (held by legislation.gov.uk only as scanned images); Northern Ireland Statutory Rules, a series of their own (Welsh statutory instruments and Northern Ireland Orders in Council carry UK SI numbers and are held under them); instruments published on legislation.gov.uk without their text (mostly temporary traffic orders); instruments made under an EU regulation or another Order rather than an Act; and any instrument published after the last refresh",
+ "harvested_at": "2026-10-09",
+ "types": [
+  "ssi",
+  "uksi"
+ ],
+ "years": [
+  1987,
+  2026
+ ],
+ "instruments": 86744,
+ "with_powers": 68780,
+ "act_titles_unresolved": 90,
+ "source": "legislation.gov.uk as-made XML preambles; tools/madeunder_probe.py (FIX_PLAN P3.31)",
+ "revocations": {
+  "source": "legislation.gov.uk's Changes to Legislation record, the affected feeds of the SSI type and of each UK SI year; tools/revocation_harvest.py (FIX_PLAN P3.33)",
+  "checked": {
+   "ssi": "2026-10-10",
+   "uksi/1987": "2026-10-10",
+   "uksi/1988": "2026-10-10",
+   "uksi/1989": "2026-10-10",
+   "uksi/1990": "2026-10-10",
+   "uksi/1991": "2026-10-10",
+   "uksi/1992": "2026-10-10",
+   "uksi/1993": "2026-10-10",
+   "uksi/1994": "2026-10-10",
+   "uksi/1995": "2026-10-10",
+   "uksi/1996": "2026-10-10",
+   "uksi/1997": "2026-10-10",
+   "uksi/1998": "2026-10-10",
+   "uksi/1999": "2026-10-10",
+   "uksi/2000": "2026-10-10",
+   "uksi/2001": "2026-10-10",
+   "uksi/2002": "2026-10-10",
+   "uksi/2003": "2026-10-10",
+   "uksi/2004": "2026-10-10",
+   "uksi/2005": "2026-10-10",
+   "uksi/2006": "2026-10-10",
+   "uksi/2007": "2026-10-10",
+   "uksi/2008": "2026-10-10",
+   "uksi/2009": "2026-10-10",
+   "uksi/2010": "2026-10-10",
+   "uksi/2011": "2026-10-10",
+   "uksi/2012": "2026-10-10",
+   "uksi/2013": "2026-10-10",
+   "uksi/2014": "2026-10-10",
+   "uksi/2015": "2026-10-10",
+   "uksi/2016": "2026-10-10",
+   "uksi/2017": "2026-10-10",
+   "uksi/2018": "2026-10-10",
+   "uksi/2019": "2026-10-10",
+   "uksi/2020": "2026-10-10",
+   "uksi/2021": "2026-10-10",
+   "uksi/2022": "2026-10-10",
+   "uksi/2023": "2026-10-10",
+   "uksi/2024": "2026-10-10",
+   "uksi/2025": "2026-10-10",
+   "uksi/2026": "2026-10-10"
+  },
+  "flagged": {
+   "partly": 5610,
+   "wholly": 20308,
+   "qualified": 60
+  }
+ }
+}

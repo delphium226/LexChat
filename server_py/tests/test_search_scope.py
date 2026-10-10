@@ -1063,11 +1063,419 @@ def test_footer_trips_no_detector():
                     {"legislation_id": "asp/2025/2", "provisions_commenced": 8,
                      "commencement_orders_of_amendments": 0,
                      "repeal_or_revocation_relations": 0})
-    for log in (empty_log, sourced_log):
+    # P4.18, the third branch: a change record consulted that held no
+    # commencement or repeal relation. Its first draft ("list no commencement
+    # ...") tripped `NEG_ASSERTED`, which is what this test is for.
+    consulted_log = []
+    record_currency(consulted_log, "get_legislation_changes",
+                    {"legislation_id": "ssi/1901/1"},
+                    {"legislation_id": "ssi/1901/1", "provisions_commenced": 0,
+                     "commencement_orders_of_amendments": 0,
+                     "repeal_or_revocation_relations": 0})
+    from tools.replay_report import (
+        IN_FORCE_CLAIM, _CMC_CONTEXT, _CMC_DENIED, _CUR_DISCLOSED,
+        _currency_asserted, _sentences,
+    )
+    for log in (empty_log, sourced_log, consulted_log):
         clause = _currency_footer_clause(log)
         assert clause
         assert not NEG_ASSERTED.search(clause)
         assert derivation_claims(clause)[0] == []
+        # P3.5's commencement denial and P2.5's own `CURRENCY_ASSERTED`, per
+        # sentence, as `cmd_commencements` and `cmd_currency` read them.
+        for s in _sentences(clause):
+            assert not (_CMC_CONTEXT.search(s) and _CMC_DENIED.search(s)), s
+            assert not _currency_asserted(s), s
+        # No more "in force" adjacencies than the opening every branch shares,
+        # and no disclosure credit taken by the product's own footer.
+        assert len(IN_FORCE_CLAIM.findall(clause)) == 1
+        assert not _CUR_DISCLOSED.search(clause)
+    assert "no change record was consulted" not in _currency_footer_clause(consulted_log)
+
+    # P3.24: the negative and continuing commencement detector
+    # (`replay_report negcurrency`). Screened on the WHOLE footer, every clause
+    # at once, because the lookup clause (P3.7) and the change-record clause
+    # (P3.5) say "not held" and "not recorded" in the vocabulary it reads.
+    from src.utils.instrument_lookup import HELD_WITHOUT_TEXT, NOT_HELD
+    from src.utils.search_scope import LOOKUP_ENTRY, record_relations
+    from tools.replay_report import negcurrency_claim
+    full_log = _log_with(("ssi/1901/8", False), ("uksi/1901/9", True))
+    full_log += empty_log + sourced_log + consulted_log
+    record_relations(full_log, "get_legislation_changes",
+                     {"legislation_id": "ssi/1901/1"},
+                     {"legislation_id": "ssi/1901/1", "relations": 0,
+                      "by_other_legislation": 0, "related": [],
+                      "window_complete": False})
+    record_relations(full_log, "get_legislation_changes",
+                     {"legislation_id": "asp/1901/2"},
+                     {"legislation_id": "asp/1901/2", "relations": 3,
+                      "by_other_legislation": 3, "window_complete": True,
+                      "related": [{"legislation_id": "ssi/1901/3", "self": False}]})
+    full_log += [
+        {"tool": LOOKUP_ENTRY, "legislation_id": "ssi/1901/4",
+         "label": "SSI 1901/4", "status": NOT_HELD},
+        {"tool": LOOKUP_ENTRY, "legislation_id": "ssi/1901/5",
+         "label": "SSI 1901/5", "status": HELD_WITHOUT_TEXT},
+    ]
+    footer = answer_scope_footer(full_log, {})
+    assert "looked up by" in footer and "recorded changes" in footer
+    for s in _sentences(footer):
+        assert negcurrency_claim(s)[0] is None, s
+
+    # P4.21: P3.7's lookup clause, both branches, so a detector added here
+    # screens it too.
+    from src.utils.search_scope import LOOKUP_ENTRY, _lookup_footer_clause
+    lookup_clause = _lookup_footer_clause([
+        {"tool": LOOKUP_ENTRY, "legislation_id": "ssi/1901/3", "label": "SSI 1901/3",
+         "status": "not_held"},
+        {"tool": LOOKUP_ENTRY, "legislation_id": "ssi/1901/4", "label": "SSI 1901/4",
+         "status": "held_without_text"}])
+    assert lookup_clause and not NEG_ASSERTED.search(lookup_clause)
+    assert derivation_claims(lookup_clause)[0] == []
+    assert not IN_FORCE_CLAIM.search(lookup_clause)
+    for s in _sentences(lookup_clause):
+        assert not (_CMC_CONTEXT.search(s) and _CMC_DENIED.search(s)), s
+        assert not _currency_asserted(s), s
+        assert negcurrency_claim(s)[0] is None, s
+
+    # P3.24: the per-instrument commencement line in `_currency_limb`, every
+    # case, and the prompt sentence beside `_IN_FORCE_RULE`. Neither is a
+    # footer, but the line sits in the scope block a Manager can echo into an
+    # answer and the sentence in a prompt a Worker can echo into a report, so
+    # both are screened as footer text, sentence by sentence, against every
+    # detector that reads answers. ("not recorded as commenced", the wording
+    # the line permits, is in `negcurrency`'s drop vocabulary by design: a
+    # statement about the record, never a claim.)
+    from src.prompts import _COMMENCEMENT_RECORD_RULE
+    from src.utils.search_scope import _commencement_lines
+    from tools.replay_report import (
+        HALT_AS_TIMEOUT, HALT_LITERAL, HALT_PARAPHRASE, NEG_BLAMED_INDEX,
+        NEG_BLAMED_USER, NEG_LIMITS, NEG_TERMS, NOT_FOUND, OPENER_VOCAB,
+    )
+
+    def _cif(lid, n, self_=False, cut=0, effect="coming into force", direction="to"):
+        g = {"legislation_id": lid, "self": self_, "type_of_effect": effect,
+             "count": n, "changes": [{"by": "reg. 2", "changed": ["s. 1"]}]}
+        if cut:
+            g["changes_not_listed"] = cut
+        return g
+
+    def _rec(lid, related, total, direction="to"):
+        return {"legislation_id": lid, "direction": direction, "relations": 9,
+                "provisions_commenced": total, "window_complete": True,
+                "related": related}
+
+    variants = {
+        "other_full": [_rec("asp/1901/1", [_cif("ssi/1901/3", 4)], 4)],
+        "other_cut": [_rec("asp/1901/2", [_cif("ssi/1901/3", 70, cut=10)], 70)],
+        "self_only": [_rec("asp/1901/4", [_cif("asp/1901/4", 9, self_=True)], 9)],
+        "unlisted": [_rec("asp/1901/5", [], 3)],
+        "none": [_rec("asp/1901/6", [_cif("ssi/1901/7", 2, effect="words substituted")], 0)],
+        "by": [_rec("ssi/1901/8", [_cif("asp/1901/9", 5)], 5, "by")],
+        "by, empty": [_rec("ssi/1901/10", [], 0, "by")],
+        "to and by": [_rec("asp/1901/6", [], 0),
+                      _rec("asp/1901/6", [_cif("asp/1901/9", 5)], 5, "by")],
+        "not consulted": [],
+        "overflow": [_rec(f"asp/1901/{20 + i}", [], 0) for i in range(14)],
+    }
+    screened = [_COMMENCEMENT_RECORD_RULE]
+    for name, recs in variants.items():
+        clog = []
+        for r in recs:
+            record_currency(clog, "get_legislation_changes",
+                            {"legislation_id": r["legislation_id"]}, r)
+        text = _commencement_lines(clog)
+        assert text, name
+        screened.append(text)
+    # P3.24 extension: the Worker-facing sentences on the change record itself
+    # (`_relation_commencement_bits`), every case, since a Worker can echo them.
+    from src.utils.search_scope import _relation_commencement_bits
+    variants["mixed"] = [_rec("asp/1901/11", [_cif("ssi/1901/3", 2),
+                                              _cif("asp/1901/11", 3, self_=True)], 5)]
+    worker_texts = []
+    for name, recs in variants.items():
+        for r in recs:
+            if r["provisions_commenced"]:
+                worker_texts.append(_relation_commencement_bits(r, r["provisions_commenced"]))
+    # by another instrument in full, cut, self only, a count with no group,
+    # "by" (twice) and mixed
+    assert len(worker_texts) == 7 and all(worker_texts), worker_texts
+    screened += worker_texts
+    # P3.27: the SCHEDULES AND ANNEXES line on a whole-text read, every case
+    # (headings named, one heading, lead text, no heading, none held, the
+    # boundary unknown). It is Worker-facing, and a Worker can echo it.
+    screened += _schedule_line_variants()
+    # P3.12: every header, piece label and line of the PROVISION FETCHED BY
+    # CODE block, on synthetic labels with no statutory text in the body.
+    screened += _fetched_wording_variants()
+    # P3.38: every block, line, limb, footer clause and changed note of the
+    # legislation.gov.uk text read, on synthetic ids with an empty body.
+    screened += _published_wording_variants()
+    # Batch 8 A2: P3.1's cap on an instrument whose complete provision list
+    # code read, every new sentence: the refusal's two fields (Worker-facing),
+    # the limb (Manager-facing) and the footer's added sentence (lawyer-facing).
+    # The clause about schedules must read as an index fact, never a limit.
+    held_texts = _section_cap_held_variants()
+    screened += held_texts
+    from tools.replay_report import sched_unit_clauses
+    unit_rx = re.compile(r"\b(?:schedules?|annex(?:es)?)\b", re.I)
+    for text in held_texts:
+        classes = [c for c, _, _ in sched_unit_clauses(text, unit_rx)]
+        assert not {"LIMIT", "OFFER"} & set(classes), (classes, text)
+        if "none of them is a schedule" in text:
+            assert "INDEX" in classes, (classes, text)
+    for text in screened:
+        assert not NEG_ASSERTED.search(text), text
+        assert not NOT_FOUND.search(text), text
+        assert derivation_claims(text)[0] == [], text
+        assert not IN_FORCE_CLAIM.search(text), text
+        assert not _CUR_DISCLOSED.search(text), text
+        for rx in (NEG_TERMS, NEG_LIMITS, NEG_BLAMED_INDEX, NEG_BLAMED_USER,
+                   HALT_LITERAL, HALT_PARAPHRASE, HALT_AS_TIMEOUT, OPENER_VOCAB):
+            assert not rx.search(text), (rx.pattern[:40], text)
+        assert _without_footer(text) == text.strip()
+        for s in _sentences(text):
+            assert not (_CMC_CONTEXT.search(s) and _CMC_DENIED.search(s)), s
+            assert not _currency_asserted(s), s
+            assert negcurrency_claim(s)[0] is None, s
+
+    # P3.38: the two notes it rewords trip no detector their originals did not.
+    def _trips(text):
+        found = set()
+        for rx in (NEG_ASSERTED, NOT_FOUND, IN_FORCE_CLAIM, _CUR_DISCLOSED, NEG_TERMS,
+                   NEG_LIMITS, NEG_BLAMED_INDEX, NEG_BLAMED_USER, HALT_LITERAL,
+                   HALT_PARAPHRASE, HALT_AS_TIMEOUT, OPENER_VOCAB):
+            if rx.search(text):
+                found.add(rx.pattern[:30])
+        if derivation_claims(text)[0]:
+            found.add("derivation")
+        for s in _sentences(text):
+            if _CMC_CONTEXT.search(s) and _CMC_DENIED.search(s):
+                found.add("cmc")
+            if _currency_asserted(s):
+                found.add("currency")
+            if negcurrency_claim(s)[0] is not None:
+                found.add("negcurrency")
+        return found
+
+    for after, before in _published_changed_notes():
+        assert _trips(after) <= _trips(before), (_trips(after) - _trips(before), after)
+
+
+def _schedule_line_variants() -> list:
+    """Every wording `schedule_units.schedules_note` can produce, on synthetic
+    text, for the detector screen above."""
+    from src.utils.schedule_units import schedules_note
+
+    sections = "Section 1) **Citation**\nThis Order may be cited as the Widget Order 1901."
+
+    def line(appended, start="exact"):
+        rec = {"legislation": {}, "full_text": sections + appended,
+               "include_schedules": True,
+               "schedule_text_starts_at": len(sections) if start == "exact" else start}
+        return schedules_note({"legislation_id": "ssi/1901/3"}, json.dumps(rec))
+
+    variants = [
+        line("\n\nSCHEDULE 1 Widgets\n1) text\n\nSCHEDULE 2 Fees\n1) text"),
+        line("\n\nSCHEDULE Widgets regulation 4"),
+        line("\n\nSECOND SCHEDULE referred to\n\nANNEX XII Widgets"),
+        line("\n\nlead text\n\nSCHEDULE 1 Widgets"),
+        line("\n\nChapter: 1901 c. 1."),
+        line(""),
+        line("\n\nSCHEDULE 1 Widgets", start=None),
+    ]
+    assert all(variants) and len(set(variants)) == len(variants), variants
+    return variants
+
+
+def _published_wording_variants() -> list:
+    """Every wording P3.38's read can write (`utils/published_text.py`, and
+    the two notes it changes), on synthetic ids, for the screen. Each value
+    class: not held, held without text, an empty or not-found text read; a
+    version as made, as enacted or current; schedules present or absent; the
+    block whole or summarised; every no-text outcome and failure reason."""
+    from src.utils import published_text as pt
+
+    texts = []
+    ids = ("ssi/1901/3", "ukpga/1901/4", "ukpga/Vict/1-2/99")
+    for lid in ids:
+        for kind in (pt.KIND_NOT_HELD, pt.KIND_NO_TEXT, pt.KIND_READ_NOT_FOUND):
+            for version in ("made", "enacted", "current"):
+                for sched in (True, False):
+                    for title in ("The Widget Order 1901", ""):
+                        outcome = {"status": pt.OK, "version": version, "title": title,
+                                   "has_schedules": sched, "url": ""}
+                        for how in ("whole", "summary"):
+                            texts.append(pt.published_block(
+                                lid, kind, outcome, how, "", total_chars=12345).strip())
+            for outcome in ({"status": pt.NOT_PUBLISHED},
+                            {"status": pt.PDF_ONLY, "pdf": "https://www.legislation.gov.uk/x.pdf"},
+                            {"status": pt.PDF_ONLY},
+                            {"status": pt.FAILED, "reason": "no_reply"},
+                            {"status": pt.FAILED, "reason": "too_large"},
+                            {"status": pt.FAILED, "reason": "unreadable"},
+                            {"status": pt.FAILED, "reason": "error"},
+                            {"status": pt.LIMIT, "limit": 8},
+                            {"status": pt.EARLIER}):
+                texts.append(pt.published_line(lid, kind, outcome).strip())
+    log = []
+    for i, status in enumerate((pt.OK, pt.OK, pt.EARLIER, pt.FAILED, pt.NOT_PUBLISHED)):
+        pt.record_published(log, f"ssi/1901/{10 + i}", pt.KIND_NOT_HELD,
+                            {"status": status, "version": ("made", "current")[i % 2]})
+    texts.append(pt.published_limb(log))
+    texts.append(pt.published_limb(log[:1]))
+    texts.append(pt.published_limb(log[3:]))
+    for n in (1, 2, 3):
+        texts.append(pt.published_footer_clause([
+            {"tool": pt.PUBLISHED_ENTRY, "legislation_id": f"ssi/1901/{k}",
+             "label": f"SSI 1901/{k}", "status": pt.OK, "version": v}
+            for k, v in zip(range(n), ("made", "enacted", "current"))]).strip())
+    assert all(texts), texts
+    return texts
+
+
+def _published_changed_notes() -> list:
+    """P3.38's variants of two Worker-facing notes that were never clean of
+    the answer detectors (P2.4's not-held note and P3.7's lookup brief block
+    say "no record" and "NOT HELD" by design), each paired with the note as it
+    was, so the screen can require that a variant adds no trip of its own."""
+    import json as _json
+
+    from src.utils import published_text as pt
+    from src.utils.instrument_lookup import lookup_brief_block
+    from src.utils.search_scope import not_held_note
+
+    pairs = []
+    err = 'Error executing tool: {"detail":"Legislation not found: ssi 1901 No. 3"}'
+    before = not_held_note({"legislation_id": "ssi/1901/3"}, err)
+    for read in ("below", "earlier"):
+        pairs.append((not_held_note({"legislation_id": "ssi/1901/3"}, err, text_read=read),
+                      before))
+    block = pt.published_block("ssi/1901/3", pt.KIND_NOT_HELD,
+                               {"status": pt.OK, "version": "made"}, "whole", "")
+    for status, desc in (("not_held", ""), ("held_without_text", ""),
+                         ("held_without_text", "These Regulations bring a Widget Act into force.")):
+        got = {"tool": "lookup_legislation", "legislation_id": "ssi/1901/3",
+               "label": "SSI 1901/3", "status": status, "title": "The Widget Order 1901",
+               "description": desc}
+        pairs.append((lookup_brief_block([_json.dumps(got) + block]),
+                      lookup_brief_block([_json.dumps(got)])))
+    # P3.7's limb, "here" become "in this index" beside P3.38's limb
+    from src.utils.search_scope import LOOKUP_ENTRY, _lookup_limb
+    limb = _lookup_limb([{"tool": LOOKUP_ENTRY, "legislation_id": "ssi/1901/3",
+                          "label": "SSI 1901/3", "status": "held_without_text"}])
+    pairs.append((limb, limb.replace("available in this index, never", "available here, never")))
+    assert all(a and b and a != b for a, b in pairs), pairs
+    return pairs
+
+
+def _section_cap_held_variants() -> list:
+    """Every new sentence batch 8 A2 adds to P3.1's cap, on synthetic ids:
+    none held, schedules and annexes held, more than the named cap held."""
+    from src.utils import discovery_budget as db
+    from src.utils import search_scope as ss
+
+    budget = {"section_limit": 3, "id": "r1"}
+    texts = []
+    for held in ({"provisions": 3, "units": []},
+                 {"provisions": 6, "units": ["Schedule 2", "Annex II"]},
+                 {"provisions": 60, "units": [f"Schedule {i}" for i in range(1, 13)]}):
+        msg = json.loads(db.section_stop_message(budget, {"legislation_id": "ssi/1901/3"},
+                                                 held=held))
+        log = []
+        for _ in range(2):
+            ss.record_section_budget_stop(log, "search_legislation_sections",
+                                          {"legislation_id": "ssi/1901/3", "query": "q"},
+                                          budget, held=held)
+        texts += [msg["provision_list"], msg["instruction"], ss._section_budget_limb(log),
+                  ss._held_section_budget_footer(log).strip()]
+    texts.append(ss._held_section_budget_limb("ssi/1901/3", {"provisions": 3, "units": []},
+                                              1, None))
+    assert all(texts) and len(set(texts)) == len(texts), texts
+    return texts
+
+
+def _fetched_wording_variants() -> list:
+    """Every wording P3.12's route can write (`schedule_units`), for the screen."""
+    from src.utils import schedule_units as su
+
+    lid, url = "ssi/1901/3", "http://www.legislation.gov.uk/id/ssi/1901/3/schedule/2"
+    sch = su.ScheduleUnit("schedule", "2", paragraphs=("4",))
+    anx = su.ScheduleUnit("annex", "II", chapter="II")
+    rows = [{"uri": url}, {"uri": url.replace("schedule/2", "annex/II")}]
+    texts = [
+        su.unit_absent_line(lid, su.ScheduleUnit("schedule", "7"), rows, True),
+        su.unit_absent_line(lid, su.ScheduleUnit("schedule", "7"), [{"uri": "x/article/1"}], True),
+        su.unit_absent_line(lid, su.ScheduleUnit("schedule", "7"), rows, False),
+        su.unit_without_text_line(lid, sch),
+        su.instrument_without_text_line(lid, sch),
+        su.fetch_failed_line(lid, sch),
+        su.paragraph_label(sch, "4", su.PARAGRAPH_CUT, None),
+        su.paragraph_label(sch, "4", su.SPAN_CUT, 6),
+        su.paragraph_label(sch, "4", su.SPAN_CUT, None),
+        su.paragraph_label(sch, "4", su.TO_THE_END, None),
+        su.cut_pieces(anx, "CHAPTER IIRules. CHAPTER IIIMore.")[0][0][0],
+        su.cut_pieces(anx, "no chapter headings")[2],
+        su.cut_pieces(sch, "1) bare")[2],
+        su.cut_pieces(su.ScheduleUnit("schedule", "2", paragraphs=("4", "5")), "1) bare")[2],
+    ]
+    for source in (su.FROM_LIST, su.FROM_TEXT):
+        for how in (su.CUT, su.WHOLE, su.SUMMARY, su.MATCHED):
+            for reason in ("", texts[-2]):
+                texts.append(su.fetched_block(lid, sch, url, [("", "")], how, reason=reason,
+                                              total_chars=92066, source=source).strip())
+        # Batch 10 A: a summarised cut says so.
+        texts.append(su.fetched_block(lid, sch, url, [("", "")], su.SUMMARY,
+                                      total_chars=92066, source=source,
+                                      summary_of=su.CUT).strip())
+        # Batch 11 A: the MATCHED tail naming one paragraph, and several, on a
+        # labelled and an unlabelled unit, with and without a reason.
+        for unit in (sch, su.ScheduleUnit("schedule", "")):
+            for matched in (("4",), ("2", "9", "12", "30", "31", "32")):
+                for reason in ("", su.sole_schedule_reason(lid)):
+                    texts.append(su.fetched_block(lid, unit, url, [("", "")], su.MATCHED,
+                                                  reason=reason, total_chars=92066,
+                                                  source=source, matched=matched).strip())
+    # Batch 13 B (P3.12): a partial cut's reason, one paragraph and several
+    # not cut, alone and in its block from either source.
+    part = "Section 4) **Widget fees**\n1) Text.\nSection 5) **Widget forms**\n1) Text.\n"
+    for paras in (("4", "30"), ("4", "30", "31")):
+        reason = su.cut_pieces(su.ScheduleUnit("schedule", "2", paragraphs=paras), part,
+                               whole_limit=1)[2]
+        assert reason.endswith("not among the parts below."), reason
+        texts.append(reason)
+        for source in (su.FROM_LIST, su.FROM_TEXT):
+            texts.append(su.fetched_block(lid, sch, url, [("", "")], su.CUT, reason=reason,
+                                          source=source).strip())
+    # Batch 10 A: the heading list's label, an untitled heading and the cap's
+    # last line (the headings themselves are statutory text, like a cut).
+    headed = ("SCHEDULE 5 WIDGETS\nSection 1) **Widget fees**\n1) Text.\n"
+              "Section 2) ****\n1) Text.\n")
+    listed = su.matched_pieces(su.ScheduleUnit("schedule", "5"), headed, "fees", 10_000)
+    texts.append(listed[0][0])
+    texts.append(listed[0][1].split("\n")[1])
+    many = "Section 1) **Gizmo fees**\n1) Text.\n" + "".join(
+        f"Section {n}) **Widget {n}**\n1) Text.\n" for n in range(2, 160))
+    texts.append(su.matched_pieces(su.ScheduleUnit("schedule", "5"), many, "gizmo",
+                                   10_000)[0][1].split("\n")[-1])
+    # Decision 1: "the Schedule" with no label, both outcomes it acts on.
+    bare = su.ScheduleUnit("schedule", "")
+    texts += [
+        su.sole_schedule_reason(lid),
+        su.unit_absent_line(lid, bare, [{"uri": "x/article/1"}], True),
+        su.fetched_block(lid, bare, url, [("", "")], su.WHOLE,
+                         reason=su.sole_schedule_reason(lid)).strip(),
+        su.fetched_block(lid, bare, url, [("", "")], su.SUMMARY, total_chars=9000,
+                         reason=su.sole_schedule_reason(lid)).strip(),
+        # Batch 10 A (user's fixes, 2026-10-08): the unlabelled unit's own
+        # wording, "The Schedule runs to" and "the retrieved text of the Schedule".
+        su.fetched_block(lid, bare, url, [("", "")], su.MATCHED, total_chars=92066,
+                         reason=su.sole_schedule_reason(lid)).strip(),
+        su.fetched_block(lid, bare, url, [("", "")], su.SUMMARY, total_chars=9000,
+                         summary_of=su.CUT).strip(),
+    ]
+    assert all(texts) and len(set(texts)) == len(texts), texts
+    return texts
 
 
 def test_the_enabling_block_is_stripped_before_a_lawyer_sees_it():
@@ -1524,7 +1932,8 @@ def test_a_turn_that_searched_gets_no_carried_line(tool):
     """A turn that ran a search is P2.2's, and the fresh footer is unchanged.
     **Both** search tools count. A turn that searched only within an instrument
     gets no fresh footer, but "no search was run for this reply" would be false
-    there, so it stays silent."""
+    there, so the carried line stays silent. That turn's scope is stated by
+    P4.17's `section_scope_footer` instead (`test_section_scope.py`)."""
     fresh = answer_scope_footer(_P28_LOG, {})
     searched = [{"tool": tool, "query": "q", "legislation_id": "asp/2025/2"}]
     assert carried_scope_footer(_p28_history(fresh), searched) == ""

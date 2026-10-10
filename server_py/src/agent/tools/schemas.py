@@ -144,6 +144,46 @@ WORKER_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "find_instruments_made_under",
+            # P3.31 (bucket B3). The reverse made-under question — "which
+            # instruments were made under section N of Act X" — was every
+            # made-under question of the pre-pilot (6340, 6382, 6383), and no
+            # search can answer it: a ranked search for the Act returns
+            # instruments that merely mention it. This reads a record of
+            # instrument preambles harvested in advance
+            # (`services/made_under_store.py`). Its result states its coverage.
+            "description": (
+                "List the instruments whose own preamble names a given provision as a power "
+                "they were made under: 'which regulations were made under section 95 of the "
+                "Social Security (Scotland) Act 2018?'. Use this for ANY question asking what "
+                "was made under, or uses the power in, a section of an Act; a keyword search "
+                "cannot answer it. Reads a harvested record of instrument preambles, and the "
+                "result says which instruments the record covers: an instrument outside that "
+                "coverage was not checked, so never turn an empty or short list into a "
+                "statement that nothing else was made under the provision."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "act": {
+                        "type": "string",
+                        "description": (
+                            "The enabling Act: its full title as enacted (e.g. 'Social Security "
+                            "(Scotland) Act 2018') or its legislation_id (e.g. 'asp/2018/9')."
+                        ),
+                    },
+                    "section": {
+                        "type": "string",
+                        "description": "The section number (e.g. '95' or '35A').",
+                    },
+                },
+                "required": ["act", "section"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_legislation_sections",
             "description": (
                 "Search for specific sections within a known piece of legislation. "
@@ -191,8 +231,11 @@ WORKER_TOOLS = [
                 "These relations come from legislation.gov.uk's own change records — they are the "
                 "ONLY source for them, and a keyword search cannot establish any of them. "
                 "Returns relations grouped by the other instrument, each with the provisions "
-                "affected. It does NOT return dates, and it does NOT say what an instrument was "
-                "made under (its enabling power)."
+                "affected. The relations carry no dates of their own: where legislation.gov.uk's "
+                "Changes to Legislation record dates a commencement made by another instrument, "
+                "code adds that date to the entry as `in_force`, and the result says when it "
+                "could not. It does NOT say what an instrument was made under (its enabling "
+                "power)."
             ),
             "parameters": {
                 "type": "object",
@@ -731,8 +774,119 @@ _PARLIAMENT_TOOL_NAMES = {t["function"]["name"] for t in PARLIAMENT_TOOLS}
 _WESTMINSTER_TOOL_NAMES = {t["function"]["name"] for t in WESTMINSTER_TOOLS}
 
 
-def get_worker_tools(research_mode: str = "legislation_only") -> list:
-    """Return the appropriate tool set for the given research mode."""
+# P3.25: the tools the quick-lookup (conversational) Worker is NOT offered.
+# Its prompt said "Do NOT fall back to `get_legislation_text`" while its tool
+# list offered it: 143 of 1,314 answered conversational turns called it (247
+# calls), 133 of 208 successful calls straight from a search, and a whole-text
+# read carries no schedule or annex (P3.27). Removed in code (Invariant 2). The
+# two things only that read supplied, an SI's recital and `valid_date`, now
+# come through `lookup_legislation`, which code runs on every statutory
+# instrument this Worker searches within (`instrument_lookup.
+# section_search_lookup`). The research Workers keep the tool.
+QUICK_LOOKUP_WITHHELD_TOOLS = ("get_legislation_text",)
+
+
+def withheld_tool_result(name: str) -> str:
+    """What the quick-lookup Worker gets back if it calls a withheld tool
+    anyway. No `results` key and nothing about the index, so no recorder or
+    grader can read it as a retrieval that found nothing."""
+    import json
+
+    return json.dumps({
+        "tool": name,
+        "run": False,
+        "note": (
+            f"{name} is not offered in quick-lookup mode, so this call was not run. "
+            "Read an instrument's provisions with search_legislation_sections, and "
+            "its record with lookup_legislation."
+        ),
+    })
+
+
+def is_quick_lookup_worker(research_mode: str = "legislation_only",
+                           chat_mode: str = None) -> bool:
+    """True where the Worker runs on `WORKER_SYSTEM_PROMPT_CONVERSATIONAL`.
+
+    The same test `prompts.get_worker_system_prompt` applies, so the
+    conversational prompt and the narrowed tool list always go together
+    (`tests/test_quick_lookup_tools.py` checks the two agree)."""
+    return (chat_mode == "conversational"
+            and research_mode not in ("parliamentary_records", "westminster_records"))
+
+
+# FIX_PLAN P3.20: the two case-law tools' descriptions when `search_case_law`
+# also searches the Scottish Courts and Tribunals Service's published
+# judgments (`scts_caselaw_enabled`). With the setting off the tools are the
+# CASE_LAW_TOOLS objects above, untouched.
+SCTS_SEARCH_CASE_LAW_DESCRIPTION = (
+    "Search for case law in two databases at once, returned as two lists: the National "
+    "Archives Find Case Law database (`results`: courts of England & Wales and UK-wide courts "
+    "and tribunals, with Scottish appeals decided by the UK Supreme Court) and the Scottish "
+    "Courts and Tribunals Service's published judgments (`scottish_results`: the Court of "
+    "Session, the High Court of Justiciary and the Sheriff Appeal Court from 1998, and the "
+    "Sheriff Court decisions SCTS publishes). Returns titles, courts, dates, neutral citations "
+    "where known, and URLs. The `court` argument applies to Find Case Law only. In the Scottish "
+    "judgments every quoted phrase and every other word must appear in a judgment for it to "
+    "match, so keep queries to the distinctive terms."
+)
+SCTS_COURT_ARG_PREFIX = "Applies to Find Case Law (`results`) only. "
+SCTS_GET_CASE_LAW_TEXT_DESCRIPTION = (
+    "Retrieve the full text of a judgment from either database, by the exact url its search "
+    "returned (a Find Case Law url, or a scotcourts.gov.uk PDF url). "
+    "Returns the complete judgment text so you can read the reasoning, holdings, and obiter dicta "
+    "before synthesising your answer. Call this for the 1–3 most relevant cases found in Phase 1."
+)
+SCTS_URL_ARG_DESCRIPTION = (
+    "The URL of the case exactly as returned by search_case_law (e.g. "
+    "'https://caselaw.nationalarchives.gov.uk/uksc/2023/1', or a "
+    "'https://www.scotcourts.gov.uk/media/...pdf' url from `scottish_results`)."
+)
+
+
+def _with_scts_descriptions(tools: list) -> list:
+    """A copy of `tools` whose two case-law tools carry the SCTS descriptions."""
+    import copy
+
+    out = []
+    for t in tools:
+        name = t.get("function", {}).get("name")
+        if name not in ("search_case_law", "get_case_law_text"):
+            out.append(t)
+            continue
+        t = copy.deepcopy(t)
+        fn = t["function"]
+        if name == "search_case_law":
+            fn["description"] = SCTS_SEARCH_CASE_LAW_DESCRIPTION
+            court = fn["parameters"]["properties"].get("court")
+            if court:
+                court["description"] = SCTS_COURT_ARG_PREFIX + court["description"]
+        else:
+            fn["description"] = SCTS_GET_CASE_LAW_TEXT_DESCRIPTION
+            fn["parameters"]["properties"]["url"]["description"] = SCTS_URL_ARG_DESCRIPTION
+        out.append(t)
+    return out
+
+
+def get_worker_tools(research_mode: str = "legislation_only", chat_mode: str = None) -> list:
+    """Return the appropriate tool set for the given research mode.
+
+    `chat_mode` (P3.25): the quick-lookup Worker's list omits
+    `QUICK_LOOKUP_WITHHELD_TOOLS`. Without it, or in any other chat mode, the
+    list is exactly what it was before (the same list objects).
+
+    P3.20: with `scts_caselaw_enabled` on and a research type that searches
+    case law, the case-law tools are copies carrying the SCTS descriptions."""
+    tools = _worker_tools_for(research_mode)
+    if is_quick_lookup_worker(research_mode, chat_mode):
+        tools = [t for t in tools
+                 if t["function"]["name"] not in QUICK_LOOKUP_WITHHELD_TOOLS]
+    from .scts import scts_enabled
+    if scts_enabled(research_mode):
+        tools = _with_scts_descriptions(tools)
+    return tools
+
+
+def _worker_tools_for(research_mode: str) -> list:
     if research_mode == "case_law_only":
         return CASE_LAW_TOOLS
     elif research_mode == "legislation_and_case_law":

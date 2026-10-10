@@ -133,6 +133,17 @@ _ABOUT_SUMMARY = re.compile(
     r"|\bnot\s+(?:included|reflected|represented|present|extracted)\b|\bnot possible to confirm"
     r"|\bavailable in the (?:provided |source )?(?:text|material)"
     r"|\bcannot\s+be\s+(?:confirmed|identified|determined|extracted)|\bcould not be\b", re.I)
+# Batch 2 (agent A): the note can also say what the supplied text "does not
+# provide" ("The provided text does not contain X; therefore, it does not
+# provide Y"). Adding "provide" to the verbs above would drop a gloss from
+# absence ("...; therefore, these Regulations do not provide for appeals"), so
+# this shape is recognised by its two subjects instead: the supplied text
+# before the marker, and "it" (or the text itself) right after it.
+_NOTE_SUBJECT = re.compile(
+    r"\b(?:provided|supplied|retrieved|source)\s+(?:text|material|results?|excerpts?|sections?)\b"
+    r"|\btext\s+(?:provided|supplied)\b|\bthis\s+(?:text|excerpt)\b", re.I)
+_NOTE_PRONOUN = re.compile(
+    r"^\W*(?:it|the\s+(?:provided\s+|supplied\s+)?text|this\s+text)\s+(?:does|did)\s+not\b", re.I)
 _STATUTORY_SUGGESTS = re.compile(r"\b(?:information|evidence)\s+$", re.I)
 _MANNER_BEFORE = re.compile(r"(?:\b(?:and|as|be|been|or)\s+|[\"'“‘])$", re.I)
 _MANNER_AFTER = re.compile(r"^\s*(?:[)\].,;:\"'”’(]|$)")
@@ -245,6 +256,8 @@ def glosses_in(raw: str, final: str) -> list:
             continue
         lo, hi = _window(summ, m.start(), m.end())
         if _ABOUT_SUMMARY.search(summ[m.end():hi]):
+            continue
+        if _NOTE_SUBJECT.search(summ[lo:m.start()]) and _NOTE_PRONOUN.match(summ[m.end():hi]):
             continue
         pre = _WORD.findall(summ[lo:m.start()].lower())[-_BEFORE:]
         mark = _WORD.findall(m.group(1).lower())
@@ -534,13 +547,57 @@ def _gloss_slots(args) -> list:
     return slots
 
 
+# P3.45 (batch 13 A): per draw, the case citations the summary carries that the
+# raw text does not hold, before and after the product's check
+# (`summarisation.check_summary_citations`), and the citations it carries that
+# the raw text DOES hold, before and after (the check must keep every one).
+CITATION_KEYS = ("unheld_before", "unheld_after", "held_before", "held_after", "drawn_with_unheld")
+
+
+def citation_check(s, raw: str, text: str, brief: str) -> dict:
+    from src.utils.summary_citations import SourceIndex, find_citations, unsourced_citations  # noqa: PLC0415
+    checked = s.check_summary_citations(text, raw, brief)
+    idx = SourceIndex(raw, brief)
+    before = len(unsourced_citations(text, raw, brief))
+    return {"unheld_before": before,
+            "unheld_after": len(unsourced_citations(checked, raw, brief)),
+            "held_before": sum(1 for c in find_citations(text) if idx.held(c)),
+            "held_after": sum(1 for c in find_citations(checked) if idx.held(c)),
+            "drawn_with_unheld": int(before > 0)}
+
+
+def _citation_slots(args) -> list:
+    """(label, tool, raw, brief) for every stored summary carrying a case
+    citation its raw text does not hold (P3.45), in --dir (and --session)."""
+    from src.utils.summary_citations import unsourced_citations  # noqa: PLC0415
+    slots, seen = [], set()
+    for d in _dirs(args.dir):
+        for f in sorted(d.glob("*.json")):
+            doc = json.loads(f.read_text(encoding="utf-8"))
+            if args.session and _base(doc) not in args.session:
+                continue
+            for t, dg, tl in _tools(doc):
+                raw, brief = tl.get("raw_result") or "", dg.get("brief") or ""
+                if (_is_summary(tl) and (not args.max_raw or len(raw) <= args.max_raw)
+                        and (raw, brief) not in seen
+                        and unsourced_citations(tl.get("final_result") or "", raw, brief)):
+                    seen.add((raw, brief))
+                    slots.append((f"{d.name} {f.stem} t{t.get('turn')}", tl.get("name"), raw, brief))
+    return slots
+
+
 async def _redraw(args) -> int:
     import httpx  # noqa: PLC0415
     s, sides = _sides(args)
     pats = []
-    if args.glosses:
+    if args.citations:
+        slots = _citation_slots(args)
+    elif args.glosses:
         slots = _gloss_slots(args)
     else:
+        if not args.session:
+            print("  --session is required (unless --citations)")
+            return 2
         session = (args.session or [None])[0]
         rub = _rubric(Path(args.rubric)).get(session) or {}
         if not rub.get("summary_adds"):
@@ -566,6 +623,7 @@ async def _redraw(args) -> int:
     print(f"model {model}")
     keys = ("glosses", "prov", "chars", "neg")
     tally = {k: dict.fromkeys(keys + ("adds", "n"), 0) for k in sides}
+    ctally = {k: dict.fromkeys(CITATION_KEYS + ("n",), 0) for k in sides}
     cost = 0.0
     async with httpx.AsyncClient() as client:
         for i, (label, name, raw, brief) in enumerate(slots, 1):
@@ -575,6 +633,14 @@ async def _redraw(args) -> int:
                                              for _ in range(args.reps)])
                 cost += sum(c for _o, c in res)
                 _save(args, f"{i:02d} {label} {name}", side, [o for o, _c in res])
+                if args.citations:
+                    cs = [citation_check(s, raw, o, brief) for o, _c in res]
+                    for k in CITATION_KEYS:
+                        ctally[side][k] += sum(x[k] for x in cs)
+                    ctally[side]["n"] += args.reps
+                    row.append(f"{side}: " + " ".join(f"{k} {sum(x[k] for x in cs)}"
+                                                      for k in CITATION_KEYS))
+                    continue
                 ms = [_measure(raw, o, name) for o, _c in res]
                 adds = sum(1 for o, _c in res if any(p.search(o) for p in pats))
                 for k in keys:
@@ -585,6 +651,11 @@ async def _redraw(args) -> int:
                            f"{sum(m['prov'] for m in ms)} neg {sum(m['neg'] for m in ms)}"
                            + (f" adds {adds}/{args.reps}" if pats else ""))
             print(f"  {label} {name:<28} " + " | ".join(row), flush=True)
+    if args.citations:
+        for side, t in ctally.items():
+            print(f"TOTAL {side}: {t['n']} summaries, " + ", ".join(f"{k} {t[k]}" for k in CITATION_KEYS))
+        print(f"cost ${cost:.3f}")
+        return 0
     for side, t in tally.items():
         print(f"TOTAL {side}: {t['n']} summaries, glosses {t['glosses']}, provisions {t['prov']}, "
               f"chars {t['chars']}, 'does not contain' {t['neg']}"
@@ -669,13 +740,18 @@ def main(argv=None) -> int:
     c.add_argument("--dir", nargs="+", default=None)
     r = sub.add_parser("redraw", help="paid: re-summarise with and without a rule")
     r.add_argument("--dir", nargs="+", required=True)
-    r.add_argument("--session", nargs="+", required=True)
+    r.add_argument("--session", nargs="+", default=None,
+                   help="the session(s); required unless --citations (then optional, a filter)")
     r.add_argument("--reps", type=int, default=3)
     r.add_argument("--rule", choices=("source", "gloss"), default="source",
                    help="the rule the 'without rule' side drops")
     r.add_argument("--glosses", action="store_true",
                    help="slots are the stored summaries `glosses` flags, not the rubric's additions")
-    r.add_argument("--max-raw", type=int, default=0, help="with --glosses: skip raw results longer than this")
+    r.add_argument("--citations", action="store_true",
+                   help="P3.45: slots are the stored summaries carrying a case citation their raw "
+                        "text does not hold; each draw is put through the product's check")
+    r.add_argument("--max-raw", type=int, default=0,
+                   help="with --glosses or --citations: skip raw results longer than this")
     r.add_argument("--dry-run", action="store_true", help="list the slots and the estimated cost; draw nothing")
     r.add_argument("--out", default=None, help="save every draw here (use the gitignored evidence)")
     r.add_argument("--side", choices=("both", "with", "without"), default="both")

@@ -17,7 +17,268 @@ where each row carries its evidence and acceptance.
 
 ## Unreleased
 
-Nothing yet.
+On `fix/prepilot-defects` since 2026.09.3, waiting for the next cut.
+
+What an instrument was made under:
+- Answer "which instruments were made under section N of this Act?" from a
+  record of what each instrument's own preamble says it was made under,
+  harvested from legislation.gov.uk: Scottish statutory instruments made
+  from 1999 and UK statutory instruments made from 1987 (86,744 instruments,
+  68,780 with their enabling powers read). A new research tool lists them
+  with the total, and every such answer says what the record covers, so an
+  empty or short list is never read as "nothing else was made under it".
+  The same record gives the enabling power of a single instrument whose
+  index record carries no preamble, including instruments the index does not
+  hold. The record loads at startup and adds newly published instruments
+  daily, through the LEX API's connection to legislation.gov.uk (P3.31).
+- Say which of those instruments legislation.gov.uk records as revoked: in
+  whole (with the revoking instrument and the date, or that no date is
+  recorded), in part, or not at all, and the day that was checked. A
+  revocation dated after today is given with its date and never called done,
+  and "no revocation recorded" is never turned into "in force". When more
+  than 40 instruments are found, the list leads with those not revoked in
+  whole. The record's coverage note now says that Welsh statutory
+  instruments and Northern Ireland Orders in Council are included under
+  their UK SI numbers (P3.33).
+
+Saying honestly what was and was not found:
+- When a research report names one of the notes code adds ("an enabling
+  power block") in its own sentence, keep those words instead of leaving a
+  gap in the sentence (P4.22).
+- When case law was searched, say that a search can miss a judgment the
+  database holds, so one missing from its results may still exist: that is not
+  proof of absence (P4.15).
+- When a reply searched only within instruments, say so in the scope line:
+  which instruments and terms were searched, and that a provision missing
+  from such a search may still be in the instrument and in the index
+  (P4.17).
+- Don't say no change record was consulted when one was: say that the
+  records consulted list neither a commencement nor a repeal (P4.18).
+- When an instrument cited by number is looked up and is not in the index,
+  say that it is not held in this index, which is incomplete, and that this
+  does not show whether the number is accurate. It used to say this was "not
+  a sign that the citation is wrong", which a lookup cannot establish (P4.21).
+- Remove a case citation that a document summary carries and the document
+  itself does not, together with the passage built on it where the document
+  never names the case. A summary served from the shared cache is checked
+  the same way (P3.45).
+
+Change records:
+- Where a change record lists a commencement made by another instrument, give
+  the date legislation.gov.uk's Changes to Legislation record gives for it, with
+  its qualification ("wholly in force", "for specified purposes"), read
+  through the LEX API. A date earlier than the day the commencing instrument
+  was made is refused, and the reply says when the record could not be read.
+  The date says when the provision was brought into force, never that it is in
+  force now (P3.21).
+- When listing the changes made to or by an instrument, keep each change with
+  the provision that made it, and say how many changes a long list leaves out.
+  The changed provisions and the provisions that changed them used to be two
+  separate lists, which lost which made which (one lawyer was given the wrong
+  provision for an insertion), and the second list was cut at six with no
+  count (P3.19).
+- Say a provision is "not recorded as commenced" only where the change record
+  lists, in full, the commencements made by other instruments. An
+  instrument's own commencement provision says how its provisions come into
+  force, not whether they have, so it is no longer treated as evidence either
+  way; where no record was consulted, say neither (P3.24).
+- Read what a change record removes by the kind of change: a provision
+  repealed, revoked, omitted or ceasing to have effect, wholly or in part;
+  words or entries removed, which amend a provision that stays; and a removal
+  that is prospective, temporary, conditional, for specified purposes or for
+  part of the UK only. Say a provision is no longer in force only for the
+  first kind. The count used to miss "omitted" and "ceases to have effect"
+  and counted "words repealed" as a provision repealed. Built; the research
+  step's own standing rule is still to be brought into line (P3.28).
+
+Jurisdiction:
+- Where a question names no jurisdiction, answer for Scotland and say so;
+  where it asks about the UK, answer for each of England, Wales, Scotland and
+  Northern Ireland and say where the law differs. This applies to
+  conversational replies, quick lookups, research replies and Deep
+  Research plans (P3.4).
+- When a research step is asked about one jurisdiction, it reads the law
+  that applies there, UK legislation that extends there included, not only
+  legislation made for that jurisdiction alone (P3.4).
+- The jurisdiction filter's notes no longer use letter codes the index never
+  sends, and say that most search results carry no stated extent (P3.4).
+- Keep a search result whose stated extent the filter does not recognise,
+  as one whose extent is unknown, instead of dropping it under every filter;
+  read "N.I." as Northern Ireland, and England, Wales, Scotland and Northern
+  Ireland named one by one as the whole UK (P3.26).
+
+Search results:
+- Keep each legislation search result's own published summary (its
+  description, cut to 600 characters), so a commencement date or enabling
+  power it states is visible at the first step. The search note says it may be
+  quoted with a citation and is not evidence of in-force status (P3.6).
+
+Quick lookups:
+- The quick-lookup research step no longer reads an instrument's whole text,
+  which its own instructions forbade and which never included schedules or
+  annexes. An SI's own recital of its enabling power, and the date its held
+  text is up to date to, now come from the index record, looked up before the
+  SI is searched. The existing "in-force status is not something this index
+  reports" sentence therefore appears on more quick-lookup replies (P3.25).
+
+Instruments the index lacks:
+- When an instrument is not in the index, or the index has no text for it,
+  read its text from legislation.gov.uk (the version as made or enacted,
+  with its schedules) through the LEX API, hand it to the research step,
+  and say in the reply that it was read from there. Nothing is stored.
+  Built; its acceptance replay has not been run (P3.38).
+
+Schedules and annexes:
+- When several searches in one step name schedules of different instruments
+  at the same time, fetch each instrument's provision list once and keep to the
+  per-step limit, now 8 instruments (P3.12).
+- When the research step reads an instrument's whole text, ask the index for
+  its schedules and annexes too, and say which ones the text carries, or that
+  the index holds none for it. Every whole-text read used to leave them out
+  without saying so (P3.27).
+- When a search within an instrument names a schedule or annex ("Schedule
+  B1, paragraph 43", "Annex XIV, Chapter V") and the results leave it out,
+  fetch that schedule or annex from the index and hand over the part named,
+  cut at its own heading where it cuts cleanly, or the whole of it summarised
+  for the question; where the index holds no schedule for the instrument, say
+  so. Both the quick-lookup and the research steps do this (P3.12).
+- When a schedule fetched for a search is too large to hand over whole and
+  the search names no paragraph, hand over the schedule's paragraph headings
+  and the paragraphs whose headings share a word with the search, each cut at
+  its own heading, instead of one summary of the whole schedule. Where a
+  schedule is still summarised, say that it was retrieved and that the summary
+  is a condensed reading of it, so a paragraph the summary leaves out is not
+  read as missing (P3.12).
+- Read a list of schedule paragraphs separated only by spaces ("paragraphs
+  42 43 44") as all of them, not just the first (P3.12).
+- Where the index's complete list of an instrument's provisions has been read
+  and a search limit within that instrument is then reached, say what that
+  list holds, so a schedule the index does not hold is not put down to the
+  limit (P3.27, P3.12).
+- When paragraphs of a large schedule are handed over because their headings
+  match the search, name them, and ask the research step to report each one
+  that bears on the question in its own sentence, cited by its number and
+  taken from its own words (P3.12).
+- When a reply cites one paragraph of a schedule fetched for it and leaves
+  out another paragraph it was handed, add the omitted paragraph's heading
+  and opening words after it, quoted from the statute. Built; its measured
+  acceptance is not yet met (P3.12).
+- In that added paragraph, quote the rule first and then when it applies,
+  never a bare "This paragraph applies to ..." line. Where a reply cites only
+  some sub-paragraphs of a paragraph it was handed, add the operative
+  sub-paragraphs it left out. Where one named paragraph of a large schedule
+  cannot be cut out cleanly, still hand over the ones that can, and say which
+  could not. Measured: 2 of 3 replays now carry the three paragraphs asked
+  for; the acceptance is 3 of 3 (P3.12).
+
+Deep Research:
+- Hand every step after the first the instruments the earlier steps'
+  reports cite (up to 40), so a step that works on an earlier step's list
+  works on that list rather than searching for it again (P3.10).
+
+Sources:
+- When a research step's report vouches for none of the sources it
+  retrieved, show none, instead of every search result; keep a source the
+  report names by its title or number; stop counting a section heading, or
+  a citation that is only the start of a longer one, as a mention (P4.3).
+- Put back in the sources list a source the research retrieved and the
+  answer cites, even when no research report named it (P4.3).
+- Show a source listed under a bare identifier by its title, taken from the
+  research's own results or the made-under record, and give a source with
+  no link its legislation.gov.uk address (P4.24).
+- When a reply names an instrument in words and links it nowhere, link it to
+  the address the research report gave it; link a provision's address only
+  where the reply names that provision beside the instrument (P4.23).
+
+Reliability and cost:
+- When the final answer comes back empty after research is already in hand,
+  fall back to that research sooner: an empty answer after long reasoning is
+  not retried, an upstream timeout is retried once instead of twice, and the
+  answer call's output is capped as research calls already are. With no
+  research in hand the retries are kept (P4.12).
+
+Case law:
+- List case-law search results most relevant first, not newest first, and say
+  so in the search note (P3.22).
+- Search the Scottish Courts and Tribunals Service's published judgments
+  beside Find Case Law, and read a Scottish judgment's text, so a Scots-law
+  question can cite Court of Session and Sheriff Appeal Court decisions.
+  Switched off until the server can reach the Scottish Courts site (P3.20).
+- Date ranges on a case-law search now apply. They never did: the National
+  Archives ignored the form we sent. A start date after the end date is
+  refused rather than searched (P3.9).
+- Say how many judgments matched a case-law search, not only how many were
+  shown, and that they are listed newest first, so a negative drawn from the
+  list says what was searched (P3.23).
+- Retry a case-law search or judgment fetch that hits the National Archives'
+  rate limit, as legislation calls already are (P4.19).
+- When a case-law search names a case and the results do not include it,
+  tell the research step so, and that what the case decided must not be
+  stated as if its judgment had been read. A case cited only by a law report
+  is said to be one that cannot be matched to the results. Built; its
+  acceptance replay has not been run (P3.46).
+
+Interpretation. P3.17 and P3.3 stay open: P3.17's change fixed the turn it
+aimed at but has not met its acceptance.
+- In quick lookups, when an Act does not define a word, look for the general
+  interpretation legislation and retrieve the provision saying which Acts it
+  applies to before saying it applies (P3.17).
+- Also remove the unscoped agreement opener "You are correct to highlight
+  this" (P4.16).
+
+Already in 2026.09.3, ticked since: the summariser rule against adding its own
+conclusions (P3.16).
+
+Replay harness and measuring tools only, no product change: the negatives
+grader reads "a search of the database ... returned no results" as attributing
+the miss to the search (P4.15). The interpretation grader reads "As you
+suggest, ..." as agreement rather than a hedge (P3.3); the position grader
+reads a negated sentence as taking no position (P3.2); a new check reports
+whether the section-search scope line appears on exactly the replies that
+searched only within instruments (P4.17). The derivation grader no longer
+reads an application or appeal "made under section N" as a claim about what
+an instrument was made under, and the interpretation grader reads "on a third
+reading" (a numbered or contrasted reading) as a hedge (P3.3). A new
+`replay_report negcurrency` lists every claim that a provision is not yet
+commenced, not in force or remains in force, and grades each against what the
+conversation retrieved; footer wording is now screened against it (P3.24).
+It now reads the change record's new shape, where on the old reading a
+negative the record contradicted was graded supported (P3.24). The seam
+tools offer the quick-lookup Worker the same tool list the product does
+(P3.25). `python -m tools.lex_probe --caselaw` live-checks the case-law total
+and the date filter (P3.23, P3.9), and whether `order=relevance` still
+reorders the same 50 results (P3.22). The depth grader has a ground
+truth for one schedule-paragraph question, and a new `replay_report
+schedules` checks what an answer says about a schedule or annex: a held one
+called not held, or one the index does not hold blamed on a search limit
+(P3.12, P3.27). A new `python -m tools.lgu_probe` reads legislation.gov.uk's
+dated "Changes to Legislation" effects, directly or through LEX (P3.21,
+P5.4). New `replay_report` checks: `authorities` grades which case-law authorities a
+run retrieved, read and cited against a rubric (P3.22); `cmcdates` lists every
+commencement date an answer states and whether a retrieved source states it
+(P3.21); `jurisdiction` checks that a reply names its jurisdiction (P3.4); with
+two scripted replays of P3.4's opening turns. `lex_probe --caselaw`'s count
+and date checks now send the product's own request (P3.22). `authorities`
+counts an out-of-corpus authority as named only by its citation or its full
+party names, never by one surname, and reads a link whose label holds a
+bracketed citation (P3.22); `negcurrency` reads both stored shapes of a
+section-search result (P3.24); `commencements` grades scripted replays
+(P3.21); `corpus`'s description labels are true before and after P3.6.
+A new `replay_report rail` grades the sources rail with a careful-reader
+test, and the older rail counters are labelled as the token test's (P4.3);
+two scripted replays of P3.10's Deep Research turns (P3.10).
+`authorities` grades an answer by the first sentence that states what an
+out-of-collection authority decided, reads "this principle" pointing back to
+it, and skips a bare listing (P3.46); `depth` reads "wind up" (P3.12);
+`summary_probe redraw --citations` re-summarises stored results and reports
+the case citations the check removes (P3.45). Session 45 measured a
+corpus-wide definition search over the LEX index for P3.34 (notes only).
+
+Planning tools only, no product change: a new `python -m tools.plan_lint`
+checks the fix plan's structure (one table cell per column, every row in the
+bucket index once, done marks agreeing with the ticks, dependencies,
+the top progress line's counts, balanced bold, UTF-8); `plan_status` now
+shares its parsing.
 
 ## 2026.09.3 — 2026-09-29
 

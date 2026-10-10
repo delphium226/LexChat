@@ -7,6 +7,7 @@ import random
 import time
 import uuid
 from typing import Callable, Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -22,10 +23,25 @@ from ...utils.instrument_lookup import (
     legislation_id as lookup_legislation_id,
     lookup_args,
 )
+from ...utils.made_under import MADE_UNDER_TOOL
 from ...utils.redact import redact_args
+from ...utils import schedule_units
 from ..provider_factory import get_request_provider_config
 from ._util import _emit
-from .caselaw import _fetch_judgment_text, _parse_case_law_atom
+from .caselaw import (
+    CASE_LAW_ORDER_PARAMS,
+    _fetch_judgment_text,
+    _parse_case_law_atom,
+    case_law_count,
+    case_law_date_window,
+)
+from .commencement_dates import add_commencement_dates
+from .scts import (
+    fetch_scts_judgment,
+    is_scts_judgment_url,
+    scts_enabled_for_request,
+    search_scts,
+)
 from .lex import (
     LEX_API_URL,
     _TYPE_CODES,
@@ -54,6 +70,14 @@ _MAX_SEARCH_RESULTS = 5
 # chased — see the branch for the measurements.
 _AMENDMENT_FETCH_SIZE = 2000
 _AMENDMENT_ESCALATED_SIZE = 20000
+
+# P3.20: `get_case_law_text` on a URL that is neither a Find Case Law judgment
+# nor (with the setting on) an SCTS judgment PDF. Worker-facing; no "exactly"
+# (`OPENER_VOCAB`).
+GET_CASE_LAW_TEXT_REFUSAL = (
+    "Not fetched: get_case_law_text reads only a judgment URL returned by "
+    "search_case_law. Pass the url field as the search returned it, unchanged."
+)
 
 # -----------------------------------------------------------------------
 # Retry / backoff for the (rate-limited) LEX API
@@ -137,6 +161,91 @@ async def _request_with_retry(
             continue
 
         return resp
+
+
+# -----------------------------------------------------------------------
+# P3.12: one instrument's provision list, and its whole text, for code
+# -----------------------------------------------------------------------
+# `/legislation/section/lookup` with a `limit` above the provision count
+# returns every provision with its text (batch 7 B, live: 674 of 674 for the
+# largest Act the route fires on, 1.6 MB in 405 ms; a schedule is one row, and
+# not the last, so a small `limit` cannot be used). Neither call is a tool the
+# Worker can make: `agent_shared.run_worker_tool` calls them after a section
+# search whose query names a schedule or annex unit its results left out. Each
+# emits `api_call_start`/`api_call_end` on the caller's `on_chunk`, so the
+# audit records it under that section search, with a size, not the payload.
+PROVISION_LIST_LIMIT = 5000
+
+
+async def fetch_provision_list(
+    legislation_id: str, on_chunk: Optional[Callable] = None,
+    timing_collector=None, tool_name: str = "search_legislation_sections",
+) -> dict:
+    """`{"status": "ok", "rows": [...], "complete": bool}`, `{"status":
+    "no_text"}` (LEX's own "No sections found"), or `{"status": "failed"}`
+    for anything else. Never raises."""
+    url = f"{LEX_API_URL}/legislation/section/lookup"
+    payload = {"legislation_id": legislation_id, "limit": PROVISION_LIST_LIMIT}
+    call_id = f"{uuid.uuid4()}-provision-list"
+    try:
+        async with httpx.AsyncClient(timeout=60.0, verify=False) as client:
+            await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url,
+                                   "method": "POST", "payload": payload})
+            t0 = time.perf_counter()
+            resp = await _request_with_retry(client, "POST", url, name=tool_name, json=payload)
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            if timing_collector:
+                timing_collector.record_lex_api_call(tool_name, elapsed_ms)
+            try:
+                body = resp.json()
+            except ValueError:
+                body = None
+            await _emit(on_chunk, {
+                "type": "api_call_end", "id": call_id, "url": url,
+                "status": resp.status_code,
+                "response": {"provisions": len(body) if isinstance(body, list) else None},
+                "elapsed_ms": round(elapsed_ms),
+            })
+    except Exception as e:  # noqa: BLE001 - fail-soft, reported as failed
+        logger.warning(f"[Worker Tool Exec] provision list for {legislation_id} failed: {e!r}")
+        return {"status": "failed"}
+    if resp.status_code == 200 and isinstance(body, list):
+        return {"status": "ok", "rows": body, "complete": len(body) < PROVISION_LIST_LIMIT}
+    detail = str(body.get("detail") or "") if isinstance(body, dict) else ""
+    if resp.status_code == 404 and detail.startswith("No sections found"):
+        return {"status": "no_text"}
+    return {"status": "failed"}
+
+
+async def fetch_text_with_schedules(
+    legislation_id: str, on_chunk: Optional[Callable] = None,
+    timing_collector=None, tool_name: str = "search_legislation_sections",
+) -> Optional[str]:
+    """The instrument's whole text with its schedules appended (P3.27's flag),
+    or None. P3.12's fallback when the provision list does not come back."""
+    url = f"{LEX_API_URL}/legislation/text"
+    payload = {"legislation_id": legislation_id, "include_schedules": True}
+    call_id = f"{uuid.uuid4()}-text-with-schedules"
+    try:
+        async with httpx.AsyncClient(timeout=60.0, verify=False) as client:
+            await _emit(on_chunk, {"type": "api_call_start", "id": call_id, "url": url,
+                                   "method": "POST", "payload": payload})
+            t0 = time.perf_counter()
+            resp = await _request_with_retry(client, "POST", url, name=tool_name, json=payload)
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            if timing_collector:
+                timing_collector.record_lex_api_call(tool_name, elapsed_ms)
+            text = schedule_units.full_text_of(resp.json()) if resp.status_code == 200 else None
+            await _emit(on_chunk, {
+                "type": "api_call_end", "id": call_id, "url": url,
+                "status": resp.status_code,
+                "response": {"full_text_chars": len(text) if text is not None else None},
+                "elapsed_ms": round(elapsed_ms),
+            })
+            return text
+    except Exception as e:  # noqa: BLE001 - fail-soft
+        logger.warning(f"[Worker Tool Exec] text with schedules for {legislation_id} failed: {e!r}")
+        return None
 
 
 # -----------------------------------------------------------------------
@@ -425,7 +534,25 @@ async def execute_worker_tool(
                     )
                     if not slimmed["window_complete"]:
                         slimmed["window_size"] = requested
+                # P3.21: the date of each commencement made by another
+                # instrument, from legislation.gov.uk's Changes to Legislation
+                # record read through LEX's proxy (one feed per change record,
+                # memoised per request, at most 2 pages, 8 s, fail-soft, no
+                # date before the instrument's made date). A record with no such
+                # relation, or direction "by", comes back untouched. See
+                # `commencement_dates.py`.
+                slimmed = await add_commencement_dates(
+                    slimmed, on_chunk=on_chunk, timing_collector=timing_collector,
+                    call_id=call_id, tool_name=name,
+                )
                 return json.dumps(slimmed)
+
+            elif name == MADE_UNDER_TOOL:
+                # P3.31: a DB read of the made-under record, no external call.
+                from ...services.made_under_store import query as made_under_query
+                result = await made_under_query(str(args.get("act") or ""),
+                                                str(args.get("section") or ""))
+                return json.dumps(result, ensure_ascii=False)
 
             elif name == LOOKUP_TOOL:
                 # P3.7 (bucket B5): the one question a ranked search cannot
@@ -505,10 +632,19 @@ async def execute_worker_tool(
                     url=url or None,
                     category=record.get("category"),
                     enactment_date=record.get("enactment_date"),
+                    # P3.25: the date the held text is stated to be up to date
+                    # to, the field `get_legislation_text` was the only route
+                    # to (equal on 9 of 9 stored pairs). Not an in-force date;
+                    # `record_currency` reads it, for a held record only.
+                    valid_date=record.get("valid_date") or None,
                     # The description carries a commencement instrument's
                     # effect and date ("bring sections 2, 9 … into force on 10
                     # May 2025"), which is all a stub has to offer. Capped: the
                     # reason `_slim_search_results` drops it is its size.
+                    # P3.25: it is also where an SI's recital sits (7 of the 8
+                    # stored text records carrying one), and each of those 7
+                    # descriptions is 600 characters or fewer in whole, so the
+                    # cap loses none of them (batch 7 C, `p325_fields.py`).
                     description=(str(record.get("description") or "")[:600] or None),
                 )
                 try:
@@ -530,7 +666,16 @@ async def execute_worker_tool(
 
             elif name == "get_legislation_text":
                 url = f"{LEX_API_URL}/legislation/text"
-                payload = {"legislation_id": args["legislation_id"]}
+                # P3.27: `include_schedules` (default false: "only sections
+                # are returned") was never sent, so every whole-text read left
+                # out every schedule and annex, and said nothing (batch 7 B: 98
+                # of 195 reading turns). With it the text is the sections and
+                # then the schedules (60 of 60 live). The unflagged call below
+                # tells code exactly where the schedules start, which one
+                # flagged call does in only 22 of 27; `schedules_note` builds
+                # the Worker's line from the two.
+                payload = {"legislation_id": args["legislation_id"],
+                           "include_schedules": True}
 
                 await _emit(on_chunk, {
                     "type": "api_call_start",
@@ -562,73 +707,197 @@ async def execute_worker_tool(
                 })
 
                 resp.raise_for_status()
-                return json.dumps(resp_json)
+                # P3.27: the same call without the flag, for the boundary
+                # only. Fail-soft (Invariant 5): any failure here keeps the
+                # flagged text and leaves the boundary unknown, so the line
+                # says less, never more. Its response reaches the audit as a
+                # length, not the text again (a large Act's sections are
+                # 0.9 MB, already carried by the call above).
+                unflagged = None
+                base_id = f"{call_id}-without-schedules"
+                base_payload = {"legislation_id": args["legislation_id"]}
+                try:
+                    await _emit(on_chunk, {
+                        "type": "api_call_start", "id": base_id, "url": url,
+                        "method": "POST", "payload": base_payload,
+                    })
+                    t1 = time.perf_counter()
+                    base_resp = await _request_with_retry(
+                        client, "POST", url, name=name, json=base_payload)
+                    base_ms = (time.perf_counter() - t1) * 1000
+                    if timing_collector:
+                        timing_collector.record_lex_api_call(name, base_ms)
+                    if base_resp.status_code == 200:
+                        unflagged = base_resp.json()
+                    base_text = schedule_units.full_text_of(unflagged)
+                    await _emit(on_chunk, {
+                        "type": "api_call_end", "id": base_id, "url": url,
+                        "status": base_resp.status_code,
+                        "response": {"full_text_chars": len(base_text)
+                                     if base_text is not None else None},
+                        "elapsed_ms": round(base_ms),
+                    })
+                except Exception as e:  # noqa: BLE001 - the boundary is optional
+                    logger.warning(f"[Worker Tool Exec] {name}: unflagged text call failed: {e!r}")
+                    unflagged = None
+                return json.dumps(schedule_units.mark_schedule_boundary(resp_json, unflagged))
 
             elif name == "search_case_law":
                 url = "https://caselaw.nationalarchives.gov.uk/atom.xml"
                 params: dict = {"query": args["query"]}
                 if args.get("court"):
                     params["court"] = args["court"]
-                if args.get("date_from"):
-                    params["date_from"] = args["date_from"]
-                if args.get("date_to"):
-                    params["date_to"] = args["date_to"]
 
                 # Apply user's hard filter constraints (override model args).
                 # `_court` is gone (P4.4): the UI filter used to clobber the
                 # model's own `court` argument here, so a court selected turns
                 # earlier beat the model's per-query judgement. The date
-                # filters below deliberately INTERSECT rather than override,
-                # which is what court should always have done.
+                # filters deliberately INTERSECT rather than override, which
+                # is what court should always have done.
+                #
+                # P3.9: and they are now sent in the one form the feed honours
+                # (`from_date_0/1/2`, `to_date_0/1/2`; NOT in the published
+                # spec, see `case_law_date_window`). `date_from`/`date_to`
+                # were sent until P3.9 and the feed ignored them, so neither
+                # the model's dates nor the lawyer's ever applied. An empty
+                # window or a malformed date is refused here, with no call.
                 cl_cfg = get_request_provider_config()
-                if cl_cfg.get("_date_from"):
-                    model_df = args.get("date_from") or ""
-                    params["date_from"] = max(model_df, cl_cfg["_date_from"]) if model_df else cl_cfg["_date_from"]
-                if cl_cfg.get("_date_to"):
-                    model_dt = args.get("date_to") or ""
-                    params["date_to"] = min(model_dt, cl_cfg["_date_to"]) if model_dt else cl_cfg["_date_to"]
-
-                await _emit(on_chunk, {
-                    "type": "api_call_start",
-                    "id": call_id,
-                    "url": url,
-                    "method": "GET",
-                    "payload": params,
-                })
-
-                t0 = time.perf_counter()
-                resp = await client.get(url, params=params, timeout=15.0)
-                elapsed_ms = (time.perf_counter() - t0) * 1000
-
-                if timing_collector:
-                    timing_collector.record_lex_api_call(name, elapsed_ms)
-
-                await _emit(on_chunk, {
-                    "type": "api_call_end",
-                    "id": call_id,
-                    "url": url,
-                    "status": resp.status_code,
-                    "response": {"preview": resp.text[:300]},
-                    "elapsed_ms": round(elapsed_ms),
-                })
-
-                if resp.status_code == 400:
-                    court = args.get("court", "")
+                window = case_law_date_window(args, cl_cfg)
+                if window["error"]:
                     return json.dumps({
-                        "error": f"Invalid court filter '{court}'. Use only the exact court codes listed in the tool description (e.g. 'uksc', 'ewca/civ', 'ewhc/admin'). Retry without the court filter, or with a valid code.",
+                        "error": window["error"],
                         "results": [],
+                        "shown": 0,
                         "total": 0,
+                        "query": args["query"],
                     })
-                resp.raise_for_status()
-                entries = _parse_case_law_atom(resp.text)
-                return json.dumps({
-                    "results": entries,
-                    "total": len(entries),
-                    "query": args["query"],
-                })
+                params.update(window["params"])
+                # P3.22: by relevance, not newest first (the feed's default).
+                # `order=relevance` is not in the published spec and `per_page`
+                # must travel with it, or the page falls to 10 rows: see
+                # `caselaw.CASE_LAW_ORDER_PARAMS`.
+                params.update(CASE_LAW_ORDER_PARAMS)
+
+                async def _find_case_law() -> dict:
+                    await _emit(on_chunk, {
+                        "type": "api_call_start",
+                        "id": call_id,
+                        "url": url,
+                        "method": "GET",
+                        "payload": params,
+                    })
+
+                    t0 = time.perf_counter()
+                    # P4.19: through the retry helper, as every LEX call is. The
+                    # National Archives publishes a limit of 1,000 requests per
+                    # rolling five minutes per IP and answers it with a 429; the
+                    # target is one IP for every user, so a direct `client.get`
+                    # turned a 429 into a dropped retrieval. A 400 (an invalid
+                    # court code) is not in `_RETRY_STATUS` and still returns at
+                    # once to the branch below. The helper also retries a timeout
+                    # or transport error, which is wanted here: the only failures
+                    # in 1,149 stored calls were 3 DNS transport errors, and none
+                    # reached the 15 s timeout (batch 7 D's note).
+                    resp = await _request_with_retry(
+                        client, "GET", url, name=name, params=params, timeout=15.0
+                    )
+                    elapsed_ms = (time.perf_counter() - t0) * 1000
+
+                    if timing_collector:
+                        timing_collector.record_lex_api_call(name, elapsed_ms)
+
+                    await _emit(on_chunk, {
+                        "type": "api_call_end",
+                        "id": call_id,
+                        "url": url,
+                        "status": resp.status_code,
+                        "response": {"preview": resp.text[:300]},
+                        "elapsed_ms": round(elapsed_ms),
+                    })
+
+                    if resp.status_code == 400:
+                        court = args.get("court", "")
+                        return {
+                            "error": f"Invalid court filter '{court}'. Use only the exact court codes listed in the tool description (e.g. 'uksc', 'ewca/civ', 'ewhc/admin'). Retry without the court filter, or with a valid code.",
+                            "results": [],
+                            "total": 0,
+                        }
+                    resp.raise_for_status()
+                    entries = _parse_case_law_atom(resp.text)
+                    # P3.23: the shown count and the matching total, separately.
+                    # `total` was `len(entries)`, never more than the 50-row page,
+                    # so `total: 50` read as "every match seen" when the feed held
+                    # thousands. `case_law_count` reads the real figure from the
+                    # feed's `last` link; `shown` is what anything deciding "did
+                    # this search return results" must key on.
+                    return {
+                        "results": entries,
+                        **case_law_count(resp.text, len(entries)),
+                        "query": args["query"],
+                        # P3.9: the window the search ran under, for the note.
+                        **({"dates": window["dates"]} if window["dates"] else {}),
+                    }
+
+                if not scts_enabled_for_request():
+                    return json.dumps(await _find_case_law())
+
+                # P3.20: and the Scottish Courts and Tribunals Service's
+                # judgments, searched at the same time and returned as a second
+                # list, `scottish_results`, with its own counts in `scottish`.
+                # The same date window (the model's dates intersected with the
+                # lawyer's) applies to SCTS's date of decision; the `court`
+                # argument is a Find Case Law code and is not sent to SCTS.
+                # Either half failing leaves the other: Find Case Law's failure
+                # becomes an `error` here, beside the Scottish list, instead of
+                # the whole call's error string.
+                fcl, scot = await asyncio.gather(
+                    _find_case_law(),
+                    search_scts(args["query"], window["dates"], client,
+                                on_chunk=on_chunk, call_id=call_id,
+                                timing_collector=timing_collector, tool_name=name),
+                    return_exceptions=True,
+                )
+                for part in (fcl, scot):
+                    if isinstance(part, asyncio.CancelledError):
+                        raise part
+                if isinstance(fcl, BaseException):
+                    detail = (f"HTTP {fcl.response.status_code}"
+                              if isinstance(fcl, httpx.HTTPStatusError)
+                              else type(fcl).__name__)
+                    logger.error(f"[Tool Error] {name}: Find Case Law failed: {fcl!r}")
+                    fcl = {"error": f"The Find Case Law search failed ({detail}).",
+                           "results": [], "shown": 0, "total": 0,
+                           "query": args["query"]}
+                if not isinstance(scot, dict):
+                    scot = {"results": [], "block": {
+                        "status": "error", "shown": 0, "total": 0, "total_exact": True,
+                        "match": None, "query_sent": None}}
+                fcl["scottish_results"] = scot["results"]
+                fcl["scottish"] = scot["block"]
+                return json.dumps(fcl)
 
             elif name == "get_case_law_text":
                 url = args["url"]
+
+                # P3.20: routed by host. A Scottish Courts and Tribunals
+                # Service judgment is a PDF on its site, read by
+                # `scts.fetch_scts_judgment`; a Find Case Law judgment goes the
+                # way it always has; anything else is refused here, with no
+                # call (it used to be fetched as `<url>/data.xml` from whatever
+                # host it named). Every stored call (952) was a Find Case Law
+                # https URL, so the refusal moves none of them.
+                host = (urlparse(str(url)).hostname or "").lower()
+                if is_scts_judgment_url(url) and scts_enabled_for_request():
+                    result = await fetch_scts_judgment(
+                        url, client, on_chunk=on_chunk, call_id=call_id,
+                        timing_collector=timing_collector, tool_name=name)
+                    return json.dumps(result)
+                if host != "caselaw.nationalarchives.gov.uk":
+                    return json.dumps({
+                        "error": GET_CASE_LAW_TEXT_REFUSAL,
+                        "url": url,
+                        "text": "",
+                    })
 
                 await _emit(on_chunk, {
                     "type": "api_call_start",
@@ -640,7 +909,9 @@ async def execute_worker_tool(
 
                 t0 = time.perf_counter()
                 try:
-                    result = await _fetch_judgment_text(url)
+                    # P4.19: the shared client, so the fetch can go through
+                    # `_request_with_retry` like the search above.
+                    result = await _fetch_judgment_text(url, client=client)
                 except httpx.HTTPStatusError as e:
                     result = {"error": f"HTTP {e.response.status_code} fetching judgment", "url": url, "text": ""}
                 except Exception as e:

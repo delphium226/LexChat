@@ -85,6 +85,13 @@ from .instrument_lookup import (
     NOT_HELD,
     parse_lookup_result,
 )
+from .published_text import published_footer_clause, published_limb
+from .removal_effects import (
+    PROVISION_KEY,
+    QUALIFIED_KEY,
+    WORDS_ONLY_KEY,
+    removal_counts,
+)
 
 __all__ = [
     "LEX_COVERAGE_SENTENCE",
@@ -105,9 +112,21 @@ __all__ = [
     "incomplete_steps_note",
     "CASE_LAW_COVERAGE_SENTENCE",
     "CASE_LAW_DOCTRINE_SENTENCE",
+    "CASE_LAW_ABSENCE_SENTENCE",
     "record_case_law_search",
+    "case_law_search_note",
+    "CASE_LAW_RESULT_ORDER",
     "case_law_scope_clause",
     "case_law_scope_footer",
+    "scottish_search_note",
+    "SCTS_COVERAGE_BOTH_SENTENCE",
+    "SCTS_COVERAGE_ONLY_SENTENCE",
+    "SCTS_ABSENCE_SENTENCE",
+    "SCTS_ERRORED_SENTENCE",
+    "SCTS_FCL_ERRORED_SENTENCE",
+    "FCL_ZERO_NOTE_WITH_SCTS",
+    "SCTS_ZERO_NOTE",
+    "CASE_LAW_BOTH_ZERO_STOP",
     "not_held_note",
     "record_not_held",
     "record_lookup",
@@ -225,6 +244,48 @@ _RELATION_ROUTE_CLAUSE = (
     "and it answers in one call what no number of searches can."
 )
 
+# FIX_PLAN P3.6 (batch 9 D): a search row now carries its `description`, cut to
+# 600 characters (`lex._search_description`), and two clauses of this block were
+# written when no row did. Measured with the built slimmer over every stored
+# search result (6,521 re-run): `_ADJACENCY_CLAUSE`'s "nothing here states what
+# any instrument was made under" would be FALSE on 3,295 of the 5,632 results
+# that carry it (a description quoting the powers the instrument was made
+# under: 24 of 25 sampled are recitals or "made under" statements), and
+# `_RELATION_ROUTE_CLAUSE`'s "do NOT conclude anything about them from these
+# rows" would forbid, on 5,415 results, quoting a description that states a
+# relation, which is what the description was kept for. So where any shown row
+# carries a description, the block drops the false sentence, points the route
+# clause at which rows came back (what it was always about), and adds ONE
+# sentence on what a description is; a result with none keeps the old clauses
+# byte for byte (gated in code on the data). `_CURRENCY_CLAUSE` is unchanged
+# and stays true beside it: a date a description states is not currency. The
+# section-search block keeps `_RELATION_ROUTE_CLAUSE` (its rows carry no
+# description). The block grows by about 240 to 340 characters where it applies.
+_ADJACENCY_CLAUSE_DESCRIBED = (
+    " An instrument ranking highly in a search for an Act's title has NOT thereby "
+    "been shown to be made under that Act — do not say that it was."
+)
+_RELATION_ROUTE_CLAUSE_DESCRIBED = (
+    " Commencement, amendment, repeal and revocation are a special case: do NOT "
+    "conclude anything about them from which rows came back. Call "
+    "`get_legislation_changes` with the legislation_id — it is the only tool that "
+    "returns those relations, and it answers in one call what no number of searches "
+    "can."
+)
+_DESCRIPTION_CLAUSE = (
+    " A row's `description` is that instrument's own published summary, possibly "
+    "truncated: you may quote it, citing the instrument (a date it gives for bringing "
+    "provisions into force, for example), but it is not the change record, it is no "
+    "evidence of current in-force status, and an enabling power it quotes still needs "
+    "an ENABLING POWER block."
+)
+
+
+def _rows_described(results: Any) -> bool:
+    """Does any shown row carry a `description` (P3.6)?"""
+    return isinstance(results, list) and any(
+        isinstance(r, dict) and r.get("description") for r in results)
+
 
 def legislation_search_note(
     args: dict, data: Any, cfg: Optional[dict] = None
@@ -272,16 +333,20 @@ def legislation_search_note(
             if removed
             else ""
         )
+        # P3.6: the variants where a row carries a description (see above).
+        described = _rows_described(results)
         # P2.3 (B3b): only where a derivation claim can arise — a page of Acts
         # cannot produce one, and an unconditional clause would be noise on the
         # majority of searches.
         adjacency = (
-            _ADJACENCY_CLAUSE
+            (_ADJACENCY_CLAUSE_DESCRIBED if described else _ADJACENCY_CLAUSE)
             if isinstance(results, list)
             and any(_is_secondary(r.get("legislation_id")) for r in results
                     if isinstance(r, dict))
             else ""
         )
+        route = _RELATION_ROUTE_CLAUSE_DESCRIBED if described else _RELATION_ROUTE_CLAUSE
+        description = _DESCRIPTION_CLAUSE if described else ""
         return (
             f"\n\n[SEARCH SCOPE — {window} for {query_phrase}. Filters in force: "
             f"{filters}.{removed_phrase} The index ranks the whole corpus against "
@@ -291,7 +356,7 @@ def legislation_search_note(
             "instrument, commencement, amendment or provision missing from these "
             "rows may still be held, and may still exist. Do NOT state that "
             f"anything does not exist on the strength of this result.{adjacency}"
-            f"{_RELATION_ROUTE_CLAUSE}{_CURRENCY_CLAUSE} "
+            f"{route}{_CURRENCY_CLAUSE}{description} "
             f"{LEX_COVERAGE_SENTENCE} {_REPORTING_RULE}]"
         )
 
@@ -503,35 +568,85 @@ def enabling_power_note(args: dict, data: Any) -> str:
 
     recital = _recital_in(d)
     if recital:
-        # Bounded: a preamble runs to a few hundred characters and the point is
-        # to hand back the words, not the document.
-        #
-        # Square brackets are removed from the quote, and that is load-bearing
-        # rather than cosmetic: `strip_scope_blocks` matches this block with
-        # `\[ENABLING POWER[^\[\]]*\]`, so a `[` or `]` inside the recital would
-        # end the match early and leave agent-facing bookkeeping rendering in
-        # front of a lawyer. The same single-bracket form as the other tool
-        # block, and the same reason it stays balanced.
-        quoted = recital[:600].replace("[", "(").replace("]", ")")
-        quoted += "..." if len(recital) > 600 else ""
-        return (
-            f"\n\n[ENABLING POWER — this record DOES state what {lid} was made "
-            f"under, and these words are the only evidence of it you have:\n"
-            f'  "{quoted}"\n'
-            f"You MAY state the enabling power of {lid}, citing this text. Do NOT "
-            "extend the claim to any other instrument: each one states its own, "
-            "and most records do not state it at all.]"
-        )
+        return _enabling_stated_block(lid, recital)
     return (
         f"\n\n[ENABLING POWER — this record does NOT state what {lid} was made "
-        "under. No endpoint we call returns a made-under relation, and this "
-        "record carries no enabling-power recital, so nothing you hold "
+        "under. It carries no enabling-power recital, and the made-under record "
+        "holds no preamble for it either, so nothing you hold "
         f"establishes it. Do NOT write that {lid} was made under, cites, or "
         "relies on any provision as its enabling power, and do not infer one "
         "from the instrument's title or subject matter. If the question turns "
         "on it, say the enabling power could not be verified from the available "
         "material.]"
     )
+
+
+def _enabling_stated_block(lid: str, recital: str, source: str = "this record") -> str:
+    """The permitting branch of the ENABLING POWER block: the recital, quoted.
+
+    `source` names what carried it. "this record" for a `/legislation/text`
+    result, which is the wording P2.3 built, byte for byte; P3.25's lookup
+    route names the lookup record, because its block can arrive appended to a
+    section search, where "this record" would read as the ranked sections.
+    """
+    # Bounded: a preamble runs to a few hundred characters and the point is
+    # to hand back the words, not the document.
+    #
+    # Square brackets are removed from the quote, and that is load-bearing
+    # rather than cosmetic: `strip_scope_blocks` matches this block with
+    # `\[ENABLING POWER[^\[\]]*\]`, so a `[` or `]` inside the recital would
+    # end the match early and leave agent-facing bookkeeping rendering in
+    # front of a lawyer. The same single-bracket form as the other tool
+    # block, and the same reason it stays balanced.
+    quoted = recital[:600].replace("[", "(").replace("]", ")")
+    quoted += "..." if len(recital) > 600 else ""
+    return (
+        f"\n\n[ENABLING POWER — {source} DOES state what {lid} was made "
+        f"under, and these words are the only evidence of it you have:\n"
+        f'  "{quoted}"\n'
+        f"You MAY state the enabling power of {lid}, citing this text. Do NOT "
+        "extend the claim to any other instrument: each one states its own, "
+        "and most records do not state it at all.]"
+    )
+
+
+# P3.25: `lookup_legislation` carries the same `description` as the
+# `/legislation/text` record (17 of 17 paired calls, batch 6 D; 10 of 10 stored
+# LEX lookup payloads, batch 7 C), and the recital lives there for 7 of the 8
+# stored text records that carry one (the eighth has it only in `full_text`,
+# which no lookup returns). So the quick-lookup Worker, which no longer has
+# `get_legislation_text`, keeps P2.3's permitted branch through the lookup.
+# A lookup is not a read of the instrument: only the PERMITTING branch is built
+# from it, and a lookup whose record carries no recital adds no block and no
+# record. The section search, which is the read, already records the
+# instrument as looked at.
+_LOOKUP_ENABLING_STATUSES = (HELD, HELD_WITHOUT_TEXT)
+
+
+def _lookup_recital(data: Any) -> tuple:
+    """`(legislation_id, recital)` from a `lookup_legislation` result, or
+    `("", "")`. Only for a secondary instrument whose record was found."""
+    got = parse_lookup_result(data)
+    if not got or got.get("status") not in _LOOKUP_ENABLING_STATUSES:
+        return "", ""
+    lid = str(got.get("legislation_id") or "").strip()
+    if not _is_secondary(lid):
+        return "", ""
+    recital = _recital_in({"legislation": {"description": got.get("description") or ""}})
+    return (lid, recital) if recital else ("", "")
+
+
+def lookup_enabling_note(data: Any) -> str:
+    """The ENABLING POWER block for a `lookup_legislation` result whose record
+    states a recital, else "". Never raises."""
+    try:
+        lid, recital = _lookup_recital(data)
+        if not recital:
+            return ""
+        return _enabling_stated_block(
+            lid, recital, source=f"the index record lookup_legislation returned for {lid}")
+    except Exception:
+        return ""
 
 
 # Appended to `search_legislation` and `search_legislation_sections` results.
@@ -578,6 +693,13 @@ def record_enabling_power(log: Optional[list], name: str, args: dict, data: Any)
     if log is None:
         return
     try:
+        if name == LOOKUP_TOOL:
+            # P3.25: the permitting record only (see `_lookup_recital`).
+            lid, recital = _lookup_recital(data)
+            if recital:
+                log.append({"tool": "enabling_power", "legislation_id": lid[:60],
+                            "stated": True})
+            return
         if name not in _ENABLING_ROUTES:
             return
         lid = str((args or {}).get("legislation_id") or "").strip()
@@ -598,6 +720,12 @@ def record_enabling_power(log: Optional[list], name: str, args: dict, data: Any)
                     "stated": stated})
     except Exception:
         pass
+
+
+def _and_more(ids: list, n: int) -> str:
+    """The first `n` ids, and how many more (P3.31: a made-under list can name 37)."""
+    shown = ", ".join(ids[:n])
+    return shown + (f" and {len(ids) - n} more" if len(ids) > n else "")
 
 
 def _enabling_limb(log: Optional[list]) -> str:
@@ -621,20 +749,120 @@ def _enabling_limb(log: Optional[list]) -> str:
     if stated:
         return (
             f"Enabling power: retrieved for {len(stated)} of {total} instrument(s) "
-            f"looked at — {', '.join(stated[:8])} (their own preambles state it). "
+            f"looked at — {_and_more(stated, 8)} (their own preambles state it). "
             "For EVERY other instrument named in this report the enabling power "
             "was NOT retrieved and is NOT known: do not write that it was made "
             "under, cites or relies on any provision."
         )
     return (
         f"Enabling power: NOT retrieved for any of the {total} instrument(s) "
-        "looked at. No endpoint we call returns a made-under relation and none "
-        "of these records states one. Do NOT write that any instrument was made "
+        "looked at. None of these records states one, and the made-under "
+        "record supplied no preamble for them. Do NOT write that any instrument was made "
         "under, cites or relies on a provision as its enabling power — say it "
         "could not be verified instead. Ranking near an Act in a keyword search "
         "is not evidence of being made under it."
     )
 
+
+
+# ---------------------------------------------------------------------------
+# B3 — the made-under record (FIX_PLAN P3.31)
+# ---------------------------------------------------------------------------
+#
+# `find_instruments_made_under` reads a harvest of instrument preambles. Each
+# instrument it lists is recorded as an `enabling_power` entry with `stated`,
+# because its own preamble does state the power, so the limb and the footer
+# above do not then tell the Manager or the lawyer that its derivation is
+# unverified. One `made_under` entry per call carries the coverage, which is
+# the record's edge: the Manager and the lawyer never see the tool result, and
+# a short list read without its coverage is how a total gets invented.
+MADE_UNDER_ENTRY = "made_under"
+
+
+def record_made_under(log: Optional[list], data: Any) -> None:
+    """Record one `find_instruments_made_under` result. Never raises."""
+    if log is None:
+        return
+    try:
+        d = json.loads(data) if isinstance(data, str) else dict(data or {})
+        status = d.get("status")
+        if status not in ("found", "act_known_section_not_cited", "act_not_in_record"):
+            return
+        for inst in d.get("instruments") or []:
+            lid = str(inst.get("legislation_id") or "")[:60]
+            if lid:
+                log.append({"tool": "enabling_power", "legislation_id": lid,
+                            "stated": True, "source": "made_under_record"})
+        entry = {
+            "tool": MADE_UNDER_ENTRY, "status": status,
+            "act": str(d.get("matched_act") or d.get("act") or "")[:160],
+            "provision": str(d.get("provision") or "")[:40],
+            "count": int(d.get("count") or 0),
+            "listed": len(d.get("instruments") or []),
+            "coverage": str((d.get("coverage") or {}).get("label") or "")[:200],
+        }
+        # P3.33: legislation.gov.uk's recorded revocations, counted over every
+        # instrument found, with the day they were checked.
+        rv = d.get("revocations")
+        if isinstance(rv, dict) and rv.get("checked"):
+            entry["revocations"] = {k: rv.get(k) for k in (
+                "revoked", "revoked_undated", "revoked_later", "partly", "qualified",
+                "none", "unchecked", "checked")}
+        log.append(entry)
+    except Exception:
+        pass
+
+
+def _made_under_limb(log: Optional[list]) -> str:
+    rows = [e for e in (log or []) if e.get("tool") == MADE_UNDER_ENTRY]
+    if not rows:
+        return ""
+    parts = []
+    for e in rows:
+        prov = e.get("provision", "").replace("/", " ")
+        if e.get("status") == "found":
+            listed = (f", {e.get('listed')} of them listed" if e.get("listed", 0) < e.get("count", 0)
+                      else "")
+            parts.append(f"{e.get('count')} instrument(s) whose own preamble names {prov} of "
+                         f"the {e.get('act')}{listed}" + _revocation_limb(e.get("revocations")))
+        else:
+            parts.append(f"none whose preamble names {prov} of the {e.get('act')}")
+    cov = rows[-1].get("coverage") or "a stated class of instruments"
+    rule = (" A revocation is stated only as legislation.gov.uk records it; no revocation "
+            "recorded does not mean in force." if any(e.get("revocations") for e in rows) else "")
+    return (
+        "Made-under record consulted: " + "; ".join(parts) + f". It covers {cov} only; "
+        "instruments outside that coverage were not checked, so give the coverage, "
+        "never a total, and never say nothing else was made under the provision." + rule
+    )
+
+
+def _revocation_limb(rv: Optional[dict]) -> str:
+    """P3.33: ", of which legislation.gov.uk records R as revoked in whole ... (checked D)"."""
+    if not isinstance(rv, dict) or not rv.get("checked"):
+        return ""
+    whole = sum(int(rv.get(k) or 0) for k in ("revoked", "revoked_undated", "revoked_later"))
+    later = int(rv.get("revoked_later") or 0)
+    bits = [f"{whole} as revoked in whole" + (f" ({later} from a date still to come)" if later else ""),
+            f"{int(rv.get('partly') or 0)} as revoked in part"]
+    if rv.get("qualified"):
+        bits.append(f"{rv['qualified']} with a qualified removal only")
+    return f", of which legislation.gov.uk records {', '.join(bits)} (checked {rv['checked']})"
+
+
+def _made_under_footer_clause(entries: Optional[list]) -> str:
+    rows = [e for e in (entries or []) if e.get("tool") == MADE_UNDER_ENTRY]
+    if not rows:
+        return ""
+    cov = rows[-1].get("coverage") or "a stated class of instruments"
+    checked = [e["revocations"]["checked"] for e in rows if e.get("revocations")]
+    revoked = (f" Revocations of those instruments are as recorded on legislation.gov.uk on "
+               f"{max(checked)}; where none is recorded, that is not confirmation that an "
+               "instrument still has effect." if checked else "")
+    return (
+        f" The record of enabling powers consulted here covers {cov}; anything "
+        "outside that coverage was not checked." + revoked
+    )
 
 # ---------------------------------------------------------------------------
 # B3 — the relationship, retrieved (FIX_PLAN P3.5)
@@ -664,6 +892,125 @@ def _enabling_limb(log: Optional[list]) -> str:
 # dropped — see `_slim_amendment_results`. The block below names the label so
 # the model cannot treat it as an effect it recognises.
 _EFFECT_NOT_STATED = "not stated"
+
+
+# ---------------------------------------------------------------------------
+# P3.21 — the commencement DATE, where code retrieved one
+# ---------------------------------------------------------------------------
+#
+# `agent/tools/commencement_dates.py` adds, after a change record whose listed
+# relations include a commencement made by another instrument, the date
+# legislation.gov.uk's Changes to Legislation record gives for each of them
+# (`in_force` and `qualification` on the `changes` entry) and a result-level
+# `commencement_dates` status. Every sentence in this module that says the
+# record carries no dates is true of the relations themselves and false of a
+# record that hop dated, so each is GATED on the hop's result (P3.20's
+# pattern): unchanged where no hop ran or it dated nothing, and, where it
+# dated something, saying that a date is when the named instrument brought a
+# provision into force, with its source and qualification, and never that the
+# provision is in force today (P2.5; the repeal half is unchanged: no repeal is
+# dated). This module depends on nothing in the agent package, so it reads the
+# hop's output by its keys. Every new sentence is screened against every
+# detector in `tests/test_commencement_dates.py`.
+_DATE_RECORD = "legislation.gov.uk's Changes to Legislation record"
+
+# The hop's not-retrieved reasons, as a sentence. Worded without "timed out"
+# (`HALT_AS_TIMEOUT` reads answers for that) and without "not retrieved"
+# (`NOT_FOUND`): a Worker can echo this.
+_HOP_REASONS = {
+    "no_reply": "the record did not answer within 8 seconds",
+    "unreadable": "what came back was not a readable record",
+    "error": "the request failed",
+}
+
+
+def _hop_reason(reason: Any) -> str:
+    r = str(reason or "error")
+    if r.startswith("http_") and r[5:].isdigit():
+        return f"the record answered with an error, HTTP {r[5:]}"
+    return _HOP_REASONS.get(r, _HOP_REASONS["error"])
+
+
+def _commencement_dates(d: dict) -> dict:
+    """What P3.21's hop did to one change record, read off the record.
+
+    `status` is None where no hop ran (no ``commencement_dates`` key), else the
+    hop's own status. `dated` is the number of listed commencement relations it
+    dated, and is 0 unless an entry really carries an ``in_force`` (the gate is
+    the structure, not the count alone).
+    """
+    cd = d.get("commencement_dates") if isinstance(d, dict) else None
+    out = {"status": None, "dated": 0, "relations": 0, "reason": None,
+           "refused": [], "unchecked": [], "window": None}
+    if not isinstance(cd, dict):
+        return out
+    out["status"] = cd.get("status")
+    out["reason"] = cd.get("reason")
+    entries = 0
+    for g in d.get("related") or []:
+        if not isinstance(g, dict) or g.get("self"):
+            continue
+        for c in g.get("changes") or []:
+            if isinstance(c, dict) and c.get("in_force"):
+                entries += 1
+    if out["status"] == "retrieved" and entries:
+        out["dated"] = cd.get("dated") if isinstance(cd.get("dated"), int) else entries
+        out["relations"] = cd.get("relations") if isinstance(cd.get("relations"), int) else 0
+    for key, name in (("refused_instruments", "refused"), ("made_date_not_read", "unchecked")):
+        v = cd.get(key)
+        if isinstance(v, list):
+            out[name] = [str(x) for x in v if x]
+    w = cd.get("feed_window")
+    if isinstance(w, dict) and isinstance(w.get("read"), int) and isinstance(w.get("total"), int):
+        out["window"] = w
+    return out
+
+
+def _some(ids: list, k: int = 6) -> str:
+    """At most `k` ids, and how many more: a list that names some and stops
+    would leave the rest unexplained."""
+    more = len(ids) - k
+    return ", ".join(ids[:k]) + (f" and {more} more" if more > 0 else "")
+
+
+def _dated_closing(lid: str, hop: dict) -> str:
+    """The Worker-facing closing of a change record the hop dated (P3.21)."""
+    bits = [
+        " The relations themselves carry no date. The `in_force` date on "
+        f"{hop['dated']} of the {hop['relations'] or hop['dated']} commencement "
+        "relation(s) made by another instrument listed here was added by code from "
+        f"{_DATE_RECORD}, read through the LEX API, with that record's "
+        "`qualification` (such as \"wholly in force\" or \"for specified "
+        "purposes\"): you MAY state such a date, with its qualification, as the "
+        "date the instrument named against that entry brought those provisions "
+        "into force, citing that record. It records when they were brought into "
+        "force, not whether they have since been amended or repealed, so it is "
+        "never evidence of in-force status today. Do not give a date for a "
+        "relation listed without `in_force`."
+    ]
+    if hop["refused"]:
+        bits.append(
+            f" For relations made by {_some(hop['refused'])} no date is given: "
+            "the date that record holds for them is earlier than the day the "
+            "instrument was made, which is impossible."
+        )
+    if hop["unchecked"]:
+        bits.append(
+            f" For relations made by {_some(hop['unchecked'])} no date is given: "
+            "the day that instrument was made could not be read, so the date could "
+            "not be checked against it."
+        )
+    if hop["window"]:
+        bits.append(
+            f" That record was read for the first {hop['window']['read']} of the "
+            f"{hop['window']['total']} changes it lists for {lid}, so a relation "
+            "without a date here may be in the part that was not read."
+        )
+    bits.append(
+        " There is no made-under relation, so this record says nothing about any "
+        "instrument's enabling power.]"
+    )
+    return "".join(bits)
 
 
 def amendment_search_note(args: dict, data: Any) -> str:
@@ -754,6 +1101,21 @@ def amendment_search_note(args: dict, data: Any) -> str:
     # do and do not. Placed before the closing caveats so the caveats still end
     # the block.
     bits.append(_relation_currency_limb(d))
+    # P3.21: gated on the date hop. Where it dated a relation, the closing says
+    # where the date came from and what it is (and is not); where it ran and
+    # could not read the record, one sentence says so ahead of the unchanged
+    # closing; where it did not run, or dated nothing, the closing is P3.5's.
+    hop = _commencement_dates(d)
+    if hop["dated"]:
+        bits.append(_dated_closing(lid, hop))
+        return "".join(bits)
+    if hop["status"] == "not_retrieved":
+        bits.append(
+            " Code tried to read the date of each commencement made by another "
+            f"instrument from {_DATE_RECORD}, through the LEX API, and could not "
+            f"this time ({_hop_reason(hop['reason'])}), so no date is given against "
+            "any relation here."
+        )
     bits.append(
         " Two things this record does NOT contain, whatever it shows: there is no "
         "DATE on any relation, so you cannot say when a provision came into force "
@@ -790,6 +1152,7 @@ def record_relations(log: Optional[list], name: str, args: dict, data: Any) -> N
             if isinstance(g, dict) and not g.get("self") and g.get("legislation_id"):
                 if g["legislation_id"] not in others:
                     others.append(g["legislation_id"])
+        hop = _commencement_dates(d)
         log.append({
             "tool": "change_record",
             "legislation_id": str(
@@ -801,6 +1164,9 @@ def record_relations(log: Optional[list], name: str, args: dict, data: Any) -> N
                 d.get("by_other_legislation"), int) else 0,
             "others": others[:8],
             "complete": d.get("window_complete") is not False,
+            # P3.21: how many listed commencements code dated (0 where no hop
+            # ran or it dated none), for `_relations_limb` and the footer.
+            "dated": hop["dated"],
         })
     except Exception:
         pass
@@ -854,6 +1220,25 @@ def _relations_limb(log: Optional[list]) -> str:
         parts.append(
             " At least one of those lists was truncated, so it is not exhaustive."
         )
+    # P3.21: gated on the date hop having dated a listed commencement.
+    dated = []
+    for e in rows:
+        lid = e.get("legislation_id") or ""
+        if e.get("dated") and lid and lid not in dated:
+            dated.append(lid)
+    if dated:
+        parts.append(
+            " The change record's relations carry no dates of their own, and no "
+            f"made-under relation. For the record of {', '.join(dated[:8])}, code "
+            f"added the date {_DATE_RECORD} gives for each commencement made by "
+            "another instrument, with that record's qualification: a date the report "
+            "gives for such a commencement may be stated, with its qualification, as "
+            "the date that instrument brought the provision into force, citing that "
+            "record, and never as evidence of in-force status today. Do not state "
+            "any other commencement date, or an enabling power, from the change "
+            "record."
+        )
+        return "".join(parts)
     parts.append(
         " The change record carries no dates and no made-under relation: do not "
         "state a commencement date, or an enabling power, from it."
@@ -894,7 +1279,18 @@ def _relations_footer_clause(entries: Optional[list]) -> str:
         f"recorded changes for {', '.join(consulted[:3])}, which this research "
         "consulted directly"
     )
-    if any_found:
+    if any_found and any(e.get("dated") for e in rows):
+        # P3.21: a date the hop retrieved is not "read from the instrument
+        # itself", so this branch says where it did come from.
+        lead += (
+            "; those records carry no dates of their own, so a commencement date "
+            "given above for a provision commenced by another instrument is the "
+            f"date {_DATE_RECORD} gives for that commencement, read through the LEX "
+            "API, with its qualification. It says when the provision was brought "
+            "into force, not whether it has been amended or repealed since; any "
+            "other date was read from the instrument itself."
+        )
+    elif any_found:
         lead += (
             "; those records carry no dates, so any date given above was read from "
             "the instrument itself and not from the relation."
@@ -1067,6 +1463,72 @@ def currency_note(args: dict, data: Any) -> str:
     )
 
 
+def _relation_commencement_bits(d: dict, commenced: int) -> str:
+    """P3.24: the Worker-facing commencement sentences on a change record.
+
+    The Worker's own view of the rule the Manager gets per instrument from
+    `_commencement_lines`, computed from the same split:
+
+    * relations made by ANOTHER instrument: state each, citing it; if all are
+      listed, a provision not among them may be called not recorded as
+      commenced, and if not, the list is said to be incomplete;
+    * `self: true` relations: the instrument's own commencement provision,
+      which says how its provisions come into force, not whether they have.
+      For an Act that is the commencement section, often an appointed-day
+      power; for an SI it is usually the regulation fixing the day the SI
+      comes into force, so the Worker is sent to that provision for the date
+      rather than to the relation, which carries none;
+    * a count whose groups are not listed: which provisions, and who made
+      them, is not shown;
+    * under ``"by"``: this legislation commencing OTHER legislation, which
+      says nothing about its own commencement.
+    """
+    split = _commencement_split(d)
+    if split["direction"] != "to":
+        return (
+            f" {commenced} relation(s) are `coming into force`: this legislation "
+            "commencing provisions of the legislation named against each. You may "
+            "state those, citing it; they do not show whether this legislation's "
+            "own provisions have been commenced."
+        )
+    other, own = split["commenced_by_other"], split["commenced_self"]
+    bits = []
+    if other:
+        bits.append(
+            f" {other} `coming into force` relation(s) were made by another "
+            "instrument and name a provision of this legislation: you may state "
+            "each of those provisions as commenced, citing the instrument against it."
+        )
+        if split["commenced_listed_in_full"]:
+            bits.append(
+                " They are all listed here, so a provision of this legislation not "
+                "among them may be called not recorded as commenced, citing this "
+                "record."
+            )
+        else:
+            bits.append(
+                " The commencement relations are not all listed here, so a "
+                "provision not listed may be in the part not shown: do not state "
+                "whether it has been commenced."
+            )
+    if own:
+        bits.append(
+            f" {own} `coming into force` relation(s) are marked `self: true`: this "
+            "legislation's own commencement provision acting on itself, which says "
+            "how its provisions come into force, not whether they have. Read that "
+            "provision itself for any date it fixes, and do not state from these "
+            "relations alone whether a provision has been commenced."
+        )
+    if not other and not own:
+        bits.append(
+            f" {commenced} relation(s) are `coming into force`, but their groups "
+            "are not listed here, so which provisions they name, and who made them, "
+            "is not shown: do not state from this record whether a provision has "
+            "been commenced."
+        )
+    return "".join(bits)
+
+
 def _relation_currency_limb(d: dict) -> str:
     """The three currency-bearing relation classes, appended to a change record.
 
@@ -1077,14 +1539,15 @@ def _relation_currency_limb(d: dict) -> str:
     """
     commenced = d.get("provisions_commenced")
     orders = d.get("commencement_orders_of_amendments")
-    repeals = d.get("repeal_or_revocation_relations")
     bits = []
     if isinstance(commenced, int) and commenced:
-        bits.append(
-            f" {commenced} relation(s) are `coming into force` and name a "
-            "provision of this legislation: those ARE its own commencement and "
-            "you may state them, citing the instrument against each."
-        )
+        # P3.24 (batch 7 A, extension decided by the user): P2.5's sentence
+        # here said every `coming into force` relation "ARE its own
+        # commencement and you may state them", the instrument's OWN
+        # relations included (batch 6 B's F3), which is the opposite of what
+        # the Manager's line in `_currency_limb` and `_COMMENCEMENT_RECORD_RULE`
+        # now say. Split by who made them, from `_commencement_split`.
+        bits.append(_relation_commencement_bits(d, commenced))
     if isinstance(orders, int) and orders:
         bits.append(
             f" {orders} relation(s) carry the effect `Commencement Order` and are "
@@ -1095,12 +1558,7 @@ def _relation_currency_limb(d: dict) -> str:
             "Do NOT name any of those instruments as having commenced this "
             "legislation or any of its provisions."
         )
-    if isinstance(repeals, int) and repeals:
-        bits.append(
-            f" {repeals} relation(s) are repeals or revocations: those establish "
-            "that the named provision is no longer in force, and you may state "
-            "them the same way. The record gives no date for them either."
-        )
+    bits.append(_relation_removal_bits(d))
     if isinstance(commenced, int) and not commenced:
         bits.append(
             " NO relation here is a `coming into force` relation for this "
@@ -1114,6 +1572,111 @@ def _relation_currency_limb(d: dict) -> str:
         "is in force as a whole, as at today. Do not write that it is."
     )
     return "".join(bits)
+
+
+def _relation_removal_bits(d: dict) -> str:
+    """P3.28: the removal sentences on a change record, one per class present.
+
+    P2.5's one sentence said of every relation whose effect held "repeal",
+    "revok" or "revoc" that the named provision "is no longer in force". That
+    over-claimed on "words repealed" (the provision stays, its text amended)
+    and on "repealed (prosp.)" (not yet in effect), and the count missed
+    "omitted", "ceases to have effect" and the other removal families, so a
+    record removing whole provisions was handed over as holding no repeal
+    (batch 12 G: 12 answer sentences denying a removal the record held). The
+    classes come from `removal_effects.removal_counts`, which reads a stored
+    record's effect histogram where the slimmer's counts are absent.
+    """
+    counts = removal_counts(d)
+    whole, words, qualified = (counts[PROVISION_KEY], counts[WORDS_ONLY_KEY],
+                               counts[QUALIFIED_KEY])
+    bits = []
+    if whole:
+        bits.append(
+            f" {whole} relation(s) remove a provision, wholly or in part (their "
+            "groups are marked `removal: provision` or `removal: provision_in_part`): "
+            "those establish that the named provision, or the part of it removed, "
+            "is no longer in force, and you may state them the same way."
+        )
+    if words:
+        bits.append(
+            f" {words} relation(s) remove words or entries only (marked `removal: "
+            "words_only`): each amends the text of the named provision, which "
+            "stays, so state it as the text amended, never as a provision removed."
+        )
+    if qualified:
+        bits.append(
+            f" {qualified} relation(s) remove something with a qualification in "
+            "their effect (marked `removal: qualified`, with a `qualifier`: "
+            "prospective, temporary, conditional, for specified purposes, or for "
+            "part of the United Kingdom only): state each only with its "
+            "qualification, never as a provision removed outright."
+        )
+    if bits:
+        # P3.21: "either" assumed the commencements were undated too; where
+        # code dated them, the removal half stands without it.
+        bits.append(
+            " The record gives no date for these removals"
+            + ("." if _commencement_dates(d)["dated"] else " either.")
+        )
+    return "".join(bits)
+
+
+# FIX_PLAN P3.24. The effect string that names a provision of the subject (see
+# `_COMMENCEMENT_OF_SUBJECT` in `agent/tools/lex.py`, not imported: this module
+# depends on nothing in the agent package).
+_COMING_INTO_FORCE = "coming into force"
+
+
+def _commencement_split(d: dict) -> dict:
+    """A change record's `coming into force` relations, split by who made them.
+
+    `provisions_commenced` counts every such relation, and the instrument's
+    OWN ones are among them: a group marked `self: true` is its commencement
+    provision acting on itself, listed against every provision that provision
+    governs, including those it leaves to an appointed day (batch 6 B, F3: 100
+    of the 518 stored records holding any commencement relation hold only
+    those). That says how a provision comes into force, not that it has, so it
+    cannot ground "not recorded as commenced" for the rest.
+
+    Returns `commenced_by_other` and `commenced_self`, the relations in the
+    LISTED groups, and `commenced_listed_in_full`: every commencement relation
+    the record holds is listed, with every provision it changed (no group cut
+    at the slimmer's window, none cut at its instrument cap, and the fetch not
+    truncated). Reads both group shapes, P3.19's `changes_not_listed` and the
+    older `changed_provisions_not_listed`, so a stored result rebuilds through
+    this code. Direction is left to the caller: under ``"by"`` a `self` group
+    has no commencement meaning for the subject.
+    """
+    total = d.get("provisions_commenced")
+    if not isinstance(total, int):
+        effects = d.get("effects") if isinstance(d.get("effects"), dict) else {}
+        total = sum(v for k, v in effects.items()
+                    if isinstance(v, int)
+                    and str(k).strip().lower() == _COMING_INTO_FORCE)
+    by_other = by_self = 0
+    cut = False
+    for g in d.get("related") or []:
+        if not isinstance(g, dict):
+            continue
+        if str(g.get("type_of_effect") or "").strip().lower() != _COMING_INTO_FORCE:
+            continue
+        n = g.get("count") if isinstance(g.get("count"), int) else 0
+        if g.get("self"):
+            by_self += n
+        else:
+            by_other += n
+        if g.get("changes_not_listed") or g.get("changed_provisions_not_listed"):
+            cut = True
+    return {
+        "direction": d.get("direction") or "to",
+        "commenced_by_other": by_other,
+        "commenced_self": by_self,
+        "commenced_listed_in_full": bool(
+            not cut and by_other + by_self >= total
+            and d.get("window_complete") is not False
+        ),
+    }
 
 
 def record_currency(log: Optional[list], name: str, args: dict, data: Any) -> None:
@@ -1145,13 +1708,25 @@ def record_currency(log: Optional[list], name: str, args: dict, data: Any) -> No
                 })
         elif name == "get_legislation_changes":
             lid = str(d.get("legislation_id") or args.get("legislation_id") or "")[:60]
+            # P3.28: `repeals` now counts only the removals of a provision,
+            # wholly or in part; the words-only and qualified ones are kept
+            # apart, for `_currency_limb`'s lines and the footer's gate.
+            removals = removal_counts(d)
             log.append({
                 "tool": "currency",
                 "kind": "relations",
                 "legislation_id": lid,
                 "commenced": d.get("provisions_commenced") or 0,
                 "orders": d.get("commencement_orders_of_amendments") or 0,
-                "repeals": d.get("repeal_or_revocation_relations") or 0,
+                "repeals": removals[PROVISION_KEY],
+                "words_only_removals": removals[WORDS_ONLY_KEY],
+                "qualified_removals": removals[QUALIFIED_KEY],
+                # P3.24: which of those commencements another instrument made,
+                # for the per-instrument line in `_currency_limb`.
+                **_commencement_split(d),
+                # P3.21: how many of those code dated (0 where no hop ran or it
+                # dated none), for the line and the currency footer clause.
+                "dated": _commencement_dates(d)["dated"],
             })
         elif name == "get_legislation_text":
             # `_text_record` returns the `{legislation, full_text}` wrapper, and
@@ -1171,8 +1746,201 @@ def record_currency(log: Optional[list], name: str, args: dict, data: Any) -> No
                     )[:60],
                     "valid_date": vd,
                 })
+        elif name == LOOKUP_TOOL:
+            # P3.25: the same `valid_date` on the lookup record (9 of 9 stored
+            # pairs equal to the text record's). Only for a record whose text
+            # is held: a stub has no "held text" for the date to describe.
+            got = parse_lookup_result(data)
+            vd = str((got or {}).get("valid_date") or "")
+            if got and got.get("status") == HELD and _VALID_DATE.match(vd):
+                log.append({
+                    "tool": "currency",
+                    "kind": "valid_date",
+                    "legislation_id": str(got.get("legislation_id") or "")[:60],
+                    "valid_date": vd,
+                    "via": LOOKUP_TOOL,
+                })
     except Exception:
         pass
+
+
+# P3.24: how many instruments get a commencement line of their own. One of the
+# 710 stored delegations that consulted a change record consulted more (14;
+# batch 7 A's census); the rest beyond the cap share one line that permits
+# nothing, which is true of a record the line does not describe.
+_MAX_COMMENCEMENT_LINES = 12
+
+
+def _commencement_case(e: dict) -> str:
+    """Which of the line's cases one recorded change-record call falls in."""
+    if (e.get("direction") or "to") != "to":
+        return "by"
+    if e.get("commenced_by_other"):
+        return "other_full" if e.get("commenced_listed_in_full") else "other_cut"
+    if e.get("commenced_self"):
+        return "self_only"
+    if e.get("commenced"):
+        return "unlisted"
+    return "none"
+
+
+# Best first: where one instrument's record was consulted twice in a step (a
+# memo hit, say), its line takes the call that shows the most. A ``"by"`` call
+# is never ranked against a ``"to"`` one: it is about other legislation.
+_CASE_RANK = ("other_full", "other_cut", "self_only", "unlisted", "none")
+
+
+# P3.21: what a line says of a listed commencement where code dated the
+# record's commencements, in place of "Neither carries a date".
+_DATED_LISTED = (
+    "A provision listed there may be stated as commenced by the instrument named "
+    "against it, with the date " + _DATE_RECORD + " gives for it where the report "
+    "gives one: the day that instrument brought it into force, with its "
+    "qualification, never its status today"
+)
+
+
+def _commencement_line(lid: str, case: str, e: dict) -> str:
+    """The line for one instrument's own provisions, from its ``"to"`` record."""
+    if case == "other_full":
+        if e.get("dated"):
+            return (
+                f"{lid}: {e.get('commenced_by_other')} commencement relation(s) made "
+                f"by another instrument, all listed. {_DATED_LISTED}; one of its "
+                "provisions not listed there may be called not recorded as "
+                "commenced, citing this record, without a date."
+            )
+        return (
+            f"{lid}: {e.get('commenced_by_other')} commencement relation(s) made by "
+            "another instrument, all listed. A provision listed there may be stated "
+            "as commenced by the instrument named against it; one of its "
+            "provisions not listed there may be called not recorded as commenced, "
+            "citing this record. Neither carries a date."
+        )
+    if case == "other_cut":
+        if e.get("dated"):
+            return (
+                f"{lid}: commencement relations made by another instrument are "
+                f"recorded, but not all are listed. {_DATED_LISTED}; one not listed "
+                "may be in the part not shown, so do not state whether it has been "
+                "commenced."
+            )
+        return (
+            f"{lid}: commencement relations made by another instrument are "
+            "recorded, but not all are listed. A provision listed there may be "
+            "stated as commenced by the instrument named against it; one not listed "
+            "may be in the part not shown, so do not state whether it has been "
+            "commenced."
+        )
+    if case == "self_only":
+        return (
+            f"{lid}: the only commencement relations recorded are its own "
+            "commencement provision acting on itself, which says how its provisions "
+            "come into force, not whether they have: do not state from this record "
+            "whether any of its provisions has been commenced."
+        )
+    if case == "unlisted":
+        return (
+            f"{lid}: the record counts {e.get('commenced')} commencement relation(s) "
+            "but does not list them: do not state from it whether any of its "
+            "provisions has been commenced."
+        )
+    return (
+        f"{lid}: the record lists neither a commencement by another instrument "
+        "nor one of its own: do not state from it whether any of its provisions "
+        "has been commenced."
+    )
+
+
+def _commencement_lines(rows: list) -> str:
+    """P3.24: one line per instrument whose change record this step consulted.
+
+    Thomas's retest (30 September, `glm-5.2:cloud`) listed provisions as not
+    yet commenced where the research found only that no commencement was
+    recorded. A change record that lists no commencement is not evidence that
+    none was made, so the line says, per instrument and computed from the
+    record, what may be said about the commencement of its provisions:
+
+    * commencement relations made by ANOTHER instrument, all listed: a
+      provision not among them may be called "not recorded as commenced",
+      citing the record (the true negative Invariant 1 keeps stateable);
+    * such relations, but not all listed: the listed ones only;
+    * only the instrument's own commencement provision acting on itself
+      (batch 6 B's F3), none at all, or a count with no list: neither
+      commenced nor uncommenced, from that record;
+    * only the changes it makes to other legislation consulted (``"by"``):
+      those, and nothing about its own provisions;
+
+    and, for every instrument whose record was not consulted, neither. Addressed
+    to the agent that writes the answer (a Manager or the Deep Research
+    synthesis), which never sees the record itself. Screened against every
+    detector in `test_footer_trips_no_detector`, because a Manager can echo it.
+    """
+    to_best: dict = {}
+    by_commenced: dict = {}
+    order: list = []
+    dated: set = set()
+    for e in rows:
+        if e.get("kind") != "relations":
+            continue
+        lid = e.get("legislation_id") or "?"
+        if lid not in order:
+            order.append(lid)
+        case = _commencement_case(e)
+        if case == "by":
+            by_commenced[lid] = by_commenced.get(lid, False) or bool(e.get("commenced"))
+        else:
+            # P3.21: an instrument whose record was dated on any of this step's
+            # calls keeps the date wording, whichever call ranks best.
+            if e.get("dated"):
+                dated.add(lid)
+            if lid not in to_best or _CASE_RANK.index(case) < _CASE_RANK.index(to_best[lid][0]):
+                to_best[lid] = (case, e)
+    for lid in dated:
+        case, e = to_best[lid]
+        to_best[lid] = (case, {**e, "dated": e.get("dated") or 1})
+    if not order:
+        return (
+            " Commencement: this step consulted no change record, so do not state "
+            "whether any provision of any instrument has been commenced."
+        )
+
+    lines = [
+        " Commencement, from the change records this step consulted (one line per "
+        "instrument; what a line does not permit, do not state):"
+    ]
+    for lid in order[:_MAX_COMMENCEMENT_LINES]:
+        by_part = (
+            "A provision of other legislation it lists as commenced may be stated "
+            "as commenced by it."
+            if by_commenced.get(lid) else ""
+        )
+        if lid in to_best:
+            line = _commencement_line(lid, *to_best[lid])
+            if lid in by_commenced and by_part:
+                line += " Its changes to other legislation were also consulted: " \
+                        + by_part[0].lower() + by_part[1:]
+        else:
+            line = (
+                f"{lid}: only the changes it makes to other legislation were "
+                "consulted. " + (by_part + " " if by_part else "")
+                + f"The record does not show whether any provision of {lid} itself "
+                "has been commenced."
+            )
+        lines.append(f"\n- {line}")
+    more = order[_MAX_COMMENCEMENT_LINES:]
+    if more:
+        lines.append(
+            f"\n- {', '.join(more[:8])}"
+            + (f" and {len(more) - 8} more" if len(more) > 8 else "")
+            + ": records consulted but not described here: do not state from them "
+            "whether any of their provisions has been commenced."
+        )
+    lines.append(
+        "\nFor any instrument not named here, this step consulted no change "
+        "record: do not state whether its provisions have been commenced."
+    )
+    return "".join(lines)
 
 
 def _currency_limb(log: Optional[list]) -> str:
@@ -1196,7 +1964,8 @@ def _currency_limb(log: Optional[list]) -> str:
     if not touched and not rows:
         return ""
 
-    marked, commenced, repealed, valid = [], [], [], []
+    marked, repealed, valid = [], [], []
+    words_only, qualified = [], []
     for e in rows:
         kind = e.get("kind")
         if kind == "title_marker":
@@ -1206,10 +1975,14 @@ def _currency_limb(log: Optional[list]) -> str:
                     marked.append(label)
         elif kind == "relations":
             lid = e.get("legislation_id") or "?"
-            if e.get("commenced") and lid not in commenced:
-                commenced.append(lid)
             if e.get("repeals") and lid not in repealed:
                 repealed.append(lid)
+            # P3.28: the two removal classes that do not take a provision
+            # out of force.
+            if e.get("words_only_removals") and lid not in words_only:
+                words_only.append(lid)
+            if e.get("qualified_removals") and lid not in qualified:
+                qualified.append(lid)
         elif kind == "valid_date":
             label = f"{e.get('legislation_id') or '?'} to {e.get('valid_date')}"
             if label not in valid:
@@ -1220,17 +1993,39 @@ def _currency_limb(log: Optional[list]) -> str:
         "in force as at today. The index records which text version it holds, not "
         "currency, and no tool returns an in-force flag."
     ]
-    if commenced:
-        parts.append(
-            f" Commencement relations WERE retrieved for {', '.join(commenced[:6])}"
-            " — a provision-level statement about those, citing the commencing "
-            "instrument, is supported. The relations carry no dates."
-        )
+    # P3.24: one line per instrument whose change record this step consulted,
+    # in place of P2.5's "Commencement relations WERE retrieved for …", which
+    # counted an instrument's own commencement provision as a commencement.
+    parts.append(_commencement_lines(rows))
     if repealed:
+        # P3.21: "again" pointed back at commencements that carried no date;
+        # where code dated them, the repeal half stands without it.
+        any_dated = any(e.get("kind") == "relations" and e.get("dated") for e in rows)
+        # P3.28: only removals of a provision, wholly or in part, now reach
+        # this list ("omitted" and "ceases to have effect" among them; "words
+        # repealed" and "repealed (prosp.)" no longer).
         parts.append(
-            " Repeal or revocation relations were retrieved for "
-            f"{', '.join(repealed[:6])} — a statement that those provisions are no "
-            "longer in force is supported, again without a date."
+            " Relations removing a provision wholly or in part (repealed, "
+            "revoked, omitted or ceasing to have effect, for example) were "
+            "retrieved for "
+            f"{', '.join(repealed[:6])} — a statement that those provisions, or "
+            "the parts removed, are no longer in force is supported, "
+            + ("without a date." if any_dated else "again without a date.")
+        )
+    if words_only:
+        parts.append(
+            " Relations removing words or entries only were retrieved for "
+            f"{', '.join(words_only[:6])}: each amends the text of the provision "
+            "it names, which stays, so state it as the text amended, never as a "
+            "provision removed."
+        )
+    if qualified:
+        parts.append(
+            " Removals with a qualification in their effect (prospective, "
+            "temporary, conditional, for specified purposes, or for part of the "
+            f"United Kingdom only) were retrieved for {', '.join(qualified[:6])}: "
+            "state each only with its qualification, never as a provision removed "
+            "outright."
         )
     if marked:
         parts.append(
@@ -1273,6 +2068,13 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
     which is the thing 42 of 62 pre-pilot sessions could not have known, because
     the UI was telling them the opposite.
 
+    **P4.18: a third case sits between those two.** A change record that was
+    consulted and held no commencement or repeal relation is neither "checked"
+    nor "not consulted", and the second wording was false there, beside P3.5's
+    clause saying the record was consulted directly. That case now says the
+    record was consulted and does not establish in-force status; "no change
+    record was consulted" is kept for a turn that consulted none.
+
     **The title-marker limb was drafted here and removed after the smoke run.**
     The marker is recorded per SEARCH ROW, not per cited instrument, so the
     footer read *"the index's own title for uksi/2024/697 marks it as repealed"*
@@ -1292,12 +2094,34 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
     rows = [e for e in (entries or []) if e.get("tool") == "currency"]
     if not rows:
         return ""
-    sourced = []
+    sourced, consulted, dated = [], False, []
     for e in rows:
         if e.get("kind") == "relations":
+            consulted = True
             lid = e.get("legislation_id") or ""
-            if lid and (e.get("commenced") or e.get("repeals")) and lid not in sourced:
+            # P3.28: a record whose only removals are words-only or qualified
+            # ones still lists a removal, so P4.18's "list neither a
+            # commencement nor a repeal" would be false of it: it is sourced.
+            # One whose only "repeal" was a power conferred no longer is.
+            if lid and (e.get("commenced") or e.get("repeals")
+                        or e.get("words_only_removals")
+                        or e.get("qualified_removals")) and lid not in sourced:
                 sourced.append(lid)
+            if lid and e.get("dated") and lid not in dated:
+                dated.append(lid)
+    if sourced and dated:
+        # P3.21: code retrieved commencement dates, so "nothing above has been
+        # checked against a commencement date" is false here. Says what the date
+        # is, and that it is not a check of current status. Keeps the opening's
+        # one "is in force" (an indirect question) and its disclaimer literal.
+        return (
+            " Whether legislation is in force is not something this index reports; "
+            f"what was checked is the recorded changes for {', '.join(sorted(sourced)[:3])}, "
+            "which name the instruments involved provision by provision, and, for "
+            f"the commencements of {', '.join(sorted(dated)[:3])} made by another "
+            f"instrument, the date {_DATE_RECORD} gives for each. Neither is a check "
+            "of whether a provision has since been amended or repealed."
+        )
     lead = (
         " Whether legislation is in force is not something this index reports, so "
         "nothing above has been checked against a commencement date"
@@ -1307,6 +2131,21 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
             "; what was checked is the recorded changes for "
             f"{', '.join(sorted(sourced)[:3])}, which name the instruments "
             "involved provision by provision but carry no dates."
+        )
+    elif consulted:
+        # P4.18: a change record WAS consulted and held no commencement or
+        # repeal relation. "No change record was consulted" was false here,
+        # beside P3.5's clause on the same line ("which this research
+        # consulted directly"): 28 stored footers. The instruments are not
+        # named again because P3.5's clause, just before this one, names them.
+        # Screened against every detector in `replay_report`: "list no
+        # commencement" trips `NEG_ASSERTED`, "in-force status is not
+        # established" trips `_CUR_DISCLOSED`, "whether it is in force" adds an
+        # `IN_FORCE_CLAIM` match, and an instrument id adds lookup and
+        # derivation pattern hits. This wording adds none.
+        lead += (
+            "; the recorded changes consulted list neither a commencement nor a "
+            "repeal, so they do not answer that question either."
         )
     else:
         lead += " and no change record was consulted for this answer."
@@ -1475,12 +2314,51 @@ _PINPOINT_BLOCK = re.compile(
 _OUTLINE_BLOCK = re.compile(
     r"\[SECTION OUTLINE[^\]]*\][\s\S]*?\[/SECTION OUTLINE\]", re.I
 )
+# P3.12: the provision code fetched for a schedule or annex unit a section
+# search left out (`schedule_units.fetched_block`). Its body is retrieved
+# statutory text, so, like the outline, the whole block goes first, then any
+# stray header or closer via `_TOOL_BLOCK`.
+_FETCHED_BLOCK = re.compile(
+    r"\[PROVISION FETCHED BY CODE[^\]]*\][\s\S]*?\[/PROVISION FETCHED BY CODE\]", re.I
+)
+# P3.27 adds `SCHEDULES AND ANNEXES` (`schedule_units.schedules_note`). Not
+# the bare word "SCHEDULES": the pattern is case-insensitive, and a lawyer's
+# answer can open a citation link with it ("[Schedules 1 and 2](...)").
 _TOOL_BLOCK = re.compile(
     r"\[/?(?:SEARCH SCOPE|ENABLING POWER|CHANGE RECORD|CURRENCY|PINPOINTS TO KEEP"
-    r"|SECTION OUTLINE)"
+    r"|SECTION OUTLINE|SCHEDULES AND ANNEXES —|PROVISION FETCHED BY CODE)"
     r"[^\[\]]*\]",
     re.I,
 )
+# P4.22: a Worker (or the synthesis) that NAMES a block in its own sentence
+# ("does not contain an `[ENABLING POWER]` block") is not echoing one, and
+# `_TOOL_BLOCK` deleting the tag left "an `` block" in three stored answers.
+# Code never writes a bare tag (every opener above carries " —" and text, every
+# closer a "/"), so a bare tag is always a model's. Inside a sentence it becomes
+# its own words without brackets ("an enabling power block", as the model
+# already writes it unbracketed in ten stored answers); used as a label (at a
+# line's start, after a sentence's end, before a capital or a link) it is
+# deleted as before, now with its backticks and one following space.
+# `SCHEDULES AND ANNEXES` is not here: `_TOOL_BLOCK` strips it only with its
+# dash.
+_BARE_TAG = re.compile(
+    r"(`?)\[(SEARCH SCOPE|ENABLING POWER|CHANGE RECORD|CURRENCY|PINPOINTS TO KEEP"
+    r"|SECTION OUTLINE|PROVISION FETCHED BY CODE)\]\1( ?)",
+    re.I,
+)
+
+
+def _bare_tag(m: "re.Match") -> str:
+    """`_BARE_TAG`'s replacement: the tag's words inside a sentence, else ""."""
+    s = m.string
+    before = s[s.rfind("\n", 0, m.start()) + 1:m.start()].rstrip()
+    nxt = s[m.end():m.end() + 1]
+    in_sentence = (
+        bool(before) and (before[-1].isalnum() or before[-1] in "(,")
+        and (nxt in ("", "\n", "\r") or nxt.islower()
+             or (nxt != "" and nxt in ".,;:)"))   # "" is `in` every str
+    )
+    return m.group(2).lower() + m.group(3) if in_sentence else ""
 
 
 def record_search(log: Optional[list], name: str, args: dict, data: Any) -> None:
@@ -1628,21 +2506,35 @@ _SECTION_BUDGET_TOOL = "section_budget"
 
 
 def record_section_budget_stop(log: Optional[list], name: str, args: dict,
-                               budget: Optional[dict]) -> None:
-    """Record one section search the per-instrument budget refused. Never raises."""
+                               budget: Optional[dict], held: Optional[dict] = None) -> None:
+    """Record one section search the per-instrument budget refused. Never raises.
+
+    Batch 8 A2: `held` is what code's COMPLETE read of the instrument's
+    provision list in this worker run established
+    (`schedule_units.provision_list_facts`). Recorded as `provisions` and
+    `units` only when given, so the limb and the footer can say it; every
+    other entry is exactly as before.
+    """
     if log is None:
         return
     try:
         args = args or {}
         budget = budget or {}
-        log.append({
+        entry = {
             "tool": _SECTION_BUDGET_TOOL,
             "blocked_tool": name,
             "legislation_id": str(args.get("legislation_id") or "")[:60],
             "query": str(args.get("query") or "")[:200],
             "limit": budget.get("section_limit"),
             "run": budget.get("id"),
-        })
+        }
+        if held:
+            try:
+                entry.update({"provisions": int(held["provisions"]),
+                              "units": [str(u) for u in (held.get("units") or [])]})
+            except Exception:
+                pass            # the stop is still recorded, saying nothing new
+        log.append(entry)
     except Exception:
         pass
 
@@ -1663,6 +2555,70 @@ def _section_budget_limb(log: Optional[list]) -> str:
         rows = _section_budget_rows(log)
         if not rows:
             return ""
+        # Batch 8 A2: an instrument whose complete provision list code read in
+        # this run gets its own sentences; the rest keep the text below.
+        limit = next((e.get("limit") for e in rows if e.get("limit")), None)
+        held = {}
+        for lid, facts in list(_section_budget_held(rows).items())[:4]:
+            k = sum(1 for e in rows if _sb_lid(e) == lid)
+            text = _held_section_budget_limb(lid, facts, k, limit)
+            if text:
+                held[lid] = text
+        plain = [e for e in rows if _sb_lid(e) not in held]
+        parts = ([_plain_section_budget_limb(plain)] if plain else []) + list(held.values())
+        return " ".join(p for p in parts if p)
+    except Exception:
+        return ""
+
+
+def _sb_lid(e: dict) -> str:
+    return str(e.get("legislation_id") or "").strip()
+
+
+def _section_budget_held(rows: list) -> dict:
+    """lid -> {"provisions", "units"} for every refused instrument whose stop
+    recorded a complete code-read provision list (batch 8 A2), in order."""
+    out = {}
+    for e in rows:
+        lid = _sb_lid(e)
+        if lid and lid not in out and isinstance(e.get("provisions"), int):
+            out[lid] = {"provisions": e["provisions"], "units": list(e.get("units") or [])}
+    return out
+
+
+def _held_section_budget_limb(lid: str, facts: dict, k: int, limit) -> str:
+    """Batch 8 A2: the limb for one instrument whose complete provision list
+    code read before the cap stopped the step. Screened with the footer
+    (`test_footer_trips_no_detector`); "" when the facts are not usable."""
+    try:
+        from .schedule_units import provision_list_sentence
+        lid_c = lid.replace("[", "(").replace("]", ")")
+        fact = provision_list_sentence(lid_c, facts)
+        n = int(facts["provisions"])
+    except Exception:
+        return ""
+    if not fact:
+        return ""
+    return (
+        f"Searching within {lid_c} was stopped by this step's limit "
+        + (f"of {limit} rounds of section searches" if limit else "on section searches")
+        + f" on one instrument, and {k} further "
+        + ("section search it asked for was" if k == 1 else "section searches it asked for were")
+        + f" not run. Before that, code had read the index's complete provision list "
+        f"for {lid_c}: {fact}. The index holds only those {n:,} provisions for {lid_c}, "
+        "so the limit kept nothing outside that list from this step: if the answer you "
+        f"write speaks of a provision of {lid_c} outside that list, it must say what the "
+        f"index holds for {lid_c}, and must not put it down to the limit. Provisions in "
+        "that list that this step did not retrieve may still bear on the question: if "
+        "the answer reports one of them as absent or unretrieved, it MUST also say that "
+        "searching within the instrument was stopped by a limit before it finished."
+    )
+
+
+def _plain_section_budget_limb(rows: list) -> str:
+    """The limb as P3.1 wrote it, over the refused instruments with no
+    complete code-read provision list."""
+    try:
         limit = next((e.get("limit") for e in rows if e.get("limit")), None)
         ids = []
         for e in rows:
@@ -1709,7 +2665,29 @@ def _section_budget_footer_clause(entries: Optional[list]) -> str:
             + ("search of it was" if n == 1 else "searches of it were")
             + " not run, so the answer above may not cover every provision of "
             "that instrument."
+            + _held_section_budget_footer(rows)
         )
+    except Exception:
+        return ""
+
+
+def _held_section_budget_footer(rows: list) -> str:
+    """Batch 8 A2: for each refused instrument (at most 3) whose complete
+    provision list code read before the cap stopped the step, what that list
+    established, after the clause above. "" when there is none."""
+    try:
+        from .schedule_units import provision_list_sentence
+        out = []
+        for lid, facts in list(_section_budget_held(rows).items())[:3]:
+            lid_c = lid.replace("[", "(").replace("]", ")")
+            fact = provision_list_sentence(lid_c, facts)
+            if fact:
+                out.append(
+                    f" For {lid_c}, the index's complete list of provisions had been "
+                    f"read before that cap was reached: {fact}, so the cap did not "
+                    "cause any provision outside that list to be missed."
+                )
+        return "".join(out)
     except Exception:
         return ""
 
@@ -1786,6 +2764,9 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     _enabling = _enabling_limb(log)
     if _enabling:
         lines.append(_enabling)
+    _made_under = _made_under_limb(log)
+    if _made_under:
+        lines.append(_made_under)
     # P3.5 (B3). Same reason again, and it is the sharpest case of it: the
     # sentence "no commencement regulations have been made" is written by the
     # Manager or the DR synthesis, neither of which has seen the change record
@@ -1809,6 +2790,12 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     _lookup = _lookup_limb(log)
     if _lookup:
         lines.append(_lookup)
+    # P3.38. Straight after the lookup it qualifies: what code read from
+    # legislation.gov.uk for an instrument the index lacks, which only the
+    # Worker saw.
+    _published = published_limb(log)
+    if _published:
+        lines.append(_published)
     if _lookup and not searches and not sections:
         # P3.7: a step that only looked instruments up has no search terms, so
         # the rule below would demand quoting terms that are not there (P2.9's
@@ -1908,7 +2895,7 @@ def _enabling_footer_clause(entries: Optional[list]) -> str:
         # moves instead.
         return (
             " An instrument's enabling power is recorded here only where its own "
-            f"preamble states it; that applied only to {', '.join(stated[:4])}, "
+            f"preamble states it; that applied only to {_and_more(stated, 4)}, "
             "and for anything else mentioned above the derivation is unverified."
         )
     return (
@@ -2058,6 +3045,240 @@ CASE_LAW_DOCTRINE_SENTENCE = (
     "Scotland, whether it also forms part of Scots law has not been checked."
 )
 
+# P4.15 (B5), Session 35: a case-law negative's attribution, stated by code.
+# The coverage sentence says which courts the database holds; it never said
+# that a search finding nothing is not proof that nothing exists. A turn that
+# reached its legislation by lookup and section search (P3.7) and ran no
+# `search_legislation` gets the case-law line alone, so its negatives (13
+# stored turns, all case law, one a Deep Research negative about a decision's
+# later history) reached the lawyer with no attribution in footer or prose.
+# Same gate as the doctrine sentence (this turn's case-law search ran), never a
+# reading of the answer, and true on every such turn. Placed after the coverage
+# sentence and before the doctrine sentence, so the line still ends with the
+# doctrine sentence. Worded so that the only detector it trips is
+# `NEG_BLAMED_INDEX`, by design (pinned by `test_case_law_gap.py`): two earlier
+# wordings ("a ranked keyword search", "a keyword search can miss") also
+# tripped `NEG_LIMITS` and `NEG_TERMS`, and "ranked" was unverified (the
+# product sent no `order` to the case-law feed until P3.22; the window note
+# below states the order it now sends, still without the word).
+CASE_LAW_ABSENCE_SENTENCE = (
+    "A search can miss a judgment the database holds, so one missing from its "
+    "results may still exist, in this database or elsewhere: that is not proof "
+    "of absence."
+)
+
+
+# P3.23: the order the feed lists `search_case_law` results in. P3.22 flipped
+# it: the executor now sends `order=relevance` with `per_page=50`
+# (`caselaw.CASE_LAW_ORDER_PARAMS`), where until then it sent no `order` and
+# the feed listed newest first. This string and the params change together
+# (`test_caselaw_window.py` pins both). No "ranked": that word trips
+# `NEG_LIMITS` (see the comment above `CASE_LAW_ABSENCE_SENTENCE`).
+CASE_LAW_RESULT_ORDER = "most relevant first, by relevance to the search words rather than by date"
+
+
+def case_law_search_note(args: dict, data: Any) -> str:
+    """The window statement appended to a `search_case_law` result (P3.23).
+
+    P2.2's form, for the case-law tool, which P2.2 did not touch: how many were
+    shown, of how many matching, and in what order, so a negative drawn from
+    the list says what was searched. The count comes from the executor
+    (`caselaw.case_law_count`), which reads it from the feed's `last` link.
+    Empty for an error or a zero-result search: the zero-result note in
+    `agent_shared` speaks for those, and is keyed on the shown count.
+
+    In `[SEARCH SCOPE — …]` form with no brackets inside, so `_TOOL_BLOCK`
+    strips it if a Worker echoes it into a report. Worded to trip no detector
+    that reads answers (pinned by `test_caselaw_window.py`): no "ranked", no
+    "top N of" (both `NEG_LIMITS`), no "date range", no "limited to", no
+    "not found".
+    """
+    d = _as_dict(data)
+    if not d or d.get("error"):
+        return ""
+    results = d.get("results")
+    shown = len(results) if isinstance(results, list) else 0
+    if not shown:
+        return ""
+    args = args or {}
+    # Square brackets in the query (a neutral citation such as "[1901] EWHC 1")
+    # would put a bracket inside the block, and `_TOOL_BLOCK` stops at it, so
+    # an echoed note would survive the strip. 14 of the 781 stored searches
+    # with results had one (batch 7 D's dry run). Shown as round brackets.
+    query = (str(args.get("query") or "").strip()
+             .replace("[", "(").replace("]", ")"))
+    matching = "matching " + (f'"{query[:200]}"' if query else "the query")
+    court = str(args.get("court") or "").strip()
+    # P3.9: the window the search actually ran under (the model's dates
+    # intersected with the lawyer's), as the executor reports it.
+    dates = d.get("dates") if isinstance(d.get("dates"), dict) else {}
+    d_from, d_to = dates.get("from"), dates.get("to")
+    dated = (f"dated {d_from} to {d_to}" if d_from and d_to
+             else f"dated from {d_from}" if d_from
+             else f"dated up to {d_to}" if d_to else "")
+    limits = "; ".join(p for p in (f"court: {court}" if court else "", dated) if p)
+    where = "in Find Case Law" + (f" ({limits})" if limits else "")
+    total, lo, hi = d.get("total"), d.get("total_min"), d.get("total_max")
+    if d.get("total_exact") and total == shown:
+        return (f"\n\n[SEARCH SCOPE — all {shown} judgment(s) {where} {matching}, "
+                f"listed {CASE_LAW_RESULT_ORDER}.]")
+    # P3.22: "the first N", not "the N most recent", and "another judgment",
+    # not "an older judgment": the list is in relevance order now, so the
+    # judgments outside it are the ones the feed placed lower, of any date.
+    if isinstance(lo, int) and isinstance(hi, int) and hi > shown:
+        count = (f"the first {shown} of about {hi:,} judgments {where} "
+                 f"{matching} (the feed reports between {lo:,} and {hi:,})")
+    else:
+        count = (f"the first {shown} judgments {where} {matching}; the feed "
+                 "gave no figure for how many match in all")
+    return (
+        f"\n\n[SEARCH SCOPE — {count}, listed {CASE_LAW_RESULT_ORDER}. Another "
+        f"judgment that matches can sit outside these {shown}: to reach it, search "
+        "again with narrower terms (a party's name, a court or dates) rather than "
+        "treat this list as complete.]"
+    )
+
+
+# ---------------------------------------------------------------------------
+# P3.20: the Scottish Courts and Tribunals Service's judgments, a second list
+# ---------------------------------------------------------------------------
+#
+# When `scts_caselaw_enabled` is on, `search_case_law` also searches SCTS's
+# published judgments and returns them as `scottish_results`, with its own
+# counts in a `scottish` block (`agent/tools/scts.py`). **The day that search
+# runs, `CASE_LAW_COVERAGE_SENTENCE` above is false for the turn** ("not the
+# decisions of the Court of Session …" of the databases searched). So the
+# footer keys on what THIS TURN's records show ran, never on the setting: a
+# record without an `scts` key (the setting off, or any record from before
+# P3.20) gives exactly the text above, byte for byte; an ok SCTS search gives
+# the wording below, which still states what SCTS does not hold (Sheriff
+# Court decisions it does not publish, almost all criminal ones, and Northern
+# Ireland). Worded and screened against every detector that reads answers
+# (pinned by `test_scts_caselaw.py`, which renders every variant).
+
+_SCTS_DATABASE = "the Scottish Courts and Tribunals Service's published judgments"
+_CASE_LAW_DATABASES_BOTH = (
+    "the case-law databases (the National Archives' Find Case Law, and "
+    f"{_SCTS_DATABASE})"
+)
+SCTS_COVERAGE_BOTH_SENTENCE = (
+    "Between them they hold decisions of the UK Supreme Court and, from 1998, of the "
+    "Court of Session, the High Court of Justiciary and the Sheriff Appeal Court, but not "
+    "every Sheriff Court decision: the Scottish Courts and Tribunals Service publishes only "
+    "some, and almost none in criminal cases, and neither database holds decisions of the "
+    "courts of Northern Ireland."
+)
+SCTS_COVERAGE_ONLY_SENTENCE = (
+    "They hold decisions of the Court of Session, the High Court of Justiciary and the "
+    "Sheriff Appeal Court from 1998, but not every Sheriff Court decision (only some are "
+    "published, and almost none in criminal cases), not decisions of the UK Supreme Court "
+    "and not those of the courts of Northern Ireland."
+)
+SCTS_ABSENCE_SENTENCE = (
+    "A search can miss a judgment a database holds, so one missing from these results "
+    "may still exist, in these databases or elsewhere: that is not proof of absence."
+)
+SCTS_FCL_ERRORED_SENTENCE = (
+    "A search of the National Archives' Find Case Law was attempted and returned an error."
+)
+# "published decisions of those courts", not batch 11 D's "those Scottish
+# courts' decisions": SCTS publishes only some Sheriff Court decisions.
+SCTS_ERRORED_SENTENCE = (
+    f"A search of {_SCTS_DATABASE}, which hold published decisions of those courts, was "
+    "attempted and returned an error."
+)
+
+
+def _scots_query(args: dict) -> str:
+    """The Worker's query as the Scottish note shows it: in quotes, unless it
+    carries its own (a quoted phrase), which a second pair would garble
+    (`""title to sue" widget"`); square brackets as round ones, so the block
+    holds none. "" for an empty query."""
+    query = (str((args or {}).get("query") or "").strip()
+             .replace("[", "(").replace("]", ")"))[:200]
+    if not query:
+        return ""
+    return query if '"' in query else f'"{query}"'
+
+
+def scottish_search_note(args: dict, data: Any) -> str:
+    """The window statement for the Scottish list of a `search_case_law`
+    result (P3.20). "" when the result carries no `scottish` block (the
+    setting off), so the Find Case Law note is then exactly what it was.
+
+    Worker-facing, in `[SEARCH SCOPE — …]` form with no square bracket inside
+    (a neutral citation in the query is shown in round brackets, as
+    `case_law_search_note` does), so `_TOOL_BLOCK` strips an echoed copy.
+    """
+    try:
+        d = _as_dict(data)
+        block = d.get("scottish")
+        if not isinstance(block, dict):
+            return ""
+        status = block.get("status")
+        shown_q = _scots_query(args)
+        q = shown_q or "the query"
+        for_q = f" for {shown_q}" if shown_q else ""
+        dates = block.get("dates") if isinstance(block.get("dates"), dict) else {}
+        d_from, d_to = dates.get("from"), dates.get("to")
+        limits = (f" (decided {d_from} to {d_to})" if d_from and d_to
+                  else f" (decided from {d_from})" if d_from
+                  else f" (decided up to {d_to})" if d_to else "")
+        where = f"{_SCTS_DATABASE}{limits}"
+        # Worded to trip no detector: "not searched for" trips
+        # `NEGATIVE_EXPLAINED` and `NEG_TERMS`, "did not complete" `SCHED_LIMIT`.
+        if status == "error":
+            return (f"\n\n[SEARCH SCOPE — the request to {where}{for_q} returned an "
+                    "error, so it says nothing about which Scottish judgments match.]")
+        if status == "capped":
+            return (f"\n\n[SEARCH SCOPE — {_SCTS_DATABASE} had no part in this search: this "
+                    f"request has already made its {block.get('cap') or 'allowed'} searches "
+                    "of them. Work from the Scottish judgments already returned.]")
+        if status != "ok":
+            return (f"\n\n[SEARCH SCOPE — {_SCTS_DATABASE} had no part in this search: "
+                    + (f"the query {shown_q} holds" if shown_q else "the query holds")
+                    + " no word to look up in them.]")
+        shown = int(block.get("shown") or 0)
+        total = int(block.get("total") or 0)
+        if not shown:
+            return ""   # the zero note in `agent_shared` speaks for it
+        if block.get("match") == "any":
+            return (f"\n\n[SEARCH SCOPE — the first {shown} of {total:,} judgments in "
+                    f"{where} that contain any of the terms of {q}, listed most relevant "
+                    "first: a query requiring every term returned 0. One that contains only "
+                    "some of the terms may not answer the question.]")
+        if total <= shown:
+            return (f"\n\n[SEARCH SCOPE — all {shown} judgment(s) in {where} that contain "
+                    f"every term of {q}, listed {CASE_LAW_RESULT_ORDER}.]")
+        return (f"\n\n[SEARCH SCOPE — the first {shown} of {total:,} judgments in {where} "
+                f"that contain every term of {q}, listed {CASE_LAW_RESULT_ORDER}. Another "
+                f"judgment that matches can sit outside these {shown}: to reach it, search "
+                "again with narrower terms (a party's name, a court or dates) rather than "
+                "treat this list as complete.]")
+    except Exception:
+        return ""
+
+
+# The zero-result notes when the Scottish list is present. Find Case Law's
+# is today's note without its stop rule, which follows both lists once, and
+# only when both are empty: "This search returned 0 results" is false of a
+# search whose Scottish list is full. In `[SEARCH SCOPE — …]` form, unlike
+# today's zero note, so an echoed copy is stripped.
+FCL_ZERO_NOTE_WITH_SCTS = (
+    "\n\n[SEARCH SCOPE — Find Case Law returned 0 results for this search. It holds no "
+    "decisions of the Court of Session, the Sheriff Appeal Court, the Sheriff Courts or the "
+    "High Court of Justiciary; Scottish appeals decided by the UK Supreme Court are included.]"
+)
+SCTS_ZERO_NOTE = (
+    f"\n\n[SEARCH SCOPE — this search of {_SCTS_DATABASE} returned 0 results. They hold "
+    "decisions of the Court of Session, the High Court of Justiciary and the Sheriff Appeal "
+    "Court from 1998 and the Sheriff Court decisions SCTS publishes.]"
+)
+CASE_LAW_BOTH_ZERO_STOP = (
+    "\n\n[SEARCH SCOPE — both lists are empty. If you have already tried 2–3 different "
+    "queries without results, stop searching and say which searches you made.]"
+)
+
 
 def record_case_law_search(log: Optional[list], name: str, args: dict, data: Any) -> None:
     """Record one case-law search for the lawyer-facing footer. Never raises.
@@ -2067,18 +3288,29 @@ def record_case_law_search(log: Optional[list], name: str, args: dict, data: Any
     `Error executing tool: …` string, or JSON carrying `error`, which is what a
     rejected court code returns), so the footer never says a search ran when it
     failed.
+
+    P3.20: `ok` stays Find Case Law's. A result carrying the Scottish list adds
+    `scts` (its status: "ok", "error", "capped", "not_searched") and
+    `scts_shown`; a result without one adds nothing, so the record, and the
+    footer built from it, is what it was.
     """
     if log is None or name != CASE_LAW_TOOL:
         return
     try:
         d = _as_dict(data)
         results = d.get("results")
-        log.append({
+        rec = {
             "tool": CASE_LAW_TOOL,
             "query": str((args or {}).get("query") or "")[:200],
             "shown": len(results) if isinstance(results, list) else None,
             "ok": bool(d) and not d.get("error"),
-        })
+        }
+        block = d.get("scottish")
+        if isinstance(block, dict):
+            scot = d.get("scottish_results")
+            rec["scts"] = str(block.get("status") or "")
+            rec["scts_shown"] = len(scot) if isinstance(scot, list) else 0
+        log.append(rec)
     except Exception:
         pass
 
@@ -2090,6 +3322,11 @@ def _case_law_body(entries: Optional[list]) -> str:
     if not rows:
         return ""
     done = [e for e in rows if e.get("ok", True)]
+    # P3.20: an ok search of SCTS this turn makes the coverage sentence false.
+    scots = [e for e in rows if e.get("scts") == "ok"]
+    if scots:
+        return _case_law_body_with_scts(done, scots)
+    scots_failed = any(e.get("scts") == "error" for e in rows)
     terms, listed = _listed_terms(e.get("query") for e in (done or rows))
     if done:
         head = f"{_CASE_LAW_DATABASE} was searched" + (f" for {listed}" if terms else "")
@@ -2097,10 +3334,30 @@ def _case_law_body(entries: Optional[list]) -> str:
         head = (f"a search of {_CASE_LAW_DATABASE} was attempted"
                 + (f" for {listed}" if terms else "")
                 + " and returned an error")
-    # The doctrine sentence only when a search ran: an errored one returned no
-    # judgment for a rule to be taken from.
-    tail = f" {CASE_LAW_DOCTRINE_SENTENCE}" if done else ""
-    return f"{head}. {CASE_LAW_COVERAGE_SENTENCE}{tail}"
+    # The absence and doctrine sentences only when a search ran: an errored one
+    # returned no results to be missing from, and no judgment for a rule to be
+    # taken from.
+    tail = f" {CASE_LAW_ABSENCE_SENTENCE} {CASE_LAW_DOCTRINE_SENTENCE}" if done else ""
+    # P3.20: the coverage sentence is still true when SCTS was attempted and
+    # failed; the lawyer is told it was attempted.
+    errored = f" {SCTS_ERRORED_SENTENCE}" if scots_failed else ""
+    return f"{head}. {CASE_LAW_COVERAGE_SENTENCE}{errored}{tail}"
+
+
+def _case_law_body_with_scts(done: list, scots: list) -> str:
+    """P3.20: the case-law statement on a turn whose SCTS search ran."""
+    if done:
+        terms, listed = _listed_terms(e.get("query") for e in done + scots)
+        head = (f"{_CASE_LAW_DATABASES_BOTH} were searched"
+                + (f" for {listed}" if terms else ""))
+        # The doctrine sentence stays: Find Case Law still returns judgments of
+        # courts outside Scotland, and a rule taken from one is still unchecked.
+        return (f"{head}. {SCTS_COVERAGE_BOTH_SENTENCE} {SCTS_ABSENCE_SENTENCE} "
+                f"{CASE_LAW_DOCTRINE_SENTENCE}")
+    terms, listed = _listed_terms(e.get("query") for e in scots)
+    head = f"{_SCTS_DATABASE} were searched" + (f" for {listed}" if terms else "")
+    return (f"{head}. {SCTS_COVERAGE_ONLY_SENTENCE} {SCTS_ABSENCE_SENTENCE} "
+            f"{SCTS_FCL_ERRORED_SENTENCE}")
 
 
 def case_law_scope_clause(entries: Optional[list]) -> str:
@@ -2174,17 +3431,32 @@ def _not_held_id(args: dict, data: Any) -> str:
     return str((args or {}).get("legislation_id") or found.group(1)).strip()[:60]
 
 
-def not_held_note(args: dict, data: Any) -> str:
+def not_held_note(args: dict, data: Any, text_read: str = "") -> str:
     """The note appended to a retrieval the index answered with not-found.
 
     In `[SEARCH SCOPE — …]` form, with no brackets inside, so the strip that
     already removes tool blocks from an answer covers it unchanged. Never
     raises.
+
+    P3.38: `text_read` is "below" when code has read the instrument's text
+    from legislation.gov.uk and appends it after this note, and "earlier" when
+    this worker run was handed that text already. The clause "and that its
+    contents could not be checked here" would then be false, so it says where
+    the text came from instead. With `text_read` empty (the default) the note
+    is byte for byte what it was.
     """
     try:
         lid = _not_held_id(args, data)
         if not lid:
             return ""
+        if text_read == "below":
+            checked = ("not hold it, and that its text below was read from "
+                       "legislation.gov.uk instead. If ")
+        elif text_read == "earlier":
+            checked = ("not hold it, and that its text was read from legislation.gov.uk "
+                       "earlier in this research. If ")
+        else:
+            checked = "not hold it and that its contents could not be checked here. If "
         return (
             f"\n\n[SEARCH SCOPE — not held: this index has no record under the id "
             f"{lid}. That is a fact about the index, not about the law and not "
@@ -2194,8 +3466,8 @@ def not_held_note(args: dict, data: Any) -> str:
             "contain an error, do NOT ask the user to check, verify or confirm "
             "it, and do NOT present a different instrument (another year or "
             "number) as the one the user meant. Say plainly that this index does "
-            "not hold it and that its contents could not be checked here. If "
-            "you built this id yourself, the id format may be at fault, not the "
+            + checked
+            + "you built this id yourself, the id format may be at fault, not the "
             "user.]"
         )
     except Exception:
@@ -2301,7 +3573,7 @@ def _lookup_limb(log: Optional[list]) -> str:
         "itself: not merely that its text is unavailable, which reads as if its record "
         "were held, and not that a search did not find it. Never suggest an error in "
         "the user's citation. Report one held without text as held with no text "
-        "available here, never as not found."
+        "available in this index, never as not found."
     )
 
 
@@ -2312,10 +3584,26 @@ def _lookup_footer_clause(entries: Optional[list]) -> str:
     Worded clear of `NEG_ASSERTED` ("not held in THIS index", never "in the")
     and of `LK_FOOTER`'s sibling detectors, and pinned by
     `test_footer_trips_no_detector`.
+
+    P4.21: the not-held clause states only what the lookup established. It
+    used to end "that is a gap in the index, not a sign that the citation is
+    wrong", but a lookup that finds nothing cannot tell a missing instrument
+    from a mistyped number, so that was a default, not a finding (Thomas, 30
+    September; 69 stored answers). It now says the index is incomplete (true
+    of the index, `LEX_COVERAGE_SENTENCE`) and that this does not show whether
+    the number is accurate: neutral both ways, so it neither vouches for the
+    citation nor asks the lawyer to check it (P2.4's defect). "accurate", not
+    "right" or "correct", which `OPENER_VOCAB` reads as a concession. The
+    opening up to "not held in this index" is unchanged: `_EARLIER_LOOKUP`
+    parses it back out of an earlier answer, old wording and new.
     """
+    # P3.38: the instruments whose text code read from legislation.gov.uk,
+    # one sentence after the lookup's, and on its own where no lookup ran
+    # (a text read the index answered "not found", or one with no text).
+    published = published_footer_clause(entries)
     rows = [e for e in _lookups(entries) if e.get("status") in (NOT_HELD, HELD_WITHOUT_TEXT)]
     if not rows:
-        return ""
+        return published
     absent = [e["label"] for e in rows if e["status"] == NOT_HELD]
     stub = [e["label"] for e in rows if e["status"] == HELD_WITHOUT_TEXT]
     bits = []
@@ -2323,8 +3611,9 @@ def _lookup_footer_clause(entries: Optional[list]) -> str:
         bits.append(
             f" {_and_join(absent)} {'was' if len(absent) == 1 else 'were'} looked up by "
             f"{'its number' if len(absent) == 1 else 'their numbers'} and "
-            f"{'is' if len(absent) == 1 else 'are'} not held in this index; that is a gap "
-            "in the index, not a sign that the citation is wrong."
+            f"{'is' if len(absent) == 1 else 'are'} not held in this index, which is "
+            "incomplete; that does not show whether the "
+            f"{'number is' if len(absent) == 1 else 'numbers are'} accurate."
         )
     if stub:
         bits.append(
@@ -2333,7 +3622,7 @@ def _lookup_footer_clause(entries: Optional[list]) -> str:
             f"{'its record' if len(stub) == 1 else 'their records'} but not "
             f"{'its' if len(stub) == 1 else 'their'} text."
         )
-    return "".join(bits)
+    return "".join(bits) + published
 
 
 # The labels `citation_label` writes, and the two clauses above, read back out
@@ -2408,7 +3697,12 @@ def lookup_scope_footer(entries: Optional[list], messages: Optional[list] = None
     about one instrument, and the earlier answer that stated it stays visible
     above. "" when no lookup reported anything a lawyer needs told.
     """
-    clause = _lookup_footer_clause(entries)
+    # P3.33: the made-under record's coverage and revocation clause, which every
+    # other footer branch carries. Without it a turn that consulted only the
+    # record (6383's "any other SSIs?" follow-up) told the lawyer neither what
+    # the record covers nor when its revocations were checked (wave4_p333 t3;
+    # the same on wave4_p331).
+    clause = _lookup_footer_clause(entries) + _made_under_footer_clause(entries)
     # A search WITHIN an instrument is a search (P2.8 keeps such a turn silent
     # for the same reason), so "no ranked search … was run" would be false
     # there. Found by `replay_report nosearch` on `wave4_p37` (6373 r1 t3,
@@ -2481,6 +3775,7 @@ def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) ->
         f"absent from the law.{_budget_footer_clause(all_entries)}"
         f"{_section_budget_footer_clause(all_entries)}"
         f"{_enabling_footer_clause(all_entries)}"
+        f"{_made_under_footer_clause(all_entries)}"
         f"{_relations_footer_clause(all_entries)}"
         f"{_currency_footer_clause(all_entries)}"
         f"{_lookup_footer_clause(all_entries)}"
@@ -2504,7 +3799,9 @@ _FRESH_FOOTER = re.compile(
 )
 # Both search tools, not just the one the fresh footer lists. A turn that only
 # searched WITHIN an instrument has run a search, so "no search of the index
-# was run for this reply" would be false there. That turn stays silent.
+# was run for this reply" would be false there. That turn gets no carried
+# line; since P4.17 it gets `section_scope_footer` instead, which states the
+# section searches that did run.
 _SEARCH_TOOLS = ("search_legislation", "search_legislation_sections")
 _MAX_CARRIED_TERMS = 2
 
@@ -2622,6 +3919,7 @@ def carried_scope_footer(
             "index that is known to be incomplete, so a result reported as not "
             "found in those searches was not found in this index, which is not "
             f"the same as being absent from the law.{_enabling_footer_clause(entries)}"
+            f"{_made_under_footer_clause(entries)}"
             f"{_relations_footer_clause(entries)}"
             f"{_currency_footer_clause(entries)}"
             # P3.7: a follow-up that looked an instrument up, which is not a
@@ -2631,6 +3929,89 @@ def carried_scope_footer(
             f"{_earlier_lookup_clause(messages, entries)}"
             # P2.4 (B12): a hybrid follow-up that searched only case law. This
             # clause is about THIS reply's own search, so it is true here too.
+            f"{case_law_scope_clause(entries)}*"
+        )
+    except Exception:
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# P4.17 (B5): a turn that searched only WITHIN instruments
+# ---------------------------------------------------------------------------
+#
+# A turn that reached its legislation by lookup and section search, and ran no
+# `search_legislation`, got no fresh footer (it is gated on that tool), no
+# carried line (that line opens "no search ... was run for this reply", false
+# after a section search) and, unless a lookup found something not held, no
+# lookup line. So a negative on that turn reached the lawyer with no
+# attribution, and P2.3's, P2.5's and P3.5's clauses were dropped by the gate
+# (measured over every stored answer: 29 such turns, 11 with no footer at all,
+# `negatives` FAIL on the 2 of them it enrols; `notes/batch3_C.md`).
+#
+# This line states the section searches that did run, so P2.8's reason for
+# silence does not apply to it. Same structural gate as every other footer
+# here (the turn's own records, never the answer's prose), same single
+# `*Search scope: ...*` line, same clause set as the fresh footer, which is
+# why it carries the lookup clause itself and the lookup line does not fire
+# beside it. It opens "for this reply the text of", which `_FRESH_FOOTER`
+# does not match, so P2.8 never carries it forward: its not-in-the-results
+# statement is about a search within one instrument, and "not found in this
+# index" would be false of it (P3.12's case: the provision is held, it just
+# did not rank).
+#
+# Worded so that its new sentence trips `NEG_BLAMED_INDEX` and no other
+# detector (pinned by `test_search_scope.py`). Avoided: "did not return"
+# (`NEG_ASSERTED`'s "search ... did not return" limb), "ranked"
+# (`NEG_LIMITS`), and "not found in this index" (false here, see above).
+SECTION_SCOPE_SENTENCE = (
+    "A search within an instrument returns the provisions that best match its "
+    "terms, not the whole instrument, so a provision missing from its results "
+    "may still be in the instrument and in this index."
+)
+_SECTION_TOOL = "search_legislation_sections"
+_MAX_NAMED_INSTRUMENTS = 3
+
+
+def section_scope_footer(searches: Optional[list]) -> str:
+    """The scope line for a turn that searched within instruments and ran no
+    ranked search of the whole index. "" on every other turn. Never raises.
+
+    Fires if and only if this turn recorded a `search_legislation_sections`
+    and no `search_legislation`. Names the instruments by id (as P3.5's
+    clause does) and the terms in `_listed_terms`' form, then carries the
+    fresh footer's clauses in the fresh footer's order.
+
+    Not suppressed by `scope_unknown` on the Manager path, like the fresh
+    footer: it states only searches this turn recorded, and those ran.
+    """
+    try:
+        entries = list(searches or [])
+        if any(e.get("tool") == "search_legislation" for e in entries):
+            return ""
+        rows = [e for e in entries
+                if isinstance(e, dict) and e.get("tool") == _SECTION_TOOL]
+        if not rows:
+            return ""
+        ids = []
+        for e in rows:
+            lid = str(e.get("legislation_id") or "").strip()
+            if lid and lid not in ids:
+                ids.append(lid)
+        where = _and_join(ids[:_MAX_NAMED_INSTRUMENTS])
+        if len(ids) > _MAX_NAMED_INSTRUMENTS:
+            where += f" and {len(ids) - _MAX_NAMED_INSTRUMENTS} more"
+        terms, listed = _listed_terms(e.get("query") for e in rows)
+        head = (f"for this reply the text of {where or 'an instrument'} in the "
+                "legislation index was searched" + (f" for {listed}" if terms else ""))
+        return (
+            f"\n\n*Search scope: {head}. {SECTION_SCOPE_SENTENCE}"
+            f"{_budget_footer_clause(entries)}"
+            f"{_section_budget_footer_clause(entries)}"
+            f"{_enabling_footer_clause(entries)}"
+            f"{_made_under_footer_clause(entries)}"
+            f"{_relations_footer_clause(entries)}"
+            f"{_currency_footer_clause(entries)}"
+            f"{_lookup_footer_clause(entries)}"
             f"{case_law_scope_clause(entries)}*"
         )
     except Exception:
@@ -2658,8 +4039,11 @@ def strip_scope_blocks(text: str) -> tuple:
     out, n = _WORKER_BLOCK.subn("", text)
     out, n1 = _PINPOINT_BLOCK.subn("", out)
     out, n3 = _OUTLINE_BLOCK.subn("", out)
+    out, n4 = _FETCHED_BLOCK.subn("", out)
+    # P4.22: a bare tag a sentence names, before `_TOOL_BLOCK` would delete it.
+    out, n5 = _BARE_TAG.subn(_bare_tag, out)
     out, n2 = _TOOL_BLOCK.subn("", out)
-    n += n1 + n2 + n3
+    n += n1 + n2 + n3 + n4 + n5
     if n:
         out = re.sub(r"\n{3,}", "\n\n", out).strip()
     return out, n

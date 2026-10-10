@@ -292,7 +292,22 @@ NEG_BLAMED_INDEX = re.compile(
     r"include|index)|is incomplete|coverage|gap)"
     r"|\bnot held\b|\bcoverage (?:is|gap|of the)\b"
     r"|\bnot (?:evidence|proof) (?:of|that)\b[^.]{0,40}\b(?:absence|does not exist)"
-    r"|\babsence from the index\b",
+    r"|\babsence from the index\b"
+    # P4.15 (c): the model's own attribution, "a search of the case-law
+    # database for X returned no results". It reports what a named search
+    # returned, which is P2.2's `index` ("the miss is attributed to the index
+    # or the search"), but none of the alternatives above reads it: they want
+    # "in the database" or "not ... database". Measured before it was added
+    # (batch 2 agent D, re-run by batch 3 agent A): it newly matches 64
+    # sentences over every stored answer, all read, every one reporting what a
+    # named search returned and none concluding anything about the law; it
+    # moves 9 `negatives` verdicts, all 6370, and leaves the 4 negatives that
+    # do not say this failing. The gaps are `[^.\n]`, so the search, the
+    # corpus and the "returned no ..." must sit in ONE sentence: a later
+    # sentence concluding the thing does not exist is not credited by it.
+    r"|\bsearch(?:es)? of (?:the|this|our) [^.\n]{0,80}?\b(?:database|index|"
+    r"corpus|collection)\b[^.\n]{0,240}?\breturned (?:no|zero) "
+    r"(?:results?|judgments?|matches|cases?)\b",
     re.I,
 )
 # The failing direction: the lawyer's own citation questioned. 6373 and 6409.
@@ -532,8 +547,13 @@ class RunSignals:
     provision_links_manufactured: int = 0
     provision_links_reconstructed: int = 0
     sources_kept: int = 0
-    sources_unused: int = 0  # B8: kept but not textually cited
-    turns_source_fallback: int = 0  # B8: rail showed an unvouched-for list
+    # B8, by the TOKEN test (`_source_cited`); `rail` is the reader test.
+    sources_unused: int = 0  # kept but not cited by url/cite/sub token
+    # A turn citing none of its rail by the token test. Before P4.3 (V4) this
+    # was the Worker seam's fall-back-to-all; since then the legislation bot
+    # does not fall back, so it counts only rails the answer cites by no token
+    # (a source named in words reads as uncited). `rail` reads the fall-back.
+    turns_source_fallback: int = 0
     tool_calls: Counter = field(default_factory=Counter)
     delegations: int = 0
 
@@ -567,9 +587,13 @@ class RunSignals:
 def _source_cited(src: dict, text: str) -> bool:
     """Whether a source is *textually cited* in the answer.
 
-    This mirrors the token branch of `agent_core._source_is_used` exactly —
-    same tokens, same >=6-char floor, same substring test — and deliberately
-    omits its `excerpt` branch. That omission is the whole point.
+    This mirrors the token branch of `agent_core._source_is_used` as it was
+    BEFORE P4.3 — same tokens, same >=6-char floor, same substring test — and
+    deliberately omits its `excerpt` branch. That omission is the whole point.
+    P4.3 (V4) made the product's test boundary-aware, dropped a legislation
+    source's `sub` and added a naming test; this one is left as it was so the
+    stored `src_unused` counts stay comparable across sweeps. It is the TOKEN
+    test, and it overstates the unused rate: `rail` is the reader test.
 
     `audit["sources"]` is the ALREADY-FILTERED `kept` list, so re-running the
     full `_source_is_used` over it would return True for everything and measure
@@ -743,11 +767,12 @@ def analyse_run(doc: dict) -> RunSignals:
         cited = sum(1 for s in sources if _source_cited(s, answer))
         sig.sources_kept += len(sources)
         sig.sources_unused += len(sources) - cited
-        # `agent_core` falls back to the UNFILTERED accumulator when filtering
-        # would have left nothing, so a turn citing none of its sources is
-        # showing the rail a list no one vouched for. Counting those turns
-        # separately keeps them from inflating the "consulted, not cited" rate,
-        # which is a different condition with a different fix.
+        # Before P4.3, `agent_core` fell back to the UNFILTERED accumulator
+        # when filtering would have left nothing, so a turn citing none of its
+        # sources was showing the rail a list no one vouched for. Since P4.3
+        # (V4) the legislation bot no longer falls back, and this token-test
+        # count no longer means that: `replay_report rail` grades the fall-back
+        # (a rail source no completed report vouches for) by the reader test.
         if sources and cited == 0:
             sig.turns_source_fallback += 1
 
@@ -877,10 +902,10 @@ def cmd_summary(args) -> int:
     print(f"  unsupported in-force claims {sum(s.in_force_claims for s in sigs)}   <- B4 / P2.5")
     sk = sum(s.sources_kept for s in sigs)
     su = sum(s.sources_unused for s in sigs)
-    print(f"  sources kept                {sk}, consulted-not-cited {su}"
-          f"{f'  ({100*su/sk:.0f}%)' if sk else ''}   <- B8 / P4.3")
-    print(f"  turns citing NONE of their sources (rail fallback): "
-          f"{sum(s.turns_source_fallback for s in sigs)}")
+    print(f"  sources kept                {sk}, consulted-not-cited by the token test {su}"
+          f"{f'  ({100*su/sk:.0f}%)' if sk else ''}   <- B8 / P4.3 (reader test: `rail`)")
+    print(f"  turns citing NONE of their sources by the token test (the rail fallback "
+          f"before P4.3): {sum(s.turns_source_fallback for s in sigs)}")
     mism = [s for s in sigs if s.model_mismatch]
     if mism:
         print(f"\n  [!] {len(mism)} run(s) on a model other than the pin: "
@@ -958,7 +983,7 @@ def cmd_baseline(args) -> int:
         if any(r.in_force_claims for r in runs):
             notes.append(f"in-force claims: {sum(r.in_force_claims for r in runs)}")
         if any(r.sources_unused for r in runs):
-            notes.append(f"unused sources: {sum(r.sources_unused for r in runs)}/{sum(r.sources_kept for r in runs)}")
+            notes.append(f"unused sources (token test): {sum(r.sources_unused for r in runs)}/{sum(r.sources_kept for r in runs)}")
         if any(r.turns_errored for r in runs):
             notes.append(f"errored turns: {sum(r.turns_errored for r in runs)}")
         if any(r.model_mismatch for r in runs):
@@ -992,8 +1017,8 @@ _COMPARE_METRICS: list[tuple[str, str, str]] = [
     ("bare_negatives", "bare negatives", "B5/P2.2"),
     ("explained_negatives", "  (explained negatives)", ""),
     ("sources_kept", "sources kept", "B8/P4.3"),
-    ("sources_unused", "  consulted, not cited", "B8/P4.3"),
-    ("turns_source_fallback", "  turns citing none of theirs", "B8/P4.3"),
+    ("sources_unused", "  not cited (token test)", "B8/P4.3"),
+    ("turns_source_fallback", "  turns citing none (token)", "B8/P4.3"),
     ("turns_empty_answer", "turns with an empty answer", "B13/P4.2"),
     ("turns_billed_but_empty", "  of those, billed >$0", "B13/P4.2"),
     ("turns_needing_clarification", "turns that asked for clarification", ""),
@@ -1479,6 +1504,19 @@ _DERIV_FINITE = re.compile(
 _DERIV_PARTICIPIAL = re.compile(
     r"\bmade\s+(?:under|pursuant to|by virtue of|in exercise of)\b"
     r"|\benabling\s+(?:power|authority)\s+(?:for|behind|of)\b", re.I)
+# A thing a PERSON makes under a section is not an instrument made under it:
+# "applications made under section N ... (regulation N(n))" lists a procedure
+# the Regulations cover, and claims nothing about what they were made under
+# (batch 5: one such sentence among 284 in this vocabulary over 57 replay
+# directories, enrolled through the regulation link's URL). So the
+# predicate is removed where its head is one of these nouns, and the rest of
+# the sentence is still read: a real claim beside it still counts.
+_DERIV_NOT_INSTRUMENT = re.compile(
+    r"\b((?:applications?|appeals?|requests?|proposals?|representations?"
+    r"|objections?|complaints?|claims?|payments?|requirements?|referrals?"
+    r"|notifications?|nominations?)\s+)"
+    r"(?:(?:is|are|was|were|has been|have been|had been)\s+)?"
+    r"made\s+(?:under|pursuant to|by virtue of|in exercise of)\b", re.I)
 _DERIV_SRC = re.compile(
     r"\b(?:section|sections|s\.|ss\.|subsection)\s*\d+"
     r"|\bthe\s+[A-Z][A-Za-z0-9'’()\-,. ]{4,120}?\bAct\s+\d{4}"
@@ -1558,9 +1596,10 @@ def derivation_claims(answer: str) -> tuple:
             continue
         specific = bool(_DERIV_TITLE.search(s) or _DERIV_NUMBERED.search(s)
                         or _DERIV_DEICTIC.search(s))
-        if _DERIV_FINITE.search(s):
+        pred = _DERIV_NOT_INSTRUMENT.sub(r"\1", s)
+        if _DERIV_FINITE.search(pred):
             ok = specific or bool(_DERIV_QUANTIFIED.search(s))
-        elif _DERIV_PARTICIPIAL.search(s):
+        elif _DERIV_PARTICIPIAL.search(pred):
             ok = specific or (bool(_DERIV_PRESENTED.search(s))
                               and bool(_DERIV_QUANTIFIED.search(s)))
         else:
@@ -1618,10 +1657,36 @@ def retrieved_enabling(turn: dict) -> list:
             for r in (o.get("results") or []):
                 if isinstance(r, dict) and r.get("description"):
                     cands.append((str(r.get("legislation_id") or ""), str(r["description"])))
+            # P3.25: a lookup record carries the same `description`, and is the
+            # quick-lookup Worker's route to a recital now that it has no whole
+            # text. Unread, a claim the product permits grades as unverified.
+            if o.get("tool") == "lookup_legislation" and o.get("description"):
+                cands.append((str(o.get("legislation_id") or ""), str(o["description"])))
             for lid, descr in cands:
                 if descr and _DERIV_RECITAL.search(descr) and lid not in [x[0] for x in out]:
                     out.append((lid, descr[:200]))
+            # P3.31: the made-under record is the third route, two ways. Its
+            # tool lists the instruments whose own preamble names a provision
+            # (the class claim, "37 instruments whose preambles state ...",
+            # rests on that list); and a text read, section search or lookup
+            # of an SSI whose LEX record has no recital is handed the stored
+            # one in its ENABLING POWER block, which is in `final_result`, not
+            # `raw_result`. Unread, every claim the record supports grades as
+            # unverified (9 of 9 turns of `wave4_p331`).
+            if o.get("tool") == "find_instruments_made_under" and o.get("status") == "found":
+                for inst in o.get("instruments") or []:
+                    lid = str(inst.get("legislation_id") or "")
+                    if lid and lid not in [x[0] for x in out]:
+                        out.append((lid, f"made-under record: {o.get('provision')} of "
+                                         f"{o.get('matched_act')}"))
+        for tl in dg.get("tools", []):
+            for m in _STORED_RECITAL.finditer(str(tl.get("final_result") or "")):
+                if m.group(1) not in [x[0] for x in out]:
+                    out.append((m.group(1), "made-under record (stored recital)"))
     return out
+
+
+_STORED_RECITAL = re.compile(r"the made-under record \(the as-made preamble of ([a-z]+/\d{4}/\d+)")
 
 
 # P2.3's own clause on the lawyer-facing footer contains the words "made under"
@@ -1967,7 +2032,11 @@ def cmd_commencements(args) -> int:
     and honest limits ("no commencement record is held for this Act").
     """
     docs = load_runs(Path(args.dir))
-    docs = [d for d in docs if _truth_for(d.get("session_id"))]
+    # A scripted run (`p37_6409`) is graded against its base session's truth
+    # (`script.base`), each turn reported with the export turn it was taken
+    # from (`from_turn`). Before batch 10 E it was keyed on its own session id,
+    # which has no truth, so no scripted run was ever graded here.
+    docs = [d for d in docs if _truth_for(_run_base(d))]
     if not docs:
         print("No graded session in %s (expected any of %s)"
               % (args.dir, ", ".join(sorted(COMMENCEMENT_TRUTH))))
@@ -1978,8 +2047,10 @@ def cmd_commencements(args) -> int:
     rows, drops = [], []
     for doc in sorted(docs, key=lambda d: (str(d.get("session_id")), d.get("rep", 1))):
         sid = str(doc.get("session_id"))
-        truth = _truth_for(sid)
-        for t in doc.get("turns", []):
+        base = _run_base(doc)
+        truth = _truth_for(base)
+        scripted = bool((doc.get("script") or {}).get("turns"))
+        for _n, exp, t in _export_turns(doc):
             ans = t.get("answer") or ""
             if not ans.strip():
                 continue
@@ -1988,24 +2059,25 @@ def cmd_commencements(args) -> int:
             calls = _consulted_changes(t)
             if calls:
                 consulted_turns += 1
+            label = ("%s (export t%s)" % (t.get("turn"), exp)) if scripted else t.get("turn")
             scoped = bool(_CMC_QUESTION.search(question)) and not _names_instrument(
                 question, truth[1])
             if not scoped:
                 if args.answers:
-                    rows.append((sid, doc.get("rep", 1), t.get("turn"), "out",
+                    rows.append((sid, doc.get("rep", 1), label, "out",
                                  [], [], calls, question))
                 continue
             in_scope += 1
             body = _without_footer(ans)
             retrieved = [o for c in calls for o in c["others"]]
-            verdict, named, denials = commencement_verdict(sid, body, retrieved)
+            verdict, named, denials = commencement_verdict(base, body, retrieved)
             tally[verdict] += 1
-            rows.append((sid, doc.get("rep", 1), t.get("turn"), verdict,
+            rows.append((sid, doc.get("rep", 1), label, verdict,
                          named, denials, calls, question))
             if args.drops:
                 for sent in _sentences(body):
                     if _CMC_CONTEXT.search(sent) and not _CMC_DENIED.search(sent):
-                        drops.append((sid, doc.get("rep", 1), t.get("turn"), sent))
+                        drops.append((sid, doc.get("rep", 1), label, sent))
 
     print("P3.5 (B3) — commencement relations over %s  (%d graded run file(s))"
           % (args.dir, len(docs)))
@@ -2696,6 +2768,847 @@ def cmd_currency(args) -> int:
         _currency_on_unasked_turns(docs)
     if args.before:
         _invariant_one(Path(args.before), Path(args.dir))
+    return 0
+
+# --- P3.24 (B3): negative and continuing commencement claims ---------------
+#
+# **P2.5's grader cannot see this shape, by design, and that design is right.**
+# `_currency_asserted` returns False on "not yet commenced" because a true
+# negative exists (P2.5's row: an Act with most of its sections uncommenced),
+# and a grader that counted every negative would push the model to
+# hedge a correct statement (Invariant 1; P2.2's first `NEG_ASSERTED` failed at
+# 100% that way). And P3.5's `_CMC_DENIED` grades the INSTRUMENT ("no
+# commencement regulations have been made"), never a provision. So a sentence
+# telling a lawyer "s. 5: Not yet commenced", or that a prohibition "remains in
+# force", is graded by nothing — which is Thomas's 30 September finding on
+# `glm-5.2:cloud`, and why P3.24 exists.
+#
+# **The detector therefore does not count negatives. It reads each one against
+# what the turn retrieved**, the same split `_currency_support` makes for the
+# affirmative, and says which of three things it is:
+#
+#   * ``SUPPORTED``   — the conversation holds a record that shows it. For "not
+#     yet commenced" and "partially in force": a change record for the
+#     instrument that DOES carry commencement relations by another instrument,
+#     lists them in full, and does not list this provision. That is "the
+#     record shows it uncommenced", which is the true negative the row must
+#     keep (Invariant 1). For "no longer in force": a removal relation naming
+#     it, or the instrument's own repeal marker in its title. For "remains in
+#     force": a commencement relation naming it, and a complete record that
+#     lists no removal of it.
+#   * ``UNSUPPORTED`` — read from an absence, or contradicted. No change record
+#     was consulted; or the one consulted carries no commencement relation at
+#     all (the era gap P2.5 measured on a 1998 Act), so its silence about a
+#     provision says nothing; or only the instrument's own commencement
+#     provision was read, which names the mechanism ("on such day as the
+#     Scottish Ministers may by regulations appoint") and not whether it was
+#     used; or the record lists the provision as commenced (or removed) and
+#     the sentence says the opposite.
+#   * ``UNCLEAR``     — something bears on it that only a reader can weigh: a
+#     record that covers commencement but was truncated, a record whose only
+#     commencement relations are the instrument's own, a commencement
+#     provision that fixes a calendar date, a `valid_date` on a retrieved
+#     text, a removal relation not tied to what the sentence is about.
+#
+# Evidence is the conversation's, not the turn's alone: a follow-up that says
+# "as noted, it is partially in force" rests on the earlier turn's retrieval
+# (`_nc_merge`), and the reason says so.
+#
+# **What is NOT a claim**, and is printed as a drop with its reason so both
+# directions are audited: a question; a conditional or subordinate use ("if s. 5
+# is not yet in force"); a hedged one ("may not yet be in force"); a quotation
+# of statutory text ("shall continue in force until Parliament otherwise
+# determines"); and the disclaimer P2.5 asks for ("in-force status could not be
+# verified"). A statement ABOUT the record ("not yet recorded as commenced") is
+# not matched at all: it is what the footer asks the lawyer to read.
+#
+# Dated future commencement ("comes into force on 1 April 2027") is out of
+# scope: it is read from an instrument, not from an absence.
+
+# The claim vocabulary, one pattern per kind. Order matters and is applied in
+# `negcurrency_claim`: a "not yet" sentence is never also read as continuing.
+_NC_NOT_YET = re.compile("|".join([
+    r"\bnot\s+(?:yet\s+)?(?:ha(?:ve|s)\s+)?(?:been\s+)?(?:commenced|brought\s+"
+    r"in(?:to)?\s+(?:force|operation|effect))\b",
+    r"\bnot\s+yet\s+(?:be\s+)?(?:in[- ]force|in\s+operation|in\s+effect|operative|"
+    r"effective)\b",
+    r"\b(?:has|have|had|did)\s+not\s+(?:yet\s+)?(?:come|came)\s+in(?:to)?\s+"
+    r"(?:force|operation|effect)\b",
+    r"\byet\s+to\s+(?:be\s+)?(?:commenced|brought\s+in(?:to)?\s+force|"
+    r"come\s+in(?:to)?\s+force|take\s+effect)\b",
+    r"\buncommenced\b",
+    r"\b(?:awaiting|pending)\s+commencement\b",
+]), re.I)
+# "Partially in force" claims that SOME provisions are not in force, and the
+# provisions it names are usually the ones that ARE ("partially in force, with
+# sections 24 to 28 commencing the day after Royal Assent"), so it is its own
+# kind and is never read as denying the provisions it names.
+_NC_PARTIAL = re.compile(
+    r"\b(?:only\s+)?(?:partially|partly)\s+(?:in[- ]force|commenced)\b"
+    r"|\bnot\s+(?:fully|wholly)\s+(?:in[- ]force|commenced)\b",
+    re.I,
+)
+_NC_NO_LONGER = re.compile("|".join([
+    r"\bno\s+longer\s+(?:in[- ]force|in\s+effect|in\s+operation|operative|"
+    r"effective|ha(?:s|ve)\s+effect|appl(?:y|ies))\b",
+    r"\b(?:has|have|had)\s+ceased\s+to\s+(?:have\s+effect|be\s+in[- ]force|"
+    r"apply|operate)\b",
+]), re.I)
+# "Not in force" with no "yet" and no "longer": either a non-commencement or a
+# repeal, so it is supported by either record.
+_NC_BARE_NOT = re.compile(
+    r"\b(?:is|are|was|were|be|being|remains?)\s+not\s+(?:currently\s+|presently\s+)?"
+    r"(?:in[- ]force|in\s+operation)\b"
+    r"|\bnot\s+currently\s+in[- ]force\b",
+    re.I,
+)
+_NC_CONTINUING = re.compile("|".join([
+    r"\b(?:remains?|remained)\s+(?:still\s+|currently\s+|fully\s+)?"
+    r"(?:in[- ]force|in\s+effect|in\s+operation|operative|"
+    r"on\s+the\s+statute\s+book)\b",
+    r"\bstill\s+(?:in[- ]force|in\s+effect|in\s+operation|operative)\b",
+    r"\bcontinues?\s+(?:to\s+be\s+)?in[- ]force\b",
+    r"\bcontinued\s+in[- ]force\b",
+]), re.I)
+_NC_KINDS = (
+    ("not_yet", _NC_NOT_YET),
+    ("partial", _NC_PARTIAL),
+    ("no_longer", _NC_NO_LONGER),
+    ("not_in_force", _NC_BARE_NOT),
+    ("continuing", _NC_CONTINUING),
+)
+# The wider vocabulary the drops are drawn from: anything that talks about
+# commencement or currency in the negative or continuing sense, matched or not.
+_NC_VOCAB = re.compile(
+    r"\bnot\b[^.;\n]{0,25}\b(?:commenc\w*|in(?:to)?[- ]force|in\s+operation)"
+    r"|\byet\s+to\b[^.;\n]{0,30}\b(?:commenc\w*|force)"
+    r"|\buncommenced\b|\b(?:awaiting|pending)\s+commencement\b"
+    r"|\b(?:remains?|remained|still|continues?|continued)\b[^.;\n]{0,25}"
+    r"\b(?:in[- ]force|in\s+effect|in\s+operation|operative)\b"
+    r"|\bno\s+longer\b[^.;\n]{0,25}\b(?:in[- ]force|in\s+effect|operative|"
+    r"ha(?:s|ve)\s+effect|appl(?:y|ies))\b"
+    r"|\bceased?\s+to\s+(?:have\s+effect|be\s+in[- ]force)\b"
+    r"|\b(?:partially|partly)\s+(?:in[- ]force|commenced)\b",
+    re.I,
+)
+# The clause the guards look in: back to the nearest clause boundary.
+_NC_CLAUSE_BACK = 70
+# "likely", "probably" and "presumably" are deliberately NOT hedges: "indicating
+# the rest of the Act is likely not yet in force" (read from a search that
+# returned nothing) leans on the absence as hard as the bare form does, and the
+# first draft dropped three such sentences.
+_NC_HEDGE = re.compile(
+    r"\b(?:may|might|could|would|possibly|perhaps|appears?|seems?|"
+    r"unclear|uncertain|unknown)\b", re.I)
+_NC_SUBORDINATE = re.compile(
+    r"\b(?:if|whether|where|while|whilst|unless|until|when|whenever|once)\b",
+    re.I)
+_NC_QUOTES = "\"“”"
+
+
+def _nc_clause_before(sentence: str, start: int) -> str:
+    """The text before `start`, back to a clause boundary (or 70 chars)."""
+    head = sentence[max(0, start - _NC_CLAUSE_BACK):start]
+    cut = max(head.rfind(","), head.rfind(";"), head.rfind(":"),
+              head.rfind("("), head.rfind("|"))
+    return head[cut + 1:] if cut >= 0 else head
+
+
+def negcurrency_claim(sentence: str) -> tuple:
+    """(kind, guard) for one sentence.
+
+    `kind` is one of ``not_yet``, ``partial``, ``no_longer``, ``not_in_force``,
+    ``continuing``, or ``None`` when the sentence makes no such claim. `guard`
+    is ``None`` for a claim, or the reason a matched phrase is NOT a claim
+    (``question``, ``quoted``, ``conditional``, ``hedged``, ``disclaimer``),
+    which the command prints as a drop. Pure: no I/O, no state.
+    """
+    s = sentence or ""
+    first = None
+    for kind, pat in _NC_KINDS:
+        for m in pat.finditer(s):
+            guard = _nc_guard(s, m.start())
+            if guard is None:
+                return kind, None
+            if first is None:
+                first = (kind, guard)
+    return first if first else (None, None)
+
+
+def _nc_guard(s: str, start: int):
+    """Why the claim phrase at `start` is not a claim, or None if it is one."""
+    before = _nc_clause_before(s, start)
+    if s.rstrip().rstrip("*_").endswith("?"):
+        return "question"
+    if sum(s[:start].count(q) for q in _NC_QUOTES) % 2 == 1:
+        return "quoted"
+    if _NC_SUBORDINATE.search(before):
+        return "conditional"
+    if _NC_HEDGE.search(before):
+        return "hedged"
+    # The disclaimer is read on the CLAUSE, not the sentence: "...establishing
+    # that some provisions are no longer in force, but does not establish the
+    # in-force status of the Act as a whole" claims in one clause and
+    # disclaims in the next, and the first draft dropped the claim.
+    tail = re.split(r"[,;:|]", s[start:], maxsplit=1)[0]
+    if _currency_disclaimed(before + tail):
+        return "disclaimer"
+    return None
+
+
+# Provisions named in a sentence, normalised to the change record's own base
+# form ("s. 5", "reg. 2", "art. 3", "Sch. 1", "Pt. 2"), so a sentence and a
+# record can be compared. Subsections are dropped: the record's base is what
+# a commencement relation is listed under, and "s. 13A(2A)-(2C)" and "s. 13A"
+# must meet. A provision cited as AUTHORITY ("under section 39(1)", "not
+# covered by section 39") is not the subject of the claim and is skipped —
+# found by reading `wave3_p35`, where the commencement section itself is named
+# in a sentence about everything it did NOT commence.
+_NC_PROV = re.compile(
+    r"\b(?P<kind>sections?|ss?\.|regulations?|regs?\.|articles?|arts?\.|"
+    r"schedules?|sch\.|parts?|pt\.)\s*\(?\s*"
+    r"(?P<list>\d+[A-Z]{0,2}(?:\(\w{1,4}\))*"
+    r"(?:\s*(?:,|and|to|or|&|–|—|-)\s*(?:and\s+)?\d+[A-Z]{0,2}"
+    r"(?:\(\w{1,4}\))*)*)",
+    re.I,
+)
+_NC_AUTHORITY = re.compile(
+    r"\b(?:under|by|per|see|pursuant\s+to|in\s+accordance\s+with|"
+    r"according\s+to|cf\.?)\s*\[?\s*$"
+    # A provision written straight after another instrument's citation is a
+    # provision OF that instrument: "revoked by SI 1901/3, reg. 2(c)".
+    r"|\b(?:S\.?S?\.?I\.?|SR)\s*(?:No\.?\s*)?\d{4}[/ ]\s*(?:No\.?\s*)?\d+"
+    r"\s*[,(]?\s*$", re.I)
+# A sentence that names no provision is about part of the instrument when it
+# says so ("the remaining provisions", "the rest of the Act", "partially") and
+# about the whole of it otherwise ("the Act is not yet in force"). The
+# distinction decides the verdict: a record holding commencement relations
+# SUPPORTS "the rest is not yet in force" and CONTRADICTS "the Act is not yet in
+# force".
+_NC_PARTITIVE = re.compile(
+    r"\b(?:remaining|remainder|rest|other|others|further|some|certain|"
+    r"majority|most|many|several|substantive|those|these|partially|partly|"
+    r"fully|wholly|not\s+all|provisions?|sections?|parts?|paragraphs?|"
+    r"regulations?\s+\d|articles?)\b", re.I)
+
+
+def _nc_base(kind: str, num: str) -> str:
+    """One provision in the record's base form: "s. 5", "reg. 2", "Sch. 1"."""
+    k = kind.lower().rstrip(".")
+    if k.startswith("reg"):
+        label = "reg."
+    elif k.startswith("art"):
+        label = "art."
+    elif k.startswith("sch"):
+        label = "Sch."
+    elif k.startswith("part") or k == "pt":
+        label = "Pt."
+    else:
+        label = "s."
+    return "%s %s" % (label, re.sub(r"\(.*$", "", num).strip().upper())
+
+
+def negcurrency_provisions(sentence: str) -> list:
+    """Provisions this sentence makes its claim about, in record base form."""
+    out = []
+    for m in _NC_PROV.finditer(sentence or ""):
+        if _NC_AUTHORITY.search(sentence[max(0, m.start() - 25):m.start()]):
+            continue
+        kind = m.group("kind")
+        items = re.split(r"\s*(?:,|and|or|&)\s*", m.group("list"))
+        for it in items:
+            it = it.strip()
+            if not it:
+                continue
+            rng = re.match(r"^(\d+)\s*(?:to|–|—|-)\s*(\d+)$", it)
+            if rng and 0 < int(rng.group(2)) - int(rng.group(1)) <= 200:
+                for n in range(int(rng.group(1)), int(rng.group(2)) + 1):
+                    b = _nc_base(kind, str(n))
+                    if b not in out:
+                        out.append(b)
+                continue
+            for part in re.split(r"\s*(?:to|–|—|-)\s*", it):
+                # A year after "Regulations" or "Order" is a title, not a
+                # provision: "the ... (Scotland) Regulations 2013".
+                if re.match(r"^(?:1[89]|20)\d\d$", part):
+                    continue
+                if re.match(r"^\d", part):
+                    b = _nc_base(kind, part)
+                    if b not in out:
+                        out.append(b)
+    return out
+
+
+def _nc_record_base(prov: str) -> str:
+    """A change record's `changed_provisions` entry in base form, or ""."""
+    m = re.match(r"^\s*(s|reg|art|sch|pt)\.?\s*(\d+[A-Z]{0,2})", str(prov or ""), re.I)
+    if not m:
+        return ""
+    return _nc_base(m.group(1), m.group(2))
+
+
+_NC_TITLE_MARKER = re.compile(r"\s*\((?:repealed|revoked|expired|spent)\b[^)]*\)\s*", re.I)
+_NC_CMC_TEXT = re.compile(
+    r"\bcomes?\s+into\s+force\b[^.]{0,160}\b(?:royal\s+assent|such\s+day|"
+    r"may\s+by\s+(?:regulations|order)\s+appoint|appoint)", re.I)
+# A commencement provision that fixes a calendar date, which is the one case in
+# which the instrument's own text can support "not yet in force" (a date still
+# to come) without a change record.
+_NC_CMC_DATED = re.compile(
+    r"\bcomes?\s+into\s+force\s+on\s+(?:the\s+)?\d{1,2}(?:st|nd|rd|th)?\s+"
+    r"(?:January|February|March|April|May|June|July|August|September|October|"
+    r"November|December)\s+\d{4}", re.I)
+
+
+# The removal family, read off a group's `type_of_effect`. **Wider than the
+# product's own `_REPEAL_EFFECT_TOKENS` (lex.py), deliberately, and the gap is a
+# finding:** the feed also writes a removal as "rev (saving)", "rev in pt (...)",
+# "omitted" and "ceases to have effect", none of which the slimmer counts in
+# `repeal_or_revocation_relations`. A 1985 instrument whose only relation is
+# "rev (saving)" was graded a repeal-less record by the first draft while the
+# model, which read the group, correctly said it was revoked. "words omitted"
+# is an amendment of text, not the removal of a provision, and is not counted.
+_NC_REMOVAL = re.compile(
+    r"repeal|revok|revoc|^rev\b|^omitted\b|^entr(?:y|ies) omitted\b"
+    r"|^ceases? to have effect\b|^ceased to have effect\b")
+# A removal group's changed provision that names the whole instrument rather
+# than a provision of it ("Order", "Instrument", "Act").
+_NC_WHOLE = re.compile(
+    r"^\s*(?:the\s+)?(?:act|order|instrument|regulations?|rules|scheme|whole)\b",
+    re.I)
+
+
+def _nc_lid(value) -> str:
+    """An id as the change record writes it; older section rows carry a URL."""
+    return re.sub(r"^https?://(?:www\.)?legislation\.gov\.uk/(?:id/)?", "",
+                  str(value or "")).strip("/")
+
+
+def _nc_is_removal(effect: str) -> bool:
+    return bool(_NC_REMOVAL.search(str(effect or "").strip().lower()))
+
+
+def _nc_cmc(text: str) -> tuple:
+    """(is a commencement provision, fixes a calendar date) for one text."""
+    t = str(text or "")
+    dated = bool(_NC_CMC_DATED.search(t))
+    return bool(_NC_CMC_TEXT.search(t)) or dated, dated
+
+
+def _nc_changed_provisions(g: dict) -> list:
+    """The changed provisions a change-record group lists, in either shape.
+
+    P3.19 (2026-10-05) replaced a group's flat `changed_provisions` with
+    `changes`, one entry per effecting provision (`{"by": ..., "changed":
+    [...]}`), and its cut marker `changed_provisions_not_listed` with
+    `changes_not_listed`. Every directory before `wave4_b7_p324` holds the old
+    shape; read only that, a record in the new shape lists no provision, so a
+    sentence denying a provision the record shows commenced was graded
+    SUPPORTED (batch 7 A, `nc_shape_probe.py`).
+    """
+    flat = g.get("changed_provisions")
+    if isinstance(flat, list):
+        return flat
+    out = []
+    for c in g.get("changes") or []:
+        if isinstance(c, dict):
+            for p in c.get("changed") or []:
+                if p is not None and p not in out:
+                    out.append(p)
+    return out
+
+
+def negcurrency_evidence(turn: dict) -> dict:
+    """Everything this turn retrieved that bears on a negative or continuing
+    commencement claim, read off the audit trace. Never raises on odd shapes.
+
+    `records` — one per change-record call, direction-aware: under ``"to"``
+    the commenced and repealed provisions belong to the subject; under ``"by"``
+    to the instrument the group names (a commencing SSI's own record lists the
+    Act's provisions it commenced). `cif_complete` is False when the record's
+    `coming into force` relations are not all listed (a group cut at 60, or
+    groups cut at 40), which is the difference between "the record does not
+    list s. 5" and "the record we saw does not list s. 5".
+    """
+    ev = {"records": [], "marked": [], "titles": {}, "cmc_provisions": [],
+          "valid_dates": []}
+    for dg in (turn.get("audit") or {}).get("delegations", []) or []:
+        for tl in dg.get("tools", []) or []:
+            name = tl.get("name")
+            o = _json_or_none(tl.get("raw_result"))
+            if name == "get_legislation_changes" and isinstance(o, dict):
+                lid = str(o.get("legislation_id") or
+                          (tl.get("args") or {}).get("legislation_id") or "")
+                direction = o.get("direction") or "to"
+                rec = {"lid": lid, "direction": direction, "commenced": {},
+                       "self_commenced": {}, "repealed": {}, "whole_removed": set(),
+                       "commenced_n": {}, "repeal_n": {},
+                       "groups": [], "cif_complete": True, "rep_complete": True}
+                eff = o.get("effects") if isinstance(o.get("effects"), dict) else {}
+                listed_cif = listed_rep = 0
+                for g in o.get("related") or []:
+                    if not isinstance(g, dict):
+                        continue
+                    glid = str(g.get("legislation_id") or "")
+                    if glid and glid not in rec["groups"]:
+                        rec["groups"].append(glid)
+                    e = str(g.get("type_of_effect") or "").strip().lower()
+                    is_cif = e == "coming into force"
+                    is_rep = _nc_is_removal(e)
+                    if not (is_cif or is_rep):
+                        continue
+                    owner = lid if direction == "to" else glid
+                    # **A self-referential `coming into force` relation is not
+                    # a commencement.** It is the instrument's own commencement
+                    # section, and it lists every provision that section
+                    # governs — including those it leaves to regulations. The
+                    # first draft read one such group (28 of 28 sections) as
+                    # "the record lists s. 1 as commenced" and graded a true
+                    # negative as contradicted. Kept apart, never counted.
+                    self_rel = bool(g.get("self")) and direction == "to"
+                    key = ("self_commenced" if self_rel else "commenced") \
+                        if is_cif else "repealed"
+                    bucket = rec[key].setdefault(owner, set())
+                    for p in _nc_changed_provisions(g):
+                        b = _nc_record_base(p)
+                        if b:
+                            bucket.add(b)
+                        elif is_rep and _NC_WHOLE.match(str(p)):
+                            rec["whole_removed"].add(owner)
+                    n = int(g.get("count") or 0)
+                    if is_cif and not self_rel:
+                        rec["commenced_n"][owner] = rec["commenced_n"].get(owner, 0) + n
+                    if is_rep:
+                        rec["repeal_n"][owner] = rec["repeal_n"].get(owner, 0) + n
+                    cut = g.get("changed_provisions_not_listed") or \
+                        g.get("changes_not_listed")
+                    if is_cif:
+                        listed_cif += n
+                        if cut:
+                            rec["cif_complete"] = False
+                    else:
+                        listed_rep += n
+                        if cut:
+                            rec["rep_complete"] = False
+                if direction == "to":
+                    c = o.get("provisions_commenced")
+                    if not isinstance(c, int):
+                        c = sum(v for k, v in eff.items()
+                                if str(k).strip().lower() == "coming into force")
+                    r = o.get("repeal_or_revocation_relations")
+                    if not isinstance(r, int):
+                        r = sum(v for k, v in eff.items()
+                                if any(tok in str(k).lower()
+                                       for tok in ("repeal", "revok", "revoc")))
+                    rec["repeal_n"][lid] = max(r, rec["repeal_n"].get(lid, 0))
+                    if listed_cif < c:
+                        rec["cif_complete"] = False
+                    if listed_rep < r:
+                        rec["rep_complete"] = False
+                if o.get("window_complete") is False:
+                    rec["cif_complete"] = rec["rep_complete"] = False
+                ev["records"].append(rec)
+            elif name == "find_instruments_made_under" and isinstance(o, dict):
+                # P3.33: the made-under record states, per listed instrument, what
+                # legislation.gov.uk records about its revocation. A revocation in
+                # whole dated today or earlier (or undated) removes the instrument,
+                # exactly as a change record's whole-instrument removal does; one
+                # dated after the day the tool ran does not, and neither does a
+                # partial one (the record keeps no provision list).
+                for inst in o.get("instruments") or []:
+                    if not isinstance(inst, dict):
+                        continue
+                    ilid = _nc_lid(inst.get("legislation_id"))
+                    if inst.get("title"):
+                        ev["titles"].setdefault(ilid, str(inst.get("title")))
+                    if ilid and inst.get("revocation_status") in ("revoked", "revoked_undated"):
+                        ev["records"].append({
+                            "lid": ilid, "direction": "to", "commenced": {},
+                            "self_commenced": {}, "repealed": {}, "whole_removed": {ilid},
+                            "commenced_n": {}, "repeal_n": {ilid: 1}, "groups": [],
+                            "cif_complete": True, "rep_complete": True,
+                            "source": "made_under_record"})
+            elif name == "search_legislation" and isinstance(o, dict):
+                for row in o.get("results") or []:
+                    if not isinstance(row, dict):
+                        continue
+                    rlid = str(row.get("legislation_id") or "")
+                    title = str(row.get("title") or "")
+                    if not rlid:
+                        continue
+                    clean = _NC_TITLE_MARKER.sub(" ", title).strip()
+                    ev["titles"].setdefault(rlid, clean)
+                    if clean != title.strip() and rlid not in [m[0] for m in ev["marked"]]:
+                        ev["marked"].append((rlid, clean))
+            elif name == "search_legislation_sections" and (
+                    isinstance(o, list) or isinstance(o, dict)):
+                # Two stored shapes: a bare list (`baseline`) and
+                # {"results": [...], "returned": n} (every directory from
+                # `wave0_conv` on: 4,748 of 5,314 stored section searches).
+                # Reading only the list left an instrument's own commencement
+                # provision, found by section search, out of `cmc_provisions`
+                # on almost every directory (batch 9 E; fixed batch 10 E).
+                rows = o if isinstance(o, list) else o.get("results")
+                for row in rows if isinstance(rows, list) else []:
+                    if not isinstance(row, dict):
+                        continue
+                    is_cmc, dated = _nc_cmc(row.get("text"))
+                    if is_cmc or re.search(r"\bcommencement\b",
+                                           str(row.get("title") or ""), re.I):
+                        item = (_nc_lid(row.get("legislation_id")),
+                                str(row.get("number") or ""), dated)
+                        if item not in ev["cmc_provisions"]:
+                            ev["cmc_provisions"].append(item)
+            elif name == "get_legislation_text" and isinstance(o, dict):
+                leg = o.get("legislation") if isinstance(o.get("legislation"), dict) else {}
+                tlid = _nc_lid((tl.get("args") or {}).get("legislation_id") or leg.get("id"))
+                if leg.get("title"):
+                    ev["titles"].setdefault(tlid, str(leg.get("title")))
+                vd = str(leg.get("valid_date") or "")
+                if re.match(r"^\d{4}-\d{2}-\d{2}$", vd):
+                    ev["valid_dates"].append((tlid, vd))
+                is_cmc, dated = _nc_cmc(o.get("full_text") or leg.get("text"))
+                if is_cmc:
+                    item = (tlid, "text", dated)
+                    if item not in ev["cmc_provisions"]:
+                        ev["cmc_provisions"].append(item)
+            elif name == "lookup_legislation" and isinstance(o, dict) \
+                    and o.get("status") == "held":
+                # P3.25: the quick-lookup Worker's `valid_date` arrives on a
+                # lookup record now, not on a whole text. The same record's
+                # date (9 of 9 stored pairs equal), read the same way.
+                llid = _nc_lid(o.get("legislation_id"))
+                if o.get("title"):
+                    ev["titles"].setdefault(llid, str(o.get("title")))
+                vd = str(o.get("valid_date") or "")
+                if re.match(r"^\d{4}-\d{2}-\d{2}$", vd) and (llid, vd) not in ev["valid_dates"]:
+                    ev["valid_dates"].append((llid, vd))
+    return ev
+
+
+def _nc_merge(earlier: dict, now: dict) -> dict:
+    """This turn's evidence plus what earlier turns of the same conversation
+    retrieved. A follow-up that restates an earlier turn's finding ("as noted,
+    it is partially in force") rests on that turn's retrieval, and the lawyer
+    saw it; grading the follow-up on its own trace alone read 7 such sentences
+    as unsupported in the first draft."""
+    if not earlier:
+        return now
+    out = {k: list(earlier.get(k) or []) for k in
+           ("records", "marked", "cmc_provisions", "valid_dates")}
+    for k in out:
+        for item in now.get(k) or []:
+            if item not in out[k]:
+                out[k].append(item)
+    out["titles"] = dict(earlier.get("titles") or {})
+    for lid, t in (now.get("titles") or {}).items():
+        out["titles"].setdefault(lid, t)
+    return out
+
+
+def _nc_names(sentence: str, lid: str, title: str = "") -> bool:
+    """Does this sentence name this instrument (id, link, citation or title)?"""
+    if not lid:
+        return False
+    if re.search(re.escape(lid) + r"(?![\d])", sentence):
+        return True
+    if lid.split("/")[0] in ("ssi", "uksi", "nisr", "wsi") and _names_instrument(sentence, [lid]):
+        return True
+    t = (title or "").strip()
+    return bool(len(t) >= 12 and t.lower() in sentence.lower())
+
+
+_NC_STATUTE_BOOK = re.compile(r"\bon\s+the\s+statute\s+book\b", re.I)
+_NC_DEICTIC = re.compile(
+    r"\b(?:this|that|the said)\s+(?:instrument|order|act|regulations?|statute)\b"
+    r"|^\W*(?:it|they)\b", re.I)
+
+
+def negcurrency_verdict(sentence: str, kind: str, ev: dict, previous: str = "") -> tuple:
+    """(verdict, reason) for one claim, against this turn's evidence.
+
+    See the note above `_NC_NOT_YET` for the three verdicts. The tie between a
+    sentence and a record is made by naming: a record is relevant when the
+    sentence names its subject or an instrument it lists (by id, link,
+    citation or title); a sentence that names none is read against every record
+    the turn holds, and a contradiction is then claimed only when exactly one
+    instrument's record is in play. A sentence whose subject is "this
+    instrument" or "it" is named by the sentence before it (`previous`): a
+    bullet naming an instrument and a next line saying "the index title marks
+    this instrument as revoked" is one statement over two lines.
+    """
+    provs = negcurrency_provisions(sentence)
+    recs = ev.get("records") or []
+
+    def naming(text):
+        return [r for r in recs
+                if _nc_names(text, r["lid"], ev["titles"].get(r["lid"], ""))
+                or any(_nc_names(text, g, ev["titles"].get(g, "")) for g in r["groups"])]
+
+    names_text = sentence
+    if previous and _NC_DEICTIC.search(sentence) and not any(
+            _nc_names(sentence, lid, t) for lid, t in ev["titles"].items()):
+        names_text = previous + " " + sentence
+    named = naming(names_text)
+    names_other = any(_nc_names(names_text, lid, t) for lid, t in ev["titles"].items()) \
+        and not named
+    relevant = named if named else ([] if names_other else recs)
+
+    commenced, repealed = {}, {}
+    for r in relevant:
+        for owner, ps in r["commenced"].items():
+            commenced.setdefault(owner, set()).update(ps)
+        for owner, ps in r["repealed"].items():
+            repealed.setdefault(owner, set()).update(ps)
+    owners = set(commenced) | set(repealed)
+    single = len({r["lid"] for r in relevant}) <= 1
+
+    def hit(table):
+        return [p for p in provs for ps in table.values() if p in ps]
+
+    to_recs = [r for r in relevant if r["direction"] == "to"]
+    covered = [r for r in to_recs if r["commenced_n"].get(r["lid"], 0) > 0]
+    has_repeal = [r for r in to_recs if r["repeal_n"].get(r["lid"], 0) > 0]
+    marked_named = [lid for lid, t in ev.get("marked") or []
+                    if _nc_names(names_text, lid, t)]
+    # A commencement provision or a held-text date counts only for an
+    # instrument the sentence names, or for any when it names none.
+    said = {lid for lid, t in ev["titles"].items() if _nc_names(names_text, lid, t)}
+    said |= {r["lid"] for r in named}
+    cmc = [c for c in ev.get("cmc_provisions") or [] if not said or c[0] in said]
+    vd = [v for v in ev.get("valid_dates") or [] if not said or v[0] in said]
+
+    self_only = [r for r in to_recs if r not in covered and r["self_commenced"]]
+
+    def not_yet(partial=False):
+        c = [] if partial else hit(commenced)
+        if c and (single or len(owners) == 1):
+            return "UNSUPPORTED", "the record lists %s as commenced" % ", ".join(c[:4])
+        if c:
+            return "UNCLEAR", "a record in the turn lists %s as commenced" % ", ".join(c[:4])
+        if covered and not partial and not provs and not _NC_PARTITIVE.search(sentence):
+            return "UNSUPPORTED", "the whole instrument is denied, and the record " \
+                                  "lists commencements of it"
+        if covered:
+            if all(r["cif_complete"] for r in covered):
+                return ("SUPPORTED", "the record carries %d commencement relation(s), "
+                        "listed in full, and not this" % sum(
+                            r["commenced_n"].get(r["lid"], 0) for r in covered))
+            return "UNCLEAR", "the record covers commencement but its list was cut"
+        if self_only:
+            return "UNCLEAR", "the record's only commencement relations are the " \
+                              "instrument's own, which name the mechanism"
+        # The instrument's own commencement provision names the MECHANISM
+        # ("on such day as the Scottish Ministers may by regulations appoint"),
+        # not whether it has been used, so it cannot support "not yet" — unless
+        # it fixes a calendar date, which a reader then has to weigh.
+        if any(c[2] for c in cmc):
+            return "UNCLEAR", "the instrument's commencement provision fixes a date"
+        if to_recs:
+            return "UNSUPPORTED", "the change record consulted carries no " \
+                                  "commencement relation (read from an absence)"
+        if cmc:
+            return "UNSUPPORTED", "commencement provision retrieved, which names the " \
+                                  "mechanism, and no change record (read from an absence)"
+        if names_other:
+            return "UNSUPPORTED", "no change record for the instrument named " \
+                                  "(read from an absence)"
+        return "UNSUPPORTED", "no change record consulted (read from an absence)"
+
+    def no_longer():
+        rp = hit(repealed)
+        if rp or marked_named:
+            return "SUPPORTED", ("a repeal relation names %s" % ", ".join(rp[:4])
+                                 if rp else "the instrument's title carries a repeal marker")
+        # "Those provisions are no longer in force" is supported by any removal
+        # relation; "this instrument is no longer in force" only by one that
+        # removes the instrument itself, or by its title marker — and only for
+        # an instrument the sentence NAMES. Read off every record in the turn,
+        # an unrelated 1967 instrument's revocation "supported" a sentence
+        # about a 2008 one in the first draft.
+        whole = [r for r in named if r["whole_removed"]]
+        if has_repeal and not provs and (_NC_PARTITIVE.search(sentence) or whole):
+            return "SUPPORTED", ("the record removes the instrument itself" if whole
+                                 and not _NC_PARTITIVE.search(sentence)
+                                 else "repeal relation(s) retrieved for the instrument")
+        if has_repeal or ev.get("marked"):
+            return "UNCLEAR", (("repeal relations retrieved, none naming %s"
+                                % ", ".join(provs[:4]) if provs else
+                                "repeal relations retrieved, none tied to the "
+                                "instrument the sentence is about") if has_repeal
+                               else "a repeal-marked title in the turn, not tied")
+        return "UNSUPPORTED", "no repeal relation or title marker (read from an absence)"
+
+    def continuing():
+        rp = hit(repealed)
+        if (rp and (single or len(owners) == 1)) or marked_named \
+                or (not provs and any(r["whole_removed"] for r in named)):
+            return "UNSUPPORTED", ("the record lists %s as repealed" % ", ".join(rp[:4])
+                                   if rp else "the record or title marks the "
+                                   "instrument itself as removed")
+        # "Remains on the statute book" says only that the instrument has not
+        # been removed, so a complete record that does list removals, none of
+        # them of the instrument itself, supports it without any commencement.
+        if _NC_STATUTE_BOOK.search(sentence) and not provs and has_repeal \
+                and all(r["rep_complete"] for r in has_repeal):
+            return "SUPPORTED", "a complete record lists removals, none of the " \
+                                "instrument itself"
+        c = hit(commenced)
+        if covered and (c or not provs):
+            if all(r["cif_complete"] and r["rep_complete"] for r in covered):
+                return "SUPPORTED", "a commencement relation in hand, and a complete " \
+                                    "record listing no repeal of it"
+            return "UNCLEAR", "commencement relation in hand, record cut"
+        if covered or self_only:
+            return "UNCLEAR", ("the record covers commencement but does not name %s"
+                               % ", ".join(provs[:4]) if covered else
+                               "the record's only commencement relations are the "
+                               "instrument's own")
+        # A held revised text up to date to a stated day, with the provision
+        # in it, is the one non-record source on the "not repealed" half. The
+        # commencement provision alone speaks only to the "came into force"
+        # half, so it does not lift this out of UNSUPPORTED.
+        if vd:
+            return "UNCLEAR", "a held text up to date to %s" % vd[0][1]
+        if to_recs:
+            return "UNSUPPORTED", "the change record consulted carries no " \
+                                  "commencement relation (read from an absence)"
+        return "UNSUPPORTED", "no change record consulted (read from an absence)"
+
+    if kind == "not_yet":
+        return not_yet()
+    if kind == "partial":
+        return not_yet(partial=True)
+    if kind == "no_longer":
+        return no_longer()
+    if kind == "continuing":
+        return continuing()
+    a, b = not_yet(), no_longer()
+    if "SUPPORTED" in (a[0], b[0]):
+        return "SUPPORTED", a[1] if a[0] == "SUPPORTED" else b[1]
+    if a[0] == b[0] == "UNSUPPORTED":
+        return "UNSUPPORTED", a[1]
+    return "UNCLEAR", a[1] if a[0] == "UNCLEAR" else b[1]
+
+
+def negcurrency_turn(turn: dict, earlier: dict = None) -> tuple:
+    """(claims, drops) for one answered turn, on its body (footer stripped).
+
+    `earlier` is the evidence the conversation's previous turns retrieved
+    (`_nc_merge`). `claims` is `[(sentence, kind, verdict, reason)]`, the reason
+    saying so when the verdict rests on an earlier turn's retrieval; `drops` is
+    `[(sentence, reason)]` — every sentence in the wider vocabulary that was not
+    graded, with why.
+    """
+    body = _without_footer(turn.get("answer") or "")
+    if not body.strip():
+        return [], []
+    own = merged = None
+    claims, drops = [], []
+    previous, window = "", []
+    for s in _sentences(body):
+        kind, guard = negcurrency_claim(s)
+        if kind and not guard:
+            if own is None:
+                own = negcurrency_evidence(turn)
+                merged = _nc_merge(earlier, own)
+            v, why = negcurrency_verdict(s, kind, merged, previous)
+            if earlier and negcurrency_verdict(s, kind, own, previous)[0] != v:
+                why += " — from an earlier turn's retrieval"
+            claims.append((s, kind, v, why))
+        elif kind:
+            drops.append((s, guard))
+        elif _NC_VOCAB.search(s):
+            drops.append((s, "not a claim shape"))
+        # Three sentences back: a bullet's heading line names the instrument,
+        # a count line follows, and the claim about "this instrument" comes
+        # third (`wave2_p25`).
+        window = (window + [s])[-3:]
+        previous = " ".join(window)
+    return claims, drops
+
+
+def cmd_negcurrency(args) -> int:
+    """P3.24's measurement: negative and continuing commencement claims,
+    each read against what its turn retrieved. Per sentence, then per turn.
+
+    `--dir` may be one replay directory or the replay ROOT; with `--all` every
+    subdirectory is walked and a per-directory table printed. `--sessions`
+    restricts to session ids (a prefixed id such as `p37_6409` matches 6409).
+    `--drops` prints every sentence in the vocabulary that was not graded, with
+    its reason — the both-directions audit.
+    """
+    root = Path(args.dir)
+    dirs = sorted(p for p in root.iterdir() if p.is_dir()) if args.all else [root]
+    want = set(args.sessions.split(",")) if args.sessions else None
+    grand = Counter()
+    per_dir = []
+    for d in dirs:
+        docs = load_runs(d)
+        tally = Counter()
+        lines, drop_lines = [], []
+        for doc in sorted(docs, key=lambda x: (str(x.get("session_id")), x.get("rep", 1))):
+            sid = str(doc.get("session_id"))
+            if want and sid.split("_")[-1] not in want and sid not in want:
+                continue
+            earlier = None
+            for t in doc.get("turns", []):
+                if not (t.get("answer") or "").strip():
+                    earlier = _nc_merge(earlier, negcurrency_evidence(t))
+                    continue
+                tally["answered"] += 1
+                claims, drops = negcurrency_turn(t, earlier)
+                earlier = _nc_merge(earlier, negcurrency_evidence(t))
+                verdicts = {v for _, _, v, _ in claims}
+                if claims:
+                    tally["turns_with_claim"] += 1
+                if "UNSUPPORTED" in verdicts:
+                    tally["turns_unsupported"] += 1
+                for s, kind, v, why in claims:
+                    tally[v] += 1
+                    tally["kind_" + kind] += 1
+                    tally[kind + "_" + v] += 1
+                    p25 = "p25=yes" if _currency_asserted(s) else "p25=no"
+                    lines.append("  %-11s %-12s %s rep%s t%s  %s  [%s]\n        %s"
+                                 % (v, kind, sid, doc.get("rep", 1), t.get("turn"),
+                                    p25, why, s.strip()[:220]))
+                for s, why in drops:
+                    tally["drops"] += 1
+                    drop_lines.append("    DROP %-17s %s rep%s t%s: %s"
+                                      % (why, sid, doc.get("rep", 1), t.get("turn"),
+                                         s.strip()[:200]))
+        grand.update(tally)
+        per_dir.append((d.name, tally))
+        if not args.all or args.verbose:
+            print("== %s" % d.name)
+            for ln in lines:
+                print(ln)
+            if args.drops:
+                for ln in drop_lines:
+                    print(ln)
+    print()
+    print("P3.24 — negative and continuing commencement claims over %s%s"
+          % (args.dir, " (every subdirectory)" if args.all else ""))
+    print("  %-26s %6s %6s %6s %6s %6s %6s %6s" % (
+        "directory", "turns", "w/clm", "claims", "SUPP", "UNSUP", "UNCLR", "drops"))
+    for name, t in per_dir:
+        if args.all and not (t["SUPPORTED"] + t["UNSUPPORTED"] + t["UNCLEAR"]):
+            continue
+        print("  %-26s %6d %6d %6d %6d %6d %6d %6d" % (
+            name[:26], t["answered"], t["turns_with_claim"],
+            t["SUPPORTED"] + t["UNSUPPORTED"] + t["UNCLEAR"],
+            t["SUPPORTED"], t["UNSUPPORTED"], t["UNCLEAR"], t["drops"]))
+    print("  %-26s %6d %6d %6d %6d %6d %6d %6d" % (
+        "TOTAL", grand["answered"], grand["turns_with_claim"],
+        grand["SUPPORTED"] + grand["UNSUPPORTED"] + grand["UNCLEAR"],
+        grand["SUPPORTED"], grand["UNSUPPORTED"], grand["UNCLEAR"], grand["drops"]))
+    print("  turns with an UNSUPPORTED claim: %d of %d answered"
+          % (grand["turns_unsupported"], grand["answered"]))
+    print("  by kind (SUPPORTED / UNSUPPORTED / UNCLEAR):")
+    for kind, _ in _NC_KINDS:
+        print("    %-13s %4d   %4d / %4d / %4d" % (
+            kind, grand["kind_" + kind], grand[kind + "_SUPPORTED"],
+            grand[kind + "_UNSUPPORTED"], grand[kind + "_UNCLEAR"]))
     return 0
 
 
@@ -4245,6 +5158,156 @@ def _caselaw_invariant_one(before: Path, after: Path, only: Optional[list]) -> N
             print(ln)
 
 
+# --- P3.20 acceptance: Scottish judgments from SCTS ------------------------------
+#
+# With `scts_caselaw_enabled` on, `search_case_law` also searches the Scottish
+# Courts and Tribunals Service's published judgments and returns them as
+# `scottish_results`, with a `scottish` block whose `status` is "ok" when the
+# search ran. The row's acceptance, made gradable (batch 11 D, section 5):
+#   (2) a turn of 6375 cites at least one judgment an SCTS search or text fetch
+#       returned THAT turn (a scotcourts.gov.uk URL from the audit), and
+#       presents no English authority as Scots law (a hand-read: P3.3's
+#       criterion; `fcl` counts the non-UKSC Find Case Law links in the prose
+#       for the reader);
+#   (3) no footer on a turn with an ok SCTS search carries the old coverage
+#       sentence (`CASE_LAW_CODE`), which says the Court of Session is absent
+#       from the databases searched.
+# `caselaw` (P2.4) is left as it is: its `code` column keys on
+# `CASE_LAW_CODE`, so a turn carrying the new sentence reads there as
+# disclosed by the model, not by code (its "disclosed" verdict is unchanged).
+#
+# The new sentences, by their fixed openings. `search_scope.
+# SCTS_COVERAGE_BOTH_SENTENCE` / `SCTS_COVERAGE_ONLY_SENTENCE` start with them;
+# `test_scts_caselaw.py` pins that.
+SCTS_CODE_BOTH = "Between them they hold decisions of the UK Supreme Court and"
+SCTS_CODE_ONLY = ("They hold decisions of the Court of Session, the High Court of "
+                  "Justiciary and the Sheriff Appeal Court from 1998")
+_SCTS_URL = re.compile(r"https?://www\.scotcourts\.gov\.uk/[^\s)\]>\"']+?\.pdf", re.I)
+
+
+def _scts_norm(url: str) -> str:
+    return str(url or "").strip().rstrip("/").lower().replace("http://", "https://")
+
+
+def scts_rows(doc: dict) -> list:
+    """One row per answered turn: what SCTS returned, and what the answer did with it."""
+    rows = []
+    for t in doc.get("turns", []):
+        answer = t.get("answer") or ""
+        if not answer.strip():
+            continue
+        tools = [x for dg in (t.get("audit") or {}).get("delegations") or []
+                 for x in dg.get("tools") or []]
+        searched = ok = 0
+        returned = set()
+        for x in tools:
+            o = _json_or_none(x.get("raw_result"))
+            if x.get("name") == "search_case_law" and isinstance(o, dict):
+                block = o.get("scottish")
+                if not isinstance(block, dict):
+                    continue
+                searched += 1
+                if block.get("status") == "ok":
+                    ok += 1
+                for r in o.get("scottish_results") or []:
+                    if isinstance(r, dict) and r.get("url"):
+                        returned.add(_scts_norm(r["url"]))
+            elif (x.get("name") == "get_case_law_text" and isinstance(o, dict)
+                  and not o.get("error") and _SCTS_URL.fullmatch(str(o.get("url") or ""))):
+                returned.add(_scts_norm(o["url"]))
+        prose = _without_footer(answer)
+        linked = {_scts_norm(u) for u in _SCTS_URL.findall(prose)}
+        rows.append({
+            "turn": t.get("turn"),
+            "mode": t.get("chat_mode") or "",
+            "scts_searches": searched,
+            "scts_ok": ok,
+            "returned": len(returned),
+            "cited": len(linked & returned),
+            "unreturned_links": len(linked - returned),
+            "old_sentence": CASE_LAW_CODE in answer,
+            "new_sentence": SCTS_CODE_BOTH in answer or SCTS_CODE_ONLY in answer,
+            "fcl_non_uksc": len({u for u, court in _CASELAW_URL.findall(prose)
+                                 if court.lower() != "uksc"}),
+        })
+    return rows
+
+
+def scts_verdicts(row: dict, require_cite: bool = False) -> list:
+    """P3.20's findings for one answered turn ([] = nothing wrong).
+
+    "OLD_SENTENCE"   — an ok SCTS search this turn, and the footer still says the
+                       Court of Session is absent (acceptance clause 3).
+    "MISATTRIBUTED"  — the new sentence on a turn with no ok SCTS search.
+    "UNRETURNED"     — a scotcourts.gov.uk link in the prose that no SCTS search
+                       or text fetch returned this turn.
+    "UNCITED"        — (with --require-cite) an ok SCTS search this turn and no
+                       judgment it returned linked in the prose (clause 2's half
+                       that code can grade).
+    """
+    out = []
+    if row["scts_ok"] and row["old_sentence"]:
+        out.append("OLD_SENTENCE")
+    if row["new_sentence"] and not row["scts_ok"]:
+        out.append("MISATTRIBUTED")
+    if row["unreturned_links"]:
+        out.append("UNRETURNED")
+    if require_cite and row["scts_ok"] and not row["cited"]:
+        out.append("UNCITED")
+    return out
+
+
+def cmd_scts(args) -> int:
+    """P3.20 acceptance. **Exits 1 on a finding**, and when no turn ran an ok
+    SCTS search at all (the setting was off, or the wiring failed: either way
+    nothing here was graded)."""
+    docs = load_runs(Path(args.dir))
+    if not docs:
+        print(f"No run files in {args.dir}")
+        return 1
+    only = set(args.only or [])
+    docs = [d for d in docs if not only or str(d.get("session_id")) in only]
+    print(f"P3.20 acceptance over {args.dir}")
+    print("  scts     = search_case_law calls this turn that carried the Scottish list")
+    print("  ok       = of those, how many searched SCTS without error")
+    print("  returned = distinct SCTS judgments returned this turn (searches + text fetches)")
+    print("  cited    = of those, how many the prose links (footer removed)")
+    print("  old/new  = the old coverage sentence / the new one, anywhere in the answer")
+    print("  fcl      = Find Case Law links in the prose that are not UK Supreme Court")
+    print("             (for the hand-read: English authority presented as Scots law)")
+    print()
+    print(f"{'session':>8} {'rep':>3} {'turn':>4} {'mode':>13} {'scts':>4} {'ok':>3} "
+          f"{'returned':>8} {'cited':>5} {'old':>3} {'new':>3} {'fcl':>3}  verdict")
+    print("-" * 86)
+    counts, any_ok, n_rows = Counter(), 0, 0
+    for doc in sorted(docs, key=lambda d: (str(d["session_id"]), d.get("rep", 1))):
+        for row in scts_rows(doc):
+            v = scts_verdicts(row, args.require_cite)
+            any_ok += bool(row["scts_ok"])
+            for x in v:
+                counts[x] += 1
+            if not (args.all or row["scts_searches"] or v):
+                continue
+            n_rows += 1
+            yn = lambda b: "yes" if b else "-"   # noqa: E731
+            print(f"{doc['session_id']:>8} {doc.get('rep', 1):>3} {row['turn']:>4} "
+                  f"{row['mode'][:13]:>13} {row['scts_searches']:>4} {row['scts_ok']:>3} "
+                  f"{row['returned']:>8} {row['cited']:>5} {yn(row['old_sentence']):>3} "
+                  f"{yn(row['new_sentence']):>3} {row['fcl_non_uksc']:>3}  "
+                  f"{', '.join(v) or 'ok'}")
+    print()
+    print(f"turns with an ok SCTS search: {any_ok}")
+    for k in ("OLD_SENTENCE", "MISATTRIBUTED", "UNRETURNED", "UNCITED"):
+        if k != "UNCITED" or args.require_cite:
+            print(f"{k:<14}{counts[k]}")
+    if not any_ok:
+        print()
+        print("[!] No turn ran an ok SCTS search: the setting was off for this "
+              "directory, it predates P3.20, or the wiring failed. Nothing was graded.")
+        return 1
+    return 1 if sum(counts.values()) else 0
+
+
 # --- P2.7 pre-flight: the discovery distribution a budget must come from ------
 #
 # P2.7's row: "the right number must come from the distribution, not a guess".
@@ -4619,6 +5682,19 @@ def _discovery_invariant_one(before: Path, after: Path, only: Optional[list]) ->
             print(ln)
 
 
+# The agent-facing blocks `corpus` counts as LEAKED when an answer carries one.
+# `[CURRENCY` added at P2.5. The list has to grow with `_TOOL_BLOCK` in
+# `search_scope.py` or a new block's leak is invisible here, which is how P2.3
+# shipped `[ENABLING POWER ...]` with the strip un-widened. P3.27's
+# `[SCHEDULES AND ANNEXES` line and P3.12's `[PROVISION FETCHED BY CODE` block
+# (and its closer, which a model can echo alone) added at batch 8 B2.
+CORPUS_LEAK_MARKERS = (
+    "[SEARCH SCOPE", "[ENABLING POWER", "[CHANGE RECORD", "[CURRENCY",
+    "[SECTION OUTLINE", "[SCHEDULES AND ANNEXES", "[PROVISION FETCHED BY CODE",
+    "[/PROVISION FETCHED BY CODE]",
+)
+
+
 def cmd_corpus(args) -> int:
     """The retrieval shape of a replay directory — every number P2.3 published.
 
@@ -4652,13 +5728,8 @@ def cmd_corpus(args) -> int:
             _ans = t.get("answer") or ""
             if _ans.strip():
                 answered += 1
-                # `[CURRENCY` added at P2.5. The list has to grow with
-                # `_TOOL_BLOCK` in `search_scope.py` or a new block's leak is
-                # invisible here — which is how P2.3 shipped
-                # `[ENABLING POWER …]` with the strip un-widened.
-                if any(m in _ans for m in
-                       ("[SEARCH SCOPE", "[ENABLING POWER", "[CHANGE RECORD",
-                        "[CURRENCY", "[SECTION OUTLINE")):
+                # `CORPUS_LEAK_MARKERS`, above: it grows with `_TOOL_BLOCK`.
+                if any(m in _ans for m in CORPUS_LEAK_MARKERS):
                     leaked += 1
                 if _ans.count("*Search scope:") > 1:
                     dup_footer += 1
@@ -4713,10 +5784,17 @@ def cmd_corpus(args) -> int:
     print()
     print("  P2.3 — where an enabling power can come from")
     print(f"    search rows seen                 {search_rows:5}")
+    # Both labels are true of every directory, before P3.6 and after it: until
+    # P3.6 (Session 41) `_slim_search_results` stripped `description` (0 of
+    # 5,299 rows carried one at P2.3); since, a row keeps it, cut at a word to
+    # 600 characters. And a whole text's `legislation.description` stopped
+    # being the only route to a preamble at P3.7 (`lookup_legislation` returns
+    # one) and P3.6 (a search row's). Counted here: whole texts only.
     print(f"    ... carrying a `description`     {with_description:5}   "
-          "<- _slim_search_results strips it (P3.6)")
+          "<- 0 before P3.6 (_slim_search_results stripped it); kept, cut to 600 characters, since")
     print(f"    instrument preambles retrieved   {len(recitals):5}   "
-          "<- the ONLY route, via legislation.description")
+          "<- via a whole text's legislation.description (lookup_legislation, P3.7, "
+          "and a search row, P3.6, also carry one)")
     for lid, d in recitals[:5]:
         print(f"      {lid or '(id not in args)':18} {d!r}")
     print(f"    instruments touched by section search {secondary_touch['search_legislation_sections']:5}")
@@ -4824,6 +5902,15 @@ class DepthReq:
     stated, anywhere in the answer or, with `near`, in the sentence that cites
     the provision or the one after it. A match counts only where
     `_attribute_instrument` assigns it to `act`.
+
+    Two optional fields (P3.12, batch 8 B), both off by default so every
+    earlier entry grades exactly as before: `span`, how many sentences or
+    list lines after the citing one the `near` window takes (a paragraph of a
+    Schedule is often cited on one line and its heads listed on the next few);
+    and `unless`, a pattern that disqualifies a deep match whose own sentence
+    carries it ("paragraphs 42, 43 and 44 were not retrieved" cites the
+    provision without delivering it). A disqualified match still counts as
+    coarse.
     """
     label: str
     act: str
@@ -4831,6 +5918,8 @@ class DepthReq:
     coarse: Any
     facts: tuple = ()
     near: bool = False
+    span: int = 1
+    unless: Any = None
 
 
 _S36_SUBSTANCE = re.compile(
@@ -4839,6 +5928,63 @@ _S36_SUBSTANCE = re.compile(
     r"\b(?:another|a third|third|other)\b"
     r"|\bthird[- ]part(?:y|ies)\b",
     re.I)
+
+# P3.12 (batch 8 B): 6335 turn 7 asks how the administration moratorium works
+# under Schedule B1 to the Insolvency Act 1986, and its acceptance is that the
+# answer delivers paragraphs 42-44. The facts are the statutory words of those
+# paragraphs as LEX holds them, read live by batch 7 B (the cut text is in the
+# gitignored `evidence/seam/batch7/B/p312_truth.txt`; paragraph 44 checked
+# against legislation.gov.uk's own page): 42, no resolution and no order for
+# the company's winding up; 43, no step to enforce security, and no legal
+# process instituted or continued, except with the administrator's consent or
+# the court's permission; 44, the interim moratorium, which runs from an
+# administration application made or a notice of intention to appoint filed.
+_SCH_B1 = r"\bSch(?:edule|\.)?\s*B1\b"
+_PARA_SEP = r"\s*(?:,\s*(?:and|or)?|and|or|&)\s*"
+
+
+def _sch_b1_paragraph(num: int):
+    """A reference to paragraph `num` of a schedule: ``paragraph 43``,
+    ``para. 43(2)``, ``paras 42-44``, ``paragraphs 41, 42 and 43``, and LEX's
+    own rendering echoed back (``Section 43 of Schedule B1``)."""
+    n = str(num)
+    ranges = "|".join(f"{a}\\s*(?:-|–|—|to)\\s*{b}"
+                      for a in range(num - 4, num + 1) for b in range(num, num + 5) if a < b)
+    return re.compile(
+        r"\bpara(?:graph)?s?\.?\s*(?:" + ranges + r")(?!\d)"
+        r"|\bpara(?:graph)?s?\.?\s*" + n + r"(?![\d/])"
+        r"|\bpara(?:graph)?s\.?\s*(?:\d+[A-Z]?" + _PARA_SEP + r")+" + n + r"(?![\d/])"
+        r"|\bsections?\s*" + n + r"(?![\d/])(?=[^.\n]{0,30}?" + _SCH_B1 + r")"
+        r"|" + _SCH_B1 + r"[^.\n]{0,20}?\bs(?:ection|\.)\s*" + n + r"(?![\d/])",
+        re.I)
+
+
+# A citation inside a sentence saying the paragraph was NOT obtained.
+_P312_NOT_DELIVERED = re.compile(
+    r"\bnot (?:been |be )?(?:retrieved|returned|found|located|available|held)\b"
+    r"|\bwas(?:n['’]t| not) (?:fully )?retrieved\b|\bcould not\b|\bunable to\b"
+    r"|\bno results\b|\bcut short\b|\bdid not (?:return|retrieve)\b",
+    re.I)
+# Batch 13 B: "wind up" as well as "winding up" ("an order to wind up a
+# company"; batch 12 A's hand-read of a draw this read as coarse).
+_P312_WINDING_UP = re.compile(
+    r"\b(?:resolution|order)s?\b[^.\n]{0,80}?\bwind(?:ing)?[- ]?up\b"
+    r"|\bwind(?:ing)?[- ]?up\b[^.\n]{0,60}?\b(?:resolution|order)s?\b", re.I)
+_P312_SECURITY = re.compile(
+    r"\benforc\w*\b[^.\n]{0,40}?\bsecurit(?:y|ies)\b"
+    r"|\bsecurit(?:y|ies)\b[^.\n]{0,40}?\benforc\w*", re.I)
+_P312_LEGAL_PROCESS = re.compile(r"\blegal (?:process|proceedings)\b", re.I)
+_P312_CONSENT = re.compile(
+    r"\bconsent\b[^.\n]{0,40}?\badministrator\b"
+    r"|\badministrator(?:['’]s)?\b[^.\n]{0,20}?\bconsent"
+    r"|\b(?:permission|leave)\b[^.\n]{0,20}?\bcourt\b"
+    r"|\bcourt(?:['’]s)?\b[^.\n]{0,20}?\b(?:permission|leave)\b", re.I)
+_P312_INTERIM_TRIGGER = re.compile(
+    r"\b(?:administration )?application\b[^.\n]{0,80}?"
+    r"\b(?:made|filed|lodged|presented|pending|submitted)\b"
+    r"|\b(?:made|filed|lodged|presented|pending)\b[^.\n]{0,40}?"
+    r"\b(?:administration )?application\b"
+    r"|\bnotice of (?:an )?intention to appoint\b", re.I)
 
 DEPTH_TRUTH = {
     "6396": {
@@ -4916,6 +6062,46 @@ DEPTH_TRUTH = {
             ),
         ),
     },
+    # P3.12. Turn 7 is the export's turn 7: the unscripted session runs every
+    # export turn in order, so run turn and export turn are the same (checked
+    # over every stored 6335 run file). The Schedule named on its own is the
+    # coarse citation. Each paragraph needs its own facts in the sentence that
+    # cites it or the `span` lines after it, and a citation in a sentence
+    # saying it was not retrieved does not count.
+    "6335": {
+        "turns": (7,),
+        "acts": {
+            "ukpga/1986/45": re.compile(
+                r"Insolvency Act 1986|\bIA 1986\b|\b1986 Act\b|\bukpga/1986/45\b|" + _SCH_B1,
+                re.I),
+        },
+        "reqs": (
+            DepthReq(
+                label="Sch B1 para 42: no winding-up resolution or order",
+                act="ukpga/1986/45",
+                deep=_sch_b1_paragraph(42),
+                coarse=re.compile(_SCH_B1, re.I),
+                facts=(_P312_WINDING_UP,),
+                near=True, span=2, unless=_P312_NOT_DELIVERED,
+            ),
+            DepthReq(
+                label="Sch B1 para 43: security and legal process, consent or permission",
+                act="ukpga/1986/45",
+                deep=_sch_b1_paragraph(43),
+                coarse=re.compile(_SCH_B1, re.I),
+                facts=(_P312_SECURITY, _P312_LEGAL_PROCESS, _P312_CONSENT),
+                near=True, span=4, unless=_P312_NOT_DELIVERED,
+            ),
+            DepthReq(
+                label="Sch B1 para 44: the interim moratorium and when it runs",
+                act="ukpga/1986/45",
+                deep=_sch_b1_paragraph(44),
+                coarse=re.compile(_SCH_B1, re.I),
+                facts=(_P312_INTERIM_TRIGGER,),
+                near=True, span=2, unless=_P312_NOT_DELIVERED,
+            ),
+        ),
+    },
 }
 
 
@@ -4949,15 +6135,21 @@ def _attribute_instrument(text: str, pos: int, acts: dict) -> Optional[str]:
     return last[1] if last else None
 
 
-def _sentence_window(text: str, pos: int) -> str:
-    """The sentence (or list line) holding `pos`, plus the one after it."""
+def _sentence_window(text: str, pos: int, span: int = 1) -> str:
+    """The sentence (or list line) holding `pos`, plus the `span` after it."""
     masked = _ABBREV.sub(lambda m: m.group(0).replace(".", _DOT), text)
     bounds = [0] + [m.end() for m in re.finditer(r"(?<=[.!?])\s+|\n+", masked)]
     bounds.append(len(text))
     for i in range(len(bounds) - 1):
         if bounds[i] <= pos < bounds[i + 1]:
-            return text[bounds[i]:bounds[min(i + 2, len(bounds) - 1)]]
+            return text[bounds[i]:bounds[min(i + 1 + span, len(bounds) - 1)]]
     return text[max(0, pos - 200):pos + 200]
+
+
+def _depth_disqualified(text: str, m, req: DepthReq) -> bool:
+    """A deep match whose own sentence carries `req.unless` (batch 8 B)."""
+    return bool(req.unless is not None
+                and req.unless.search(_sentence_window(text, m.start(), 0)))
 
 
 def _grade_depth_req(text: str, req: DepthReq, acts: dict) -> tuple:
@@ -4973,8 +6165,10 @@ def _grade_depth_req(text: str, req: DepthReq, acts: dict) -> tuple:
 
     deep = owned(req.deep)
     for m in deep:
+        if _depth_disqualified(text, m, req):
+            continue
         if req.near:
-            window = _sentence_window(text, m.start())
+            window = _sentence_window(text, m.start(), req.span)
             if all(f.search(window) for f in req.facts):
                 return "deep", m, window
         elif all(f.search(text) for f in req.facts):
@@ -5006,7 +6200,9 @@ def depth_counts(text: str, req: DepthReq, acts: dict) -> tuple:
     spans = [(m.start(), m.end()) for m in deep]
     coarse = [m for m in owned(req.coarse)
               if not any(s <= m.start() < e for s, e in spans)]
-    return len(deep), len(deep) + len(coarse)
+    # A disqualified deep match (`unless`) is a reference, not one at depth.
+    at_depth = [m for m in deep if not _depth_disqualified(text, m, req)]
+    return len(at_depth), len(deep) + len(coarse)
 
 
 def depth_verdict(session_id: str, answer: str) -> tuple:
@@ -6529,9 +7725,15 @@ def _lookup_routing(dirs: list, live: bool) -> int:
     """How far P3.7's routing reaches: over every Worker brief stored in `dirs`,
     the instruments the product's own parser would look up before round 1.
     Prints ids only, never brief text. `--live` also looks each distinct id up
-    against LEX (two small calls each, no model) and tallies the statuses."""
+    against LEX (two small calls each, no model) and tallies the statuses.
+
+    Each brief is read through `step_handover.without_handover_line`, as
+    `routed_lookup_block` reads it (P3.10, batch 12 D): the line naming the
+    earlier steps' instruments is not routed, so counting its ids would
+    overstate P3.7's reach on every run after P3.10."""
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from src.utils.instrument_lookup import extract_instrument_citations
+    from src.utils.step_handover import without_handover_line
 
     briefs = routed = 0
     per_session, ids = Counter(), Counter()
@@ -6542,7 +7744,8 @@ def _lookup_routing(dirs: list, live: bool) -> int:
             for t in doc.get("turns") or []:
                 for dg in (t.get("audit") or {}).get("delegations") or []:
                     briefs += 1
-                    refs = extract_instrument_citations(dg.get("brief") or "")
+                    refs = extract_instrument_citations(
+                        without_handover_line(dg.get("brief") or ""))
                     if refs:
                         routed += 1
                         per_session[base] += 1
@@ -7135,6 +8338,20 @@ STANCE_RETRACTION = re.compile(
 STANCE_CONDITIONAL = re.compile(r"^[\s>\-\d.)]*(?:if|unless|were|had|whether)\b", re.I)
 _STANCE_SENT = re.compile(r"(?<=[.!?])\s+|\n+")
 DEFAULT_RUBRIC = EVIDENCE_ROOT / "rubrics" / "p32.json"
+# Batch 4 (agent A): an affirm pattern matched under a negation asserts
+# nothing ("X is not defined as a [category]" matched "as a [category]"). The
+# negation must sit in the same clause, at most two words before the match;
+# "not only/just/merely/simply" is not a negation. A denial is the rubric's
+# `deny` list to state; this only stops a negated sentence reading as affirm.
+_STANCE_NEG = re.compile(
+    r"(?:\bnot\b(?!\s+(?:only|just|merely|simply)\b)|\bnever\b|\bcannot\b|n[’']t\b)"
+    r"(?:\s+[\w’'-]+){0,2}\s*$", re.I)
+_STANCE_CLAUSE = re.compile(r"[,;:()—–]")
+
+
+def _negated_at(sentence: str, pos: int) -> bool:
+    """A negation closes the clause that runs up to `pos`."""
+    return bool(_STANCE_NEG.search(_STANCE_CLAUSE.split(sentence[:pos])[-1]))
 
 
 def _provision_labels(text: str) -> set:
@@ -7161,7 +8378,7 @@ def stance_of(answer: str, rubric: dict) -> tuple:
             continue
         if any(r.search(s) for r in den):
             d_s.append(s.strip())
-        elif any(r.search(s) for r in aff):
+        elif any(not _negated_at(s, m.start()) for r in aff for m in r.finditer(s)):
             a_s.append(s.strip())
     stance = ("both" if a_s and d_s else "affirm" if a_s else "deny" if d_s else "none")
     return stance, a_s, d_s
@@ -7318,8 +8535,20 @@ INTERP_HEDGE = re.compile(
     # Batch 1 (agent B): "Under this reading, X" hedges X as "On this
     # reading" does; the lexicon had only the "on" form.
     r"|\bunder\s+(?:the|that|this|one|a)\s+reading\b"
+    # Batch 2 (agent A): "On your reading, X" gives X as the lawyer's
+    # reading, not the text's; one sentence in the whole corpus says it.
+    r"|\b(?:on|under)\s+your\s+(?:reading|interpretation|construction)\b"
+    # Batch 5 (agent D): a numbered or contrasted reading in a list of
+    # readings, "On a third reading, X", hedges X as "On another reading"
+    # does. ("On the alternative reading" was already a hedge, above.)
+    r"|\b(?:on|under)\s+(?:a|the|one)\s+(?:first|second|third|fourth|fifth|"
+    r"further|other|opposite|contrary|opposing|rival)\s+(?:reading|view|"
+    r"interpretation|construction)\b"
     r"|\bnot\s+(?:been\s+)?(?:verified|checked|confirmed)\b"
-    r"|\b(?:suggests?|implies|appears?\s+to|seems?\s+to)\b",
+    # Batch 4 (agent A): "As you suggest, X" agrees with the lawyer and
+    # states X firmly; the lawyer suggesting is not the text suggesting.
+    # "On the reading you suggest" stays a hedge through its "reading" form.
+    r"|\b(?:(?<!\byou\s)suggests?|implies|appears?\s+to|seems?\s+to)\b",
     re.I)
 # A hedge on a statement of what a provision SAYS. Narrower than
 # INTERP_HEDGE on purpose: "s.12 does not expressly state X" is a plain
@@ -7647,6 +8876,2137 @@ def cmd_hedges(args) -> int:
     return 0
 
 
+# --- P4.17 (B5): the section-search scope line --------------------------------
+#
+# `search_scope.section_scope_footer`: a turn that searched within instruments
+# (`search_legislation_sections`) and ran no `search_legislation` gets a scope
+# line naming those searches. Identified by its fixed opening words, which no
+# other line uses (P3.7's in-turn lookup line opens "for this reply," with a
+# comma; the standalone case-law line opens "for this reply the case-law").
+# `nosearch` cannot see this turn by construction (a section search counts as
+# searching there), so this is its own grader line.
+SECTION_SCOPE = "*Search scope: for this reply the text of"
+
+
+def sectionscope_rows(doc: dict) -> list:
+    """Every answered turn in one run: what ran, and whether the line is there.
+
+    `shape` is the line's gate, read from the audit: at least one section
+    search ran (a budget-refused call did not) and no `search_legislation`
+    ran. `line` is whether the answer carries the section line anywhere.
+    """
+    rows = []
+    for t in doc.get("turns", []):
+        answer = t.get("answer") or ""
+        if not answer.strip():
+            continue
+        audit = t.get("audit") or {}
+        ran = Counter(x.get("name") for dg in (audit.get("delegations") or [])
+                      for x in (dg.get("tools") or []) if _ran(x))
+        sections = ran.get("search_legislation_sections", 0)
+        ranked = ran.get("search_legislation", 0)
+        rows.append({
+            "turn": t.get("turn"),
+            "sections": sections,
+            "ranked": ranked,
+            "lookups": ran.get("lookup_legislation", 0),
+            "shape": bool(sections) and not ranked,
+            "line": SECTION_SCOPE in answer,
+            "mode": t.get("research_mode") or audit.get("research_mode") or "",
+        })
+    return rows
+
+
+def sectionscope_verdict(row: dict) -> Optional[str]:
+    """P4.17's grader line for one answered turn. None means nothing wrong.
+
+    "MISATTRIBUTED" — the line is on a turn that ran `search_legislation`, or
+                      ran no section search: it describes searches the turn
+                      did not run (or that the fresh footer already states).
+    "MISSING"       — the turn has the shape and the lawyer saw no section line.
+    """
+    if row["line"] and (row["ranked"] or not row["sections"]):
+        return "MISATTRIBUTED"
+    if row["shape"] and not row["line"]:
+        return "MISSING"
+    return None
+
+
+def cmd_sectionscope(args) -> int:
+    """P4.17 acceptance, live item: every turn of the shape carries the
+    section line and no other turn does. **Exits 1 on a finding.** Every
+    directory recorded before P4.17 reports each of its shape turns MISSING,
+    which is the before-column, not a regression."""
+    docs = load_runs(Path(args.dir))
+    if not docs:
+        print(f"No run files in {args.dir}")
+        return 1
+    print(f"P4.17 section-search scope line over {args.dir}")
+    print("  shape = a section search ran and no search_legislation ran")
+    print("  line  = the answer carries the section line")
+    print()
+    answered = shape = carrying = 0
+    bad, listed = [], []
+    for doc in sorted(docs, key=lambda d: (d["session_id"], d.get("rep", 1))):
+        for row in sectionscope_rows(doc):
+            answered += 1
+            shape += row["shape"]
+            carrying += row["line"]
+            verdict = sectionscope_verdict(row)
+            if verdict:
+                bad.append((doc, row, verdict))
+            if args.all or row["shape"] or row["line"] or verdict:
+                listed.append((doc, row, verdict))
+    if listed:
+        print(f"{'session':>8} {'rep':>3} {'turn':>4} {'sections':>8} {'ranked':>6} "
+              f"{'lookups':>7} {'line':>4}  {'mode':<26} verdict")
+        print("-" * 84)
+        for doc, row, verdict in listed:
+            print(f"{doc['session_id']:>8} {doc.get('rep', 1):>3} {row['turn']:>4} "
+                  f"{row['sections']:>8} {row['ranked']:>6} {row['lookups']:>7} "
+                  f"{('yes' if row['line'] else '-'):>4}  {row['mode']:<26} "
+                  f"{verdict or 'ok'}")
+        print()
+    mis = [b for b in bad if b[2] == "MISATTRIBUTED"]
+    miss = [b for b in bad if b[2] == "MISSING"]
+    print(f"answered turns                                 {answered}")
+    print(f"  of the shape                                 {shape}")
+    print(f"  carrying the section line                    {carrying}")
+    print(f"MISSING       shape turn without the line      {len(miss)}")
+    print(f"MISATTRIBUTED line on a turn not of the shape  {len(mis)}")
+    return 0 if not bad else 1
+
+
+# --- P3.27 / P3.12: what an answer says about a schedule or annex unit --------
+#
+# Batch 8 B. Two acceptances read the same thing, so one command grades both:
+#   * P3.27 (and P3.12's criterion (v)): on a turn about a schedule or annex
+#     unit that LEX HOLDS, the answer must not call it "not held", "not
+#     retrievable" or "not in the text" (batch 7 B: 14 of 23 need turns did, and
+#     LEX held the unit in all 14).
+#   * P3.27's Invariant 1 guard: on 6374's turns about its Order's Schedule,
+#     which LEX does NOT hold (no schedule provision on `/section/lookup`, and
+#     `include_schedules` adds nothing), the answer still says the index holds
+#     no text for it, and no longer blames a search or step limit or offers to
+#     fetch it (batch 7 B: 5 of 14 answers blamed a limit).
+# Which units a session is about, and whether LEX holds each, are a matter's
+# facts, so they live in a gitignored rubric (`evidence/rubrics/p327.json`,
+# written by batch 8 B); this code is generic. Per unit: `label`, `held`
+# (true/false), `mention` (a pattern for a sentence about the unit, compiled
+# case-insensitively; use `(?-i:...)` for a case-sensitive part), optional
+# `turns` (export turns to grade; default every turn that mentions it).
+#
+# Classified per CLAUSE, not per sentence, because a sentence can say one thing
+# about the unit and another about the run: "the database lacked the Schedule
+# ...; furthermore step 2 was halted by a system limit" states the index for
+# the Schedule and blames the limit for something else. The classes, in order:
+#   OFFER  the answer implies the unit can be fetched ("would you like me to
+#          pull ...", "would require a deeper look");
+#   LIMIT  its absence put down to a search or step limit, or to the search
+#          being short ("cut short", "did not complete", "initial search");
+#   INDEX  a negative attributed to the index ("not held in this index",
+#          "missing from the database", "the index holds no ...");
+#   TEXT   a negative about the text retrieved ("the retrieved text does not
+#          contain the Annexes");
+#   NEG    a negative with no attribution ("could not be retrieved", "was not
+#          returned").
+# Negatives are `NEG_ASSERTED` (P2.2's) plus `SCHED_NEG_EXTRA`: NEG_ASSERTED
+# alone misses "not held in THIS index", "missing from", "lacked", "not in the
+# text" and "was not returned", each in a stored answer; NEG_ASSERTED's "no
+# <noun>" alternative is not used alone (a reading of the law). Index
+# attribution is `SCHED_INDEX_NEG` (the index as the negative's subject:
+# "lacked", "missing from the database", "holds no", "no schedules ... in this
+# index"), or a negative beside `NEG_BLAMED_INDEX` / `SCHED_INDEX_EXTRA` ("from
+# the database"). Verdicts:
+#   held unit:     FAIL on INDEX, TEXT or NEG (it is held, so each is false);
+#                  LIMIT is reported, not failed (true of the run: batch 7 B's
+#                  NEG_BUDGET), OFFER is fine (it can be fetched);
+#   not-held unit: FAIL on LIMIT or OFFER; PASS on INDEX; TEXT, NEG or a
+#                  mention with no statement (SILENT) are reported, not failed,
+#                  and read by hand.
+DEFAULT_P327_RUBRIC = EVIDENCE_ROOT / "rubrics" / "p327.json"
+_SCHED_URL = re.compile(r"\]\([^)\s]*\)")
+_SCHED_CLAUSE = re.compile(
+    r";|\s+[—–]\s+|,\s*(?=(?:and|but|while|whereas|so|meaning|though|although|"
+    r"consequently|however|furthermore|moreover)\b)", re.I)
+_SCHED_ANAPHOR = re.compile(r"\b(?:its|it|this|that|which|their|them)\b", re.I)
+# Research negatives only. A bare "does not contain" is NOT here: "Chapter 2 of
+# Annex 9 does not contain any provision for widget oil" is a reading
+# of the law (and the right one on P3.2's control turn), so a containment
+# negative counts only with the text or the index as its subject.
+SCHED_NEG_EXTRA = re.compile(
+    r"\bnot (?:currently )?held\b|\bmissing from\b"
+    r"|\bnot (?:fully )?retrieved\b|\bwas(?:n['’]t| not) (?:fully )?"
+    r"(?:retrieved|returned|included)\b|\bnot (?:be )?retrievable\b"
+    r"|\bunable to (?:retrieve|access|obtain)\b"
+    r"|\bcannot be (?:retrieved|accessed)\b"
+    r"|\bnot (?:included|contained|present|available) in (?:the|this|our|its)\b"
+    r"|\btext\b[^.\n]{0,40}?\b(?:does|did) not (?:contain|include)\b"
+    r"|\bdid not return\b|\bnot (?:been )?returned\b|\bdid not complete\b"
+    r"|\bunavailable (?:in|from)\b", re.I)
+SCHED_LIMIT = re.compile(
+    r"\bcut short\b|\b(?:system|step|search|research|tool[- ]call|internal|round)s?\b"
+    r"[^.\n]{0,25}?"
+    r"\blimits?\b|\blimits? on (?:search|tool|step)|\blimit (?:was|had been) reached\b"
+    r"|\bdid not complete\b|\bhalted\b|\b(?:not|n['’]t) fully retrieved\b"
+    r"|\b(?:initial|quick) search\b|\btimed out\b", re.I)
+SCHED_OFFER = re.compile(
+    r"\bwould you like me to\b|\bI can (?:retrieve|pull|fetch|look)\b"
+    r"|\bshall I (?:retrieve|pull|fetch)\b|\bswitch(?:ing)? to \**Research mode\b"
+    r"|\bmore comprehensive search\b|\bdeeper (?:look|search)\b", re.I)
+# A negative whose subject is the index: a negative on its own (INDEX).
+# The last four alternatives (batch 8 B2) read P3.12's true-negative lines and
+# their echoes, whose index clause is split from the unit clause at ", and" or
+# ", so": "the index holds 3 provisions for X, and none of them is a schedule
+# or an annex: Schedule 2 is not one of them" and "the index holds X without
+# its provision text, so it holds none for Schedule 2 either". "is not one of
+# them" counts only with the unit as its subject (an anaphor clause such as
+# "theft is not one of them" after "the Schedule lists offences" does not),
+# and never "was not among them": that is P3.12's OPEN line ("code fetched
+# only the first N provisions ... and Schedule 2 was not among them"), which
+# says nothing about what the index holds.
+SCHED_INDEX_NEG = re.compile(
+    r"\b(?:database|index|corpus|collection)\b[^.\n]{0,60}?\b(?:lack(?:s|ed)?|"
+    r"did not (?:hold|contain|include|have)|does not (?:have|hold|contain|include)"
+    r"|holds? no(?:ne)?|has no)\b"
+    r"|\bno (?:text|schedules?|annex(?:es)?)\b[^.\n]{0,60}?\b(?:index|database)\b"
+    r"|\bmissing from (?:the |this |our )?(?:retrieved |available |legislation )?"
+    r"(?:database|index)\b"
+    r"|\bnone of (?:them|these|those|which|its provisions|the provisions)\b"
+    r"[^.\n]{0,15}?\b(?:is|are)\b (?:an? )?(?:schedules?|annex(?:es)?)\b"
+    r"|\b(?:schedule|annex)(?: [A-Z0-9][\w.]{0,7})? is not one of them\b"
+    r"|\bholds? none for\b"
+    r"|\b(?:database|index|corpus|collection)\b[^.\n]{0,60}?\bwithout (?:its|the|any) "
+    r"(?:[\w-]+ ){0,3}?text\b", re.I)
+# An index named beside a negative: attributes it (INDEX).
+SCHED_INDEX_EXTRA = re.compile(
+    r"\b(?:from|in|by) (?:the|this|our) (?:retrieved |available |legislation )?"
+    r"(?:database|index)\b", re.I)
+SCHED_TEXT = re.compile(
+    r"\b(?:retrieved|returned|full|whole|available) text\b|\btext (?:retrieved|returned)\b"
+    r"|\bin the text\b", re.I)
+
+
+# NEG_ASSERTED's "no <noun>" alternative reads "contains no provision for X"
+# as a research negative; about a schedule's contents that is a reading of the
+# law. Such a match counts only for a search noun or with a found-type verb.
+_SCHED_LEGAL_NO = re.compile(r"no\b", re.I)
+_SCHED_SEARCH_NO = re.compile(
+    r"\b(?:results?|matches?|records?|found|located|retrieved|identified|returned|"
+    r"surfaced|available)\b", re.I)
+
+
+# "I cannot verify/confirm X" is a research negative only beside the index or
+# the text ("Because the index is incomplete, I cannot verify ..."); on its own
+# it is as often a refusal to answer from memory (`wave4_b4_post` r3 export 8).
+_SCHED_VERIFY = re.compile(r"\b(?:cannot|could not|can ?not|unable to) (?:verify|confirm)\b", re.I)
+
+
+def _sched_research_negative(clause: str) -> bool:
+    if SCHED_NEG_EXTRA.search(clause):
+        return True
+    if _SCHED_VERIFY.search(clause) and (
+            NEG_BLAMED_INDEX.search(clause) or SCHED_INDEX_EXTRA.search(clause)
+            or SCHED_TEXT.search(clause)):
+        return True
+    for m in NEG_ASSERTED.finditer(clause):
+        if not _SCHED_LEGAL_NO.match(m.group(0)) or _SCHED_SEARCH_NO.search(m.group(0)):
+            return True
+    return False
+
+
+def sched_clause_class(clause: str) -> str:
+    """OFFER / LIMIT / INDEX / TEXT / NEG, or '' for a clause stating no
+    negative about its subject. See the block comment above."""
+    if SCHED_OFFER.search(clause):
+        return "OFFER"
+    if SCHED_LIMIT.search(clause):
+        return "LIMIT"
+    if SCHED_INDEX_NEG.search(clause):
+        return "INDEX"
+    if not _sched_research_negative(clause):
+        return ""
+    if NEG_BLAMED_INDEX.search(clause) or SCHED_INDEX_EXTRA.search(clause):
+        return "INDEX"
+    if SCHED_TEXT.search(clause):
+        return "TEXT"
+    return "NEG"
+
+
+def sched_unit_clauses(prose: str, mention) -> list:
+    """[(class, clause, sentence)] for every clause of `prose` about the unit:
+    a clause matching `mention`, or a clause with an anaphor ("its text") in a
+    sentence where an earlier clause matched it. Link URLs are removed first,
+    so a `/schedule/8` path is not a mention."""
+    out = []
+    for s in _sentences(_SCHED_URL.sub("]", prose or "")):
+        seen = False
+        for c in _SCHED_CLAUSE.split(s):
+            if mention.search(c):
+                seen = True
+            elif not (seen and _SCHED_ANAPHOR.search(c)):
+                continue
+            out.append((sched_clause_class(c), c.strip(), s))
+    return out
+
+
+def sched_verdict(held: bool, classes: set, mentioned: bool) -> tuple:
+    """(verdict, reason) for one unit on one turn."""
+    if held:
+        bad = classes & {"INDEX", "TEXT", "NEG"}
+        if bad:
+            return "FAIL", "a held unit called " + "/".join(
+                {"INDEX": "not held", "TEXT": "not in the text",
+                 "NEG": "not retrievable"}[k] for k in sorted(bad))
+        if "LIMIT" in classes:
+            return "LIMIT", "not obtained, put down to a limit (true of the run)"
+        return ("OK", "") if mentioned else ("SILENT", "not mentioned")
+    if classes & {"LIMIT", "OFFER"}:
+        return "FAIL", ("blames a search limit" if "LIMIT" in classes
+                        else "implies it can be fetched")
+    if "INDEX" in classes:
+        return "PASS", "says the index holds no text for it"
+    if classes & {"TEXT", "NEG"}:
+        return "UNATTRIBUTED", "a negative not attributed to the index"
+    return "SILENT", ("mentioned, no statement about what is held" if mentioned
+                      else "not mentioned")
+
+
+def sched_rows(doc: dict, rubric: dict) -> list:
+    """One row per (turn, unit) the run file has to say something about."""
+    script = doc.get("script") or {}
+    base = str(script.get("base") or doc.get("session_id"))
+    entry = rubric.get(base)
+    if not entry:
+        return []
+    src = [t.get("from_turn") for t in (script.get("turns") or [])]
+    rows = []
+    for i, t in enumerate(doc.get("turns") or [], 1):
+        n = t.get("turn") or i
+        exp = src[n - 1] if src and n <= len(src) else n
+        prose = _without_footer(t.get("answer") or "")
+        for unit in entry.get("units") or []:
+            if unit.get("turns") and exp not in unit["turns"]:
+                continue
+            mrx = re.compile(unit["mention"], re.I)
+            clauses = sched_unit_clauses(prose, mrx)
+            asked = bool(mrx.search(t.get("question") or "")) or bool(unit.get("turns"))
+            if not clauses and not asked:
+                continue
+            classes = {k for k, _, _ in clauses if k}
+            verdict, why = sched_verdict(bool(unit.get("held")), classes, bool(clauses))
+            if not (t.get("answer") or "").strip():
+                verdict, why = "NO ANSWER", ""
+            rows.append({"session": base, "run": str(doc.get("session_id")),
+                         "rep": doc.get("rep", 1), "turn": n, "export_turn": exp,
+                         "chat_mode": t.get("chat_mode") or "?", "unit": unit["label"],
+                         "held": bool(unit.get("held")), "classes": classes,
+                         "clauses": clauses, "verdict": verdict, "why": why})
+    return rows
+
+
+def cmd_schedules(args) -> int:
+    """P3.27 acceptance and its Invariant 1 guard (P3.12's criterion (v) too):
+    what each answer says about a schedule or annex unit, held or not. Prints
+    every clause it classified (they quote a matter: keep the output out of
+    the repo) and, with --drops, every clause about a unit that carries no
+    statement. Exits 1 if any graded slot FAILS."""
+    rpath = Path(args.rubric)
+    try:
+        rubric = json.loads(rpath.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"  rubric not read ({rpath}): {e}")
+        return 2
+    dirs = [Path(args.dir)] + [Path(d) for d in (args.also or [])]
+    if getattr(args, "all_dirs", False):
+        dirs = sorted(p for p in Path(args.dir).parent.iterdir() if p.is_dir())
+    print(f"P3.27 schedules and annexes: what the answer says about a unit; rubric {rpath.name}")
+    print("  held unit:     FAIL = called not held / not in the text / not retrievable;"
+          " LIMIT reported")
+    print("  not-held unit: FAIL = blames a limit or offers to fetch it; PASS = says the"
+          " index holds no text for it")
+    rows = []
+    for d in dirs:
+        for doc in load_runs(d):
+            if args.session and not ({str(doc.get("session_id")),
+                                      str((doc.get("script") or {}).get("base"))}
+                                     & set(args.session)):
+                continue
+            for r in sched_rows(doc, rubric):
+                r["dir"] = d.name
+                rows.append(r)
+    tally: dict = {}
+    for r in rows:
+        print(f"\n  {r['dir']} {r['run']} r{r['rep']} t{r['turn']} (export {r['export_turn']}) "
+              f"{r['chat_mode']}  [{r['unit']}, {'held' if r['held'] else 'NOT held'}]  "
+              f"{r['verdict']}{(': ' + r['why']) if r['why'] else ''}")
+        for k, c, _s in r["clauses"]:
+            if k or args.drops:
+                print(f"      {k or '-':<6} {c[:args.chars]}")
+        key = (r["session"], r["unit"], r["held"])
+        tally.setdefault(key, Counter())[r["verdict"]] += 1
+    print("\n  per unit:")
+    for (sid, unit, held), c in sorted(tally.items()):
+        print(f"    {sid} [{unit}] {'held' if held else 'NOT held'}: "
+              + ", ".join(f"{k} {v}" for k, v in sorted(c.items())))
+    fails = [r for r in rows if r["verdict"] == "FAIL"]
+    print(f"\n  graded slots: {len(rows)}, failing: {len(fails)}")
+    return 1 if fails else 0
+
+
+def _export_turns(doc: dict) -> list:
+    """[(run turn, export turn, turn)] for a run file; a scripted run maps each
+    of its turns back to the export turn it was taken from (`from_turn`)."""
+    src = [t.get("from_turn") for t in ((doc.get("script") or {}).get("turns") or [])]
+    out = []
+    for i, t in enumerate(doc.get("turns") or [], 1):
+        n = t.get("turn") or i
+        out.append((n, src[n - 1] if src and n <= len(src) else n, t))
+    return out
+
+
+def _run_base(doc: dict) -> str:
+    """The export session a run file replays (a script's `base`)."""
+    return str((doc.get("script") or {}).get("base") or doc.get("session_id"))
+
+
+def _grading_dirs(args) -> list:
+    """--dir, plus --also, or every directory beside --dir with --all-dirs."""
+    if getattr(args, "all_dirs", False):
+        return sorted(p for p in Path(args.dir).parent.iterdir() if p.is_dir())
+    return [Path(args.dir)] + [Path(d) for d in (getattr(args, "also", None) or [])]
+
+
+# --- P3.22: the authorities 6363 and 6359 need, retrieved and cited ------------
+#
+# Batch 9 E. Grades batch 8 C's bar (adopted by the user, 2026-10-06) per run,
+# from a gitignored rubric (`evidence/rubrics/p322.json`): case names are a
+# matter's facts, so this code is generic. Per base session, `authorities`, each
+# with `label`; an in-corpus judgment carries `ncn` and/or `url`, matched by
+# neutral citation and by Find Case Law URL MERGED into one key ("2022 uksc 18"),
+# so a judgment written either way is one judgment. Optional: `in_corpus`
+# (default true), `lead` (bar item 2), `carrier` with `need_turns` (item 4),
+# `mention` (a name pattern: how an answer names an out-of-corpus authority, or
+# an in-corpus one cited by name alone, which is printed as a drop).
+#
+# The bar's four items, per run:
+#   1. each in-corpus authority RETRIEVED (returned by a `search_case_law`
+#      call in the run) or not, and CITED (its key in an answer) or not,
+#      counted per session across runs; with --before, FAIL where it is
+#      retrieved in fewer runs after than before (a rate where the run counts
+#      differ);
+#   2. the `lead` authority retrieved in how many runs (FAIL with --before
+#      where fewer);
+#   3. an answer naming an out-of-corpus authority does so second-hand or
+#      says the judgment is not in the database (Invariant 1). Each sentence
+#      naming one is LINKED (a Find Case Law link labelled with its name: the
+#      corpus does not hold it, so the link is another judgment's or made up),
+#      NOT_HELD, SECOND_HAND (a citing word AND the judgment it came through:
+#      a citation, a rubric authority, or "the retrieved judgments") or
+#      UNQUALIFIED. FAIL on LINKED or UNQUALIFIED;
+#   4. the `carrier` retrieved at or before the last of its `need_turns`, in
+#      every run that answered any of them.
+# "Retrieved" is the search's result list, not a read: `get_case_law_text`
+# reads are printed beside it.
+DEFAULT_P322_RUBRIC = EVIDENCE_ROOT / "rubrics" / "p322.json"
+# A neutral citation: "[1901] UKSC 3", "[1901] EWCA Civ 4", "[1901] UKUT 5
+# (TCC)". Only the Court of Appeal puts its division before the number; the
+# High Court and the tribunals put it in a bracket after. The court is one of
+# the neutral-citation courts, so a law report ("[1901] AC 52", "[1901] IRLR
+# 8") is not read as a judgment key: it names no Find Case Law document, and
+# an out-of-corpus authority's own report must not count as the judgment it
+# came through (found on the stored 6359 answers).
+_CL_COURTS = (r"UKSC|UKHL|UKPC|EWCA|EWHC|EWCOP|EWFC|EWCC|EWCR|UKUT|UKFTT|UKEAT|EAT|UKAIT"
+              r"|CSOH|CSIH|HCJAC|SAC|NICA|NIQB|NICH|NIFam|UKIPTrib|UKSIAC")
+_CL_NCN_RX = re.compile(
+    r"\[(?P<y>(?:19|20)\d{2})\]\s*(?P<court>" + _CL_COURTS + r")\s+(?:(?P<div>Civ|Crim)\s+)?"
+    r"(?P<num>\d{1,5})\b(?:\s*\((?P<sub>[A-Za-z]{2,8})\))?")
+# A Find Case Law URL, with or without `/id/`: court[/division]/year/number.
+_CL_URL_RX = re.compile(
+    r"caselaw\.nationalarchives\.gov\.uk/(?:id/)?(?P<court>[a-z]{2,8})/"
+    r"(?:(?P<sub>[a-z]{2,8})/)?(?P<y>(?:19|20)\d{2})/(?P<num>\d{1,5})\b", re.I)
+
+
+def _cl_key(m, sub: str) -> str:
+    return "%s %s%s %d" % (m.group("y"), m.group("court").lower(),
+                           (" " + sub.lower()) if sub else "", int(m.group("num")))
+
+
+def cl_keys(text: str) -> list:
+    """[(key, how, matched text)] for every neutral citation and Find Case Law
+    URL in `text`. One judgment written both ways gives the same key twice."""
+    out = []
+    for m in _CL_NCN_RX.finditer(text or ""):
+        out.append((_cl_key(m, m.group("div") or m.group("sub") or ""), "ncn", m.group(0)))
+    for m in _CL_URL_RX.finditer(text or ""):
+        out.append((_cl_key(m, m.group("sub") or ""), "url", m.group(0)))
+    return out
+
+
+# Two families of citing words. A CITING verb ("Gadget Ltd cites Widget Co",
+# "Widget Co (applied in Gadget Ltd ...)") makes a mention second-hand when the
+# judgment it came through is named nearby. A SOURCE phrase ("as set out in",
+# "according to", "derived from") names its OBJECT as the source, so it counts
+# only when that object is the judgment it came through, never the
+# out-of-corpus authority itself: "As set out in Widget Co ..." presents Widget
+# Co as read (found on the stored 6359 answers, where the first draft passed it).
+_P322_SECOND = re.compile(
+    r"\b(?:cit(?:es|ed|ing)|referr(?:ed|ing)\s+to|refers?\s+to|referenc(?:ed|es|ing)"
+    r"|relie[ds]\s+(?:up)?on"
+    r"|relying\s+(?:up)?on|appl(?:ied|ies|ying)|follow(?:ed|s|ing)|approv(?:ed|es|ing)"
+    r"|endors(?:ed|es|ing)|adopt(?:ed|s|ing)|discuss(?:ed|es|ing)|consider(?:ed|s|ing)"
+    r"|summari[sz](?:ed|es|ing)|quot(?:ed|es|ing)|restat(?:ed|es|ing)|(?:re)?affirm(?:ed|s|ing)"
+    r"|distinguish(?:ed|es|ing)|second[- ]hand|indirectly)\b", re.I)
+_P322_SOURCE = re.compile(
+    r"\b(?:derived\s+from|drawn\s+from|according\s+to|as\s+(?:set\s+out|stated|explained"
+    r"|described|noted|recorded|summari[sz]ed|laid\s+down)\s+(?:in|by))\b", re.I)
+# The judgment a second-hand mention came through, named generically.
+_P322_VIA = re.compile(
+    r"\b(?:the|these|those|this|that|several|many|later|recent|retrieved|other)\s+"
+    r"(?:\w+\s+){0,2}?(?:judgments?|cases?|decisions?|authorit(?:y|ies))\b", re.I)
+_P322_NOT_HELD = re.compile(
+    r"\bnot\s+(?:currently\s+)?(?:held|indexed|available|included|present|contained|found"
+    r"|retrievable|accessible)\b"
+    r"|\b(?:could|can|was|were)\s*(?:not|n['’]t)\s+(?:be\s+)?(?:find|locate|retrieve|access"
+    r"|found|located|retrieved|accessed|returned)\b"
+    r"|\bunable\s+to\s+(?:find|locate|retrieve|access)\b"
+    r"|\bdid\s+not\s+(?:find|return|retrieve|surface)\b"
+    r"|\b(?:absent|missing)\s+from\b"
+    r"|\boutside\s+(?:the|this|our)\s+(?:database|index|corpus|collection|dataset)\b"
+    r"|\b(?:database|index|corpus|collection|dataset|national\s+archives|find\s+case\s+law)\b"
+    r"[^.\n]{0,80}?\b(?:does|did)\s*(?:not|n['’]t)\s+(?:hold|contain|include|have|cover)\b",
+    re.I)
+
+
+# A Markdown link whose label may hold ONE nested bracket pair: a citation
+# inside the label ("[*Widget Co v Example Ltd* [1901] AC 9](https://...)").
+# The shared `MD_LINK` stops at the first "]", so such a link was never seen
+# and fell through to the citing-word test (batch 10 B found it; batch 10 E).
+# Local to `authorities`: the other graders keep `MD_LINK`.
+_P322_LINK = re.compile(
+    r"\[((?:[^\[\]]|\[[^\[\]]{0,60}\]){1,200})\]\((https?://[^)\s]+)\)")
+
+
+def p322_mention_class(sentence: str, mention, carriers=(), window: str = "") -> tuple:
+    """(class, reason) for one sentence naming an out-of-corpus authority.
+    `carriers` are compiled name patterns of the rubric's in-corpus authorities;
+    `window` is the two sentences before, where the judgment a citing word
+    points to is often named ("... Gadget Ltd ... The tribunal referenced the
+    principles established in Widget Co")."""
+    for label, url in _P322_LINK.findall(sentence):
+        if "caselaw.nationalarchives" in url.lower() and mention.search(label):
+            return "LINKED", "a Find Case Law link labelled with its name"
+    if _P322_NOT_HELD.search(sentence) or NEG_BLAMED_INDEX.search(sentence):
+        return "NOT_HELD", "says the judgment is not in the database or was not found"
+
+    def carrier(text):
+        if cl_keys(text):
+            return "a cited judgment"
+        if any(c.search(text) for c in carriers):
+            return "a rubric authority"
+        if _P322_VIA.search(text):
+            return "'the ... judgments'"
+        return ""
+
+    for m in _P322_SOURCE.finditer(sentence):
+        obj = sentence[m.end():m.end() + 90]
+        if mention.search(obj[:30]):
+            continue
+        c = carrier(obj)
+        if c:
+            return "SECOND_HAND", "a source phrase naming " + c
+    if _P322_SECOND.search(sentence):
+        for where, text in (("", sentence), (" (the sentences before)", window)):
+            c = carrier(text)
+            if c:
+                return "SECOND_HAND", "a citing word and " + c + where
+        return "UNQUALIFIED", "a citing word, but no judgment it came through"
+    if _P322_SOURCE.search(sentence):
+        return "UNQUALIFIED", "a source phrase naming the authority itself"
+    return "UNQUALIFIED", "named as if read"
+
+
+def p322_answer_verdict(classes: list, qualified_before: bool, bare=None) -> str:
+    """Item 3 for one answer naming an out-of-corpus authority, by the
+    FIRST-STATEMENT RULE (batch 13 E; batch 12 E's hand-read, the user's
+    decision): FAIL on a LINKED sentence anywhere; PASS where any sentence
+    says the judgment is not held (NOT_HELD), or where the FIRST sentence that
+    says something of the authority is SECOND_HAND (tied to the judgment it
+    came through); otherwise EARLIER where an earlier answer of the same run
+    passed (reported, not failed), else FAIL. A tie written only after the
+    authority's holding was first stated on its own terms does not save the
+    answer: a lawyer has already read the holding as read. `bare` marks each
+    sentence that only lists the authority (a reference-list entry, see
+    `p322_is_bare`), which is not a statement and is skipped; an answer that
+    only lists it is judged on its first listing. Until batch 13 the rule was
+    "PASS where ANY sentence is SECOND_HAND", which passed the holding-first
+    shape (3 of 25 answer-turns against the hand-read)."""
+    if "LINKED" in classes:
+        return "FAIL"
+    if "NOT_HELD" in classes:
+        return "PASS"
+    bare = list(bare) if bare is not None else [False] * len(classes)
+    stated = [c for c, b in zip(classes, bare) if not b] or classes[:1]
+    if stated and stated[0] == "SECOND_HAND":
+        return "PASS"
+    return "EARLIER" if qualified_before else "FAIL"
+
+
+# --- The back-reference and the bare listing (batch 13 E) ------------------------
+#
+# A sentence that names no authority but points back to one named in the
+# sentence before ("Gadget Ltd applied this principle to ...") speaks of it:
+# a demonstrative and a rule-word, with a citing word. It is classified like
+# any mention (SECOND_HAND where the judgment it came through is named), and
+# marked as a back-reference. Under the first-statement rule it can never be
+# the first statement (the authority is named before it), so it never turns a
+# FAIL into a PASS; it records the tie the hand-read saw.
+_P322_BACKREF = re.compile(
+    r"\b(?:this|that|these|those|the\s+same)\s+(?:[\w'’-]+\s+){0,2}?"
+    r"(?:principles?|tests?|approach(?:es)?|rules?|reasoning|doctrine|standard|guidance"
+    r"|framework|line\s+of\s+authority)\b", re.I)
+# A bare listing: once the authority's own name and any link target are
+# taken out, no lower-case word of four or more letters is left (nor a first
+# word of four or more outside the name): "*   *Widget v Gadget Sprocket*
+# [1899] AC 52 (HL)". Names, citations and court tags are capitalised; a
+# statement carries a lower-case word.
+_P322_BARE_STRIP = re.compile(r"\[([^\[\]]{0,200})\]\((?:https?://[^)\s]+)\)|https?://\S+")
+
+
+def p322_is_bare(sentence: str, auth: dict) -> bool:
+    """True when the sentence only lists the authority (see above)."""
+    s = _P322_BARE_STRIP.sub(lambda m: m.group(1) or " ", sentence or "")
+    spans = []
+    for rx in list(auth.get("full_rx") or []) + (
+            [auth["mention_rx"]] if auth.get("mention_rx") else []):
+        spans += [(m.start(), m.end()) for m in rx.finditer(s)]
+    if not spans:
+        return False
+    keep = []
+    for i, ch in enumerate(s):
+        keep.append(" " if any(a <= i < b for a, b in spans) else ch)
+    rest = "".join(keep)
+    words = re.findall(r"[A-Za-z][A-Za-z'’]*", rest)
+    if any(len(w) >= 4 and w[0].islower() for w in words):
+        return False
+    lead = re.match(r"[\s*_#>\-\d.)]*([A-Za-z][A-Za-z'’]*)", s)
+    if lead and not any(a <= lead.start(1) < b for a, b in spans) and len(lead.group(1)) >= 4:
+        return False
+    return True
+
+
+def _p322_auths(entry: dict) -> list:
+    out = []
+    for a in entry.get("authorities") or []:
+        keys = set()
+        if a.get("ncn"):
+            keys |= {k for k, _, _ in cl_keys(a["ncn"])}
+        if a.get("url"):
+            u = str(a["url"])
+            if "caselaw.nationalarchives" not in u:
+                u = "caselaw.nationalarchives.gov.uk/" + u.lstrip("/")
+            keys |= {k for k, _, _ in cl_keys(u)}
+        in_corpus = a.get("in_corpus", True) is not False
+        out.append(dict(a, keys=keys, in_corpus=in_corpus,
+                        mention_rx=re.compile(a["mention"], re.I) if a.get("mention") else None,
+                        full_rx=[] if in_corpus else _p322_full_forms(a)))
+    return out
+
+
+# --- An out-of-corpus authority is named by its full party names or its
+#     citation, never by one surname (batch 10 E) ---------------------------------
+#
+# Session 41's sweeps: the rubric's `mention` for one out-of-corpus authority
+# carried its first party's surname as an alternative, and three answers that
+# cited a DIFFERENT judgment sharing that surname (in the corpus, returned by
+# that turn's `search_case_law` and read) were graded as naming the
+# out-of-corpus authority as if read: three false item-3 FAILs. So a sentence
+# names an out-of-corpus authority when it carries a FULL form:
+#   F1  its law-report citation (`citations`, or the one in its label);
+#   F2  "A v B", a distinctive word of its first party (a closing bracket may
+#       follow it: "R (Widget) v ..."), then " v ", then the first
+#       distinctive word of its second party, each gap at most 40 characters
+#       with no bracket in it ("Widget v E. Sprocket & Co Ltd");
+#   F3  a party's first two distinctive words together ("Sprocket, Gear");
+#   F4  a `mention` match of two or more words (the rubric's own full forms).
+# The parties are `parties` ([A, B]) or, where the rubric gives none, the
+# label's "A v B" with its citation and a trailing bracket removed. A one-word
+# `mention` match (a SHORT form: the surname a later sentence uses) counts
+# only where the run's answers name the authority in full in this answer or an
+# earlier one. And whatever the form, a match whose words all appear in the
+# title of a judgment that a `search_case_law` call in the run returned (at or
+# before this turn) and that the sentence cites (by citation or URL) is that
+# judgment, never the out-of-corpus authority.
+_P322_REPORT = re.compile(
+    r"\[(?:18|19|20)\d{2}\]\s*(?:\d{1,2}\s+)?[A-Z][A-Za-z.]{0,10}\s+\d{1,5}\b")
+_P322_PARTY_STOP = {"and", "the", "for", "ltd", "limited", "plc", "llp", "co", "company",
+                    "son", "sons", "anor", "ors", "others", "another", "inc", "application"}
+_P322_GAP = r"[^\[\]()\n]{0,40}?"
+
+
+def _p322_party_words(party: str) -> list:
+    """The distinctive words of one party name, in order: three or more
+    characters, not a corporate or procedural word ("Ltd", "& Son", "Anor")."""
+    return [w for w in re.findall(r"[A-Za-z][A-Za-z'’&]*", party or "")
+            if len(w) >= 3 and w.lower() not in _P322_PARTY_STOP]
+
+
+def _p322_parties(entry: dict) -> list:
+    """[A, B] from `parties`, else from the label's "A v B" (citation and
+    brackets removed), else []."""
+    p = entry.get("parties")
+    if isinstance(p, list) and len(p) == 2 and all(isinstance(x, str) for x in p):
+        return p
+    label = _P322_REPORT.sub(" ", str(entry.get("label") or ""))
+    # A trailing bracket is a court and year ("(EAT 1899)"), not a party; a
+    # bracket inside a name ("R (Widget) v ...") is the party, and stays.
+    label = re.sub(r"\[[^\]]*\]|\s*\([^()]*\)\s*$", " ", label)
+    sides = re.split(r"\s+v\.?\s+", label.strip())
+    return [s.strip() for s in sides] if len(sides) == 2 and all(s.strip() for s in sides) else []
+
+
+def _p322_full_forms(entry: dict) -> list:
+    """Compiled F1-F3 patterns for one out-of-corpus authority (F4 is read off
+    `mention` at match time)."""
+    out = []
+    cites = entry.get("citations")
+    if not isinstance(cites, list):
+        cites = _P322_REPORT.findall(str(entry.get("label") or ""))
+    for c in cites:
+        toks = re.findall(r"\S+", str(c))
+        if toks:
+            out.append(re.compile(r"\s*".join(re.escape(t) for t in toks) + r"(?!\d)"))
+    parties = _p322_parties(entry)
+    if parties:
+        a_words, b_words = (_p322_party_words(x) for x in parties)
+        if a_words and b_words:
+            out.append(re.compile(
+                r"\b(?:" + "|".join(re.escape(w) for w in a_words) + r")\b\)?" + _P322_GAP
+                + r"\s(?-i:[vV])\.?\s" + _P322_GAP + r"\b" + re.escape(b_words[0]) + r"\b",
+                re.I))
+        for words in (a_words, b_words):
+            if len(words) >= 2:
+                out.append(re.compile(r"\b" + re.escape(words[0]) + r"\W{1,3}(?:(?:and|&)\s+)?"
+                                      + re.escape(words[1]) + r"\b", re.I))
+    return out
+
+
+def _p322_ooc_matches(sentence: str, auth: dict) -> list:
+    """[(match text, full)] for every F1-F4 or short-form match in a sentence."""
+    out = []
+    for rx in auth.get("full_rx") or []:
+        out.extend((m.group(0), True) for m in rx.finditer(sentence))
+    if auth.get("mention_rx"):
+        for m in auth["mention_rx"].finditer(sentence):
+            out.append((m.group(0), len(m.group(0).split()) >= 2))
+    return out
+
+
+def _p322_cited_titles(sentence: str, titles: dict) -> list:
+    """Titles of the judgments this sentence cites (by citation or URL) that a
+    `search_case_law` call in the run returned: {key: title} in `titles`."""
+    return [titles[k] for k, _, _ in cl_keys(sentence) if k in titles]
+
+
+def _p322_is_cited_judgment(match_text: str, cited_titles: list) -> bool:
+    """Every word of the match is in one cited, retrieved judgment's title."""
+    words = {w.lower() for w in re.findall(r"[A-Za-z][A-Za-z'’&]*", match_text)}
+    words.discard("v")
+    if not words:
+        return False
+    for t in cited_titles:
+        tw = {w.lower() for w in re.findall(r"[A-Za-z][A-Za-z'’&]*", t)}
+        if words <= tw:
+            return True
+    return False
+
+
+def p322_names_ooc(sentence: str, auth: dict, anchored: bool, titles: dict) -> tuple:
+    """(names it, named in full) for one sentence and one out-of-corpus
+    authority (see the block comment above). `anchored`: the run's answers
+    name it in full in this answer or an earlier one; `titles`: {key: title}
+    of every judgment the run's searches returned so far."""
+    cited = _p322_cited_titles(sentence, titles)
+    names = full = False
+    for text, is_full in _p322_ooc_matches(sentence, auth):
+        if _p322_is_cited_judgment(text, cited):
+            continue
+        if is_full:
+            names = full = True
+        elif anchored:
+            names = True
+    return names, full
+
+
+class _P322OocMention:
+    """`p322_mention_class`'s `mention` for an out-of-corpus authority in one
+    sentence: a `.search` for a link label or a phrase's object, in which a
+    cited, retrieved judgment's own name never counts. A short form counts
+    there: a sentence reaches the classifier only when the answer names the
+    authority in full somewhere (it is anchored), so no anchoring test is
+    needed here."""
+
+    def __init__(self, auth: dict, cited_titles: list):
+        self.auth, self.cited_titles = auth, cited_titles
+
+    def search(self, text: str):
+        for m_text, _full in _p322_ooc_matches(text or "", self.auth):
+            if not _p322_is_cited_judgment(m_text, self.cited_titles):
+                return m_text
+        return None
+
+
+def _p322_turn_titles(turn: dict) -> dict:
+    """{key: title} for every judgment a `search_case_law` call in this turn
+    returned, by its citation and its URL."""
+    out = {}
+    for dg in (turn.get("audit") or {}).get("delegations") or []:
+        for tl in dg.get("tools") or []:
+            if tl.get("name") != "search_case_law":
+                continue
+            for field_ in ("raw_result", "final_result"):
+                o = _json_or_none(tl.get(field_))
+                if isinstance(o, dict) and isinstance(o.get("results"), list):
+                    for r in o["results"]:
+                        if isinstance(r, dict) and r.get("title"):
+                            for fld in ("url", "ncn"):
+                                for k, _, _ in cl_keys(str(r.get(fld) or "")):
+                                    out.setdefault(k, str(r["title"]))
+                    break
+    return out
+
+
+def _p322_turn_retrieval(turn: dict) -> tuple:
+    """({key: {how}} returned by search_case_law, {key: {how}} read by
+    get_case_law_text) for one turn; `how` is "ncn", "url" or "text"."""
+    retrieved, read = {}, {}
+    for dg in (turn.get("audit") or {}).get("delegations") or []:
+        for tl in dg.get("tools") or []:
+            nm = tl.get("name")
+            if nm == "search_case_law":
+                rows = None
+                for field_ in ("raw_result", "final_result"):
+                    o = _json_or_none(tl.get(field_))
+                    if isinstance(o, dict) and isinstance(o.get("results"), list):
+                        rows = o["results"]
+                        break
+                if rows is None:
+                    for k, how, _ in cl_keys(str(tl.get("final_result") or "")):
+                        retrieved.setdefault(k, set()).add("text")
+                    continue
+                for r in rows:
+                    if isinstance(r, dict):
+                        for fld in ("url", "ncn"):
+                            for k, how, _ in cl_keys(str(r.get(fld) or "")):
+                                retrieved.setdefault(k, set()).add(how)
+            elif nm == "get_case_law_text":
+                for k, how, _ in cl_keys(str((tl.get("args") or {}).get("url") or "")):
+                    read.setdefault(k, set()).add(how)
+                o = _json_or_none(tl.get("raw_result"))
+                if isinstance(o, dict):
+                    for fld in ("url", "ncn"):
+                        for k, how, _ in cl_keys(str(o.get(fld) or "")):
+                            read.setdefault(k, set()).add(how)
+    return retrieved, read
+
+
+def p322_run(doc: dict, entry: dict) -> dict:
+    """What one run did with each rubric authority (see the block comment)."""
+    auths = _p322_auths(entry)
+    carriers = [a["mention_rx"] for a in auths if a["in_corpus"] and a["mention_rx"]]
+    rubric_keys = set().union(*(a["keys"] for a in auths)) if auths else set()
+    turns = []
+    titles = {}
+    for n, exp, t in _export_turns(doc):
+        retrieved, read = _p322_turn_retrieval(t)
+        for k, title in _p322_turn_titles(t).items():
+            titles.setdefault(k, title)
+        prose = _without_footer(t.get("answer") or "")
+        cited = {}
+        for k, how, _ in cl_keys(prose):
+            cited.setdefault(k, set()).add(how)
+        turns.append(dict(turn=n, export_turn=exp, answered=bool(prose.strip()),
+                          retrieved=retrieved, read=read, cited=cited, prose=prose,
+                          titles=dict(titles)))
+    per = []
+    for a in auths:
+        row = dict(label=a["label"], in_corpus=a["in_corpus"], lead=bool(a.get("lead")),
+                   carrier=bool(a.get("carrier")), retrieved=[], read=[], cited=[],
+                   named_only=[], mentions=[], carrier_verdict=None)
+        anchored = False
+        for t in turns:
+            if a["keys"] & set(t["retrieved"]):
+                row["retrieved"].append((t["export_turn"], sorted(set().union(
+                    *(t["retrieved"][k] for k in a["keys"] & set(t["retrieved"]))))))
+            if a["keys"] & set(t["read"]):
+                row["read"].append(t["export_turn"])
+            hit = a["keys"] & set(t["cited"])
+            if hit:
+                row["cited"].append((t["export_turn"], sorted(
+                    set().union(*(t["cited"][k] for k in hit)))))
+            if not a["in_corpus"] and (a["mention_rx"] or a["full_rx"]):
+                sents, back = [], []
+                all_s = list(_sentences(t["prose"]))
+                # Anchored: named in full in this answer or an earlier one.
+                anchored = anchored or any(
+                    p322_names_ooc(s, a, False, t["titles"])[1] for s in all_s)
+                bares, named_prev = [], False
+                for s in all_s:
+                    named = p322_names_ooc(s, a, anchored, t["titles"])[0]
+                    # Batch 13 E: "... applied this principle", the sentence
+                    # after one that names it.
+                    backref = (not named and named_prev and bool(_P322_BACKREF.search(s))
+                               and bool(_P322_SECOND.search(s)))
+                    if named or backref:
+                        mention = _P322OocMention(a, _p322_cited_titles(s, t["titles"]))
+                        cls, why = p322_mention_class(s, mention, carriers,
+                                                      " ".join(back))
+                        bare = named and p322_is_bare(s, a)
+                        if backref:
+                            why += "; a back-reference to the sentence before"
+                        elif bare:
+                            why += "; a bare listing, not a statement"
+                        sents.append((cls, why, s))
+                        bares.append(bare)
+                    named_prev = named
+                    back = (back + [s])[-2:]
+                if sents:
+                    before = any(v == "PASS" for _, v, _ in row["mentions"])
+                    row["mentions"].append((t["export_turn"], p322_answer_verdict(
+                        [c for c, _, _ in sents], before, bares), sents))
+            elif a["mention_rx"] and not hit and a["mention_rx"].search(t["prose"]):
+                row["named_only"].append(t["export_turn"])
+        if a.get("carrier"):
+            need = [int(x) for x in a.get("need_turns") or []]
+            reached = any(t["answered"] and t["export_turn"] in need for t in turns)
+            if not need or not reached:
+                row["carrier_verdict"] = ("n/a", "no need turn answered")
+            else:
+                by = [e for e, _ in row["retrieved"] if e <= max(need)]
+                row["carrier_verdict"] = (("PASS", "retrieved in export turn(s) %s"
+                                           % ", ".join(map(str, by))) if by else
+                                          ("FAIL", "not retrieved by export turn %d" % max(need)))
+        per.append(row)
+    others = {}
+    for t in turns:
+        for k in t["cited"]:
+            if k not in rubric_keys:
+                others.setdefault(k, []).append(t["export_turn"])
+    # Which ordering the run's case-law searches used: P3.22 (agent B) sends
+    # `order` and `per_page`, recorded on `api_calls[].request`; before it no
+    # `order` was sent (the feed's default, newest first).
+    orders = Counter()
+    for _n, _e, t in _export_turns(doc):
+        for dg in (t.get("audit") or {}).get("delegations") or []:
+            for tl in dg.get("tools") or []:
+                if tl.get("name") != "search_case_law":
+                    continue
+                for ac in tl.get("api_calls") or []:
+                    req = ac.get("request") if isinstance(ac.get("request"), dict) else {}
+                    orders["%s/%s" % (req.get("order") or "none", req.get("per_page") or "-")] += 1
+    return {"auths": per, "turns": turns, "others": others, "orders": dict(orders)}
+
+
+def _p322_grade(dirs, rubric, sessions=None) -> dict:
+    """{session: [(dir, doc, run)]} over the directories given."""
+    out = {}
+    for d in dirs:
+        for doc in load_runs(d):
+            b = _run_base(doc)
+            if b not in rubric or (sessions and b not in sessions
+                                   and str(doc.get("session_id")) not in sessions):
+                continue
+            out.setdefault(b, []).append((d.name, doc, p322_run(doc, rubric[b])))
+    return out
+
+
+def _p322_counts(graded: list) -> dict:
+    """{label: (runs retrieving, runs reading, runs citing, runs)}."""
+    out = {}
+    for _d, _doc, run in graded:
+        for a in run["auths"]:
+            c = out.setdefault(a["label"], [0, 0, 0, 0, a["in_corpus"], a["lead"]])
+            c[0] += bool(a["retrieved"])
+            c[1] += bool(a["read"])
+            c[2] += bool(a["cited"])
+            c[3] += 1
+    return out
+
+
+def cmd_authorities(args) -> int:
+    """P3.22's bar (batch 8 C's four items) per run, from a gitignored rubric.
+    Prints every match (retrieved, read, cited: by neutral citation or URL)
+    and every drop (cited by name only; authorities cited outside the rubric;
+    every sentence naming an out-of-corpus authority, classified). The output
+    quotes answers: keep it out of the repo. Exits 1 on an item-3 or item-4
+    FAIL, or, with --before, an item-1 or item-2 regression."""
+    rpath = Path(args.rubric)
+    try:
+        rubric = {k: v for k, v in json.loads(rpath.read_text(encoding="utf-8")).items()
+                  if not k.startswith("_")}
+    except Exception as e:
+        print(f"  rubric not read ({rpath}): {e}")
+        return 2
+    sessions = set(args.session) if args.session else None
+    graded = _p322_grade(_grading_dirs(args), rubric, sessions)
+    print(f"P3.22 authorities: retrieved / read / cited, per run; rubric {rpath.name}")
+    print("  retrieved = returned by a search_case_law call; read = get_case_law_text;"
+          " cited = its NCN or URL in an answer (footer removed)")
+    bad = []
+    for sid in sorted(graded):
+        print(f"\n== {sid}")
+        for dname, doc, run in graded[sid]:
+            tag = f"{dname} {doc.get('session_id')} r{doc.get('rep', 1)}"
+            print(f"  {tag}  case-law requests by order/per_page: "
+                  + (", ".join(f"{k} x{v}" for k, v in sorted(run["orders"].items())) or "none"))
+            for a in run["auths"]:
+                if a["in_corpus"]:
+                    ret = ", ".join(f"t{e} ({'/'.join(h)})" for e, h in a["retrieved"]) or "-"
+                    cit = ", ".join(f"t{e} ({'/'.join(h)})" for e, h in a["cited"]) or "-"
+                    rd = ", ".join(f"t{e}" for e in a["read"]) or "-"
+                    flags = ("lead " if a["lead"] else "") + ("carrier " if a["carrier"] else "")
+                    print(f"    [{a['label']}] {flags}retrieved {ret}; read {rd}; cited {cit}")
+                    if a["named_only"]:
+                        print(f"      DROP named but not cited by NCN or URL in t"
+                              + ", t".join(map(str, a["named_only"])))
+                    if a["carrier_verdict"]:
+                        v, why = a["carrier_verdict"]
+                        print(f"      item 4 (carrier): {v}: {why}")
+                        if v == "FAIL":
+                            bad.append((tag, a["label"], "item 4"))
+                else:
+                    if not a["mentions"]:
+                        print(f"    [{a['label']}] out of corpus: not named")
+                    for e, verdict, sents in a["mentions"]:
+                        print(f"    [{a['label']}] out of corpus: t{e} item 3 {verdict}")
+                        for cls, why, s in sents:
+                            print(f"      {cls:<11} ({why}) {s[:args.chars]}")
+                        if verdict == "FAIL":
+                            bad.append((tag, a["label"], "item 3 t%s" % e))
+            if run["others"]:
+                print("    other judgments cited (not in the rubric): " + "; ".join(
+                    f"{k} (t{', t'.join(map(str, v))})" for k, v in sorted(run["others"].items())))
+        counts = _p322_counts(graded[sid])
+        print(f"  -- {sid}, {len(graded[sid])} run(s): runs retrieving / reading / citing")
+        for label, (r, rd, c, n, inc, lead) in counts.items():
+            if inc:
+                print(f"     {label:<34} {r}/{n} / {rd}/{n} / {c}/{n}"
+                      + ("   <- item 2 (lead)" if lead else ""))
+    if args.before:
+        before = _p322_grade([Path(d) for d in args.before], rubric, sessions)
+        print("\n== item 1 and 2 against --before (" + ", ".join(Path(d).name for d in args.before) + ")")
+        for sid in sorted(set(graded) & set(before)):
+            a_c, b_c = _p322_counts(graded[sid]), _p322_counts(before[sid])
+            for label, (r, _rd, _c, n, inc, lead) in a_c.items():
+                if not inc or label not in b_c:
+                    continue
+                br, bn = b_c[label][0], b_c[label][3]
+                worse = (r < br) if n == bn else (r / max(n, 1) < br / max(bn, 1))
+                print(f"  {sid} [{label}] retrieved {br}/{bn} before -> {r}/{n} after"
+                      + ("   FAIL (fewer)" if worse else "") + ("   (lead)" if lead else ""))
+                if worse:
+                    bad.append((sid, label, "item 2" if lead else "item 1"))
+    print(f"\n  failing: {len(bad)}")
+    for b in bad:
+        print(f"    {b[2]}: {b[0]} [{b[1]}]")
+    return 1 if bad else 0
+
+
+# --- P3.21: commencement dates an answer states, against what the conversation
+#     retrieved ----------------------------------------------------------------
+#
+# Batch 9 E. P3.21's acceptance: "every commencement date an answer states is
+# one a retrieved description or text states" (6409), "a commencement question
+# gets a date wherever one is retrievable", and on 6411 the negative branch
+# only: NO commencement date stated. A CLAIM is a date (day month year, a
+# month and year, ISO or d/m/y) in a sentence about commencement ("into force",
+# "commenced", "commencement date", "in force from", "appointed day"), or in a
+# table row under such a heading, unless the words just before it make it
+# another event's date (Royal Assent, made, laid, "as at", today). Each claim is
+#   SUPPORTED   a source retrieved in the same conversation (this turn or an
+#               earlier one) states that date for an instrument or provision
+#               the sentence names (or the three lines before it, when the
+#               sentence names none);
+#   UNCLEAR     the date is retrieved, but for something else, or the sentence
+#               names nothing to tie it to, or names provisions the source
+#               does not list;
+#   UNSUPPORTED no retrieved source states the date.
+# Sources: (1) P3.21's feed dates on a change record (`related[].changes[]
+# .in_force`, `qualification`; agent C's shape, read whether `in_force` is a
+# string, a list or a {provision: date} map) — none exist before P3.21;
+# (2) a description (`lookup_legislation`, `legislation.description` on a
+# whole text, a search row's `description`); (3) retrieved text (a whole text,
+# a section search's rows, a summary). A raw API response the tool did not
+# pass on is not a source (the model never saw it); an UNSUPPORTED claim whose
+# date sits only there says so. The result-level `commencement_dates` status
+# (`retrieved`, `not_retrieved` with a reason) is printed per turn.
+_CD_MON = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|"
+           r"aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)")
+_CD_DATE = re.compile(
+    r"\b(?P<d1>[0-3]?\d)(?:st|nd|rd|th)?(?:\s+of)?\s+(?P<m1>" + _CD_MON
+    + r")\.?,?\s+(?P<y1>(?:19|20)\d{2})\b"
+    r"|\b(?P<m2>" + _CD_MON + r")\.?\s+(?P<d2>[0-3]?\d)(?:st|nd|rd|th)?,?\s+(?P<y2>(?:19|20)\d{2})\b"
+    r"|\b(?P<y3>(?:19|20)\d{2})-(?P<m3>[01]\d)-(?P<d3>[0-3]\d)\b"
+    r"|\b(?P<d4>[0-3]?\d)/(?P<m4>[01]?\d)/(?P<y4>(?:19|20)\d{2})\b"
+    r"|\b(?P<m5>" + _CD_MON + r")\.?\s+(?P<y5>(?:19|20)\d{2})\b", re.I)
+_CD_MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct",
+              "nov", "dec")
+_CD_CUE = re.compile(
+    r"\binto\s+force\b|\bcommenc(?:e|ed|es|ement|ing)\b"
+    r"|\bin[- ]force\s+(?:on|from|since|with\s+effect\s+from|as\s+from)\b"
+    r"|\bappointed\s+day\b|\bday\s+appointed\b", re.I)
+# Another event's date, by the words just before it.
+_CD_OTHER = re.compile(
+    r"(?:\bassent(?:ed)?|\b(?:made|laid(?:\s+before\s+[\w ]{0,40}?)?|signed|sealed|enacted"
+    r"|passed|published|issued|dated|sampled|accessed|checked|decided|delivered"
+    r"|handed\s+down|heard))[\s\-–—:]*(?:on|of)?[\s\-–—:]*\(?\s*$"
+    r"|\bas\s+(?:of|at)\s*:?\s*$|\bup\s+to\s+date\s+(?:to|as\s+at|as\s+of|on)\s*:?\s*$"
+    r"|\bup\s+(?:to|until)\s*$"
+    r"|\btoday(?:['’]s\s+date)?(?:\s+is)?\s*,?\s*(?:the\s+)?$"
+    r"|\bvalid\s+(?:from|to|as\s+at|on)\s*:?\s*$", re.I)
+# "came into force on the day it was passed (19 November 1998)": a commencement
+# on Royal Assent, stated with the assent date. A claim, tagged.
+_CD_BY_ASSENT = re.compile(
+    r"\bon\s+the\s+day\s+(?:after\s+)?(?:(?:it|the\s+act|this\s+act|the\s+bill)\s+)?"
+    r"(?:was\s+|is\s+|received\s+)?(?:passed|royal\s+assent)\s*\(?\s*$", re.I)
+_CD_ASSENT_WORD = re.compile(r"\broyal\s+assent\b|\bwas\s+passed\b", re.I)
+_CD_TABLE_SEP = re.compile(r"^\s*\|?\s*:?-{3,}")
+CMCDATE_NEGATIVE_BRANCH = {"6411"}
+_CD_SOURCE_WORDS = re.compile(
+    r"legislation\.gov\.uk|changes\s+to\s+legislation|\beffects?\b|\bfeed\b|\brecords?\b"
+    r"|\bdescription\b|\bmetadata\b|\bexplanatory\b|\bindex\b", re.I)
+_CD_QUAL_WORDS = re.compile(
+    r"\bwholly\b|\bpartly\b|\bpartially\b|\bfor\s+(?:certain|specified|the)\s+purposes?\b"
+    r"|\bin\s+so\s+far\b|\binsofar\b|\bfor\s+(?:E|W|S|NI|E\.W\.|E\.W\.S\.)\b", re.I)
+
+
+def cd_dates(text: str) -> list:
+    """[(start, end, (year, month, day or 0), raw)] for every date in `text`."""
+    out = []
+    for m in _CD_DATE.finditer(text or ""):
+        g = m.groupdict()
+        try:
+            if g["y1"]:
+                ymd = (int(g["y1"]), _CD_MONTHS.index(g["m1"][:3].lower()) + 1, int(g["d1"]))
+            elif g["y2"]:
+                ymd = (int(g["y2"]), _CD_MONTHS.index(g["m2"][:3].lower()) + 1, int(g["d2"]))
+            elif g["y3"]:
+                ymd = (int(g["y3"]), int(g["m3"]), int(g["d3"]))
+            elif g["y4"]:
+                ymd = (int(g["y4"]), int(g["m4"]), int(g["d4"]))
+            else:
+                ymd = (int(g["y5"]), _CD_MONTHS.index(g["m5"][:3].lower()) + 1, 0)
+        except ValueError:
+            continue
+        if not (1 <= ymd[1] <= 12 and 0 <= ymd[2] <= 31) or (ymd[2] == 0 and not g["y5"]):
+            continue
+        out.append((m.start(), m.end(), ymd, m.group(0)))
+    return out
+
+
+def _cd_fmt(ymd) -> str:
+    return "%04d-%02d" % ymd[:2] + ("-%02d" % ymd[2] if ymd[2] else "")
+
+
+def cd_statements(text: str, cue_given: bool = False) -> tuple:
+    """(statements, drops) for one sentence or table row. A statement is
+    (ymd, raw, tags); a drop is (raw, reason). A date is a statement when a
+    commencement cue sits between the previous date and the next one (or
+    `cue_given`, for a row under a commencement heading), and the words just
+    before it are not another event's."""
+    dates = cd_dates(text)
+    out, drops = [], []
+    for i, (s, e, ymd, raw) in enumerate(dates):
+        lo = dates[i - 1][1] if i else 0
+        hi = dates[i + 1][0] if i + 1 < len(dates) else len(text)
+        window = text[lo:hi]
+        before = text[lo:s]
+        tags = []
+        if _CD_BY_ASSENT.search(before):
+            tags.append("assent")
+        elif _CD_OTHER.search(before):
+            drops.append((raw, "another event's date (%s)"
+                          % _CD_OTHER.search(before).group(0).strip()[:30]))
+            continue
+        if not (cue_given or _CD_CUE.search(window)):
+            drops.append((raw, "no commencement cue"))
+            continue
+        if _CD_ASSENT_WORD.search(text) and "assent" not in tags:
+            tags.append("assent")
+        # The provisions a date is stated for: those between the previous date
+        # and this one ("section 2 came into force on D1; section 3 ... on
+        # D2"), or, where none is named there, those after it up to the next
+        # date ("1 April 1901: sections 1 to 3 came into force").
+        scope = text[lo:e]
+        if not negcurrency_provisions(scope):
+            scope = text[s:hi]
+        out.append((ymd, raw, tags, scope))
+    return out, drops
+
+
+def cd_claims(prose: str) -> tuple:
+    """(claims, drops) for an answer body: claims are (sentence, ymd, raw, tags,
+    window) with `window` the three lines before; drops are (sentence, raw,
+    reason). Table rows under a heading with a commencement cue are read with
+    the cue given."""
+    claims, drops = [], []
+    lines = (prose or "").split("\n")
+    table_cue = False
+    prev: list = []
+    for i, line in enumerate(lines):
+        is_row = line.strip().startswith("|")
+        if is_row and i + 1 < len(lines) and _CD_TABLE_SEP.match(lines[i + 1]) \
+                and not _CD_TABLE_SEP.match(line):
+            table_cue = bool(_CD_CUE.search(line))
+            prev = (prev + [line])[-3:]
+            continue
+        if not is_row:
+            table_cue = False
+        if is_row and _CD_TABLE_SEP.match(line):
+            continue
+        for s in ([line] if is_row else list(_sentences(line))):
+            got, dr = cd_statements(s, cue_given=is_row and table_cue)
+            for ymd, raw, tags, scope in got:
+                claims.append((s, ymd, raw, tags, " ".join(prev), scope))
+            for raw, why in dr:
+                drops.append((s, raw, why))
+            prev = (prev + [s])[-3:]
+    return claims, drops
+
+
+_CD_LID_LINK = re.compile(r"legislation\.gov\.uk/(?:id/)?([a-z]{2,5})/((?:18|19|20)\d{2})/(\d+)", re.I)
+_CD_LID_CITE = re.compile(
+    r"\b(S\.?S\.?I|W\.?S\.?I|S\.?I|S\.?R|NISR)\.?\s*(?:No\.?\s*)?((?:18|19|20)\d{2})\s*[/ ]\s*"
+    r"(?:No\.?\s*)?(\d+)\b|\b((?:18|19|20)\d{2})\s+asp\s+(\d+)\b|\b(asp|ssi|uksi|wsi|nisr|ukpga)/"
+    r"((?:18|19|20)\d{2})/(\d+)\b", re.I)
+_CD_SERIES = {"ssi": "ssi", "si": "uksi", "wsi": "wsi", "sr": "nisr", "nisr": "nisr"}
+
+
+def cd_lids(text: str, titles: Optional[dict] = None) -> set:
+    """Instrument ids a text names: legislation.gov.uk links, citations ("SSI
+    1901/3", "(1901 asp 2)", "uksi/1901/4") and, given `titles`
+    ({lid: title}), any title of 12 characters or more."""
+    out = {"%s/%s/%s" % (m.group(1).lower(), m.group(2), m.group(3))
+           for m in _CD_LID_LINK.finditer(text or "")}
+    for m in _CD_LID_CITE.finditer(text or ""):
+        if m.group(1):
+            series = _CD_SERIES.get(re.sub(r"\W", "", m.group(1)).lower())
+            if series:
+                out.add("%s/%s/%s" % (series, m.group(2), int(m.group(3))))
+        elif m.group(4):
+            out.add("asp/%s/%s" % (m.group(4), int(m.group(5))))
+        else:
+            out.add("%s/%s/%s" % (m.group(6).lower(), m.group(7), int(m.group(8))))
+    low = (text or "").lower()
+    for lid, t in (titles or {}).items():
+        t = (t or "").strip().lower()
+        if len(t) >= 12 and t in low:
+            out.add(lid)
+    return out
+
+
+def _cd_in_force_items(entry: dict) -> list:
+    """[(ymd, changed provisions, qualification)] from one `changes` entry,
+    reading `in_force` as a string, a list of strings or a {provision: date}
+    map, and `qualification` as a string or the same map."""
+    v, q = entry.get("in_force"), entry.get("qualification")
+    changed = [p for p in (entry.get("changed") or []) if p]
+    out = []
+    if isinstance(v, dict):
+        for prov, d in v.items():
+            for _, _, ymd, _ in cd_dates(str(d)):
+                out.append((ymd, [prov], str((q or {}).get(prov) or "") if isinstance(q, dict)
+                            else str(q or "")))
+        return out
+    for d in (v if isinstance(v, list) else [v] if v else []):
+        for _, _, ymd, _ in cd_dates(str(d)):
+            out.append((ymd, changed, str(q or "") if not isinstance(q, dict) else ""))
+    return out
+
+
+def cd_evidence(turn: dict, turn_no=None) -> dict:
+    """Every commencement date this turn's tools returned or showed, with what
+    it is stated for: {"items": [...], "titles": {lid: title}, "statuses":
+    [...], "api_dates": set()}. Never raises on odd shapes."""
+    ev = {"items": [], "titles": {}, "statuses": [], "api_dates": set(), "commencing": set()}
+
+    def add_text(text, src, lid, tool):
+        for s in _sentences(text or ""):
+            got, _ = cd_statements(s)
+            for ymd, raw, _tags, scope in got:
+                ev["items"].append(dict(ymd=ymd, src=src, lid=lid, subject=None,
+                                        provisions=set(negcurrency_provisions(scope)),
+                                        qualification="", tool=tool, turn=turn_no,
+                                        text=s.strip()[:240], named=cd_lids(s)))
+
+    for dg in (turn.get("audit") or {}).get("delegations") or []:
+        for tl in dg.get("tools") or []:
+            nm = tl.get("name") or ""
+            args = tl.get("args") or {}
+            o = _json_or_none(tl.get("raw_result"))
+            for ac in tl.get("api_calls") or []:
+                for _, _, ymd, _ in cd_dates(json.dumps(ac.get("response"), ensure_ascii=False)
+                                             if ac.get("response") is not None else ""):
+                    ev["api_dates"].add(ymd)
+            if nm == "get_legislation_changes" and isinstance(o, dict):
+                lid = _nc_lid(o.get("legislation_id") or args.get("legislation_id"))
+                direction = o.get("direction") or "to"
+                st = o.get("commencement_dates")
+                if st is not None:
+                    status = st.get("status") if isinstance(st, dict) else st
+                    # Agent C's built shape (commit 36ddcee): a dict, {"status":
+                    # "retrieved", "relations", "dated", "refused", ...} or
+                    # {"status": "not_retrieved", "reason": ...}; absent when
+                    # no hop ran. A bare string is read too.
+                    reason = ((st.get("reason") or (
+                        "dated %s of %s, refused %s" % (st.get("dated"), st.get("relations"),
+                                                         st.get("refused"))
+                        if "dated" in st else "")) if isinstance(st, dict) else
+                        o.get("commencement_dates_reason") or "")
+                    ev["statuses"].append((lid, str(status), str(reason or "")))
+                for g in o.get("related") or []:
+                    if not isinstance(g, dict):
+                        continue
+                    glid = _nc_lid(g.get("legislation_id"))
+                    if str(g.get("type_of_effect") or "").strip().lower() == "coming into force" \
+                            and not g.get("self"):
+                        ev["commencing"] |= {glid if direction == "to" else lid,
+                                             lid if direction == "to" else glid}
+                    for ch in g.get("changes") or []:
+                        if not isinstance(ch, dict):
+                            continue
+                        for ymd, changed, qual in _cd_in_force_items(ch):
+                            ev["items"].append(dict(
+                                ymd=ymd, src="feed", tool=nm, turn=turn_no,
+                                lid=glid if direction == "to" else lid,
+                                subject=lid if direction == "to" else glid,
+                                provisions={b for b in (_nc_record_base(p) for p in changed) if b},
+                                by=str(ch.get("by") or ""), qualification=qual,
+                                text="%s %s by %s %s" % (lid if direction == "to" else glid,
+                                                         ", ".join(changed[:6]), glid if
+                                                         direction == "to" else lid,
+                                                         ch.get("by") or ""),
+                                named=set()))
+                continue
+            recs = []
+            if nm == "lookup_legislation" and isinstance(o, dict):
+                recs.append((_nc_lid(o.get("legislation_id")), o.get("title"), o.get("description")))
+            elif nm == "get_legislation_text" and isinstance(o, dict):
+                leg = o.get("legislation") if isinstance(o.get("legislation"), dict) else {}
+                tlid = _nc_lid(args.get("legislation_id") or leg.get("id"))
+                recs.append((tlid, leg.get("title"), leg.get("description")))
+                add_text(o.get("full_text") or leg.get("text") or "", "text", tlid, nm)
+            elif nm == "search_legislation":
+                # P3.6 (agent D) keeps a row's `description`, cut, in what the
+                # Worker is shown; before it the slimmer dropped it, and the
+                # stored runs hold it only in the API response the tool did
+                # not pass on. A date stated there is kept as its own source,
+                # "description (API response only)", which grades
+                # SUPPORTED_RAW_ONLY, never SUPPORTED, so a before-column and
+                # an after-column stay comparable (integrator, batch 9).
+                shown = set()
+                for field_ in ("raw_result", "final_result"):
+                    fo = _json_or_none(tl.get(field_))
+                    for r in (fo.get("results") or []) if isinstance(fo, dict) else []:
+                        if isinstance(r, dict) and r.get("description"):
+                            key = (_nc_lid(r.get("legislation_id")), str(r["description"]))
+                            if key not in shown:
+                                shown.add(key)
+                                recs.append(key[:1] + (r.get("title"), key[1]))
+                        elif isinstance(r, dict):
+                            recs.append((_nc_lid(r.get("legislation_id")), r.get("title"), None))
+                for ac in tl.get("api_calls") or []:
+                    resp = ac.get("response")
+                    for r in (resp.get("results") or []) if isinstance(resp, dict) else []:
+                        if not (isinstance(r, dict) and r.get("description")):
+                            continue
+                        rlid = _nc_lid(r.get("legislation_id") or r.get("id") or r.get("uri"))
+                        # Kept even where the row showed a description: P3.6
+                        # cuts at 600 characters, so a date past the cut was
+                        # never seen. A date also in the shown text has a
+                        # "description" item beside this one, and grades
+                        # SUPPORTED on it.
+                        before = len(ev["items"])
+                        add_text(str(r["description"]), "description (API response only)",
+                                 rlid, nm)
+                        for it in ev["items"][before:]:
+                            it["subject"] = next(iter(sorted(it["named"] - {rlid})), None)
+            elif nm == "search_legislation_sections":
+                # Two stored shapes: a bare list (older directories) and
+                # {"results": [...], "returned": n}. Reading only the list read
+                # no section text on the newer shape (found on 6411's stored
+                # runs: the Commencement Order's article stating its appointed
+                # day was invisible).
+                rows = o if isinstance(o, list) else (
+                    o.get("results") if isinstance(o, dict) else None)
+                for r in rows or []:
+                    if isinstance(r, dict):
+                        add_text(str(r.get("text") or ""), "text",
+                                 _nc_lid(r.get("legislation_id")), nm)
+            for rlid, title, desc in recs:
+                if rlid and title:
+                    ev["titles"].setdefault(rlid, str(title))
+                if desc:
+                    before = len(ev["items"])
+                    add_text(str(desc), "description", rlid, nm)
+                    for it in ev["items"][before:]:
+                        it["subject"] = next(iter(sorted(it["named"] - {rlid})), None)
+            if tl.get("summarised") and isinstance(tl.get("final_result"), str):
+                # A summary is the summariser's text, not a source: on the
+                # stored 6411 runs summaries of a change record (which carries
+                # no dates) and of a case-law search state commencement dates
+                # (P3.16's class). A date a summary states counts as the
+                # source's only where the raw result it summarised carries it;
+                # otherwise it is kept as "summary", which supports nothing.
+                lid0 = _nc_lid(args.get("legislation_id") or "")
+                raw_dates = {ymd for _, _, ymd, _ in cd_dates(
+                    tl.get("raw_result") if isinstance(tl.get("raw_result"), str)
+                    else json.dumps(tl.get("raw_result"), ensure_ascii=False))}
+                before = len(ev["items"])
+                add_text(tl["final_result"], "summary", lid0, nm)
+                for it in ev["items"][before:]:
+                    if it["ymd"] in raw_dates:
+                        it["src"] = "text (summarised)"
+    return ev
+
+
+def _cd_merge(earlier: Optional[dict], now: dict) -> dict:
+    if not earlier:
+        return {"items": list(now["items"]), "titles": dict(now["titles"]),
+                "statuses": list(now["statuses"]), "api_dates": set(now["api_dates"]),
+                "commencing": set(now["commencing"])}
+    out = {"items": earlier["items"] + now["items"], "titles": dict(earlier["titles"]),
+           "statuses": earlier["statuses"] + now["statuses"],
+           "api_dates": earlier["api_dates"] | now["api_dates"],
+           "commencing": earlier["commencing"] | now["commencing"]}
+    for k, v in now["titles"].items():
+        out["titles"].setdefault(k, v)
+    return out
+
+
+def _cd_same_date(a, b) -> bool:
+    if a[2] and b[2]:
+        return a == b
+    return a[:2] == b[:2]
+
+
+_CD_RAW_ONLY = "description (API response only)"
+
+
+def cmcdate_verdict(sentence: str, ymd, ev: dict, window: str = "",
+                    question: str = "", scope: Optional[str] = None) -> tuple:
+    """(verdict, reason, tied evidence) for one claimed date against the
+    conversation's evidence. See the block comment. A sentence that names no
+    instrument is tied through the three lines before it, then through the
+    turn's question ("What about X?" answered "these provisions commenced on
+    D")."""
+    cands = [e for e in ev["items"] if _cd_same_date(e["ymd"], ymd)
+             and e["src"] != "summary"]
+    named = cd_lids(sentence, ev["titles"])
+    # `scope`: the stretch of the sentence this date is stated for (see
+    # `cd_statements`), so two dates in one sentence keep their own provisions.
+    provs = set(negcurrency_provisions(sentence if scope is None else scope))
+    via = ""
+    if not named and window:
+        named = cd_lids(window, ev["titles"])
+    if not named and not provs and question:
+        named = cd_lids(question, ev["titles"])
+        via = " (named in the question)" if named else ""
+    if not cands:
+        others = sorted({_cd_fmt(e["ymd"]) for e in ev["items"] if e["src"] != "summary"
+                         and (e["lid"] in named or (e.get("subject") and e["subject"] in named))})
+        why = "no retrieved source states %s" % _cd_fmt(ymd)
+        if others:
+            why += "; for what it names the sources state %s" % ", ".join(others[:4])
+        if any(_cd_same_date(e["ymd"], ymd) for e in ev["items"] if e["src"] == "summary"):
+            why += " (only a summary states it, not the text it summarised)"
+        if any(_cd_same_date(a, ymd) for a in ev["api_dates"]):
+            why += " (the date is in a raw API response the tool did not pass on)"
+        return "UNSUPPORTED", why, []
+    tied = [e for e in cands if e["lid"] in named
+            or (e.get("subject") and e["subject"] in named
+                and (not provs or provs & e["provisions"]))
+            or (provs and provs & e["provisions"])]
+    if not tied and all(e["src"] == _CD_RAW_ONLY for e in cands):
+        # A date the Worker never saw, stated for something else, does not
+        # make the claim UNCLEAR (found on the stored 6409 runs: an unrelated
+        # order's description in an API response).
+        return "UNSUPPORTED", ("no source the Worker was shown states %s (an API response the "
+                               "tool did not pass on states it, for %s)" % (
+                                   _cd_fmt(ymd), ", ".join(sorted({e["lid"] or "?"
+                                                                    for e in cands})[:4]))), []
+    if not tied:
+        lids = sorted({e["lid"] or "?" for e in cands})
+        if not named and not provs:
+            return "UNCLEAR", ("the date is retrieved (for %s) but the sentence names no "
+                               "instrument or provision" % ", ".join(lids[:4])), cands
+        return "UNCLEAR", ("the date is retrieved for %s, not for what the sentence names"
+                           % ", ".join(lids[:4])), cands
+    ev_provs = set().union(*(e["provisions"] | ({_nc_record_base(e["by"])} if e.get("by")
+                                                  else set()) for e in tied))
+    kinds = {p.split()[0] for p in ev_provs if p}
+    extra = sorted(p for p in provs if p.split()[0] in kinds and p not in ev_provs)
+    if extra and ev_provs:
+        return "UNCLEAR", ("the date is retrieved, but the sentence also names %s, which "
+                           "the source does not list" % ", ".join(extra[:6])), tied
+    verdict = ("SUPPORTED_RAW_ONLY" if all(e["src"] == _CD_RAW_ONLY for e in tied)
+               else "SUPPORTED")
+    return verdict, "stated by " + "; ".join(sorted({
+        "%s %s" % (e["src"], e["lid"] or "?") for e in tied})) + via, tied
+
+
+def cmcdate_rows(doc: dict) -> list:
+    """One row per answered turn: its claims graded, its drops, and what the
+    conversation had retrieved by then."""
+    base = _run_base(doc)
+    truth = _truth_for(base)
+    rows = []
+    earlier = None
+    for n, exp, t in _export_turns(doc):
+        now = cd_evidence(t, exp)
+        ev = _cd_merge(earlier, now)
+        earlier = ev
+        prose = _without_footer(t.get("answer") or "")
+        if not prose.strip():
+            continue
+        claims, drops = cd_claims(prose)
+        graded = []
+        for s, ymd, raw, tags, window, scope in claims:
+            v, why, tied = cmcdate_verdict(s, ymd, ev, window, t.get("question") or "", scope)
+            src_named = bool(_CD_SOURCE_WORDS.search(s))
+            quals = {e["qualification"] for e in tied if e.get("qualification")}
+            qual_stated = bool(_CD_QUAL_WORDS.search(s)) or any(
+                q.lower() in s.lower() for q in quals)
+            graded.append(dict(sentence=s, ymd=ymd, raw=raw, tags=tags, verdict=v, why=why,
+                               tied=tied, src_named=src_named, quals=sorted(quals),
+                               qual_stated=qual_stated))
+        asked = bool(_CMC_QUESTION.search(t.get("question") or ""))
+        # "A date retrieved" for the question: a feed date, or a date stated
+        # for an instrument the question names, a commencing instrument a
+        # change record in the conversation named (or its subject), or one of
+        # the session's known commencing instruments. Not every date in the
+        # conversation: a Deep Research step reads many unrelated orders'
+        # own commencement articles.
+        relevant = cd_lids(t.get("question") or "", ev["titles"]) | ev["commencing"] \
+            | set(truth[1] if truth else ())
+        relevant_items = [e for e in ev["items"] if e["src"] not in ("summary", _CD_RAW_ONLY) and (
+            e["src"] == "feed" or e["lid"] in relevant or (e.get("subject") in relevant))]
+        dated_for = {}
+        if truth:
+            for lid in truth[1]:
+                dated_for[lid] = (
+                    any(g["verdict"] == "SUPPORTED" and any(e["lid"] == lid for e in g["tied"])
+                        for g in graded),
+                    any(e["lid"] == lid for e in ev["items"]))
+        rows.append(dict(session=base, run=str(doc.get("session_id")), rep=doc.get("rep", 1),
+                         turn=n, export_turn=exp, chat_mode=t.get("chat_mode") or "?",
+                         claims=graded, drops=drops, asked=asked,
+                         retrieved=len(relevant_items), statuses=now["statuses"],
+                         negative_branch=base in CMCDATE_NEGATIVE_BRANCH, dated_for=dated_for))
+    return rows
+
+
+def cmd_cmcdates(args) -> int:
+    """P3.21's acceptance: every commencement date an answer states, graded
+    SUPPORTED / UNCLEAR / UNSUPPORTED against what the same conversation
+    retrieved; whether a commencement question got a date wherever one was
+    retrieved; and on the negative-branch session (6411) that no date is
+    stated. Prints every claim and, with --drops, every dated sentence not
+    graded, with why (the output quotes answers: keep it out of the repo).
+    Exits 1 on an UNSUPPORTED claim or any claim on a negative-branch session."""
+    dirs = _grading_dirs(args)
+    want = set(args.session) if args.session else None
+    print("P3.21 commencement dates: each date an answer states, against what the "
+          "conversation retrieved (feed / description / text)")
+    tally, bad = Counter(), []
+    asked = Counter()
+    for d in dirs:
+        for doc in sorted(load_runs(d), key=lambda x: (str(x.get("session_id")), x.get("rep", 1))):
+            if want and not ({_run_base(doc), str(doc.get("session_id"))} & want):
+                continue
+            rows = cmcdate_rows(doc)
+            if not rows:
+                continue
+            print(f"\n== {d.name} {doc.get('session_id')} r{doc.get('rep', 1)}")
+            for r in rows:
+                head = (f"  t{r['turn']} (export {r['export_turn']}) {r['chat_mode']}"
+                        f"{'  ASKED' if r['asked'] else ''}  relevant retrieved dates in the "
+                        f"conversation: {r['retrieved']}")
+                if r["statuses"]:
+                    head += "  hop: " + "; ".join(
+                        f"{lid} {st}{(' (' + why + ')') if why else ''}"
+                        for lid, st, why in r["statuses"])
+                print(head)
+                for c in r["claims"]:
+                    v = c["verdict"]
+                    neg_fail = r["negative_branch"] and not (
+                        args.negative_allows_supported and v == "SUPPORTED")
+                    if r["negative_branch"]:
+                        v = ("NEG-BRANCH FAIL/" if neg_fail else "NEG-BRANCH ok/") + v
+                    tally[c["verdict"]] += 1
+                    flags = ",".join(c["tags"] + (["source named"] if c["src_named"] else [])
+                                     + (["qualification"] if c["qual_stated"] else []))
+                    print(f"    {v:<12} {_cd_fmt(c['ymd'])} [{c['why']}]"
+                          + (f" {{{flags}}}" if flags else "")
+                          + (f" feed qualification: {', '.join(c['quals'])}" if c["quals"] else ""))
+                    print(f"        {c['sentence'][:args.chars]}")
+                    for e in c["tied"][:2]:
+                        print(f"        <- {e['src']} {e['lid'] or '?'} (export t{e['turn']}): "
+                              f"{e['text'][:args.chars // 2]}")
+                    if c["verdict"] == "UNSUPPORTED" or neg_fail:
+                        bad.append((d.name, doc.get("session_id"), doc.get("rep", 1), r["turn"]))
+                if r["dated_for"]:
+                    print("    commencing instruments: " + "; ".join(
+                        f"{lid} {'DATED' if dd else 'not dated'}"
+                        f"{'' if rr_ else ' (no date retrieved for it)'}"
+                        for lid, (dd, rr_) in r["dated_for"].items()))
+                if args.drops:
+                    for s, raw, why in r["drops"]:
+                        print(f"    DROP {raw!r}: {why}: {s[:args.chars]}")
+                sup = any(c["verdict"] == "SUPPORTED" for c in r["claims"])
+                if r["asked"]:
+                    key = ("asked, a date retrieved, " + ("DATED" if sup else "NOT DATED")
+                           if r["retrieved"] else "asked, no date retrieved, "
+                           + ("dated" if r["claims"] else "no date stated"))
+                    asked[key] += 1
+                if r["negative_branch"] and not r["claims"]:
+                    print("    negative branch: no commencement date stated (PASS)")
+    print("\n  claims: " + ", ".join(f"{k} {tally[k]}" for k in
+                                     ("SUPPORTED", "SUPPORTED_RAW_ONLY", "UNCLEAR",
+                                      "UNSUPPORTED")))
+    print("  (SUPPORTED_RAW_ONLY: the date is stated by a search row's description in the "
+          "API response the tool did not pass on; reported, not failed)")
+    print("  commencement questions: " + ("; ".join(f"{k} {v}" for k, v in sorted(asked.items()))
+                                          or "none"))
+    print(f"  failing (UNSUPPORTED, or any claim on a negative-branch session): {len(bad)}")
+    return 1 if bad else 0
+
+
+# --- P3.4: does the answer name the jurisdiction it answers for? ---------------
+#
+# Batch 9 E. P3.4's acceptance (b): "6378 turn 1 and 6360 turn 1 name their
+# jurisdiction explicitly": where the question names none, the answer is for
+# Scotland and says so; where it says "the UK", the answer covers all four
+# nations and flags whether they diverge. The expectation comes from the
+# rubric (`evidence/rubrics/p34.json`: per base session `expect` "scotland" or
+# "uk_all", `turns` (export turns, default [1]), optional `markers` {name:
+# pattern} printed as columns, optional pattern overrides) or, where the rubric
+# gives none, from the question ("the UK" -> uk_all, else scotland). The
+# nation vocabulary below is generic; a nation named only inside an
+# instrument's title ("(Scotland) Regulations"), a link, or an institution
+# ("the Scottish Ministers") is IMPLICIT, not a statement of jurisdiction.
+DEFAULT_P34_RUBRIC = EVIDENCE_ROOT / "rubrics" / "p34.json"
+_JX_PATTERNS = {
+    "title": (r"\((?:Scotland|Wales|England|Northern\s+Ireland|England\s+and\s+Wales)\)"
+              r"|\bRegulations\s+\(Northern\s+Ireland\)"),
+    "institution": (r"\b(?:Scottish|Welsh|Northern\s+Ireland)\s+(?:Ministers?|Parliament|"
+                    r"Government|Assembly|Executive|Statutory\s+Instruments?|Courts)\b"
+                    r"|\bSenedd\b|\bScotland\s+Act\b"),
+    "scotland": r"\bScotland\b|\bScottish\b|\bScots\b",
+    "england": r"\bEngland\b|\bEnglish\b",
+    "wales": r"\bWales\b|\bWelsh\b",
+    "ni": r"\bNorthern\s+Ireland\b|\bNorthern\s+Irish\b",
+    "gb": r"\bGreat\s+Britain\b",
+    "all_four": (r"\b(?:all|each\s+of\s+the)\s+four\s+(?:nations|jurisdictions|parts|countries)\b"
+                 r"|\b(?:UK|United\s+Kingdom)[- ]wide\b|\b(?:across|throughout)\s+(?:the\s+)?"
+                 r"(?:whole\s+(?:of\s+the\s+)?)?(?:UK|United\s+Kingdom)\b"),
+    "diverge": (r"\bdiffer(?:s|ent|ence|ences|ing)?\b|\bvar(?:y|ies|ying|iation|iations)\b"
+                r"|\bdiverg\w*|\bdepend(?:s|ing)?\s+on\s+(?:where|the\s+(?:nation|jurisdiction|"
+                r"part|country))\b|\bseparate\s+(?:rules|regimes?|legislation|provisions|"
+                r"regulations|legal\s+systems?)\b|\bdevolved\b|\bwhereas\b|\b(?:by|in)\s+contrast\b"
+                r"|\bonly\s+(?:in|applies\s+in|apply\s+in|to)\s+(?:England|Wales|Scotland|"
+                r"Northern\s+Ireland)\b|\bno\s+longer\s+(?:applies|apply)\s+in\b"
+                r"|\bdoes\s+not\s+(?:apply|extend)\s+(?:in|to)\b"),
+    # Sameness stated: the rule is the same in every nation, or applies
+    # UK-wide. A bare "UK-wide" naming an instrument ("the UK-wide Regulations
+    # 1967 have been revoked") names all four nations but flags nothing.
+    "uniform": (r"\b(?:the\s+same|identical|uniform(?:ly)?|equally|consistent)\b[^.\n]{0,60}"
+                r"\b(?:UK|United\s+Kingdom|nations|jurisdictions|England|Scotland|Wales|"
+                r"Northern\s+Ireland)\b"
+                r"|\b(?:appl(?:y|ies)|extends?)\s+(?:equally\s+)?(?:across|throughout|to)\s+"
+                r"(?:the\s+)?(?:whole\s+(?:of\s+the\s+)?)?(?:UK|United\s+Kingdom)\b"
+                r"|\b(?:UK|United\s+Kingdom)[- ]wide\s+(?:rules?|requirements?|regimes?|"
+                r"standards?)\b"),
+    "question_uk": r"\b(?:the\s+)?(?:UK|U\.K\.|United\s+Kingdom|Britain)\b",
+}
+_JX_NATIONS = ("scotland", "england", "wales", "ni")
+
+
+def _jx_compile(rubric: dict) -> dict:
+    pats = dict(_JX_PATTERNS)
+    pats.update((rubric.get("_patterns") or {}))
+    return {k: re.compile(v, re.I) for k, v in pats.items()}
+
+
+def jx_sentence(sentence: str, rx: dict) -> tuple:
+    """(explicit nations, implicit hits) for one sentence: link URLs, titles
+    and institutions are masked before the nation words are read."""
+    s = _SCHED_URL.sub("]", sentence)
+    implicit = [m.group(0) for k in ("title", "institution") for m in rx[k].finditer(s)]
+    s = rx["institution"].sub(" ", rx["title"].sub(" ", s))
+    implicit += [m.group(0) for m in re.finditer(r"\[[^\]]*\]", s)
+                 if any(rx[n].search(m.group(0)) for n in _JX_NATIONS)]
+    s = re.sub(r"\[[^\]]*\]", " ", s)     # a link's label is a title, not a statement
+    nations = {n for n in _JX_NATIONS if rx[n].search(s)}
+    if rx["gb"].search(s):
+        nations |= {"england", "wales", "scotland"}
+    if rx["all_four"].search(s):
+        nations |= set(_JX_NATIONS) | {"all_four"}
+    return nations, implicit
+
+
+def jx_verdict(prose: str, expect: str, rx: dict) -> tuple:
+    """(verdict, reason, explicit nations, flags, sentences) for one answer."""
+    explicit, implicit, sents = set(), [], []
+    for s in _sentences(prose):
+        nations, imp = jx_sentence(s, rx)
+        if nations or imp:
+            sents.append(("EXPLICIT " + "/".join(sorted(nations)) if nations else "IMPLICIT",
+                          s))
+        explicit |= nations
+        implicit += imp
+    flags = [k for k in ("diverge", "uniform") if rx[k].search(prose)]
+    nations = explicit - {"all_four"}
+    if expect == "uk_all":
+        missing = [n for n in _JX_NATIONS if n not in nations]
+        if missing:
+            return "FAIL", "does not name " + ", ".join(missing), nations, flags, sents
+        if not flags:
+            return "FAIL", "names all four, flags no divergence (or sameness)", nations, flags, sents
+        return "PASS", "all four named, " + "/".join(flags), nations, flags, sents
+    if "scotland" in nations:
+        return "PASS", "names Scotland as its jurisdiction", nations, flags, sents
+    if nations:
+        return "FAIL", "names " + ", ".join(sorted(nations)) + " and not Scotland", \
+            nations, flags, sents
+    if implicit:
+        return "IMPLICIT", "Scotland only in a title, link or institution", nations, flags, sents
+    return "FAIL", "names no jurisdiction", nations, flags, sents
+
+
+def cmd_jurisdiction(args) -> int:
+    """P3.4's acceptance (b): the graded turns name their jurisdiction
+    explicitly (Scotland where the question names none; all four nations,
+    divergence flagged, where it says "the UK"). Prints every sentence naming a
+    nation, EXPLICIT or IMPLICIT (the both-directions audit; the output quotes
+    answers: keep it out of the repo). Exits 1 on a FAIL; IMPLICIT is
+    reported, not failed."""
+    rpath = Path(args.rubric)
+    try:
+        rubric = json.loads(rpath.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"  rubric not read ({rpath}): {e}")
+        return 2
+    rx = _jx_compile(rubric)
+    sessions = {k: v for k, v in rubric.items() if not k.startswith("_")}
+    print(f"P3.4 jurisdiction named, per graded turn; rubric {rpath.name}")
+    tally, bad = Counter(), []
+    for d in _grading_dirs(args):
+        for doc in sorted(load_runs(d), key=lambda x: (str(x.get("session_id")), x.get("rep", 1))):
+            base = _run_base(doc)
+            entry = sessions.get(base)
+            if entry is None or (args.session and not ({base, str(doc.get("session_id"))}
+                                                       & set(args.session))):
+                continue
+            for n, exp, t in _export_turns(doc):
+                if exp not in (entry.get("turns") or [1]):
+                    continue
+                prose = _without_footer(t.get("answer") or "")
+                expect = entry.get("expect") or (
+                    "uk_all" if rx["question_uk"].search(t.get("question") or "") else "scotland")
+                src = "rubric" if entry.get("expect") else "question"
+                if not prose.strip():
+                    v, why, nations, flags, sents = "NO ANSWER", "", set(), [], []
+                else:
+                    v, why, nations, flags, sents = jx_verdict(prose, expect, rx)
+                tally[v] += 1
+                if v == "FAIL":
+                    bad.append((d.name, doc.get("session_id"), doc.get("rep", 1), n))
+                marks = {k: bool(re.search(p, prose, re.I))
+                         for k, p in (entry.get("markers") or {}).items()}
+                print(f"\n  {d.name} {doc.get('session_id')} r{doc.get('rep', 1)} t{n} "
+                      f"(export {exp}) {t.get('chat_mode') or '?'} expect {expect} ({src}): "
+                      f"{v}{(': ' + why) if why else ''}"
+                      + (f"  markers {marks}" if marks else ""))
+                if args.sentences:
+                    for cls, s in sents:
+                        print(f"      {cls:<36} {s[:args.chars]}")
+    print("\n  verdicts: " + ", ".join(f"{k} {v}" for k, v in sorted(tally.items())))
+    return 1 if bad else 0
+
+
+# --- P4.3: the Sources rail, graded by a careful reader -----------------------
+#
+# The stored counters (`sources_unused`, `turns_source_fallback`, from
+# `_source_cited`) are the TOKEN test's: an exact url/cite/sub substring. Batch
+# 10 C found it overstates the unused rate (43% against 31% post-P2.1) because
+# the audit strips `_lid` and a section search rewrites `cite` to "Title, s.N",
+# so a source the answer links by URL reads as uncited, and a source the answer
+# names in words always does. This is the reader test batch 10 C hand-validated
+# both ways (its `reader.py`), ported verbatim but for three fixes found by
+# validating it against the product's keep test: a neutral citation or bare id
+# must not run on into a longer one (`_rail_ends_clear`), a regnal-year id has
+# four segments (`_RAIL_LID_IN_URL`), and a case's parties followed by another
+# judgment's citation name that judgment (`_rail_case_title_named`). It is
+# deliberately NOT the product's own keep test (`utils/source_naming.py`): a
+# grader built from the code it grades cannot see that code's mistakes.
+
+RAIL_BAR = 0.15  # P4.3 (ii): the reader-unused rate on report turns, per chat mode
+_RAIL_URL_ANY = re.compile(r"https?://[^\s)\]>\"'<]+", re.I)
+# A regnal-year id has four segments (`ukpga/geo6/14/51`): read as three, every
+# Act of one session was "cited" by any other (batch 11 C, 36 report verdicts).
+_RAIL_LID_IN_URL = re.compile(
+    r"legislation\.gov\.uk/([a-z]+/(?:[a-z]+\d*/[\d-]+/[^/]+|[^/]+/[^/]+))")
+_RAIL_BARE_LID = re.compile(r"^([a-z]+/\d{4}/\d+)")
+_RAIL_CASE_HOST = "caselaw.nationalarchives.gov.uk"
+_RAIL_SI_TYPES = {"ssi", "uksi", "wsi", "nisr", "nisi", "ukdsi", "sdsi"}
+# Batch 12 D: or "(Commencement", closed or not: a quoted, truncated search
+# query ('"Widget Act 1901 (Commencement No. 1"') names the commencement
+# instrument, not the Act (3 stored answers, each read; the product's
+# `source_naming._LONGER_TITLE` has the same alternative).
+_RAIL_LONGER_TITLE = re.compile(
+    r"\s*\((?:[^)]{1,80}\)\s*(regulations|order|rules|scheme)|commencement\b)")
+_RAIL_OLD_SI = re.compile(r"(\d{4}) No\. (\d+)")
+_RAIL_MODES = ("conversational", "research", "deep_research")
+
+
+_RAIL_PRODUCT: dict = {}
+
+
+def _rail_product(name: str):
+    """`normalise_leg_url` and `strip_scope_blocks`, imported once."""
+    if not _RAIL_PRODUCT:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from src.utils.citation_links import normalise_leg_url  # noqa: PLC0415
+        from src.utils.search_scope import strip_scope_blocks  # noqa: PLC0415
+        _RAIL_PRODUCT.update(normalise_leg_url=normalise_leg_url,
+                             strip_scope_blocks=strip_scope_blocks)
+    return _RAIL_PRODUCT[name]
+
+
+def _rail_norm_leg_url(u: str) -> str:
+    return _rail_product("normalise_leg_url")(u)
+
+
+def _rail_norm_case_url(u: str) -> str:
+    s = re.sub(r"^https?://", "", (u or "").strip().rstrip(".,;:)]}'\""), flags=re.I)
+    s = re.sub(r"^www\.", "", s, flags=re.I).split("#", 1)[0].split("?", 1)[0]
+    return s.rstrip("/").lower()
+
+
+def _rail_link_keys(text: str) -> tuple:
+    """Distinct normalised legislation and case-law URLs anywhere in text."""
+    leg, case = set(), set()
+    for u in _RAIL_URL_ANY.findall(text or ""):
+        n = _rail_norm_leg_url(u)
+        if n:
+            leg.add(n)
+        elif _RAIL_CASE_HOST in u.lower():
+            case.add(_rail_norm_case_url(u))
+    return leg, case
+
+
+def _rail_lid_of_url(n: str) -> str:
+    m = _RAIL_LID_IN_URL.search(n or "")
+    return m.group(1).lower() if m else ""
+
+
+def _rail_src_lid(s: dict) -> str:
+    """The audit strips `_lid`: recover it from the URL, else a bare-id cite."""
+    n = _rail_norm_leg_url(s.get("url") or "")
+    if n:
+        lid = _rail_lid_of_url(n)
+        if lid:
+            return lid
+    m = _RAIL_BARE_LID.match((s.get("cite") or "").strip().lower())
+    return m.group(1) if m else ""
+
+
+def _rail_norm_text(t: str) -> str:
+    t = (t or "").lower().replace("\u2019", "'").replace("\u2018", "'").replace("\u00a0", " ")
+    t = re.sub(r"[*_`,]", "", t)
+    return re.sub(r"\s+", " ", t)
+
+
+def _rail_norm_title(t: str) -> str:
+    t = _rail_norm_text(t).strip()
+    return t[4:] if t.startswith("the ") else t
+
+
+def _rail_title_named(title: str, body_n: str) -> bool:
+    """The title occurs somewhere NOT as the head of a longer instrument title
+    ("... Act 2025 (Commencement No. 1) Regulations 2025" does not name the Act)."""
+    i = body_n.find(title)
+    while i != -1:
+        if not _RAIL_LONGER_TITLE.match(body_n, i + len(title)):
+            return True
+        i = body_n.find(title, i + 1)
+    return False
+
+
+def _rail_ends_clear(needle: str, hay: str) -> bool:
+    """`needle` occurs in `hay` with no digit or letter running on after it.
+
+    Batch 11 C: batch 10 C's reader tested a neutral citation and a bare id as
+    plain substrings, so "[1901] EAT 1" read as cited by "[1901] EAT 12" (13
+    rail-source verdicts over the 64 stored directories, every one a neutral
+    citation running on) — the same prefix defect the product's token test
+    had. The only change to the validated reader."""
+    i = hay.find(needle)
+    while i != -1:
+        j = i + len(needle)
+        if j >= len(hay) or not hay[j].isalnum():
+            return True
+        i = hay.find(needle, i + 1)
+    return False
+
+
+_RAIL_NCN = re.compile(r"\[(\d{4})\]\s+([a-z]+(?:\s+[a-z]+){0,2}?)\s+(\d+)")
+_RAIL_CASE_PATH = re.compile(r"caselaw\.nationalarchives\.gov\.uk/([a-z0-9/-]+?)/?(?=[)\s\]#?.;]|$)")
+
+
+def _rail_case_title_named(s: dict, title: str, body_n: str) -> bool:
+    """A case's parties named, and not as another judgment of the same parties.
+
+    Batch 11 C: the reader took a case title anywhere as a reference, so a
+    first-instance search hit read as cited by its appeal ("Widget Co v
+    Example Ltd [1902] EWCA Civ 9" for "[1901] EWHC 5"): 50 of the 52
+    case-title matches in the stored Worker reports, every one read, and 2
+    answer-level verdicts. An occurrence followed in the same sentence (100
+    chars) by a neutral citation or judgment URL that is not this source's
+    names the other judgment."""
+    own_m = _RAIL_NCN.search(_rail_norm_text(s.get("cite") or s.get("sub") or ""))
+    own_ncn = own_m.groups() if own_m else None
+    own_u = _RAIL_CASE_PATH.search((s.get("url") or "").lower())
+    own_path = own_u.group(1) if own_u else ""
+    i = body_n.find(title)
+    while i != -1:
+        win = body_n[i + len(title): i + len(title) + 100]
+        stops = [j for j in (win.find("\n"), win.find(". "), win.find("; ")) if j != -1]
+        win = win[:min(stops)] if stops else win
+        found = [m for m in (_RAIL_NCN.search(win), _RAIL_CASE_PATH.search(win)) if m]
+        if not found:
+            return True
+        first = min(found, key=lambda m: m.start())
+        if first.re is _RAIL_CASE_PATH:
+            if not own_path or first.group(1) == own_path:
+                return True
+        elif not own_ncn or first.groups() == own_ncn:
+            return True
+        i = body_n.find(title, i + 1)
+    return False
+
+
+def rail_reader(s: dict, body: str, body_n: str, leg_lids: set, case_urls: set) -> str:
+    """A careful reader's test: '' if `body` does not reference the source,
+    else the route that found it (url, ncn, title, si-number, eu-number,
+    id-text). `body_n` is `_rail_norm_text(body)`; `leg_lids` the instrument
+    ids of every legislation URL in `body`; `case_urls` its case-law URLs."""
+    if s.get("kind") == "Case":
+        u = _rail_norm_case_url(s.get("url") or "")
+        if u and u in case_urls:
+            return "url"
+        ncn = (s.get("cite") or s.get("sub") or "").strip()
+        if ncn and len(ncn) >= 6 and _rail_ends_clear(_rail_norm_text(ncn), body_n):
+            return "ncn"
+        title = _rail_norm_title(s.get("title") or "")
+        if len(title) >= 8 and _rail_case_title_named(s, title, body_n):
+            return "title"
+        return ""
+    lid = _rail_src_lid(s)
+    if lid and lid in leg_lids:
+        return "url"
+    title = _rail_norm_title(s.get("title") or "")
+    if len(title) >= 8 and not _RAIL_BARE_LID.match(title) and _rail_title_named(title, body_n):
+        return "title"
+    if lid:
+        typ, year, num = lid.split("/", 2)
+        if typ in _RAIL_SI_TYPES and re.search(
+                rf"(?<![\d/]){re.escape(year)}/{re.escape(num)}(?![\d])", body):
+            return "si-number"
+        if typ.startswith("eu") and re.search(
+                rf"(?<![\d/]){re.escape(num)}/{re.escape(year)}(?![\d])", body):
+            return "eu-number"
+        if _rail_ends_clear(lid, body_n):
+            return "id-text"
+    # an old SI whose URL is malformed: cite "1949 No. 870 (S. 47)"
+    m = _RAIL_OLD_SI.match((s.get("cite") or "").strip())
+    if m and (re.search(rf"(?<![\d/]){m.group(1)}/{m.group(2)}(?![\d])", body)
+              or f"{m.group(1)} no. {m.group(2)}" in body_n):
+        return "si-number"
+    return ""
+
+
+def _rail_text_index(text: str) -> tuple:
+    leg, case = _rail_link_keys(text)
+    return text, _rail_norm_text(text), {_rail_lid_of_url(u) for u in leg} - {""}, case
+
+
+def rail_turn(t: dict, doc: Optional[dict] = None) -> dict:
+    """One turn's rail, graded. The turn classes are batch 10 C's census:
+
+    * `report` — answered, at least one delegation, and EVERY delegation
+      completed (no halt, no lost reply, no error, a non-empty report). The
+      bar is read on these alone: a failed delegation's rail is P4.5's.
+    * `report_mixed`, `no_report`, `no_delegation`, `unanswered`.
+
+    Per rail source: `reader` (the answer references it, and how), `token`
+    (the stored `_source_cited`), and `unvouched`: no excerpt, and no
+    completed report references it by either test. A report turn holding an
+    unvouched source shows a rail no report vouched for, which is what the
+    Worker seam's fall-back-to-all produced before P4.3.
+
+    `fallback` (batch 12 D) is the detector's test: unvouched AND the answer
+    does not reference it. An unvouched source the answer cites is what P4.3's
+    lever R puts in the rail at the answer seam, not the fall-back; on every
+    stored directory before lever R the two tests flag the same turns.
+    """
+    doc = doc or {}
+    answer = t.get("answer") if isinstance(t.get("answer"), str) else ""
+    audit = t.get("audit") or {}
+    dgs = audit.get("delegations") or []
+    status = t.get("status") or ""
+    answered = bool(answer.strip()) and status not in ("error", "http_error", "needs_clarification")
+
+    def done(d):
+        return (not (d.get("halted") or d.get("lost") or d.get("error"))
+                and bool((d.get("report") or "").strip()))
+
+    n_done = sum(1 for d in dgs if done(d))
+    if not answered:
+        cls = "unanswered"
+    elif not dgs:
+        cls = "no_delegation"
+    elif n_done == len(dgs):
+        cls = "report"
+    elif n_done:
+        cls = "report_mixed"
+    else:
+        cls = "no_report"
+    mode = (audit.get("chat_mode") or t.get("chat_mode")
+            or doc.get("filter_snapshot_chat_mode") or "?")
+    out = {"cls": cls, "mode": mode, "sources": [], "fallback_counter":
+           bool((t.get("timing") or {}).get("source_filter_fallback"))}
+    if not answered:
+        return out
+    body = _without_footer(answer)
+    b_idx = _rail_text_index(body)
+    strip = _rail_product("strip_scope_blocks")
+    rep_text = ("\n".join(strip(d.get("report") or "")[0] for d in dgs if done(d))
+                if cls == "report" else "")
+    r_idx = _rail_text_index(rep_text)
+    for s in audit.get("sources") or []:
+        reader = rail_reader(s, *b_idx)
+        token = _source_cited(s, body)
+        unvouched = bool(cls == "report" and not s.get("excerpt")
+                         and not rail_reader(s, *r_idx) and not _source_cited(s, rep_text))
+        out["sources"].append({"src": s, "reader": reader, "token": token,
+                               "unvouched": unvouched,
+                               "fallback": unvouched and not reader})
+    return out
+
+
+def _rail_key(s: dict) -> str:
+    return _rail_src_lid(s) or (s.get("url") or "") or (s.get("cite") or "")
+
+
+def cmd_rail(args) -> int:
+    """P4.3's grader: the unused-source rate on report turns by the reader test,
+    per chat mode, and the report turns whose rail no report vouched for (the
+    fall-back). Exit 1 if any such turn exists, or any chat mode's rate is over
+    `RAIL_BAR`. `--drops` lists every source on which the reader and the token
+    test disagree, and every unvouched source: the both-ways audit."""
+    root = Path(args.dir)
+    exclude = {x for x in (args.exclude or "").split(",") if x}
+    dirs = ([p for p in sorted(root.iterdir()) if p.is_dir() and p.name not in exclude]
+            if args.all else [root])
+    turns = Counter()
+    tally = Counter()
+    agree = Counter()
+    drops = []
+    files = 0
+    for d in dirs:
+        for p in sorted(d.glob("*.json")):
+            try:
+                doc = json.loads(p.read_text(encoding="utf-8"))
+            except Exception as e:  # noqa: BLE001
+                print(f"[!] unreadable {p.name}: {e}", file=sys.stderr)
+                continue
+            if "turns" not in doc:
+                continue
+            files += 1
+            for t in doc.get("turns") or []:
+                g = rail_turn(t, doc)
+                turns[g["cls"]] += 1
+                if g["cls"] != "report" or not g["sources"]:
+                    continue
+                m = g["mode"]
+                n = len(g["sources"])
+                unused = sum(1 for x in g["sources"] if not x["reader"])
+                tok_unused = sum(1 for x in g["sources"] if not x["token"])
+                unv = sum(1 for x in g["sources"] if x["fallback"])
+                ans_only = sum(1 for x in g["sources"] if x["unvouched"] and not x["fallback"])
+                for k in (m, "all"):
+                    tally[(k, "turns")] += 1
+                    tally[(k, "sources")] += n
+                    tally[(k, "unused")] += unused
+                    tally[(k, "token_unused")] += tok_unused
+                    tally[(k, "fallback_turns")] += bool(unv)
+                    tally[(k, "unvouched")] += unv
+                    tally[(k, "answer_only")] += ans_only
+                    tally[(k, "cite_none")] += unused == n
+                agree[(bool(unv), g["fallback_counter"])] += 1
+                where = f"{d.name} {p.name} t{t.get('turn')} {m}"
+                for x in g["sources"]:
+                    s = x["src"]
+                    if bool(x["reader"]) != x["token"]:
+                        tally["reader_only" if x["reader"] else "token_only"] += 1
+                        drops.append(f"  {'READER-ONLY ' + x['reader'] if x['reader'] else 'TOKEN-ONLY':<22}"
+                                     f" {where}  {s.get('kind')}  {_rail_key(s)[:70]}"
+                                     f"  | {(s.get('title') or '')[:args.chars]}")
+                    if x["unvouched"]:
+                        drops.append(f"  {'UNVOUCHED' if x['fallback'] else 'ANSWER-ONLY':<22} "
+                                     f"{where}  {s.get('kind')}  "
+                                     f"{_rail_key(s)[:70]}  | {(s.get('title') or '')[:args.chars]}")
+    print(f"rail (P4.3): {len(dirs)} director{'y' if len(dirs) == 1 else 'ies'}, {files} run files"
+          + (f"  (excluded: {', '.join(sorted(exclude))})" if exclude else ""))
+    print("  turn classes: " + ", ".join(f"{k} {turns[k]}" for k in
+                                         ("report", "report_mixed", "no_report",
+                                          "no_delegation", "unanswered")))
+    print(f"  {'report turns with a rail':<34} {'turns':>6} {'sources':>8} "
+          f"{'unused (reader)':>18} {'token test':>14} {'fall-back turns':>16} {'cite none':>10}")
+    fail = False
+    for k in _RAIL_MODES + ("all",):
+        n = tally[(k, "sources")]
+        if not tally[(k, "turns")]:
+            continue
+        u = tally[(k, "unused")]
+        rate = u / n if n else 0.0
+        over = k != "all" and rate > RAIL_BAR
+        fail |= over
+        print(f"  {k:<34} {tally[(k, 'turns')]:>6} {n:>8} "
+              f"{u:>8} ({100 * rate:4.1f}%){'*' if over else ' '} "
+              f"{tally[(k, 'token_unused')]:>6} ({100 * tally[(k, 'token_unused')] / n:3.0f}%) "
+              f"{tally[(k, 'fallback_turns')]:>8} ({tally[(k, 'unvouched')]} src) "
+              f"{tally[(k, 'cite_none')]:>6}")
+    fb = tally[("all", "fallback_turns")]
+    fail |= bool(fb)
+    print(f"  sources no report vouched for that the answer cites (lever R re-admits these; "
+          f"not the fall-back): {tally[('all', 'answer_only')]}")
+    print(f"  reader vs token test: reader-only {tally['reader_only']}, token-only "
+          f"{tally['token_only']} (--drops lists each)")
+    print(f"  fall-back detector vs the product counter (timing.source_filter_fallback):"
+          f" both {agree[(True, True)]}, detector only {agree[(True, False)]},"
+          f" counter only {agree[(False, True)]}, neither {agree[(False, False)]}")
+    print(f"  bar: 0 fall-back turns and each chat mode <= {RAIL_BAR:.0%} unused: "
+          f"{'NOT MET' if fail else 'MET'}  (* = over the bar)")
+    if args.drops:
+        print("\n  -- every disagreement and every unvouched source --")
+        for ln in drops:
+            print(ln)
+    return 1 if fail else 0
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     _utf8_stdout()
     p = argparse.ArgumentParser(prog="replay_report")
@@ -7706,6 +11066,19 @@ def main(argv: Iterable[str] | None = None) -> int:
     cu.add_argument("--unasked", action="store_true",
                     help="the measured cost: turns carrying a currency "
                          "disclaimer whose question never asked about currency")
+    nc = sub.add_parser("negcurrency",
+                        help="P3.24 measurement: negative and continuing "
+                             "commencement claims, each read against what "
+                             "its turn retrieved")
+    nc.add_argument("--all", action="store_true",
+                    help="--dir is the replay ROOT: walk every subdirectory")
+    nc.add_argument("--sessions", default=None,
+                    help="comma-separated session ids (6409 also matches p37_6409)")
+    nc.add_argument("--drops", action="store_true",
+                    help="print every sentence in the vocabulary NOT graded, "
+                         "with its reason")
+    nc.add_argument("--verbose", action="store_true",
+                    help="with --all, print every claim per directory too")
     sub.add_parser("scoperecord",
                    help="P2.9 acceptance: every search a worker run issued, "
                         "against what its own scope block recorded")
@@ -7738,6 +11111,16 @@ def main(argv: Iterable[str] | None = None) -> int:
                          "shared sessions only")
     cl.add_argument("--only", nargs="+", metavar="SESSION",
                     help="with --before, restrict both sides to these sessions")
+    sc = sub.add_parser("scts",
+                        help="P3.20 acceptance: turns whose case-law search ran SCTS, what "
+                             "they cited from it, and the footer's coverage sentence")
+    sc.add_argument("--all", action="store_true",
+                    help="list every answered turn, not only SCTS turns and findings")
+    sc.add_argument("--require-cite", action="store_true",
+                    help="a turn with an ok SCTS search must link a judgment it returned "
+                         "(acceptance clause 2's code half; use on the 6375 reps)")
+    sc.add_argument("--only", nargs="+", metavar="SESSION",
+                    help="restrict to these sessions")
     dc = sub.add_parser("discovery",
                         help="P2.7 pre-flight: discovery calls per worker run, "
                              "halted vs completed, and what a budget of N would block")
@@ -7932,6 +11315,82 @@ def main(argv: Iterable[str] | None = None) -> int:
     sub.add_parser("corpus",
                    help="retrieval shape: raw volume, where an enabling power "
                         "can come from, and what the tool memo costs P2.2")
+    ssc = sub.add_parser("sectionscope",
+                         help="P4.17 acceptance: turns that searched only within "
+                              "instruments carry the section scope line, and no "
+                              "other turn does (MISSING / MISATTRIBUTED)")
+    ssc.add_argument("--all", action="store_true",
+                     help="list every answered turn, not only the shape and findings")
+    sch = sub.add_parser("schedules",
+                         help="P3.27 acceptance and its Invariant 1 guard: what each "
+                              "answer says about a schedule or annex unit LEX holds "
+                              "(never 'not held') or does not hold (the index, not a "
+                              "search limit)")
+    sch.add_argument("--rubric", default=str(DEFAULT_P327_RUBRIC),
+                     help="the gitignored rubric JSON (units name a matter's instruments)")
+    sch.add_argument("--also", nargs="+", metavar="DIR", help="further dirs to grade")
+    sch.add_argument("--all-dirs", action="store_true",
+                     help="grade every directory beside --dir (say so in any write-up: "
+                          "a new directory changes the counts)")
+    sch.add_argument("--session", nargs="+", default=None,
+                     help="restrict to these session ids or script bases")
+    sch.add_argument("--drops", action="store_true",
+                     help="also print every clause about a unit that states nothing")
+    sch.add_argument("--chars", type=int, default=240)
+    au = sub.add_parser("authorities",
+                        help="P3.22's bar: each rubric authority retrieved / read / cited "
+                             "per run, out-of-corpus authorities named second-hand, the "
+                             "carrier retrieved (gitignored rubric)")
+    au.add_argument("--rubric", default=str(DEFAULT_P322_RUBRIC),
+                    help="the gitignored rubric JSON (names a matter's authorities)")
+    au.add_argument("--also", nargs="+", metavar="DIR", help="further dirs to grade")
+    au.add_argument("--all-dirs", action="store_true",
+                    help="grade every directory beside --dir (a new directory changes the counts)")
+    au.add_argument("--before", nargs="+", metavar="DIR",
+                    help="the before-column: items 1 and 2 compared run counts against it")
+    au.add_argument("--session", nargs="+", default=None)
+    au.add_argument("--chars", type=int, default=300)
+    cd = sub.add_parser("cmcdates",
+                        help="P3.21's acceptance: every commencement date an answer states, "
+                             "SUPPORTED / UNCLEAR / UNSUPPORTED against what the conversation "
+                             "retrieved; 6411's negative branch")
+    cd.add_argument("--also", nargs="+", metavar="DIR", help="further dirs to grade")
+    cd.add_argument("--all-dirs", action="store_true",
+                    help="grade every directory beside --dir (a new directory changes the counts)")
+    cd.add_argument("--session", nargs="+", default=None,
+                    help="restrict to these session ids or script bases")
+    cd.add_argument("--drops", action="store_true",
+                    help="also print every dated sentence NOT graded as a claim, with why")
+    cd.add_argument("--negative-allows-supported", action="store_true",
+                    help="on a negative-branch session fail only a claim that is not "
+                         "SUPPORTED (the booked criterion fails any date stated)")
+    cd.add_argument("--chars", type=int, default=300)
+    jx = sub.add_parser("jurisdiction",
+                        help="P3.4's acceptance (b): the graded turn names its jurisdiction "
+                             "(Scotland, or all four nations with divergence flagged where "
+                             "the question says 'the UK')")
+    jx.add_argument("--rubric", default=str(DEFAULT_P34_RUBRIC),
+                    help="the gitignored rubric JSON (sessions, turns, expectations)")
+    jx.add_argument("--also", nargs="+", metavar="DIR", help="further dirs to grade")
+    jx.add_argument("--all-dirs", action="store_true",
+                    help="grade every directory beside --dir (a new directory changes the counts)")
+    jx.add_argument("--session", nargs="+", default=None)
+    jx.add_argument("--sentences", action="store_true",
+                    help="print every sentence naming a nation, EXPLICIT or IMPLICIT")
+    jx.add_argument("--chars", type=int, default=240)
+    rl = sub.add_parser("rail",
+                        help="P4.3's grader: the unused-source rate on report turns by the "
+                             "careful-reader test, per chat mode, and the rails no report "
+                             "vouched for (exit 1 if over the bar)")
+    rl.add_argument("--all", action="store_true",
+                    help="--dir is the replay ROOT: walk every subdirectory")
+    rl.add_argument("--exclude", default="",
+                    help="with --all, comma-separated directory names to skip "
+                         "(e.g. baseline,wave1, the pre-P2.1 sweeps)")
+    rl.add_argument("--drops", action="store_true",
+                    help="list every source on which the reader and the token test "
+                         "disagree, and every unvouched source")
+    rl.add_argument("--chars", type=int, default=80)
     args = p.parse_args(list(argv) if argv is not None else None)
     return {
         "summary": cmd_summary,
@@ -7943,9 +11402,11 @@ def main(argv: Iterable[str] | None = None) -> int:
         "derivations": cmd_derivations,
         "commencements": cmd_commencements,
         "currency": cmd_currency,
+        "negcurrency": cmd_negcurrency,
         "scoperecord": cmd_scoperecord,
         "nosearch": cmd_nosearch,
         "caselaw": cmd_caselaw,
+        "scts": cmd_scts,
         "discovery": cmd_discovery,
         "depth": cmd_depth,
         "modes": cmd_modes,
@@ -7962,6 +11423,12 @@ def main(argv: Iterable[str] | None = None) -> int:
         "interpret": cmd_interpret,
         "hedges": cmd_hedges,
         "corpus": cmd_corpus,
+        "sectionscope": cmd_sectionscope,
+        "schedules": cmd_schedules,
+        "authorities": cmd_authorities,
+        "cmcdates": cmd_cmcdates,
+        "jurisdiction": cmd_jurisdiction,
+        "rail": cmd_rail,
     }[args.cmd](args)
 
 

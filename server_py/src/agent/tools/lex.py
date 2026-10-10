@@ -4,6 +4,11 @@ import re
 from urllib.parse import urlparse
 
 from ...config import settings
+from ...utils.removal_effects import (
+    QUALIFIED,
+    classify_removal,
+    counts_from_effects,
+)
 
 
 def _slim_search_results(resp_json: dict) -> dict:
@@ -30,8 +35,14 @@ def _slim_search_results(resp_json: dict) -> dict:
     So it would steer Phase 2 at least as often as it helped. Decided with the
     user at Session 16: not used.
 
-    description is intentionally excluded — it is verbose and redundant once Phase 2
-    retrieves actual section text via search_legislation_sections.
+    ~~description is intentionally excluded — it is verbose and redundant once
+    Phase 2 retrieves actual section text via search_legislation_sections.~~
+    **`description` is kept, cut to `SEARCH_DESCRIPTION_CAP` characters
+    (FIX_PLAN P3.6, batch 9 D).** True of the text, false of the relationships:
+    no section text says what an instrument commences, but its description
+    does, with the date ("These Regulations bring sections 31 and 36 ... into
+    force on 8 October 2020"). The reason it was stripped was size, and the cap
+    answers that: see `_search_description`.
 
     legislation_id is derived from the URI and included explicitly so the model
     can pass it directly to search_legislation_sections.
@@ -71,10 +82,53 @@ def _slim_search_results(resp_json: dict) -> dict:
             "year": item.get("year"),
             "extent": item.get("extent", []),
         })
+        description = _search_description(item.get("description"))
+        if description:
+            slimmed[-1]["description"] = description
     return {
         "results": slimmed,
         "total": resp_json.get("total", len(slimmed)),
     }
+
+
+# FIX_PLAN P3.6: the cap on a search row's `description`, chosen from every
+# stored search row (batch 9 D, `desc_census.py`: 7,189 distinct rows, 6,535
+# with real text). Real descriptions run to a median of 345 characters and a
+# 90th percentile of 593, against the row's sample of 73-210, and the API itself
+# cuts many at 500 ("..."). At 600 the whole description survives for 90.5% of
+# rows, and a stated "into force on <date>" keeps its date for 266 of 273 rows
+# carrying one (at 300: 41.1% and 240; `cap_p36.py`). It is also
+# `lookup_legislation`'s cap on the same field (`executor.py`), so a searched
+# and a looked-up instrument show the same text up to the cut. Re-run over every
+# stored search result, the largest output grows from 2,989 to 4,643 characters,
+# under the 8,000 every stored replay was summarised at, so no Phase-1 result
+# crosses it (batch 9 D's note).
+SEARCH_DESCRIPTION_CAP = 600
+_HAS_LETTER = re.compile(r"[A-Za-z]")
+
+
+def _search_description(value) -> str:
+    """A search row's `description` as the model sees it, or "" for none.
+
+    Whitespace is collapsed (newlines in the API's text cost escapes and carry
+    nothing). A value with no letter is dropped: 304 stored rows are dot
+    leaders (". . . . .") and 282 are empty, and an empty key is noise. Over
+    the cap, the text is cut at the last space in the second half of the cap
+    and marked "...", the mark the API uses for its own cuts, so a cut is never
+    mid-word: a date cut to "1 Ma" would be worse than no date.
+    """
+    if not isinstance(value, str):
+        return ""
+    text = " ".join(value.split())
+    if not _HAS_LETTER.search(text):
+        return ""
+    if len(text) <= SEARCH_DESCRIPTION_CAP:
+        return text
+    cut = text[:SEARCH_DESCRIPTION_CAP - 3]
+    space = cut.rfind(" ")
+    if space >= SEARCH_DESCRIPTION_CAP // 2:
+        cut = cut[:space]
+    return cut.rstrip(" ,;:.") + "..."
 
 
 # The complete `extent` vocabulary the LEX API emits, measured over 17,560 result
@@ -100,7 +154,22 @@ _TERRITORY_ALIASES = {
     "northern ireland": "NI",
     "united kingdom": "UK",
     "great britain": "GB",
+    # FIX_PLAN P3.26: legislation.gov.uk's own extent code for Northern
+    # Ireland ("E+W+S+N.I.", "N.I."), which LEX does not emit today (0 of
+    # 39,133 stored rows) but legislation.gov.uk's per-provision extent does
+    # (735 of 10,846 provision extents read in batch 12 G).
+    "n.i.": "NI",
+    "n.i": "NI",
 }
+
+# FIX_PLAN P3.26: every token `_extent_tokens` can produce that names a
+# territory. Anything else it produces (a value upper-cased because no alias
+# knew it) is unrecognised, and an unrecognised token makes the extent UNKNOWN
+# for the filter, never a territory no filter accepts: before P3.26 such a row
+# was dropped under every filter, against the rule that an unknown extent is
+# admitted (Invariant 1).
+_KNOWN_TERRITORY_TOKENS = frozenset({"E", "W", "S", "NI", "UK", "GB"})
+_FOUR_NATIONS = frozenset({"E", "W", "S", "NI"})
 
 # Which territory tokens satisfy each filter value. UK (and GB, where it appears)
 # count for their constituent nations: a UK-wide Act applies in Scotland, so a
@@ -185,6 +254,12 @@ def _matches_jurisdiction(
        admitted there, because "UK-wide only" is an explicit narrowing and a row
        that does not say it is UK-wide does not satisfy it.
 
+    **P3.26:** a token no alias recognises is not a territory no filter
+    accepts, which dropped the row under every filter: it makes the extent
+    unknown (rule 2), unless a recognised token already matches. "N.I." is
+    Northern Ireland, and the four nations named one by one are the United
+    Kingdom (legislation.gov.uk's own codes, "E+W+S+N.I.").
+
     Scored against the 17,560 baseline rows, this drops **0%** of unambiguously
     Scottish rows and admits **0** rows that are clearly not Scottish. The old
     implementation dropped 97.5% of the Scottish ones.
@@ -194,10 +269,18 @@ def _matches_jurisdiction(
         return True  # unknown filter value: never silently narrow
 
     tokens = _extent_tokens(extent)
-    if tokens:
-        return bool(tokens & accepts)
-
-    # Extent unknown from here on.
+    # P3.26: only the tokens that name a territory decide. All four nations
+    # named one by one ("E+W+S+N.I.") is the United Kingdom, so a UK-wide
+    # filter keeps it.
+    known = set(tokens & _KNOWN_TERRITORY_TOKENS)
+    if _FOUR_NATIONS <= known:
+        known.add("UK")
+    if known & accepts:
+        return True
+    if tokens and tokens <= _KNOWN_TERRITORY_TOKENS:
+        return False
+    # Extent unknown from here on: none stated, or (P3.26) a token the filter
+    # does not recognise, which could name the territory filtered for.
     if jurisdiction == "uk_wide":
         return False
 
@@ -353,7 +436,11 @@ _TYPE_CODES: dict[str, set[str]] = {
 # There is **no date** on a relation row (confirmed at P5.1 and again here), so
 # this tool can establish that s. 9 was commenced by `ssi/2025/119` and never
 # that it came into force on a given day. That bears on P2.5, and the tool block
-# says it in terms.
+# says it in terms. **P3.21:** the date now comes from a second source, after
+# this slimmer: `commencement_dates.add_commencement_dates` reads legislation.
+# gov.uk's Changes to Legislation record and adds `in_force` to the `changes`
+# entries it can date (the executor's `get_legislation_changes` branch). The
+# row itself still carries none.
 
 # **Provision labels, not provision URLs, and that is a decision rather than an
 # omission.** Emitting a URL beside every listed provision costs 45-70 KB on the
@@ -376,13 +463,31 @@ _TYPE_CODES: dict[str, set[str]] = {
 # `ssi/2018/298`, and a commencement answer that stops at 40 of them is a worse
 # answer than one that lists them. Above this the count carries the fact and the
 # list carries the examples.
+#
+# **FIX_PLAN P3.19: each listed change carries the provision that made it.**
+# ~~A separate, separately sorted list of effecting provisions, cut at
+# `_MAX_EFFECTING_PROVISIONS = 6` with no count.~~ Two lists sorted apart cannot
+# say which provision made which change: 6338's inserting Act has an `inserted`
+# group of 16 relations whose six listed effecting provisions did not include
+# the one that inserted the section asked about, and the summariser paired the
+# section with one of the six, so a lawyer was given a wrong pinpoint for an
+# insertion. The window is still the first 60 distinct changed provisions, in
+# provision order, so nothing the old list showed is hidden; each is now listed
+# with EVERY provision that changed it (`changes`, below), and a group that lists
+# fewer relations than it holds says how many it left out (`changes_not_listed`),
+# as P3.5's rule requires of every cut list. Measured over every stored
+# change-record call at the build (batch 6 A, `notes/batch6_A.md`): the median
+# output does not move; the long tail grows, because the six-item cut no longer
+# hides the effecting side.
 _MAX_CHANGED_PROVISIONS = 60
+# A backstop, not a window: the most relations one group lists however its
+# changed provisions are shared out. The stored maximum inside the window above
+# is 92 (one changed provision is changed by at most 20 provisions), so this
+# binds only on a shape the corpus has not shown, and says so when it does.
+_MAX_CHANGES_LISTED = 120
 # How many related instruments are listed. `ukpga/2004/33` reaches 369 groups;
 # no answer is improved by the 41st, and the total is reported either way.
 _MAX_RELATED_INSTRUMENTS = 40
-# The operative provision on the other side ("reg. 2 sch.") — a handful is
-# provenance, a hundred is noise.
-_MAX_EFFECTING_PROVISIONS = 6
 
 
 def _provision_sort_key(label) -> list:
@@ -441,14 +546,12 @@ def _https(url) -> str:
 _COMMENCEMENT_OF_SUBJECT = "coming into force"
 _COMMENCEMENT_ORDER_EFFECT = "commencement order"
 
-# The repeal/revocation family, matched on the effect string. Deliberately a
-# substring test rather than a fixed set: the vocabulary has 2,912 distinct
-# values over the same sample and the family spans `repealed` (2,957), `words
-# repealed` (1,182), `revoked` (525), `word repealed` (376), `repealed in part`
-# (210), `repeal` (194), `entry repealed`, `repealed (1.1.1996)` and more. A
-# fixed set would silently miss the tail, and missing a repeal is the direction
-# this row exists to stop.
-_REPEAL_EFFECT_TOKENS = ("repeal", "revok", "revoc")
+# FIX_PLAN P3.28: removals are classified by effect type in
+# `utils/removal_effects.py` (whole provision, part of one, words only, or
+# qualified), not counted on the tokens "repeal", "revok" and "revoc", which
+# missed "omitted", "ceases to have effect" and the rest of the removal
+# families and counted "words repealed" and "power to repeal conferred" as
+# removals of a provision.
 
 
 def _effect_is_commencement_of_subject(effect: str) -> bool:
@@ -459,12 +562,6 @@ def _effect_is_commencement_of_subject(effect: str) -> bool:
 def _effect_is_commencement_order(effect: str) -> bool:
     """True for a `Commencement Order` row — a commencement of an AMENDMENT."""
     return str(effect or "").strip().lower() == _COMMENCEMENT_ORDER_EFFECT
-
-
-def _effect_is_repeal(effect: str) -> bool:
-    """True for anything in the repeal/revocation family. See `_REPEAL_EFFECT_TOKENS`."""
-    low = str(effect or "").lower()
-    return any(tok in low for tok in _REPEAL_EFFECT_TOKENS)
 
 
 def _slim_amendment_results(resp_json, legislation_id: str, direction: str) -> dict:
@@ -485,6 +582,15 @@ def _slim_amendment_results(resp_json, legislation_id: str, direction: str) -> d
     other instrument is the affecting one under ``"to"`` and the changed one
     under ``"by"``.
 
+    Each group lists its relations as ``changes``, one entry per effecting
+    provision: ``{"by": <affecting_provision>, "changed": [<changed_provision>,
+    ...]}`` (FIX_PLAN P3.19). So every listed change keeps the provision that
+    made it, and a provision the record does not name is ``null`` on its side
+    rather than dropped. A group lists its first `_MAX_CHANGED_PROVISIONS`
+    changed provisions in provision order, each with every provision that
+    changed it (at most `_MAX_CHANGES_LISTED` relations in all), and
+    ``changes_not_listed`` counts the relations it leaves out.
+
     Anything that is not a list of dicts is passed through untouched, for the
     reason `_slim_section_results` does: a slimmer must never be the reason a
     retrieval goes missing.
@@ -501,6 +607,7 @@ def _slim_amendment_results(resp_json, legislation_id: str, direction: str) -> d
 
     seen = set()
     groups = {}
+    pairs_seen = {}
     effects = {}
     rows_returned = 0
     for item in items:
@@ -523,38 +630,68 @@ def _slim_amendment_results(resp_json, legislation_id: str, direction: str) -> d
         effect = item.get("type_of_effect") or "not stated"
         effects[effect] = effects.get(effect, 0) + 1
         other = _short_legislation_id(item.get(other_key) or "")
-        g = groups.setdefault((other, effect), {
-            "legislation_id": other,
-            "url": _https(item.get(other_url_key)),
-            "self": bool(other) and other == lid,
-            "type_of_effect": effect,
-            # P2.5: `Commencement Order` rows do not commence the subject — see
-            # the note above. Emitted only on those rows, so a group without the
-            # key is not thereby asserted to commence anything.
-            **({"commences_this_legislation": False}
-               if _effect_is_commencement_order(effect) else {}),
-            "count": 0,
-            "changed_provisions": [],
-            "effected_by": [],
-        })
+        if (other, effect) not in groups:
+            # P3.28: the group's removal class, from its effect type. Emitted
+            # only on a removal, as `commences_this_legislation` is only on a
+            # `Commencement Order`, so a group without it asserts nothing.
+            removal, qualifier = classify_removal(effect)
+            groups[(other, effect)] = {
+                "legislation_id": other,
+                "url": _https(item.get(other_url_key)),
+                "self": bool(other) and other == lid,
+                "type_of_effect": effect,
+                # P2.5: `Commencement Order` rows do not commence the subject —
+                # see the note above. Emitted only on those rows, so a group
+                # without the key is not thereby asserted to commence anything.
+                **({"commences_this_legislation": False}
+                   if _effect_is_commencement_order(effect) else {}),
+                **({"removal": removal} if removal else {}),
+                **({"qualifier": qualifier} if removal == QUALIFIED else {}),
+                "count": 0,
+                "changes": [],
+            }
+        g = groups[(other, effect)]
         g["count"] += 1
-        prov = item.get("changed_provision")
-        if prov and prov not in g["changed_provisions"]:
-            g["changed_provisions"].append(prov)
-        eff_prov = item.get("affecting_provision")
-        if eff_prov and eff_prov not in g["effected_by"]:
-            g["effected_by"].append(eff_prov)
+        # P3.19: the pair, never the two sides separately. A provision the
+        # record leaves empty stays in the pair as None (JSON null) so the
+        # relation is still listed and still says what it does not know.
+        pair = (item.get("changed_provision") or None, item.get("affecting_provision") or None)
+        held_pairs = pairs_seen.setdefault((other, effect), set())
+        if pair not in held_pairs:
+            held_pairs.add(pair)
+            g["changes"].append(pair)
 
     related = []
     for g in groups.values():
-        g["changed_provisions"].sort(key=_provision_sort_key)
-        held = len(g["changed_provisions"])
-        if held > _MAX_CHANGED_PROVISIONS:
-            g["changed_provisions"] = g["changed_provisions"][:_MAX_CHANGED_PROVISIONS]
-            g["changed_provisions_not_listed"] = held - _MAX_CHANGED_PROVISIONS
-        g["effected_by"] = sorted(
-            g["effected_by"], key=_provision_sort_key
-        )[:_MAX_EFFECTING_PROVISIONS]
+        pairs = sorted(g["changes"], key=lambda p: (
+            _provision_sort_key(p[0]), _provision_sort_key(p[1])))
+        held = len(pairs)
+        # The window: the first `_MAX_CHANGED_PROVISIONS` NAMED changed
+        # provisions, each with every pair it has (a change whose provision the
+        # record leaves empty takes no slot, as it took none in the old list);
+        # then the backstop on pairs.
+        window = []
+        for changed, _ in pairs:
+            if changed is not None and changed not in window:
+                window.append(changed)
+                if len(window) == _MAX_CHANGED_PROVISIONS:
+                    break
+        window = set(window)
+        pairs = [p for p in pairs if p[0] is None or p[0] in window][:_MAX_CHANGES_LISTED]
+        if held > len(pairs):
+            g["changes_not_listed"] = held - len(pairs)
+        # One entry per effecting provision, its changes in provision order:
+        # "reg. 2 commenced ss. 1, 2 and 9" is how a commencement reads, and a
+        # group whose one provision made every change costs barely more than
+        # the old flat list did.
+        by_effecting = {}
+        for changed, effecting in pairs:
+            by_effecting.setdefault(effecting, []).append(changed)
+        g["changes"] = [
+            {"by": effecting, "changed": changed}
+            for effecting, changed in sorted(
+                by_effecting.items(), key=lambda kv: _provision_sort_key(kv[0]))
+        ]
         related.append(g)
     # Relations by another instrument first: that is the answer to "commenced by
     # regulation", and the self-referential block is context for it. P2.5 sends
@@ -606,9 +743,13 @@ def _slim_amendment_results(resp_json, legislation_id: str, direction: str) -> d
         "commencement_orders_of_amendments": sum(
             v for k, v in effects.items() if _effect_is_commencement_order(k)
         ),
-        "repeal_or_revocation_relations": sum(
-            v for k, v in effects.items() if _effect_is_repeal(k)
-        ),
+        # P3.28: removals by effect type, in three counts, in place of
+        # `repeal_or_revocation_relations`. Only the first may be read as a
+        # provision no longer in force (whole or in part); the second removes
+        # words only, so the text is amended and the provision stays; the third
+        # carries a qualification in its effect (prospective, temporary,
+        # conditional, specified purposes, part of the UK).
+        **counts_from_effects(effects),
         "related_instruments": len(related),
         "related": related[:_MAX_RELATED_INSTRUMENTS],
     }

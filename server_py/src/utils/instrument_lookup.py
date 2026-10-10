@@ -27,7 +27,10 @@ is also offered, so the Worker can look up an instrument it meets mid-run (a
 change record naming SSI 2025/377 is how 6409 turn 9 met it). No Worker prompt
 names the tool: Session 14 measured a prompt block moving the quick-lookup
 Worker to bullet lists and costing the lawyer case links, and Session 22 a
-prompt edit moving a call it was not aimed at.
+prompt edit moving a call it was not aimed at. (P3.25: the quick-lookup
+prompt now names it in two existing sentences, as the route to a recital and
+to `valid_date` in place of `get_legislation_text`, which that Worker is no
+longer offered. No rule tells it to call the tool.)
 
 This module holds the pure parts: parsing a citation out of a brief,
 normalising the tool's arguments, a lawyer-readable label, and the block. The
@@ -185,9 +188,15 @@ def routed_lookup_args(ref: tuple) -> dict:
 
 
 def parse_lookup_result(data: Any) -> Optional[dict]:
-    """The tool's own result, or None if `data` is not one."""
+    """The tool's own result, or None if `data` is not one.
+
+    `raw_decode`, not `loads` (P3.25): a lookup's result can now carry an
+    appended ENABLING POWER block, and `routed_lookup_block` reads the result
+    as returned, so a plain parse would drop that instrument from the brief
+    without a sign."""
     try:
-        got = json.loads(data) if isinstance(data, str) else data
+        got = (json.JSONDecoder().raw_decode(data.lstrip())[0]
+               if isinstance(data, str) else data)
     except (TypeError, ValueError):
         return None
     if not isinstance(got, dict) or got.get("tool") != LOOKUP_TOOL:
@@ -215,13 +224,88 @@ async def routed_lookup_block(brief: str, tool_names, run_tool) -> str:
     """
     if LOOKUP_TOOL not in set(tool_names or ()):
         return ""
-    refs = extract_instrument_citations(brief)
+    # P3.10: a Deep Research step's line naming the instruments the earlier
+    # steps' reports cite is not read here. Those reports came from the index,
+    # and five lookups would cover an arbitrary part of a longer list.
+    from .step_handover import without_handover_line
+
+    refs = extract_instrument_citations(without_handover_line(brief))
     if not refs:
         return ""
     import asyncio
 
     results = await asyncio.gather(*(run_tool(LOOKUP_TOOL, routed_lookup_args(r)) for r in refs))
-    return lookup_brief_block(results)
+    # P3.38: the text code read from legislation.gov.uk for an instrument the
+    # index lacks rides on that lookup's result; the brief carries it on, after
+    # the lookup block that says why it is there.
+    from .published_text import blocks_in
+
+    block = lookup_brief_block(results)
+    if not block:
+        return ""
+    return block + "".join(blocks_in(r) for r in results)
+
+
+# P3.25: the code lookup the quick-lookup Worker gets in place of
+# `get_legislation_text`. At most this many per Worker run, like the routed
+# lookups above; a repeat of one already run is served by the request's memo.
+MAX_SECTION_LOOKUPS = MAX_ROUTED_LOOKUPS
+SECTION_SEARCH_TOOL = "search_legislation_sections"
+
+
+async def section_search_lookup(name: str, args: Any, done: set, run_tool,
+                                limit: int = MAX_SECTION_LOOKUPS,
+                                log: Optional[list] = None) -> str:
+    """Look up the statutory instrument a section search is about, once per
+    Worker run, and return the block to append to that search's result.
+
+    Why: the quick-lookup Worker no longer has `get_legislation_text`, which
+    was its only route to an SI's own recital (P2.3's permitted branch: 6340
+    went from a search straight to the whole text of a pre-1990 UK SI and
+    quoted its preamble). `lookup_legislation` returns the same record's `description`,
+    where 7 of the 8 stored recitals sit, and its `valid_date`. The lookup runs
+    through `run_tool`, the Worker's own executor, so the audit, the memo and
+    the step's scope record see it (P3.7's precedent), and the recorders take
+    the recital and the date from it. The Worker is shown only a recital, when
+    the record states one: that is the one thing it may act on, and a block on
+    every SI it searches would be the noise Session 14 measured moving this
+    Worker's output format.
+
+    `log` is the step's scope record, which `run_tool` writes to. A HELD
+    outcome is taken back out of it: this lookup is a route to the recital and
+    the date, not P3.7's held/absent test (the section search it precedes is
+    the evidence the instrument is held), and kept, it would put P3.7's
+    "Looked up by number" line on the report for every SI this Worker searches
+    within (164 of 1,169 stored quick-lookup delegations). A stub or a
+    not-held outcome is kept: those are what P3.7's line and footer exist to
+    state.
+
+    "" for any other tool, a primary or unparseable id, an instrument already
+    looked up in this run, or past `limit`. Exceptions propagate: the caller
+    fails soft.
+    """
+    if name != SECTION_SEARCH_TOOL or not isinstance(args, dict):
+        return ""
+    ref = lookup_args({"legislation_id": args.get("legislation_id")})
+    if ref is None:
+        return ""
+    from .search_scope import LOOKUP_ENTRY, _is_secondary, lookup_enabling_note
+
+    lid = legislation_id(ref)
+    if not _is_secondary(lid) or lid in done or len(done) >= limit:
+        return ""
+    done.add(lid)
+    start = len(log) if log is not None else 0
+    result = await run_tool(LOOKUP_TOOL, routed_lookup_args(ref))
+    if log is not None:
+        log[start:] = [e for e in log[start:]
+                       if not (e.get("tool") == LOOKUP_ENTRY and e.get("status") == HELD)]
+    # P3.38: a stub or not-held SI's text, read by code from legislation.gov.uk
+    # on that lookup, goes to the Worker with the section search it precedes
+    # (the lookup's own result is never shown to this Worker).
+    from .published_text import blocks_in
+
+    return lookup_enabling_note(result) + blocks_in(result)
 
 
 def lookup_brief_block(results: list) -> str:
@@ -233,6 +317,8 @@ def lookup_brief_block(results: list) -> str:
     answer. In `[SEARCH SCOPE — …]` form with no brackets inside, so the strip
     that removes tool blocks from an answer removes an echo of this too.
     """
+    from .published_text import has_published_text
+
     parts = []
     for raw in results or []:
         got = parse_lookup_result(raw)
@@ -243,6 +329,38 @@ def lookup_brief_block(results: list) -> str:
         status = got.get("status")
         title = _clean(got.get("title"), 200)
         named = f"{label} ({title})" if title else label
+        # P3.38: code read the text from legislation.gov.uk, and it follows
+        # this block. The two sentences below that said the text cannot be
+        # read here, or is not available here, are then said of this index
+        # only, and point at the text that follows.
+        if has_published_text(raw) and status == NOT_HELD:
+            parts.append(
+                f"{label}: NOT HELD. The index has no record of it under that type, year "
+                "and number, so a search for its title or number will not find it and its "
+                "text cannot be read from this index; code read its text from "
+                "legislation.gov.uk instead, and that text follows this block. Report it "
+                "as not held in this index, not as not found by a search, and say that its "
+                "text was read from legislation.gov.uk. That is a gap in the index: it does "
+                "not mean the instrument does not exist, and it is not an error in the "
+                "citation. What it changes can also be retrieved: legislation.gov.uk's "
+                "change records list what it commenced, amended or revoked even where the "
+                "index holds no record of it, so call get_legislation_changes with "
+                f"legislation_id {lid} and direction 'by' before you report."
+            )
+            continue
+        if has_published_text(raw) and status == HELD_WITHOUT_TEXT:
+            desc = _clean(got.get("description"))
+            parts.append(
+                f"{named}: HELD WITHOUT TEXT. The index holds its record but none of its "
+                "text, so a search inside it returns nothing; code read its text from "
+                "legislation.gov.uk instead, and that text follows this block. Report it "
+                "as a record this index holds without its text, never as not found, and "
+                "say that its text was read from legislation.gov.uk."
+                + (f" Its record describes it as: {desc}" if desc else "")
+                + " What it commences or amends can also be read from change records "
+                "(get_legislation_changes)."
+            )
+            continue
         # Both sentences end on what CAN still be retrieved. The first draft said
         # "do not search for it again", and on the first-round probe the Worker
         # then wrote at once on 4 of 5 stored briefs. At HEAD, 6409 t9 and t11

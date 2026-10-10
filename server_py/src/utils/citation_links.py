@@ -58,6 +58,9 @@ __all__ = [
     "enforce_provision_links",
     "link_sibling_pinpoints",
     "restore_dropped_siblings",
+    "instrument_key",
+    "plan_instrument_links",
+    "link_named_instruments",
     "PROVISION_MARKER",
     "PROVISION_FOOTNOTE",
 ]
@@ -711,6 +714,253 @@ def restore_dropped_siblings(answer: str, reports, max_notes: int = 3) -> tuple:
         return answer, total
     except Exception:  # pragma: no cover - defensive
         logger.debug("[Citations] sibling restore skipped", exc_info=True)
+        return answer, 0
+
+
+# --- P4.23: an instrument the answer names in words and links nowhere --------
+
+# A markdown link whose label holds one level of nested brackets ("[*Widget Co
+# v Example Ltd* [1902] EWHC 1](url)"), which `_MD_LINK` does not match: an
+# Act's title inside such a case label would otherwise read as a plain-word
+# mention of the Act (batch 12 D's hand-read).
+_MD_LINK_NESTED = re.compile(
+    r"\[((?:[^\[\]\n]|\[[^\[\]\n]{0,80}\]){1,400})\]\((https?://[^)\s]+)\)")
+_BARE_URL = re.compile(r"https?://[^\s)\]>\"'<]+", re.I)
+# P3.13's and P3.12's restored notes: the Worker's words, put back by code.
+_RESTORED_NOTE = re.compile(r"\n\nAlso in [^\n]*")
+# Below an instrument: P1.6's provision segments, and an EU annex.
+_BELOW_INSTRUMENT = re.compile(
+    r"/(?:section|regulation|article|schedule|rule|order|chapter|part|"
+    r"paragraph|crossheading|annex)/")
+_VERSION_TAIL = re.compile(
+    r"(?:/(?:contents|made|enacted|created|adopted|\d{4}-\d{2}-\d{2}))+$")
+# "ssi/1901/3", a regnal "ukpga/edw7/1/12" or "ukpga/1-2edw7/12".
+_INSTRUMENT_PATH = re.compile(
+    r"^[a-z]+/(?:\d{4}/\d+|[a-z]+\d*/[\d-]+/[^/]+|[\d-]+[a-z]+\d*/[^/]+)$")
+# How an answer names the provision a URL segment points at.
+_PIN_WORDS = {
+    "section": r"(?:sections?|ss?\.)",
+    "regulation": r"(?:regulations?|regs?\.?)",
+    "article": r"(?:articles?|arts?\.?)",
+    "rule": r"(?:rules?|r\.)",
+    "paragraph": r"(?:paragraphs?|paras?\.?)",
+    "schedule": r"(?:schedules?|sch\.?)",
+}
+_URL_SEGMENTS = re.compile(r"/([a-z]+)/([0-9a-z]+)(?=/|$)")
+_BESIDE_CHARS = 100
+_SI_NAME = r"(?:\b(?:SSI|S\.S\.I\.|SI|S\.I\.|UKSI|WSI|NISR)\s*)?"
+_EU_NAME = (r"(?:\b(?:Regulation|Directive|Decision)\s*\((?:EU|EC|EEC)\)\s*"
+            r"(?:No\.?\s*)?)?")
+
+
+def instrument_key(url: str) -> str:
+    """The instrument a legislation.gov.uk URL is for, as "type/year/number"
+    (lower case, the form of a LEX `legislation_id`); "" for anything else.
+    `.../id/ssi/1901/3/regulation/4` and `https://www.../ssi/1901/3/contents`
+    are both "ssi/1901/3"."""
+    key = normalise_leg_url(url)
+    if not key:
+        return ""
+    path = key.split(_LEG_HOST + "/", 1)[-1]
+    m = _BELOW_INSTRUMENT.search("/" + path)
+    if m:
+        path = path[:max(0, m.start() - 1)]
+    path = _VERSION_TAIL.sub("", path.strip("/"))
+    return path if _INSTRUMENT_PATH.match(path) else ""
+
+
+def _below_instrument(url: str) -> bool:
+    key = normalise_leg_url(url)
+    return bool(key) and bool(
+        _BELOW_INSTRUMENT.search("/" + key.split(_LEG_HOST + "/", 1)[-1]))
+
+
+def _links_at(text: str) -> list:
+    """(start, end, url) for every link in text, in order: markdown links
+    (nested-bracket labels too), then bare URLs outside them."""
+    out = [(m.start(), m.end(), m.group(2)) for m in _MD_LINK_NESTED.finditer(text)]
+    masked = _MD_LINK_NESTED.sub(lambda m: "\x00" * len(m.group(0)), text)
+    out += [(m.start(), m.end(), m.group(0)) for m in _BARE_URL.finditer(masked)]
+    return sorted(out)
+
+
+def _title_pattern(title: str):
+    """A title as written in prose: case aside, any run of spaces, emphasis
+    marks and commas between its words, either apostrophe, no leading "the"."""
+    t = re.sub(r"^\s*the\s+", "", title or "", flags=re.I).strip()
+    toks = re.findall(r"\w+|[^\w\s]", t)
+    if not toks:
+        return None
+    parts = ["['’]" if tok in ("'", "’") else re.escape(tok) for tok in toks]
+    return re.compile(r"(?<![A-Za-z0-9])" + r"[\s*_,]*".join(parts)
+                      + r"(?![A-Za-z0-9])", re.I)
+
+
+def _first_mention(body: str, masked_spans: list, lid: str, titles) -> Optional[tuple]:
+    """(start, end) of the first mention of the instrument in plain words
+    outside every masked span: one of its titles (never as the head of a
+    longer instrument title), or its SI or EU number. None if there is none."""
+    from .source_naming import SI_TYPES, heads_longer_title, nameable_title
+
+    cands = []
+    for t in titles:
+        if not nameable_title(t):
+            continue
+        rx = _title_pattern(t)
+        if rx is None:
+            continue
+        for m in rx.finditer(body):
+            if not heads_longer_title(body[m.end():m.end() + 120]):
+                cands.append((m.start(), m.end()))
+    typ, _, rest = lid.partition("/")
+    yr, _, num = rest.partition("/")
+    if yr.isdigit() and num.isdigit():
+        if typ in SI_TYPES:
+            pats = [rf"{_SI_NAME}(?<![\w/]){yr}/{num}(?![\w/])",
+                    rf"(?<!\d){yr} No\.? ?{num}(?!\d)"]
+        elif typ.startswith("eu"):
+            pats = [rf"{_EU_NAME}(?<![\w/]){num}/{yr}(?![\w/])"]
+        else:
+            pats = []
+        for p in pats:
+            cands += [(m.start(), m.end()) for m in re.finditer(p, body, re.I)]
+    cands = [c for c in cands
+             if not any(c[0] < e and s < c[1] for s, e in masked_spans)]
+    return min(cands, key=lambda c: (c[0], -c[1])) if cands else None
+
+
+def _provision_beside(body: str, start: int, end: int, url: str) -> bool:
+    """The answer names the URL's provision within `_BESIDE_CHARS` of the
+    mention: every segment of it ("paragraph 3" and "Schedule 2" for
+    `/schedule/2/paragraph/3`), each of a kind an answer can name."""
+    key = normalise_leg_url(url)
+    path = key.split(_LEG_HOST + "/", 1)[-1]
+    m = _BELOW_INSTRUMENT.search("/" + path)
+    if not m:
+        return False
+    segs = _URL_SEGMENTS.findall(path[max(0, m.start() - 1):])
+    if not segs or any(kind not in _PIN_WORDS for kind, _ in segs):
+        return False
+    win = body[max(0, start - _BESIDE_CHARS):end + _BESIDE_CHARS]
+    return all(re.search(rf"\b{_PIN_WORDS[kind]}\s*{re.escape(num)}(?![0-9A-Za-z])",
+                         win, re.I) for kind, num in segs)
+
+
+def _guard(body: str, masked: str, start: int, end: int) -> str:
+    """Why a mention at [start, end) must not be linked, or ""."""
+    line = masked[masked.rfind("\n", 0, start) + 1:start]
+    if (line.count('"') % 2 or line.count("“") > line.count("”")
+            or line.count("`") % 2 or masked.count("```", 0, start) % 2):
+        return "quoted"        # a quotation or a code span: a link there mislabels it
+    if masked.count("[", 0, start) > masked.count("]", 0, start):
+        return "bracketed"     # inside a [...] block or label: the strippers stop at a ']'
+    if re.search(r"[*_]", body[start:end]):
+        return "emphasis"      # "**Widget** Order 1901": the link would cut a pair in two
+    return ""
+
+
+def plan_instrument_links(answer: str, reports, sources=(), titles=None) -> tuple:
+    """The links `link_named_instruments` would add, and why it adds no other.
+    Returns (edits, drops): edits [(start, end, url, lid, cls)], cls "A" (the
+    report's instrument URL) or "B" (a provision URL, the provision named
+    beside the mention); drops [(lid, reason, start, end)] for every instrument
+    a report links, the answer links nowhere and names in words."""
+    from .search_scope import strip_scope_blocks
+
+    rep_urls: dict = {}
+    for report in list(reports or []):
+        body = strip_scope_blocks(str(report or ""))[0]
+        for _s, _e, url in _links_at(body):
+            lid = instrument_key(url)
+            if lid:
+                rep_urls.setdefault(lid, []).append(url.strip().rstrip(_URL_TRAILING))
+    if not rep_urls:
+        return [], []
+    links = _links_at(answer)
+    linked = {instrument_key(u) for _s, _e, u in links} - {""}
+    masked_spans = [(s, e) for s, e, _u in links]
+    masked_spans += [(m.start(), m.end()) for m in _RESTORED_NOTE.finditer(answer)]
+    masked = list(answer)
+    for s, e in masked_spans:
+        masked[s:e] = "\x00" * (e - s)
+    masked = "".join(masked)
+
+    by_lid: dict = {}
+    for src in list(sources or []):
+        if not isinstance(src, dict) or not src.get("title"):
+            continue
+        for key in {str(src.get("_lid") or "").strip().lower(),
+                    instrument_key(src.get("url") or "")}:
+            if key and _INSTRUMENT_PATH.match(key):
+                by_lid.setdefault(key, set()).add(str(src["title"]))
+    for lid, title in (titles or {}).items():
+        if lid and title:
+            by_lid.setdefault(str(lid).strip().lower(), set()).add(str(title))
+
+    edits, drops = [], []
+    for lid, urls in rep_urls.items():
+        if lid in linked:
+            continue
+        hit = _first_mention(answer, masked_spans, lid, sorted(by_lid.get(lid, ())))
+        if not hit:
+            continue
+        start, end = hit
+        why = _guard(answer, masked, start, end)
+        if why:
+            drops.append((lid, why, start, end))
+            continue
+        inst = [u for u in urls if not _below_instrument(u)]
+        if inst:
+            edits.append((start, end, inst[0], lid, "A"))
+            continue
+        beside = {normalise_leg_url(u): u for u in urls
+                  if _provision_beside(answer, start, end, u)}
+        if len(beside) == 1:
+            edits.append((start, end, next(iter(beside.values())), lid, "B"))
+        else:
+            # Never a whole-instrument mention to one provision's URL.
+            drops.append((lid, "provision not named beside it" if not beside
+                          else "two provisions named beside it", start, end))
+    edits.sort()
+    clash = {i for i, a in enumerate(edits) for j, b in enumerate(edits)
+             if i != j and a[0] < b[1] and b[0] < a[1]}
+    for i in sorted(clash):
+        drops.append((edits[i][3], "two instruments at one mention", edits[i][0], edits[i][1]))
+    return [x for i, x in enumerate(edits) if i not in clash], drops
+
+
+def link_named_instruments(answer: str, reports, sources=(), titles=None) -> tuple:
+    """Link an instrument the answer names in words, and links nowhere, to the
+    URL a Worker report linked it with. Returns (answer, links added).
+
+    **FIX_PLAN P4.23 (B8), the conversational Manager's answer seam.** The
+    conversational Manager keeps about 80% of the instruments its reports link
+    and names a further share in words with the link gone (128 instruments in
+    1,117 stored Conversational report turns; batch 12 D). Thomas measured
+    larger losses on another model. P1.6's and P3.13's pattern: code puts back
+    what the Worker had, never what nobody retrieved.
+
+    The answer's FIRST plain-word mention of the instrument (a title the turn
+    retrieved for it, its SI number, an old SI's "YYYY No. N" or an EU
+    number), outside every link and every restored note, is wrapped with the
+    report's own URL, verbatim: the report's instrument-level URL when it has
+    one; otherwise a provision URL, and only when the answer names that
+    provision beside the mention, so a mention of a whole instrument never
+    reads as a pinpoint. Nothing is linked inside a quotation, a code span or
+    a [...] block, or across an emphasis pair, nor where two instruments
+    claim one mention (`plan_instrument_links` lists every such drop). The
+    URL is always one a report carried, which P1.6 already checked against
+    what the tools returned. Idempotent and fail-soft.
+    """
+    if not answer or not reports:
+        return answer, 0
+    try:
+        edits, _drops = plan_instrument_links(answer, reports, sources, titles)
+        for start, end, url, _lid, _cls in reversed(edits):
+            answer = f"{answer[:start]}[{answer[start:end]}]({url}){answer[end:]}"
+        return answer, len(edits)
+    except Exception:  # pragma: no cover - defensive
+        logger.debug("[Citations] instrument linking skipped", exc_info=True)
         return answer, 0
 
 

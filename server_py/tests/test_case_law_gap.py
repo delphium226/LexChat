@@ -40,6 +40,7 @@ from src.agent.agent_core import run_deep_research, run_worker_agent  # noqa: E4
 from src.agent.provider_factory import set_request_provider_config  # noqa: E402
 from src.utils import search_scope  # noqa: E402
 from src.utils.search_scope import (  # noqa: E402
+    CASE_LAW_ABSENCE_SENTENCE,
     CASE_LAW_COVERAGE_SENTENCE,
     CASE_LAW_DOCTRINE_SENTENCE,
     _earlier_footers,
@@ -206,6 +207,30 @@ def test_no_case_law_search_no_doctrine_sentence():
     assert CASE_LAW_DOCTRINE_SENTENCE not in answer_scope_footer(_leg("a"), {})
 
 
+def test_a_search_that_ran_says_a_miss_is_not_proof_of_absence():
+    """P4.15 (B5): a case-law negative's attribution, stated by code. On every
+    turn whose case-law search ran, in the clause and in the standalone line
+    alike, after the coverage sentence and before the doctrine sentence, so the
+    line still ends with the doctrine sentence."""
+    for line in (case_law_scope_clause(_cl("q")), case_law_scope_footer(_cl("q")),
+                 case_law_scope_footer(_cl("ran") + _cl("failed", ok=False)),
+                 answer_scope_footer(_leg("Widget Order 1901") + _cl("q"), {})):
+        assert line.count(CASE_LAW_ABSENCE_SENTENCE) == 1
+        cov = line.index(CASE_LAW_COVERAGE_SENTENCE)
+        absent = line.index(CASE_LAW_ABSENCE_SENTENCE)
+        assert cov + len(CASE_LAW_COVERAGE_SENTENCE) + 1 == absent
+        assert absent < line.index(CASE_LAW_DOCTRINE_SENTENCE)
+        assert line.rstrip("*").endswith(CASE_LAW_DOCTRINE_SENTENCE)
+    # The standalone line is still one line.
+    line = case_law_scope_footer(_cl("q"))
+    assert line.count("*Search scope:") == 1 and "\n" not in line.strip()
+    # Not on a search that only errored (it returned no results for anything
+    # to be missing from), nor on a turn that searched no case law.
+    assert CASE_LAW_ABSENCE_SENTENCE not in case_law_scope_footer(_cl("q", ok=False))
+    assert CASE_LAW_ABSENCE_SENTENCE not in case_law_scope_clause(_cl("q", ok=False))
+    assert CASE_LAW_ABSENCE_SENTENCE not in answer_scope_footer(_leg("a"), {})
+
+
 def test_a_failed_search_is_never_described_as_run():
     line = case_law_scope_footer(_cl("q", ok=False))
     assert "was attempted" in line and "returned an error" in line
@@ -284,6 +309,14 @@ def test_p28_reads_back_a_fresh_footer_that_carries_the_clause(log, cfg):
     # And the carried line built from it restates legislation terms only.
     carried = carried_scope_footer(_history(fresh), [])
     assert carried and "case-law" not in carried
+    # P4.15: the fresh line carries the absence sentence whenever its case-law
+    # search ran, and the carried line never restates it (it is about THAT
+    # turn's case-law search) nor any other case-law wording.
+    ran = any(e.get("ok", True) for e in log if e.get("tool") == "search_case_law")
+    assert (CASE_LAW_ABSENCE_SENTENCE in fresh) is ran
+    for case_law_text in (CASE_LAW_ABSENCE_SENTENCE, CASE_LAW_COVERAGE_SENTENCE,
+                          CASE_LAW_DOCTRINE_SENTENCE, "judgment", "case law"):
+        assert case_law_text not in carried
 
 
 def test_a_standalone_case_law_line_is_never_read_as_a_legislation_search():
@@ -292,6 +325,7 @@ def test_a_standalone_case_law_line_is_never_read_as_a_legislation_search():
     the legislation index was run" would be true, but there were never any
     legislation searches to restate."""
     standalone = case_law_scope_footer(_cl("privilege"))
+    assert CASE_LAW_ABSENCE_SENTENCE in standalone      # P4.15's longer line
     assert _earlier_footers(_history(standalone)) == []
     assert carried_scope_footer(_history(standalone), []) == ""
 
@@ -305,6 +339,13 @@ def test_a_hybrid_follow_up_that_searched_only_case_law_keeps_one_line():
     assert line.count("*Search scope:") == 1 and "\n" not in line.strip()
     # And the next turn still parses the ORIGINAL fresh footer, not this one.
     assert len(_earlier_footers(_history(fresh, line))) == 1
+    # P4.15: this reply's case-law search ran, so its line says a miss is not
+    # proof of absence; a later reply that searched nothing restates the
+    # legislation terms only, never that sentence.
+    assert CASE_LAW_ABSENCE_SENTENCE in line
+    later = carried_scope_footer(_history(fresh, line), [])
+    assert later and '"FOISA section 36"' in later
+    assert CASE_LAW_ABSENCE_SENTENCE not in later and "case-law" not in later
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +392,24 @@ def test_the_case_law_sentence_trips_no_detector_of_its_own():
         assert not any(rr._currency_asserted(s) for s in rr._sentences(text))
         assert rr.caselaw_gap_statements(text)          # it IS a gap statement
         assert rr.SCOTS_CASELAW_GAP.search(text)        # hazard 1, by design
+    # P4.15: the absence sentence trips `NEG_BLAMED_INDEX` by design (it is the
+    # attribution a case-law negative lacked) and neither `NEG_LIMITS` nor
+    # `NEG_TERMS` (two earlier wordings tripped both). Read on the sentence
+    # alone and on the code's text from the coverage sentence on, because the
+    # opening "was searched for "a"" already reads as naming terms, and a
+    # case-law line WITHOUT the sentence attributes nothing to the index.
+    assert rr.NEG_BLAMED_INDEX.search(CASE_LAW_ABSENCE_SENTENCE)
+    assert not rr.NEG_LIMITS.search(CASE_LAW_ABSENCE_SENTENCE)
+    assert not rr.NEG_TERMS.search(CASE_LAW_ABSENCE_SENTENCE)
+    for text in (case_law_scope_clause(_cl("a", "b", "c")),
+                 case_law_scope_footer(_cl("a"))):
+        code = text[text.index(CASE_LAW_COVERAGE_SENTENCE):]
+        assert CASE_LAW_ABSENCE_SENTENCE in code
+        assert rr.NEG_BLAMED_INDEX.search(code)
+        assert not rr.NEG_LIMITS.search(code)
+        assert not rr.NEG_TERMS.search(code)
+    errored = case_law_scope_footer(_cl("a", ok=False))
+    assert not rr.NEG_BLAMED_INDEX.search(errored)
 
 
 def test_the_instrument_is_coupled_to_the_product_sentence():
@@ -788,7 +847,11 @@ async def test_the_note_reaches_the_worker_and_survives_the_memo():
         assert got.startswith(_NOT_FOUND_RESULT)
         assert "[SEARCH SCOPE — not held:" in got
     for log in (first, second):
-        assert [e["tool"] for e in log] == ["not_held"]
+        # P3.38: the not-held retrieval also triggers code's read of the text
+        # from legislation.gov.uk, which `conftest.py` refuses offline, so the
+        # read is recorded as failed, on the memo hit too.
+        assert [e["tool"] for e in log] == ["not_held", "published_text"]
+        assert log[1]["status"] == "failed"
 
 
 @pytest.mark.parametrize("prompt_name", [
