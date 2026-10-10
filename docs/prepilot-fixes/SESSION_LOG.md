@@ -9431,3 +9431,11 @@ whitelisted) and SCTS's written confirmation; the lawyer pack (P3.2, P3.3, P3.17
 carry P3.31, P4.12, batch 12's six rows and this batch's three); Tesseract (P3.35); P3.12's tracker severity (P2
 on the tracker, P1 in the briefs); P3.47's tracker severity; the Fix Tracker (v48 is the base; not updated this
 session).
+
+**Addendum to Session 45 (2026-10-10, after the user added a 70 GB F: drive).** The seven batch 13 worktrees were
+removed (merged, clean, every scratch file already in the main checkout: `wt_diff.py`), and
+`C:\Projects\LexChat\.claude\worktrees` is now a directory junction to `F:\LexChat-worktrees`, so an agent's worktree
+(about 1.7 GB, mostly the tracked offline-dependency zip parts) is written to F:. Tested with a throwaway
+`git worktree add` through the junction (1.6 GB on F:, C: unchanged; `pytest` ran from it, 85 passed) and removed.
+This supersedes the handover's "remove the worktrees before another batch: disk"; merged worktrees should still be
+removed with `git worktree remove`. C: has about 22 GB free. The branch is still not pushed.
