@@ -9439,3 +9439,12 @@ removed (merged, clean, every scratch file already in the main checkout: `wt_dif
 `git worktree add` through the junction (1.6 GB on F:, C: unchanged; `pytest` ran from it, 85 passed) and removed.
 This supersedes the handover's "remove the worktrees before another batch: disk"; merged worktrees should still be
 removed with `git worktree remove`. C: has about 22 GB free. The branch is still not pushed.
+
+**Second addendum to Session 45 (2026-10-10, user decision): Session 46 takes P3.33 first**, as a single-row session
+(no parallel batch), over the weekend: the revocation flag in the made-under record, a long unattended harvest at
+$0 in model spend. It supersedes the handover's "take next" order for Session 46 only; the P1 and P2 items there
+follow it. The kickoff prompt asks for, in order: the base checks; a probe of the type-wide route (about 1,850 page
+reads) against the per-instrument pass (about 86,744 reads, 8-15 hours) before any long run; the user's agreement
+to the live calls and the run; the harvest, resumable and paced, into the gitignored evidence; then the build
+(a stored flag with the revoking instrument, the feed's date and qualification and the date checked, reusing
+P3.28's `classify_removal`), the wording to the user, and the acceptance (6382 and 6383's lists, priced first).
