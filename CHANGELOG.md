@@ -17,7 +17,12 @@ where each row carries its evidence and acceptance.
 
 ## Unreleased
 
-On `fix/prepilot-defects` since 2026.09.3, waiting for the next cut.
+On `fix/prepilot-defects` since 2026.10.1, waiting for the next cut.
+
+## 2026.10.1 — 2026-10-10
+
+Fourth cut of the pre-pilot defect fixes (merge `db19e81`): Sessions 34 to 46,
+30 fixes accepted since 2026.09.3 (71 of 103 plan rows, 9 of 14 buckets).
 
 What an instrument was made under:
 - Answer "which instruments were made under section N of this Act?" from a
