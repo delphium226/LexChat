@@ -31,6 +31,15 @@ What an instrument was made under:
   index record carries no preamble, including instruments the index does not
   hold. The record loads at startup and adds newly published instruments
   daily, through the LEX API's connection to legislation.gov.uk (P3.31).
+- Say which of those instruments legislation.gov.uk records as revoked: in
+  whole (with the revoking instrument and the date, or that no date is
+  recorded), in part, or not at all, and the day that was checked. A
+  revocation dated after today is given with its date and never called done,
+  and "no revocation recorded" is never turned into "in force". When more
+  than 40 instruments are found, the list leads with those not revoked in
+  whole. The record's coverage note now says that Welsh statutory
+  instruments and Northern Ireland Orders in Council are included under
+  their UK SI numbers (P3.33).
 
 Saying honestly what was and was not found:
 - When a research report names one of the notes code adds ("an enabling

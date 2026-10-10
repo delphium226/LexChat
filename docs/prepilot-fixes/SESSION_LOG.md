@@ -9448,3 +9448,85 @@ reads) against the per-instrument pass (about 86,744 reads, 8-15 hours) before a
 to the live calls and the run; the harvest, resumable and paced, into the gitignored evidence; then the build
 (a stored flag with the revoking instrument, the feed's date and qualification and the date checked, reusing
 P3.28's `classify_removal`), the wording to the user, and the acceptance (6382 and 6383's lists, priced first).
+
+## Session 46 — 2026-10-10 — P3.33 alone: the revocation flag in the made-under record DONE ($9.18)
+
+**Done:**
+- **Checks at the start:** the brief current (`887f23d`, the log ending at the second addendum to Session 45); the
+  branch was 36 commits ahead of `origin`, which the user then pushed; `plan_status` 70 of 102, 4 in progress, 9 of
+  14; `plan_lint` 0, 0; baseline suite **3,872** on `lexchat_test`.
+- **Probe (user-agreed: 356 legislation.gov.uk reads, cap 420, 0.6 s apart, the harvester's User-Agent; $0;
+  `evidence/seam/s46/probe_s46.py`, one door `door.py`, every call logged and every body saved):** per-instrument
+  feeds of the 37, 100 random SSIs and 40 random UK SIs of 2005 (seed 46, instruments with powers only: 68,780 can
+  be listed, not 86,744); the whole SSI type-wide feed (129 pages); the UK SI feed of 2005 (46 pages); 3 pages
+  through LEX's proxy. The type-wide feeds hold every effect the per-instrument feeds hold; `sort=modified` is
+  strictly ordered by each effect's `Modified` but 22% of SSI effects carry none and sit in a tail ordered by
+  instrument number.
+- **The user raised the effort and asked me to check my homework** (`check_s46.py`, `check2_s46.py`,
+  `check3_s46.py`). Three statements I had given were wrong and were corrected before the harvest: the UK SI flags
+  missed Welsh SIs and NI Orders in Council (held as `uksi/Y/N`, filed in the feed as `wsi/`/`nisi/`: 4 of 40
+  sampled read as never revoked; corrected 14 wholly, not 10); the delta figures were measured on `<updated>`, not
+  the sort key (re-measured: a top read sees 81 of 242 SSI removals touched in 30 days, 90 of 128 for UK SI 2005);
+  "byte-identical through the proxy" proved only that the proxy relays a cached copy (its pages carried my direct
+  read's generation stamp). Also found: the comparison's 177 of 177 included 96 instruments with no effects at all;
+  "Sch." on a removal is the schedule (35 in the two crawls); 51 SSI whole removals are dated after today; 722 of
+  3,041 whole revocations carry no InForce date.
+- **Harvest (user-agreed: about 1,900 reads, cap 2,400; `harvest_s46.py`; keep-awake):** stopped after 25 reads when
+  the first pages came back in 30 ms from legislation.gov.uk's cache, and the consistency check rewritten so its
+  window starts at the earliest page's generation stamp; resumed with no read repeated. **41 of 41 feeds clean,
+  1,462 reads, all 200, 1.6 GB read, 93 MB kept** (gitignored `evidence/seam/s46/harvest/`).
+- **Built** (`b4b3751`, `274dfba`): `utils/revocation_record.py`, `tools/revocation_harvest.py`, the store's two
+  additive columns, lines, statuses and counts, the CURRENCY block, the limb clause and the footer sentence, the
+  graders (`negcurrency`, `madeunder_grade`); snapshot `2026-10-10.1` attached and checked against the verified
+  copy (identical) and against the 177 own feeds (177 of 177); smoke on the dev DB (load 8.4 s, queries 51-168 ms).
+  83 new tests (**3,955**); **35 of 35** single-site mutants caught (`mutants_s46.py`, control first); dry run over
+  the 30 stored made-under calls (`dry_s46.py`): 27 move, additively, 3 unchanged.
+- **Decisions put to the user, stepped through one by one:** freshness snapshot-only (b); a cut list leads with
+  instruments not revoked in whole; the wording as rendered; the acceptance at a $7 cap with 6340 as a guard; the
+  coverage note corrected (rendered first); after the first sweep, the lever and the footer fix (wording rendered
+  and screened first); the re-run (6383 n=3 + 6382 n=1, cap $5.50); the tick, with the partial omission as a watch
+  item and P3.48 booked.
+- **Sweeps** (`replay check`, `replay pin`, uvicorn restarted after the pin, keep-awake, `replay restore`, both
+  processes stopped each time): `wave4_p333` at `b4b3751`, **$5.68** (not met: one Deep Research turn gave counts
+  without names; 6383's "any other?" follow-up left partial revocations unmarked); `wave4_p333b` at `274dfba`,
+  **$3.50** (the wholly revoked instrument named in every turn that names it, 4 of 4; no wrong claim; no in-force
+  claim about a listed instrument). Two `replay check` probes ($0.002). Hand-read in the gitignored
+  `evidence/rubrics/handread_wave4_p333.md`.
+- **Folded:** FIX_PLAN (P3.33 ticked and annotated; new row P3.48; the bucket index; a new top order line;
+  `plan_lint` 0, 0; `plan_status` **71 of 103, 4 in progress, 9 of 14**); CHANGELOG *Unreleased*; CLAUDE.md's
+  made-under note; the memory entry.
+- **Spend: $9.18** (the two sweeps) and $0.002 (two `replay check` probes).
+
+**Surprises:**
+- **The record holds Welsh SIs and NI Orders in Council under UK SI ids**, and the feed files their effects under
+  `wsi/` and `nisi/`. A comparison that filters both sides the same way cannot see the miss: 40 of 40 "agreed" while
+  4 were wrong. Check a filter against the unfiltered rows.
+- **legislation.gov.uk caches by URL** for at least 50 minutes: a re-read of the same URL is not fresh, and a proxy
+  read of a URL just read directly returns that copy. Vary the URL for a check read.
+- **A footer branch had never carried the made-under clause** (the lookup-only one), visible only on a follow-up
+  turn; P3.31's acceptance had the same footer.
+- **P2.5's `currency` grader reads a true sentence from an Act's own commencement section as unsupported**: it
+  counts only change-record relations.
+
+## Session 46 — handover for Session 47 (2026-10-10)
+
+**One session works the branch at a time.** Read this handover, then FIX_PLAN's top order line ("end of Session
+46"). Confirm first that the branch has been pushed (`git status -sb`).
+
+**Take next:** the Session 45 order, unchanged: **P1** P3.12 (measure the paragraph named by number without its
+words, then 6335 n=3, about $1.80); **P2** P3.38's acceptance (about $3.60), P3.46's acceptance (about $9.50),
+P3.34's build, P3.28's F2 probe and prompt change; **P3** P3.47, P3.48 (the limb names the revoked ids), and the
+rest of the order line.
+
+**State:** branch `fix/prepilot-defects` at this handover's commit; `main` at `a6b4a76`; 71 of 103, 4 in progress,
+9 of 14; `plan_lint` 0; **3,955 tests**; **73 replay directories** (`wave4_p333`, `wave4_p333b` new); no server, no
+pin, no keep-awake, the dev box's settings restored; the dev DB holds snapshot `2026-10-10.1`. Session scripts and
+the harvest are in the gitignored `evidence/seam/s46/`.
+
+**Re-harvesting the revocation flags** (snapshot-only freshness, user decision): `python -m tools.revocation_harvest
+--harvest <dir>` (about 1,460 reads, about 40 minutes at 0.6 s, resumable; keep the machine awake), then `--attach
+<dir> server_py/data/made_under --version <new>`; check a sample against per-instrument feeds before committing.
+
+**Watch items:** P3.33's partial revocations on short conversational lists (P3.48); the earlier ones carried.
+
+**Carried, the user's:** as Session 45's, less the push; the Fix Tracker (v48 is the base; not updated this session).
