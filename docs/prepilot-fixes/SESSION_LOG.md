@@ -9530,3 +9530,14 @@ the harvest are in the gitignored `evidence/seam/s46/`.
 **Watch items:** P3.33's partial revocations on short conversational lists (P3.48); the earlier ones carried.
 
 **Carried, the user's:** as Session 45's, less the push; the Fix Tracker (v48 is the base; not updated this session).
+
+**Addendum to Session 46 (2026-10-10, user decision): release `v2026.10.1` cut, and the tracker updated.** The user
+asked to push everything and merge to `main`. The branch was pushed; merged to `main` `--no-ff` (`db19e81`: Sessions
+34-46, 71 of 103 rows, 9 of 14 buckets, 30 fixes since `v2026.09.3`); `release: v2026.10.1` (`79c7522`: `VERSION`,
+the CHANGELOG's dated section, CLAUDE.md's record of the cut); annotated tag `v2026.10.1`; the full suite on `main`
+**3,955 passed** (`git describe` exactly `v2026.10.1`); `main` and the tag pushed; the branch fast-forwarded to `main`
+and pushed. **`v2026.09.3` is the rollback point.** The target takes it on its next `git pull` and restart; the dev DB
+already holds snapshot `2026-10-10.1`, and the target loads it at startup (about 8 s). **Fix Tracker v49** published
+to the same URL (Sessions 45 and 46 synced; every Next-release row now 2026.10.1; P3.12 and the new P3.47 at P1, user
+decisions; P3.48 added; 99 rows: 67 Fixed, 4 In progress, 18 Verified, 5 Blocked, 5 To be verified). This supersedes
+the handover's "`main` at `a6b4a76`" and "confirm the push": both are done. Next session: **P3.12 alone**.
