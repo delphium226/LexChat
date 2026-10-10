@@ -51,6 +51,12 @@
     --bar-verified: #085491; --bar-verified-ink: #ffffff;
     --bar-blocked: #d4a72c;  --bar-blocked-ink: #111a2e;
     --bar-tbv: #c3cbdd;      --bar-tbv-ink: #111a2e;   /* neutral: sub-3:1 by design, label + table carry it */
+    /* The timeline's severity ramp (v50): severity is ordered, so one hue, P1 darkest (as its
+       chip is). Validated as an ordinal ramp (dataviz validate_palette.js --ordinal): light
+       #8fbbe6 / #3f7fc4 / #123f78 on #ffffff, hue spread 8°, light end 2.02:1; dark below,
+       P1 lightest, on #131d38, hue spread 5°, light end 2.37:1. Labels and the table carry
+       the values; colour is never the only key. */
+    --sev-p1: #123f78;  --sev-p2: #3f7fc4;  --sev-p3: #8fbbe6;
     --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-serif: 'Source Serif 4', Georgia, serif;
     --font-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
@@ -86,6 +92,7 @@
       --bar-verified: #488acb; --bar-verified-ink: #0f1830;
       --bar-blocked: #e2bd4a;  --bar-blocked-ink: #0f1830;
       --bar-tbv: #313f5c;      --bar-tbv-ink: #e4e8f2;
+      --sev-p1: #a9cff7;  --sev-p2: #4f8fd6;  --sev-p3: #2b5a94;
     }
   }
   :root[data-theme="dark"] {
@@ -118,6 +125,7 @@
     --bar-verified: #488acb; --bar-verified-ink: #0f1830;
     --bar-blocked: #e2bd4a;  --bar-blocked-ink: #0f1830;
     --bar-tbv: #313f5c;      --bar-tbv-ink: #e4e8f2;
+    --sev-p1: #a9cff7;  --sev-p2: #4f8fd6;  --sev-p3: #2b5a94;
   }
 
   body {
@@ -157,7 +165,8 @@
   .lede { margin: 0; color: var(--ink-soft); max-width: 68ch; }
   .lede strong { color: var(--ink); font-weight: 600; }
 
-  /* Progress summary: one hero figure, one stacked bar of every fix, three by source. */
+  /* Progress summary: one hero figure, one stacked bar of every fix, one per severity, and the
+     timeline (v50, user request; it replaced the three bars by source). */
   .progress {
     background: var(--paper);
     border: 1px solid var(--rule);
@@ -219,7 +228,32 @@
   .key i { width: 12px; height: 12px; border-radius: 3px; background: var(--seg); flex: none; }
   .key b { color: var(--ink); font-weight: 500; }
   .key .n { font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
-  .by-source { display: grid; gap: 8px; }
+  /* The timeline: a burn-up. Fixes accepted to date, stacked by severity (P1 at the base),
+     under a line of every fix booked; the gap between them is the work still open. */
+  .timeline { position: relative; min-width: 0; }
+  .timeline svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; }
+  .timeline svg:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; border-radius: 4px; }
+  .timeline .grid line { stroke: var(--rule); stroke-width: 1; shape-rendering: crispEdges; }
+  .timeline .axis text { font-size: 11px; fill: var(--ink-faint); font-variant-numeric: tabular-nums; }
+  .timeline .release line { stroke: var(--rule-strong); stroke-width: 1; shape-rendering: crispEdges; }
+  .timeline .release text { font-size: 10.5px; fill: var(--ink-faint); }
+  .timeline .layer { stroke: var(--paper); stroke-width: 2; stroke-linejoin: round; }
+  .timeline .layer.p1 { fill: var(--sev-p1); }
+  .timeline .layer.p2 { fill: var(--sev-p2); }
+  .timeline .layer.p3 { fill: var(--sev-p3); }
+  .timeline .booked { fill: none; stroke: var(--ink-soft); stroke-width: 1.5; stroke-linejoin: round; }
+  .timeline .end-label { font-size: 11.5px; fill: var(--ink-soft); }
+  .timeline .end-label tspan.v { fill: var(--ink); font-weight: 600; }
+  .timeline .cross { stroke: var(--ink-soft); stroke-width: 1; shape-rendering: crispEdges; }
+  .tl-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
+  .tl-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; }
+  .tl-legend i.line { height: 0; border-top: 1.5px solid var(--ink-soft); border-radius: 0; vertical-align: 3px; }
+  .tip .row { display: flex; align-items: center; gap: 6px; }
+  .tip .row i { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .tip .row i.line { height: 0; border-top: 1.5px solid currentColor; border-radius: 0; }
+  @media (forced-colors: active) {
+    .timeline .layer { forced-color-adjust: none; stroke: Canvas; }
+  }
   /* By severity: one stacked bar per severity, same status fills and order as the
      main bar (no new colours, so the validated palette above still covers it). */
   .bar-group { display: grid; gap: 8px; }
@@ -403,8 +437,9 @@
         <div class="by-severity" id="by-severity"></div>
       </div>
       <div class="bar-group">
-        <span class="group-label">By source</span>
-        <div class="by-source" id="by-source"></div>
+        <span class="group-label">Over time: fixes accepted, by severity</span>
+        <div class="timeline" id="timeline"></div>
+        <div class="tl-legend" id="tl-legend" aria-hidden="true"></div>
       </div>
     </div>
   </section>
@@ -474,6 +509,11 @@
       <h2>References</h2>
       <p><strong>Plan ref</strong> is the row in <code>docs/prepilot-fixes/FIX_PLAN.md</code>.
         <code>TODO B6</code> is in <code>docs/TODO.md</code>, outside the plan.</p>
+      <p><strong>Over time</strong>, in the summary above, counts the fixes accepted by each day, stacked by
+        severity with P1 at the base, under a line of every fix booked by then: the gap between the line and the
+        bands is the work still open. The vertical lines are the releases. Point at the chart, or focus it and use
+        the arrow keys, to read any day. It replaced the bars by source on 10 October; the Source filter below
+        still selects Thomas's rows, ours or both.</p>
       <p><strong>Date added</strong> is the day the problem was booked: for our own rows, the day its row
         entered the fix plan; for Thomas's, the day his point was first listed here (his review of
         10 September was added on 18 September, his retest of 30 September on 5 October). Both are
@@ -1223,8 +1263,8 @@
   //         v2026.09.1 on main; see CHANGELOG.md), or "Next release" while it is only on the
   //         fix branch. A row belongs to the first release whose FIX_PLAN.md shows it [x].
   // AS_AT: the date and time of this update, shown in the header (tracker v40, user request).
-  const AS_AT = "10th Oct 2026, 1:30pm";
-  const UPDATED = "10 October 2026 (Sessions 45 and 46: P3.45, P4.23, P3.26 and P3.33 fixed; release 2026.10.1; P3.47 and P3.48 added)";
+  const AS_AT = "10th Oct 2026, 1:45pm";
+  const UPDATED = "10 October 2026 (Sessions 45 and 46: P3.45, P4.23, P3.26 and P3.33 fixed; release 2026.10.1; P3.47 and P3.48 added; the timeline replaces the bars by source)";
   const ROWS = [
     { src: "R", fix: "Re-run twelve sessions in the mode the lawyers used (Conversational) and re-check the fixes measured on them", sev: "P3", status: "Fixed", ref: "P0.5", type: "Measurement", t: "", added: "2026-09-22", fixed: "2026-09-22", ver: "2026.09.1" },
     { src: "R", fix: "Record, rather than assume, which research filter those twelve sessions used", sev: "P3", status: "Fixed", ref: "P0.6", type: "Measurement", t: "", added: "2026-09-22", fixed: "2026-09-23", ver: "2026.09.3" },
@@ -1460,8 +1500,188 @@
   }
 
   // ---- Progress summary: computed from ROWS, so nothing here needs editing. ----
-  const SOURCE_GROUPS = [["T", "Thomas"], ["R", "Us"], ["T & R", "Both"]];
   const tip = document.getElementById("tip");
+
+  // ---- Timeline (v50, user request): a burn-up over the life of the fix plan. ----
+  // Releases are marked on it; add one here when it is cut (the day of its tag).
+  const RELEASES = [["2026-09-22", "2026.09.1"], ["2026-09-23", "2026.09.2"],
+                    ["2026-09-29", "2026.09.3"], ["2026-10-10", "2026.10.1"]];
+  const SEVS = ["P1", "P2", "P3"];
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  let tlDay = null;   // the day the crosshair is on (keyboard and pointer share it)
+
+  function svgEl(tag, attrs, text) {
+    const e = document.createElementNS(SVG_NS, tag);
+    for (const k in attrs || {}) e.setAttribute(k, attrs[k]);
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  const dayMs = 86400000;
+  const isoDay = iso => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
+  function shortDate(t) {
+    const d = new Date(t);
+    return d.getUTCDate() + " " + MONTHS[d.getUTCMonth()];
+  }
+
+  function timelineData() {
+    const dates = [];
+    for (const r of ROWS) { if (r.added) dates.push(isoDay(r.added)); if (r.fixed) dates.push(isoDay(r.fixed)); }
+    const t0 = Math.min(...dates), t1 = Math.max(...dates);
+    const days = [];
+    for (let t = t0; t <= t1; t += dayMs) {
+      const d = { t, booked: 0, fixed: { P1: 0, P2: 0, P3: 0 }, today: { P1: 0, P2: 0, P3: 0 } };
+      for (const r of ROWS) {
+        if (r.added && isoDay(r.added) <= t) d.booked++;
+        if (r.fixed && isoDay(r.fixed) <= t) d.fixed[r.sev]++;
+        if (r.fixed && isoDay(r.fixed) === t) d.today[r.sev]++;
+      }
+      days.push(d);
+    }
+    return days;
+  }
+
+  function showTimelineTip(d, x, y) {
+    tip.textContent = "";
+    tip.append(el("div", "", shortDate(d.t) + " " + new Date(d.t).getUTCFullYear()));
+    const total = SEVS.reduce((a, s) => a + d.fixed[s], 0);
+    for (const s of SEVS) {
+      const row = el("div", "row");
+      const key = el("i");
+      key.style.background = "var(--sev-" + s.toLowerCase() + ")";
+      row.append(key, el("b", "", String(d.fixed[s])),
+                 document.createTextNode(" " + s + " fixed" + (d.today[s] ? " (+" + d.today[s] + " that day)" : "")));
+      tip.append(row);
+    }
+    const sum = el("div", "row");
+    sum.append(el("b", "", String(total)), document.createTextNode(" fixed of "),
+               el("b", "", String(d.booked)), document.createTextNode(" booked"));
+    tip.append(sum);
+    tip.hidden = false;
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, x - w / 2)) + "px";
+    tip.style.top = Math.max(8, y - h - 14) + "px";
+  }
+
+  function buildTimeline() {
+    const box = document.getElementById("timeline");
+    const days = timelineData();
+    const W = Math.max(280, box.clientWidth || 560), H = 190;
+    const m = { top: 18, right: 76, bottom: 22, left: 30 };
+    const pw = W - m.left - m.right, ph = H - m.top - m.bottom;
+    const n = days.length, step = pw / n;
+    const last = days[n - 1];
+    const yMax = Math.ceil(last.booked / 25) * 25 || 25;
+    const X = i => m.left + i * step;                 // start of day i
+    const Y = v => m.top + ph - (v / yMax) * ph;
+    const totals = SEVS.map(s => last.fixed[s]);
+    const fixedTotal = totals.reduce((a, b) => a + b, 0);
+
+    const svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, tabindex: "0", role: "img",
+      "aria-label": "Burn-up from " + shortDate(days[0].t) + " to " + shortDate(last.t) + " " +
+        new Date(last.t).getUTCFullYear() + ": " + fixedTotal + " fixes accepted (" +
+        SEVS.map((s, k) => s + " " + totals[k]).join(", ") + ") of " + last.booked +
+        " booked. Use the arrow keys to read each day." });
+    // gridlines and y ticks
+    const grid = svgEl("g", { class: "grid" }), axis = svgEl("g", { class: "axis" });
+    for (let v = 0; v <= yMax; v += yMax / 4) {
+      grid.append(svgEl("line", { x1: m.left, x2: m.left + pw, y1: Y(v), y2: Y(v) }));
+      axis.append(svgEl("text", { x: m.left - 6, y: Y(v) + 4, "text-anchor": "end" }, String(v)));
+    }
+    // x ticks: Mondays, dropped where the previous one would collide (a phone)
+    let lastTick = -Infinity;
+    days.forEach((d, i) => {
+      if (new Date(d.t).getUTCDay() !== 1 || X(i) - lastTick < 52) return;
+      lastTick = X(i);
+      axis.append(svgEl("text", { x: X(i), y: H - 6, "text-anchor": i === 0 ? "start" : "middle" }, shortDate(d.t)));
+    });
+    svg.append(grid);
+    // stacked step layers, P1 at the base; drawn top band first so each 2px surface edge shows
+    const band = (lo, hi) => {
+      let top = "", bot = "";
+      days.forEach((d, i) => {
+        top += (i ? " L" : "M") + X(i) + " " + Y(hi(d)) + " L" + X(i + 1) + " " + Y(hi(d));
+      });
+      for (let i = n - 1; i >= 0; i--) bot += " L" + X(i + 1) + " " + Y(lo(days[i])) + " L" + X(i) + " " + Y(lo(days[i]));
+      return top + bot + " Z";
+    };
+    const cum = (d, k) => SEVS.slice(0, k).reduce((a, s) => a + d.fixed[s], 0);
+    for (let k = SEVS.length - 1; k >= 0; k--) {
+      svg.append(svgEl("path", { class: "layer " + SEVS[k].toLowerCase(), d: band(d => cum(d, k), d => cum(d, k + 1)) }));
+    }
+    // releases
+    const rel = svgEl("g", { class: "release" });
+    const narrow = pw < 420;   // a phone: "09.1" for "2026.09.1"
+    const relX = iso => X(Math.round((isoDay(iso) - days[0].t) / dayMs) + 1);
+    RELEASES.forEach(([iso, full], j) => {
+      const i = Math.round((isoDay(iso) - days[0].t) / dayMs);
+      if (i < 0 || i >= n) return;
+      const x = X(i + 1), label = narrow ? full.slice(5) : full;
+      rel.append(svgEl("line", { x1: x, x2: x, y1: m.top - 4, y2: m.top + ph }));
+      const prev = RELEASES[j - 1], next = RELEASES[j + 1];
+      // two labels closer than a label's width sit either side of their lines
+      const near = o => o && Math.abs(relX(o[0]) - x) < (narrow ? 30 : 64);
+      const anchor = i === n - 1 ? "end" : near(next) ? "end" : near(prev) ? "start" : "middle";
+      const dx = anchor === "end" ? -3 : anchor === "start" ? 3 : 0;
+      rel.append(svgEl("text", { x: x + dx, y: m.top - 7, "text-anchor": anchor }, label));
+    });
+    svg.append(rel);
+    // the booked line (step)
+    let bp = "";
+    days.forEach((d, i) => { bp += (i ? " L" : "M") + X(i) + " " + Y(d.booked) + " L" + X(i + 1) + " " + Y(d.booked); });
+    svg.append(svgEl("path", { class: "booked", d: bp }));
+    svg.append(axis);
+    // direct end labels: booked, then each band at its middle, nudged apart to 13px
+    const ends = [{ y: Y(last.booked), parts: ["booked ", String(last.booked)] }];
+    SEVS.forEach((s, k) => ends.push({ y: Y(cum(last, k) + last.fixed[s] / 2), parts: [s + " ", String(last.fixed[s])] }));
+    ends.sort((a, b) => a.y - b.y);
+    for (let j = 1; j < ends.length; j++) if (ends[j].y - ends[j - 1].y < 13) ends[j].y = ends[j - 1].y + 13;
+    for (const e of ends) {
+      const t = svgEl("text", { class: "end-label", x: m.left + pw + 6, y: e.y + 4 });
+      t.append(svgEl("tspan", {}, e.parts[0]), svgEl("tspan", { class: "v" }, e.parts[1]));
+      svg.append(t);
+    }
+    // crosshair and the hover/keyboard layer (the whole plot is the hit target)
+    const cross = svgEl("line", { class: "cross", y1: m.top, y2: m.top + ph, visibility: "hidden" });
+    svg.append(cross);
+    const hit = svgEl("rect", { x: m.left, y: 0, width: pw, height: H, fill: "transparent" });
+    svg.append(hit);
+    function point(i) {
+      tlDay = Math.max(0, Math.min(n - 1, i));
+      const x = X(tlDay) + step / 2;
+      cross.setAttribute("x1", x); cross.setAttribute("x2", x); cross.setAttribute("visibility", "visible");
+      const r = svg.getBoundingClientRect(), k = r.width / W;
+      showTimelineTip(days[tlDay], r.left + x * k, r.top + m.top * k);
+    }
+    function leave() { cross.setAttribute("visibility", "hidden"); hideTip(); }
+    hit.addEventListener("pointermove", e => {
+      const r = svg.getBoundingClientRect(), k = W / r.width;
+      point(Math.floor(((e.clientX - r.left) * k - m.left) / step));
+    });
+    hit.addEventListener("pointerleave", leave);
+    svg.addEventListener("focus", () => point(tlDay === null ? n - 1 : tlDay));
+    svg.addEventListener("blur", leave);
+    svg.addEventListener("keydown", e => {
+      const moves = { ArrowLeft: -1, ArrowRight: 1, Home: -n, End: n };
+      if (!(e.key in moves)) return;
+      e.preventDefault();
+      point((tlDay === null ? n - 1 : tlDay) + moves[e.key]);
+    });
+    box.textContent = "";
+    box.append(svg);
+    // legend (identity never by colour alone: the end labels name every band too)
+    const lg = document.getElementById("tl-legend");
+    lg.textContent = "";
+    for (const s of SEVS) {
+      const k = el("span");
+      const sw = el("i");
+      sw.style.background = "var(--sev-" + s.toLowerCase() + ")";
+      k.append(sw, document.createTextNode(s + " fixed"));
+      lg.append(k);
+    }
+    const bk = el("span");
+    bk.append(el("i", "line"), document.createTextNode("all fixes booked"));
+    lg.append(bk);
+  }
 
   function countBy(rows) {
     return Object.fromEntries(STATUSES.map(s => [s, rows.filter(r => r.status === s).length]));
@@ -1543,21 +1763,10 @@
       row.append(el("span", "bar-label sev-label", sev), bar, el("span", "bar-total", String(rows.length)));
       bySev.append(row);
     }
-    const by = document.getElementById("by-source");
-    by.textContent = "";
-    for (const [value, label] of SOURCE_GROUPS) {
-      const rows = ROWS.filter(r => r.src === value);
-      const row = el("div", "bar-row");
-      const bar = el("div", "bar thin");
-      bar.setAttribute("role", "group");
-      bar.setAttribute("aria-label", label + ": " + rows.length + " fixes, by status");
-      buildBar(bar, rows, true);
-      row.append(el("span", "bar-label", label), bar, el("span", "bar-total", String(rows.length)));
-      by.append(row);
-    }
+    buildTimeline();
     fitLabels();
   }
-  window.addEventListener("resize", fitLabels);
+  window.addEventListener("resize", () => { fitLabels(); buildTimeline(); });
 
   buildFilters();
   render();
