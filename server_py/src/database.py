@@ -290,6 +290,12 @@ async def init_db() -> None:
                 provision VARCHAR(64) NOT NULL,
                 role VARCHAR(32) NOT NULL
             )""",
+            # FIX_PLAN P3.33: whether legislation.gov.uk records each instrument as
+            # revoked (a JSON flag from `utils/revocation_record.py`, NULL when
+            # none is recorded) and the day that was checked (NULL: not checked,
+            # e.g. an instrument the daily refresh added). Additive.
+            "ALTER TABLE made_under_instruments ADD COLUMN IF NOT EXISTS revocation TEXT",
+            "ALTER TABLE made_under_instruments ADD COLUMN IF NOT EXISTS revocation_checked DATE",
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS local_cache_hits INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE request_timings ADD COLUMN IF NOT EXISTS local_cache_chars_saved INTEGER NOT NULL DEFAULT 0",
             # Resolved active provider per request (D8, additive, no backfill —

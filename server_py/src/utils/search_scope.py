@@ -793,14 +793,22 @@ def record_made_under(log: Optional[list], data: Any) -> None:
             if lid:
                 log.append({"tool": "enabling_power", "legislation_id": lid,
                             "stated": True, "source": "made_under_record"})
-        log.append({
+        entry = {
             "tool": MADE_UNDER_ENTRY, "status": status,
             "act": str(d.get("matched_act") or d.get("act") or "")[:160],
             "provision": str(d.get("provision") or "")[:40],
             "count": int(d.get("count") or 0),
             "listed": len(d.get("instruments") or []),
             "coverage": str((d.get("coverage") or {}).get("label") or "")[:200],
-        })
+        }
+        # P3.33: legislation.gov.uk's recorded revocations, counted over every
+        # instrument found, with the day they were checked.
+        rv = d.get("revocations")
+        if isinstance(rv, dict) and rv.get("checked"):
+            entry["revocations"] = {k: rv.get(k) for k in (
+                "revoked", "revoked_undated", "revoked_later", "partly", "qualified",
+                "none", "unchecked", "checked")}
+        log.append(entry)
     except Exception:
         pass
 
@@ -816,15 +824,30 @@ def _made_under_limb(log: Optional[list]) -> str:
             listed = (f", {e.get('listed')} of them listed" if e.get("listed", 0) < e.get("count", 0)
                       else "")
             parts.append(f"{e.get('count')} instrument(s) whose own preamble names {prov} of "
-                         f"the {e.get('act')}{listed}")
+                         f"the {e.get('act')}{listed}" + _revocation_limb(e.get("revocations")))
         else:
             parts.append(f"none whose preamble names {prov} of the {e.get('act')}")
     cov = rows[-1].get("coverage") or "a stated class of instruments"
+    rule = (" A revocation is stated only as legislation.gov.uk records it; no revocation "
+            "recorded does not mean in force." if any(e.get("revocations") for e in rows) else "")
     return (
         "Made-under record consulted: " + "; ".join(parts) + f". It covers {cov} only; "
         "instruments outside that coverage were not checked, so give the coverage, "
-        "never a total, and never say nothing else was made under the provision."
+        "never a total, and never say nothing else was made under the provision." + rule
     )
+
+
+def _revocation_limb(rv: Optional[dict]) -> str:
+    """P3.33: ", of which legislation.gov.uk records R as revoked in whole ... (checked D)"."""
+    if not isinstance(rv, dict) or not rv.get("checked"):
+        return ""
+    whole = sum(int(rv.get(k) or 0) for k in ("revoked", "revoked_undated", "revoked_later"))
+    later = int(rv.get("revoked_later") or 0)
+    bits = [f"{whole} as revoked in whole" + (f" ({later} from a date still to come)" if later else ""),
+            f"{int(rv.get('partly') or 0)} as revoked in part"]
+    if rv.get("qualified"):
+        bits.append(f"{rv['qualified']} with a qualified removal only")
+    return f", of which legislation.gov.uk records {', '.join(bits)} (checked {rv['checked']})"
 
 
 def _made_under_footer_clause(entries: Optional[list]) -> str:
@@ -832,9 +855,13 @@ def _made_under_footer_clause(entries: Optional[list]) -> str:
     if not rows:
         return ""
     cov = rows[-1].get("coverage") or "a stated class of instruments"
+    checked = [e["revocations"]["checked"] for e in rows if e.get("revocations")]
+    revoked = (f" Revocations of those instruments are as recorded on legislation.gov.uk on "
+               f"{max(checked)}; where none is recorded, that is not confirmation that an "
+               "instrument still has effect." if checked else "")
     return (
         f" The record of enabling powers consulted here covers {cov}; anything "
-        "outside that coverage was not checked."
+        "outside that coverage was not checked." + revoked
     )
 
 # ---------------------------------------------------------------------------

@@ -3208,6 +3208,26 @@ def negcurrency_evidence(turn: dict) -> dict:
                 if o.get("window_complete") is False:
                     rec["cif_complete"] = rec["rep_complete"] = False
                 ev["records"].append(rec)
+            elif name == "find_instruments_made_under" and isinstance(o, dict):
+                # P3.33: the made-under record states, per listed instrument, what
+                # legislation.gov.uk records about its revocation. A revocation in
+                # whole dated today or earlier (or undated) removes the instrument,
+                # exactly as a change record's whole-instrument removal does; one
+                # dated after the day the tool ran does not, and neither does a
+                # partial one (the record keeps no provision list).
+                for inst in o.get("instruments") or []:
+                    if not isinstance(inst, dict):
+                        continue
+                    ilid = _nc_lid(inst.get("legislation_id"))
+                    if inst.get("title"):
+                        ev["titles"].setdefault(ilid, str(inst.get("title")))
+                    if ilid and inst.get("revocation_status") in ("revoked", "revoked_undated"):
+                        ev["records"].append({
+                            "lid": ilid, "direction": "to", "commenced": {},
+                            "self_commenced": {}, "repealed": {}, "whole_removed": {ilid},
+                            "commenced_n": {}, "repeal_n": {ilid: 1}, "groups": [],
+                            "cif_complete": True, "rep_complete": True,
+                            "source": "made_under_record"})
             elif name == "search_legislation" and isinstance(o, dict):
                 for row in o.get("results") or []:
                     if not isinstance(row, dict):

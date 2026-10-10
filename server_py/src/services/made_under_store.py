@@ -33,7 +33,7 @@ import gzip
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
@@ -44,6 +44,9 @@ from ..utils.made_under import (
     MADE_UNDER_TOOL, MAX_LISTED, _short, is_legislation_id, normalise_title,
     parse_powers, preamble_text, provision_key, recital_window, text_before_window,
 )
+from ..utils.revocation_record import category as revocation_category
+from ..utils.revocation_record import describe as describe_revocation
+from ..utils.revocation_record import scope_of, tally as revocation_tally
 
 logger = logging.getLogger(__name__)
 
@@ -96,15 +99,31 @@ def _as_datetime(value) -> Optional[datetime]:
         return None
 
 
+def _as_date(value) -> Optional[date]:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value)[:10]) if value else None
+    except ValueError:
+        return None
+
+
 def _rows_for(rec: dict) -> tuple:
     """`(instrument_row, [power_rows])` for one snapshot or refresh record."""
+    flag = rec.get("revocation")
     inst = {
         "lid": rec["id"], "title": _short(rec.get("title") or "", 300),
         "recital": (rec.get("recital") or rec.get("window") or "")[:2000],
         "version": rec.get("version") or "", "source": rec.get("source") or "snapshot",
         # asyncpg types the bind from the column and rejects a string, even
-        # one inside a CAST, so the date is parsed here.
+        # one inside a CAST, so the dates are parsed here.
         "harvested_at": _as_datetime(rec.get("harvested_at")),
+        # P3.33: the stored flag (None: no removal recorded) and the day the
+        # feed it came from was checked (None: never checked).
+        "revocation": json.dumps(flag, ensure_ascii=False) if flag else None,
+        "revocation_checked": _as_date(rec.get("revocation_checked")),
     }
     powers = []
     for p in rec.get("powers") or []:
@@ -120,10 +139,12 @@ def _rows_for(rec: dict) -> tuple:
 
 
 _INSERT_INSTRUMENT = text(
-    "INSERT INTO made_under_instruments (legislation_id, title, recital, version, source, harvested_at) "
-    "VALUES (:lid, :title, :recital, :version, :source, :harvested_at) "
+    "INSERT INTO made_under_instruments (legislation_id, title, recital, version, source, harvested_at, "
+    "revocation, revocation_checked) "
+    "VALUES (:lid, :title, :recital, :version, :source, :harvested_at, :revocation, :revocation_checked) "
     "ON CONFLICT (legislation_id) DO UPDATE SET title = EXCLUDED.title, recital = EXCLUDED.recital, "
-    "version = EXCLUDED.version, source = EXCLUDED.source, harvested_at = EXCLUDED.harvested_at")
+    "version = EXCLUDED.version, source = EXCLUDED.source, harvested_at = EXCLUDED.harvested_at, "
+    "revocation = EXCLUDED.revocation, revocation_checked = EXCLUDED.revocation_checked")
 _INSERT_POWER = text(
     "INSERT INTO made_under_powers (legislation_id, act_title, act_norm, act_id, provision, role) "
     "VALUES (:lid, :act_title, :act_norm, :act_id, :provision, :role)")
@@ -146,6 +167,18 @@ async def _store(session, records: list) -> int:
     return len(insts)
 
 
+def prepare_snapshot(records: list, manifest: dict) -> list:
+    """Snapshot records ready to store. P3.33: each instrument's revocation check date is its
+    feed's, from the manifest (`revocations.checked`, one date per feed); an instrument whose
+    feed was not checked keeps None, which reads "not checked", never "no revocation recorded"."""
+    checked = ((manifest or {}).get("revocations") or {}).get("checked") or {}
+    for rec in records:
+        rec.setdefault("harvested_at", (manifest or {}).get("harvested_at"))
+        rec["source"] = "snapshot"
+        rec["revocation_checked"] = checked.get(scope_of(rec["id"]))
+    return records
+
+
 async def load_snapshot(snapshot_dir: Path = SNAPSHOT_DIR) -> dict:
     """Copy the committed snapshot into the tables if it is newer than the one
     loaded. Instruments the daily refresh added and the snapshot lacks are kept."""
@@ -162,10 +195,7 @@ async def load_snapshot(snapshot_dir: Path = SNAPSHOT_DIR) -> dict:
             if current is not None and current.value == version:
                 _STATE["available"] = True
                 return {"loaded": 0, "reason": "current", "version": version}
-            records = await asyncio.to_thread(read_snapshot, snapshot_dir)
-            for rec in records:
-                rec.setdefault("harvested_at", manifest.get("harvested_at"))
-                rec["source"] = "snapshot"
+            records = prepare_snapshot(await asyncio.to_thread(read_snapshot, snapshot_dir), manifest)
             await session.execute(text(
                 "DELETE FROM made_under_powers WHERE legislation_id IN "
                 "(SELECT legislation_id FROM made_under_instruments WHERE source = 'snapshot')"))
@@ -212,11 +242,29 @@ def _sort_key(lid: str) -> tuple:
         return (0, 0)
 
 
+def _flag(value) -> Optional[dict]:
+    if isinstance(value, dict):
+        return value
+    try:
+        f = json.loads(value) if value else None
+        return f if isinstance(f, dict) else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _iso(value) -> Optional[str]:
+    if value is None:
+        return None
+    return value.isoformat()[:10] if hasattr(value, "isoformat") else str(value)[:10]
+
+
 def build_result(act: str, section: str, provision: str, rows: list, act_rows: list,
-                 cov: dict) -> dict:
+                 cov: dict, today: Optional[str] = None) -> dict:
     """The tool's JSON from query rows. Pure, so it is tested without a DB.
 
-    `rows`: (legislation_id, title, act_title, act_id, role) for the provision.
+    `rows`: (legislation_id, title, act_title, act_id, role[, revocation, revocation_checked])
+    for the provision; the last two are P3.33's (absent on a record loaded before it, which
+    then reads as never checked).
     `act_rows`: (provision, count) for every provision of the Act the record
     holds, used only when `rows` is empty.
     """
@@ -231,8 +279,9 @@ def build_result(act: str, section: str, provision: str, rows: list, act_rows: l
         else:
             out.update(status="act_not_in_record", count=0, instruments=[])
         return out
-    by_id = {}
-    for lid, title, act_title, act_id, role in rows:
+    by_id, revs = {}, {}
+    for row in rows:
+        lid, title, act_title, act_id, role = row[:5]
         e = by_id.setdefault(lid, {"legislation_id": lid, "title": _short(title, 110),
                                    "url": f"https://www.legislation.gov.uk/{lid}",
                                    "roles": []})
@@ -241,13 +290,38 @@ def build_result(act: str, section: str, provision: str, rows: list, act_rows: l
         out.setdefault("matched_act", act_title)
         if act_id:
             out.setdefault("act_id", act_id)
+        revs[lid] = (_flag(row[5]) if len(row) > 5 else None,
+                     _iso(row[6]) if len(row) > 6 else None)
     insts = sorted(by_id.values(), key=lambda e: _sort_key(e["legislation_id"]))
     for e in insts:
         # "power" is the common case and says nothing; a qualifier
         # ("as applied by") is kept because it changes what the claim is.
         if e["roles"] == ["power"]:
             e.pop("roles")
-    out.update(status="found", count=len(insts), instruments=insts[:MAX_LISTED])
+    cut = len(insts) > MAX_LISTED
+    if cut:
+        # P3.33 (user decision, Session 46): a cut list leads with the instruments NOT
+        # recorded as revoked in whole (oldest first), since a lawyer asking what was made
+        # under a power mostly wants what may still apply; the counts cover all found.
+        def _gone(e):
+            flag, checked = revs.get(e["legislation_id"], (None, None))
+            return bool(checked) and revocation_category(flag, today) in ("revoked", "revoked_undated")
+        insts.sort(key=lambda e: (_gone(e), _sort_key(e["legislation_id"])))
+    listed = insts[:MAX_LISTED]
+    # P3.33: what legislation.gov.uk records about each listed instrument's
+    # revocation, and the counts over EVERY instrument found, so a cut list
+    # still says how many of the whole are recorded as revoked.
+    for e in listed:
+        flag, checked = revs.get(e["legislation_id"], (None, None))
+        e["revocation"] = describe_revocation(flag, checked, today)
+        # The same, as a value code and the graders read (`replay_report negcurrency`).
+        e["revocation_status"] = revocation_category(flag, today) if checked else "unchecked"
+    checked_days = sorted({c for _, c in revs.values() if c})
+    out.update(status="found", count=len(insts), instruments=listed,
+               listed_order=("not_wholly_revoked_first" if cut and checked_days else "oldest_first"),
+               revocations=dict(revocation_tally(revs.values(), today),
+                                checked=checked_days[-1] if checked_days else None,
+                                checked_from=checked_days[0] if checked_days else None))
     return out
 
 
@@ -270,7 +344,8 @@ async def query(act: str, section: str) -> dict:
                 return dict(base, status="unavailable",
                             note="The made-under record is not loaded on this server.")
             rows = (await session.execute(text(
-                "SELECT p.legislation_id, i.title, p.act_title, p.act_id, p.role "
+                "SELECT p.legislation_id, i.title, p.act_title, p.act_id, p.role, "
+                "i.revocation, i.revocation_checked "
                 "FROM made_under_powers p JOIN made_under_instruments i USING (legislation_id) "
                 f"WHERE p.{col} = :v AND p.provision = :prov"), {"v": val, "prov": provision})).all()
             act_rows = []

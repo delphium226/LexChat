@@ -417,6 +417,62 @@ def _short(text: str, n: int) -> str:
     return text if len(text) <= n else text[: n - 1].rstrip() + "…"
 
 
+def _plural(n: int, one: str, many: str) -> str:
+    return f"{n} {one if n == 1 else many}"
+
+
+def revocation_note(d: dict) -> str:
+    r"""P3.33: the block on what legislation.gov.uk records about these instruments' revocation.
+
+    A CURRENCY block by name, so `strip_scope_blocks` removes it from what the lawyer reads
+    (no square brackets inside). It permits a RECORDED revocation, stated as the record gives
+    it, and forbids the two inferences the B4 rules forbid (P2.5, P3.24): that an instrument
+    with no revocation recorded is in force, and that a revocation dated after today has
+    already taken effect. Empty where the result carries no counts (a record loaded before
+    P3.33) or nothing was checked.
+    """
+    rv = d.get("revocations")
+    if not isinstance(rv, dict):
+        return ""
+    n = int(d.get("count") or 0)
+    unchecked = int(rv.get("unchecked") or 0)
+    if not n or unchecked >= n:
+        return ""
+    whole = int(rv.get("revoked") or 0) + int(rv.get("revoked_undated") or 0) \
+        + int(rv.get("revoked_later") or 0)
+    detail = []
+    if rv.get("revoked_undated"):
+        detail.append(f"{rv['revoked_undated']} with no date recorded")
+    if rv.get("revoked_later"):
+        detail.append(f"{rv['revoked_later']} with effect from a date still to come")
+    parts = [f"{whole} recorded as revoked in whole" + (f" ({'; '.join(detail)})" if detail else ""),
+             f"{int(rv.get('partly') or 0)} as revoked in part"]
+    if rv.get("qualified"):
+        parts.append(f"{rv['qualified']} with a qualified removal only")
+    checked = rv.get("checked") or "an unrecorded date"
+    if rv.get("checked_from") and rv.get("checked_from") != rv.get("checked"):
+        checked = f"{rv['checked_from']} to {rv['checked']}"
+    tail = (f"; {_plural(unchecked, 'instrument was', 'instruments were')} added to the record "
+            "after the check and not checked") if unchecked else ""
+    listed = len(d.get("instruments") or [])
+    order = (" The list leads with the instruments not recorded as revoked in whole, oldest first."
+             if d.get("listed_order") == "not_wholly_revoked_first" else "")
+    cut = (f" Only the {listed} listed instruments carry a line; the counts cover all {n}.{order}"
+           if listed < n else "")
+    return (
+        f"\n\n[CURRENCY — revocations as recorded on legislation.gov.uk (checked {checked}): "
+        f"of the {_plural(n, 'instrument', 'instruments')}, {', '.join(parts)}; for the other "
+        f"{int(rv.get('none') or 0)} no revocation is recorded{tail}. Each listed instrument's "
+        f"revocation line says which, with the revoking instrument and its date.{cut} You MAY "
+        "state a recorded revocation as the line gives it: by which instrument, and from which "
+        "date or that no date is recorded. A revocation dated after today has not yet taken "
+        "effect: give its date, and do not say the instrument has been revoked. No revocation "
+        "recorded is NOT evidence that an instrument is in force: say only that "
+        f"legislation.gov.uk records no revocation of it as at {rv.get('checked') or 'the check'}, "
+        "never that it is in force, current or still has effect.]"
+    )
+
+
 def made_under_note(raw_result) -> str:
     r"""The block appended to a `find_instruments_made_under` result.
 
@@ -450,7 +506,7 @@ def made_under_note(raw_result) -> str:
             "does NOT establish that no other instrument was made under the provision: "
             "outside its coverage nothing was checked, so state the coverage rather "
             "than a total.]"
-        )
+        ) + revocation_note(d)
     if status in ("act_known_section_not_cited", "act_not_in_record"):
         return (
             f"\n\n[ENABLING POWER — the made-under record: no instrument it holds names "
