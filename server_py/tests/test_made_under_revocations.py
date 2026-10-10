@@ -275,3 +275,41 @@ def test_a_list_that_is_not_cut_keeps_its_order():
     assert [i["legislation_id"] for i in d["instruments"]] == ["ssi/1901/1", "ssi/1901/2", "ssi/1901/3"]
     assert d["listed_order"] == "oldest_first"
     assert "The list leads" not in mu.made_under_note(json.dumps(d))
+
+
+def test_madeunder_grade_reads_specific_provisions_as_partial():
+    from tools import madeunder_grade as g
+    body = ("*   Specific provisions within **SSI 2021/73**, **SSI 2021/174**, and **SSI 2022/54** have "
+            "been revoked or omitted by subsequent legislation (e.g., SSI 2021/249, SSI 2025/336).")
+    r = g.revocation_grade(body, g.named_ids(body))
+    assert r["whole_wrong"] == [] and r["part_correct"] == ["ssi/2021/174", "ssi/2021/73", "ssi/2022/54"]
+
+
+def test_the_block_asks_for_each_revocation_against_its_instrument():
+    note = mu.made_under_note(json.dumps(_result([WHOLE, PART, None])))
+    assert ("When you list or name any of these instruments, say against each one the record shows "
+            "revoked, in whole or in part, what its line says.") in note
+
+
+def test_a_turn_that_consulted_only_the_record_gets_its_clause_in_the_footer():
+    """wave4_p333 6383 t3 (and wave4_p331's): the lookup-only branch had no made-under clause,
+    and a turn with the record alone got no footer at all."""
+    log = _log([WHOLE, None])
+    footer = ss.lookup_scope_footer(log, [])
+    assert footer.strip().startswith("*Search scope: no ranked search of the legislation index was run")
+    assert "The record of enabling powers consulted here covers" in footer
+    assert "Revocations of those instruments are as recorded on legislation.gov.uk on 1906-05-01" in footer
+
+
+def test_no_detector_trips_on_the_lookup_only_footer():
+    from tools.replay_report import (
+        IN_FORCE_CLAIM, NEG_ASSERTED, NOT_FOUND, _CMC_CONTEXT, _CMC_DENIED, _currency_asserted,
+        _sentences, derivation_claims, negcurrency_claim,
+    )
+    footer = ss.lookup_scope_footer(_log([WHOLE, None]), [])
+    assert not NEG_ASSERTED.search(footer) and not NOT_FOUND.search(footer)
+    assert not IN_FORCE_CLAIM.search(footer) and derivation_claims(footer)[0] == []
+    for s in _sentences(footer):
+        assert not _currency_asserted(s), s
+        assert not (_CMC_CONTEXT.search(s) and _CMC_DENIED.search(s)), s
+        assert negcurrency_claim(s)[0] is None, s

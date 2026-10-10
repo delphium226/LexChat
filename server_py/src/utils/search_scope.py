@@ -3697,7 +3697,12 @@ def lookup_scope_footer(entries: Optional[list], messages: Optional[list] = None
     about one instrument, and the earlier answer that stated it stays visible
     above. "" when no lookup reported anything a lawyer needs told.
     """
-    clause = _lookup_footer_clause(entries)
+    # P3.33: the made-under record's coverage and revocation clause, which every
+    # other footer branch carries. Without it a turn that consulted only the
+    # record (6383's "any other SSIs?" follow-up) told the lawyer neither what
+    # the record covers nor when its revocations were checked (wave4_p333 t3;
+    # the same on wave4_p331).
+    clause = _lookup_footer_clause(entries) + _made_under_footer_clause(entries)
     # A search WITHIN an instrument is a search (P2.8 keeps such a turn silent
     # for the same reason), so "no ranked search … was run" would be false
     # there. Found by `replay_report nosearch` on `wave4_p37` (6373 r1 t3,

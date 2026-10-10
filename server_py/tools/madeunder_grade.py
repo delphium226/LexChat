@@ -70,6 +70,7 @@ _REVOKE_WORD = re.compile(
     r"\b(?:revok\w*|revoc\w*|repeal\w*|ceas\w*\s+to\s+have\s+effect|omitted)\b", re.I)
 _PART_WORD = re.compile(
     r"\b(?:in\s+part|partly|partially|part\s+of|some\s+(?:of\s+its\s+)?provisions|certain\s+provisions"
+    r"|specific\s+provisions|provisions\s+within"
     r"|provisions?\s+(?:of|in)|regulations?\s+\d|reg\.\s*\d|paragraphs?\s+\d|schedule\s+\d|parts?\s+\d)\b",
     re.I)
 _NEGATED = re.compile(r"\b(?:no|not|never|none)\b[^.;\n]{0,40}\b(?:revok|revoc|repeal)", re.I)
