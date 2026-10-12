@@ -17,7 +17,12 @@ where each row carries its evidence and acceptance.
 
 ## Unreleased
 
-On `fix/prepilot-defects` since 2026.10.1, waiting for the next cut.
+On `fix/prepilot-defects` since 2026.10.2, waiting for the next cut.
+
+## 2026.10.2 — 2026-10-12
+
+Fifth cut (merge `1000d12`): deployment only, no change to the application's
+code since 2026.10.1.
 
 Deployment:
 - The connection test (`server_py/test_apis.ps1`) now checks the two Scottish
