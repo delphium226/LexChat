@@ -23,6 +23,7 @@ import CreateMatterModal from './components/CreateMatterModal';
 import MatterNotesModal from './components/MatterNotesModal';
 import DataSourcesModal from './components/DataSourcesModal';
 import AboutModal from './components/AboutModal';
+import ReleaseNotesModal from './components/ReleaseNotesModal';
 import AssignMatterModal from './components/AssignMatterModal';
 import ResearchFiltersModal from './components/ResearchFiltersModal';
 import Composer from './components/Composer';
@@ -1111,6 +1112,14 @@ function AppContent() {
         />
       )}
 
+      {modals.releaseNotes && (
+        <ReleaseNotesModal
+          botInfo={botInfo}
+          onClose={() => modals.close('releaseNotes')}
+          isParliament={isParliament}
+        />
+      )}
+
       {modals.about && (
         <AboutModal
           botInfo={botInfo}
@@ -1216,6 +1225,7 @@ function AppContent() {
         onOpenAccountSettings={() => modals.open('settings')}
         onOpenAdminPortal={() => modals.open('admin')}
         onOpenAbout={() => modals.open('about')}
+        onOpenReleaseNotes={() => modals.open('releaseNotes')}
         onOpenDataSources={() => modals.open('dataSources')}
         onLogout={logout}
       />

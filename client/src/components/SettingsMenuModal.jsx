@@ -10,6 +10,7 @@ const SettingsMenuModal = ({
   onOpenAdminPortal,
   onOpenAbout,
   onOpenDataSources,
+  onOpenReleaseNotes,
   onLogout,
   botName = 'AILA',
 }) => {
@@ -94,6 +95,17 @@ const SettingsMenuModal = ({
             className="w-full text-left px-4 py-3 rounded-md hover:bg-ink-100 text-ink-700 transition-colors flex items-center gap-3"
           >
             <span className="font-medium">Data Sources</span>
+          </button>
+
+          {/* Release notes */}
+          <button
+            onClick={() => {
+              onOpenReleaseNotes();
+              onClose();
+            }}
+            className="w-full text-left px-4 py-3 rounded-md hover:bg-ink-100 text-ink-700 transition-colors flex items-center gap-3"
+          >
+            <span className="font-medium">Release notes</span>
           </button>
 
           {/* About */}
