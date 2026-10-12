@@ -11,6 +11,11 @@ import Modal from './ui/Modal';
 
 const RELEASES = [
   [
+    '2026.10.4',
+    '12 October 2026',
+    'A switch for administrators to turn on Scottish judgments once the network allows it; no change to answers',
+  ],
+  [
     '2026.10.3',
     '12 October 2026',
     'A Data Sources screen that says what is actually searched, and these release notes in the Settings menu',
@@ -56,7 +61,7 @@ function LegislationNotes({ botName, scottishJudgments }) {
   return (
     <>
       <p>
-        Since the pre-pilot ended in August, {botName} has been improved in six releases, from 22 September to 12
+        Since the pre-pilot ended in August, {botName} has been improved in seven releases, from 22 September to 12
         October 2026. Its answers are now more precise, more complete and plainer about what they could and could not
         check.
       </p>
