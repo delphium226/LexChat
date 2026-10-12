@@ -28,6 +28,7 @@ DEFAULTS = {
     "suggested_questions_enabled": True,
     "weekly_survey_enabled": False,
     "session_feedback_enabled": False,
+    "scts_caselaw_enabled": False,
 }
 
 
@@ -70,6 +71,25 @@ async def test_save_features_accepts_old_client_body(client, admin_token):
     response = await client.post(FEATURES_URL, json={"matters_enabled": False}, headers=headers)
     assert response.status_code == 200
     assert response.json()["features"] == {**DEFAULTS, "matters_enabled": False}
+
+
+@pytest.mark.asyncio
+async def test_scts_flag_defaults_to_the_environment_setting_until_saved(
+        client, admin_token, monkeypatch):
+    """P3.20: SCTS_CASELAW_ENABLED is the default; a saved flag wins over it."""
+    from src.config import settings
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    monkeypatch.setattr(settings, "scts_caselaw_enabled", True)
+    assert (await client.get(FEATURES_URL, headers=headers)).json()["scts_caselaw_enabled"] is True
+    # an old client body without the key takes the environment default
+    r = await client.post(FEATURES_URL, json={"matters_enabled": True}, headers=headers)
+    assert r.json()["features"]["scts_caselaw_enabled"] is True
+    r = await client.post(FEATURES_URL, json={**DEFAULTS, "scts_caselaw_enabled": False},
+                          headers=headers)
+    assert r.json()["features"]["scts_caselaw_enabled"] is False
+    assert (await client.get(FEATURES_URL, headers=headers)).json()["scts_caselaw_enabled"] is False
+    # and /api/bot-info follows the saved flag, not the environment
+    assert (await client.get("/api/bot-info")).json().get("scottish_judgments") in (False, None)
 
 
 @pytest.mark.asyncio

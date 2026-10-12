@@ -36,6 +36,19 @@ _PROJECT_ROOT = os.path.dirname(
 )
 
 
+async def _scottish_judgments_on() -> bool:
+    """The Developer tab's `scts_caselaw_enabled` flag (P3.20), the switch
+    `scts.scts_enabled` reads per request; the environment setting if the
+    flag cannot be read."""
+    try:
+        from ..database import async_session_maker
+        from .developer import _read_features
+        async with async_session_maker() as db:
+            return bool((await _read_features(db)).get("scts_caselaw_enabled"))
+    except Exception:  # noqa: BLE001 - this endpoint takes no login and must not fail
+        return bool(settings.scts_caselaw_enabled)
+
+
 @router.get("/api/bot-info", response_model=BotInfoOut, response_model_exclude_none=True)
 async def bot_info():
     bot_identity = get_bot_identity()
@@ -53,7 +66,7 @@ async def bot_info():
     if APP_BUILD:
         result["build"] = APP_BUILD
     if not settings.research_mode:
-        result["scottish_judgments"] = bool(settings.scts_caselaw_enabled)
+        result["scottish_judgments"] = await _scottish_judgments_on()
     if brand_color := bot_identity.get("brand_color"):
         result["brand_color"] = brand_color
     if logo_emoji := bot_identity.get("logo_emoji"):

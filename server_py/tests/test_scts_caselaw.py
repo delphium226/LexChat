@@ -929,6 +929,36 @@ def test_the_gate_reads_the_setting_and_the_research_type(monkeypatch):
         assert not scts.scts_enabled(mode)
 
 
+def test_the_developer_tab_flag_on_the_request_wins_over_the_setting(monkeypatch):
+    """The Developer tab's flag reaches the gate as `_scts_caselaw_enabled`;
+    the environment setting decides only where no request config carries it."""
+    try:
+        for setting in (False, True):
+            monkeypatch.setattr(settings, "scts_caselaw_enabled", setting)
+            for flag in (False, True):
+                set_request_provider_config({"_scts_caselaw_enabled": flag})
+                assert scts.scts_enabled("case_law_only") is flag
+                assert scts.scts_enabled("legislation_only") is False
+            set_request_provider_config({"_provider": "t"})
+            assert scts.scts_enabled("case_law_only") is setting
+    finally:
+        set_request_provider_config({})
+
+
+def test_build_request_config_carries_the_flag(monkeypatch):
+    from src.routers.agent_request import ChatRequest, build_request_config
+    body = ChatRequest(messages=[{"role": "user", "content": "q"}], model="m",
+                       research_mode="case_law_only")
+    monkeypatch.setattr(settings, "scts_caselaw_enabled", False)
+    for flag in (False, True):
+        cfg = build_request_config(body, {}, "ollama", {"scts_caselaw_enabled": flag},
+                                   chat_mode="research")
+        assert cfg["_scts_caselaw_enabled"] is flag
+    monkeypatch.setattr(settings, "scts_caselaw_enabled", True)
+    cfg = build_request_config(body, {}, "ollama", {}, chat_mode="research")
+    assert cfg["_scts_caselaw_enabled"] is True
+
+
 # ---------------------------------------------------------------------------
 # 9. Caching
 # ---------------------------------------------------------------------------

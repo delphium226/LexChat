@@ -693,6 +693,8 @@ async def cmd_run(args) -> int:
         "suggested_questions_enabled": state["features"].get(
             "suggested_questions_enabled"
         ),
+        # P3.20: None = never saved, so SCTS_CASELAW_ENABLED decides.
+        "scts_caselaw_enabled": state["features"].get("scts_caselaw_enabled"),
         "git_head": _git_head(),
     }
 
@@ -777,6 +779,7 @@ async def cmd_check(args) -> int:
         "prompt_caching_enabled",
         "suggested_questions_enabled",
         "deep_research_mode_enabled",
+        "scts_caselaw_enabled",
     ):
         print(f"  {k:28} = {state['features'].get(k)}")
 
