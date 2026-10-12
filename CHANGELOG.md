@@ -19,6 +19,14 @@ where each row carries its evidence and acceptance.
 
 On `fix/prepilot-defects` since 2026.10.1, waiting for the next cut.
 
+Deployment:
+- The connection test (`server_py/test_apis.ps1`) now checks the two Scottish
+  Courts and Tribunals Service addresses (tests 8a and 8b), and
+  `docs/NETWORK_AND_DEPENDENCIES.md` lists them and says how to switch Scottish
+  judgments on: the machine environment variable `SCTS_CASELAW_ENABLED=true`
+  and a restart, with pdfplumber installed. Both addresses are approved on the
+  server's firewall and SCTS has confirmed our use in writing (P3.20).
+
 ## 2026.10.1 — 2026-10-10
 
 Fourth cut of the pre-pilot defect fixes (merge `db19e81`): Sessions 34 to 46,
