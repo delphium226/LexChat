@@ -38,6 +38,7 @@ foreach ($envPath in @($EnvFile, $ParliamentEnv)) {
 }
 
 $CaseLawBase       = "https://caselaw.nationalarchives.gov.uk"
+$SctsSearch        = "https://api.pa.web.scotcourts.gov.uk/web/search"
 $TwfyBase          = "https://www.theyworkforyou.com/api"
 $ScottishBills     = "https://data.parliament.scot/api/bills"
 $SpOrBase          = "https://www.parliament.scot/chamber-and-committees/official-report/search-what-was-said-in-parliament"
@@ -50,6 +51,7 @@ Write-Host "API Connectivity Tests -- LexChat Chatbots"
 Write-Host "============================================================"
 Write-Host "LEX base URL         : $LexBaseUrl"
 Write-Host "Case law base URL    : $CaseLawBase"
+Write-Host "SCTS judgments       : $SctsSearch (PDFs on www.scotcourts.gov.uk)"
 Write-Host "TWFY base URL        : $TwfyBase"
 Write-Host "TWFY API key         : $TwfyStatus"
 Write-Host "SP Official Report   : $SpOrBase"
@@ -354,6 +356,7 @@ function Get-SpIobId {
 Write-Host "--- GROUP 1: LEGISLATION BOT ---"
 Write-Host "    LEX API ($LexBaseUrl)"
 Write-Host "    National Archives case law ($CaseLawBase)"
+Write-Host "    SCTS Scottish judgments ($SctsSearch; www.scotcourts.gov.uk)"
 Write-Host ""
 
 Write-Host "1. search_legislation -- basic search"
@@ -416,6 +419,35 @@ if ($CaseLawUrl) {
         -Method GET
 } else {
     Skip-Test -Label "get_case_law_text" -Reason "no case URL returned by search_case_law (test 5)"
+}
+
+# Scottish judgments (FIX_PLAN P3.20): used only when SCTS_CASELAW_ENABLED is on.
+# Both hosts must be whitelisted: the search API and the site that serves the PDFs.
+Write-Host "8a. search_case_law -- Scottish judgments (SCTS search API; captures result for 8b)"
+$SctsContent = Test-Endpoint `
+    -Label   "search_case_law (SCTS)" `
+    -Url     $SctsSearch `
+    -Method  POST `
+    -Body    @{ query = "+judicial +review"; filters = @(); page = 1; limit = 5; indexType = "Judgments"; category = "" } `
+    -Capture
+
+Write-Host "8b. get_case_law_text -- a Scottish judgment's PDF (chained from test 8a)"
+$SctsPdf = $null
+if ($SctsContent) {
+    # documentLink is a path on www.scotcourts.gov.uk ("/media/.../2026csih36-....pdf")
+    $m = [regex]::Match(($SctsContent -replace '\\/', '/'), '"documentLink"\s*:\s*"((?:https://www\.scotcourts\.gov\.uk)?/[^"]+?\.pdf)"', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if ($m.Success) {
+        $SctsPdf = $m.Groups[1].Value
+        if ($SctsPdf.StartsWith("/")) { $SctsPdf = "https://www.scotcourts.gov.uk" + $SctsPdf }
+    }
+}
+if ($SctsPdf) {
+    Test-Endpoint `
+        -Label  "get_case_law_text (SCTS PDF)" `
+        -Url    $SctsPdf `
+        -Method GET
+} else {
+    Skip-Test -Label "get_case_law_text (SCTS PDF)" -Reason "no judgment PDF link returned by the SCTS search (test 8a)"
 }
 
 # ===========================================================================
