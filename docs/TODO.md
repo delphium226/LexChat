@@ -1430,3 +1430,40 @@ judgment text with an LLM, so it reads as in scope. **The licence is free**
   agent C, decision C3).
 - **It does not block** the four open rows that build further on the feed (FIX_PLAN P3.9,
   P3.22, P3.23, P4.19); each row notes it.
+
+### D24. Cache the Scottish case-law (SCTS) API results — FEASIBILITY FIRST (booked 2026-10-12, user)
+
+**Type: Data Improvement.** Keep what AILA fetches from the Scottish Courts and Tribunals
+Service, so a repeated search or judgment is not fetched from SCTS again. FIX_PLAN P3.20 built
+the SCTS route (`agent/tools/scts.py`); it is switched off on the target until both SCTS hosts
+are reachable. **No implementation until a feasibility study answers the questions below and the
+user decides.**
+
+What exists today, and what it does not do:
+- The per-request tool memo (D5) serves an exact repeat within one request only.
+- The local prompt cache (D7) admits `search_case_law` and `get_case_law_text`, but it stores the
+  *summary* keyed on the hash of the raw result, so it must still fetch from SCTS first. It saves
+  the summarisation call, not the SCTS call (A5's finding for LEX applies equally here).
+- Per request, SCTS calls are capped in code (60 searches, 20 PDFs, 2 in flight).
+
+The feasibility study should answer:
+1. **Permission.** Do SCTS's terms, as confirmed in writing (2026-10-12), allow storing their
+   search results and judgment text on our server? Related: P3.36's licence question and D23.
+2. **What to cache.** Judgment PDFs, or their extracted text, rarely change once published.
+   Search results change whenever SCTS publishes a judgment. These probably need different
+   rules: kept long versus a short time-to-live.
+3. **Is it worth it?** Measure once SCTS is live: how often the same search or judgment repeats
+   across users, the time a search and a PDF fetch and parse take (pdfplumber median 0.46 s;
+   batch 11 D), and that time against the LLM time per answer (A5 measured LLM time dominating
+   API time for LEX).
+4. **Load on SCTS.** SCTS stated no rate limit, but the target shares one outbound address.
+   Would a cache materially cut the calls, and does SCTS want that?
+5. **Freshness and correctness.** How would a cached search miss a newly published judgment,
+   and how would AILA say so? A correction or withdrawal of a judgment must not be served stale.
+6. **Storage and safety.** Size of a judgment cache (PDFs up to 15 MB each, capped), where it
+   lives (a DB table versus files), retention, and confirming every cached item is public
+   content only (the CACHEABLE_TOOLS rule, D8 Phase 7).
+7. **Where it fits.** Within `_request_with_retry` / `scts.py`, beside the per-request memo, or as
+   the A5 response cache generalised to both LEX and SCTS.
+
+Output: a short note with the measurements and a GO / NO-GO recommendation for the user.
