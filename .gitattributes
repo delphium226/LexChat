@@ -1,0 +1,2 @@
+# Wheels are zip archives: never convert line endings (deployment/pdf_wheels/).
+*.whl binary

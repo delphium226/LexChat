@@ -213,19 +213,18 @@ python -c "import docx"
 
 If both print nothing, the packages are installed and there is nothing more to do.
 
-If either prints `ModuleNotFoundError`, install the packages from wheels made on the online dev machine:
+If either prints `ModuleNotFoundError`, install them from the wheels committed in the repo. `deployment\pdf_wheels\` holds the 11 wheels the two packages need for Python 3.11 on 64-bit Windows (26 MB, including pdfminer.six, Pillow, pypdfium2 and lxml), so `git pull` brings them and nothing is downloaded on the server.
 
-1. On the dev machine, download the wheels for the target's Python (3.11, 64-bit):
+1. `git pull`.
+2. In PowerShell, as Administrator:
     ```powershell
-    pip download --platform win_amd64 --python-version 3.11 --implementation cp --only-binary=:all: pdfplumber==0.11.10 python-docx==1.2.0 -d pdf_wheels
+    cd C:\Projects\LexChat
+    .\deployment\install_pdf_support.ps1
     ```
-    This also downloads the packages pdfplumber depends on, including pdfminer.six, Pillow and pypdfium2.
-2. Copy the `pdf_wheels` folder to the target server.
-3. On the target, as Administrator:
-    ```cmd
-    python -m pip install --no-index --find-links=pdf_wheels pdfplumber==0.11.10 python-docx==1.2.0
-    ```
-4. Run the two checks again, then restart the app with `deployment\stop_native.cmd` and `deployment\start_native.cmd`.
+    The script installs with `pip --no-index` (it never contacts PyPI), into the same Python the app runs under: `server_py\venv` if it exists, as `start_native.cmd` uses, otherwise `python` on PATH. Packages already installed are left alone. It then runs both import checks and prints `[OK]` or `[FAIL]` for each.
+3. Restart the app with `deployment\stop_native.cmd` and `deployment\start_native.cmd`.
+
+If an import still fails after the script, send its output to the developer. A `DLL load failed` error is a different problem from a missing package.
 
 Regenerating the offline bundle with `package_offline_native.ps1` also includes both packages, for the next fresh installation.
 

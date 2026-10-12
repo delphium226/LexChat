@@ -5,7 +5,10 @@
 #
 # NOTE: pdfplumber and python-docx are NOT in the current offline bundle -
 # the bundle predates the document-upload feature. Regenerate the bundle
-# before the next fresh air-gapped install.
+# before the next fresh air-gapped install. Until then, their wheels (and
+# their dependencies') are committed in deployment/pdf_wheels/ and installed
+# on the target by deployment/install_pdf_support.ps1; a version change here
+# needs those wheels re-downloaded too.
 fastapi==0.135.1
 uvicorn[standard]==0.41.0
 pydantic-settings==2.13.1

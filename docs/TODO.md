@@ -26,6 +26,10 @@ Note: not yet deployed — the target still needs `git pull origin main` + resta
 ### T3. Regenerate the offline bundle (LAST, after merge)
 `package_offline_native.ps1`. The current bundle predates the doc-upload feature and
 LACKS the pdfplumber/python-docx wheels — a fresh air-gapped install would fail.
+Stopgap (2026-10-12): those wheels and their dependencies are committed in
+`deployment/pdf_wheels/` (26 MB, Python 3.11 win_amd64) and installed by
+`deployment/install_pdf_support.ps1`. Once the bundle is regenerated, the folder
+and script can go.
 
 ### T4. Credential loose ends
 - Old `server/.env` credentials remain in git history (no history rewrite chosen) —

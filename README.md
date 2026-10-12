@@ -148,7 +148,7 @@ Then check that pdfplumber is installed:
 ```cmd
 python -c "import pdfplumber"
 ```
-It should print nothing. The current offline bundle does not include pdfplumber, which AILA needs to read uploaded PDFs and Scottish judgments. If the check prints `ModuleNotFoundError`, follow *Checking pdfplumber is installed* in NATIVE_DEPLOYMENT.md.
+It should print nothing. The current offline bundle does not include pdfplumber, which AILA needs to read uploaded PDFs and Scottish judgments. If the check prints `ModuleNotFoundError`, run `.\deployment\install_pdf_support.ps1` as Administrator, which installs it from wheels committed in the repo, then restart. Details: *Checking pdfplumber is installed* in NATIVE_DEPLOYMENT.md.
 
 The application is served over **HTTPS on port 443**.
 
