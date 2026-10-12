@@ -196,6 +196,55 @@ For secure environments with no internet access. All steps are split between an 
     deployment\start_native.cmd
     ```
 
+### Checking pdfplumber is installed
+
+**pdfplumber** reads PDFs. AILA needs it for two things:
+- PDF documents that users upload;
+- the text of Scottish judgments, which SCTS publishes as PDFs.
+
+It is in `server_py\requirements.txt`, but the current offline bundle was made before it was added. A server installed from that bundle may not have it. **python-docx**, which reads uploaded Word documents, has the same gap.
+
+On the target server, in a new command prompt, run:
+
+```cmd
+python -c "import pdfplumber"
+python -c "import docx"
+```
+
+If both print nothing, the packages are installed and there is nothing more to do.
+
+If either prints `ModuleNotFoundError`, install the packages from wheels made on the online dev machine:
+
+1. On the dev machine, download the wheels for the target's Python (3.11, 64-bit):
+    ```powershell
+    pip download --platform win_amd64 --python-version 3.11 --implementation cp --only-binary=:all: pdfplumber==0.11.10 python-docx==1.2.0 -d pdf_wheels
+    ```
+    This also downloads the packages pdfplumber depends on, including pdfminer.six, Pillow and pypdfium2.
+2. Copy the `pdf_wheels` folder to the target server.
+3. On the target, as Administrator:
+    ```cmd
+    python -m pip install --no-index --find-links=pdf_wheels pdfplumber==0.11.10 python-docx==1.2.0
+    ```
+4. Run the two checks again, then restart the app with `deployment\stop_native.cmd` and `deployment\start_native.cmd`.
+
+Regenerating the offline bundle with `package_offline_native.ps1` also includes both packages, for the next fresh installation.
+
+**Without pdfplumber:**
+- uploaded PDFs cannot be read;
+- with Scottish judgments switched on, AILA can still search the judgments but cannot read their text.
+
+### Switching on Scottish judgments
+
+Scottish judgments from the Scottish Courts and Tribunals Service (SCTS) are off by default. Before switching them on:
+
+1. Both SCTS addresses must be reachable from the server: `api.pa.web.scotcourts.gov.uk` and `www.scotcourts.gov.uk`, on port 443. Run `server_py\test_apis.ps1`; tests 8a and 8b must pass.
+2. pdfplumber must be installed (see above).
+
+Then, in the Admin Portal, go to **Developer → Configuration → Feature Flags** and turn on **Scottish judgments (SCTS)**.
+- No restart is needed: the switch takes effect from the next question.
+- Users see the Scottish courts on the Data Sources screen once they reload the page.
+- To switch Scottish judgments off again, turn the flag off.
+
 ### Applying Updates (Including Frontend)
 
 All updates — backend and frontend — are deployed via git. The frontend is pre-built on the dev machine and committed to the repo (`git add -f client/dist/`), so the target never needs Node.js:

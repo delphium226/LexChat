@@ -144,6 +144,12 @@ Install on the target using the offline bundle (see the offline-install section 
 deployment\start_native.cmd
 ```
 
+Then check that pdfplumber is installed:
+```cmd
+python -c "import pdfplumber"
+```
+It should print nothing. The current offline bundle does not include pdfplumber, which AILA needs to read uploaded PDFs and Scottish judgments. If the check prints `ModuleNotFoundError`, follow *Checking pdfplumber is installed* in NATIVE_DEPLOYMENT.md.
+
 The application is served over **HTTPS on port 443**.
 
 Backups are a scheduled nightly `pg_dump -Fc` per database (`deployment/backup_databases.ps1`, GFS retention), verified by a full `pg_restore -f NUL` read; restore is done scope-by-scope from the Admin Portal → Developer tab. See [docs/deployment/BACKUP_RUNBOOK.md](docs/deployment/BACKUP_RUNBOOK.md).
