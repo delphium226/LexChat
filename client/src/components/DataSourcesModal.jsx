@@ -4,184 +4,185 @@ import Modal from './ui/Modal';
 // same client serves three bots with entirely disjoint sources, so the body is
 // selected per-bot rather than shared — only the bot name is interpolated.
 
-// --- Legislation bot: LEX / legislation.gov.uk + TNA Find Case Law ----------
-function LegislationSources({ botName }) {
+// --- Legislation bot: LEX + legislation.gov.uk records + Find Case Law (+ SCTS) ---
+// Rewritten 2026-10-12 (FIX_PLAN P4.27's data-sources half, and what P3.5, P3.21,
+// P3.31, P3.33, P3.38 and P3.20 added). It describes what the assistant actually
+// searches; every limit stated here is one the answers themselves disclose.
+function LegislationSources({ botName, scottishJudgments }) {
   return (
     <>
-      {/* Legislation API */}
+      {/* Legislation */}
       <section>
-        <h3 className="text-base font-bold text-ink-900 mb-2">
-          Source Overview: The National Archives "Legislation" API
-        </h3>
+        <h3 className="text-base font-bold text-ink-900 mb-2">Legislation: the LEX index of UK legislation</h3>
         <p>
-          {botName} connects to the official API for legislation.gov.uk, operated by The National Archives. This
-          database serves as the official, government-maintained statute book for the United Kingdom. Through this
-          integration, {botName} can retrieve and analyze the text of laws, regulations, and statutory rules.
+          {botName} searches LEX, a search service run by the Government's AI incubator (i.AI) over the legislation
+          published on legislation.gov.uk by The National Archives. Through it, {botName} finds Acts and statutory
+          instruments, searches inside them for particular provisions, and reads their text, schedules included.
         </p>
       </section>
 
       <section>
-        <h4 className="font-semibold text-ink-900 mb-2">Jurisdictions and Parliaments Covered</h4>
-        <p className="mb-2">
-          Unlike the Case Law database, the Legislation API provides comprehensive coverage across all four nations of
-          the UK. {botName} can retrieve legislation from:
-        </p>
-        <ul className="list-disc list-inside space-y-1 pl-2">
-          <li>The UK Parliament (Westminster)</li>
-          <li>The Scottish Parliament (Holyrood)</li>
-          <li>The Welsh Parliament / Senedd Cymru</li>
-          <li>The Northern Ireland Assembly</li>
-        </ul>
-      </section>
-
-      <section>
-        <h4 className="font-semibold text-ink-900 mb-2">Types of Legislation Included</h4>
-        <p className="mb-2">
-          {botName} has access to both primary laws (the main Acts) and secondary legislation (the detailed rules and
-          regulations):
-        </p>
+        <h4 className="font-semibold text-ink-900 mb-2">What it covers</h4>
         <ul className="list-disc list-inside space-y-1 pl-2">
           <li>
-            <strong>Primary Legislation:</strong> Public General Acts of the UK Parliament, Acts of the Scottish
-            Parliament (ASPs), Acts/Measures of the Senedd Cymru, and Acts of the Northern Ireland Assembly.
+            <strong>Primary legislation:</strong> Acts of the UK Parliament, Acts of the Scottish Parliament, Acts and
+            Measures of Senedd Cymru, and Acts of the Northern Ireland Assembly.
           </li>
           <li>
-            <strong>Secondary Legislation:</strong> Statutory Instruments (SIs), Scottish Statutory Instruments
-            (SSIs), and Welsh Statutory Instruments.
+            <strong>Secondary legislation:</strong> UK statutory instruments, Scottish statutory instruments and Welsh
+            statutory instruments.
           </li>
           <li>
-            <strong>Historical EU Law:</strong> "Retained EU legislation" that was incorporated into UK domestic law
-            following Brexit.
+            <strong>Retained (assimilated) EU law</strong> that became part of UK law after Brexit.
           </li>
         </ul>
       </section>
 
       <section>
-        <h4 className="font-semibold text-ink-900 mb-2">Versioning: "As Enacted" vs. "Revised"</h4>
+        <h4 className="font-semibold text-ink-900 mb-2">Records read from legislation.gov.uk</h4>
         <p className="mb-2">
-          One of the most powerful features of this database is how it handles the timeline of the law. {botName} can
-          distinguish between:
+          Alongside the text, {botName} reads legislation.gov.uk's own records, through the same service:
         </p>
         <ul className="list-disc list-inside space-y-1 pl-2">
           <li>
-            <strong>As Enacted:</strong> The original text of the law exactly as it was originally passed by
-            Parliament.
+            <strong>The record of changes:</strong> which later legislation amended, brought into force, repealed or
+            revoked which provision, and the date a provision was brought into force where legislation.gov.uk records
+            one.
           </li>
           <li>
-            <strong>Latest Available (Revised):</strong> The current, up-to-date version of the law, reflecting any
-            amendments, insertions, or repeals made by subsequent legislation.
+            <strong>What an instrument was made under:</strong> a record of what each statutory instrument's own
+            opening words say it was made under, for Scottish statutory instruments made from 1999 and UK statutory
+            instruments made from 1987 (Welsh statutory instruments and Northern Ireland Orders in Council included).
+            It answers questions such as "which regulations were made under section 95?", and says which of those
+            instruments legislation.gov.uk records as revoked, with the date that was checked.
+          </li>
+          <li>
+            <strong>Instruments missing from the index:</strong> where an instrument named by its number is not held,{' '}
+            {botName} reads its text from legislation.gov.uk where it can, and says so.
           </li>
         </ul>
       </section>
 
       <section className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-md p-4">
-        <h4 className="font-semibold text-amber-800 dark:text-amber-300 mb-2">
-          Important Limitations (The "Revision Gap")
-        </h4>
-        <p className="mb-2 text-amber-900 dark:text-amber-200">
-          To ensure users interpret the law correctly, it is important to understand a key limitation of the official
-          UK statute book:
-        </p>
+        <h4 className="font-semibold text-amber-800 dark:text-amber-300 mb-2">Important limitations</h4>
         <ul className="list-disc list-inside space-y-1 pl-2 text-amber-900 dark:text-amber-200">
           <li>
-            <strong>Delayed Revisions:</strong> While the National Archives team works constantly to update the
-            database, there is often a "revision gap." When a new law amends an old law, it can take time (sometimes
-            months or, for obscure legislation, years) for those changes to be officially applied to the "Revised"
-            text on the database.
+            <strong>The index is incomplete.</strong> Most secondary legislation made in the current year is not yet
+            held, and some older Acts are missing. When something is not found, {botName} says what it searched; a
+            gap in the index is not proof that the legislation does not exist.
           </li>
           <li>
-            <strong>Repealed Text:</strong> {botName} may retrieve legislation that has been entirely repealed or is
-            no longer in force if you specifically ask for historical context, so always verify the current legal
-            status of older statutes.
+            <strong>Which version of the text.</strong> The text held is either the version as made or enacted, or a
+            revised version that legislation.gov.uk updates as amendments are made. Revisions can lag months, or for
+            obscure legislation years, behind the amending legislation.
+          </li>
+          <li>
+            <strong>Whether something is in force.</strong> Neither version of the text says whether a provision is in
+            force today. {botName} states only what the record of changes shows, with its date; "no revocation
+            recorded" does not mean in force, and the record itself can lag. Check the current position before relying
+            on it.
+          </li>
+          <li>
+            <strong>Older instruments.</strong> Statutory instruments made before 1987 are mostly published only as
+            scanned images and are not in the record of what instruments were made under.
           </li>
         </ul>
       </section>
 
+      {/* Case law */}
       <div className="border-t border-ink-200 pt-6">
-        <h3 className="text-base font-bold text-ink-900 mb-2">
-          Source Overview: The National Archives "Find Case Law" API
-        </h3>
+        <h3 className="text-base font-bold text-ink-900 mb-2">Case law: The National Archives' Find Case Law</h3>
         <p>
-          Alongside legislation, {botName} integrates with The National Archives (TNA) "Find Case Law" API. This is
-          the official, government-backed repository for court judgments and tribunal decisions in the United Kingdom.
-          By connecting directly to this source, {botName} ensures that the case law it references is authoritative,
-          unmodified, and publicly verifiable.
+          {botName} searches Find Case Law, the official, government-backed collection of court judgments and tribunal
+          decisions published by The National Archives, and reads a judgment's full text. Search results come back
+          most relevant first.
         </p>
       </div>
 
       <section>
-        <h4 className="font-semibold text-ink-900 mb-2">Courts and Tribunals Covered</h4>
-        <p className="mb-2">
-          The API primarily covers the higher courts of England and Wales, alongside the highest appellate courts for
-          the entire UK. Through this integration, {botName} can retrieve judgments from:
-        </p>
+        <h4 className="font-semibold text-ink-900 mb-2">Courts and tribunals covered</h4>
         <div className="space-y-3 pl-2">
           <div>
-            <p className="font-medium text-ink-800">UK-Wide Appellate Courts:</p>
+            <p className="font-medium text-ink-800">UK-wide appellate courts:</p>
             <ul className="list-disc list-inside space-y-1 pl-4">
-              <li>The UK Supreme Court (UKSC)</li>
-              <li>The Judicial Committee of the Privy Council (JCPC)</li>
+              <li>The UK Supreme Court, including appeals from Scotland</li>
+              <li>The Judicial Committee of the Privy Council</li>
             </ul>
           </div>
           <div>
-            <p className="font-medium text-ink-800">England &amp; Wales Higher Courts:</p>
+            <p className="font-medium text-ink-800">England &amp; Wales higher courts:</p>
             <ul className="list-disc list-inside space-y-1 pl-4">
               <li>Court of Appeal (Civil and Criminal Divisions)</li>
-              <li>High Court of Justice (King's Bench, Chancery, and Family Divisions)</li>
+              <li>High Court (King's Bench, Chancery and Family Divisions)</li>
               <li>Courts Martial Appeal Court</li>
             </ul>
           </div>
           <div>
-            <p className="font-medium text-ink-800">UK Tribunals:</p>
+            <p className="font-medium text-ink-800">UK tribunals:</p>
             <ul className="list-disc list-inside space-y-1 pl-4">
-              <li>
-                Upper Tribunal (Administrative Appeals, Immigration and Asylum, Lands, and Tax and Chancery Chambers)
-              </li>
-              <li>Employment Appeal Tribunal (EAT)</li>
+              <li>Upper Tribunal (Administrative Appeals, Immigration and Asylum, Lands, and Tax and Chancery Chambers)</li>
+              <li>Employment Appeal Tribunal</li>
             </ul>
           </div>
         </div>
       </section>
 
-      <section>
-        <h4 className="font-semibold text-ink-900 mb-2">Temporal Coverage (Dates)</h4>
-        <ul className="list-disc list-inside space-y-1 pl-2">
-          <li>
-            <strong>Modern Judgments:</strong> The database is highly comprehensive for cases handed down from 2003
-            onwards.
-          </li>
-          <li>
-            <strong>Recent Cases:</strong> Newly published judgments are added to the database shortly after being
-            handed down by the courts.
-          </li>
-          <li>
-            <strong>Historical Cases:</strong> While not a complete historical archive, the database is continually
-            expanding to include significant landmark judgments from before 2003.
-          </li>
-        </ul>
-      </section>
+      {scottishJudgments && (
+        <>
+          <div className="border-t border-ink-200 pt-6">
+            <h3 className="text-base font-bold text-ink-900 mb-2">
+              Scottish case law: the Scottish Courts and Tribunals Service
+            </h3>
+            <p>
+              For Scottish judgments, {botName} also searches the judgments published by the Scottish Courts and
+              Tribunals Service, and reads a judgment's full text. Both sets of results are searched together, so a
+              question of Scots law is answered from Scottish decisions where they bear on it.
+            </p>
+          </div>
+          <section>
+            <h4 className="font-semibold text-ink-900 mb-2">Courts and tribunals covered</h4>
+            <ul className="list-disc list-inside space-y-1 pl-2">
+              <li>Court of Session (Inner and Outer House)</li>
+              <li>High Court of Justiciary</li>
+              <li>Sheriff Appeal Court</li>
+              <li>Sheriff courts (published decisions only)</li>
+              <li>Scottish tribunals</li>
+            </ul>
+            <p className="mt-2">Coverage runs from 1998.</p>
+          </section>
+        </>
+      )}
 
       <section className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-md p-4">
-        <h4 className="font-semibold text-amber-800 dark:text-amber-300 mb-2">
-          Important Limitations (What is NOT Covered)
-        </h4>
-        <p className="mb-2 text-amber-900 dark:text-amber-200">
-          To ensure you get the most out of {botName}, it is important to know which jurisdictions and courts are not
-          currently available through this official API:
-        </p>
+        <h4 className="font-semibold text-amber-800 dark:text-amber-300 mb-2">Important limitations</h4>
         <ul className="list-disc list-inside space-y-1 pl-2 text-amber-900 dark:text-amber-200">
+          {scottishJudgments ? (
+            <li>
+              <strong>Scottish judgments:</strong> only decisions the Scottish Courts and Tribunals Service publishes
+              are searched. Most sheriff court decisions are not published, and judgments from before 1998 are not
+              covered.
+            </li>
+          ) : (
+            <li>
+              <strong>Scotland and Northern Ireland:</strong> the domestic courts of Scotland (for example the Court of
+              Session and the High Court of Justiciary) and of Northern Ireland are not covered, except where a case
+              was appealed to the UK Supreme Court.
+            </li>
+          )}
           <li>
-            <strong>Scotland and Northern Ireland:</strong> The API does not host judgments from the domestic courts
-            of Scotland (e.g., Court of Session, High Court of Justiciary) or Northern Ireland, except when those
-            cases are appealed to the UK Supreme Court.
+            <strong>Lower courts:</strong> judgments of the Crown Court, County Courts, magistrates' courts and the
+            Family Court are generally not published, and so are not available.
           </li>
           <li>
-            <strong>Lower Courts:</strong> Judgments from the Crown Court, County Courts, Magistrates' Courts, and
-            Family Court are generally not published or available through this API.
+            <strong>First-tier tribunals:</strong> decisions of lower tribunals, such as the Employment Tribunal and
+            the First-tier Tribunal, are not included.
           </li>
           <li>
-            <strong>First-Tier Tribunals:</strong> Decisions from lower-level tribunals (like the Employment Tribunal
-            or First-tier Immigration Tribunals) are currently excluded.
+            <strong>Older judgments:</strong> coverage of older cases is incomplete, and some leading older cases are
+            not in the collection at all.
+          </li>
+          <li>
+            <strong>A search can miss a judgment:</strong> a case that does not appear in the results may still exist.
           </li>
         </ul>
       </section>
@@ -346,7 +347,9 @@ function WestminsterSources({ botName }) {
   );
 }
 
-export default function DataSourcesModal({ botName, onClose, isParliament = false, isWestminster = false }) {
+export default function DataSourcesModal({
+  botName, onClose, isParliament = false, isWestminster = false, scottishJudgments = false,
+}) {
   return (
     <Modal onClose={onClose} className="max-w-3xl w-full max-h-[90vh] flex flex-col">
       <div className="flex justify-between items-center p-6 border-b border-ink-200 flex-shrink-0">
@@ -374,7 +377,7 @@ export default function DataSourcesModal({ botName, onClose, isParliament = fals
         ) : isParliament ? (
           <HolyroodSources botName={botName} />
         ) : (
-          <LegislationSources botName={botName} />
+          <LegislationSources botName={botName} scottishJudgments={scottishJudgments} />
         )}
       </div>
       <div className="flex justify-end p-4 border-t border-ink-200 flex-shrink-0">

@@ -4,7 +4,7 @@ import { useReducer } from 'react';
 // the boolean flags (previously one useState pair each) into one reducer.
 // API: modals.<name> (bool), modals.open(name), modals.close(name),
 // modals.closeAll(). Names: settingsMenu, admin, settings, history, about,
-// dataSources, weeklyBanner, sessionFeedback.
+// dataSources, releaseNotes, weeklyBanner, sessionFeedback.
 const MODAL_NAMES = [
   'settingsMenu',
   'admin',
@@ -12,6 +12,7 @@ const MODAL_NAMES = [
   'history',
   'about',
   'dataSources',
+  'releaseNotes',
   'weeklyBanner',
   'sessionFeedback',
 ];
