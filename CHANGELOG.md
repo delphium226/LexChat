@@ -19,6 +19,18 @@ where each row carries its evidence and acceptance.
 
 On `fix/prepilot-defects` since 2026.10.3, waiting for the next cut.
 
+Administration:
+- Scottish judgments are switched on and off on the Admin Portal's Developer
+  tab (Configuration → Feature Flags, "Scottish judgments (SCTS)"), with no
+  restart, instead of by a machine environment variable. Off by default. The
+  environment variable `SCTS_CASELAW_ENABLED` is now only the flag's default
+  until the flag is first saved. The Data Sources screen and Release notes
+  follow the flag (P3.20).
+
+Presentation:
+- Release notes: the 2026.10.2 line no longer says Scottish judgments were
+  switched on; it says that release added the connection checks.
+
 ## 2026.10.3 — 2026-10-12
 
 Sixth cut (merge `5fdd53a`): the Data Sources screen rewritten, and release

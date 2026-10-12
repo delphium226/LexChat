@@ -421,7 +421,8 @@ if ($CaseLawUrl) {
     Skip-Test -Label "get_case_law_text" -Reason "no case URL returned by search_case_law (test 5)"
 }
 
-# Scottish judgments (FIX_PLAN P3.20): used only when SCTS_CASELAW_ENABLED is on.
+# Scottish judgments (FIX_PLAN P3.20): used only when the Developer tab's
+# "Scottish judgments (SCTS)" feature flag is on.
 # Both hosts must be whitelisted: the search API and the site that serves the PDFs.
 Write-Host "8a. search_case_law -- Scottish judgments (SCTS search API; captures result for 8b)"
 $SctsContent = Test-Endpoint `

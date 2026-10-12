@@ -219,4 +219,8 @@ def build_request_config(
         # it when it exists — it was OFF for the whole pre-pilot, and "switch to
         # Research mode" was advice to use a control the lawyers did not have.
         "_research_mode_enabled": features.get("research_mode_enabled", True),
+        # P3.20: the Developer-tab switch for Scottish judgments, read by
+        # `scts.scts_enabled` (environment default when never saved).
+        "_scts_caselaw_enabled": bool(features.get(
+            "scts_caselaw_enabled", settings.scts_caselaw_enabled)),
     }

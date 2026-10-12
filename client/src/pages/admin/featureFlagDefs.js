@@ -49,6 +49,12 @@ export const FLAG_DEFS = [
     desc: 'Pops up the 6-question productivity survey once a week, and shows a "Take weekly survey" button until it has been completed.',
   },
   {
+    flag: 'scts_caselaw_enabled',
+    group: 'features',
+    label: 'Scottish judgments (SCTS)',
+    desc: "Also searches the Scottish Courts and Tribunals Service's published judgments when a question needs case law. Switch on only once both SCTS addresses (api.pa.web.scotcourts.gov.uk and www.scotcourts.gov.uk) are reachable from this server: run test_apis.ps1, tests 8a and 8b. Users see the change on the Data Sources screen after reloading the page. Has no effect on the parliament bots.",
+  },
+  {
     flag: 'prompt_caching_enabled',
     group: 'caching',
     label: 'Prompt caching (Anthropic via OpenRouter)',

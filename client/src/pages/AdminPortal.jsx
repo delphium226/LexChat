@@ -151,6 +151,7 @@ const AdminPortal = ({ currentUser }) => {
     suggested_questions_enabled: true,
     weekly_survey_enabled: false,
     session_feedback_enabled: false,
+    scts_caselaw_enabled: false,
   });
   const [isSavingFeatures, setIsSavingFeatures] = useState(false);
 

@@ -494,20 +494,31 @@ _DEFAULT_FEATURES = {
     # different things and are not meant to run at the same time.
     "weekly_survey_enabled": False,
     "session_feedback_enabled": False,
+    # FIX_PLAN P3.20: Scottish judgments (SCTS). Defaults OFF: both SCTS hosts
+    # must be reachable from the server first. Until the flag is saved, its
+    # default is the SCTS_CASELAW_ENABLED environment setting
+    # (`_default_features`); once saved, this row wins, like every provider
+    # setting (.env is the startup default, the DB overrides).
+    "scts_caselaw_enabled": False,
 }
+
+
+def _default_features() -> dict:
+    return {**_DEFAULT_FEATURES,
+            "scts_caselaw_enabled": bool(settings.scts_caselaw_enabled)}
 
 
 async def _read_features(db: AsyncSession) -> dict:
     result = await db.execute(select(AppSetting).where(AppSetting.key == _FEATURES_KEY))
     row = result.scalar_one_or_none()
     if not row:
-        return dict(_DEFAULT_FEATURES)
+        return _default_features()
     try:
         # Merge over defaults so a features JSON saved before a flag existed
         # still reports that flag at its default value.
-        return {**_DEFAULT_FEATURES, **json.loads(row.value)}
+        return {**_default_features(), **json.loads(row.value)}
     except (json.JSONDecodeError, ValueError):
-        return dict(_DEFAULT_FEATURES)
+        return _default_features()
 
 
 @router.get("/features")
@@ -531,6 +542,8 @@ class FeaturesUpdate(BaseModel):
     suggested_questions_enabled: bool = True
     weekly_survey_enabled: bool = False
     session_feedback_enabled: bool = False
+    # Absent from an old client's body: the environment default, never True.
+    scts_caselaw_enabled: Optional[bool] = None
 
 
 @admin_router.post("/features")
@@ -550,6 +563,10 @@ async def save_features(
         "suggested_questions_enabled": body.suggested_questions_enabled,
         "weekly_survey_enabled": body.weekly_survey_enabled,
         "session_feedback_enabled": body.session_feedback_enabled,
+        "scts_caselaw_enabled": (
+            bool(settings.scts_caselaw_enabled) if body.scts_caselaw_enabled is None
+            else body.scts_caselaw_enabled
+        ),
     }
     result = await db.execute(select(AppSetting).where(AppSetting.key == _FEATURES_KEY))
     row = result.scalar_one_or_none()

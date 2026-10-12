@@ -12,8 +12,10 @@ page's client is `1.0.0-beta.1`); SCTS agreed to its use by phone
 Licence. Probe detail: `docs/LEGAL_DATA_SOURCES.md` section 3 and
 `docs/prepilot-fixes/notes/batch11_D.md`.
 
-**Off unless `settings.scts_caselaw_enabled`** (`scts_enabled`): both hosts
-must be whitelisted on the target first. With it off nothing here is called
+**Off unless switched on** (`scts_enabled`): the Developer tab's
+`scts_caselaw_enabled` feature flag, whose default until saved is
+`settings.scts_caselaw_enabled`. Both hosts must be reachable from the
+target first. With it off nothing here is called
 and every case-law text is what it was before P3.20.
 
 The design, decided by the user on 2026-10-09 (P3.20's row):
@@ -98,11 +100,21 @@ CASE_LAW_TYPES = ("case_law_only", "legislation_and_case_law")
 
 
 def scts_enabled(research_mode: Optional[str] = None) -> bool:
-    """The one gate: the setting on, and (when given) a research type that
-    searches case law. Never raises; anything unexpected is off."""
+    """The one gate: the switch on, and (when given) a research type that
+    searches case law. Never raises; anything unexpected is off.
+
+    The switch is the Developer tab's `scts_caselaw_enabled` feature flag,
+    carried on the request config as `_scts_caselaw_enabled`
+    (`build_request_config`). Where no request config carries it (a consult,
+    a script, a test), the `SCTS_CASELAW_ENABLED` setting decides."""
     try:
-        from ...config import settings
-        if not bool(getattr(settings, "scts_caselaw_enabled", False)):
+        cfg = get_request_provider_config() or {}
+        if "_scts_caselaw_enabled" in cfg:
+            on = bool(cfg["_scts_caselaw_enabled"])
+        else:
+            from ...config import settings
+            on = bool(getattr(settings, "scts_caselaw_enabled", False))
+        if not on:
             return False
     except Exception:  # noqa: BLE001 - fail closed
         return False
