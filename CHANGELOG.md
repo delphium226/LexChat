@@ -17,7 +17,12 @@ where each row carries its evidence and acceptance.
 
 ## Unreleased
 
-On `fix/prepilot-defects` since 2026.10.2, waiting for the next cut.
+On `fix/prepilot-defects` since 2026.10.3, waiting for the next cut.
+
+## 2026.10.3 — 2026-10-12
+
+Sixth cut (merge `5fdd53a`): the Data Sources screen rewritten, and release
+notes in the Settings menu.
 
 Presentation:
 - The legislation assistant's Data Sources screen says what it actually
