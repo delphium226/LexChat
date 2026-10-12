@@ -17,7 +17,12 @@ where each row carries its evidence and acceptance.
 
 ## Unreleased
 
-On `fix/prepilot-defects` since 2026.10.3, waiting for the next cut.
+On `fix/prepilot-defects` since 2026.10.4, waiting for the next cut.
+
+## 2026.10.4 — 2026-10-12
+
+Seventh cut (merge `e72d3bc`): the Scottish judgments switch moves to the
+Developer tab. No change to answers while it is off.
 
 Administration:
 - Scottish judgments are switched on and off on the Admin Portal's Developer
