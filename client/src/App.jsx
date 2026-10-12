@@ -1107,6 +1107,7 @@ function AppContent() {
           onClose={() => modals.close('dataSources')}
           isParliament={isParliament}
           isWestminster={isWestminster}
+          scottishJudgments={botInfo.scottishJudgments}
         />
       )}
 

@@ -23,6 +23,9 @@ class BotInfoOut(BaseModel):
     # (`git describe`, e.g. "v2026.09.2-3-gabc1234"; absent without git).
     version: Optional[str] = None
     build: Optional[str] = None
+    # FIX_PLAN P3.20: whether Scottish judgments (SCTS) are switched on, so the
+    # Data Sources screen describes only what this server searches. Legislation bot only.
+    scottish_judgments: Optional[bool] = None
 
 # identity.py lives at server_py/src/routers/identity.py — four dirname calls reach
 # the repo root (routers -> src -> server_py -> repo). Three stopped at server_py/,
@@ -49,6 +52,8 @@ async def bot_info():
     }
     if APP_BUILD:
         result["build"] = APP_BUILD
+    if not settings.research_mode:
+        result["scottish_judgments"] = bool(settings.scts_caselaw_enabled)
     if brand_color := bot_identity.get("brand_color"):
         result["brand_color"] = brand_color
     if logo_emoji := bot_identity.get("logo_emoji"):

@@ -14,6 +14,7 @@ export function useBotIdentity(loading) {
     researchMode: '',
     version: null,
     build: null,
+    scottishJudgments: false,
   });
   const [botLogoUrl, setBotLogoUrl] = useState(null);
 
@@ -31,6 +32,9 @@ export function useBotIdentity(loading) {
             // in the About modal so a user can say which version they were on.
             version: info.version || null,
             build: info.build || null,
+            // P3.20: whether this server searches the Scottish Courts' judgments
+            // (Data Sources describes only what is switched on).
+            scottishJudgments: info.scottish_judgments === true,
           });
           document.title = info.name;
         }

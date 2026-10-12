@@ -67,3 +67,19 @@ async def test_bot_info_reports_the_version():
     assert info["version"] == v.APP_VERSION
     assert info.get("build") == v.APP_BUILD  # absent when there is no git
     BotInfoOut(**info)  # the response model accepts it
+
+
+@pytest.mark.asyncio
+async def test_bot_info_says_whether_scottish_judgments_are_on(monkeypatch):
+    """P3.20: the Data Sources screen describes SCTS only where it is switched on."""
+    from src.config import settings
+    from src.routers.identity import BotInfoOut, bot_info
+
+    monkeypatch.setattr(settings, "research_mode", "")
+    for on in (False, True):
+        monkeypatch.setattr(settings, "scts_caselaw_enabled", on)
+        info = await bot_info()
+        assert info["scottish_judgments"] is on
+        BotInfoOut(**info)
+    monkeypatch.setattr(settings, "research_mode", "parliamentary_records")
+    assert "scottish_judgments" not in await bot_info()
