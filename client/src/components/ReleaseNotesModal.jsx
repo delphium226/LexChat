@@ -15,7 +15,7 @@ const RELEASES = [
     '12 October 2026',
     'A Data Sources screen that says what is actually searched, and these release notes in the Settings menu',
   ],
-  ['2026.10.2', '12 October 2026', 'Scottish judgments switched on; no other change to answers'],
+  ['2026.10.2', '12 October 2026', 'Connection checks for Scottish judgments; no change to answers'],
   [
     '2026.10.1',
     '10 October 2026',
