@@ -23,6 +23,10 @@ $BINARIES_DIR = "..\binaries\raw"
 $INSTALLERS_DIR = "$BINARIES_DIR\installers"
 $WHEELS_DIR = "$BINARIES_DIR\python_wheels"
 $OLLAMA_MODELS_DIR = "$BINARIES_DIR\ollama_models"
+# pdfplumber and python-docx (and their dependencies) are committed here, because
+# the offline bundle predates them. pip takes from this folder only what the
+# bundle lacks.
+$PDF_WHEELS_DIR = Join-Path $PSScriptRoot "pdf_wheels"
 
 if (!(Test-Path $BINARIES_DIR)) {
     Write-Error "Binaries directory not found. Please ensure the chunks have been reconstructed into $BINARIES_DIR."
@@ -52,7 +56,30 @@ if (-not $SkipSystemInstall) {
 Write-Host "Installing Python dependencies from local wheels..."
 # Need to reload path to ensure pip from new Python install is available
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-python -m pip install --no-index --find-links=$WHEELS_DIR -r ..\server_py\requirements.txt
+# Both wheel folders: without the second, pip cannot resolve pdfplumber and
+# python-docx from the bundle and installs nothing at all.
+$findLinks = @("--find-links=$WHEELS_DIR")
+if (Test-Path $PDF_WHEELS_DIR) {
+    $findLinks += "--find-links=$PDF_WHEELS_DIR"
+} else {
+    Write-Warning "$PDF_WHEELS_DIR not found: pdfplumber and python-docx can only come from the bundle."
+}
+python -m pip install --no-index @findLinks -r ..\server_py\requirements.txt
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "pip could not install the Python dependencies (exit code $LASTEXITCODE). See the output above."
+    exit 1
+}
+
+# pdfplumber reads uploaded PDFs and Scottish judgments; python-docx reads Word files.
+Write-Host "Checking pdfplumber and python-docx..."
+foreach ($module in @("pdfplumber", "docx")) {
+    python -c "import $module"
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "  [OK]   import $module"
+    } else {
+        Write-Warning "  [FAIL] import $module. Run deployment\install_pdf_support.ps1 after the installer, and send its output to the developer if it still fails."
+    }
+}
 
 # 3. Restore AI Models
 Write-Host "Restoring Ollama Models..."

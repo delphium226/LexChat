@@ -28,8 +28,9 @@ Note: not yet deployed — the target still needs `git pull origin main` + resta
 LACKS the pdfplumber/python-docx wheels — a fresh air-gapped install would fail.
 Stopgap (2026-10-12): those wheels and their dependencies are committed in
 `deployment/pdf_wheels/` (26 MB, Python 3.11 win_amd64) and installed by
-`deployment/install_pdf_support.ps1`. Once the bundle is regenerated, the folder
-and script can go.
+`deployment/install_pdf_support.ps1`; `install_native_offline.ps1` also reads that
+folder, so a fresh install no longer fails on them. Once the bundle is regenerated,
+the folder, the script and that second `--find-links` can go.
 
 ### T4. Credential loose ends
 - Old `server/.env` credentials remain in git history (no history rewrite chosen) —

@@ -191,6 +191,8 @@ For secure environments with no internet access. All steps are split between an 
     ```
     > Append `-SkipSystemInstall` to skip reinstalling Python, PostgreSQL, and Ollama if they are already installed.
 
+    The installer installs the Python packages from the bundle and from `deployment\pdf_wheels\`, which the repo carries because the bundle predates pdfplumber and python-docx. pip takes from that folder only what the bundle lacks. The installer then checks both imports and prints `[OK]` or `[FAIL]` for each. On `[FAIL]`, see *Checking pdfplumber is installed* below.
+
 6. Start the application:
     ```cmd
     deployment\start_native.cmd
@@ -202,7 +204,7 @@ For secure environments with no internet access. All steps are split between an 
 - PDF documents that users upload;
 - the text of Scottish judgments, which SCTS publishes as PDFs.
 
-It is in `server_py\requirements.txt`, but the current offline bundle was made before it was added. A server installed from that bundle may not have it. **python-docx**, which reads uploaded Word documents, has the same gap.
+It is in `server_py\requirements.txt`, but the current offline bundle was made before it was added. The offline installer now adds it from `deployment\pdf_wheels\`, but a server installed before that change may not have it. **python-docx**, which reads uploaded Word documents, has the same gap.
 
 On the target server, in a new command prompt, run:
 

@@ -15,7 +15,7 @@ Every script in this directory, what it does, and where it runs. Full walkthroug
 
 | Script | Runs on | Purpose |
 |---|---|---|
-| `install_native_offline.ps1` | Target | Full air-gapped installation from the reconstructed offline bundle. `-SkipSystemInstall` skips Python/PostgreSQL/Ollama reinstall. |
+| `install_native_offline.ps1` | Target | Full air-gapped installation from the reconstructed offline bundle, plus `deployment/pdf_wheels/` for the packages the bundle lacks (pdfplumber, python-docx); checks both imports. `-SkipSystemInstall` skips Python/PostgreSQL/Ollama reinstall. |
 | `reconstruct_binaries.ps1` | Target | Reassemble `binaries/offline_dependencies.zip.part*` into the offline bundle. |
 | `setup_server.ps1` | Target | Server environment setup. |
 | `install_pdf_support.ps1` | Target | Install pdfplumber and python-docx (not in the offline bundle) from the wheels committed in `deployment/pdf_wheels/`, offline, into the Python the app runs under; then check both imports. Run as Administrator, then restart. |
