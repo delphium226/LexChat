@@ -19,6 +19,20 @@ where each row carries its evidence and acceptance.
 
 On `fix/prepilot-defects` since 2026.10.2, waiting for the next cut.
 
+Presentation:
+- The legislation assistant's Data Sources screen says what it actually
+  searches: the LEX index over legislation.gov.uk data (not "the official
+  API"), the records it reads from legislation.gov.uk (the record of changes
+  and commencement dates, the made-under record and its revocations, text for
+  instruments the index lacks), Find Case Law, and Scottish judgments only where
+  the server has them switched on; "comprehensive coverage across all four
+  nations" is gone (P4.27's data-sources half, P3.20).
+- A "Release notes" item in the Settings menu: what has changed since the
+  pre-pilot, in plain language, with the releases and the exact version and
+  build the server runs. The About box shows the version only.
+- `/api/bot-info` says whether Scottish judgments are switched on
+  (`scottish_judgments`, legislation bot only).
+
 ## 2026.10.2 — 2026-10-12
 
 Fifth cut (merge `1000d12`): deployment only, no change to the application's

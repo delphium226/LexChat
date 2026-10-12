@@ -10,6 +10,11 @@ import Modal from './ui/Modal';
 // describe the legislation assistant; the parliamentary assistants show the table.
 
 const RELEASES = [
+  [
+    '2026.10.3',
+    '12 October 2026',
+    'A Data Sources screen that says what is actually searched, and these release notes in the Settings menu',
+  ],
   ['2026.10.2', '12 October 2026', 'Scottish judgments switched on; no other change to answers'],
   [
     '2026.10.1',
@@ -51,7 +56,7 @@ function LegislationNotes({ botName, scottishJudgments }) {
   return (
     <>
       <p>
-        Since the pre-pilot ended in August, {botName} has been improved in five releases, from 22 September to 12
+        Since the pre-pilot ended in August, {botName} has been improved in six releases, from 22 September to 12
         October 2026. Its answers are now more precise, more complete and plainer about what they could and could not
         check.
       </p>
@@ -234,6 +239,10 @@ function LegislationNotes({ botName, scottishJudgments }) {
           Each step is handed what the earlier steps found, instead of searching for it again.
         </Item>
         <Item title="One search line, not two,">under each answer.</Item>
+        <Item title="Know what it searches.">
+          Settings, then Data Sources, now describes exactly what {botName} searches and the limits of each source.
+          These release notes are under Settings too, with the version and build your server runs.
+        </Item>
       </Section>
     </>
   );
