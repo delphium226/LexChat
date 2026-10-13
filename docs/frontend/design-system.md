@@ -23,9 +23,9 @@ Two blues serve distinct roles and must not be mixed up:
 | Primary action (CTA) | `--brand` | `bg-brand`, `text-brand` | Button backgrounds, primary links, selected nav items |
 | Interactive state | `--accent` | `bg-accent`, `text-accent` | Focus rings, active indicators, hover highlights |
 
-**Brand** is the deep authoritative navy (≈ rgb 0, 60, 130) — it carries weight and authority. Use it where a user takes an action.
+**Brand** is the deep authoritative navy (`oklch(0.32 0.13 240)`, ≈ rgb 0, 54, 109 in light mode) — it carries weight and authority. Use it where a user takes an action.
 
-**Accent** is a lighter mid-blue — it shows that something is selected, focused, or in progress. Use it for `:focus-visible` rings, active sidebar items, loading indicators.
+**Accent** is a lighter mid-blue (`oklch(0.50 0.10 240)`, ≈ rgb 31, 106, 150 in light mode) — it shows that something is selected, focused, or in progress. Use it for `:focus-visible` rings, active sidebar items, loading indicators.
 
 ### Full Colour Reference
 
@@ -37,9 +37,12 @@ Two blues serve distinct roles and must not be mixed up:
 | `--accent` | `bg-accent` / `text-accent` | Focus rings, active indicators |
 | `--accent-hover` | `bg-accent-hover` | Accent element hover |
 | `--accent-soft` | `bg-accent-soft` | Link / accent hover backgrounds |
+| `--accent-soft-strong` | — (no Tailwind utility) | Selected option background in `ResearchFiltersModal.jsx`, applied as `var(--accent-soft-strong)` |
 | `--accent-ink` | `text-accent-ink` | Readable accent text on light backgrounds |
+| `--ink-950` | `text-ink-950` / `bg-ink-950` | Darkest ink (near-white in dark mode); currently unused in components |
 | `--ink-900` | `text-ink-900` | Primary body text |
 | `--ink-800` | `text-ink-800` | Strong body text, headings |
+| `--ink-700` | `text-ink-700` | Body text one step lighter than `ink-800` |
 | `--ink-600` | `text-ink-600` | Secondary / muted text |
 | `--ink-500` | `text-ink-500` | Placeholder-weight text |
 | `--ink-400` | `text-ink-400` | Placeholder text, disabled labels |
@@ -133,7 +136,19 @@ Tailwind's default scale (4px base). Stick to these steps — avoid one-off valu
 
 ## Component Anatomy
 
-Reference class strings for each primitive. These are not enforced by a shared component — they define what the component *should* look like when implemented.
+Reference class strings for each primitive. Some now have a shared component in `client/src/components/ui/`, which is the source of truth for its classes; use it rather than copying the class string:
+
+| Component | File | What it is |
+|---|---|---|
+| `IBtn` | `ui/buttons.jsx` | Square icon button (see Icon Button below) |
+| `GhostBtn` | `ui/buttons.jsx` | Bordered text button with an optional icon: the Secondary recipe at `px-3 py-1.5`, with `gap-1.5` |
+| `Card`, `SectionHeader` | `ui/Card.jsx` | Admin-panel card and its heading (see Card below) |
+| `Modal` | `ui/Modal.jsx` | Dialog shell: overlay, Escape and backdrop-click dismissal (see Modal below) |
+| `Spinner` | `ui/Spinner.jsx` | `animate-spin` SVG in `text-accent`; `size="sm"` (`h-4 w-4`) or default `h-8 w-8` |
+| `InfoTip` | `ui/InfoTip.jsx` | "ⓘ" hover hint, `text-ink-400 hover:text-ink-600`, text in `title` |
+| Icons | `ui/icons.jsx` | Inline SVG icon components (`PlusIcon`, `SearchIcon`, …) taking a `size` prop |
+
+The other recipes below are not enforced by a shared component — they define what the component *should* look like when implemented.
 
 ### Button
 
@@ -181,6 +196,8 @@ Disabled
 bg-paper rounded-lg shadow-md border border-ink-100 p-4
 ```
 
+The shared `Card` (`ui/Card.jsx`) uses this recipe with `p-6`, because the admin panels it serves are full-width panels rather than tiles; `tone="danger"` swaps the border for `border-danger`. Its `SectionHeader` is Heading 2 (`font-ui text-base font-semibold text-ink-900`, or `text-danger`) with an optional `font-ui text-sm text-ink-500` description and a right-hand slot.
+
 ### Badge
 
 ```
@@ -189,28 +206,35 @@ Warning  bg-warn-soft    text-warn     rounded-full px-2 py-0.5 font-ui text-lab
 Danger   bg-danger-soft  text-danger   rounded-full px-2 py-0.5 font-ui text-label uppercase tracking-wide
 Neutral  bg-ink-100      text-ink-600  rounded-full px-2 py-0.5 font-ui text-label uppercase tracking-wide
 Cite     bg-cite-soft    text-cite     rounded-full px-2 py-0.5 font-ui text-label uppercase tracking-wide
+Accent   bg-accent-soft  text-accent-ink rounded-full px-2 py-0.5 font-ui text-label uppercase tracking-wide
 ```
 
 ### Modal
 
-```
-Overlay   fixed inset-0 bg-ink-950/40 z-50
-
-Content   bg-paper rounded-xl shadow-md p-6 max-w-lg w-full mx-auto
-          (rendered inside the overlay, typically centred with flex)
-```
-
-### Icon Button (ToolBtn / IBtn pattern)
+Use the shared `Modal` (`ui/Modal.jsx`), which renders:
 
 ```
-Default   size-[30px] flex items-center justify-center rounded-md
+Overlay   fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50
+
+Content   bg-paper rounded-lg shadow-xl border border-ink-200
+          + the caller's className for size and padding (e.g. max-w-lg w-full p-6;
+            append `relative` if the content positions an absolute close button)
+```
+
+The overlay is `bg-black`, not an ink token, because the ink scale inverts in dark mode and `ink-950` would lighten the page behind the dialog. Escape and a click on the backdrop call `onClose`; pass `dismissable={false}` to require an explicit close.
+
+### Icon Button (IBtn / ToolBtn pattern)
+
+`IBtn` (`ui/buttons.jsx`):
+
+```
+Default   inline-flex items-center justify-center rounded-md flex-shrink-0
           text-ink-500 hover:bg-ink-100 hover:text-ink-900
-          focus-visible:ring-2 focus-visible:ring-accent
-
-Active    bg-accent text-white
-
-Error     bg-danger-soft text-danger
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent
+          width and height from the `size` prop (default 30px), set inline
 ```
+
+`IBtn` has no active or error state. `ToolBtn` (local to `ChatMessage.jsx`, the message action buttons) is styled inline: active is `var(--accent-soft)` background with `var(--accent)` icon, hover `var(--ink-100)`, disabled `var(--ink-300)` at 50% opacity. Its error state reads `var(--red-soft, #fee2e2)` and `var(--red, #dc2626)`, which are not defined tokens, so it always renders the hex fallbacks; the token equivalent is `bg-danger-soft text-danger`.
 
 ### Filter Pill
 
@@ -233,7 +257,7 @@ Active    bg-accent text-white border-transparent rounded-full px-3 py-1 font-ui
 
 ## Migration Status
 
-The initial token migration across all existing components is **complete** (May 2026). Every button, input, and modal in the app now uses design-system tokens.
+The initial token migration of the files below was completed in May 2026. It did not reach every file: raw Tailwind palette utilities (`bg-red-50`, `text-green-600`, `ring-blue-500` and the like) remain in `pages/AdminPortal.jsx` (the most), `components/DataSourcesModal.jsx`, `pages/SystemChat.jsx`, and the admin tabs `EfficiencyTab.jsx`, `CacheTab.jsx`, `PerformanceTab.jsx`, `CostTab.jsx` and `ParliamentCoverageTab.jsx` (under `pages/admin/`), and in `LoginModal.jsx`'s session-expired notice (`bg-amber-50 border-amber-300 text-amber-800`). `ChatMessage.jsx`'s `ToolBtn` error state uses undefined `--red` / `--red-soft` vars (see Icon Button). Replace these with tokens when you next touch those files.
 
 Files audited and migrated:
 - `client/src/components/LoginModal.jsx`
@@ -244,7 +268,7 @@ Files audited and migrated:
 - `client/src/components/CreateMatterModal.jsx`
 - `client/src/components/MatterNotesModal.jsx`
 - `client/src/components/WeeklyFeedbackBanner.jsx`
-- `client/src/App.jsx` (IBtn, GhostBtn primitives; send/stop/new-chat buttons; all modal close Xs)
+- `client/src/App.jsx` (IBtn, GhostBtn primitives, since moved to `components/ui/buttons.jsx`; send/stop/new-chat buttons; all modal close Xs)
 - `client/src/pages/AdminPortal.jsx`
 - `client/src/pages/Settings.jsx`
 

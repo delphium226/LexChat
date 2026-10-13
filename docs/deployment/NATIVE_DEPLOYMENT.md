@@ -12,7 +12,7 @@ Installation on the internet-restricted target uses the offline installer — fo
 
 ### 2. Configure SSL Certificates
 To run over HTTPS, place your organisational certificate files in the `deployment\certs` folder:
-*   **Certificate file**: `deployment\certs\lexchat.crt` (or `.pem`)
+*   **Certificate file**: `deployment\certs\lexchat.crt` (the start scripts look for exactly this name; PEM content, as uvicorn expects)
 *   **Private key file**: `deployment\certs\lexchat.key`
 
 ### 3. Start the App
@@ -27,13 +27,16 @@ The script detects which mode to use automatically:
 | No certs, no `--nginx` flag | HTTP on port 8000 | `http://localhost:8000` |
 | `--nginx` flag passed | nginx reverse proxy on port 80 | `http://localhost` |
 
+`--port N` binds uvicorn to port N instead of the default (443 with certs, else 8000); it is ignored with `--nginx`, whose upstream is fixed at port 8000. `--no-ssl` forces plain HTTP even when the certificates are present (so `start_native.cmd --port 80 --no-ssl` serves HTTP on port 80).
+
 *   *On an internal network, access via your machine's FQDN (e.g. `https://your-server-name`), matching your certificate.*
+*   *The parliament bot, on its own server, starts with `deployment\start_parliament.cmd` instead: the same modes (certificates, plain HTTP, `--nginx`), with `bots\parliament\.env` loaded over `.env.native`.*
 
 ### 4. Stop the App
 ```cmd
 deployment\stop_native.cmd
 ```
-This gracefully stops nginx (if running), the FastAPI backend, Ollama, and the PostgreSQL service.
+This stops nginx (if running), the FastAPI backend, Ollama, and the PostgreSQL service.
 
 ### 5. Demo / Home Server Mode (nginx Reverse Proxy)
 
@@ -101,12 +104,12 @@ cd C:\Projects\LexChat
 This will:
 1. Detect the Python and Ollama executable paths on this machine and write them to `deployment\autostart_config.ps1` (machine-specific, not committed to the repo).
 2. Create `deployment\logs\` if it does not exist.
-3. Register a **"AILA Autostart"** Task Scheduler task that runs `start_background.ps1` as the SYSTEM account on every boot.
+3. Register a **"LexChat Autostart"** Task Scheduler task that runs `start_background.ps1` as the SYSTEM account on every boot.
 
 After installation, AILA starts automatically on every reboot. To trigger it immediately without rebooting:
 
 ```powershell
-Start-ScheduledTask -TaskName "AILA Autostart"
+Start-ScheduledTask -TaskName "LexChat Autostart"
 ```
 
 Startup and backend logs are written to `deployment\logs\`:
@@ -144,18 +147,21 @@ cd C:\Projects\LexChat
 .\deployment\update_ollama.ps1
 ```
 
-This stops Ollama, installs the pinned version (`OllamaSetup.exe` from GitHub), copies manifests from the repo into `%USERPROFILE%\.ollama\models\`, and restarts Ollama.
+This stops Ollama, reassembles the pinned version's `OllamaSetup.exe` from the chunks `binaries\OllamaSetup.exe.part*` (meant to be committed, so that `git pull` brings them) and installs it silently, copies manifests from the repo into the Ollama models directory (`%USERPROFILE%\.ollama\models\`, or `%OLLAMA_MODELS%` if set), and restarts Ollama.
+
+> **Note:** the installer chunks are not currently committed on `main`. Until they are (step 2 below), the script stops Ollama and then exits with "No OllamaSetup.exe.part* files found", before it restores any manifests, leaving Ollama stopped.
 
 **To update to a newer Ollama version or add/update models (dev machine):**
 
 1. Pull any new models: `ollama pull <model-name>`
-2. Copy the updated model store into the repo:
+2. For a new Ollama version: download `OllamaSetup.exe` into the repo root and run `.\deployment\chunk_ollama_installer.ps1`, which writes `binaries\OllamaSetup.exe.part*` (50 MB each) for commit.
+3. Copy the updated model store into the repo:
    ```powershell
    Remove-Item -Recurse C:\Projects\LexChat\deployment\ollama_models
    Copy-Item -Recurse "$env:USERPROFILE\.ollama\models" C:\Projects\LexChat\deployment\ollama_models
    ```
-3. Update `$OllamaVersion` in `deployment\update_ollama.ps1`.
-4. Commit and push. On the target: `git pull` then `.\deployment\update_ollama.ps1`.
+4. Update `$OllamaVersion` in `deployment\update_ollama.ps1`.
+5. Commit and push. On the target: `git pull` then `.\deployment\update_ollama.ps1`.
 
 ---
 
@@ -276,30 +282,33 @@ If you cannot use the automated scripts:
     *   Ollama
 
 2.  **LLM Provider**:
-    *   Default provider is **Ollama** using `mistral-large-3:675b-cloud` (cloud-routed).
-    *   **OpenRouter** is also supported as an alternative provider. Requires `OPENROUTER_API_KEY` in `.env.native` and outbound internet access to `openrouter.ai` (not available on fully air-gapped deployments).
+    *   Default provider is **Ollama** using the first model in `MODEL_LIST` (`server_py/src/config.py`; currently `deepseek-v3.2:cloud`, cloud-routed) until another is chosen in the Admin Portal.
+    *   **OpenRouter** is also supported as an alternative provider. Requires an OpenRouter API key, entered in **Admin Portal → Developer tab** (stored in the database), and outbound internet access to `openrouter.ai` (not available on fully air-gapped deployments).
     *   The active provider and all per-provider settings (model, temperature, concurrency limits, base URL, API key) are configurable at runtime via **Admin Portal → Developer tab** — no restart required.
 
 3.  **Network Requirements (Outbound URL Whitelist)**:
 
-    The target environment restricts outbound internet access. The following URLs must be whitelisted for the application to function. URLs marked **parliament bot only** are not required if only the legislation bot is deployed.
+    The target environment restricts outbound internet access. The following URLs must be whitelisted for the application to function. Each bot needs only its own rows. The full list, with ports, optional hosts (SP TV, Gmail SMTP, federation peers) and TLS-inspection notes, is in [NETWORK_AND_DEPENDENCIES.md](../NETWORK_AND_DEPENDENCIES.md).
 
     | URL | Purpose | Bot |
     |---|---|---|
-    | `lex.lab.i.ai.gov.uk` | LEX API — legislation search, section search, full text | Legislation |
+    | `lex.lab.i.ai.gov.uk` | LEX API — legislation search, section search, full text, change records, lookups; also legislation.gov.uk through its proxy | Legislation |
     | `caselaw.nationalarchives.gov.uk` | National Archives — UK case law (Atom feed) | Legislation (case law mode) |
-    | `www.theyworkforyou.com` | TheyWorkForYou — Hansard search, debates, MSP info | Parliament only |
-    | `members-api.parliament.uk` | UK Parliament Members API — MP/Lord lookup | Parliament only |
-    | `bills-api.parliament.uk` | UK Parliament Bills API — Westminster bill search | Parliament only |
-    | `data.parliament.scot` | Scottish Parliament — bill search | Parliament only |
-    | `openrouter.ai` | OpenRouter LLM provider (alternative to Ollama) | Both (if OpenRouter active) |
+    | `api.pa.web.scotcourts.gov.uk`, `www.scotcourts.gov.uk` | SCTS — Scottish judgments search and judgment PDFs | Legislation (only with Scottish judgments switched on) |
+    | `www.theyworkforyou.com` | TheyWorkForYou — Scottish Parliament plenary and written-answer search, MSP info | Parliament |
+    | `www.parliament.scot` | Scottish Parliament Official Report — transcript crawl and retrieval | Parliament |
+    | `data.parliament.scot` | Scottish Parliament — bill search | Parliament |
+    | `hansard-api.parliament.uk` | UK Parliament Hansard API — Commons and Lords debate search and retrieval | Westminster |
+    | `members-api.parliament.uk` | UK Parliament Members API — MP/Lord lookup | Westminster |
+    | `bills-api.parliament.uk` | UK Parliament Bills API — Westminster bill search | Westminster |
+    | `openrouter.ai` | OpenRouter LLM provider (alternative to Ollama) | All (if OpenRouter active) |
 
     If using Ollama (default), `openrouter.ai` is not required. If using OpenRouter, `openrouter.ai` must be reachable.
 
 4.  **Configuration**:
-    *   The app uses a `.env.native` file in `server_py/` to configure `localhost` connections.
-    *   Add `OPENROUTER_API_KEY=sk-or-...` to `.env.native` to enable OpenRouter as a provider option.
+    *   The app uses a `.env.native` file in `server_py/` to configure `localhost` connections; `start_native.cmd` copies it over `.env` on every start.
+    *   To enable OpenRouter as a provider option, enter its API key in **Admin Portal → Developer tab**.
 
-4.  **Build**:
+5.  **Build**:
     *   Backend: `pip install -r requirements.txt` in `server_py/`
     *   Frontend: `npm run build` in `client/` — generates static files served by the backend.

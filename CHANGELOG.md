@@ -7,7 +7,8 @@ names the last release the code contains. How to cut one is in CLAUDE.md,
 *Releases*.
 
 To see which version a server is running, look at any of these:
-- the **About** box in the app (Settings → About);
+- **Release notes** in the app (Settings → Release notes), which shows the
+  version and build; the About box shows the version only;
 - `GET /api/bot-info`: `version`, plus `build` (`git describe`, for example
   `v2026.09.2-3-gabc1234` three commits past the release);
 - the first line the server logs at startup: `[Startup] AILA <version> (build <build>)`.

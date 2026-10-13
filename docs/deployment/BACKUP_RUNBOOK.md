@@ -5,6 +5,16 @@ and follow it down. The reference material is below that.
 
 Plan and rationale: `docs/BACKUP_RESTORE_PLAN.md`. This document is the procedure.
 
+> **First check that there is a backup at all.** The nightly task is set up by running
+> `deployment\install_backup_task.ps1` once, elevated, on the server. **It has not yet been run on
+> the target**, and until it is, nothing there is backed up and there is nothing to restore from.
+> Admin Portal -> Developer -> Backup & Restore -> **Backup status** says so plainly ("The backup
+> directory does not exist"). To set it up, see
+> [Installing the regime on a new server](#installing-the-regime-on-a-new-server).
+
+Run the console commands below from an **elevated** PowerShell. Once the installer has run, the
+backup directory is readable only by SYSTEM and Administrators.
+
 ---
 
 ## The 30-second version
@@ -34,38 +44,40 @@ current contents first, so step 2 is reversible.
 that happened since last night, including other people's chats. What you have
 lost is scope-shaped, and there is a scope-shaped tool for it.
 
-**Admin Portal -> Developer -> Restore from backup.** No console needed.
+**Admin Portal -> Developer -> Backup & Restore -> Restore from backup.** No console
+needed. (The Developer tab is shown only to the `admin` account.)
 
 1. Pick the backup to restore from (defaults to the most recent verified one).
 2. Tick the same boxes that were ticked in the Danger Zone.
 3. Press **Check what would change**. This loads the dump into a staging
    database and reports, line by line, exactly what it would put back - it is
    the real restore with the writes withheld, not an estimate.
-4. Read it, type `RESTORE`, press the button.
+4. Read it, type `RESTORE`, press **Restore selected data**.
 
 It is **additive**: it only fills in what is missing and never overwrites
 anything that survived, so it is safe to run twice and safe to run when you are
 not sure. It dumps the current contents to `C:\LexChatBackups\pre-restore\`
-first, so it can itself be undone, and it writes a row to the activity log.
+first, so it can itself be undone, and it writes a `RESTORE` row to the activity log.
 
-**Reading the preflight.** Three things surprise people:
+**Reading the panel.** Three things surprise people:
 
-- **"Cached summaries" is always unavailable.** `local_prompt_cache` rows are
+- **"Local prompt cache" cannot be ticked.** `local_prompt_cache` rows are
   excluded from every dump by design, so there is nothing to restore. It is pure
   cache and refills on its own. This is correct, not a fault.
 - **"Message ratings" says *updates rows that survived*.** Clearing feedback sets
   `rating = NULL` in place; the messages themselves are still there. So ratings
-  are written back onto the existing rows rather than inserted.
-- **Rows can be reported as unrestorable.** If a user or matter was deleted by
-  hand, their chats have nothing to attach to. Those are skipped and counted;
-  optional links (a chat's matter) are simply cleared instead.
+  are written back onto the existing rows rather than inserted, and only where
+  the live row has no rating of its own.
+- **Rows can be reported as unrestorable.** If a user was deleted by hand, their
+  chats have nothing to attach to: those are skipped and counted. An optional
+  link whose target has gone (a chat's matter) is simply cleared instead.
 
 **If you cleared `feedback` but restore `chats`,** the messages already exist, so
 nothing happens and the preflight will show every count as 0. Tick the scope that
 was actually cleared.
 
-**If the restore panel is not there,** no verified backup of this bot's database
-exists yet - see [Is the backup healthy?](#is-the-backup-healthy).
+**If the restore panel says no verified backup is available,** there is no
+successful run holding this bot's database - see [Is the backup healthy?](#is-the-backup-healthy).
 
 <details>
 <summary>Doing it by hand instead (only if the Developer tab is unreachable)</summary>
@@ -80,8 +92,8 @@ exists yet - see [Is the backup healthy?](#is-the-backup-healthy).
 2. Copy back only what was lost:
 
    ```
-   pg_dump -Fc -t session_feedback -d lexchat_recovery -f sf.dump
-   pg_restore -d lexchat --data-only -t session_feedback sf.dump
+   pg_dump -U lexuser -h localhost -Fc -t session_feedback -d lexchat_recovery -f sf.dump
+   pg_restore -U lexuser -h localhost -d lexchat --data-only -t session_feedback sf.dump
    ```
 
    **Parents before children.** `chats` must land before `session_feedback`
@@ -89,23 +101,36 @@ exists yet - see [Is the backup healthy?](#is-the-backup-healthy).
    in that order.
 
    **Ratings are an UPDATE, not an INSERT.** A data-only insert restores nothing
-   for them, because the message rows still exist and every insert conflicts:
+   for them, because the message rows still exist and every insert conflicts.
+   PostgreSQL cannot join across databases here, so carry the ratings over in a
+   file. Export them from the scratch database:
 
-   ```sql
-   UPDATE messages m SET rating = s.rating, feedback_comment = s.feedback_comment
-   FROM staging.messages s
-   WHERE m.id = s.id AND (s.rating IS NOT NULL OR s.feedback_comment IS NOT NULL);
+   ```
+   psql -U lexuser -h localhost -d lexchat_recovery -c "\copy (SELECT id, rating, feedback_comment FROM messages WHERE rating IS NOT NULL OR feedback_comment IS NOT NULL) TO 'ratings.csv' CSV"
    ```
 
-3. **Reset the sequences afterwards,** or the next real INSERT collides with a
-   restored primary key hours later:
+   then, in one `psql` session on `lexchat`, write them back without
+   overwriting a rating that survived:
+
+   ```sql
+   CREATE TEMP TABLE r (id integer, rating integer, feedback_comment text);
+   \copy r FROM 'ratings.csv' CSV
+   UPDATE messages m
+   SET rating = COALESCE(m.rating, r.rating),
+       feedback_comment = COALESCE(m.feedback_comment, r.feedback_comment)
+   FROM r WHERE m.id = r.id;
+   ```
+
+3. **Reset the sequences afterwards** for every table you inserted into, or the
+   next real INSERT collides with a restored primary key hours later:
 
    ```sql
    SELECT setval(pg_get_serial_sequence('chats','id'),
                  COALESCE(MAX(id), 1), MAX(id) IS NOT NULL) FROM chats;
    ```
 
-4. Drop the scratch database when you are done.
+4. Drop the scratch database when you are done. Its name starts with `lexchat`,
+   so if it is left in place the nightly backup will dump it too.
 
 </details>
 
@@ -148,33 +173,45 @@ cd C:\Projects\LexChat
 The script does all of this in order, and stops at the first thing that fails:
 
 1. **Picks the newest verified run** under `C:\LexChatBackups` and prints its
-   manifest - date, size, and the **commit SHA** the dump's schema belongs to.
+   manifest - status, PostgreSQL version, and the **commit SHA** the dump's
+   schema belongs to.
 2. **Verifies the dump before touching anything.** If it cannot be read, you
    find out here, with the live database untouched.
-3. **Stops the app but leaves PostgreSQL running.** (Do not use
-   `stop_native.cmd` for this - its last step stops the PostgreSQL service, and
-   the restore needs the server up.)
-4. **Dumps the current contents first** into `C:\LexChatBackups\pre-restore\`,
+3. Asks you to type the database name to confirm (`-Force` skips this).
+4. **Stops the app but leaves PostgreSQL running.** It stops the
+   "LexChat Autostart" task, nginx and **every uvicorn process on the machine**,
+   so any other bot on the same box stops too. (Do not use `stop_native.cmd` for
+   this - its last step stops the PostgreSQL service, and the restore needs the
+   server up.)
+5. **Dumps the current contents first** into `C:\LexChatBackups\pre-restore\`,
    so the restore is undoable. It prints the exact command to undo it.
-5. Terminates leftover connections, drops and recreates the database, restores.
-6. Runs `ANALYZE` and prints exact per-table row counts.
+6. Terminates leftover connections, drops and recreates the database, restores.
+7. Runs `ANALYZE` and prints exact per-table row counts.
 
-Then, by hand:
+Then, by hand, start the app again:
 
 ```powershell
 .\deployment\start_native.cmd
+# or, if the autostart task is installed:
+Start-ScheduledTask -TaskName "LexChat Autostart"
 ```
+
+(The parliament bot's server uses `.\deployment\start_parliament.cmd`.)
 
 Startup re-applies the additive `ADD COLUMN IF NOT EXISTS` migrations in
 `server_py/src/database.py`, which is what makes an older dump safe against
 newer code.
 
 **Smoke test:** log in, open a chat, send one message, confirm the Admin Portal
-loads. Then check the backend log for schema errors:
+loads. Then check the error log for schema errors (the file is named after the
+bot's `BOT_ID`; the legislation bot's is shown):
 
 ```powershell
-Get-Content .\deployment\logs\backend.log -Tail 50
+Get-Content .\server_py\logs\legislation_bot_error.log -Tail 50
 ```
+
+If the app was started by the autostart task, its console output is also in
+`.\deployment\logs\backend.log`.
 
 ### Restoring from a specific night
 
@@ -191,6 +228,9 @@ The pre-restore safety dump is a normal dump:
 .\deployment\restore_database.ps1 -Database lexchat `
     -DumpFile C:\LexChatBackups\pre-restore\lexchat_2026-08-14_075705.dump
 ```
+
+The Developer tab's scoped restore writes its safety dump to the same folder,
+named `<database>_<date>_<time>_scoped.dump`, and is undone the same way.
 
 ### About the commit SHA
 
@@ -246,7 +286,8 @@ live, flagging every difference.
 - Differences in `users`, `app_settings` or `peer_bots` are **not** expected and
   are worth investigating.
 
-Clean up afterwards:
+Clean up afterwards. `lexchat_restore_test` matches `lexchat%`, so if it is left
+in place the nightly backup dumps it as well:
 
 ```powershell
 psql -U lexuser -h localhost -d postgres -c "DROP DATABASE lexchat_restore_test;"
@@ -262,11 +303,12 @@ and identical full-text search results.
 
 ## Is the backup healthy?
 
-**The quickest answer is Admin Portal -> Developer -> Backup status.** It reads
-the same `manifest.json` files as the commands below and shows the last run, its
-size and duration, the per-database verify result, and the commit SHA the dump's
-schema belongs to. It also says plainly when the backup directory does not exist
-or holds no runs.
+**The quickest answer is Admin Portal -> Developer -> Backup & Restore -> Backup
+status.** It reads the same `manifest.json` files as the commands below and shows
+the last run, its duration and total size, the PostgreSQL version, the number of
+runs retained, the per-database size and verify result (this bot's database is
+marked), any errors, and the commit SHA the dump's schema belongs to. It also
+says plainly when the backup directory does not exist or holds no runs.
 
 For anything the panel does not cover:
 
@@ -284,7 +326,7 @@ Get-ChildItem C:\LexChatBackups -Directory | Sort-Object Name -Descending | Sele
 
 A run directory containing a file named `FAILED` is a failed run. Failed runs
 are kept for 14 days so they can be investigated, and are **never** selected by
-the restore script.
+the restore script or offered by the Developer tab.
 
 Failures also raise an Application event log entry:
 
@@ -296,7 +338,7 @@ Get-EventLog -LogName Application -Source "LexChat Backup" -Newest 10
 
 ```powershell
 Start-ScheduledTask -TaskName "LexChat Database Backup"
-# or directly:
+# or directly, from an elevated PowerShell:
 .\deployment\backup_databases.ps1
 ```
 
@@ -314,48 +356,49 @@ cd C:\Projects\LexChat
 ```
 
 That creates `C:\LexChatBackups`, locks its ACL to SYSTEM and Administrators
-only, registers the "LexChat Backup" event log source, and schedules the nightly
-run at 02:30 as SYSTEM.
+only, registers the "LexChat Backup" event log source, and schedules the
+"LexChat Database Backup" task to run nightly at 02:30 as SYSTEM. `-RunNow` also
+starts the first backup straight away. Re-running the installer replaces the task.
 
 **The ACL matters.** Dumps contain `app_settings` (the OpenRouter API key) and
 `peer_bots.api_key`. Treat the backup directory exactly like the PostgreSQL data
-directory.
+directory. The app reads the same directory for the Developer tab's panels and
+writes its pre-restore dumps into it, so it must run as an account the ACL
+admits: SYSTEM (the autostart task) or an elevated console.
 
-Options:
+Options, for example somewhere with more room, a different time of day and longer
+daily retention:
 
 ```powershell
-.\deployment\install_backup_task.ps1 `
-    -BackupRoot D:\Backups\LexChat `   # somewhere with room
-    -At 01:00 `                        # time of day
-    -KeepDaily 30                      # retention
+.\deployment\install_backup_task.ps1 -BackupRoot D:\Backups\LexChat -At 01:00 -KeepDaily 30
 ```
+
+`-KeepWeekly` and `-KeepMonthly` set the other two retention tiers, and `-PgBin`
+the PostgreSQL bin directory if it is not under `C:\Program Files\PostgreSQL`.
 
 **Prefer the default `C:\LexChatBackups`.** The app (`config.py`) and the
 installer already agree on it, so with the default there is nothing to configure
 and nothing to keep in sync.
 
 **If you do change `-BackupRoot`,** the app has to be told too, or the Developer
-tab's backup panel reads an empty directory and reports that nothing is being
-backed up while the nightly task runs perfectly somewhere else. Set it in
-`server_py/.env.native`:
-
-```
-BACKUP_ROOT=D:\Backups\LexChat
-```
-
-**Not `server_py/.env`** — `start_native.cmd` does `copy /Y .env.native .env` on
-every start, so anything written directly to `.env` is silently overwritten the
-next time the app restarts.
-
-Be aware that `.env.native` is **tracked in git**, so a local edit to it can
-collide with a `git pull`. If that happens:
+tab's backup panels read an empty directory and report that nothing is being
+backed up while the nightly task runs perfectly somewhere else. Pass `-BackupRoot`
+to `restore_database.ps1` as well. Tell the app with a **machine environment
+variable**, from an elevated prompt:
 
 ```powershell
-copy server_py\.env.native server_py\.env.native.bak
-git checkout -- server_py\.env.native
-git pull
-copy /Y server_py\.env.native.bak server_py\.env.native
+setx BACKUP_ROOT "D:\Backups\LexChat" /M
 ```
+
+then restart the app from a new console window (a process sees only the machine
+variables that existed when it started; a reboot settles it for everything).
+A process environment variable takes precedence over the `.env` file.
+
+**Do not put it in `server_py/.env.native` or `server_py/.env`.** `start_native.cmd`
+copies `.env.native` over `.env` on every start, so anything written to `.env` is
+silently overwritten at the next restart; and `.env.native` is tracked in git
+and is the live configuration on the target, so a local edit to it collides with
+the next `git pull`.
 
 ---
 
@@ -367,11 +410,21 @@ Databases are **enumerated at run time**, not hardcoded:
 
 ```sql
 SELECT datname FROM pg_database
-WHERE datname LIKE 'lexchat%' AND datname <> 'lexchat_test'
+WHERE datname LIKE 'lexchat%'
+  AND datname NOT IN ('lexchat_test')
+  AND datallowconn
+  AND NOT datistemplate
+ORDER BY datname;
 ```
 
 so a new federated bot is backed up the night it is created, with nobody having
-to remember to edit anything.
+to remember to edit anything - provided its database name starts with `lexchat`.
+An empty list is treated as a failure, since it is far more likely to mean a
+connection problem than an empty server.
+
+The scripts take their connection settings (user, password, host, port) from
+`DATABASE_URL` in `server_py/.env`, falling back to `server_py/.env.native`;
+`-PgUser`, `-PgPassword`, `-PgHost` and `-PgPort` override them.
 
 Each run writes one directory, `C:\LexChatBackups\YYYY-MM-DD_HHMMSS\`:
 
@@ -383,13 +436,15 @@ Each run writes one directory, `C:\LexChatBackups\YYYY-MM-DD_HHMMSS\`:
 | `FAILED` | present only if the run failed; contains the reasons |
 | `*.dump.corrupt` | a dump that failed verification, quarantined |
 
+The run log is `C:\LexChatBackups\logs\backup.log`.
+
 `local_prompt_cache` rows are excluded (`--exclude-table-data`). The table's
 schema is kept; only its rows are dropped. It is pure cache, and it is the only
 table holding plaintext user queries, so excluding it shrinks the sensitive
 surface as well as the file.
 
-Current sizes: about 157 MB per run, dominated by `lexchat_parliament`. A run
-takes about 20 seconds.
+Sizes measured on the dev machine in August 2026: about 157 MB per run,
+dominated by `lexchat_parliament`. A run took about 20 seconds.
 
 ### How dumps are verified
 
@@ -405,7 +460,8 @@ header-corrupt file.
 forcing every data block to be read and decompressed. That is what actually
 catches truncation (`could not read from input file: end of file`). It costs
 about 1.7 seconds for the 157 MB parliament dump, so it runs on every database
-every night.
+every night. The restore script and the Developer tab's scoped restore run both
+stages again before they use a dump.
 
 A dump that fails either stage is renamed to `<name>.dump.corrupt`, the run is
 marked `FAILED`, an event log entry is written, and the script exits 1.
