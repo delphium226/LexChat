@@ -1,0 +1,8 @@
+{
+  "session_id": "p349_6341",
+  "base": "6341",
+  "note": "P3.49 acceptance (Session 47): session 6341's turn 7 only, the Deep Research turn, under 'legislation_only' and no jurisdiction filter, as every stored 6341 replay ran it. Its text is Thomas's Q8 (13 October 2026) verbatim, run alone as his eval runs it. Graded: no provision of a pre-1963 Act stated or relied on as in force without the caveat that whether it has since been amended or repealed is not known from this research. Turn text is taken from the export by index and is never stored here.",
+  "turns": [
+    {"from_turn": 7, "research_mode": "legislation_only", "chat_mode": "deep_research"}
+  ]
+}

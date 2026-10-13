@@ -1340,9 +1340,12 @@ def _relations_footer_clause(entries: Optional[list]) -> str:
     old_clause = ""
     if old:
         one = len(old) == 1
+        # Every one up to the limb's 8, then a count: at 3, the acceptance's
+        # rep 2 named three of six and left out the Shops Act 1950 itself.
+        named = ", ".join(old[:8]) + (f" and {len(old) - 8} more" if len(old) > 8 else "")
         old_clause = (
             " The index used holds no record of changes to legislation made before "
-            f"{CHANGE_RECORD_FIRST_YEAR} ({', '.join(old[:3])}), so whether "
+            f"{CHANGE_RECORD_FIRST_YEAR} ({named}), so whether "
             f"{'it has' if one else 'they have'} been amended or repealed since is "
             "not known from this research; check the revised text on "
             f"legislation.gov.uk before relying on {'it' if one else 'them'}."

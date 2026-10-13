@@ -202,6 +202,18 @@ def test_footer_mixed_keeps_the_consulted_lead_and_adds_the_clause():
         "revised text on legislation.gov.uk before relying on them.")
 
 
+def test_footer_names_every_pre_1963_instrument_up_to_eight_then_counts():
+    """The acceptance's rep 2: six pre-1963 records, and a cap of three left
+    out the Shops Act 1950, the Act the question was about."""
+    six = ["ukpga/1-2Geo5/54", "ukpga/1934/42", "ukpga/1912/3", SHOPS_1950,
+           "ukpga/1951/38", "uksi/1960/2014"]
+    clause = _relations_footer_clause(_log(*[(lid, []) for lid in six]))
+    assert f"({', '.join(six)})" in clause
+    ten = [f"ukpga/19{40 + i}/{i + 1}" for i in range(10)]
+    clause = _relations_footer_clause(_log(*[(lid, []) for lid in ten]))
+    assert f"({', '.join(ten[:8])} and 2 more)" in clause
+
+
 def test_footer_for_a_modern_empty_record_is_unchanged():
     clause = _relations_footer_clause(_log((MODERN, [])))
     assert "before 1963" not in clause
