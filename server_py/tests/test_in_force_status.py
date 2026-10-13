@@ -460,7 +460,7 @@ def test_the_footer_clause_says_what_was_checked_when_something_was():
 # P4.18: a change record consulted and holding nothing is still consulted
 # ---------------------------------------------------------------------------
 
-def _amendment_row(effect, changed="ssi/1901/1", affecting="ssi/1901/9"):
+def _amendment_row(effect, changed="ssi/2001/1", affecting="ssi/2001/9"):
     """One synthetic `/amendment/search` row (both schemes, as the feed sends)."""
     return [{
         "changed_legislation": changed, "changed_provision": "reg. 2",
@@ -493,7 +493,7 @@ def test_a_consulted_record_with_no_commencement_is_not_called_unconsulted(rows)
     when a record WAS consulted and held none, or held only amendments. P3.5's
     clause on the same line says the record was consulted directly: 28 stored
     footers carried both. The clause now says what is true."""
-    clause = _currency_footer_clause(_consulted(("ssi/1901/1", rows)))
+    clause = _currency_footer_clause(_consulted(("ssi/2001/1", rows)))
     assert "no change record was consulted" not in clause
     assert "the recorded changes consulted list neither a commencement nor a repeal" in clause
     # The rest of the disclosure is unchanged: nothing was checked against a date.
@@ -507,8 +507,8 @@ def test_the_no_check_wording_stays_for_a_turn_that_consulted_no_record():
     still told so."""
     for log in (
         _log_from(("search_legislation", {}, _slim_search_results(_api_search(
-            ("ukpga/1901/7", "Widget Act 1901 (repealed)"))))),
-        [{"tool": "currency", "kind": "valid_date", "legislation_id": "ssi/1901/1",
+            ("ukpga/2001/7", "Widget Act 1901 (repealed)"))))),
+        [{"tool": "currency", "kind": "valid_date", "legislation_id": "ssi/2001/1",
           "valid_date": "2020-01-01"}],
     ):
         clause = _currency_footer_clause(log)
@@ -521,9 +521,9 @@ def test_a_sourced_record_keeps_its_wording_beside_an_empty_one():
     and another holds nothing: it says what was checked, and it never said no
     record was consulted."""
     clause = _currency_footer_clause(_consulted(
-        ("ssi/1901/1", _amendment_row("coming into force", affecting="ssi/1901/9")),
-        ("ssi/1901/2", [])))
-    assert "what was checked is the recorded changes for ssi/1901/1" in clause
+        ("ssi/2001/1", _amendment_row("coming into force", affecting="ssi/2001/9")),
+        ("ssi/2001/2", [])))
+    assert "what was checked is the recorded changes for ssi/2001/1" in clause
     assert "no change record was consulted" not in clause
     assert "neither a commencement nor a repeal" not in clause
 
@@ -531,12 +531,12 @@ def test_a_sourced_record_keeps_its_wording_beside_an_empty_one():
 def test_neither_footer_line_contradicts_p35s_clause_any_more():
     """At the seam the lawyer reads: the whole line, fresh and carried, built by
     the product's own footers from the product's own recorders."""
-    fresh_log = _consulted(("ssi/1901/1", []), search="widget licence")
+    fresh_log = _consulted(("ssi/2001/1", []), search="widget licence")
     fresh = answer_scope_footer(fresh_log, {})
     history = [{"role": "user", "content": "Is the Widget Order 1901 in force?"},
                {"role": "assistant", "content": "Answer." + answer_scope_footer(
                    fresh_log[:1], {})}]
-    carried = carried_scope_footer(history, _consulted(("ssi/1901/1", [])))
+    carried = carried_scope_footer(history, _consulted(("ssi/2001/1", [])))
     for line in (fresh, carried):
         assert "which this research consulted directly" in line
         assert "no change record was consulted" not in line
@@ -856,7 +856,7 @@ def test_the_detector_does_not_read_the_products_own_new_wording():
                        ("search_legislation", {}, _slim_search_results(_api_search(
                            ("ukpga/1967/81", "Companies Act 1967 (repealed)")))))),
                    # P4.18's branch: a record consulted that held nothing.
-                   _currency_footer_clause(_consulted(("ssi/1901/1", []))),
+                   _currency_footer_clause(_consulted(("ssi/2001/1", []))),
                    "in-force status was not verified — the legislation index does not "
                    "report it, and no commencement or repeal record was retrieved for "
                    "this instrument."):

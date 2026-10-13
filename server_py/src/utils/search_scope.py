@@ -158,6 +158,37 @@ LEX_COVERAGE_SENTENCE = (
     "date). Absence from the index is therefore NOT evidence of absence in law."
 )
 
+# P3.49: LEX's change record (`/amendment/search`) holds no relation with an
+# instrument made before 1963 on EITHER side. Probed live 2026-10-13 (Session
+# 47, `evidence/seam/s47/p349_probe.jsonl`): the Shops Act 1950, Factories Act
+# 1961, Transport Act 1962 and a 1961 SI return nothing under either id form and
+# in either direction, while the Offices, Shops and Railway Premises Act 1963
+# returns 50 relations; and the Sunday Trading Act 1994's own record of what it
+# changed lists 30 relations, all on Acts of 1963 or later, though it repealed
+# provisions of the 1950 Act. Over the replay corpus, 171 of 171 calls on a
+# pre-1963 id were empty. So for such an instrument an empty record is not a
+# negative of any strength, and the empty-record wording is replaced (gated on
+# the record being empty, so it retires itself if LEX ever adds the data). This
+# is not `LEX_COVERAGE_SENTENCE`'s gap, which is in the text index and "per
+# instrument rather than by date": the two are kept apart.
+CHANGE_RECORD_FIRST_YEAR = 1963
+_CALENDAR_ID = re.compile(r"^([a-z]+)/(\d{4})/\d+", re.I)
+# A regnal-year id: "ukpga/Geo6/14/28", "ukpga/Vict/49-50/55", "ukpga/1-2Geo5/54".
+_REGNAL_ID = re.compile(r"^([a-z]+)/(?:[A-Za-z]+\d*|[\d-]+[A-Za-z]+\d*)/", re.I)
+
+
+def before_change_record(legislation_id: Any) -> bool:
+    """True for an instrument made before the change record's first year:
+    a regnal-year id, or a UK calendar id of an earlier year (EU ids excluded,
+    which were not probed)."""
+    lid = str(legislation_id or "").strip().strip("/")
+    m = _CALENDAR_ID.match(lid)
+    if m:
+        return (not m.group(1).lower().startswith("eu")
+                and int(m.group(2)) < CHANGE_RECORD_FIRST_YEAR)
+    m = _REGNAL_ID.match(lid)
+    return bool(m) and not m.group(1).lower().startswith("eu")
+
 # What any negative drawn from a search must carry. One string, so the
 # legislation and section notes cannot drift apart.
 #
@@ -1041,6 +1072,22 @@ def amendment_search_note(args: dict, data: Any) -> str:
     if not isinstance(relations, int):
         return ""
 
+    if not relations and before_change_record(lid):
+        # P3.49: here the record is empty whatever happened to the instrument,
+        # and "no change is recorded" read as "never amended" (Thomas's Q8:
+        # ss.38 and 39 of the Shops Act 1950, repealed, relied on unwarned).
+        return (
+            f"\n\n[CHANGE RECORD — nothing is returned for {lid}, and that is "
+            "expected: this index holds no change record at all for legislation "
+            f"made before {CHANGE_RECORD_FIRST_YEAR}, in either direction, including "
+            "Acts known to have been amended and repealed. So whether "
+            f"{lid} or any of its provisions has been amended, repealed or revoked "
+            "is NOT known from this tool. Do not write that no change is recorded "
+            "for it, or that it has not been amended or repealed. If the report "
+            "relies on a provision of it, say that whether that provision has since "
+            "been amended or repealed could not be checked in this index.]"
+        )
+
     if not relations:
         # Honest failure, in the direction Invariant 1 protects. An empty
         # change record is a real and common answer — 112 of the 271
@@ -1201,6 +1248,9 @@ def _relations_limb(log: Optional[list]) -> str:
                 empty.append(lid)
         if not e.get("complete"):
             truncated = True
+    # P3.49: an empty record of a pre-1963 instrument is no negative at all.
+    old = [lid for lid in empty if before_change_record(lid)]
+    empty = [lid for lid in empty if lid not in old]
     parts = [
         f"Change record (commencement / amendment / repeal / revocation): consulted "
         f"for {', '.join(looked[:8]) or 'n/a'}."
@@ -1215,6 +1265,17 @@ def _relations_limb(log: Optional[list]) -> str:
             f" NO relation is recorded for {', '.join(empty[:8])}. Report that as "
             "nothing being recorded in the change record, NOT as a finding that no "
             "commencement or amendment has been made."
+        )
+    if old:
+        one = len(old) == 1
+        parts.append(
+            f" {', '.join(old[:8])} {'was' if one else 'were'} made before "
+            f"{CHANGE_RECORD_FIRST_YEAR}, and the index holds no change record for "
+            "legislation of that age, so the empty record says nothing about whether "
+            f"{'it has' if one else 'they have'} been amended, repealed or revoked. "
+            "Do not report it as no change being recorded. Where the answer relies "
+            f"on a provision of {'it' if one else 'them'}, say that whether that "
+            "provision has since been amended or repealed could not be checked here."
         )
     if truncated:
         parts.append(
@@ -1267,11 +1328,27 @@ def _relations_footer_clause(entries: Optional[list]) -> str:
     rows = [e for e in (entries or []) if e.get("tool") == "change_record"]
     if not rows:
         return ""
-    consulted = []
+    consulted, old = [], []
     for e in rows:
         lid = e.get("legislation_id") or ""
         if lid and lid not in consulted:
             consulted.append(lid)
+        # P3.49: written by code, so the lawyer is told whatever the answer says.
+        if (lid and not e.get("relations") and before_change_record(lid)
+                and lid not in old):
+            old.append(lid)
+    old_clause = ""
+    if old:
+        one = len(old) == 1
+        old_clause = (
+            " The index used holds no record of changes to legislation made before "
+            f"{CHANGE_RECORD_FIRST_YEAR} ({', '.join(old[:3])}), so whether "
+            f"{'it has' if one else 'they have'} been amended or repealed since is "
+            "not known from this research; check the revised text on "
+            f"legislation.gov.uk before relying on {'it' if one else 'them'}."
+        )
+        if all(lid in old for lid in consulted):
+            return old_clause
     any_found = any(e.get("by_other") for e in rows)
     truncated = any(not e.get("complete") for e in rows)
     lead = (
@@ -1307,7 +1384,7 @@ def _relations_footer_clause(entries: Optional[list]) -> str:
             "treat the instruments named above as examples rather than a complete "
             "set."
         )
-    return lead
+    return lead + old_clause
 
 
 # ---------------------------------------------------------------------------
@@ -1716,6 +1793,9 @@ def record_currency(log: Optional[list], name: str, args: dict, data: Any) -> No
                 "tool": "currency",
                 "kind": "relations",
                 "legislation_id": lid,
+                # P3.49: an empty record, for the line's pre-1963 branch.
+                "relations": d.get("relations") if isinstance(
+                    d.get("relations"), int) else None,
                 "commenced": d.get("provisions_commenced") or 0,
                 "orders": d.get("commencement_orders_of_amendments") or 0,
                 "repeals": removals[PROVISION_KEY],
@@ -1844,6 +1924,13 @@ def _commencement_line(lid: str, case: str, e: dict) -> str:
             f"{lid}: the record counts {e.get('commenced')} commencement relation(s) "
             "but does not list them: do not state from it whether any of its "
             "provisions has been commenced."
+        )
+    if e.get("relations") == 0 and before_change_record(lid):
+        # P3.49: not a record that lists nothing, but no record at all.
+        return (
+            f"{lid}: made before {CHANGE_RECORD_FIRST_YEAR}, for which the index "
+            "holds no change record: do not state from it whether any of its "
+            "provisions has been commenced, amended, repealed or revoked."
         )
     return (
         f"{lid}: the record lists neither a commencement by another instrument "
