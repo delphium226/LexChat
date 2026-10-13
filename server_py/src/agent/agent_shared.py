@@ -1673,7 +1673,9 @@ async def run_worker_tool(
                                    "stated": True, "source": "legislation_gov_uk"})
     _published_entries = (list(search_log[_log_start:]) if search_log is not None else [])
 
-    from .provider_factory import get_summarise_threshold
+    from .provider_factory import get_summarise_threshold, get_tool_result_threshold
+    # P3.50: a judgment passes whole up to its own cap (`CASE_LAW_WHOLE_CHARS`).
+    _threshold = get_tool_result_threshold(name)
     # Two independent triggers: this result is large on its own, OR the run has
     # accumulated enough context that even a modest addition is no longer free.
     # The second is what stops several under-threshold retrievals stacking into a
@@ -1689,8 +1691,8 @@ async def run_worker_tool(
     # P3.31: the made-under list is bounded by construction (`MAX_LISTED`,
     # compact rows), and a summary that dropped instruments from it would
     # undo the tool, so it always reaches the Worker whole.
-    if (len(result) > get_summarise_threshold() or _over_budget) and name != MADE_UNDER_TOOL:
-        if _over_budget and len(result) <= get_summarise_threshold():
+    if (len(result) > _threshold or _over_budget) and name != MADE_UNDER_TOOL:
+        if _over_budget and len(result) <= _threshold:
             logger.info(
                 f"[Worker] Context budget reached "
                 f"({context_budget['used']}/{context_budget['limit']} chars) — "

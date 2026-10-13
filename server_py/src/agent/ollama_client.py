@@ -328,12 +328,10 @@ async def chat_loop(
 
         next_messages = [*messages, message]
 
-        # Last-resort safety net: results above the summarisation threshold are
-        # summarised (and capped) by run_worker_tool before reaching here.  The
-        # +4K headroom leaves room for the phase nudges appended after
-        # summarisation so they are never truncated off the tail.
-        from .provider_factory import get_summarise_threshold
-        MAX_TOOL_RESULT_CHARS = get_summarise_threshold() + 4_000
+        # Last-resort safety net (`cap_tool_result`): results above the
+        # summarisation threshold are summarised (and capped) by
+        # run_worker_tool before reaching here; per tool since P3.50.
+        from .provider_factory import cap_tool_result
 
         # Execute all tool calls concurrently — they are independent of each
         # other so there is no reason to serialise them.  Results are reordered
@@ -344,17 +342,7 @@ async def chat_loop(
             func_name = tc["function"]["name"]
             func_args = tc["function"]["arguments"]
             result = await tool_executor(func_name, func_args)
-            if len(result) > MAX_TOOL_RESULT_CHARS:
-                logger.warning(
-                    f"[ChatLoop] Tool result from '{func_name}' truncated "
-                    f"({len(result)} -> {MAX_TOOL_RESULT_CHARS} chars)"
-                )
-                if timing_collector:
-                    timing_collector.record_truncation()
-                result = (
-                    result[:MAX_TOOL_RESULT_CHARS]
-                    + "\n\n[Content truncated — result exceeded context limit]"
-                )
+            result = cap_tool_result(func_name, result, timing_collector, "[ChatLoop]")
             return func_name, result
 
         # P2.7: each task copies this context at creation, so every call in

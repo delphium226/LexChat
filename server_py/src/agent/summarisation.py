@@ -28,6 +28,21 @@ SUMMARISE_CHUNK_FALLBACK_CHARS = 5_000
 # the tail of a long research run is compressed.
 WORKER_CONTEXT_BUDGET_CHARS = 250_000
 
+# P3.50: a judgment is handed to the Worker whole up to this size, whatever the
+# model's threshold (`provider_factory.get_tool_result_threshold`); the context
+# budget above still applies. A case summary has to read the court's own words,
+# and a query-shaped summary drops exactly the passage that makes a point the
+# case's central one: over the 21 stored turns that fetched Rex v Evans [2025]
+# EWCA Crim 1150 (28,746 chars), the raw text carried [43] ("our focus was
+# necessarily on the admitted duties and responsibilities of the appellant on
+# the night in question") 21 times and the summary handed over 0 (Session 48,
+# `evidence/seam/s48/p350_phrases.py`), and no report or answer ever carried a
+# passage its summary had dropped. 60,000 is the first cap (user decision,
+# Session 48): 84 of the 228 judgments in the stored replays fit it (median
+# 73,229 chars); a larger one is summarised as before.
+CASE_LAW_WHOLE_CHARS = 60_000
+WHOLE_TEXT_TOOLS = frozenset({"get_case_law_text"})
+
 
 async def call_chunk(on_chunk: Callable, data: dict) -> None:
     """Call on_chunk callback, handling both sync and async callables."""

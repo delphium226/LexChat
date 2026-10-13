@@ -344,6 +344,42 @@ def get_summarise_threshold() -> int:
     return max(10_000, min(int(context_chars * 0.10), 200_000))
 
 
+def get_tool_result_threshold(tool_name: str) -> int:
+    """The size above which `tool_name`'s result is summarised (P3.50).
+
+    The model's threshold (`get_summarise_threshold`), except that a judgment
+    (`summarisation.WHOLE_TEXT_TOOLS`) passes whole up to
+    `CASE_LAW_WHOLE_CHARS` even where that threshold is lower. One definition,
+    read by `run_worker_tool`'s summarisation decision and by both chat loops'
+    last-resort cap (`cap_tool_result`), so a judgment handed over whole is
+    not cut off downstream.
+    """
+    from .summarisation import CASE_LAW_WHOLE_CHARS, WHOLE_TEXT_TOOLS
+
+    threshold = get_summarise_threshold()
+    if tool_name in WHOLE_TEXT_TOOLS:
+        return max(threshold, CASE_LAW_WHOLE_CHARS)
+    return threshold
+
+
+def cap_tool_result(tool_name: str, result: str, timing_collector=None,
+                    label: str = "[ChatLoop]") -> str:
+    """The chat loops' last-resort safety net on one tool result.
+
+    Results above the threshold are summarised (and capped) by
+    `run_worker_tool` before reaching here. The +4K headroom leaves room for
+    the phase nudges appended after summarisation so they are never truncated
+    off the tail. Per tool since P3.50 (`get_tool_result_threshold`).
+    """
+    limit = get_tool_result_threshold(tool_name) + 4_000
+    if len(result) <= limit:
+        return result
+    logger.warning(f"{label} Tool result from '{tool_name}' truncated ({len(result)} -> {limit} chars)")
+    if timing_collector:
+        timing_collector.record_truncation()
+    return result[:limit] + "\n\n[Content truncated — result exceeded context limit]"
+
+
 def get_summarise_model() -> str:
     """Return the configured summarisation model, falling back to the main model.
 
