@@ -341,6 +341,8 @@ once the provider hit its rate limit, 12 of 12 Deep Research attempts got `502` 
 Tracker as "TODO B6", P3 (recorded 2026-10-05; FIX_PLAN "External review — Thomas, 30 September
 2026").
 
+**Reported a third time by Thomas on 13 October 2026** (his retest of `v2026.10.4`: once the provider returned 429, every Deep Research attempt got `502` from `/api/research/plan`; FIX_PLAN "External review — Thomas, 13 October 2026"). `routers/research.py` still raises `502 "The planner failed. Please try again."` for any non-connection error (checked 2026-10-13).
+
 Outside the pre-pilot fix plan (not a pre-pilot defect), so it can go straight to `main`.
 
 ### B5. Add a 'Data coverage' tab to the parliament bot (feature; added 2026-07-24, unscoped)
