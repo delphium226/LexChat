@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import tools.seam_replay as sr  # noqa: E402
 from src.agent import agent_core  # noqa: E402
+from src.utils.lawyer_words import with_lawyer_words  # noqa: E402
 
 S57 = "http://www.legislation.gov.uk/asp/2002/3/section/57"
 S21 = "http://www.legislation.gov.uk/asp/2000/1/section/21"
@@ -788,7 +789,10 @@ def test_the_as_sent_payload_is_rounds_not_a_compose_message():
     msgs = sr.worker_as_sent_messages(doc, doc["turns"][0])
     assert [m["role"] for m in msgs] == ["system", "user", "assistant", "tool",
                                          "assistant", "tool", "tool"]
-    assert msgs[1]["content"] == "the brief"
+    # the brief, then the lawyer's words as today's code appends them (P3.52 c)
+    brief = with_lawyer_words("the brief", "Q", "legislation_only", "conversational")
+    assert brief.startswith("the brief\n\n[THE LAWYER'S LATEST MESSAGE")
+    assert msgs[1]["content"] == brief
     assert [c["function"]["name"] for c in msgs[4]["tool_calls"]] == [
         "search_legislation_sections", "get_legislation_changes"]
     # the ids pair each call with its result
@@ -797,7 +801,7 @@ def test_the_as_sent_payload_is_rounds_not_a_compose_message():
     # no closing "compose" message: the call that reasoned to nothing had none
     assert msgs[-1]["role"] == "tool"
     # sent_chars counts content the way chat_loop does
-    assert sr.sent_chars(msgs) == len(msgs[0]["content"]) + len("the brief") + 6
+    assert sr.sent_chars(msgs) == len(msgs[0]["content"]) + len(brief) + 6
     # cut at a round
     assert len(sr.worker_as_sent_messages(doc, doc["turns"][0], upto_round=1)) == 4
 
@@ -991,8 +995,12 @@ def test_the_as_sent_payload_at_a_rev_uses_that_revs_worker_prompt(monkeypatch):
     assert old[0]["content"] == ("Today's date is 18 September 2026.\n"
                                  "OLD WORKER PROMPT legislation_only")
     assert ("2d9ae11", "server_py/src/prompts.py") in seen
-    # only the system prompt is the rev's: the brief and the rounds are recorded
-    assert old[1:] == now[1:]
+    # the rounds are recorded; the user message is the rev's own (P3.52 c):
+    # a revision without `utils/lawyer_words.py` sent the brief alone
+    assert ("2d9ae11", sr.LAWYER_WORDS_PATH) in seen
+    assert old[1]["content"] == "the brief"
+    assert now[1]["content"].startswith("the brief\n\n[THE LAWYER'S LATEST MESSAGE")
+    assert old[2:] == now[2:]
 
 
 def test_an_as_sent_draw_at_the_recorded_rev_offers_that_revs_tools(

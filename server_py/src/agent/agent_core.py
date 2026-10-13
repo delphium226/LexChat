@@ -32,6 +32,7 @@ from ..utils.discovery_budget import new_search_budget
 from ..utils.instrument_lookup import (
     LOOKUP_TOOL, parse_lookup_result, routed_lookup_block, section_search_lookup,
 )
+from ..utils.lawyer_words import with_lawyer_words
 from ..utils.mode_change import apply_mode_change_marker, mode_change_for
 from ..utils.openers import strip_agreement_opener
 from ..utils.paragraph_restore import (
@@ -231,9 +232,13 @@ async def run_worker_agent(
     _audit = get_audit_collector()
     _audit_delegation = _audit.start_delegation(query) if _audit else None
 
+    # P3.52 (c): the lawyer's latest message after the brief, in the Worker's
+    # message only. The log line above and the audit keep the brief as the
+    # Manager wrote it; so does every other reader of `query` below.
     messages = [
         {"role": "system", "content": get_worker_system_prompt(research_mode, cfg)},
-        {"role": "user", "content": query},
+        {"role": "user", "content": with_lawyer_words(
+            query, cfg.get("_cache_key_query"), research_mode, cfg.get("_chat_mode"))},
     ]
 
     # P3.25: the quick-lookup Worker's list omits `get_legislation_text`.
@@ -349,7 +354,7 @@ async def run_worker_agent(
             query, [t.get("function", {}).get("name") for t in worker_tools],
             worker_tool_executor)
         if _block:
-            messages[1]["content"] = query + _block
+            messages[1]["content"] += _block
     except asyncio.CancelledError:
         raise
     except Exception:
