@@ -319,7 +319,21 @@ Files: `client/src/App.jsx`, `client/src/components/ResearchFiltersModal.jsx`,
 `client/src/index.css`. `client/dist/` rebuilt. **Uncommitted** — commit with
 force-added `client/dist/` and push when ready to deploy.
 
-### B6. The Deep Research planner reports every provider error as a generic 502 (bug; added 2026-09-18)
+### B6. The Deep Research planner reports every provider error as a generic 502 (bug; added 2026-09-18) — DONE 2026-10-13 (on `main`)
+
+**Done 2026-10-13.** `routers/research.py::planner_provider_error` catches `httpx.HTTPStatusError`
+before the generic handler and words the detail from `describe_agent_error` (the provider's
+status, never its body): 401, 402 and 403 → **502**, "trying again will not help. Please tell
+your administrator" (a provider 401 is deliberately not passed through: the client logs the user
+out on a 401 from this server); 429 → **503**, "try again in a few minutes"; any other status →
+**503**, "try again later". `ConnectionError` → 503 and every other exception → the generic 502
+are unchanged. The client already renders `detail` verbatim (`formatSendError`), so no client
+change. Tests: six in `tests/test_deep_research.py` (402, 401, 429, 503, connection failure,
+other exception); with the new branch removed, the four provider tests fail. Not live-verified
+against a real provider 429. The chat path's wording (`routers/ai.py`, "Please try again") is
+unchanged and still advises a retry on a 402.
+
+*Original entry:*
 *From Thomas's external review of 10 September 2026, action 8. Verified against the code on
 `fix/prepilot-defects` on 2026-09-18.*
 
