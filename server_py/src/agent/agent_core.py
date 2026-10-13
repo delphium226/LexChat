@@ -33,6 +33,7 @@ from ..utils.instrument_lookup import (
     LOOKUP_TOOL, parse_lookup_result, routed_lookup_block, section_search_lookup,
 )
 from ..utils.lawyer_words import with_lawyer_words
+from ..utils.made_under import prune_section_family_entries
 from ..utils.mode_change import apply_mode_change_marker, mode_change_for
 from ..utils.openers import strip_agreement_opener
 from ..utils.paragraph_restore import (
@@ -522,6 +523,10 @@ async def run_worker_agent(
     # rail, and the `source_filter_fallback` counter (the Worker vouched for
     # none of its sources) would never fire — a diagnostic corrupting the
     # measurement of a different bucket.
+    # P3.51: the made-under block's entries speak in the limb and the footer
+    # only for an instrument this report names; a family the Worker did not
+    # use adds nothing to either.
+    search_log[:] = prune_section_family_entries(search_log, result.get("content", "") or "")
     _scope = worker_scope_block(search_log, cfg)
     if _scope:
         result["content"] = (result.get("content", "") or "") + _scope

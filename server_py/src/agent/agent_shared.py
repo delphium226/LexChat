@@ -899,6 +899,32 @@ async def stored_enabling_note(lid: str, search_log: Optional[list]) -> str:
         return ""
 
 
+async def made_under_sections_note(name: str, raw_result, search_log: Optional[list]) -> tuple:
+    """P3.51: `(block, entries)`, the made-under record's instruments for the
+    sections a section search returned and the lettered sections beside them
+    (`utils.made_under.section_families_block`), or `("", [])`. Each family
+    once per Worker run; no database until the record is loaded; never
+    raises."""
+    if name != "search_legislation_sections":
+        return "", []
+    try:
+        from ..utils.made_under import (
+            handed_families, returned_section_families, section_families_block,
+        )
+        act, bases = returned_section_families(raw_result)
+        done = handed_families(search_log)
+        bases = [b for b in bases if (act, b) not in done]
+        if not act or not bases:
+            return "", []
+        from ..services.made_under_store import section_family_rows
+        rows, cov = await section_family_rows(act, bases)
+        if not rows:
+            return "", []
+        return section_families_block(act, bases, rows, cov)
+    except Exception:
+        return "", []
+
+
 def _has_scottish_list(result) -> bool:
     """P3.20: a `search_case_law` result that carries SCTS's list."""
     try:
@@ -1170,6 +1196,9 @@ async def run_worker_tool(
             # P3.38: and what the read from legislation.gov.uk recorded.
             if search_log is not None and hit.get("published_entries"):
                 search_log.extend(dict(e) for e in hit["published_entries"])
+            # P3.51: and what the result's made-under block named.
+            if search_log is not None and hit.get("made_under_entries"):
+                search_log.extend(dict(e) for e in hit["made_under_entries"])
             if parent_on_chunk:
                 await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
                 await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done (cached)"})
@@ -1557,6 +1586,14 @@ async def run_worker_tool(
         if stored:
             enabling_note = stored
     record_enabling_power(search_log, name, args, raw_result)
+    # P3.51: the record's instruments for the sections this search returned
+    # (s.33 returned, s.33A's Order listed), so a mechanism made under a
+    # section the Worker relies on is in front of it without the made-under
+    # question being asked. Its entries reach the limb and the footer only for
+    # an instrument the report names (`run_worker_agent` prunes the rest).
+    family_note, _family_entries = await made_under_sections_note(name, raw_result, search_log)
+    if search_log is not None and _family_entries:
+        search_log.extend(_family_entries)
 
     # P3.5 (B3): the other four relations of the bucket, which ARE retrievable.
     # Computed from the RAW result for the same reason as everything else at
@@ -1832,6 +1869,7 @@ async def run_worker_tool(
     result += not_held
     result += published_note
     result += enabling_note
+    result += family_note
     result += schedules_line
     result += relations_note
     result += fetched_note
@@ -1853,6 +1891,9 @@ async def run_worker_tool(
         # on a hit; this read does not run again).
         if _published_entries:
             tool_memo[memo_key]["published_entries"] = _published_entries
+        # P3.51: and what its made-under block named, for the same reason.
+        if _family_entries:
+            tool_memo[memo_key]["made_under_entries"] = _family_entries
 
     # Charged after the nudges are appended: what is counted is exactly what the
     # model receives, so the budget tracks the real context growth.

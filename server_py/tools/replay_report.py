@@ -1683,10 +1683,20 @@ def retrieved_enabling(turn: dict) -> list:
             for m in _STORED_RECITAL.finditer(str(tl.get("final_result") or "")):
                 if m.group(1) not in [x[0] for x in out]:
                     out.append((m.group(1), "made-under record (stored recital)"))
+            # P3.51: a section search's block naming the record's instruments
+            # for the sections it returned (the Act's own id opens the block).
+            for m in _FAMILY_BLOCK.finditer(str(tl.get("final_result") or "")):
+                ids = _BLOCK_ID.findall(m.group(0))
+                for lid in ids[1:]:
+                    if lid not in [x[0] for x in out]:
+                        out.append((lid, "made-under record (returned sections)"))
     return out
 
 
 _STORED_RECITAL = re.compile(r"the made-under record \(the as-made preamble of ([a-z]+/\d{4}/\d+)")
+_FAMILY_BLOCK = re.compile(
+    r"\[ENABLING POWER — the made-under record, for the sections this search returned[^\[\]]*\]")
+_BLOCK_ID = re.compile(r"\(([a-z]+/\d{4}/\d+)\)")
 
 
 # P2.3's own clause on the lawyer-facing footer contains the words "made under"
