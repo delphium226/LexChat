@@ -9601,9 +9601,10 @@ the handover's "`main` at `a6b4a76`" and "confirm the push": both are done. Next
 **One session works the branch at a time.** Read this handover, then FIX_PLAN's top order line ("end of Session
 47"). Confirm the branch is pushed (`git status -sb`).
 
-**Take next:** P3.12 then P3.47 (the existing P1s); P3.52's next lever (the Manager's brief framing, or (b), the
-question's own words as a second query; the research and hybrid prompts after reconciling P3.1's combined query);
-P3.51; P3.50; then the rest of the Session 46 order.
+**Take next (user decision, 2026-10-13, after the fold: Thomas's list first, his P2s ahead of the other P1s):**
+P3.52's next lever (the Manager's brief framing, or (b), the question's own words as a second query; the research
+and hybrid prompts after reconciling P3.1's combined query); then P3.51; then P3.50; only then P3.12 and P3.47,
+then the rest of the Session 46 order. P3.3 (his Q9) stays blocked on the lawyer pack.
 
 **State:** branch `fix/prepilot-defects` at this handover's commit; `main` at `397bee9` (B6; not a release, the
 target runs `v2026.10.4` until a cut); 72 of 107, 5 in progress, 8 of 14; `plan_lint` 0; **4,005 tests**; **75
