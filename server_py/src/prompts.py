@@ -611,6 +611,18 @@ def _quick_lookup_route(rule: str) -> str:
 # case-law query is not narrowed by an added "Scotland". This Worker is never
 # told the filters (P3.14), so it takes the jurisdiction from the brief, which
 # the conversational Manager is now told to state.
+# P3.52 (Thomas, 13 October, Q17 / 6345): the legislation searches rank by
+# meaning. Probed live (Session 47, `evidence/seam/s47/p352_probe.jsonl`): on
+# the Transport (Scotland) Act 2001 the question's own words put s.38 (grants
+# to bus service operators, the fare-cap power) at rank 3 and a plain sentence
+# at rank 2, while the Worker's own form, `"maximum fare" OR "fare cap"`,
+# left it out of the top 20; the Act-level search on the question's words
+# returned the 2001 Act, the Worker's quoted query did not. Its first query
+# was a quoted OR list in 6 of 6 seam draws. The worked example is
+# deliberately not about buses.
+_LEGISLATION_QUERY_WORDING = """QUERY WORDING (legislation searches): `search_legislation` and `search_legislation_sections` rank results by meaning, not by matching words. Unless you are searching for an Act by its exact title, write the query as a plain sentence saying what the provision would do, in the question's own words (for example "duty of an education authority to provide free school transport"), not as quoted phrases joined by OR or AND, which rank the provision you need lower. Where the question asks what enables a measure the legislation may not name in those words (a cap, a subsidy, a charge), the power may be a general one through which the measure is funded or required, such as a power to make grants on conditions: word the query to cover that too, and say which kind of power each provision you cite is."""
+
+
 WORKER_SYSTEM_PROMPT_CONVERSATIONAL ="""You are a Legal Research Support Agent operating in quick-lookup mode.
 
 YOUR MANDATE:
@@ -625,6 +637,8 @@ Issue one targeted search using the appropriate search tool.
 - Legislation: call `search_legislation` once. Use the exact Act title if known.
 - Case law: call `search_case_law` once with focused keywords.
 - Stop when you have 2–3 relevant results. Do not batch multiple searches unless the brief explicitly names multiple distinct Acts or cases.
+
+""" + _LEGISLATION_QUERY_WORDING + """
 
 PHASE 2 — RETRIEVE:
 For each result from Phase 1, call the appropriate retrieval tool once.
