@@ -9541,3 +9541,73 @@ already holds snapshot `2026-10-10.1`, and the target loads it at startup (about
 to the same URL (Sessions 45 and 46 synced; every Next-release row now 2026.10.1; P3.12 and the new P3.47 at P1, user
 decisions; P3.48 added; 99 rows: 67 Fixed, 4 In progress, 18 Verified, 5 Blocked, 5 To be verified). This supersedes
 the handover's "`main` at `a6b4a76`" and "confirm the push": both are done. Next session: **P3.12 alone**.
+
+## Session 47 — 2026-10-13 — Thomas's items first: TODO B6 on `main`, P3.49 DONE, P3.52 measured and in progress ($4.49)
+
+**Done:**
+- **Checks at the start:** the brief current (branch at `e170238`, `main` at `v2026.10.4` plus 4 deployment and
+  docs commits); the tree clean and pushed; baseline suite **3,959** on the branch.
+- **TODO B6 on `main` (`397bee9`, merged into the branch at `464225f`; not a fix-plan row):**
+  `routers/research.py::planner_provider_error` catches `httpx.HTTPStatusError` before the generic handler and words
+  the detail from `describe_agent_error` (status only, never the body): 401, 402, 403 -> 502, "trying again will not
+  help. Please tell your administrator"; 429 -> 503, "try again in a few minutes"; any other -> 503, "try again
+  later". A provider 401 is not passed through, because the client logs the user out on a 401 from this server
+  (`formatSendError`). Six tests; the four provider tests fail with the branch removed. `main` **3,965**. Not
+  live-verified against a real 429. The chat path's "Please try again" still advises a retry on a 402 (unchanged).
+- **P3.49 probe (10 live LEX calls, user-agreed, gitignored `evidence/seam/s47/p349_probe.py` and `.jsonl`):**
+  pre-1963 Acts and a 1961 SI return 0 rows under both id forms and in both directions; the 1963 Act returns 50 and
+  a 1966 SI 1; the Sunday Trading Act 1994's own "what it changed" record lists 30 relations, all on 1963+ Acts,
+  though it repealed provisions of the Shops Act 1950. Stored (`count_changes.py`, scratchpad): 171 of 171 calls on
+  pre-1963 ids empty; the earliest instrument with rows is from 1963.
+- **P3.49 built** (`f1e5484`, `af1956c`): `search_scope.before_change_record` and `CHANGE_RECORD_FIRST_YEAR`, four
+  texts gated on an empty record (block, limb, P3.24's line, footer). 37 tests; 8 single-site mutants all caught
+  (`mutants_p349.py`, scratchpad).
+- **P3.49 acceptance** (`wave5_p349`, script `evidence/scripts/p349_6341.json`, 6341 turn 7 alone, Deep Research,
+  n=3, **$3.92** against a $5 cap the user raised to $6 when rep 1 cost $1.76): met 3 of 3. Found by it and fixed
+  after (`af1956c`): the footer named the first 3 of 6 pre-1963 instruments and left out the Shops Act 1950.
+  **Ticked at the user's decision.**
+- **P3.52 measured** ($0 stored, then 18 live LEX calls in two user-agreed batches, `p352_probe.py`,
+  `p352_probe2.py`): s.38 of the Transport (Scotland) Act 2001 is "Grants to bus service operators"; the search ranks
+  by meaning; the Worker's quoted OR queries never reach it; the Manager's brief names the concession scheme in 10
+  of 16 turn 1s. Lever (a), the user's choice: `_LEGISLATION_QUERY_WORDING` in the quick-lookup Worker prompt
+  (`dbc5b6a`, 3 tests). Seam `--first-round` A/B on three briefs x 2 reps (**$0.149**): plain first queries 0 of 6
+  -> 6 of 6, and those return the 2001 Act at the Act level 0 of 5 -> 4 of 4.
+- **P3.52 acceptance** (`wave5_p352`, script `p352_6345.json`, 6345 turn 1 alone, Conversational, n=3, **$0.42**,
+  cap $2): s.38 cited 0 of 3, not met. Kept at the user's decision, the row in progress.
+- **Sweeps:** `replay check` (twice, about $0.001 each), `replay pin`, uvicorn (PIDs 14388, then 14592 on
+  `dbc5b6a`) and the keep-awake helper (PID 13692) by `Start-Process -PassThru`; `replay restore`; both stopped,
+  port 8000 free, no pin file.
+- **Folded:** FIX_PLAN (P3.49 ticked; P3.52 `[~]`; the Thomas table's B6 line; a new top order line; `plan_lint`
+  0, 0; `plan_status` **72 of 107, 5 in progress, 8 of 14**); CHANGELOG *Unreleased*; `docs/TODO.md` B6; CLAUDE.md;
+  the `external-apis` skill (the 1963 cut-off); the memory entry. Suite **4,005**.
+- **Spend: $4.49** (the sweeps $3.92 and $0.42, seam $0.149, preflight checks about $0.002).
+
+**Surprises:**
+- **The cut-off is in the index, not in the identifiers.** The reverse-direction call (what a 1994 Act changed)
+  settled it in one request; two id forms in one direction could not have.
+- **The detector screen caught the first wording.** "Whether that provision is still in force could not be
+  checked" reads as a *continuing* claim to `negcurrency`; a Manager echoing the limb would have been miscounted.
+- **A footer cap of 3 dropped the one Act the question was about.** Lists in code texts are in log order, not
+  importance order; cap at the limb's 8 and count the rest.
+- **Two test files used `/1901/` as an ordinary placeholder year.** 91 test files still do; any later rule keyed
+  on age will meet them.
+- **Git Bash's grep hid CR again** (`grep -c $'\r$'` reported 0 on a CRLF working tree; `core.autocrlf=true`).
+  Count line endings with Python.
+- **P3.52's framing starts upstream of the Worker.** The Manager's brief named "national concessionary travel
+  scheme" in 10 of 16 turn 1s; a Worker-side line cannot undo a brief that names the wrong concept.
+
+## Session 47 — handover for Session 48 (2026-10-13)
+
+**One session works the branch at a time.** Read this handover, then FIX_PLAN's top order line ("end of Session
+47"). Confirm the branch is pushed (`git status -sb`).
+
+**Take next:** P3.12 then P3.47 (the existing P1s); P3.52's next lever (the Manager's brief framing, or (b), the
+question's own words as a second query; the research and hybrid prompts after reconciling P3.1's combined query);
+P3.51; P3.50; then the rest of the Session 46 order.
+
+**State:** branch `fix/prepilot-defects` at this handover's commit; `main` at `397bee9` (B6; not a release, the
+target runs `v2026.10.4` until a cut); 72 of 107, 5 in progress, 8 of 14; `plan_lint` 0; **4,005 tests**; **75
+replay directories** (`wave5_p349`, `wave5_p352` new); no server, no pin, no keep-awake, the dev box's settings
+restored. Session scripts and probe logs are in the gitignored `evidence/seam/s47/`.
+
+**Carried, the user's:** the Fix Tracker (v49 is the base; not updated this session); the next cut.

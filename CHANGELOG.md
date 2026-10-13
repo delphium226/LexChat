@@ -26,6 +26,18 @@ Errors (on `main`, outside the fix plan; `docs/TODO.md` B6):
   retrying will not help and to tell the administrator. The provider's own
   response is never shown.
 
+Currency (P3.49):
+- An answer that relies on legislation made before 1963 now says that whether
+  it has since been amended or repealed is not known from this research. The
+  index holds no record of changes to legislation of that age, and its empty
+  record used to read as "never amended" (the Shops Act 1950 in Thomas's
+  13 October retest).
+
+Searching (P3.52, in progress):
+- A quick lookup now writes its legislation searches as plain sentences, which
+  the search ranks better than lists of quoted phrases. It does not yet find
+  s.38 of the Transport (Scotland) Act 2001 for the bus fare cap question.
+
 ## 2026.10.4 — 2026-10-12
 
 Seventh cut (merge `e72d3bc`): the Scottish judgments switch moves to the
