@@ -406,6 +406,82 @@ async def test_plan_endpoint_planner_error_maps_to_502(mock_draft, client, auth_
     assert response.status_code == 502
 
 
+def _provider_status_error(status, body="raw provider body: acct 1234"):
+    import httpx
+    request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    response = httpx.Response(status, request=request, text=body)
+    return httpx.HTTPStatusError(f"HTTP {status}", request=request, response=response)
+
+
+@pytest.mark.asyncio
+@patch("src.agent.ollama_client.draft_research_plan")
+async def test_plan_endpoint_provider_402_does_not_advise_retry(mock_draft, client, auth_headers):
+    """TODO B6: a provider out of credit is not 'try again'."""
+    mock_draft.side_effect = _provider_status_error(402)
+    response = await client.post("/api/research/plan", json=PLAN_BODY, headers=auth_headers)
+    assert response.status_code == 502
+    detail = response.json()["detail"]
+    assert "HTTP 402" in detail
+    assert "will not help" in detail and "administrator" in detail
+    assert "try again later" not in detail.lower()
+    assert "in a few minutes" not in detail
+    assert "The planner failed" not in detail
+    assert "acct 1234" not in detail  # the provider's raw body is never forwarded
+
+
+@pytest.mark.asyncio
+@patch("src.agent.ollama_client.draft_research_plan")
+async def test_plan_endpoint_provider_401_is_not_passed_through(mock_draft, client, auth_headers):
+    """A provider 401 must not reach the client as a 401: the client logs out on it."""
+    mock_draft.side_effect = _provider_status_error(401)
+    response = await client.post("/api/research/plan", json=PLAN_BODY, headers=auth_headers)
+    assert response.status_code == 502
+    assert "will not help" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+@patch("src.agent.ollama_client.draft_research_plan")
+async def test_plan_endpoint_provider_429_says_try_later(mock_draft, client, auth_headers):
+    mock_draft.side_effect = _provider_status_error(429)
+    response = await client.post("/api/research/plan", json=PLAN_BODY, headers=auth_headers)
+    assert response.status_code == 503
+    detail = response.json()["detail"]
+    assert "HTTP 429" in detail
+    assert "limiting the rate" in detail and "try again in a few minutes" in detail
+    assert "will not help" not in detail
+    assert "acct 1234" not in detail
+
+
+@pytest.mark.asyncio
+@patch("src.agent.ollama_client.draft_research_plan")
+async def test_plan_endpoint_provider_outage_says_try_later(mock_draft, client, auth_headers):
+    mock_draft.side_effect = _provider_status_error(503)
+    response = await client.post("/api/research/plan", json=PLAN_BODY, headers=auth_headers)
+    assert response.status_code == 503
+    detail = response.json()["detail"]
+    assert "HTTP 503" in detail and "try again later" in detail
+    assert "acct 1234" not in detail
+
+
+@pytest.mark.asyncio
+@patch("src.agent.ollama_client.draft_research_plan")
+async def test_plan_endpoint_connection_failure_stays_503(mock_draft, client, auth_headers):
+    message = "OpenRouter is not reachable. Check your internet connection and OPENROUTER_API_KEY."
+    mock_draft.side_effect = ConnectionError(message)
+    response = await client.post("/api/research/plan", json=PLAN_BODY, headers=auth_headers)
+    assert response.status_code == 503
+    assert response.json()["detail"] == message
+
+
+@pytest.mark.asyncio
+@patch("src.agent.ollama_client.draft_research_plan")
+async def test_plan_endpoint_other_exception_stays_generic_502(mock_draft, client, auth_headers):
+    mock_draft.side_effect = RuntimeError("internal detail")
+    response = await client.post("/api/research/plan", json=PLAN_BODY, headers=auth_headers)
+    assert response.status_code == 502
+    assert response.json()["detail"] == "The planner failed. Please try again."
+
+
 @pytest.mark.asyncio
 async def test_plan_endpoint_missing_fields(client, auth_headers):
     response = await client.post(

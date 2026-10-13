@@ -19,6 +19,13 @@ where each row carries its evidence and acceptance.
 
 On `fix/prepilot-defects` since 2026.10.4, waiting for the next cut.
 
+Errors (on `main`, outside the fix plan; `docs/TODO.md` B6):
+- When the AI provider refuses a Deep Research plan request, the lawyer is told
+  why instead of "The planner failed. Please try again.": a rate limit or an
+  outage says to try again later, and an account or credit problem says that
+  retrying will not help and to tell the administrator. The provider's own
+  response is never shown.
+
 ## 2026.10.4 — 2026-10-12
 
 Seventh cut (merge `e72d3bc`): the Scottish judgments switch moves to the
