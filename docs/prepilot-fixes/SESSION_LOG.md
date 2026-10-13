@@ -9612,3 +9612,16 @@ replay directories** (`wave5_p349`, `wave5_p352` new); no server, no pin, no kee
 restored. Session scripts and probe logs are in the gitignored `evidence/seam/s47/`.
 
 **Carried, the user's:** the Fix Tracker (v49 is the base; not updated this session); the next cut.
+
+**Addendum to Session 47 (2026-10-13, after the fold, user decisions):**
+- **Order:** Thomas's list first, his P2s ahead of the other open P1s: P3.52's next lever, then P3.51, then P3.50;
+  only then P3.12 and P3.47 (`685bf26`; FIX_PLAN's order line, the handover above, memory's
+  `feedback_priority_order` exception).
+- **P3.52 lever (c), found at $0:** the Worker's only user message is the Manager's brief, and the lawyer's own
+  words sit unused on `_cache_key_query`. (c) appends them after the brief, in code. Detail, seam plan and prices
+  are on P3.52's row. **This replaces "(the Manager's brief framing, or (b))" as the next step;** (b) stays open.
+- **Scripts moved out of the session scratchpad** to the gitignored `evidence/seam/s47/scratchpad_s47/`:
+  `count_changes.py` (P3.49's stored count), `grade_p349.py`, `mutants_p349.py` (run from `server_py/`),
+  `p352_turn1.py` and `p352_sections.py` (P3.52's stored analysis; pass `docs/prepilot-fixes/evidence/replay`),
+  the sweep log and the fold scripts. Read "scratchpad" in the entry above as that folder.
+- **Fix Tracker v52** published to the same URL (user request): see the tracker commit.
