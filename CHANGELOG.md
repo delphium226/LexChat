@@ -35,8 +35,21 @@ Currency (P3.49):
 
 Searching (P3.52, in progress):
 - A quick lookup now writes its legislation searches as plain sentences, which
-  the search ranks better than lists of quoted phrases. It does not yet find
-  s.38 of the Transport (Scotland) Act 2001 for the bus fare cap question.
+  the search ranks better than lists of quoted phrases.
+- The research is now given the lawyer's own question alongside the
+  assistant's research brief. Neither change yet makes it name s.38 of the
+  Transport (Scotland) Act 2001 as the provision for the bus fare cap question.
+
+Secondary legislation (P3.51, in progress):
+- When the research reads sections of an Act, it is now also told which
+  statutory instruments were made under those sections, and under the
+  lettered sections beside them, from the record of enabling powers. It has
+  not yet named the 2022 Order suspending local connection referrals in
+  Thomas's homelessness question.
+
+Case law (P3.50, in progress):
+- A judgment of up to 60,000 characters is now read in full rather than
+  summarised first. Summaries of Rex v Evans still miss its central point.
 
 ## 2026.10.4 — 2026-10-12
 

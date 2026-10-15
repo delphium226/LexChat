@@ -1,0 +1,8 @@
+{
+  "session_id": "p350_6347",
+  "base": "6347",
+  "note": "P3.50 acceptance (Session 48): session 6347's turn 1 only, Deep Research under 'case_law_only', as Thomas ran his Q12 (13 October 2026; the question is that turn verbatim). Graded: the report states as the case's central point that whether a person holds public office turns on the actual duties and responsibilities at the material time, not the formal designation of the role (Rex v Evans [2025] EWCA Crim 1150 at [37]-[43]), citing the judgment. Turn text is taken from the export by index and is never stored here.",
+  "turns": [
+    {"from_turn": 1, "research_mode": "case_law_only", "chat_mode": "deep_research"}
+  ]
+}

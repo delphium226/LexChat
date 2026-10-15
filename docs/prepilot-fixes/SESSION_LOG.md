@@ -9625,3 +9625,82 @@ restored. Session scripts and probe logs are in the gitignored `evidence/seam/s4
   `p352_turn1.py` and `p352_sections.py` (P3.52's stored analysis; pass `docs/prepilot-fixes/evidence/replay`),
   the sweep log and the fold scripts. Read "scratchpad" in the entry above as that folder.
 - **Fix Tracker v52** published to the same URL (user request): see the tracker commit.
+
+## Session 48 — 2026-10-13 to 2026-10-15 — Thomas's list: P3.52 lever (c), P3.51 and P3.50 built and kept, none accepted ($3.88)
+
+**Done:**
+- **Checks at the start:** the brief current on the branch (`c8c2da9` at the head, the five commits it named);
+  `main` one docs-only commit past what it said (`6810043`, "bring the documentation up to date with
+  v2026.10.4", on `origin`); the tree clean and pushed; suite **4,005**, `plan_lint` 0, `plan_status` 72 of 107,
+  5 in progress, 8 of 14.
+- **P3.52 lever (c)** (`dbbc718`): `utils/lawyer_words.with_lawyer_words` appends the lawyer's latest message
+  after the Manager's brief in the Worker's user message only (legislation research types; never Deep Research,
+  drafting, a consult or a script; cut past 4,000 characters). The log line, the audit's brief, P3.7's routed
+  lookup and the summariser keep the brief; P3.7 stays on the brief by measurement (1,916 stored delegations: the
+  question named an instrument in 112, the brief the same one in all 112, `lookup_from_question.py`).
+  `seam_replay` builds the Worker's message through the same function, `--as-sent` as the code at `--at-rev` had
+  it. 43 tests, 20 mutants caught. Seam A/B ($0.1442): no change in the first query's framing. Acceptance
+  `wave5_p352b` ($1.01): s.38 as the enabling provision 0 of 3, cited at all 2 of 3.
+- **P3.51 measured** ($0, `p351_measure.py`, `p351_lever_size.py`): 265 of 417 stored turns that rely on a
+  section whose record family holds instruments name none of them; a block on returned sections runs a median 3
+  lines a turn. **Built** (`9b57a6e`, the user's choice): the ENABLING POWER block after each section search,
+  pruned out of the limb and footer unless the report names an instrument; real blocks from the local record
+  (`p351_real_blocks.py`). 31 tests, 20 mutants caught.
+- **P3.50 measured** ($0, `p350_trace.py`, `p350_phrases.py`): the loss is summarisation ([43] in the raw text
+  21 of 21, in the summary 0 of 21). **Built** (`8ee3c2e`, the user's choice): judgments whole up to 60,000
+  characters, one per-tool threshold read by the summariser and both chat loops (`cap_tool_result`). 12 tests,
+  10 mutants caught.
+- **Acceptance** (one server session on `8ee3c2e`, user-agreed, caps $2, $2, $4): `wave5_p351` $0.80 (Q16: the
+  2022 Order 0 of 3), `wave5_p352c` $0.92 (Q17 through P3.51's block: 0 of 3), `wave5_p350` $1.00 (Q12: the
+  judgment whole 3 of 3, the actual-duties test 0 of 3). Graded by reading: `evidence/seam/s48/
+  acceptance_grades.md` and `p352b_grade.md`.
+- **Kept, all three, at the user's decision**; the halts on 6345 turn 1 a watch item.
+- **Sweeps:** `replay check` three times (about $0.003), `replay pin` twice; uvicorn (PIDs 2172 on `dbbc718`,
+  2868 on `8ee3c2e`) and the keep-awake helper (9500, 12568) by `Start-Process -PassThru`; `replay restore` each
+  time; all stopped, port 8000 free, no pin file.
+- **Folded:** FIX_PLAN (P3.50 and P3.51 `[~]`; Session 48 on the three rows; a new top order line; `plan_lint`
+  0, 0; `plan_status` 72 of 107, 7 in progress, 8 of 14); CHANGELOG *Unreleased*; CLAUDE.md; memory. Scripts
+  `p351_6354.json` and `p350_6347.json` added. Suite **4,089**.
+- **Spend: about $3.88** (seam $0.1442; sweeps $1.01, $0.80, $0.92, $1.00; checks about $0.003).
+
+**Surprises:**
+- **The chat loops cut every tool result at the model's threshold plus 4,000** (12,000 at the fallback),
+  separately from the summariser: handing a judgment over whole needed one per-tool definition read in three
+  places.
+- **No stored 6347 run had ever fetched the judgment** (the export's blank research type made every replay
+  `legislation_only`); 6346's P4.1 replays had, 21 times, and were the seam.
+- **Retrieval fixed, answer unchanged, three times over.** P3.50 put [43] in front of the Worker at every step
+  and no report carried it; P3.51 put the 2022 Order in front of it once and it was not named; P3.52's Worker
+  held s.38 in 3 of 6 runs and led with s.40. What remains in all three is selection or synthesis.
+- **A code block can feed the wrong choice:** in `wave5_p352c` rep 2 the made-under block's 2006 concession
+  scheme order was cited as confirming s.40 as the fare-cap power.
+- **One malformed revocation flag would have cost the block every instrument** (`category` raises); found by
+  the detector screen's fixture, now guarded per row.
+- **A test file leaked `_cache_key_query` through the request-config ContextVar** into later files (two
+  local-cache tests failed only in the full suite); its autouse fixture now resets the config.
+- **Conversational answers cite sections in words, not links:** a link-only count missed 6354 entirely; P3.51's
+  measure ties a plain-text cite to a section a tool returned.
+
+## Session 48 — handover for Session 49 (2026-10-15)
+
+**One session works the branch at a time.** Read this handover, then FIX_PLAN's top order line ("end of Session
+48"). Confirm the branch is pushed (`git status -sb`).
+
+**Take next:** the Session 48 brief's order unless the user says otherwise: P3.12, then P3.47, then the rest of
+the Session 46 order (P3.38, P3.46, P3.34, P3.28's instruction, P3.48). **Open, and the user's to order:** a
+selection or synthesis lever for P3.50, P3.51 and P3.52, which now hold the right text and state the wrong
+conclusion; measure at $0 first on `wave5_p350`, `wave5_p351` and `wave5_p352b`/`c`. P3.3 (his Q9), P3.2 and P3.17
+stay blocked on the lawyer pack.
+
+**State:** branch `fix/prepilot-defects` at this handover's commit; `main` at `6810043` (B6 plus a docs commit;
+not a release, the target runs `v2026.10.4` until a cut); 72 of 107, 7 in progress, 8 of 14; `plan_lint` 0;
+**4,089 tests**; **79 replay directories** (`wave5_p352b`, `wave5_p351`, `wave5_p352c`, `wave5_p350` new); no
+server, no pin, no keep-awake, the dev box's settings restored. Session scripts and logs are in the gitignored
+`evidence/seam/s48/`.
+
+**Watch items:** halts on 6345 turn 1 since (c) (2 of 6); P3.51's block feeding a wrong choice (Q17 rep 2).
+
+**Tools added:** `seam_replay worker --first-round --without-lawyer-words` (the brief alone); `--as-sent`
+rebuilds (c)'s block as the code at `--at-rev` wrote it.
+
+**Carried, the user's:** the Fix Tracker (v52 is the base; not updated this session); the next cut.
