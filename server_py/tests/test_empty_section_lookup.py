@@ -181,7 +181,7 @@ async def _chunk(*a, **k):
 
 
 def _seam(monkeypatch, section_raw=EMPTY, lookup_status="not_held", pages=None, log=None,
-          memo=None, suffix="", callback=True, seen=None, args=None, preface=()):
+          memo=None, suffix="", callback=True, seen=None, args=None, preface=(), budget=None):
     """A section search through `run_worker_tool`, the executor answering by tool
     and the read served from `pages`. Returns (result, server, lookups asked)."""
     srv = _Server(pages if pages is not None else {f"{LID}/made/data.xml": (200, _doc())})
@@ -202,7 +202,8 @@ def _seam(monkeypatch, section_raw=EMPTY, lookup_status="not_held", pages=None, 
         async def run_tool(name, a, result_suffix=""):
             return await run_worker_tool(name, a, "is a fee in pounds set?", _chunk, "m",
                                          search_log=log, tool_memo=memo,
-                                         empty_search_lookup=cb, result_suffix=result_suffix)
+                                         empty_search_lookup=cb, result_suffix=result_suffix,
+                                         context_budget=budget)
 
         async def cb(a):
             return await empty_section_lookup(a, done, run_tool, log=log, seen=seen)
@@ -213,7 +214,8 @@ def _seam(monkeypatch, section_raw=EMPTY, lookup_status="not_held", pages=None, 
             return await run_worker_tool(SECTIONS, dict(args or ARGS), "is a fee in pounds set?",
                                          _chunk, "m", search_log=log, tool_memo=memo,
                                          result_suffix=suffix,
-                                         empty_search_lookup=cb if callback else None)
+                                         empty_search_lookup=cb if callback else None,
+                                         context_budget=budget)
     return asyncio.run(go()), srv, asked
 
 
@@ -239,6 +241,42 @@ def test_an_empty_search_of_an_instrument_held_without_text_says_so(monkeypatch)
     assert "this index holds the record of SSI 1901/3 (The Widget Order 1901) but none of " \
            "its text, so code read" in out
     assert OLD_CLAUSE not in out
+
+
+@pytest.fixture
+def _over_budget(monkeypatch):
+    """Past the budget `run_worker_tool` summarises, which consults the shared
+    local prompt cache in the database: stubbed, as test_published_text does,
+    because a test's closing event loop would leave that transaction open and
+    the session's teardown would wait on its lock (found in Session 50)."""
+    monkeypatch.setattr("src.agent.agent_shared.summarise_for_query",
+                        AsyncMock(return_value=("Summary: a summary.", False)))
+    from src.services import local_prompt_cache as lpc
+    monkeypatch.setattr(lpc, "lookup", AsyncMock(return_value=None))
+    monkeypatch.setattr(lpc, "store", AsyncMock(return_value=None))
+    return {"used": 300_000, "limit": 250_000}
+
+
+@pytest.mark.parametrize("status,phrase", [
+    ("not_held", "SSI 1901/3 is one this index lacks"),
+    ("held_without_text", "holds the record of SSI 1901/3 but none of its text, so there was nothing"),
+])
+def test_past_the_context_budget_the_summarised_lookup_still_decides(monkeypatch, _over_budget,
+                                                                    status, phrase):
+    """6383 t1 r3 (Session 50): past the Worker's context budget every result is
+    summarised, the lookup's JSON included, so its status could not be parsed
+    from it; three instruments then kept the old note and got no text. The
+    outcome is read from the scope record, written from the raw result."""
+    log = []
+    out, _, asked = _seam(monkeypatch, lookup_status=status, log=log, budget=_over_budget)
+    assert len(asked) == 1
+    assert phrase in out and OLD_CLAUSE not in out
+    assert pt.FETCHED_OPEN in out  # the text (here its summary) follows the note
+
+
+def test_past_the_context_budget_a_held_lookup_still_leaves_the_note(monkeypatch, _over_budget):
+    out, srv, _ = _seam(monkeypatch, lookup_status="held", budget=_over_budget)
+    assert OLD_CLAUSE in out and srv.asked == []
 
 
 def test_a_held_lookup_leaves_the_note_and_reads_nothing(monkeypatch):

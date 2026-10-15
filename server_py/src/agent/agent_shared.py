@@ -866,9 +866,20 @@ async def _empty_search_text(args: dict, scope_note: str, result_suffix: str,
     start = len(search_log) if search_log is not None else 0
     looked = await empty_search_lookup(args)
     entries = list(search_log[start:]) if search_log is not None else []
-    got = parse_lookup_result(looked) if looked else None
-    if not got:
+    if not looked:
         return scope_note, entries
+    got = parse_lookup_result(looked) or {}
+    if not got.get("status"):
+        # Past the Worker's context budget every result is summarised, a
+        # lookup's included, and a summary is no longer its JSON (Session 50:
+        # 6383 t1 r3 lost three instruments' text this way). The scope record
+        # was written from the raw result: read the outcome from it. A HELD
+        # outcome is not in it (`empty_section_lookup` takes it out), so it
+        # still leaves the note as it was.
+        from ..utils.search_scope import LOOKUP_ENTRY
+        recs = [e for e in (search_log or []) if e.get("tool") == LOOKUP_ENTRY
+                and e.get("legislation_id") == lid]
+        got = recs[-1] if recs else {}
     status = got.get("status")
     note = empty_section_note(args, status, label=got.get("label") or "")
     if not note:
