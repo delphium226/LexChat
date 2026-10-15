@@ -24,8 +24,9 @@ route cut them.
   query-matched block, one whose heading shares a word with it (so an
   unrelated paragraph matched on another query word is never added);
 * only where the answer cites the paragraph's number nowhere (in a list or a
-  range too), and does not already say what its excerpt says
-  (a restatement: 60% of its content words in one answer sentence);
+  range too; but see "named by number only" below), and does not already say
+  what its excerpt says (a restatement: 60% of its content words in one
+  answer sentence);
 * once per paragraph however many blocks handed it, at most `max_lines`;
 * the excerpt is whole sub-paragraphs within `MAX_EXCERPT_CHARS`, the rule
   first: the first operative one, then the leading "This paragraph applies
@@ -44,6 +45,22 @@ application line or its qualifier is never carried; a sub-paragraph the answer
 already says is left out (60% of its words in one sentence, the paragraph's
 shared boilerplate words aside); `SUB_LINE_WITH_BARE` says whether an answer
 that also names the paragraph whole gets it.
+
+**A paragraph named by number only (Session 49, B4; user decision
+2026-10-15: measured first).** A handed paragraph the answer cites only by
+its number ("paragraph 44", "paragraphs 42 and 43", "Paragraphs 40–43") and
+never in its words gets the paragraph line, as a dropped sibling does, after
+the answer paragraph holding its first citation, sharing the `max_lines` cap.
+"Never in its words": the sentences citing it share fewer than
+`_NAMED_ONLY_SHARED` of its distinctive words (`misattributed_paragraphs`'
+words, from its text and not its heading, in no other handed paragraph of its
+unit), and the answer says none of its operative sub-paragraphs (the
+sub-paragraph line's test). No line carries a heading alone here, since the
+answer has named the paragraph already. A paraphrase ("an interim moratorium applies
+while an application is pending or a notice of intention is filed") shares
+four or more such words and gets nothing. Not where `misattributed_paragraphs`
+reports the paragraph's number given to another paragraph's words: a line of
+its own words under that sentence would read as confirming it.
 
 `misattributed_paragraphs` is the second half: a sentence that cites one
 handed paragraph in the words of another (`wave4_b11_sweep` rep 2 gave one
@@ -76,6 +93,19 @@ SUB_LINE_WITH_BARE = True
 # A word in this many of a paragraph's sub-paragraphs is boilerplate to the
 # sub-paragraph line's restatement test (`uncited_excerpt`).
 _BOILERPLATE_SUBS = 3
+# A paragraph's distinctive words (`_distinct_words`), read by
+# `misattributed_paragraphs` and the named-by-number-only rule.
+_DISTINCT_MIN = 5
+# Generic words only: a word every handed paragraph shares is not distinctive
+# anyway (it is removed by the comparison with the others).
+_DISTINCT_STOP = frozenset("""paragraph paragraphs schedule section which where under other
+there their shall would""".split())
+# Session 49 (B4): a paragraph cited by number only is named without its words
+# when the sentences citing it share fewer than this many of its distinctive
+# words. Two, not one: "Paragraphs 40–43 impose the moratorium" shares one
+# word, by chance, with a sub-paragraph of 43 about a court imposing a
+# condition; every stored paraphrase shares four or more.
+_NAMED_ONLY_SHARED = 2
 
 _BLOCK = re.compile(re.escape(FETCHED_OPEN) + r"(?P<head>[^\]]*)\]\n(?P<body>.*?)\n"
                     + re.escape(FETCHED_CLOSE), re.S)
@@ -283,16 +313,10 @@ def cited_in_part(text: str, cited: Iterable[str]) -> bool:
     return bool(cited) and bool(ops) and 2 * len(cited & set(ops)) <= len(ops)
 
 
-def uncited_excerpt(text: str, cited: Iterable[str], said: list,
-                    cap: int = MAX_EXCERPT_CHARS) -> str:
-    """Batch 13 B (P3.12): for a paragraph the answer cites only by some of
-    its sub-paragraphs, the operative sub-paragraphs it does not cite, whole
-    and in order, while they fit `cap` ("" when none does). Not taken: a
-    sub-paragraph the answer cites (`cited`), an application line or its
-    qualifier (anywhere in the paragraph), an unnumbered piece, and one the
-    answer already says (`said`: the content words of each answer sentence;
-    60% of the sub-paragraph's in one, as the paragraph line's guard)."""
-    cited = {str(c).upper() for c in cited}
+def _said_subs(text: str, said: list) -> set:
+    """The numbers of a paragraph's operative sub-paragraphs the answer
+    already says (`said`: the content words of each answer sentence; 60% of
+    the sub-paragraph's in one, as the paragraph line's guard)."""
     # A word in three or more of the paragraph's sub-paragraphs is its
     # boilerplate (one stored paragraph closes five of its limbs with the same
     # two exceptions, word for word), and says nothing about which limb an
@@ -301,13 +325,28 @@ def uncited_excerpt(text: str, cited: Iterable[str], said: list,
     seen = Counter(w for _, t in _subparagraphs(text)
                    for w in set(_CONTENT_WORD.findall(t.lower())))
     common = {w for w, k in seen.items() if k >= _BOILERPLATE_SUBS}
-    parts = []
+    out = set()
     for n, t in _operative(text):
-        if n.upper() in cited:
-            continue
         words = set(_CONTENT_WORD.findall(t.lower()))
         cw = (words - common) or words
         if cw and any(len(cw & s) >= 0.6 * len(cw) for s in said):
+            out.add(n.upper())
+    return out
+
+
+def uncited_excerpt(text: str, cited: Iterable[str], said: list,
+                    cap: int = MAX_EXCERPT_CHARS) -> str:
+    """Batch 13 B (P3.12): for a paragraph the answer cites only by some of
+    its sub-paragraphs, the operative sub-paragraphs it does not cite, whole
+    and in order, while they fit `cap` ("" when none does). Not taken: a
+    sub-paragraph the answer cites (`cited`), an application line or its
+    qualifier (anywhere in the paragraph), an unnumbered piece, and one the
+    answer already says (`_said_subs`)."""
+    cited = {str(c).upper() for c in cited}
+    already = _said_subs(text, said)
+    parts = []
+    for n, t in _operative(text):
+        if n.upper() in cited or n.upper() in already:
             continue
         piece = f"({n}) {t}"
         if len(" ".join(parts + [piece])) > cap:
@@ -462,6 +501,31 @@ def _siblings(key, paras, blocks) -> list:
     return out
 
 
+def _distinct_words(text: str) -> set:
+    """Words of `_DISTINCT_MIN` letters or more, `_DISTINCT_STOP` aside."""
+    return {w for w in re.findall(r"[a-z]{%d,}" % _DISTINCT_MIN, str(text or "").lower())
+            if w not in _DISTINCT_STOP}
+
+
+def _named_without_words(key, paras: dict, sentences: list) -> bool:
+    """Session 49 (B4): whether the answer sentences citing paragraph `key`
+    by number share fewer than `_NAMED_ONLY_SHARED` of its distinctive words:
+    in its text (its heading is how an answer names it), and in no other
+    handed paragraph of its unit. False when no single sentence cites it."""
+    others = [q["text"] for k, q in paras.items() if k[:2] == key[:2] and k != key]
+    own = _distinct_words(paras[key]["text"]) - set().union(*map(_distinct_words, others))
+    citing = [s for s in sentences if key[2] in _cited_numbers(s)]
+    shared = set().union(*(_distinct_words(s) & own for s in citing))
+    return bool(citing) and len(shared) < _NAMED_ONLY_SHARED
+
+
+def _after_paragraph(answer: str, at: int) -> int:
+    """Where a line goes for a citation at `at`: the end of the answer
+    paragraph holding it."""
+    brk = re.compile(r"\n[ \t]*\n").search(answer, at)
+    return brk.start() if brk else len(answer.rstrip())
+
+
 def restore_dropped_paragraphs(answer: str, records: Optional[Iterable[dict]],
                                max_lines: int = _MAX_LINES) -> tuple:
     """Put back a schedule paragraph code handed over and the answer left
@@ -469,11 +533,14 @@ def restore_dropped_paragraphs(answer: str, records: Optional[Iterable[dict]],
     if not answer or not records:
         return answer, 0
     try:
-        paras, blocks = _group([r for r in records if isinstance(r, dict)])
+        records = [r for r in records if isinstance(r, dict)]
+        paras, blocks = _group(records)
         cited = _cited_numbers(answer)
         parts = _citations(answer)
         masked = _MD_LINK.sub(lambda m: m.group(1), answer)
-        sentences = [set(_CONTENT_WORD.findall(s.lower())) for s in _SENT.split(masked)]
+        split = _SENT.split(masked)
+        sentences = [set(_CONTENT_WORD.findall(s.lower())) for s in split]
+        misread = {c for c, _meant, _s in misattributed_paragraphs(answer, records)}
         adds = []      # (insert position, line)
         for key, p in paras.items():
             if len(adds) >= max_lines:
@@ -483,14 +550,21 @@ def restore_dropped_paragraphs(answer: str, records: Optional[Iterable[dict]],
             if key[2] in cited:
                 # Batch 13 B: a paragraph the answer cites only by some of
                 # its sub-paragraphs gets its uncited operative ones.
-                c = parts.get(key[2]) or {"subs": set(), "bare": True, "at": 0}
+                c = parts.get(key[2]) or {"subs": set(), "bare": True, "at": cited[key[2]]}
                 if ((SUB_LINE_WITH_BARE or not c["bare"])
                         and cited_in_part(p["text"], c["subs"])):
                     ex = uncited_excerpt(p["text"], c["subs"], sentences)
                     if ex:
-                        brk = re.compile(r"\n[ \t]*\n").search(answer, c["at"])
-                        pos = brk.start() if brk else len(answer.rstrip())
-                        adds.append((pos, render_line(p, ex)))
+                        adds.append((_after_paragraph(answer, c["at"]), render_line(p, ex)))
+                # Session 49 (B4): one cited by number only, never in its
+                # words, gets the paragraph line (not a heading alone: the
+                # answer has named it already).
+                elif (not c["subs"] and key[2] not in misread
+                        and not _said_subs(p["text"], sentences)
+                        and _named_without_words(key, paras, split)):
+                    ex = excerpt(p["text"])
+                    if ex:
+                        adds.append((_after_paragraph(answer, c["at"]), render_line(p, ex)))
                 continue
             sibs = [k for k in _siblings(key, paras, blocks) if k[2] in cited]
             if not sibs:
@@ -500,9 +574,7 @@ def restore_dropped_paragraphs(answer: str, records: Optional[Iterable[dict]],
             if cw and any(len(cw & s) >= 0.6 * len(cw) for s in sentences):
                 continue
             at = min(cited[k[2]] for k in sibs)
-            brk = re.compile(r"\n[ \t]*\n").search(answer, at)
-            pos = brk.start() if brk else len(answer.rstrip())
-            adds.append((pos, render_line(p)))
+            adds.append((_after_paragraph(answer, at), render_line(p)))
         if not adds:
             return answer, 0
         # Lines for one position keep the paragraphs' handed order; positions
@@ -518,19 +590,14 @@ def restore_dropped_paragraphs(answer: str, records: Optional[Iterable[dict]],
         return answer, 0
 
 
-_DISTINCT_MIN = 5
-# Generic words only: a word every handed paragraph shares is not distinctive
-# anyway (it is removed by the comparison below).
-_DISTINCT_STOP = frozenset("""paragraph paragraphs schedule section which where under other
-there their shall would""".split())
-
-
 def misattributed_paragraphs(answer: str, records: Optional[Iterable[dict]],
                              min_shared: int = 3) -> list:
     """[(cited, apparently meant, sentence)] where a sentence cites exactly one
     handed paragraph P of a unit and shares at least `min_shared` of another
     handed paragraph Q's distinctive words (in Q's text and in no other handed
-    paragraph of that unit) and none of P's. Reports only. Never raises."""
+    paragraph of that unit) and none of P's. Reports only. Never raises.
+    (`restore_dropped_paragraphs` reads it to withhold a named-by-number-only
+    line from P.)"""
     try:
         paras, _blocks = _group([r for r in records or [] if isinstance(r, dict)])
         by_unit: dict = {}
@@ -541,9 +608,7 @@ def misattributed_paragraphs(answer: str, records: Optional[Iterable[dict]],
         for (lid, unit), ps in by_unit.items():
             if not _unit_rx(unit).search(answer or ""):
                 continue
-            words = {n: {w for w in re.findall(r"[a-z]{%d,}" % _DISTINCT_MIN,
-                                               (p["heading"] + " " + p["text"]).lower())
-                         if w not in _DISTINCT_STOP} for n, p in ps.items()}
+            words = {n: _distinct_words(p["heading"] + " " + p["text"]) for n, p in ps.items()}
             distinct = {n: w - set().union(*(words[o] for o in words if o != n))
                         for n, w in words.items()}
             for s in _SENT.split(masked):
@@ -551,7 +616,7 @@ def misattributed_paragraphs(answer: str, records: Optional[Iterable[dict]],
                 if len(set(nums)) != 1:
                     continue
                 p_num = nums[0]
-                sw = set(re.findall(r"[a-z]{%d,}" % _DISTINCT_MIN, s.lower()))
+                sw = _distinct_words(s)
                 if sw & distinct[p_num]:
                     continue
                 for q, d in distinct.items():

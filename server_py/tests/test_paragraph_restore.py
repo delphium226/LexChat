@@ -372,7 +372,10 @@ def test_nothing_is_added_unless_the_answer_cites_a_sibling():
     "paragraph 2 and paragraph 1 and paragraph 3",
 ])
 def test_a_paragraph_the_answer_cites_in_any_form_is_not_repeated(cites):
-    answer = f"Under {cites} of Schedule 5, fees and licences apply."
+    # The answer gives each paragraph's words: one cited by number only,
+    # never in its words, gets a line (Session 49, tested below).
+    answer = (f"Under {cites} of Schedule 5, a licence lasts one year, the fee is set by the "
+              "Minister and an inspector may take samples of widgets.")
     assert _restore(answer, _cut_block()) == (answer, 0)
 
 
@@ -519,8 +522,11 @@ def _shops(answer, paras=("7", "8"), **kw):
     return pr.restore_dropped_paragraphs(answer, recs, **kw)
 
 
+# Paragraph 8 is cited in its own words: one cited by number only gets a line
+# of its own (Session 49, tested below).
+P8_SAID = "Paragraph 8 deals with gadget shops, which must display their register."
 SHOP_ANSWER = ("Under paragraph 7(4) of Schedule 5 to the Widget Order 1901, a shop may not "
-               "open on a Sunday without consent.\n\nParagraph 8 deals with gadget shops.")
+               "open on a Sunday without consent.\n\n" + P8_SAID)
 
 
 def test_a_paragraph_cited_by_one_subparagraph_gets_its_uncited_operative_ones():
@@ -574,7 +580,7 @@ def test_an_unnumbered_opening_is_never_carried_in_the_uncited_line():
 
 def test_the_subparagraph_line_follows_the_first_citation():
     answer = ("Under paragraph 7(4) of Schedule 5, a shop may not open on a Sunday.\n\n"
-              "Paragraph 8 deals with gadget shops.\n\nAs said, paragraph 7(4) applies.")
+              + P8_SAID + "\n\nAs said, paragraph 7(4) applies.")
     new, n = _shops(answer)
     assert n == 1 and new.split("\n\n")[1].startswith(LINE7)
 
@@ -584,14 +590,14 @@ def test_the_subparagraph_line_lands_after_the_answer_paragraph_citing_it():
     # right after that paragraph, not after the answer's first break.
     answer = ("Schedule 5 to the Widget Order 1901 regulates widget dealers.\n\n"
               "Under paragraph 7(4) of Schedule 5, a shop may not open on a Sunday.\n\n"
-              "Paragraph 8 deals with gadget shops.")
+              + P8_SAID)
     new, n = _shops(answer)
     blocks = new.split("\n\n")
     assert n == 1
     assert blocks[0] == "Schedule 5 to the Widget Order 1901 regulates widget dealers."
     assert blocks[1].startswith("Under paragraph 7(4)")
     assert blocks[2].startswith(LINE7)
-    assert blocks[3] == "Paragraph 8 deals with gadget shops."
+    assert blocks[3] == P8_SAID
 
 
 def test_more_than_half_of_the_operative_subparagraphs_cited_gets_no_line():
@@ -691,7 +697,7 @@ def test_no_subparagraph_line_unless_the_answer_mentions_the_unit():
 
 @pytest.mark.parametrize("order", [("7", "8"), ("8", "7")])
 def test_the_subparagraph_and_paragraph_lines_share_the_cap(order):
-    answer = SHOP_ANSWER.replace("Paragraph 8 deals", "It deals")
+    answer = SHOP_ANSWER.replace(P8_SAID, "It deals with gadget shops.")
     # Paragraph 8 is now a dropped sibling and 7 is cited in part: two lines,
     # or one under a cap of one, whichever kind comes first.
     assert _shops(answer, paras=order)[1] == 2
@@ -730,6 +736,134 @@ def test_a_paragraph_cited_in_part_in_a_matched_block_gets_its_line():
     assert [r["para"] for r in recs] == ["7", "8"]
     new, n = pr.restore_dropped_paragraphs(SHOP_ANSWER, recs)
     assert n == 1 and LINE7 + "\"(2) A shop must display its licence." in new
+
+
+# --- a paragraph named by number only (Session 49, B4) --------------------------
+#
+# A handed paragraph the answer cites only by its number and never in its
+# words gets the paragraph line. On the stored runs: "paragraph 44" named as
+# the point a moratorium ends, with nothing of what paragraph 44 says.
+
+
+def test_a_paragraph_named_by_its_number_alone_gets_its_line():
+    answer = SHOP_ANSWER.replace(P8_SAID, "Paragraph 8 deals with gadget shops.")
+    new, n = _shops(answer)
+    assert n == 2
+    assert new.endswith(
+        "Paragraph 8 deals with gadget shops.\n\nAlso in "
+        f"[Schedule 5]({URL}), paragraph 8 (Gadget shops): \"(1) A gadget shop must display "
+        "its register.\"")
+
+
+def test_the_paragraphs_heading_is_not_its_words():
+    # "inspections" is in paragraph 3's heading only; "samples" in its text.
+    answer = ("Under paragraph 2 of Schedule 5, the fee is set by the Minister.\n\n"
+              "Paragraph 3 deals with inspections and samples.")
+    new, n = _restore(answer, _cut_block(paras=("2", "3")))
+    assert n == 1 and new.endswith(
+        f"Also in [Schedule 5]({URL}), paragraph 3 (Widget inspections): \"(1) An inspector may "
+        "enter a widget shop at any reasonable hour. (2) An inspector may take samples of "
+        "widgets.\"")
+
+
+@pytest.mark.parametrize("sentence,line", [
+    # One of paragraph 3's distinctive words (inspector): named only.
+    ("Paragraph 3 of Schedule 5 gives an inspector powers.", True),
+    # Two (inspector, widgets): a paraphrase, though no sub-paragraph is said.
+    ("Paragraph 3 of Schedule 5 gives an inspector powers over widgets.", False),
+])
+def test_a_paraphrase_sharing_two_distinctive_words_gets_no_line(sentence, line):
+    new, n = _restore(sentence, _cut_block(paras=("3",)))
+    assert ("paragraph 3 (Widget inspections)" in new) is line and n == int(line)
+
+
+def test_a_word_another_handed_paragraph_has_is_not_distinctive():
+    # "display" and "register" are in paragraph 7's text as well as 8's.
+    answer = "Paragraph 8 of Schedule 5 covers display and register rules."
+    new, n = _shops(answer)
+    assert "paragraph 8 (Gadget shops)" in new
+
+
+def test_a_subparagraph_the_answer_says_withholds_the_line():
+    # One distinctive word (gadget), but 8(1) is said in full.
+    answer = "Paragraph 8 of Schedule 5: a gadget shop must display its register."
+    new, n = _shops(answer, paras=("8",))
+    assert (new, n) == (answer, 0)
+
+
+def test_a_paragraph_given_anothers_words_gets_no_line():
+    # Paragraph 2 is cited in paragraph 3's words (reported below): a line of
+    # paragraph 2's own words would read as confirming the attribution.
+    answer = ("Under paragraph 2 of Schedule 5, an inspector may enter a widget shop at any "
+              "reasonable hour and take samples.")
+    recs = pr.handed_paragraphs(_cut_block())
+    assert [(c, q) for c, q, _s in pr.misattributed_paragraphs(answer, recs)] == [("2", "3")]
+    new, n = pr.restore_dropped_paragraphs(answer, recs)
+    assert "paragraph 2 (" not in new
+    assert n == 1 and "paragraph 1 (Widget licences)" in new
+
+
+def test_a_range_naming_paragraphs_gets_a_line_for_each_in_handed_order():
+    answer = "Paragraphs 1 to 3 of Schedule 5 set the widget rules.\n\nIn case law, nothing."
+    new, n = _restore(answer, _cut_block())
+    blocks = new.split("\n\n")
+    assert n == 3
+    assert [b[:60] for b in blocks[1:4]] == [
+        f"Also in [Schedule 5]({URL}), paragraph {k} ("[:60] for k in "123"]
+    assert blocks[4] == "In case law, nothing."
+
+
+def test_the_line_lands_after_the_answer_paragraph_citing_it_and_shares_the_cap():
+    answer = ("Schedule 5 to the Widget Order 1901 regulates shops.\n\n"
+              "Paragraph 8 deals with gadget shops.\n\nIn case law, nothing.")
+    new, n = _shops(answer, paras=("8",))
+    assert n == 1 and new.split("\n\n")[2].startswith(
+        f"Also in [Schedule 5]({URL}), paragraph 8 (Gadget shops)")
+    # Handed with 7 (a dropped sibling, first in handed order) under a cap of one.
+    new, n = _shops(answer, max_lines=1)
+    assert n == 1 and "paragraph 7 (Widget shops)" in new and "paragraph 8 (" not in new
+
+
+def test_a_number_the_subparagraph_reader_misses_still_places_its_line():
+    # "paragraphs 7(4) 8": 8 is cited, but not in `_citations`; its line goes
+    # after the answer paragraph holding the citation, not the first one.
+    answer = ("Schedule 5 to the Widget Order 1901 regulates shops.\n\n"
+              "Under paragraphs 7(4) 8 of Schedule 5, a shop may not open on a Sunday.\n\n"
+              "In case law, nothing.")
+    assert "8" not in pr._citations(answer) and "8" in pr._cited_numbers(answer)
+    blocks = _shops(answer)[0].split("\n\n")
+    assert blocks[0] == "Schedule 5 to the Widget Order 1901 regulates shops."
+    assert any("paragraph 8 (Gadget shops)" in b for b in blocks[2:])
+
+
+def test_no_line_carries_a_heading_alone():
+    long_rule = "1) An inspector may enter " + "a widget shop, " * 40 + "at any reasonable hour. \n"
+    text = SCHED.replace("1) An inspector may enter a widget shop at any reasonable hour. \n",
+                         long_rule)
+    answer = "Paragraph 3 of Schedule 5 matters."
+    assert _restore(answer, _cut_block(paras=("3",), text=text)) == (answer, 0)
+
+
+def test_a_paragraph_cited_by_its_subparagraphs_gets_no_named_only_line():
+    # 7(2)-(4): more than half of 7's operative sub-paragraphs, so no
+    # sub-paragraph line, and not named by number only either.
+    answer = "Under paragraph 7(2)-(4) of Schedule 5, see the rules."
+    assert _shops(answer, paras=("7",)) == (answer, 0)
+
+
+def test_words_in_a_sentence_not_citing_the_paragraph_do_not_count():
+    # The second sentence carries two of paragraph 3's words but cites
+    # nothing: the sentence citing it names it only.
+    answer = "Paragraph 3 of Schedule 5 matters. An inspector visits widgets."
+    new, n = _restore(answer, _cut_block(paras=("3",)))
+    assert n == 1 and "paragraph 3 (Widget inspections)" in new
+
+
+def test_named_only_needs_a_sentence_citing_the_paragraph():
+    paras, _blocks = pr._group(pr.handed_paragraphs(_cut_block(paras=("3",))))
+    key = next(iter(paras))
+    assert pr._named_without_words(key, paras, ["Paragraph 3 matters."]) is True
+    assert pr._named_without_words(key, paras, ["Schedule 5 matters."]) is False
 
 
 # --- the wrong pinpoint (reported, not changed) --------------------------------
