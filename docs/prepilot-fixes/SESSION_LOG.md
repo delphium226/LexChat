@@ -9810,3 +9810,60 @@ handread_s49.md`.
 unused on `wave5_p338` (36.4%, P4.26's bar).
 
 **Carried, the user's:** the Fix Tracker (v53 is the base; not updated this session); the next cut.
+
+**Addendum to Session 49 (2026-10-15, after the fold): facts for the next steps that the rows do not carry.**
+- **P3.38 finding 1, held without text (6409 export t7, `wave5_p338` run turn 3, 3 of 3).** The Worker's own
+  report says it, not the Manager: "because the text of the Regulations is not held in the index, their saving
+  and transitional provisions cannot be verified" (r1; r2's second delegation and r3 the same), with the read of
+  `ssi/2025/119` (7,895 characters, whole, regs 3-6 in it) in the same lookup result. The code text is the
+  published-text branch of `utils/instrument_lookup.py` (about lines 351-362): "HELD WITHOUT TEXT. The index
+  holds its record but none of its text, so a search inside it returns nothing; code read its text from
+  legislation.gov.uk instead, and that text follows this block. Report it as a record this index holds without
+  its text, never as not found, and say that its text was read from legislation.gov.uk." It never says to answer
+  from that text. The block's own header (`utils/published_text.py` about line 410) also opens "this index holds
+  the record of ... but none of its text". **The contrast payload:** run turn 4 (export t8, "SSI 2025/119") got
+  the same 7,895-character result and answered regs 3-6 correctly 3 of 3, so the difference is the brief
+  ("What about the Regulations?" against the number alone), not the block. **Seam:** `python -m
+  tools.seam_replay worker --run ../docs/prepilot-fixes/evidence/replay/wave5_p338/p37_6409_rep1.json --turn 3
+  --as-sent --at-rev recorded --date recorded` (from `server_py/`; reps 1 and 3 `--delegation 1`; rep 2's turn 3
+  has two delegations, the first lost to an empty completion, so `--delegation 2`; `--delegation` is 1-based);
+  check the rebuilt payload carries the block (`--dry-run`) before paying for a draw.
+- **P3.38 finding 2, the empty section search (6383 export t1, `p37r_6383` run turn 1).** In reps 1 and 2 the
+  Worker ran `search_legislation_sections` for "£" on all 37 s.95 instruments without a lookup; six came back
+  empty (final 431 characters: `ssi/2021/122`, `ssi/2022/326`, `ssi/2025/195`, `ssi/2025/282`, `ssi/2025/336`,
+  `ssi/2026/170`). `published_text.trigger` (`utils/published_text.py:148`) reads only a `lookup_legislation`
+  result (not held, held without text) and a `get_legislation_text` result (empty or "Legislation not found"), so
+  nothing was read. The empty search's note is `utils/search_scope.py` about lines 457-464 ("That means the
+  ranked search did not surface one — NOT that the instrument lacks such a provision, and NOT that the
+  instrument is unavailable"), untrue for an instrument the index does not hold. Rep 1 then wrote "The remaining
+  20 instruments made under this power do not feature the '£' symbol"; rep 2 made no claim and never answered
+  for 2026/170. In rep 3 the Worker looked 2026/170 up (not held), the read fired, and the block also rode on its
+  section search (27,321 characters, summarised at the 8,000 fallback for the query "£"); the answer gave three
+  examples and never said whether 2026/170 carries "£". **Not established:** whether the five other empty ids
+  are held (no stored lookup of them; a live LEX lookup needs the user's agreement); the made-under record
+  (P3.31) holds `ssi/2026/170`. **Grader gap:** `replay_report negatives` graded only r1's turn 3, not r1 t1's
+  negative.
+- **P3.38 finding 3, the `lookup` bar.** The rule is `tools/replay_report.py` about line 7703 ("prose does not
+  say it is not held": the prose, footer removed, must say so). The four findings: 6373 r3 t2; 6409 r2 t9 and
+  t11; 6409 r3 t9 (export numbering). Each answer leads with the text read; the footer says not held.
+- **What each `wave5_p338` run cost** (pricing a re-run): `p37_6409` $0.41, $0.82 (a lost report and a
+  re-delegation), $0.39; `p37_6373` $0.21, $0.17, $0.27; `p37r_6383` $0.49, $0.68, $0.27; 6410 $0.14, $0.16,
+  $0.14 (n=3 all four: $4.16).
+- **Session 49's scripts** (gitignored `evidence/seam/s49/`, run from `server_py/`): B4 `b4_measure.py` (set
+  `B4_CONTROL=0` when importing it after the build), `b4_refine.py`, `b4_proto.py`, `b4_final.py`,
+  `b4_dryrun.py` (HEAD against the working tree), `b4_corpus.py`, `screen_b4.py`, `mutants_b4.py`; P3.47
+  `p347_scan.py`, `p347_validate.py`, `p347_holds.py`, `p347_dryrun.py` (prototype), `p347_dryrun_built.py`
+  (HEAD against the working tree, every stored summary; reusable for any change to `summary_citations`),
+  `mutants_p347.py`; P3.38 `dump_p338.py` (one run file per argument), `p338_claims.txt`; graders
+  `grade_all_wave5_p312.txt`, `grade_all_wave5_p338.txt`; sweep logs `sweep_p312.txt`, `sweep_p338.txt`;
+  `fold_s49.py`, `fold_s49_text.py`, `tracker_v54.py`. Hand-reads: gitignored `evidence/rubrics/handread_s49.md`.
+- **The 6335 seam drafts are Worker reports, not Manager answers:** the answer seam's restore runs on the
+  Manager's answer, so a measure over seam drafts is a proxy (as batch 13 B's was).
+- **Confirmed hazard:** Python containing backslashes in a bash heredoc is mangled even with a quoted `'EOF'`
+  delimiter in this shell; write the script with the Write or Edit tool.
+- **An untracked `docs/deployment/PARLICHAT_COHOSTING_PLAN.md`** appeared during the session, not this
+  session's; left untouched and unstaged.
+- **Fix Tracker v54** published to the same URL at the user's request (version id `1792070145-7963`): P3.12 and
+  P3.47 Fixed (`fixed: "2026-10-15"`, Next release; the lede names four Next-release rows), the In-progress note
+  and Next rewritten, a 15 October note; 103 rows (71 Fixed, 6 In progress, 16 Verified, 5 Blocked, 5 to be
+  verified). The live v53 was byte-identical to the repo source before the edit.
