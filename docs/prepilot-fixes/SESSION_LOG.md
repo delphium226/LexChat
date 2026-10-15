@@ -9867,3 +9867,128 @@ unused on `wave5_p338` (36.4%, P4.26's bar).
   P3.47 Fixed (`fixed: "2026-10-15"`, Next release; the lede names four Next-release rows), the In-progress note
   and Next rewritten, a 15 October note; 103 rows (71 Fixed, 6 In progress, 16 Verified, 5 Blocked, 5 to be
   verified). The live v53 was byte-identical to the repo source before the edit.
+
+## Session 50 — 2026-10-15 — P3.38 done; P1.7 found, booked and built (Gemini never saw the text beside a JSON tool result) ($8.13)
+
+**Done:**
+- **Checks at the start:** the brief current (`4fefc66` at the head and the five commits it named; `main` at
+  `6810043`); the tree clean bar the untracked `docs/deployment/PARLICHAT_COHOSTING_PLAN.md` (not ours, left
+  untouched); suite **4,131**, `plan_lint` 0, `plan_status` 74 of 107, 6 in progress, 8 of 14; branch pushed.
+- **P3.38 finding 1 measured ($0, `evidence/seam/s50/f1_measure.py`, `f1_measure.txt`): the premise was wrong.**
+  Over all 25 stored delegations carrying a P3.38 block, the routed brief (P3.7's lookup, the user message)
+  used the text 16 of 16; the Worker's own lookup (the tool result: the JSON, then the block) 0 of 8. The
+  HELD WITHOUT TEXT sentence the Session 49 addendum blamed was in the PASSING turn (t8's routed brief), not
+  in t7's payload. **Seam** (`f1_seam.py`, the t7 payloads rebuilt as sent with P3.7's routed block in the
+  brief, which `--as-sent` leaves out; user-agreed, cap $3.00): control DENIED 3 of 3; lever A (a sentence in
+  the block) and lever B (the routed sentence in the own-lookup result) and both, 0 of 27; t8 with A still 3
+  of 3; diagnostics D3 (t8's brief) 0 of 3, D1 (the text moved into the brief) 3 of 3, D2 (the lookup's JSON
+  stripped) 3 of 3. **A synthetic probe on the product's payload path (`f1_truncation.py`) showed why:**
+  through OpenRouter, a Google model loses every piece of text beside a JSON object in a tool result (a note
+  after the JSON 0 of 2, before it 0 of 2, alone 2 of 2, on the Vertex and AI Studio upstreams); our
+  converter passes the string unchanged; a text content part does not help, one JSON string field does (2 of
+  2 on each upstream). Wrapping every tool result on the real t7 payloads: USED 9 of 9 (regs 3-6 stated from
+  the text, the enabling power too). **Reach** (`json_hidden_scope.py`): all 81 stored directories and all
+  176 pre-pilot messages ran on `google/gemini-3.1-pro-preview`; 13,031 of 22,236 stored Worker tool results
+  carried code text beside JSON (NEXT STEP 8,227, SEARCH SCOPE 7,599, CHANGE RECORD 1,335, ENABLING POWER 736,
+  CURRENCY 697, PROVISION FETCHED BY CODE 109). Seam spend $1.09.
+- **P1.7 booked and built (user decision: a new P1 row, Bug; `00aa73f`, booked `2475429`).**
+  `openrouter_client._wrap_tool_results`: a `google/*` model is sent each tool result that is not wholly JSON as
+  `{"result": ...}`; a wholly-JSON result, every other role and every other model's payload unchanged.
+  `seam_replay --as-sent --wrap auto|on|off` (auto follows `--at-rev`). 18 tests, revert fails them, 10 of 10
+  mutants. In progress until its regression panel.
+- **P3.38 finding 2 measured ($0, `f2_measure.py`, `f2_denominator.py`, `f2_answers.py`):** 5,397 section
+  searches on 374 ids returned provisions and 131 on 13 ids returned none, and no id did both; none of the 54
+  ids a lookup calls held with text was ever empty. The quick-lookup Worker's code lookup before a section
+  search (P3.25) stops at 5 a run: 6383 t1's six empty ids were past it. Two stored runs stated a false '£'
+  negative over them. **Live LEX (user-agreed, 9 calls, `live_lookups.py`, `.log`):** the five 6383 ids with
+  no stored state are 4 held without text, 1 not held. **Built (`49d6dc5`; user decisions: a lookup on the
+  empty search through the Worker's executor, at most 8 a run, reusing any lookup the run made; the note's
+  wording approved):** the empty section search's note says the index lacks the instrument or its text, and
+  the text read follows. 40 tests, revert 4 of 4, 20 of 20 mutants. Wording screened (`wording_drafts.py`):
+  only "index lacks" (the block's own accepted phrase) trips a schedule detector.
+- **P3.38 finding 3 (user decision): the `lookup` bar accepts the footer once the text was read** (`6a5ec27`):
+  the four findings pass; over 81 directories nothing else moves. 3 tests, 6 of 6 mutants.
+- **Acceptance re-run A (user-agreed, cap $7.50): `wave5_p338b`, $5.25** (served by `2475429`). Every slot
+  passes but 6383 t1 (hand-read `evidence/rubrics/handread_s50.md`): 6409 t7 3 of 3 (was 0 of 3). It found
+  two defects: past the Worker's context budget a lookup's result is summarised and its status did not parse,
+  so three empty searches kept the old note and got no text (fixed, `2f4857b`: the outcome is read from the
+  scope record; 3 tests; the over-budget tests stub the local prompt cache, because without it a closing
+  event loop left a transaction open and the suite's teardown hung on its lock); and `cmcdates` did not read
+  text delivered on a lookup (`580374e`; only `wave5_p338` and `wave5_p338b` move).
+- **Diagnostics D (user-agreed, cap $1.50, $0.29):** D1, the 6373 t1 fan-out, did not reproduce at the
+  Manager seam (answered 6 of 6, wrapped or not); D2, 6383's sampling, follows the Manager's brief wording (the
+  payloads differ only in the brief) and predates P1.7. Neither implicates the wrap.
+- **Re-run E (user-agreed, cap $3.00): `wave5_p338c`, 6383 alone, $1.50** (served by `580374e`): r1 searched
+  35 of 37, the trigger and the fix worked on all six, 19 listed with SSI 2025/282 and 2026/170, every
+  exclusion consistent with the text received; r2-r3 sampled (the brief). **P3.38 ticked (user decision).**
+- **New rows (user decisions):** P3.53 (a list question over many instruments answered from a few; severity
+  proposed P2) and P3.54 (P2: a commencement dated after today stated as done; `future_dates.py`).
+- **Sweeps:** `replay check` twice, `replay pin` twice; uvicorn (PIDs 11220 on `2475429`, 14340 on
+  `580374e`) and the keep-awake helper (14948, 13304) by `Start-Process -PassThru`; `replay restore` each
+  time; all stopped, port 8000 free, no pin file. Two stale `lexchat_test` sessions from the hung suite run
+  terminated (test database only).
+- **Folded:** FIX_PLAN (P3.38 ticked, P1.7, P3.53, P3.54; a new top order line; `plan_lint` 0; `plan_status`
+  75 of 110, 6 in progress, 8 of 14); CHANGELOG *Unreleased*; CLAUDE.md; memory. Suite **4,196**.
+- **Spend: about $8.13** (seam $1.38; sweeps $5.25 and $1.50; checks under $0.01).
+
+**Surprises:**
+- **The model never saw most of what code wrote for it.** Every note appended after a JSON tool result was
+  dropped on the way to the pinned Gemini, in every stored sweep and in the pre-pilot. The levers that worked
+  were in the brief, the prompts or the answer seam; the ones in tool results stayed "kept, not met".
+- **A wording hypothesis survived four sessions because it fitted a contrast that was not a contrast:** t7
+  and t8 got the same block in different places (a tool result and the user message).
+- **A summarised lookup is not a lookup any more:** past the context budget even an 885-character JSON result
+  is summarised, and anything that parses it fails.
+- **A test's closing event loop can hang the whole suite:** a transaction left open on the local prompt cache
+  table blocked the session teardown's DROP TABLE for 40 minutes.
+- **The summariser writes the symbol it was asked about:** "does not contain the '£' symbol" counts as a '£'
+  to a character count (the fix's commit message overstated 2025/336 for that reason).
+
+## Session 50 — handover for Session 51 (2026-10-15)
+
+**One session works the branch at a time.** Read this handover, then FIX_PLAN's top order line ("end of
+Session 50"). Confirm the branch is pushed (`git status -sb`).
+
+**Take next:** P1.7's regression panel (6335, 6345, 6348, 6374, 6375, 6382, 6341, 6340 at n=1, about $8.50,
+cap $12.00; graded by every `replay_report` subcommand against each session's latest stored column) and
+P3.46's acceptance (6359 and 6363 n=3, cap $17.00; its case note was invisible until P1.7), both priced to the
+user; then P3.53 and P3.54 (measure first), P3.34, P3.28's instruction, P3.48. Re-measure every Worker-side
+lever kept in progress (P3.51, P3.52, P3.50) on top of P1.7 before building another. **Open, the user's to
+time:** the selection/synthesis lever for P3.50, P3.51 and P3.52. P3.3, P3.2 and P3.17 stay blocked on the
+lawyer pack.
+
+**State:** branch `fix/prepilot-defects` at this handover's commit; `main` at `6810043` (not a release; the
+target runs `v2026.10.4` until a cut, and does NOT have P1.7); 75 of 110, 6 in progress, 8 of 14; `plan_lint`
+0; **4,196 tests**; **83 replay directories** (`wave5_p338b`, `wave5_p338c` new); no server, no pin, no
+keep-awake, the dev box's settings restored. Session scripts and logs in the gitignored `evidence/seam/s50/`;
+the hand-read in `evidence/rubrics/handread_s50.md`.
+
+**Watch items:** 6373 t1's jurisdiction fan-out (2 of 3 on `wave5_p338b`, not reproduced at the seam); 6345
+turn-1 halts since P3.52's lever (c) (no 6345 run this session); `rail` over 15% unused (27.9% on
+`wave5_p338b`, 30.8% on `wave5_p338c`, P4.26's bar).
+
+**Carried, the user's:** the Fix Tracker (v54 is the base; not updated this session); the next cut (P1.7 is a
+P1 the target lacks).
+
+**Addendum to Session 50: facts for the next steps that the rows do not carry.**
+- **Every stored payload predates P1.7.** `seam_replay --as-sent` now defaults to `--wrap auto`, which follows
+  the code at `--at-rev`: with `--at-rev recorded` a stored payload redraws unwrapped, as it was sent. To ask
+  what today's code would do with it, pass `--wrap on`. Before P1.7, a Worker-side "not met" in a tool result
+  may only mean the Worker never saw the text.
+- **The wrap also changes the Manager's input:** a Worker report is plain text, so it is now sent wrapped too
+  (it never lost anything). At the seam this made no difference (D1, 6 of 6 the same). If the regression panel
+  shows a Manager-side change, narrowing `_wrap_tool_results` to results that contain a JSON object is the
+  first thing to try.
+- **The over-budget path summarises everything,** a 30-character empty search included (one flash call each,
+  and the summariser's "The provided text contains no sections" in the Worker's context). Not changed this
+  session; a candidate for a small row (exempt results under a size, or lookups).
+- **Seam scripts** (gitignored `evidence/seam/s50/`, run from `server_py/`): `f1_seam.py` (payloads `t7r1-3`,
+  `t8r1-3`; levers V0, A, B, AB, D1-D4, W), `f1_truncation.py` (`--only`, `--provider`), `d1_manager.py`,
+  `d2_sampling.py`, `dump_turn.py`, `dump_p338b.py` (`--dir`, `--turn`), `p338b_claims.py`, `price.py`,
+  `future_dates.py`, `json_hidden_scope.py`, `f2_*.py`, `live_lookups.py`, the mutant harnesses
+  (`mutants_f2.py`, `mutants_p17.py`, `mutants_lookup.py`), `fold_s50.py`, and the grader outputs
+  `grade_all_wave5_p338b.txt`, `grade_all_wave5_p338c.txt`.
+- **Run costs** (pricing a re-run): `p37_6409` $0.44, $0.42, $0.51; `p37_6373` $0.81, $0.65, $0.32 (the fan-out);
+  `p37r_6383` $0.42, $0.35, $0.81 and $0.87, $0.44, $0.18; 6410 $0.15, $0.25, $0.14.
+- **An untracked `docs/deployment/PARLICHAT_COHOSTING_PLAN.md`** is still in the tree, not this work's; left
+  untouched and unstaged.

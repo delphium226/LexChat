@@ -64,6 +64,25 @@ Summaries (P3.47):
   summariser had been adding well-known cases from memory, which then read
   as if they had been found.
 
+Research results (P1.7, in progress):
+- The research model now sees everything the system adds to a search or
+  lookup result. With the model in use (Gemini, through OpenRouter), any
+  text placed beside the structured part of a result was silently dropped
+  before the model read it: the notes on what a search can and cannot show,
+  the next-step prompts, the commencement and enabling-power records, and
+  text read from legislation.gov.uk. About three results in five carried
+  such text. Each result is now sent whole.
+
+Recent instruments (P3.38):
+- Where this index holds an instrument's record but not its text, the text
+  read from legislation.gov.uk is now used to answer: the saving and
+  transitional provisions of SSI 2025/119 are stated from it, where the
+  answer used to call them unverifiable.
+- When a search within an instrument finds nothing because this index holds
+  no text of it, the research now looks the instrument up, says so, and
+  reads its text from legislation.gov.uk, instead of treating the empty
+  search as a sign the instrument lacks what was asked for.
+
 ## 2026.10.4 — 2026-10-12
 
 Seventh cut (merge `e72d3bc`): the Scottish judgments switch moves to the
