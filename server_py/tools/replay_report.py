@@ -10157,6 +10157,13 @@ def _cd_in_force_items(entry: dict) -> list:
     return out
 
 
+# P3.38's block: its header (the instrument's "cite it as" URL; "Below is the
+# whole of it." or a summary), then the text, then the closing marker.
+_CD_PUBLISHED = re.compile(
+    r"(\[PROVISION FETCHED BY CODE — this index (?:lacks|'s text read gave no text for|holds the "
+    r"record of) [^\]]*?cite it as (\S+?), [^\]]*\])\n(.*?)\n\[/PROVISION FETCHED BY CODE\]", re.S)
+
+
 def cd_evidence(turn: dict, turn_no=None) -> dict:
     """Every commencement date this turn's tools returned or showed, with what
     it is stated for: {"items": [...], "titles": {lid: title}, "statuses":
@@ -10284,6 +10291,17 @@ def cd_evidence(turn: dict, turn_no=None) -> dict:
                     add_text(str(desc), "description", rlid, nm)
                     for it in ev["items"][before:]:
                         it["subject"] = next(iter(sorted(it["named"] - {rlid})), None)
+            # P3.38: an instrument's text code read from legislation.gov.uk, in
+            # the block it appends to a lookup, a text read or a section search
+            # (Session 50: regulation 4 of SSI 2025/119's "31 March 2025", read
+            # this way, graded UNSUPPORTED). Whole, it is the instrument's text;
+            # summarised, it supports nothing, as any summary.
+            fin = tl.get("final_result")
+            if isinstance(fin, str) and "PROVISION FETCHED BY CODE" in fin:
+                for m in _CD_PUBLISHED.finditer(fin):
+                    plid = re.sub(r"/(?:made|enacted)$", "", _nc_lid(m.group(2)) or "")
+                    add_text(m.group(3), "text (legislation.gov.uk)"
+                             if "Below is the whole of it." in m.group(1) else "summary", plid, nm)
             if tl.get("summarised") and isinstance(tl.get("final_result"), str):
                 # A summary is the summariser's text, not a source: on the
                 # stored 6411 runs summaries of a change record (which carries

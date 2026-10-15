@@ -444,6 +444,26 @@ def test_section_search_text_is_read_in_both_stored_shapes():
             ("ssi/1901/3", "1901-07-01", "text")], raw
 
 
+def test_text_read_from_legislation_gov_uk_on_a_lookup_is_read():
+    """P3.38 (Session 50): the text code read from legislation.gov.uk rides on a
+    lookup's result. Whole, its dates are the instrument's text; summarised,
+    they support nothing."""
+    sys.path.insert(0, str(TOOLS.parent))
+    from src.utils import published_text as pt
+    lookup = json.dumps({"tool": "lookup_legislation", "legislation_id": "ssi/1901/3",
+                         "status": "held_without_text"})
+    body = ("4. Despite the coming into force of section 22, paragraph 12 continues to apply "
+            "to the year ending with 31 March 1901.")
+    for how, src in (("whole", "text (legislation.gov.uk)"), ("summary", "summary")):
+        block = pt.published_block("ssi/1901/3", pt.KIND_NO_TEXT,
+                                   {"version": "made", "url": "https://www.legislation.gov.uk/ssi/1901/3/made"},
+                                   how, body, total_chars=len(body))
+        ev = rr.cd_evidence(_turn(1, "", [_tool("lookup_legislation", {}, lookup,
+                                                final=lookup + block)]), 1)
+        assert [(e["lid"], rr._cd_fmt(e["ymd"]), e["src"]) for e in ev["items"]] == [
+            ("ssi/1901/3", "1901-03-31", src)], how
+
+
 def test_a_summary_supports_only_what_its_raw_result_carries():
     raw = {"results": [{"legislation_id": "ssi/1901/3", "text": "Article 3 sets the day."}]}
     summary = ("* Article 3: the Order came into force on 1 July 1901.\n"
