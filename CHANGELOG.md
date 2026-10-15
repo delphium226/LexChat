@@ -51,6 +51,19 @@ Case law (P3.50, in progress):
 - A judgment of up to 60,000 characters is now read in full rather than
   summarised first. Summaries of Rex v Evans still miss its central point.
 
+Schedules (P3.12):
+- When an answer names a paragraph of a Schedule by its number but does not
+  say what it provides, the paragraph's own words are now added after it, as
+  they already were for a paragraph the answer left out. The moratorium
+  question (Insolvency Act 1986, Schedule B1 paragraphs 42 to 44) is now
+  answered in full in all three replays.
+
+Summaries (P3.47):
+- A summary of a document or a search no longer keeps a case it names
+  without a citation when the document itself does not name that case. The
+  summariser had been adding well-known cases from memory, which then read
+  as if they had been found.
+
 ## 2026.10.4 — 2026-10-12
 
 Seventh cut (merge `e72d3bc`): the Scottish judgments switch moves to the

@@ -9741,3 +9741,72 @@ rebuilds (c)'s block as the code at `--at-rev` wrote it.
   (appends a file keeping the target's line endings); grades `acceptance_grades.md` and `p352b_grade.md`; seam
   logs `seam_A_c8c2da9.log` and `seam_B_dbbc718.log`; sweep logs `sweep_p35*.txt`; `evans_text.txt`.
 - **Fix Tracker v53** published to the same URL at the user's request: see the tracker commit.
+
+## Session 49 — 2026-10-15 — P3.12 and P3.47 done; P3.38's re-run not met ($6.22)
+
+**Done:**
+- **Checks at the start:** the brief current (`64ace0d` at the head, the commits it named; `main` at `6810043`);
+  the tree clean and pushed; suite **4,089**, `plan_lint` 0, `plan_status` 72 of 107, 7 in progress, 8 of 14.
+- **P3.12, B4 measured** ($0, `evidence/seam/s49/b4_measure.py`, `b4_refine.py`, `b4_final.py`, `b4_threshold.txt`):
+  16 handed paragraphs cited by number only; the restatement test misses paraphrases; the paragraph's distinctive
+  text words in its citing sentences separate them (0 in the four real cases, 4-5 in all nine paraphrases).
+  **Built** (`dfd619c`, user decisions: threshold 2, skip a misattributed paragraph): the paragraph line for a
+  paragraph named by number only. Dry run: 4 of 36 stored answers PARTIAL to DELIVERED. 14 tests, 18 mutants caught,
+  revert 9 of 136 fail. **Acceptance `wave5_p312`** (6335 n=3, $2.06): **DELIVERED 3 of 3 by hand**; the new line
+  fired in none. **Ticked.**
+- **P3.47 measured** ($0, `p347_scan.py`, `p347_validate.py`, `p347_holds.py`): 37 bare names their source does
+  not name, all read (12 additions, 5 notes, 20 brief echoes); holds 40 of 40 sampled correct. **Built**
+  (`2473646`, four user decisions: notes go, brief echoes stay, a passage with a held citation stays, P3.45's
+  bracket fix). Dry run (`p347_dryrun_built.py`): 14 of 6,137 stored summaries change, every diff read. 28 tests,
+  25 mutants caught, revert 21 of 107 fail. **Ticked** (deterministic acceptance).
+- **P3.38 re-run** (`wave5_p338`, user-agreed, cap $5.40, $4.16): **not met** (row and hand-read).
+- **Sweeps:** `replay check` three times ($0.003), `replay pin` twice; uvicorn (PIDs 2256 on `dfd619c`, 11620 on
+  `2473646`) and the keep-awake helper (16016, 10100) by `Start-Process -PassThru`; `replay restore` each time; all
+  stopped, port 8000 free, no pin file.
+- **Folded:** FIX_PLAN (P3.12 and P3.47 ticked, their index entries `**done**`; P3.38's re-run on its row; a new
+  top order line; `plan_lint` 0; `plan_status` 74 of 107, 6 in progress, 8 of 14); CHANGELOG *Unreleased*;
+  CLAUDE.md; memory. Suite **4,131**.
+- **Spend: about $6.22** (sweeps $2.06 and $4.16; checks $0.003).
+
+**Surprises:**
+- **The acceptance P3.12 waited eight sessions for passed with its newest lever idle:** no rep named a paragraph
+  without its words, so B4 did not fire; the batch 12/13 lines carried two reps and the Manager the third.
+- **The 60% restatement test reads words, not meaning:** every seam draft paraphrased paragraph 44 and shared under
+  30% of any sub-paragraph's words. The inverse of `misattributed_paragraphs`' distinctive-word test separated them.
+- **A code instruction can make a Worker report a status instead of the text beside it:** held without text, the
+  lookup's block says to report it as held without text and to say the text came from legislation.gov.uk; at
+  6409 t7 every rep then called provisions in that text unverifiable. One turn later, asked by number, all three
+  read it.
+- **A scope note written for a held instrument is wrong for an unheld one:** the empty section search's note says
+  the instrument is "NOT ... unavailable"; for SSI 2026/170, which LEX does not hold, that let rep 1 write that it
+  does not feature '£'.
+- **A name reader that crosses a line break finds the next line's citation:** P3.47's first build skipped a bare
+  name because a citation began within 40 characters on the next line; the window now stops at the line's end.
+- **An untracked `docs/deployment/PARLICHAT_COHOSTING_PLAN.md` appeared during the session** (not this session's);
+  left untouched and unstaged.
+
+## Session 49 — handover for Session 50 (2026-10-15)
+
+**One session works the branch at a time.** Read this handover, then FIX_PLAN's top order line ("end of Session
+49"). Confirm the branch is pushed (`git status -sb`).
+
+**Take next:** P3.38's three findings, measured first ($0 where possible): (1) the HELD WITHOUT TEXT block's
+wording (`utils/instrument_lookup.py`, the published-text branch) at the seam, `seam_replay worker --as-sent
+--at-rev recorded --date recorded` on `wave5_p338` 6409 r1-r3 turn 3; (2) a deterministic trigger for an empty
+`search_legislation_sections` on an instrument the index does not hold (6383 t1 r1-r2; the made-under record knows
+SSI 2026/170) and the scope note's "NOT ... unavailable" for such an instrument; (3) the user's call on whether
+P3.7's `lookup` bar accepts the footer once the text is read. Then the rest of the Session 46 order: P3.46's priced
+re-run (6359 and 6363 n=3, about $9.50 up to $13.50, more now judgments go whole), P3.34, P3.28's instruction,
+P3.48. **Open, the user's to time:** the selection/synthesis lever for P3.50, P3.51 and P3.52 (Session 48's
+addendum). P3.3, P3.2 and P3.17 stay blocked on the lawyer pack.
+
+**State:** branch `fix/prepilot-defects` at this handover's commit; `main` at `6810043` (not a release; the target
+runs `v2026.10.4` until a cut); 74 of 107, 6 in progress, 8 of 14; `plan_lint` 0; **4,131 tests**; **81 replay
+directories** (`wave5_p312`, `wave5_p338` new); no server, no pin, no keep-awake, the dev box's settings restored.
+Session scripts and logs are in the gitignored `evidence/seam/s49/`; the hand-reads in `evidence/rubrics/
+handread_s49.md`.
+
+**Watch items:** 6345 turn-1 halts since P3.52's lever (c) (2 of 6; no 6345 run this session); `rail` over 15%
+unused on `wave5_p338` (36.4%, P4.26's bar).
+
+**Carried, the user's:** the Fix Tracker (v53 is the base; not updated this session); the next cut.
