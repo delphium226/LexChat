@@ -815,7 +815,7 @@ def test_an_as_sent_draw_offers_the_workers_tools_and_prints_the_outcome(
     async def fake_cfg(extra):
         return {"model": "m", **extra}
 
-    async def fake_run(messages, cfg, tools, extra=None):
+    async def fake_run(messages, cfg, tools, extra=None, wrap=False):
         seen.update(tools=[t["function"]["name"] for t in tools], extra=extra)
         return {"content_chars": 0, "tool_calls": [], "finish_reason": "stop",
                 "native_finish_reason": "STOP", "reasoning_chars": 60000,
@@ -841,7 +841,7 @@ def test_an_answered_as_sent_draw_is_graded_and_written(tmp_path, monkeypatch, c
     async def fake_cfg(extra):
         return {"model": "m", **extra}
 
-    async def fake_run(messages, cfg, tools, extra=None):
+    async def fake_run(messages, cfg, tools, extra=None, wrap=False):
         return {"content_chars": 60, "content": f"See [s.36(1)]({FOISA36}).",
                 "tool_calls": [], "finish_reason": "stop", "native_finish_reason": "STOP",
                 "reasoning_chars": 0, "completion_tokens": 200, "reasoning_tokens": 0,
@@ -924,7 +924,7 @@ def test_an_as_sent_draw_with_a_date_prints_and_names_it(tmp_path, monkeypatch, 
     async def fake_cfg(extra):
         return {"model": "m", **extra}
 
-    async def fake_run(messages, cfg, tools, extra=None):
+    async def fake_run(messages, cfg, tools, extra=None, wrap=False):
         seen["system"] = messages[0]["content"]
         return {"content_chars": 1, "content": "\n", "tool_calls": [],
                 "finish_reason": "stop", "native_finish_reason": "STOP",
@@ -1016,7 +1016,7 @@ def test_an_as_sent_draw_at_the_recorded_rev_offers_that_revs_tools(
     async def fake_cfg(extra):
         return {"model": "m", **extra}
 
-    async def fake_run(messages, cfg, tools, extra=None):
+    async def fake_run(messages, cfg, tools, extra=None, wrap=False):
         seen.update(system=messages[0]["content"],
                     tools=[t["function"]["name"] for t in tools])
         return {"content_chars": 0, "content": "", "tool_calls": [],
@@ -1073,7 +1073,7 @@ def test_an_as_sent_draw_on_a_provider_routes_it_and_prints_who_served(
     async def fake_cfg(extra):
         return {"model": "m", **extra}
 
-    async def fake_run(messages, cfg, tools, extra=None):
+    async def fake_run(messages, cfg, tools, extra=None, wrap=False):
         seen["extra"] = extra
         return {"content_chars": 3, "content": "Yes", "tool_calls": [],
                 "finish_reason": "stop", "native_finish_reason": "STOP",

@@ -670,12 +670,33 @@ def sent_chars(messages: list) -> int:
     return sum(len(str(m.get("content", "") or "")) for m in messages)
 
 
+def rev_wraps_tool_results(rev: Optional[str]) -> bool:
+    """Did `chat_loop` at `rev` send a Google model its tool results wrapped
+    (P1.7)? The working tree (`rev` None) is read from the imported module."""
+    if not rev:
+        from src.agent import openrouter_client as oc
+
+        return hasattr(oc, "_wrap_tool_results")
+    return "def _wrap_tool_results" in _file_at(rev, "server_py/src/agent/openrouter_client.py")
+
+
+def as_sent_wrap(value: str, rev: Optional[str]) -> bool:
+    """`--wrap`: 'on', 'off', or 'auto' (the code at `rev` decides)."""
+    if value == "on":
+        return True
+    if value == "off":
+        return False
+    return rev_wraps_tool_results(rev)
+
+
 async def run_as_sent(messages: list, cfg: dict, tools: list,
-                      extra: Optional[dict] = None) -> dict:
+                      extra: Optional[dict] = None, wrap: bool = False) -> dict:
     """ONE streamed attempt of `messages`, with the product's payload shape
     (model, messages, stream, temperature, tools, tool_choice) plus `extra`
     (a lever under test: `reasoning`, `max_tokens`). No retry, so one draw is
-    one attempt and an (a) draw costs one attempt, not three.
+    one attempt and an (a) draw costs one attempt, not three. `wrap` sends the
+    tool results as `chat_loop` has since P1.7 (`_wrap_tool_results`); off,
+    as it sent them before.
 
     Returns what an `empty_completions` record would hold, and the attempt's
     seconds and cost, which no record holds.
@@ -687,9 +708,12 @@ async def run_as_sent(messages: list, cfg: dict, tools: list,
     from src.agent import openrouter_client as oc
 
     set_request_provider_config(cfg)
+    sent = oc._convert_messages_to_openai(messages)
+    if wrap:
+        sent = oc._wrap_tool_results(sent, cfg["model"])
     payload = {
         "model": cfg["model"],
-        "messages": oc._convert_messages_to_openai(messages),
+        "messages": sent,
         "stream": True,
         "temperature": cfg.get("temperature", 0),
     }
@@ -807,12 +831,15 @@ def _as_sent_command(args, doc: dict, turn: dict, sid: str) -> int:
     print(f"  code: {rev + ' (--at-rev)' if rev else 'the working tree'}; tools offered: "
           + ", ".join(t["function"]["name"] for t in tools))
     print(f"  lever: {json.dumps(extra) if extra else 'none (the pre-P4.10 payload)'}")
+    wrap = as_sent_wrap(getattr(args, "wrap", "auto"), rev)
+    print(f"  tool results: {'wrapped for a Google model (P1.7)' if wrap else 'as sent before P1.7'}"
+          f" (--wrap {getattr(args, 'wrap', 'auto')})")
     if args.dry_run:
         return 0
     cfg = asyncio.run(_provider_cfg(cfg0))
     total = 0.0
     for rep in range(1, args.reps + 1):
-        r = asyncio.run(run_as_sent(messages, cfg, tools, extra))
+        r = asyncio.run(run_as_sent(messages, cfg, tools, extra, wrap=wrap))
         total += r["cost"]
         print(f"  rep{rep}: {as_sent_outcome(r):<12} ${r['cost']:.4f} {r['seconds']:6.0f}s "
               f"completion_tokens={r['completion_tokens']} "
@@ -1368,6 +1395,12 @@ def main(argv: Optional[list] = None) -> int:
                         "upstream alone (e.g. google-vertex, google-ai-studio), with "
                         "no fallback; the product sends no routing field. Each draw "
                         "prints the provider that served it either way")
+    p.add_argument("--wrap", choices=["auto", "on", "off"], default="auto",
+                   help="--as-sent only (P1.7): send each tool result that is not "
+                        "wholly JSON as one JSON string field, as chat_loop does for a "
+                        "Google model since P1.7. 'auto' (default) follows the code at "
+                        "--at-rev (the working tree without it), so a stored payload "
+                        "from before P1.7 is redrawn as it was sent")
     p.add_argument("--hint", action="store_true",
                    help="manager seam only (P3.2 lever (c), prototype): prefix the "
                         "lawyer's turn with the verbatim text of the provisions it "

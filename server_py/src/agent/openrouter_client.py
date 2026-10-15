@@ -127,6 +127,40 @@ def _apply_anthropic_cache_control(openai_messages: list, model: str) -> list:
     return marked
 
 
+def _wrap_tool_results(openai_messages: list, model: str) -> list:
+    """Send a Gemini model each tool result whole (FIX_PLAN P1.7, Session 50).
+
+    Through OpenRouter, a Google model receives a tool result as a function
+    response, and where the content holds a JSON object, every other piece of
+    text in it is dropped on the way: on the pinned model a note after the
+    JSON, or before it, was seen 0 of 4 times, and the same note alone 2 of 2
+    (both Google upstreams; `evidence/seam/s50/f1_truncation.py`). Our code
+    appends its notes after the JSON a tool returns (SEARCH SCOPE, NEXT STEP,
+    ENABLING POWER, the change record and currency blocks, text read from
+    legislation.gov.uk), so the Worker never saw them: 13,031 of 22,236 stored
+    Worker tool results carried such text. Sent as one JSON string field the
+    content arrives whole (2 of 2 on each upstream; on 6409 t7 the Worker then
+    answered from the text it had been calling unverifiable, 9 of 9).
+
+    Only content that is not wholly JSON is wrapped: a result that parses as
+    one JSON value loses nothing and keeps its structure. Non-Google models
+    get the list back unchanged (same objects), so their payloads stay
+    byte-for-byte identical.
+    """
+    if not model.startswith("google/"):
+        return openai_messages
+    out = []
+    for msg in openai_messages:
+        content = msg.get("content")
+        if msg.get("role") == "tool" and isinstance(content, str) and content:
+            try:
+                json.loads(content)
+            except ValueError:
+                msg = {**msg, "content": json.dumps({"result": content}, ensure_ascii=False)}
+        out.append(msg)
+    return out
+
+
 # A stalled provider — no response headers, or no bytes mid-stream — surfaces as
 # httpx.TimeoutException once the read timeout below expires. Unretried, a single
 # transient stall propagates out through the worker, the manager and the request
@@ -216,7 +250,7 @@ async def chat_loop(
         }
 
     openai_messages = _apply_anthropic_cache_control(
-        _convert_messages_to_openai(messages), model
+        _wrap_tool_results(_convert_messages_to_openai(messages), model), model
     )
     openai_tools = _convert_tools_to_openai(tools)
 
