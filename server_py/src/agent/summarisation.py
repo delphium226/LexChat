@@ -88,7 +88,8 @@ SUMMARY_GLOSS_RULE = (
 
 def check_summary_citations(summary: str, source, query: str = "") -> str:
     """P3.45: the summary with every case citation its source does not hold
-    removed (`utils.summary_citations.strip_unsourced_citations`, which says
+    removed, and (P3.47) every case named without a citation that the source
+    does not name (`utils.summary_citations.strip_unsourced_citations`, which says
     what goes and why). Run on every summary the Worker is handed: a fresh
     one here, and a local-cache hit in `run_worker_tool`, so a row stored
     before this check is checked when it is served. Fail-soft: the summary
@@ -101,8 +102,10 @@ def check_summary_citations(summary: str, source, query: str = "") -> str:
         return summary
     if removed:
         actions = ", ".join(sorted({r["action"] for r in removed}))
-        logger.info(f"[SummaryCheck] removed {len(removed)} case citation(s) the summarised "
-                    f"text does not hold ({actions}; {len(summary) - len(checked)} chars)")
+        names = sum(1 for r in removed if r.get("kind") == "name")
+        logger.info(f"[SummaryCheck] removed {len(removed) - names} case citation(s) and {names} "
+                    f"case name(s) the summarised text does not hold ({actions}; "
+                    f"{len(summary) - len(checked)} chars)")
         logger.debug(f"[SummaryCheck] removed: {[r['citation'] for r in removed]}")
     return checked
 

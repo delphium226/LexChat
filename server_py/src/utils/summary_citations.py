@@ -40,9 +40,21 @@ What `strip_unsourced_citations` does with a citation the source does not hold:
 * where no case name can be read before the citation, only the citation goes
   (the safe direction: never remove text whose source cannot be judged).
 
-It only removes; it never adds a word. A summary with no unheld citation is
-returned unchanged, byte for byte. Fail-soft: any error returns the summary
-unchanged (Invariant 5).
+**A case named without a citation (P3.47, Session 49; user decisions
+2026-10-15).** A "X v Y" name with no citation after it (`bare_names`) is
+judged the same way: where the source does not name the case and the
+research question does not either, the passage carrying it goes, as for a
+citation whose case the source never names (the list item, the block under a
+heading line, or the sentence). A "does not contain ... (such as X v Y)" note
+goes too: the name in it is still the summariser's. Kept: a name the source or
+the question names (13 stored "the requested case was not located" notes name
+the question's case), a name with no distinctive word, a placeholder ("Rex v
+[Name]"), and any passage that also carries a citation the source holds (the
+source's own authority is never removed to remove a bare name).
+
+It only removes; it never adds a word. A summary with no unheld citation or
+name is returned unchanged, byte for byte. Fail-soft: any error returns the
+summary unchanged (Invariant 5).
 """
 from __future__ import annotations
 
@@ -279,16 +291,39 @@ def name_before(text: str, c: Citation) -> str:
         t = _clean_token(tok)
         if t and t[0].islower() and t.lower() not in _JOINERS and not re.fullmatch(r"\d+\)?", t):
             return ""
+    side_a = _first_party(seg[:mv.start()])
+    if not side_a:
+        return ""
+    return f"{side_a} v {side_b.strip(_MARKUP + ' ')}".strip()
+
+
+# A square-bracketed word standing for a party ("Rex v [Name]"): a placeholder
+# in a note on citation style, never a case.
+_PLACEHOLDER = re.compile(r"^\[[^\]\d]*\][\"'’”*_.,;:)]*$")
+# A corporate form after which nothing more of a party follows: with a full
+# stop it ends the party ("... v Gadget Ltd. Then ..."), though `_ABBREV`
+# keeps it from ending a sentence elsewhere.
+_CORPORATE_END = frozenset("ltd limited plc inc llp".split())
+
+
+def _first_party(before: str) -> str:
+    """The first party of "X v Y", read back from the text before " v ": the
+    run of capitalised words (and joining words), stopped at a lower-case
+    word, a label ("Relevant to Widgetland:", "**Case Title:**"), the end of
+    the sentence before, or an opening bracket or emphasis mark that starts
+    the name. "" where there is none, or the party is a placeholder."""
     taken: list[str] = []
     depth = 0   # brackets closed inside the name, read backwards ("(South East)")
-    for tok in reversed(seg[:mv.start()].split()):
+    for tok in reversed(before.split()):
         t = _clean_token(tok)
-        if tok.endswith(":") or tok.endswith(";"):
-            break
+        if re.search(r"[:;][*_]*$", tok):
+            break       # a label, its emphasis closed after the colon too
         if tok.rstrip("*_").endswith(".") and not _ABBREV.search(tok.rstrip("*_")):
             break       # the end of the sentence before the name ("Intro. Widget v ...")
         if not t:
             break
+        if not taken and _PLACEHOLDER.match(tok.lstrip("\"'‘“*_(")):
+            return ""
         # "on" joins a name only as "(on the application of"; "in" never does
         # ("Held in Widget Co v ..." is prose before the name).
         joins = t.lower() in _JOINERS or (t.lower() == "on" and tok.startswith("("))
@@ -303,10 +338,43 @@ def name_before(text: str, c: Citation) -> str:
         break
     while taken and _clean_token(taken[-1]).lower() in _JOINERS:
         taken.pop()     # a name does not start with "of" / "the"
+    return " ".join(reversed(taken)).strip(_MARKUP + "( ")
+
+
+def _second_party(after: str) -> tuple[str, int]:
+    """P3.47: the second party of "X v Y" read forward from the text after
+    " v ", where no citation closes the name: capitalised words and joining
+    words, to a lower-case word, a citation or bracketed year, a closing
+    emphasis mark, a stop after a word, or the line's end (at most eight
+    words). (party, length of `after` it spans); ("", 0) where there is none,
+    or the party is a placeholder ("[Name]")."""
+    line = after.split("\n", 1)[0]
+    taken: list[str] = []
+    span = 0
+    for m in re.finditer(r"\S+", line):
+        tok = m.group(0)
+        t = _clean_token(tok)
+        if not t or re.match(r"[\[(]\d", tok):
+            break
+        if not taken and _PLACEHOLDER.match(tok):
+            return "", 0
+        if not (t[0].isupper() or t[0].isdigit() or t.lower() in _JOINERS):
+            break
+        taken.append(tok)
+        span = m.end()
+        if re.search(r"\w[*_]+[.,;:)]*$", tok):
+            break       # "*Widget v Gadget* and ...": the emphasis closes the name
+        if tok.endswith(".") and t.rstrip(".").lower() in _CORPORATE_END:
+            break       # "... v Gadget Ltd. Then ...": a party ends at its corporate form
+        if re.search(r"[.,;:)\]]['’\"*_]*$", tok) and not _ABBREV.search(tok.rstrip(",;:)]*_\"'’")):
+            break       # "... v Gadget." / "... v Gadget," / "(... v Gadget)"
+        if len(taken) >= 8:
+            break
+    while taken and _clean_token(taken[-1]).lower() in _JOINERS:
+        taken.pop()
     if not taken:
-        return ""
-    side_a = " ".join(reversed(taken))
-    return f"{side_a.strip(_MARKUP + '( ')} v {side_b.strip(_MARKUP + ' ')}".strip()
+        return "", 0
+    return " ".join(taken).strip(_MARKUP + " .)"), span
 
 
 # A case named without "v": a reference or a matter ("Reference by the Lord
@@ -393,6 +461,55 @@ def unsourced_citations(summary: str, raw, query: str = "") -> list[Unsourced]:
         nm = name_before(summary, c)
         out.append(Unsourced(c, nm, name_held(nm, index)))
     return out
+
+
+# A case named with no citation after it ("... the test in Widget Co v
+# Gadget Ltd."): within this many characters of the name's end a citation
+# would close it, and it is P3.45's to judge.
+_CITED_WITHIN = 40
+_V_BETWEEN = re.compile(r"(?<=\S)\s+v\.?\s+(?=\S)")
+
+
+def bare_names(summary: str) -> list[Citation]:
+    """P3.47: every "X v Y" case name in summary with no citation within
+    `_CITED_WITHIN` characters after it, as a Citation of kind "name" whose
+    span is the name (both parties read as `name_before` reads the first)."""
+    summary = summary or ""
+    cites = find_citations(summary)
+    out: list[Citation] = []
+    for m in _V_BETWEEN.finditer(summary):
+        line_start = summary.rfind("\n", 0, m.start()) + 1
+        before = summary[max(line_start, m.start() - 240):m.start()]
+        prev = find_citations(before)
+        if prev:
+            before = before[prev[-1].end:]
+        side_a = _first_party(before)
+        side_b, span = _second_party(summary[m.end():])
+        if not side_a or not side_b:
+            continue
+        end = m.end() + span
+        line_end = summary.find("\n", end)
+        close_by = min(end + _CITED_WITHIN, len(summary) if line_end < 0 else line_end)
+        if any(m.end() <= c.start <= close_by for c in cites):
+            continue        # a citation on the same line closes it: P3.45's
+        start = summary.rfind(side_a.split()[0], line_start, m.start())
+        if start < 0:
+            continue
+        out.append(Citation("name", start, end, summary[start:end], f"{side_a} v {side_b}"))
+    return out
+
+
+def unsourced_names(summary: str, raw, query: str = "") -> list[Unsourced]:
+    """P3.47: every bare case name in summary (`bare_names`) the source does
+    not name (`name_held` is False: a name with no distinctive word is never
+    judged) and the research question does not name either (P3.45's rule for
+    a citation the question carries), as Unsourced with name_held False."""
+    names = bare_names(summary)
+    if not names:
+        return []
+    index, asked = SourceIndex(raw), SourceIndex(query or "")
+    return [Unsourced(n, n.key, False) for n in names
+            if name_held(n.key, index) is False and not name_held(n.key, asked)]
 
 
 # --- removal -----------------------------------------------------------------
@@ -567,10 +684,13 @@ def _contentless(line: str) -> bool:
 
 
 def strip_unsourced_citations(summary: str, raw, query: str = "") -> tuple[str, list[dict]]:
-    """The summary with every citation the source does not hold removed, as
-    described in the module docstring, and one record per removal:
+    """The summary with every citation the source does not hold, and every
+    bare case name it does not name (P3.47), removed as described in the
+    module docstring, and one record per removal:
     {"citation", "name", "action": "citation" | "case" | "item" | "block" | "sentence"}
-    ("case": the case and its citation, out of a list of authorities in one line).
+    ("case": the case and its citation, out of a list of authorities in one
+    line), with "kind": "name" on a bare name's record ("citation" is then the
+    name as written).
 
     Unchanged (and []) where nothing is unheld, and on any error."""
     try:
@@ -583,7 +703,8 @@ def strip_unsourced_citations(summary: str, raw, query: str = "") -> tuple[str, 
 def _strip(summary: str, raw, query: str) -> tuple[str, list[dict]]:
     if not summary:
         return summary, []
-    uns = unsourced_citations(summary, raw, query)
+    uns = sorted(unsourced_citations(summary, raw, query) + unsourced_names(summary, raw, query),
+                 key=lambda u: u.citation.start)
     if not uns:
         return summary, []
     lines = summary.split("\n")
@@ -606,30 +727,49 @@ def _strip(summary: str, raw, query: str) -> tuple[str, list[dict]]:
     sentence_cuts: dict[int, list[tuple[int, int]]] = {}
     cite_cuts: dict[int, list[tuple[int, int]]] = {}
     records: list[dict] = []
+    index = SourceIndex(raw, query)
+    held_at = [x.start for x in all_cites if index.held(x)]
 
-    def _cut_sentence(li: int, col: int) -> None:
+    def _sentence_cut(li: int, col: int) -> tuple[tuple[int, int], range]:
+        """The span of line li a sentence removal takes, and the lines of a
+        list that goes with it."""
         a, b = _sentence_span(lines[li], col)
         # The emphasis that closes the line ("... last sentence.*") stays,
-        # or the line's opening mark is left unclosed.
+        # or the line's opening mark is left unclosed; so does a bracket
+        # closing one the line opened before the sentence ("*(Note: A. B.)*").
         end = len(lines[li].rstrip())
         at_end = b >= end
         if at_end:
             k = end
-            while k > a and end - k < 3 and lines[li][k - 1] in "*_":
+            while k > a and end - k < 3 and lines[li][k - 1] in "*_)":
+                if lines[li][k - 1] == ")" and lines[li][:a].count("(") <= lines[li][:a].count(")"):
+                    break
                 k -= 1
             b = k
-        sentence_cuts.setdefault(li, []).append((a, b))
         # A sentence that introduces a list ("... the test derived from X:")
         # takes the list with it: the items are that case's test.
         if at_end and lines[li].rstrip(" *_").endswith(":"):
             i0, i1 = _list_after(lines, li)
-            drop_lines.update(range(i0, i1))
+            return (a, b), range(i0, i1)
+        return (a, b), range(0)
+
+    def _holds_held(li_range, cut=None) -> bool:
+        """Whether a removal carries a citation the source holds: P3.47 never
+        removes the source's own authority to remove a bare name."""
+        spans = [(starts[i], starts[i] + len(lines[i])) for i in li_range]
+        if cut:
+            spans.append((starts[cut[0]] + cut[1], starts[cut[0]] + cut[2]))
+        return any(s <= h < e for h in held_at for s, e in spans)
+
     for u in uns:
         c = u.citation
+        is_name = c.kind == "name"
         li = line_of(c.start)
         line = lines[li]
         col = c.start - starts[li]
         rec = {"citation": c.text, "name": u.name}
+        if is_name:
+            rec["kind"] = "name"
         if u.name_held is not False:
             cite_cuts.setdefault(li, []).append((col, c.end - starts[li]))
             rec["action"] = "citation"
@@ -638,27 +778,32 @@ def _strip(summary: str, raw, query: str) -> tuple[str, list[dict]]:
             rest = _bare_rest(line, line_cites, starts[li], u.name)
             seg = _case_segment(line, u.name, col, c.end - starts[li])
             staying = [x for x in line_cites if x.start not in absent_at]
-            if seg and staying:
+            if seg and staying and not is_name:
                 # A list of authorities in one line, some the source's: the
                 # summariser's case goes with its citation, the rest stay.
+                # (A bare name takes its item or sentence instead, where the
+                # held-citation guard keeps the source's own authorities.)
                 cite_cuts.setdefault(li, []).append(seg)
                 rec["action"] = "case"
-            elif _is_item(line):
-                body_at = _ITEM.match(line).end()
-                a, _b = _sentence_span(line[body_at:], max(0, col - body_at))
-                if a == 0:
-                    i0, i1 = _item_span(lines, li)
-                    drop_lines.update(range(i0, i1))
-                    rec["action"] = "item"
-                else:
-                    _cut_sentence(li, col)
-                    rec["action"] = "sentence"
-            elif _is_heading(line) and len(rest.split()) <= 6:
+            elif _is_item(line) and _sentence_span(
+                    line[_ITEM.match(line).end():], max(0, col - _ITEM.match(line).end()))[0] == 0:
+                i0, i1 = _item_span(lines, li)
+                if is_name and _holds_held(range(i0, i1)):
+                    continue
+                drop_lines.update(range(i0, i1))
+                rec["action"] = "item"
+            elif not _is_item(line) and _is_heading(line) and len(rest.split()) <= 6:
                 i0, i1 = _block_span(lines, li)
+                if is_name and _holds_held(range(i0, i1)):
+                    continue
                 drop_lines.update(range(i0, i1))
                 rec["action"] = "block"
             else:
-                _cut_sentence(li, col)
+                (a, b), more = _sentence_cut(li, col)
+                if is_name and _holds_held(more, (li, a, b)):
+                    continue
+                sentence_cuts.setdefault(li, []).append((a, b))
+                drop_lines.update(more)
                 rec["action"] = "sentence"
         records.append(rec)
 
