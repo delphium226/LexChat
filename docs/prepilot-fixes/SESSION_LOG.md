@@ -9704,3 +9704,40 @@ server, no pin, no keep-awake, the dev box's settings restored. Session scripts 
 rebuilds (c)'s block as the code at `--at-rev` wrote it.
 
 **Carried, the user's:** the Fix Tracker (v52 is the base; not updated this session); the next cut.
+
+**Addendum to Session 48 (2026-10-15, after the fold): facts for the next steps that the rows do not carry.**
+- **P3.12's acceptance payload has changed** (checked at $0 on `wave4_b13_p312`, `evidence/seam/s48/
+  p312_interplay.log`). 6335 turn 7 runs `legislation_and_case_law`, so: (1) the judgment its Worker fetched
+  (`ewhc/ch/2023/829`, 22,474 characters, or `ewca/civ/2008/1321`, 46,662) now goes whole under P3.50 instead of
+  summarised (Session 43 found a judgment summary naming 43(6) as the provision, one cause of the narrow
+  answers); (2) its section search of `ukpga/1986/45` (returning ss.1, 251, 127 and 417) now carries P3.51's
+  made-under block for the s.251 family, about 1,700 characters. Read both before attributing a P3.12 result.
+- **For the selection/synthesis lever shared by P3.50, P3.51 and P3.52 (open; the user's to order):**
+  - Q17: the made-under record's titles draw the distinction Thomas wants. Under s.38 of the 2001 Act: the Bus
+    Service Operators Grant (Scotland) Regulations 2002 (`ssi/2002/289`) and Amendment Regulations 2012
+    (`ssi/2012/33`). Under s.40 of the 2005 Act: 17 National Bus Travel Concession Scheme orders "for Older and
+    Disabled Persons" or "for Young Persons" (`ssi/2006/107` to `ssi/2026/159`). s.38 is a grant power and the
+    fare cap a condition of grant (s.38(3)). (`p351_s38_record.log`, `p351_real_blocks.log`.)
+  - Q16: the record's family for the Housing (Scotland) Act 1987: s.31 and s.32 -> `ssi/2002/414` (Homeless
+    Persons Advice and Assistance Regulations 2002); s.32A -> `ssi/2010/2`; s.32B -> `ssi/2012/331`; s.33 ->
+    `uksi/1998/1603` (Homelessness (Decisions on Referrals) Order 1998); s.33A -> `ssi/2022/356`; s.29 -> eight
+    Unsuitable Accommodation orders (one revoked in whole). In `wave5_p351` the section searches returned s.33 or
+    s.33A in 1 of 3 runs (rep 3, ninth of ten).
+  - Q12: every report gives Mitchell's three questions and states the holding as a category of employee ("an
+    OSG acts as a public officer"); [43] is in the Worker's context at every step and in no step report.
+  - The halts: `wave5_p352b` rep 2 (22 calls, 6 `search_legislation`) and `wave5_p352c` rep 3 (20 calls: one
+    quoted-OR search issued twice, 9 section searches, 7 change-record reads); both kept looking for an explicit
+    fare-cap power.
+- **The threshold in replays is still the 8,000 fallback** (`wave5_p352b`: 18 of 19 results over 8,000
+  summarised), though `get_summarise_threshold`'s docstring says the context length is resolved at request start.
+  With a resolved 1M-token context the threshold is 200,000 and P3.50 changes nothing there; whether the target
+  resolves it is not checked (Thomas's `glm-5.2` is missing from `MODEL_LIST`, so his runs are at the fallback).
+- **Script hazard:** a script that calls `asyncio.run` more than once against the made-under store breaks the
+  SQLAlchemy pool ("another operation is in progress"); use one event loop.
+- **Session 48's scripts** (gitignored `evidence/seam/s48/`, run from `server_py/` unless noted):
+  `lookup_from_question.py` (P3.7's decision), `p351_measure.py`, `p351_lever_size.py`, `p351_real_blocks.py`
+  (needs the dev DB), `p350_trace.py` and `p350_phrases.py` (pass `../../replay`), `screen_p352c.py`,
+  `screen_p351.py`, `mutants_p352c.py`, `mutants_p351.py`, `mutants_p350.py`, `fold_s48.py`, `append_crlf.py`
+  (appends a file keeping the target's line endings); grades `acceptance_grades.md` and `p352b_grade.md`; seam
+  logs `seam_A_c8c2da9.log` and `seam_B_dbbc718.log`; sweep logs `sweep_p35*.txt`; `evans_text.txt`.
+- **Fix Tracker v53** published to the same URL at the user's request: see the tracker commit.
