@@ -7549,6 +7549,10 @@ LK_BLAME = re.compile(
 # The clause P3.7's code writes into the lawyer's footer for a looked-up
 # instrument. Read from the footer only.
 LK_FOOTER = re.compile(r"looked up by (?:its |their )?numbers?", re.I)
+# P3.38's footer clause: "The text of SSI 2025/377 (as made) was read from
+# legislation.gov.uk." Read from the footer only, one sentence at a time.
+LK_FOOTER_READ = re.compile(r"\bThe text of .{1,400}? was read from legislation\.gov\.uk\b", re.I)
+LK_NOT_HELD_WORDS = re.compile(r"\bnot held\b", re.I)
 # **A sentence that refers BACK to the instrument is about it too.** Found on
 # `wave4_p37c`: three answers said "This index does not hold the instrument
 # itself" on turns asking only about SSI 2025/377, and the number-only
@@ -7667,6 +7671,14 @@ def lookup_rows(doc: dict) -> list:
                     kinds[k] += 1
                     sents.append((k, s))
             p = probes_all[lid]
+            # P3.38 (Session 50): what the code footer says of THIS instrument,
+            # sentence by sentence, so another instrument's clause is not
+            # credited to the slot.
+            foot_sents = _sentences(footer or "")
+            footer_not_held = any(LK_FOOTER.search(s) and mrx.search(s)
+                                  and LK_NOT_HELD_WORDS.search(s) for s in foot_sents)
+            footer_read = any(mrx.search(m.group(0))
+                              for m in LK_FOOTER_READ.finditer(footer or ""))
             rows.append({
                 "session": base, "run": str(doc.get("session_id")), "rep": doc.get("rep", 1),
                 "turn": n, "src_turn": src, "lid": lid, "state": state, "graded": graded,
@@ -7678,6 +7690,8 @@ def lookup_rows(doc: dict) -> list:
                 "earlier_not_held": lid in earlier_not_held,
                 "kinds": kinds, "sentences": sents,
                 "footer_lookup": bool(LK_FOOTER.search(footer or "")),
+                "footer_not_held": footer_not_held,
+                "footer_read": footer_read,
                 "links": len(MD_LINK.findall(ans)),
                 "sources_kept": int((t.get("timing") or {}).get("sources_kept") or 0),
                 "prose": len(prose),
@@ -7700,6 +7714,15 @@ def lookup_verdict(r: dict) -> tuple:
             return "FAIL", "questions the citation"
         earned = "not_held" in p["lookup"] or r["earlier_not_held"]
         if not k["record_absent"]:
+            # P3.38 (user decision, Session 50): once code has read this
+            # instrument's text from legislation.gov.uk, the answer may lead
+            # with what the text provides and leave "not held" to the code
+            # footer, where the footer says both of it, a lookup in this turn
+            # said not held, and the prose does not hedge. `wave5_p338`'s four
+            # findings were each that shape.
+            if (r.get("footer_not_held") and r.get("footer_read")
+                    and "not_held" in p["lookup"] and not k["hedged"]):
+                return "PASS", "answered from the text read; the footer says not held"
             return "FAIL", "prose does not say it is not held"
         if not earned:
             return "FAIL", "not-held stated without a lookup saying so"

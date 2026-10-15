@@ -105,6 +105,54 @@ def test_text_only_hedged_and_blame_fail_an_absent_slot():
         assert _verdicts(doc)[9][0] == "FAIL", answer
 
 
+READ = " The text of SSI 2025/377 (as made) was read from legislation.gov.uk."
+ANSWERED = ("[SSI 2025/377](https://www.legislation.gov.uk/ssi/2025/377/made) brings section 18 "
+            "of the 2025 Act into force on 15 December 2025.")
+
+
+def _with_footer(clauses: str) -> str:
+    return ("\n\n*Search scope: the legislation index was searched for \"x\"; no filter."
+            + clauses + "*")
+
+
+def test_an_answer_from_the_text_read_passes_on_the_footer():
+    """P3.38 (user decision, Session 50): once the instrument's text was read
+    from legislation.gov.uk, the prose may answer from it and leave "not held"
+    to the code footer (`wave5_p338`'s four findings were that shape)."""
+    foot = _with_footer(" SSI 2025/377 was looked up by its number and is not held in this "
+                        "index, which is incomplete." + READ)
+    doc = _doc(_t(1, ANSWERED + foot, [_lookup_tool("ssi/2025/377", "not_held", True)]),
+               from_turns=[9])
+    assert _verdicts(doc)[9] == ("PASS", "answered from the text read; the footer says not held")
+
+
+def test_the_footer_must_say_both_of_this_instrument():
+    not_held = " SSI 2025/377 was looked up by its number and is not held in this index."
+    other = " Earlier in this conversation, SSI 2025/119 was looked up by its number: this " \
+            "index holds its record but not its text."
+    other_read = " The text of SSI 2025/119 (as made) was read from legislation.gov.uk."
+    other_not_held = " SSI 2026/170 was looked up by its number and is not held in this index."
+    stub_words = " SSI 2025/377 was looked up by its number: this index holds its record but not " \
+                 "its text."
+    for clauses in (not_held, READ, other + READ, not_held + other_read, other_not_held + READ,
+                    stub_words + READ):
+        doc = _doc(_t(1, ANSWERED + _with_footer(clauses),
+                      [_lookup_tool("ssi/2025/377", "not_held", True)]), from_turns=[9])
+        v = _verdicts(doc)[9]
+        assert v == ("FAIL", "prose does not say it is not held"), clauses
+
+
+def test_the_footer_does_not_save_a_hedge_or_an_answer_without_a_lookup():
+    foot = _with_footer(" SSI 2025/377 was looked up by its number and is not held in this "
+                        "index." + READ)
+    hedged = "SSI 2025/377 could not be found in the database. " + ANSWERED
+    doc = _doc(_t(1, hedged + foot, [_lookup_tool("ssi/2025/377", "not_held", True)]),
+               from_turns=[9])
+    assert _verdicts(doc)[9][0] == "FAIL"
+    doc = _doc(_t(1, ANSWERED + foot, [_text_404("ssi/2025/377")]), from_turns=[9])
+    assert _verdicts(doc)[9] == ("FAIL", "prose does not say it is not held")
+
+
 def test_a_sentence_referring_back_to_the_instrument_is_read_as_about_it():
     """`wave4_p37c`: "This index does not hold the instrument itself" names no
     number, and the number-only reading scored three correct answers as
