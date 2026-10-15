@@ -308,6 +308,57 @@ async def section_search_lookup(name: str, args: Any, done: set, run_tool,
     return lookup_enabling_note(result) + blocks_in(result)
 
 
+# P3.38: the instruments one Worker run looks up in code after a section search
+# came back empty. The legislation.gov.uk reads that follow are capped per
+# request (`published_text.MAX_READS_PER_REQUEST`); this bounds the LEX calls.
+MAX_EMPTY_SECTION_LOOKUPS = 8
+
+
+async def empty_section_lookup(args: Any, done: dict, run_tool,
+                               limit: int = MAX_EMPTY_SECTION_LOOKUPS,
+                               log: Optional[list] = None,
+                               seen: Optional[dict] = None) -> Optional[str]:
+    """Look up the instrument an empty `search_legislation_sections` was about,
+    once per Worker run, and return the lookup's result (None where no lookup
+    ran: an unparseable id, or past `limit`). `seen` holds the lookups this run
+    already made (legislation_id -> result, the Worker's own and code's): one of
+    those is reused, not repeated.
+
+    Why: P3.38 reads an instrument's text from legislation.gov.uk only on a
+    lookup or a text read, and P3.25's lookup before a section search stops at
+    five a run, so in 6383 t1 (37 instruments made under one section) six were
+    searched with no lookup, all six came back empty, and nothing was read. An
+    empty section search is the signal: over every stored run no instrument the
+    index holds with text ever returned one (`search_scope.empty_section_note`).
+    The lookup runs through `run_tool`, the Worker's own executor, so the audit,
+    the memo (a repeat of an earlier lookup costs no call) and the step's scope
+    record see it, and P3.38's read fires on its result as on any lookup. A
+    HELD outcome is taken back out of `log`, as `section_search_lookup` does:
+    that lookup is not P3.7's held/absent test and would put a line on the
+    report for nothing. Exceptions propagate: the caller fails soft.
+    """
+    ref = lookup_args({"legislation_id": (args or {}).get("legislation_id")}) \
+        if isinstance(args, dict) else None
+    if ref is None:
+        return None
+    lid = legislation_id(ref)
+    if seen and lid in seen:
+        return seen[lid]
+    if lid in done:
+        return done[lid]
+    if len(done) >= limit:
+        return None
+    from .search_scope import LOOKUP_ENTRY
+
+    start = len(log) if log is not None else 0
+    result = await run_tool(LOOKUP_TOOL, routed_lookup_args(ref))
+    done[lid] = result
+    if log is not None:
+        log[start:] = [e for e in log[start:]
+                       if not (e.get("tool") == LOOKUP_ENTRY and e.get("status") == HELD)]
+    return result
+
+
 def lookup_brief_block(results: list) -> str:
     """The block `run_worker_agent` appends to the Worker's brief, from the
     results of the lookups it ran in code. "" when there is nothing to say.

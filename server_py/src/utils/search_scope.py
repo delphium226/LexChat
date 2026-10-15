@@ -464,6 +464,52 @@ def section_search_note(args: dict, data: Any) -> str:
     )
 
 
+def is_empty_section_result(data: Any) -> bool:
+    """Whether a `search_legislation_sections` result returned no provision
+    (and no error)."""
+    d = _as_dict(data)
+    return not d.get("error") and isinstance(d.get("results"), list) and not d["results"]
+
+
+def empty_section_note(args: dict, status: str, label: str = "") -> str:
+    """P3.38: the note for an empty `search_legislation_sections` once code has
+    looked the instrument up and the index lacks it or its text. "" for any
+    other outcome, where `section_search_note`'s own note stands.
+
+    Why it differs from that note. Over every stored run (Session 50), 5,397
+    section searches on 374 ids returned provisions and 131 on 13 ids returned
+    none, and no id did both; none of the 54 ids a lookup calls held with text
+    ever came back empty. So an empty search here means the index had no text
+    of the instrument to rank, and the other note's "NOT that the instrument is
+    unavailable" was false each time it could be checked: in 6383 t1 it let a
+    Worker write that 20 instruments, the unheld SSI 2026/170 among them, "do not
+    feature the '£' symbol". Worded clear of the answer detectors; "lacks" is the
+    published-text block's own word for the same state.
+    """
+    args = args or {}
+    query = str(args.get("query") or "").strip()
+    query_phrase = f'"{query[:200]}"' if query else "(no query given)"
+    leg = str(args.get("legislation_id") or "").strip() or "this instrument"
+    label = label or leg
+    if status == NOT_HELD:
+        return (
+            f"\n\n[SEARCH SCOPE — 0 provisions of {leg} matched {query_phrase}: looked up "
+            f"by its number, {label} is one this index lacks, so there was nothing of it "
+            "to search. That says nothing about what the instrument contains or about "
+            "whether the citation is accurate, so do not report the instrument as lacking "
+            "what this search asked for.]"
+        )
+    if status == HELD_WITHOUT_TEXT:
+        return (
+            f"\n\n[SEARCH SCOPE — 0 provisions of {leg} matched {query_phrase}: looked up "
+            f"by its number, this index holds the record of {label} but none of its text, "
+            "so there was nothing of it to search. That says nothing about what the "
+            "instrument contains, so do not report the instrument as lacking what this "
+            "search asked for.]"
+        )
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # B3(b) — an enabling power may be asserted only where it was retrieved
 # (FIX_PLAN P2.3)

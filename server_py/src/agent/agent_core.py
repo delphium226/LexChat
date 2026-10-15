@@ -30,7 +30,8 @@ from ..utils.citation_links import (
 )
 from ..utils.discovery_budget import new_search_budget
 from ..utils.instrument_lookup import (
-    LOOKUP_TOOL, parse_lookup_result, routed_lookup_block, section_search_lookup,
+    LOOKUP_TOOL, empty_section_lookup, parse_lookup_result, routed_lookup_block,
+    section_search_lookup,
 )
 from ..utils.lawyer_words import with_lawyer_words
 from ..utils.made_under import prune_section_family_entries
@@ -286,6 +287,9 @@ async def run_worker_agent(
     # P4.24: the exact title each `lookup_legislation` in this run returned,
     # for the Sources rail's bare-id entries. A lookup adds no rail source.
     lookup_titles: dict = {}
+    # P3.38: every lookup this run made (legislation_id -> its result), so the
+    # code lookup after an empty section search reuses one rather than repeat it.
+    lookup_results: dict = {}
 
     async def _run_tool(name: str, args: dict, result_suffix: str = "") -> str:
         out = await _run_tool_inner(name, args, result_suffix)
@@ -293,7 +297,17 @@ async def run_worker_agent(
             got = parse_lookup_result(out)
             if got and got.get("legislation_id") and got.get("title"):
                 lookup_titles.setdefault(got["legislation_id"], got["title"])
+            if got and got.get("legislation_id"):
+                lookup_results.setdefault(got["legislation_id"], out)
         return out
+
+    # P3.38: the instruments this run looked up in code after a section search
+    # of them returned no provision, each once.
+    empty_lookups: dict = {}
+
+    async def _empty_search_lookup(args: dict):
+        return await empty_section_lookup(args, empty_lookups, _run_tool, log=search_log,
+                                          seen=lookup_results)
 
     async def _run_tool_inner(name: str, args: dict, result_suffix: str = "") -> str:
         out = await run_worker_tool(
@@ -311,6 +325,7 @@ async def run_worker_agent(
             search_log=search_log,
             result_suffix=result_suffix,
             provision_fetches=provision_fetches,
+            empty_search_lookup=_empty_search_lookup,
         )
         handed_paras.extend(handed_paragraphs(out))
         return out

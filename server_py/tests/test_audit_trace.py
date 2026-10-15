@@ -227,7 +227,9 @@ async def test_audit_captures_api_calls_inside_the_owning_tool(monkeypatch):
                 "url": "https://lex.example/search", "status": 200,
                 "response": {"results": [{"title": "An Act"}]}, "elapsed_ms": 12,
             })
-        return json.dumps({"results": []})
+        # Not empty: since P3.38 (Session 50) an empty section search makes a
+        # code lookup of its instrument, a third tool this test is not about.
+        return json.dumps({"results": [{"title": "An Act"}]})
 
     monkeypatch.setattr("src.agent.agent_shared.execute_worker_tool", fake_execute)
 

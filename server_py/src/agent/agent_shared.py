@@ -63,7 +63,9 @@ from ..utils.search_scope import (
     amendment_search_note,
     case_law_search_note,
     currency_note,
+    empty_section_note,
     enabling_power_note,
+    is_empty_section_result,
     legislation_search_note,
     lookup_enabling_note,
     not_held_note,
@@ -846,6 +848,41 @@ async def published_text_route(
     return pt.published_block(lid, kind, outcome, how, body, total_chars=len(text)), outcome
 
 
+async def _empty_search_text(args: dict, scope_note: str, result_suffix: str,
+                             empty_search_lookup: Callable,
+                             search_log: Optional[list]) -> tuple:
+    """P3.38: the note and text for an empty section search, from the code
+    lookup `empty_search_lookup` runs. Returns ``(note, log entries the lookup
+    added)``; the note is `scope_note` unchanged where the lookup says held,
+    failed or did not run. The text follows the reworded note once: not where
+    the caller's suffix already carries it (P3.25's lookup ran just before this
+    search), and as a line pointing back where this run was already handed it.
+    Exceptions propagate: the caller fails soft."""
+    from ..utils import published_text as pt
+    from ..utils.instrument_lookup import HELD_WITHOUT_TEXT, parse_lookup_result
+
+    lid = pt.normalise_id((args or {}).get("legislation_id"))
+    handed_before = bool(lid) and pt.handed_in_run(search_log, lid)
+    start = len(search_log) if search_log is not None else 0
+    looked = await empty_search_lookup(args)
+    entries = list(search_log[start:]) if search_log is not None else []
+    got = parse_lookup_result(looked) if looked else None
+    if not got:
+        return scope_note, entries
+    status = got.get("status")
+    note = empty_section_note(args, status, label=got.get("label") or "")
+    if not note:
+        return scope_note, entries
+    if pt.blocks_in(result_suffix):
+        text = ""
+    elif handed_before:
+        kind = pt.KIND_NO_TEXT if status == HELD_WITHOUT_TEXT else pt.KIND_NOT_HELD
+        text = pt.published_line(lid, kind, {"status": pt.EARLIER})
+    else:
+        text = pt.blocks_in(looked)
+    return note + text, entries
+
+
 def _published_recital(lid: str, outcome: Optional[dict]) -> str:
     """P3.38 with P2.3: the preamble of an instrument whose text code read
     from legislation.gov.uk, when it carries an enabling-power recital
@@ -1014,6 +1051,7 @@ async def run_worker_tool(
     search_log: Optional[list] = None,
     result_suffix: str = "",
     provision_fetches: Optional[dict] = None,
+    empty_search_lookup: Optional[Callable] = None,
 ) -> str:
     """Execute a single Worker tool call and return the (possibly summarised) result.
 
@@ -1069,6 +1107,12 @@ async def run_worker_tool(
             holds a Future while its fetch is in flight, so the calls of one
             round share it (`_fetch_once`). None (the default) disables the
             route.
+        empty_search_lookup: Awaitable `(args) -> lookup result or None`, the
+            Worker's code lookup of the instrument a section search returned no
+            provision of (P3.38, `instrument_lookup.empty_section_lookup`).
+            Where the index lacks the instrument or its text, the empty-search
+            note says so and the text code read from legislation.gov.uk on that
+            lookup follows it. None (the default) changes nothing.
     """
     activity_id = uuid.uuid4().hex[:8]
 
@@ -1199,6 +1243,10 @@ async def run_worker_tool(
             # P3.51: and what the result's made-under block named.
             if search_log is not None and hit.get("made_under_entries"):
                 search_log.extend(dict(e) for e in hit["made_under_entries"])
+            # P3.38: and the code lookup an empty section search made, with
+            # the read that followed it.
+            if search_log is not None and hit.get("empty_lookup_entries"):
+                search_log.extend(dict(e) for e in hit["empty_lookup_entries"])
             if parent_on_chunk:
                 await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
                 await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done (cached)"})
@@ -1544,13 +1592,30 @@ async def run_worker_tool(
     # ranked ten is not absent from the Act. 6335 turn 7 reported that a targeted
     # search "returned no results" when it had returned results, and then
     # invented a cause for it. This tool had no note of any kind before now.
+    _empty_lookup_entries: list = []
     if name == "search_legislation_sections":
+        _sec_data = None
         try:
             _sec_data = json.loads(result)
             scope_note = section_search_note(args, _sec_data)
             record_search(search_log, name, args, _sec_data)
         except Exception:
             scope_note = ""
+        # P3.38: an empty section search is the sign that the index holds no
+        # text of the instrument (Session 50: no instrument held with text ever
+        # returned one), so code looks it up, and where the index lacks it or
+        # its text the note says so and the text read from legislation.gov.uk
+        # on that lookup follows. Fail-soft (Invariant 5): on any failure the
+        # note is the one above and nothing follows it.
+        if empty_search_lookup is not None and is_empty_section_result(_sec_data):
+            try:
+                scope_note, _empty_lookup_entries = await _empty_search_text(
+                    args, scope_note, result_suffix, empty_search_lookup, search_log)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.warning("[Worker] Code lookup after an empty section search failed",
+                               exc_info=True)
 
     # P2.3 (B3b): *made under* is the one B3 relation no endpoint returns, so the
     # only evidence of it is an instrument's own preamble — which arrives in
@@ -1896,6 +1961,9 @@ async def run_worker_tool(
         # P3.51: and what its made-under block named, for the same reason.
         if _family_entries:
             tool_memo[memo_key]["made_under_entries"] = _family_entries
+        # P3.38: and what the code lookup after an empty section search recorded.
+        if _empty_lookup_entries:
+            tool_memo[memo_key]["empty_lookup_entries"] = _empty_lookup_entries
 
     # Charged after the nudges are appended: what is counted is exactly what the
     # model receives, so the budget tracks the real context growth.
