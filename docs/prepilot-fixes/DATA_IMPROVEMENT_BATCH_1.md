@@ -74,7 +74,7 @@ coverage findings; `utils/instrument_lookup.py` (the statuses) and `search_scope
    tool said an instrument is not held (a `lookup_legislation` `not_held` / `held_without_text`, a P2.2 "not found"
    about a named instrument, a scope line naming it). For each: the instrument's series and year; **whether
    legislation.gov.uk publishes it with text** (the harvest census for SSIs and UK SIs; for other series, say it is
-   unknown, do not call out); and what the lawyer needed from it (its text, a provision, its date, what it was made
+   unknown, do not call out); and what the legal professional needed from it (its text, a provision, its date, what it was made
    under). Read every one you count. Report: how many turns a legislation.gov.uk read would have changed, and of
    those how many are already met by P3.31's forward route (its recital alone).
 2. **P3.39.** Every user turn asking for the law at a past date, before or after an amendment, or "as enacted" /
@@ -104,7 +104,7 @@ provisions reachable only from the affecting side); `commencement_dates.py` (the
 ## Agent C: P3.34 and P3.43 measured ($0, no external call)
 
 **Read first:** P3.34's, P3.43's, P3.3's, P3.16's and P3.17's rows in full (P3.3 and P3.17 are Blocked on the
-lawyer pack: do not re-litigate their readings); `classification.json`'s B11 sessions.
+legal professional pack: do not re-litigate their readings); `classification.json`'s B11 sessions.
 
 **Measure:**
 1. **P3.34.** Every turn whose question or failure turns on a defined term (a definition in the same instrument,

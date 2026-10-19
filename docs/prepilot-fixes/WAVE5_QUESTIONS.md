@@ -146,7 +146,7 @@ Majesty's Advocate (Scotland)*, *ABC v Principal Reporter and another (Scotland)
 Lord Advocate*. What is missing is everything below that — **Court of Session (Inner and
 Outer House), Sheriff Appeal Court, Sheriff Courts and the High Court of Justiciary** —
 which is where the overwhelming majority of Scots law is made. Told "Scottish courts are
-not indexed", a lawyer would distrust a sound UKSC result; told the precise version, they
+not indexed", a legal professional would distrust a sound UKSC result; told the precise version, they
 also learn where the one real Scottish route is.
 
 ### The failure mode is a wrong answer, not an empty one
@@ -160,7 +160,7 @@ would.**
 
 ### Every court AILA can filter on is non-Scottish
 
-The Court filter offered to a **Scottish Government** lawyer has 14 options — UK Supreme
+The Court filter offered to a **Scottish Government** legal professional has 14 options — UK Supreme
 Court, Privy Council, Court of Appeal (Civil and Criminal), Administrative, Chancery,
 Family, Commercial, Patents, TCC, Upper Tribunal, Immigration & Asylum, Lands Chamber,
 Employment Appeal — and **not one Scottish court**. That is not a defect to fix in the
@@ -207,7 +207,7 @@ elsewhere.**
 >    opinions directly and should be checked for a feed or API; and the commercial providers
 >    (Westlaw, LexisNexis), which are a licence cost and a procurement decision. Whatever is
 >    chosen must clear the **internet-restricted target's whitelist**. Raised independently
->    by three lawyers in the pre-pilot: AlistairC (*Clark* absent, 6359), CambeulW (recency
+>    by three legal professionals in the pre-pilot: AlistairC (*Clark* absent, 6359), CambeulW (recency
 >    bias, 6363) and EmmaM.
 > 3. **To the National Archives, separately: what is the corpus's date coverage?**
 >    Judgments exist back to **1965**, but the Atom feed caps at 50 results for every window
@@ -261,13 +261,13 @@ Two things follow, and both matter more than the cadence question we set out to 
 - **Old material is patchy per instrument, not cut off by date.** `ukpga/1962/47` is
   absent, but `ukpga/1962/41`, `/42`, `/45`, `/50`, `/51` and `/55` are all held. So the
   absence of the Education (Scotland) Act 1962 is **not** a date rule, and "we don't hold
-  pre-19xx" is the wrong story to tell a lawyer.
+  pre-19xx" is the wrong story to tell a legal professional.
 
 ### What this means for B5's wording — the reason the row exists
 
 **A "not found" for a 2026 SSI is far more likely to be a coverage gap than an absence in
 law.** On these numbers, roughly four out of five 2026 SSIs are simply not in the index.
-Telling a lawyer "no such instrument was found" without that caveat is close to telling
+Telling a legal professional "no such instrument was found" without that caveat is close to telling
 them it does not exist. P2.2's negative must distinguish *we searched and the index does
 not hold it* from *it does not exist*, and for 2026 secondary legislation the honest
 default is the former.
@@ -296,7 +296,7 @@ detectors.
 > 1. **Why is 2026 only ~20% ingested when the index refreshes daily?** Is a backfill in
 >    progress, is there a lag between an instrument being made and being indexed, or is
 >    something filtering them out? This is the single fact that most changes what we can
->    honestly tell a lawyer about a "not found".
+>    honestly tell a legal professional about a "not found".
 > 2. **Is the patchiness of older material (6 of 16 sampled 1962 Acts) inherited from
 >    legislation.gov.uk, or a LEX-side rule?** We would like to tell users *why* something
 >    is missing, and the two have different answers.

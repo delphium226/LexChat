@@ -168,7 +168,7 @@ constants: 1,458 texts) and lists what changed: **746**.
 
 **What the integrator should read for, in P3.4's after-column (and any later sweep):**
 - **The first brief of each conversational turn.** Does it name the jurisdiction? Does it name an
-  instrument the lawyer did not give? The stored at-HEAD brief for 6360 turn 1 already names one
+  instrument the legal professional did not give? The stored at-HEAD brief for 6360 turn 1 already names one
   (from training, not jurisdiction-driven), so compare before and after. The new rule forbids only
   an instrument added FOR the jurisdiction.
 - **The quick-lookup Worker's first search query:** whether "Scotland" is added, and whether that

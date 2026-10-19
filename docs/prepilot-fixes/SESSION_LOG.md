@@ -21,11 +21,11 @@ session learns that reality diverged from the plan.
 ## Session 1 — 2026-09-14 — Re-analysis and plan
 
 **Done:**
-- Re-analysed all **62** pre-pilot sessions (11–21 Aug 2026, 13 lawyers, 377 messages) from the
+- Re-analysed all **62** pre-pilot sessions (11–21 Aug 2026, 13 legal professionals, 377 messages) from the
   all-time transcript export, classifying each on the transcript rather than the feedback score:
   **25 FAIL, 16 DEFECT, 21 PASS**. Derived 14 failure buckets bottom-up, then reconciled against
   the existing P1–P10 list in `docs/TODO.md`.
-- Verified the disputed law at source where a lawyer contested an answer: ILRA 2010 s.1(1)(a)
+- Verified the disputed law at source where a legal professional contested an answer: ILRA 2010 s.1(1)(a)
   scope, Education (Scotland) Act 1962 s.117, SSI 2025/119 reg 2 and its appointed day, SSI
   2008/216 and SSI 2022/356 presence and search rank, and all six contested case citations
   against the National Archives feed.
@@ -43,10 +43,10 @@ session learns that reality diverged from the plan.
   jurisdiction filter is set. It expects `"E+W+S+NI"` single-letter tokens; the API returns
   `['Scotland']`, `['']`, `['England','Wales','Scotland']`, `['United Kingdom']`. All six live
   extent values return `False` for all five jurisdiction values. 15 of 62 sessions ran with this
-  set. **Read the transcripts second; probe the API first** — fourteen sessions of lawyer
+  set. **Read the transcripts second; probe the API first** — fourteen sessions of legal professional
   evidence did not identify this and a five-line script did.
 - **B2 has zero primary allocations and that is the finding, not an omission.** The bug never
-  presents as itself — the lawyer sees "not in the legislation database", a halted report, or a
+  presents as itself — the legal professional sees "not in the legislation database", a halted report, or a
   wrong Act, and nothing in the answer mentions a filter. Any future bucket with a high
   secondary count and no primary deserves the same suspicion.
 - **`current_only` is a total no-op and cannot be fixed by extending the word list.** The
@@ -67,7 +67,7 @@ session learns that reality diverged from the plan.
 - **The feedback form's `Q7a` column has false positives.** 6376 and 6361 both answer "referred
   incorrectly: yes" with free text saying the opposite. Classify on transcripts; the scores are
   a reading order, not a verdict.
-- **The raw transcript CSV is deliberately not committed** — it contains the lawyers' live
+- **The raw transcript CSV is deliberately not committed** — it contains the legal professionals' live
   casework questions. `classification.json` is committed because it matches the precedent
   already set in `docs/TODO.md`, which names the same users and quotes them. **Open question
   for the deploying organisation: whether the verbatim replay set may be committed as a
@@ -146,10 +146,10 @@ reproduce.
 - **The halt is not confined to Deep Research.** `chat_loop` returns it as the worker's assistant
   content, so it escapes through a plain Manager delegation too — confirmed in 6340 (standard
   `research` mode) and, most starkly, **6383 turn 1, a conversational turn whose entire answer to
-  the lawyer was the raw string `[Research halted: exceeded 20 tool-call steps]`.** A fix at the
+  the legal professional was the raw string `[Research halted: exceeded 20 tool-call steps]`.** A fix at the
   `run_deep_research` site alone leaves that path open. P2.1 amended.
 
-- **A halt answer can look like honest failure and not be one.** 6340 told the lawyer the agent
+- **A halt answer can look like honest failure and not be one.** 6340 told the legal professional the agent
   "exceeded its operational limits (timed out)" — it hit a step cap — and invented a cause: *"a
   broad enabling power has generated a very large volume of statutory instruments over several
   decades"*, for an Act that is a **404 in LEX**. Invariant 1 requires the disclosure to be *true*,
@@ -542,7 +542,7 @@ three of nine negative verdicts, so any row claiming a fix still needs n=3.
 - **The UI half of P2.1 is satisfied by the text, and a badge would be worse.**
   `research_incomplete` has no DB column, so a badge would vanish on reload while the
   prepended notice — which lives in `messages.content` — persists. A marker that disappears
-  on reload teaches the lawyer that its absence means complete.
+  on reload teaches the legal professional that its absence means complete.
 
 **Decisions taken this session:**
 - Keep the prompt's "do not append `/section/{number}`" instruction *and* enforce it in
@@ -552,7 +552,7 @@ three of nine negative verdicts, so any row claiming a fix still needs n=3.
   redefined metric under the same name silently invalidates every earlier reading of it.
 - Disclose a halt **unconditionally**, with no detector deciding whether the model already
   disclosed it well enough. On this work the detectors have been wrong more often than the
-  product, and a false negative there is a lawyer relying on a partial answer.
+  product, and a false negative there is a legal professional relying on a partial answer.
 
 ### P5.1 — ANSWERED, and mostly without the LEX team (recorded answer, this row's acceptance)
 
@@ -628,7 +628,7 @@ written to ask "how stale is it". It isn't stale.
 
 **This sets B5's wording, which is what the row was for.** On these numbers a "not found"
 for a 2026 SSI is *far* more likely a coverage gap than an absence in law, and a negative
-that does not say so comes close to telling a lawyer the instrument does not exist.
+that does not say so comes close to telling a legal professional the instrument does not exist.
 P2.2 now has a number to write against.
 
 **Corrected 2026-09-15 (Session 6), by the cross-check this very section prescribes.**
@@ -638,12 +638,12 @@ instruments**, spread from `/3` to `/856`, and **all 12 spot-checked resolve on
 `/legislation/lookup`**. A 60-point census puts the rate at ~2% — low single digits, not
 nothing, which is exactly what a 0/20 sample of a ~2% series looks like. The two readings
 never disagreed; the *wording* of the headline did. So the product string P2.2 writes says
-**"under 5%"** and never "none": a lawyer told none stops looking, and the eleventh
+**"under 5%"** and never "none": a legal professional told none stops looking, and the eleventh
 instrument error would have been published in front of users rather than in a document.
 
 All three original claims re-verified. `ukpga/1962/47` is absent — **but as a
 per-instrument gap, not a date cliff**: `/41`, `/42`, `/45`, `/50`, `/51` and `/55` are all
-held. "We don't hold pre-19xx" would be the wrong story to tell a lawyer.
+held. "We don't hold pre-19xx" would be the wrong story to tell a legal professional.
 
 **A method warning, because it cost two wrong conclusions inside this probe.** Point
 lookups are a bad census instrument. Twelve misses across `ssi/2026/{1..250}` read as "no
@@ -744,7 +744,7 @@ Northern Irish court.**
 (Scotland)* and *X v Lord Advocate* — **Scottish appeals that reached the UK Supreme Court
 are indexed.** What is missing is the **Court of Session (Inner and Outer House), Sheriff
 Appeal Court, Sheriff Courts and High Court of Justiciary**, which is where the
-overwhelming majority of Scots law is made. The blunt wording would make a lawyer distrust
+overwhelming majority of Scots law is made. The blunt wording would make a legal professional distrust
 a sound UKSC result; the precise wording also tells them where the one real Scottish route
 is. P2.4 and P5.2 both amended to say it that way.
 
@@ -863,7 +863,7 @@ have gone green on a loose detector.
   acceptance run is what proved it.** The Worker sees tool results; the **Manager sees only
   the worker's report** and the **DR synthesis only the step findings**. 6367 rep 1 carried
   the scope block in the Worker's context **27 times**, three of its four worker reports
-  carried no scope language at all, and the answer told the lawyer that a search *"confirms"*
+  carried no scope language at all, and the answer told the legal professional that a search *"confirms"*
   that no SSIs prescribe the detail — the exact overclaim the block forbids. This is P2.1's
   "a fix at one site leaves the others open" in a second place, and it is why
   `worker_scope_block` exists: the facts are carried across the boundary in code, the same
@@ -871,8 +871,8 @@ have gone green on a loose detector.
 
 - **Carrying the facts to the right reader got 56%, not 100% — so the disclosure became
   code.** Instruction-only moved explained negatives from 20% to 56%; the remaining 44% still
-  told a lawyer something was not found without saying what had been looked for. Invariant 2
-  arriving exactly on schedule. `answer_scope_footer` is one lawyer-facing line emitted on
+  told a legal professional something was not found without saying what had been looked for. Invariant 2
+  arriving exactly on schedule. `answer_scope_footer` is one legal-professional-facing line emitted on
   every researched answer.
 
 - **The mechanical acceptance is now circular, and the write-up says so.** The footer
@@ -908,16 +908,16 @@ have gone green on a loose detector.
 - **The footer's first rendering exposed two defects unit tests had not.** It printed
   `""Water Industry Commission for Scotland""` (the model quotes its own query; wrapping it
   again doubles the quotes, and the quoted and unquoted forms listed as two searches), and
-  *"filters in force: years any-2026"* — **telling a lawyer a constraint was in force that was
+  *"filters in force: years any-2026"* — **telling a legal professional a constraint was in force that was
   not**. An overstated limit invites re-running a search that was never narrowed. The
-  lawyer-facing line now names only filters that could actually have excluded something; the
+  legal-professional-facing line now names only filters that could actually have excluded something; the
   agent-facing block still reports every parameter, deliberately.
 
 - **The two remaining failures are the same shape, and they became a row (P2.8).** Both are
   turns with **zero delegations** — a negative carried forward from an earlier turn (*"As noted
   in the previous search, SSI 2025/377 is not currently available…"*). No search ran, so no
   footer fired: the footer is per-turn and a conversation is not. **2 of 21 negative turns, and
-  the rate will be higher in real use than in a replay**, because a lawyer follows up more than
+  the rate will be higher in real use than in a replay**, because a legal professional follows up more than
   a script does. Booked as **P2.8** rather than a note, per the re-planning protocol — it is
   measured, reproducible and has a known mechanism. Note what NOT to do: emitting the footer on
   every turn regardless would describe searches that did not happen, which is a worse lie than
@@ -927,13 +927,13 @@ have gone green on a loose detector.
   reads as *"nothing made in 2026 is in the index"*. `/legislation/search` returns **27
   distinct `uksi/2026/*`** instruments and **all 12 spot-checked resolve on lookup**; a
   60-point census puts it at ~2%. Low single digits, not nothing — so the product string says
-  **"under 5%"** and never "none", because a lawyer told "none" stops looking. Caught by the
+  **"under 5%"** and never "none", because a legal professional told "none" stops looking. Caught by the
   cross-check P5.3's own method warning prescribes, applied to P5.3's own headline.
 
 - **The replacement coverage figure was falsified the next day, by the same command.** "Under
   5%" went into the product string from one 60-point sample of SSI 2026 (1/60). Re-running
   `lex_probe --coverage` on 16 Sep returned **5/60 — 8%**. That is ordinary noise at n=60 and
-  it is enough to make a claim false in a string a government lawyer reads. **Every coverage
+  it is enough to make a claim false in a string a government legal professional reads. **Every coverage
   figure in the product is now a bound chosen to survive the spread** ("roughly 85%", "under
   10%"), not the last number measured, and a test pins the hedging words. The general rule,
   which cost two corrections in two days to learn: **a sampled rate quoted at a user needs a
@@ -952,7 +952,7 @@ have gone green on a loose detector.
 - **Verified at source, and it settles 6373 and 6409 turns 9-11:** `ssi/2026/170` and
   `ssi/2025/377` are **both 404 in LEX**, `ssi/2025/119` is held. FrankieH's citation was right
   and AILA asked her to check it. Across 23 opportunities in the acceptance sweep, **no run
-  blamed a lawyer's citation** (Wave 1: 2 of 10 on these two sessions, 3 of 44 overall).
+  blamed a legal professional's citation** (Wave 1: 2 of 10 on these two sessions, 3 of 44 overall).
 
 **Decisions taken this session:**
 - **The footer is unconditional on any turn that searched**, not gated on a detector that
@@ -1032,7 +1032,7 @@ design.**
   `lex_probe --enabling` (new, 103 instruments, 2026-09-16): `uksi` pre-1990
   **18/25**, `uksi` 1990-2009 **0/25**, `uksi` 2010+ **0/25**, `ssi` 1990-2009
   **0/13**, `ssi` 2010+ **0/15**. **Zero for Scottish instruments in either
-  era** — the corpus these lawyers work in. Over the whole post-Wave-1 replay
+  era** — the corpus these legal professionals work in. Over the whole post-Wave-1 replay
   corpus (**38.8M chars of raw retrieval, 2,504 tool results**) only **12
   results carried an instrument preamble**, covering **6 distinct instruments,
   every one in session 6340**. ~~33M chars, 1,907 results, exactly two recitals~~
@@ -1092,22 +1092,22 @@ design.**
   reason it did not appear in the initial search is that our legislation index
   does not record the enabling powers … instruments that only cite the enabling
   power in their preamble (which is not indexed) were missed."* That tells a
-  lawyer what to do next, which a bare limit does not.
+  legal professional what to do next, which a bare limit does not.
 
 - **A review before the sweep found the fix wired to the rare route.** The
   enabling-power record was on `get_legislation_text` only — 32 calls across the
   corpus against **628** `search_legislation_sections` calls — so the report
-  block and the lawyer-facing clause would have been silent on almost every turn
+  block and the legal-professional-facing clause would have been silent on almost every turn
   where a claim can arise, including most of 6383's. Both routes are recorded
   now; only `get_legislation_text` can ever set `stated`, because a preamble is
   not a ranked provision.
 
 - **The strip needed widening, and that was a live defect**: `[ENABLING POWER …]`
   is not `[SEARCH SCOPE …]`, and `_TOOL_BLOCK` matched only the latter. Without
-  the change an agent-facing block would have rendered to a lawyer. Found by
+  the change an agent-facing block would have rendered to a legal professional. Found by
   writing the test, not by the sweep.
 
-- **P2.2's footer had a defect this sweep put in front of a lawyer.**
+- **P2.2's footer had a defect this sweep put in front of a legal professional.**
   `answer_scope_footer` stripped only the OUTER quotes from a query, so the
   model's own field syntax rendered as `"Education (Scotland) Act 1962" 117"` —
   unbalanced, and reading as two searches where there was one. Fixed and pinned;
@@ -1127,7 +1127,7 @@ design.**
   is per-REQUEST; `search_log` is per-WORKER-RUN. So when a Deep Research step
   repeats a search an earlier step already made, that query never enters its own
   run's record and is therefore absent from `worker_scope_block` and from the
-  lawyer-facing `answer_scope_footer` — **P2.2's disclosure under-reports what was
+  legal-professional-facing `answer_scope_footer` — **P2.2's disclosure under-reports what was
   searched.** Measured over all four post-Wave-1 directories: 23% of
   `search_legislation` calls are memo hits, and **78 of 358 worker runs (22%) lose
   at least one query from their own record — 150 distinct queries across 47
@@ -1162,7 +1162,7 @@ design.**
   is not re-derived.
 - **The permitted branch is narrowed from three routes to two** (preamble or
   `description`, never "a provision"), on the 11-of-12 measurement above.
-- **The lawyer-facing clause is gated on a STRUCTURAL fact** — did this turn
+- **The legal-professional-facing clause is gated on a STRUCTURAL fact** — did this turn
   retrieve an instrument — and never on a prose detector deciding whether the
   answer contains a derivation claim. A prose detector in the product fails
   silently. The measured cost is one gap: **12 of 13** before-column claim-turns
@@ -1228,7 +1228,7 @@ and two of them change what the tool reports.**
   `ukpga/1981/67` have none at all. **The handover's "15 commencements by
   `ssi/2025/119`" is that double count** — it is 8 by SSI, seven by
   `ssi/2025/119` and one by `ssi/2025/377`. A tool that counted rows would have
-  told a lawyer roughly double.
+  told a legal professional roughly double.
 - **The cap can be fetched past, cheaply, so the tool does that rather than
   stating a window.** Over the legislation_ids the replay corpus actually
   touched (272 at the last run): median 12 relation rows, p90 870, **13 (4.8%) over 2,000** — and
@@ -1263,7 +1263,7 @@ and two of them change what the tool reports.**
 - **Picking the denominator was the hard part, and the first draft got it
   wrong in the flattering direction.** Grading every answered turn scored six of
   `wave1`'s eighteen as correct — including **6409 turn 8, whose entire question
-  is "SSI 2025/119"**. Repeating back an instrument the lawyer supplied is not a
+  is "SSI 2025/119"**. Repeating back an instrument the legal professional supplied is not a
   retrieved relation. In scope now means the *question* asks about commencement
   and does not itself name one of the graded instruments.
 
@@ -1532,7 +1532,7 @@ survive measurement, and two of them changed the build.**
   0 unsupported and 0 text-version.
 
 - **A blank Deep Research report, and it did NOT recur.** 6383 rep 1 in
-  `wave2_p25` returned a report whose **body was empty** — the lawyer saw the
+  `wave2_p25` returned a report whose **body was empty** — the legal professional saw the
   scope footer and nothing else — with `status: ok`, no error, 30 tool calls,
   three intact step reports (4,836 / 5,777 / 7,190 chars) and 219 commencement
   relations retrieved. First blank in 218 answered turns across eight replay
@@ -1649,7 +1649,7 @@ survive measurement, and two of them changed the build.**
   *"the Act remains in force except ss. 38-39, repealed by uksi/2014/486"* would
   otherwise score SOURCED off the repeal while the overclaim sits in the other
   half of the sentence.
-- **The title-marker limb was dropped from the lawyer-facing footer** after the
+- **The title-marker limb was dropped from the legal-professional-facing footer** after the
   first smoke run put *"the index's own title for uksi/2024/697 marks it as
   repealed"* on an answer about the Scotland Act 1998. The marker is recorded
   per search ROW; filtering it to cited instruments needs a prose detector,
@@ -1814,13 +1814,13 @@ directory that never contained most of the defect.
   against.
 - **Both fallbacks are labelled as fallbacks (Invariant 1).** Research the
   answering step never used is not an answer. The whole complaint in this bucket
-  is that a lawyer could not tell a lost answer from a finished one, so the
+  is that a legal professional could not tell a lost answer from a finished one, so the
   fallback opens by naming the failure, states what has and has not been done to
   the material below, and reorders nothing. `run_deep_research` sets
   `synthesis_failed`; the Manager sets `answer_failed`.
 - **The Manager keeps its worker reports.** Two lines in `manager_tool_executor`,
   read only on the failure path. Discarding a completed research report to show
-  "something went wrong" would throw away retrieval the lawyer paid for, which is
+  "something went wrong" would throw away retrieval the legal professional paid for, which is
   the complaint this bucket is about.
 - **Audit schema bumped to v3 deliberately.** `AUDIT_TRACE.md` says the version
   is incremented on *any* change to the shape, so an additive key still bumps it.
@@ -1833,7 +1833,7 @@ directory that never contained most of the defect.
   progress claims as much as to legal ones.
 - **Elapsed is derived from `run.startedAt`, not counted up in the interval**, so
   a re-render, a chat switch or a backgrounded tab cannot reset or skew it. It
-  includes queue wait, which is the wait the lawyer actually experiences.
+  includes queue wait, which is the wait the legal professional actually experiences.
 
 **State of the branch:** `fix/prepilot-defects`. **998 tests green, NOTHING
 PUSHED** — the whole-plan-then-one-push policy stands, so the target still runs
@@ -2083,7 +2083,7 @@ which means new cross-turn state. The second is to fire the footer on a turn tha
 asserts a negative, which puts a prose detector in the product, and
 `search_scope.py` refuses that by design. Neither is justified at this rate. **The
 case for building anyway** is that the one instance is a real negative shown to a
-lawyer with no disclosure. That trade is the user's to make.
+legal professional with no disclosure. That trade is the user's to make.
 
 **Surprises / findings. Three of them belong to other rows.**
 
@@ -2111,7 +2111,7 @@ lawyer with no disclosure. That trade is the user's to make.
   available database does not contain information on this specific issue."* That
   is a claim about the **corpus**. The truth is a claim about the **tool set**: no
   case-law tool is loaded in this mode. The sentence is false in the way B5 cares
-  about. 6350's Manager then told the lawyer to switch to *"Legislation & Case Law"
+  about. 6350's Manager then told the legal professional to switch to *"Legislation & Case Law"
   mode*, which is P4.1(b)'s wrong control name.
 
 - ~~**3. P2.2's `NOT_FOUND` detector is blind to that sentence.**~~ **(FALSE. `NOT_FOUND` is not P2.2's detector; `NEG_ASSERTED` is, and it matches. See the correction above.)**
@@ -2211,7 +2211,7 @@ P2.7, P2.8, P2.10**. P2.10 is awaiting a decision, not work.
 
 - **P2.10's evidence is two defects, and P2.8 fixes only one.** 6341 runs under
   `legislation_only`, and **no run of it has ever called a case-law tool**. Yet
-  its turn 2 tells the lawyer the agent *"conducted a comprehensive search
+  its turn 2 tells the legal professional the agent *"conducted a comprehensive search
   across both the legislation and case law databases"*. The carried line fixes
   what P2.8 is about: a restated negative with no scope beside it. It qualifies
   the legislation searches and, correctly, says nothing about case law.
@@ -2305,7 +2305,7 @@ P2.7, P2.8, P2.10**. P2.10 is awaiting a decision, not work.
   The line opens *"no search of the legislation index was run for this reply"*,
   labels every term as earlier, claims no dependency, and scopes its not-found
   clause to *"those searches"*. Live, on the stub question (smoke 6341 turn 8),
-  it tells the lawyer that nothing was looked up for that answer. That is true,
+  it tells the legal professional that nothing was looked up for that answer. That is true,
   and it is the disclosure a training-knowledge answer lacked.
 - **Silent when the turn's searches are unknown.** That covers a failed
   delegation (its search record went with it) and a peer consult (the peer's
@@ -2331,7 +2331,7 @@ P2.7, P2.8, P2.10**. P2.10 is awaiting a decision, not work.
   - A turn that only searched *within* an instrument stays silent (see above).
   - A turn that retrieved text or relations without searching, **with no
     searched turn before it**, still shows no footer at all. Its P2.3/P3.5/P2.5
-    clauses therefore never reach the lawyer. This predates this row:
+    clauses therefore never reach the legal professional. This predates this row:
     `answer_scope_footer` returns `""` without a search. The carried line only
     covers such a turn when an earlier reply searched.
 - **Code committed before the paid sweep** (`2545184`), so the run files name
@@ -2468,12 +2468,12 @@ sessions. Wave 2's open rows: **P2.4, P2.7**.
   fired.**
   - In the smoke run the Worker read the note and still wrote *"there may be
     a typo in the citation … please verify"*. The Manager filtered it, so the
-    lawyer saw nothing wrong.
+    legal professional saw nothing wrong.
   - In neither n=3 sweep did any 6373 run call `get_legislation_text`. The
     pass therefore comes from the prompt rules. The note is a tested seam
     whose effect on the model is unmeasured.
 
-- **A prompt fix cost the lawyer case links, and only an A/B showed it.**
+- **A prompt fix cost the legal professional case links, and only an A/B showed it.**
   - The same rule, as a block appended to the four Worker prompts, gave a
     clean 6373 (0 of 6 slots blamed at either level).
   - But in 6385 the chat-mode Worker switched to bullet lists: 0 of 9 reports
@@ -2500,14 +2500,14 @@ sessions. Wave 2's open rows: **P2.4, P2.7**.
     prose report. It is a candidate for P4.3 (B8, sources) and has not been
     built.
 
-- **P4.5 closed its trap on a lawyer for the first time, in the
+- **P4.5 closed its trap on a legal professional for the first time, in the
   pre-measurement.**
   - In `wave2_p24_pre/6375 r3 t2`, Deep Research step 1 ran three
     `search_case_law` calls that returned 4, 43 and 31 judgments, including
     *Berezovsky v Hine*.
   - Its final completion then came back empty three times, so its report is
     `""`.
-  - The synthesis told the lawyer *"Step 1 found no results"*.
+  - The synthesis told the legal professional *"Step 1 found no results"*.
   - Four more followed in this session's sweeps. The running count, from
     `blanks`, is **6 unrecovered provider calls in 166 answered turns**
     across the seven schema-v3 directories (95% Wilson interval 1.7–7.7%).
@@ -2560,7 +2560,7 @@ sessions. Wave 2's open rows: **P2.4, P2.7**.
 - **No carried case-law line.** A no-search follow-up in a case-law session
   gets nothing. The pass bar is "every turn that searched case law". This is a
   recorded residual.
-- **Not a lawyer-facing "not held" clause.** "Is this instrument held" is
+- **Not a legal-professional-facing "not held" clause.** "Is this instrument held" is
   P3.7's, and a footer cannot stop the prose questioning a citation.
 - **The research-mode Worker prompts keep the rule as a block, and the
   chat-mode Worker gets it as a clause**, per the A/B.
@@ -2671,7 +2671,7 @@ request so that the P2.7 session re-derives nothing.
    6373's turn-2/3 tool calls from 35 to 14), so derive the budget from
    directories produced at `051472d` or later, or say which prompt the
    distribution was measured under.
-2. **P4.5** now has a measured false negative that reached a lawyer, plus a
+2. **P4.5** now has a measured false negative that reached a legal professional, plus a
    rate (6 in 166, 1.7–7.7%). The candidate fix must cover the Deep Research synthesis
    as well as the Manager.
 3. **Still with the user:** **P5.2** (the LEX question in
@@ -2723,7 +2723,7 @@ request so that the P2.7 session re-derives nothing.
   search. By round, a Deep Research step reusing an earlier step's search pays
   at most one round.
 - **`search_case_law` is not budgeted**; no halted run ever issued one.
-- **The lawyer gets one clause inside the existing footer line**, and the agent
+- **The legal professional gets one clause inside the existing footer line**, and the agent
   gets a stop that is explicitly NOT the parliamentary one (which says to
   answer that "no relevant records were found" — the bare negative P2.2
   exists to stop).
@@ -2798,13 +2798,13 @@ request so that the P2.7 session re-derives nothing.
   `wave2_p27_pre/6374 r3 t4`, a Deep Research step whose report is its scope
   block alone after three empty completions. The synthesis covered the gap
   from the other steps and asserted nothing false, so the trap did not close
-  on the lawyer. Running count: **7 unrecovered provider calls in 250 answered
+  on the legal professional. Running count: **7 unrecovered provider calls in 250 answered
   turns (95% Wilson 1.4-5.7%)**.
 
 **Decisions taken this session (all four put to the user, all four accepted):**
 - **8 search rounds**, counted per worker run, memo hits included.
 - **`search_case_law` unbudgeted**, with no case-law budget on `case_law_only`.
-- **One clause in the lawyer's existing footer line**, not a prepended notice
+- **One clause in the legal professional's existing footer line**, not a prepended notice
   (a budget stop still produced a report, so a halt-style banner overstates it)
   and not agent-only (P2.2 measured instruction-only at 56%).
 - **The section-search shape becomes its own row (P3.8), not this one.**
@@ -2857,7 +2857,7 @@ PUSHED**. Whole-plan-then-one-push stands. **1196 tests green.** Ledger:
 2. **P3.8** is deliberately parked behind P3.1: measure the same-resource shape
    again after Phase 2 changes, with `discovery --all`.
 3. **P4.5** has a rate (7 in 250, 1.4-5.7%) and a measured false negative that
-   reached a lawyer; its fix must cover the Deep Research synthesis.
+   reached a legal professional; its fix must cover the Deep Research synthesis.
 4. **Still with the user:** **P5.2**, which is what B12 waits on.
 
 **Added at the handover (2026-09-18).** Before the next session, what this
@@ -2987,7 +2987,7 @@ is recorded here in full.** Directories are under
 1. Re-baseline before Wave 3 (Invariant 3), or not.
 2. Whether D16's four unplanned items become rows.
 3. Whether Thomas's document (and his two companion notes) should be committed
-   to the repo. It paraphrases lawyers' questions at about the level of detail
+   to the repo. It paraphrases legal professionals' questions at about the level of detail
    this plan already carries.
 
 **State of the branch:** `fix/prepilot-defects`, no upstream, **NOTHING
@@ -3030,7 +3030,7 @@ blocks nothing.
 
 **What the measurement said before anything was built.**
 - **Retrieval was complete in 9 of 9 HEAD runs.** Every provision the three
-  lawyers wanted arrived with all its subsections, in one section search for
+  legal professionals wanted arrived with all its subsections, in one section search for
   6348 and 6396. Depth was lost after retrieval, at three seams: the Worker's
   write-up, the Deep Research synthesis, and the chat Manager's rewrite.
 - **A prompt taught the defect, the fourth time** (P2.5, P2.4, P4.6 before it):
@@ -3072,7 +3072,7 @@ last):**
   depth at least once" was met on two of 6365's anchors by amendment notes
   (*"substituted Section 57(7)(a)"*) while every timeline claim linked the bare
   section. A strict readout (N of M references at depth) now prints beside the
-  verdict and separates the runs cleanly: delivered 50-95%, the lawyer's
+  verdict and separates the runs cleanly: delivered 50-95%, the legal professional's
   complaint 0%, HEAD 0-17%.
 
 - **My own first prompt examples would have contaminated the acceptance.** They
@@ -3281,7 +3281,7 @@ and whose iterate loop is now $0.03 a draw.
   bounded by `_final_round` and fail-soft to the pre-P3.8 halt. The halt keeps
   its status (`halted.written_up`, audit schema **v4**) and P2.1 keeps its
   disclosure: the worker's agent-addressed header now says the findings are
-  PARTIAL and sits above them, the lawyer's notice is unchanged, and
+  PARTIAL and sits above them, the legal professional's notice is unchanged, and
   `incomplete_steps_note` tells the synthesis the findings are partial rather
   than missing.
 - **Acceptance:** **PASSED** (`wave3_p38`, head `1243cdd`, n=3 on 6374 and 6383, **$9.60**, 77 min). **One worker run halted in the six runs — 6374 rep 1, turn 2, Deep Research step 3 — and it wrote up:** `written_up: true`, 20 rounds, 27 tool calls, a 5,490-char partial report with 10 provision links, **10 of 10 tool-returned and 10 of 10 reaching the answer** beneath P2.1's notice; the synthesis's own BLUF says that part of the research *"did not complete due to an internal limit on tool-call rounds"*, every negative in the write-up names the limit as the reason, and no agent-facing header text leaked. `halts` 1 halted turn, 0 failing; every exit-1 subcommand exits 0. Sources per rep: 6374 42.0 (45.0 at `wave2`, n=1; 35.7 at `wave2_p27`), 6383 14.0 (12.0); `sources_kept` fell in 1 of 4 slots for 6374 and 0 of 4 for 6383, inside the 3-of-8 floor. **Coverage stated honestly, as P2.1's 6384 was:** 6383 halted in 0 of 3, so its live condition is vacuous; the round is evidenced live by one run and on the seam by four draws.
@@ -3325,13 +3325,13 @@ and whose iterate loop is now $0.03 a draw.
   returns **674 provisions for the Act and Schedule B1 is ONE of them** — no
   paragraph rows exist, and the paragraph query never ranks the Schedule
   into the top 10 (a topical query at `size` 20 does). The model was asking
-  for a granularity the index does not have. The cap now stops it; the lawyer
+  for a granularity the index does not have. The cap now stops it; the legal professional
   still does not get paragraphs 42-44, and that residual is **P3.12**, not a
   widening of this row.
 
 - **A `sources_kept` fall that is B7, not this row.** The pass bar reads
   "fell in 3 of 7 turn slots" for 6335 (noise floor 3 of 8), and all three
-  are turns 4-6, where the lawyer repeats one case-law question in
+  are turns 4-6, where the legal professional repeats one case-law question in
   legislation-only mode. At `wave2` the Manager delegated every repeat and
   a Worker searched statute for case law; at HEAD it answers two of the
   three repeats without re-delegating ("as previously noted ... switch to
@@ -3417,7 +3417,7 @@ and whose iterate loop is now $0.03 a draw.
 - Put to the user: P3.8 before P3.11 (taken).
 - Taken without asking, and stated here: the Manager's own loop gets the
   write-up round too (it is the same `chat_loop`, and 6383 turn 1's raw
-  marker as the entire answer is the case it improves); the lawyer's notice
+  marker as the entire answer is the case it improves); the legal professional's notice
   is not reworded (it was validated at P2.1 and "treat the coverage below as
   partial" is true of a write-up); the A4 reformat stays skipped on a halt
   (the write-up carries the Worker's OUTPUT STRUCTURE rule and the header is
@@ -3567,7 +3567,7 @@ the session scratchpad; the run files (`wave3_p38_pre`, `wave3_p38`) are the evi
   the live loop's final write-up not obeying P3.1's rule with the sibling in
   front of it: obedience, not information. Invariant 2's next step is a
   code-emitted sibling line at the report seam; that puts code-written
-  statute text into the lawyer's report and was not built on my own
+  statute text into the legal professional's report and was not built on my own
   judgement (see Decisions).
 
 - **A seam pass is not a live pass.** Three of three payloads DELIVERED on the
@@ -3787,7 +3787,7 @@ not updated (it is updated only when asked; P3.11 would show as Built / not acce
   `system.py` or `ai.py` checks it, so any API caller runs Research with it
   off. Not a row unless the user wants it to be a real switch (the seam would
   be `build_request_config`).
-- **P3.11's numbers are of the wrong Worker.** The lawyer met the quick-lookup
+- **P3.11's numbers are of the wrong Worker.** The legal professional met the quick-lookup
   Worker, which has no "say what the other subsections provide" rule; the
   outline itself is appended in both modes. The row's decision is deferred
   behind P0.5.
@@ -3845,7 +3845,7 @@ P3.11's decision on the Conversational-mode numbers.
     Worker issues a median of 1 discovery call and 2 retrievals, nowhere near
     the 20-round cap. Neither ticked row is undermined — both rest on wider
     evidence and the halt machinery is mode-blind — but those three sessions
-    cannot evidence a halt rate at all in the mode their lawyers used.
+    cannot evidence a halt rate at all in the mode their legal professionals used.
   - **P4.1 / B7 reproduces, for the first time in any sweep, and displaces
     the defect it was confused with.** See *Surprises*.
   - **P3.1's 6348 half and P3.11: 1 of 3 at HEAD, 0 of 3 at `2d9ae11`**
@@ -3859,7 +3859,7 @@ P3.11's decision on the Conversational-mode numbers.
 **Surprises / deviations from FIX_PLAN:**
 
 - **B5's false negative and B7's deflection are one defect in two modes, and
-  only one of them ever reached a lawyer.** In Research mode 6346 and 6347
+  only one of them ever reached a legal professional.** In Research mode 6346 and 6347
   delegate to a Worker that makes zero tool calls and writes *"The available
   database does not contain information on this specific issue"* under a
   Summary Answer heading. In Conversational mode that shape is **gone** —
@@ -3870,7 +3870,7 @@ P3.11's decision on the Conversational-mode numbers.
   in Session 16's instrument note **was an artefact of the wrong mode**, and
   the note is now wrong as written. Two defects had been booked where there
   is one, seen through two prompts.
-- **P4.6's scripted sentence was never seen by a lawyer.** It appears in
+- **P4.6's scripted sentence was never seen by a legal professional.** It appears in
   **0 of 179** pre-pilot answers and 0 of 50 `wave0_conv` turns, against 20
   of 50 in `wave2`. The line lives in `WORKER_SYSTEM_PROMPT` and not in
   `WORKER_SYSTEM_PROMPT_CONVERSATIONAL`, and the Research flag was off on the
@@ -3901,7 +3901,7 @@ P3.11's decision on the Conversational-mode numbers.
   and both were caught by a count that did not add up.** (a) `tr.prepilot`
   was built *after* the chat call, so the three early returns in the Deep
   Research branch wrote none, and `mode_rows` read the empty block as
-  *the lawyer got no reply* — manufacturing B13 evidence out of an instrument
+  *the legal professional got no reply* — manufacturing B13 evidence out of an instrument
   gap (6347 turn 2). Found because the Deep Research count read 1 where the
   set says 2. (b) The published marker matched its phrases **in prose**:
   `Statutory Framework` fired on a planner asking *"would you like to search
@@ -3925,15 +3925,15 @@ P3.11's decision on the Conversational-mode numbers.
 - **`research_mode` is the same defect and does NOT yield to the same trick
   (P0.6).** `Filter: Research mode` is blank for exactly the twelve. The
   obvious signal — "the answer cites a neutral citation, so case law was in
-  the tool set" — is **wrong**: a deflection quotes the case name the lawyer
+  the tool set" — is **wrong**: a deflection quotes the case name the legal professional
   asked about, and all three of 6346's answers match it while refusing to
   search. The real distinction is substantive content *from* the judgment,
   which is a human read. Nearly written up as a derivation before being
   checked.
 - **The transcripts hold P4.1 bug (a)'s contrast case, which no replay can
-  produce.** In 6347 and 6350 the lawyer changed the research filter
+  produce.** In 6347 and 6350 the legal professional changed the research filter
   mid-session and it **worked** (6347 answers 2–4 discuss the holding in
-  *Graham Andrew Evans v R* [2025] EWCA Crim 1150); in 6346 the lawyer
+  *Graham Andrew Evans v R* [2025] EWCA Crim 1150); in 6346 the legal professional
   changed it, said so, and was told three times it had not. Also: the
   pre-pilot's own wording was *"switch to **Research mode** using the mode
   selector"* (6343 answer 3) — the chat-mode control — where HEAD says
@@ -4002,7 +4002,7 @@ plus P0.6 and P3.13 as new rows).
 
 **Done:**
 - **The user settled P3.11: option (d), and the acceptance bar moves to
-  CONVERSATIONAL mode** — the mode 6348's lawyer used — so the row is graded
+  CONVERSATIONAL mode** — the mode 6348's legal professional used — so the row is graded
   against `wave0_conv_6348`'s 1 of 3, not the Research-mode 2 of 3.
 - **Option (d) built: the quick-lookup Worker now carries P3.1's sibling
   rule.** P3.1 put it in the research Workers only;
@@ -4148,7 +4148,7 @@ the contrast case it needs is in the transcripts rather than in any replay.
   and `ResearchFiltersModal.jsx`; `test_mode_change.py` forbids every manager,
   worker and planner prompt naming anything else.
 - **Bug (c):** the rule forbids describing the interface; tests forbid the
-  phrases the lawyers saw. **Action 9:** `extract_suggestions` drops any chip
+  phrases the legal professionals saw. **Action 9:** `extract_suggestions` drops any chip
   that offers to change a mode or filter (`is_mode_switch_offer`); every
   chips block says so.
 - **Acceptance — the scripted sequence, n=3, in both modes, before and
@@ -4179,7 +4179,7 @@ the contrast case it needs is in the transcripts rather than in any replay.
   client saves a clarification with no model; every other assistant message
   carries the backend's. `answer_shape` read all five as conversational (no
   report headings), so `wave0_conv` replayed 6346 in Conversational mode when
-  its lawyer was in Deep Research throughout — her turn 4 says so. New source
+  its legal professional was in Deep Research throughout — her turn 4 says so. New source
   `planner_marker` (`replay_set._resolve_modes`), which also serves as a
   neighbour for the unanswered turns beside it (nothing completed, so the
   client did not revert). Sources over the 62 sessions: snapshot 108,
@@ -4262,7 +4262,7 @@ directories** (+`wave4_p41`, `wave4_p41_pre`, `wave4_p41_conv`,
 **Open with the user:** P5.2 (B12, external); whether Thomas's review
 document should be committed; whether the Fix Tracker should be updated
 (P4.1 → Done, B7 closed, P4.9 new); and whether the diagnosis correction
-above changes anything for the pilot's user guidance — the control lawyers
+above changes anything for the pilot's user guidance — the control legal professionals
 need is the Filters button, and no answer had ever named it.
 
 ---
@@ -4405,14 +4405,14 @@ document should be committed; whether the Fix Tracker should be updated.
   **P3.13 ticked; B10 CLOSED; ledger 30 of 48, 8 of 14 buckets.**
 
 **Surprises / deviations:**
-- **The first dry-run's notes were not fit to show a lawyer, and only
+- **The first dry-run's notes were not fit to show a legal professional, and only
   reading them showed it.** 29 notes, three kinds of fault: a list cut
   mid-parenthesis (6374), restatements of the kept subsection, and
   near-duplicates of an answer sentence (6409). Each became a guard. After
   that there were 15 notes, all read.
 - **The prompt clause cost retrieval, which no metric on this row watched.**
   `wave3_p313b` rep 1 went to the Economic Crime and Corporate Transparency
-  Act 2023 and never searched FOISA. Its first brief was the lawyer's words
+  Act 2023 and never searched FOISA. Its first brief was the legal professional's words
   nearly verbatim. That brief form appeared in 3 of 6 runs with the clause
   and 0 of 10 before. The first brief is written before any tool result, so
   the clause was the only change of ours that could reach it. A first-round
@@ -4571,7 +4571,7 @@ Consider raising **P4.5**:
   (1) The research type was **one saved preference per user**
   (`users.research_mode`, default `legislation_only`), written only when the
   Research filters modal was applied, and restored on every chat and login. A
-  change is therefore an event, and a lawyer's turns between two equal reads
+  change is therefore an event, and a legal professional's turns between two equal reads
   are bracketed.
   (2) Each type left behaviour in the answers. The legislation-only Manager
   declined every case-law question in these sessions. The hybrid Manager note
@@ -4602,7 +4602,7 @@ Consider raising **P4.5**:
 **Surprises / deviations from FIX_PLAN:**
 - **The default was not just unlabelled; it was wrong on 16 of the 50
   turns.** Those are 6335 t6–7, 6338 t1–3, 6340 t1, 6341 t1–5, 6347 t2–4 and
-  6350 t3–4, and every sweep sent them without the case-law tool the lawyer
+  6350 t3–4, and every sweep sent them without the case-law tool the legal professional
   had. Over the 39 directories that is 14 directories and 153 turn-runs; rep
   1 of `baseline`, `wave1`, `wave2` and `wave0_conv` carries 16 each. The
   brief expected the P4.6 counts on these sessions to be artefacts of the
@@ -4625,7 +4625,7 @@ Consider raising **P4.5**:
   directory still exits 0. Earlier statements that every exit-1 subcommand
   was 0 on those four were true of the instrument at the time.
 - **The data-handling test caught my own notes twice.** Two notes named
-  judgments the lawyer had typed into a question in 6350, and the five-word
+  judgments the legal professional had typed into a question in 6350, and the five-word
   check tripped on the case names. The rule applies to public case names
   too, so the notes now use neutral citations.
 - **The row's trap was worth recording, and it has a companion.** A neutral
@@ -4634,7 +4634,7 @@ Consider raising **P4.5**:
   results. The reads use three things instead: the negative arriving
   unprompted and repeatedly, the coverage wording that only the case-law tool
   carried, and 2026 judgments.
-- **A chat-mode question I did not act on.** The 6335 lawyer's feedback says
+- **A chat-mode question I did not act on.** The 6335 legal professional's feedback says
   that after being pointed to "research mode" at t3 they switched to it.
   t4–t5 have no saved reply, and P0.5 reads their chat mode from a neighbour
   as conversational. The Research flag was off, so this may have been Deep
@@ -4724,7 +4724,7 @@ carry its sentence. Session 14's lesson applies: compare link and
 - **At the pre-pilot the research type was one saved preference per user**
   (`users.research_mode`, default `legislation_only`). It was set only
   through the Research filters modal and restored on every chat and login.
-  So a change is an event, and turns between two equal reads of one lawyer
+  So a change is an event, and turns between two equal reads of one legal professional
   are bracketed.
 - **Until `bab9642` (13 August, 15:24) the research-type pill was hidden in
   Conversational mode**, although the type was in force and editable. All
@@ -4778,7 +4778,7 @@ carry its sentence. Session 14's lesson applies: compare link and
 - Ledger rows stay on ONE line with an even `**` count. Many ticked rows
   have no closing ` |`, so an append helper must handle both shapes.
 - The data-handling test covers public case names too, where they are
-  written the way a lawyer typed them.
+  written the way a legal professional typed them.
 - Scratch-copy revert checks: `test_the_prompt_reader_finds_a_real_constant`
   and `test_the_manager_body_reader_finds_the_constant` fail in any non-git
   copy.
@@ -4856,7 +4856,7 @@ carry its sentence. Session 14's lesson applies: compare link and
   question to the legislation Worker, which then wrote it, often without a
   single tool call. Since P4.1 that Manager declines the question itself and
   delegates nothing. In the scripts, 39 of 49 turns delegated nothing. So the
-  sentence can no longer reach a lawyer on the shape that produced most of it,
+  sentence can no longer reach a legal professional on the shape that produced most of it,
   and the replay could not discriminate. The seam carried the A/B, as booked.
 - **The seam tool was wrong for this row in two ways, and one was mine to
   find.**
@@ -5008,7 +5008,7 @@ it concerns, or in `BASELINE.md`, *The scripted negatives*.
 - **6385 t4's before-run took 435 s and $0.91 with no empty completion.** It
   was a long case-law Worker run (7 tool calls, 11 LLM calls), not a P4.5
   episode. Do not count it for P4.5.
-- **6346 t2 is not a question** (the lawyer's acknowledgement). Every replay
+- **6346 t2 is not a question** (the legal professional's acknowledgement). Every replay
   answers it by asking for one, so do not grade it as a decline.
 - **The case-law Worker read 3 judgments where it had read 4** (6385 t4, n=1),
   which is within its prompt's 1–3. It is the only `sources_kept` slot that
@@ -5024,7 +5024,7 @@ it concerns, or in `BASELINE.md`, *The scripted negatives*.
   assert the row is found exactly once.
 - Scratch-copy revert checks: the two `git show` tests fail in any non-git
   copy.
-- **Seam and probe output can contain a lawyer's search terms** (the Worker
+- **Seam and probe output can contain a legal professional's search terms** (the Worker
   echoes them as queries). Keep that output in the scratchpad. Before
   committing, grep the diff for the terms you saw.
 - The API runs any chat mode it is sent. `replay pin` turns
@@ -5093,7 +5093,7 @@ decides its scope.
   - `lookup_legislation` reports held / held without text / not held.
   - Code runs it on every instrument a Worker's brief names by number,
     before the Worker's first round.
-  - The outcome reaches the Manager in the worker block, and the lawyer in a
+  - The outcome reaches the Manager in the worker block, and the legal professional in a
     code-written footer clause, which P2.8's carried line now restates on
     follow-ups.
   - No prompt changed.
@@ -5263,7 +5263,7 @@ $0.47, scratch Manager A/B $0.14.
   turn's searches are unknown, so "no ranked search was run" could be false.
   It was in a commit message only.
 - **Where the unused scratch evidence went.** The first-round probe outputs
-  and the scratch Manager A/B echo the Worker's and the lawyers' own search
+  and the scratch Manager A/B echo the Worker's and the legal professionals' own search
   terms, so they were left in the session scratchpad and not committed.
   - Every number quoted from them is on P3.7's row, from the committed
     `seam_replay` command.
@@ -5402,7 +5402,7 @@ the target only in a cut, when the user asks.
   wording) and `wave4_p47b` (6365 at `ac7878e`, whose product code is
   `158841d`'s).
 - The seam draws are in the session scratchpad, not the repo (they echo
-  lawyers' terms).
+  legal professionals' terms).
 
 **Spend: $14.49 (seam sweeps $8.54, committed redraws $3.16, scratch probe $0.71, replays $2.08).**
 
@@ -5456,7 +5456,7 @@ unblocked Wave 3/4 rows stand as the recommended-order line lists them.
 
 **Hazards (carried forward):** line endings (and `sed -i`), heredoc
 backslashes, `-F <file>`, one-line ledger rows, not committing during a
-replay, keeping seam output (which echoes lawyers' terms) in the scratchpad.
+replay, keeping seam output (which echoes legal professionals' terms) in the scratchpad.
 **New:**
 - a background job started with a trailing `&` inside one Bash call dies
   with that shell; use the tool's background mode;
@@ -5545,7 +5545,7 @@ worktrees; the dev box is on its normal settings; 49 replay directories.
 **Fix Tracker v20** (same URL, at the user's request, after the P4.5 decision):
 - P4.10 added: "Cut the cost and the wait of a lost reply", Verified, **P2**.
   - The severity is a first-pass judgement: the answer is still correct but
-    the lawyer waits nearly 20 minutes. It is not a P1, because P4.5 carries
+    the legal professional waits nearly 20 minutes. It is not a P1, because P4.5 carries
     the wrong-answer half.
 - "Next" now says P4.5 (labelling), then P4.10 (cost, measure-first), then
   P3.15.
@@ -5584,7 +5584,7 @@ worktrees; the dev box is on its normal settings; 49 replay directories.
     every chat mode (`lost_worker_report`, a closed
     `[Research Incomplete — answer lost]` block);
   - the Manager path strips the block, keeps it out of P4.2's fallback, and
-    prepends a lawyer notice only when no later delegation made the loss
+    prepends a legal professional notice only when no later delegation made the loss
     good;
   - Deep Research names a lost step in `incomplete_steps_note` (its own
     LOST STEPS paragraph) and always in the notice;
@@ -5607,7 +5607,7 @@ worktrees; the dev box is on its normal settings; 49 replay directories.
 - **The label must not forbid re-delegation, unlike the halt's.** The
   Manager already recovers that way (15 of 18), so the label permits one
   more call and the Manager-path notice is kept for a loss nothing made
-  good. Emitting it always would have warned the lawyer on answers that
+  good. Emitting it always would have warned the legal professional on answers that
   rest on completed research.
 - **The label must not deny a timeout.** 6409's failed attempts ended
   "Upstream idle timeout exceeded", so "NOT a timeout" (the halt's line)
@@ -5637,7 +5637,7 @@ target only in a cut, when the user asks.
   run), no worktrees; the dev box is on its normal settings;
 - **50 replay directories**; new: `wave4_p45` (6365 at `ba04d7c`).
 - The seam draws are in the session scratchpad, not the repo (they echo
-  lawyers' terms).
+  legal professionals' terms).
 
 **Spend: $1.91 (seam $0.88, smoke replay $1.03), plus about $0.002 of
 model probes.**
@@ -5688,7 +5688,7 @@ designing around one. **Then P3.15**, which B5 waits on alone.
 
 **Hazards (carried forward):** line endings (and `sed -i`), heredoc
 backslashes (twice more this session), `-F <file>`, one-line ledger rows,
-not committing during a replay, keeping seam output (which echoes lawyers'
+not committing during a replay, keeping seam output (which echoes legal professionals'
 terms) in the scratchpad, never reading an enum from a truncated string.
 **New:** a Python replacement script must normalise CRLF to LF before
 matching multi-line text, and restore CRLF on write.
@@ -5957,7 +5957,7 @@ session knew that the handover did not say:
      `low` still ran away on r2 t1. Do not act on it without a seam test.
 
 **Kept out of the repo on purpose:** the seam draws' answer texts (they echo a
-lawyer's terms) stayed in the session scratchpad and are gone with it. Every
+legal professional's terms) stayed in the session scratchpad and are gone with it. Every
 number from them is in BASELINE.md, and the commands re-draw them.
 
 **Second addendum to Session 28 (2026-09-25, at the user's request): the Fix
@@ -6434,15 +6434,15 @@ What the session knew that the handover above did not say:
   TOWARD the text** and the row's "held with the same citation" would pass a
   wrong answer. Turn 5's challenge was right too (Art 25(4) points to Annex
   XIV Ch V, which lists processed manure and blood products only). The
-  lawyer's own complaint (Invariant 6) is that she had to tell it the answer
+  legal professional's own complaint (Invariant 6) is that she had to tell it the answer
   and ask it to check again. **This is a reading of the text and is to be
-  confirmed by a lawyer.** Same lawyer in 6370, whose feedback says she pushes
+  confirmed by a legal professional.** Same legal professional in 6370, whose feedback says she pushes
   because the bot takes a firm position on a point open to interpretation.
 - **The acceptance re-scoped and booked before any product code** (`21ff5dd`,
   user decision): at most one position change in turns 6-12; a change must
   re-retrieve and cite a provision the previous position did not; no claim the
   text contradicts; no agreement opener on a challenge turn; control turn 5
-  (the lawyer right) passes; 6345 x3 as the stubbornness guard. Script
+  (the legal professional right) passes; 6345 x3 as the stubbornness guard. Script
   `evidence/scripts/p32_6406.json` (Conversational only; the two Deep Research
   turns replaced by turn 3's question). Budget $15; spent $7.88.
 - **Four instruments, committed:**
@@ -6522,7 +6522,7 @@ What the session knew that the handover above did not say:
   from ANY user whose question shares a keyword. The pre-pilot's one rating
   (1 in 181 answers, no comments) is a **5 on 6346's dead-end refusal**, the
   B7 defect P4.1 fixed; the query also pairs a question with ANY later answer
-  in its chat; and it puts other users' question text into a lawyer's prompt
+  in its chat; and it puts other users' question text into a legal professional's prompt
   with no drafting-mode exclusion. The dev DB holds no ratings, so no replay
   ever exercised it. Whether the target still holds that row is unknown.
 
@@ -6569,7 +6569,7 @@ measured options, with what the evidence says about each:
   as an instrument (it finds citations that do not exist).
 - **(d) A prompt change**: the finding that the model argues past text it
   has points here. The measured failure is an interpretive point stated as
-  settled, then abandoned. That is also P3.3's defect (same lawyer, 6370), and
+  settled, then abandoned. That is also P3.3's defect (same legal professional, 6370), and
   the Session 22 risk applies: run the first-delegation drift probe before and
   after, and compare links and citations.
 - **(e) Take P3.2 and P3.3 together.** Session 31 took P3.2 alone at the
@@ -6588,7 +6588,7 @@ measured options, with what the evidence says about each:
 
 **Open with the user:**
 - **P3.2's lever** (above), and whether to take P3.3 with it.
-- **The legal reading behind the rubric**: to be confirmed by a lawyer.
+- **The legal reading behind the rubric**: to be confirmed by a legal professional.
 - ~~**The learning injection** (Surprises): book a row or a `docs/TODO.md`
   item?~~ **PARKED by the user (2026-09-28): `docs/TODO.md` D21**, with the
   findings. The user also raised standing instructions per AILA user (a
@@ -6688,7 +6688,7 @@ What the session knew that the entry and handover above did not say:
     TOGETHER** (the handover's recommendation (e)). Session 32 starts there,
     measure-first: the lever is not chosen, and a combined acceptance is booked
     and committed before any product code. **6338 has never been replayed in
-    the configuration its lawyer used** (Conversational, legislation and case
+    the configuration its legal professional used** (Conversational, legislation and case
     law): `baseline`, `wave1` and `wave2` sent Research mode and legislation
     only, `wave0_conv` sent legislation only (before P0.6). 6370 (Conversational,
     legislation and case law) and 6375 (turn 1 Conversational, turn 2 Deep
@@ -6776,10 +6776,10 @@ entry and the handover for Session 33 follow at the end of the session.**
   ("summarise only what it contains") left 4 of 27 additions; the third ("leave out, without
   commenting") took 0 of 27 with no loss. Read as a band: the same prompt's own draws varied
   by several points on every measure.
-- **The rule stopped Acts, not glosses, and a gloss reached the lawyer as a quotation.** In
+- **The rule stopped Acts, not glosses, and a gloss reached the legal professional as a quotation.** In
   `p32_6406` r1 the summary of a section search carried a parenthetical interpretation that is
   in neither Regulation (checked in LEX over every provision), and that turn's answer (run-file turn 6, export turn
-  7) told the lawyer the Annex said it. That is P3.16, and it is Invariant 1's worst case.
+  7) told the legal professional the Annex said it. That is P3.16, and it is Invariant 1's worst case.
 - **The Worker now retrieves the general rule, but by its definition.** Told not to say a
   general rule applies without retrieving what applies it, it fetched the interpretation Act's
   definitions schedule, not the section that says which Acts it covers. When it also fetched
@@ -6860,7 +6860,7 @@ which"; `stance`'s rubric misses the contradicted consequence worded as "cannot 
 under the requirements of Chapter XI". List what each change stops or starts counting.
 
 **Open with the user:**
-- The legal readings behind both rubrics: to be confirmed by a lawyer.
+- The legal readings behind both rubrics: to be confirmed by a legal professional.
 - The Fix Tracker was not updated (update only when asked); if asked, P3.2 and P3.3 stay open
   and six rows are new.
 - Carried from Session 31: the release tags (D19); which rows go in the next cut
@@ -6912,11 +6912,11 @@ and handover above do not say:
    number to the controlling one's; 6375 adds the Scottish environmental regulations; 6345
    drops the "concessionary travel" steer (its before-column went to that wrong Act).
 5. **Observations not booked:**
-   - 6345 `wave4_p33_post` r3 turn 4 asked the lawyer to name the Act after a scoped
+   - 6345 `wave4_p33_post` r3 turn 4 asked the legal professional to name the Act after a scoped
      negative, rather than naming s.38.
    - 6370 after r2 turn 6 said it could not take a legal position on the interpretation. It
      set out both readings first, so it is not the blanket caveat the guard counts, but it is
-     neutrality stated as a refusal; read whether lawyers want that before any row is written.
+     neutrality stated as a refusal; read whether legal professionals want that before any row is written.
    - Change-record summaries mis-expand ids: one summary gave the interpretation Act's title
      to a different 2010 ASP number, and a `wave2` 6338 summary gave the inserting 2019 Act a
      2024 year. Both are the summariser adding to what the raw text carried: evidence for
@@ -6926,7 +6926,7 @@ and handover above do not say:
      tighter acceptance, to be booked before a re-run.
    - The 6370 reading behind the rubric (the Regulations' reg 6(4), 6(6) and 7(5) point to
      their applying to proposed development generally, not only to EIA development) is in
-     the gitignored rubric's `_note`, and is to be confirmed by a lawyer, like 6406's.
+     the gitignored rubric's `_note`, and is to be confirmed by a legal professional, like 6406's.
 6. **Hazards met this session:** the console is cp1252, so any script printing LEX or answer
    text needs `PYTHONIOENCODING=utf-8`; psycopg2 is not installed (use asyncpg, as
    `seam_replay` does); a Monitor watch expires after 30 minutes (re-arm, or rely on the
@@ -7144,7 +7144,7 @@ nothing gave a false "fails with the change reverted" (count the lines a revert 
 push is refused by the permission classifier unless the user allows it; `summary_probe count
 --dir` takes a path.
 
-**Carried, open with the user:** the legal readings behind the rubrics (a lawyer to confirm);
+**Carried, open with the user:** the legal readings behind the rubrics (a legal professional to confirm);
 release tags and deploy by tag (D19); which rows go in the next cut (v2026.10.1); deploying both
 cuts (`pg_dump` first; the local prompt cache is now **v3** on the branch, so every cached
 summary becomes unreachable when it reaches the target, intended); telling the eval-harness owner
@@ -7191,7 +7191,7 @@ handover above, and what it changes in it:
    P3.18, P4.13, P4.14 Fixed (`fixed: "2026-09-29"`, `ver: "2026.09.3"`); every former "Next
    release" row now `2026.09.3`; P3.16 In progress (the user's decision on ticking is still
    open); P3.2 and P3.3 stay Verified; a plain-language Session 33 note for Thomas naming no
-   lawyer's topic. 36 of 59 fixed, 2 in progress, 17 verified, 4 to be verified. Render-checked
+   legal professional's topic. 36 of 59 fixed, 2 in progress, 17 verified, 4 to be verified. Render-checked
    once (`.playwright-mcp/tracker_v28.png`).
 5. **Machine state unchanged:** no server, no pin file, no worktrees (the four
    `worktree-agent-*` branches remain locally; all merged, safe to delete).
@@ -7362,7 +7362,7 @@ while agent A was editing it (comparisons within one pass were unaffected).
 **Carried, open with the user (unchanged):** deploying `v2026.09.3` to the target (`pg_dump`
 first, pull, restart, `test_apis.ps1`; the local prompt cache moves to v3 there, intended);
 telling the eval-harness owner about schema v6; D19's remaining items (deploy by tag; stamp the
-version on the audit event); the legal readings behind the rubrics (a lawyer to confirm); P4.12,
+version on the audit event); the legal readings behind the rubrics (a legal professional to confirm); P4.12,
 D20, D21/D22, P5.2, Thomas's document; from batch 1: the research Worker's jurisdiction line as a
 row, the 28 case-law summaries applying English authority to Scotland, the two change-record id
 mis-expansions, `wave2_p27` 6341 r2 t2. The Fix Tracker was not updated (update only when asked;
@@ -7390,7 +7390,7 @@ not going to lose any pertinent information", then "update the tracker").** This
    collection> ... returned <no|zero> <results|judgments|matches|cases>"; D read all 64 sentences
    it newly matches. Re-run D's dry run on the built product (`evidence/seam/batch2/D/
    p415_dryrun.py`) and confirm the same 13 (a) and 9 (c) verdicts move and nothing else.
-   **Why both:** (a) is the only option that changes what a lawyer reads, and it covers the 4
+   **Why both:** (a) is the only option that changes what a legal professional reads, and it covers the 4
    turns outside the 6370 shape, one of them a Deep Research negative about a decision's later
    history (Invariant 1 in its plainest form); (c) corrects the model column, which has under-read
    that sentence form since P2.4, and graders are fixed before an after-column. Cost of (a): about
@@ -7399,13 +7399,13 @@ not going to lose any pertinent information", then "update the tracker").** This
    user before spending** (Session 34's handover gives the commands and the procedure). It
    measures P3.17 and P4.15 (6370 n=3) together and re-measures P3.3 and P3.2 (required: a Worker
    prompt changed). Expect some 6338 turn-1 misses (the live Worker named the right regime 4 of 5).
-4. **P3.2 is PARKED** (user decision): no new lever until a lawyer confirms the rubric's reading
+4. **P3.2 is PARKED** (user decision): no new lever until a legal professional confirms the rubric's reading
    of the regulation. Why: three levers failed; D's numbers rule out the next obvious ones (a
    must-re-delegate rule reaches 0 of 15 contradicted claims; the Manager handed the passage kept
    its position 6 of 6 in Session 31; a check against retrieved text needs matter-specific
    patterns to find the claim). Every lever tested the model's reading of a regulation whose
-   ground truth is still "to be confirmed by a lawyer"; if confirmed, the next step may be to
-   re-scope the acceptance rather than add plumbing. Asking a lawyer is the user's action, not a
+   ground truth is still "to be confirmed by a legal professional"; if confirmed, the next step may be to
+   re-scope the acceptance rather than add plumbing. Asking a legal professional is the user's action, not a
    session's.
 5. **P4.17 booked** (user decision, measure-first, not urgent): D's 1.5, a section-search-only
    turn in `legislation_only` gets no footer (8 stored turns, one asserting a negative). 43 of 61
@@ -7432,7 +7432,7 @@ is in their notes. FIX_PLAN carries the decisions on P3.2, P3.17, P4.15 and the 
 **Fix Tracker v29** published at the user's request (same URL; the repo source was byte-identical
 to the live body before the edit): P3.16 Fixed and P4.16 added as Fixed (both `fixed:
 "2026-10-01"`, `ver: "Next release"`), P4.17 added (Verified, P2), the lede and the In-progress
-note updated, a plain-language Session 34 note for Thomas naming no lawyer's topic, and the
+note updated, a plain-language Session 34 note for Thomas naming no legal professional's topic, and the
 "Next" paragraph rewritten. 38 of 61 fixed, 1 in progress, 18 verified, 4 to be verified.
 Render-checked once (`.playwright-mcp/tracker_v29.png`; the only console error is a local
 favicon 404).
@@ -7445,7 +7445,7 @@ piece of work as a safe multi-agent batch).** **Session 35 runs
   - B, P4.15's footer sentence (a), with the couplings it must keep (the detector-list test, P2.8's
     carried-line round trip, `test_echoed_footer.py:126`, P4.14's echo strip, `CASE_LAW_CODE`);
   - C, P4.17 measured with options;
-  - D, a confirmation pack for a lawyer on the readings behind the P3.2 and P3.3 rubrics (gitignored);
+  - D, a confirmation pack for a legal professional on the readings behind the P3.2 and P3.3 rubrics (gitignored);
 - merge order A, B, C, D;
 - then the after-column `wave4_b2_post` (about $17, cap $22, `--max-spend 12` then `10`), with
   the figure confirmed with the user first.
@@ -7495,10 +7495,10 @@ edits a rubric in this batch.
   `negatives` FAIL on 2 of them. C recommends option (d), a scope line naming the turn's section
   searches, built after (a), and proposes an acceptance; not booked (the user's decision). Found:
   P2.5's currency clause contradicts P3.5's on 27 of 455 stored footers.
-- **Agent D (lawyer confirmation pack, $0).** `evidence/lawyer_pack/confirmation_pack.md`: four
+- **Agent D (legal professional confirmation pack, $0).** `evidence/lawyer_pack/confirmation_pack.md`: four
   readings, four yes/no questions, 18 links. Integrator checks: every link is a string inside a
   stored tool's `api_calls` (18 of 18, 460 run files walked); the pack shares no 6-word run with
-  any lawyer-written field of the transcript export (1,507 user messages, rating comments and
+  any legal-professional-written field of the transcript export (1,507 user messages, rating comments and
   feedback free text) except 17 instrument titles.
 - **Ledger:** P4.15, P4.17, P3.2 and P3.3 annotated (26 `**` added, even). 43 of 61 rows
   (`plan_status`).
@@ -7576,7 +7576,7 @@ Agent worktrees removed; their branches remain locally (merged).
 - **PHASE 2c cost more than estimated:** $0.16 a rep more than `wave4_b1_post` (estimate $0.10-0.15);
   turn 1 alone up to $0.30.
 - **All three 6338 reps name a 2024 Act as inserting s.35ZA**, where the rubric's reading and the
-  lawyer pack say the 2019 Act; stored change records carry an insertion into s.35ZA by the 2024
+  legal professional pack say the 2019 Act; stored change records carry an insertion into s.35ZA by the 2024
   Act. Not resolved; flagged for the pack.
 - **6375 r1 regressed** (2 of 3 against 3 of 3): a Deep Research synthesis repeating the
   alignment claim P3.18 targeted.
@@ -7604,7 +7604,7 @@ Agent worktrees removed; their branches remain locally (merged).
    (an alternative regime offered as a reading) and turn 3 (a hedged sequence reading). C's
    deferred code lever and the research Workers' phase were waiting on this result; the cost is
    $0.50 a 6338 rep.
-4. **The lawyer pack** (`evidence/lawyer_pack/confirmation_pack.md`): before it is sent, add the
+4. **The legal professional pack** (`evidence/lawyer_pack/confirmation_pack.md`): before it is sent, add the
    s.35ZA insertion point as an unclear item (the answers and the change records name a 2024 Act;
    the reading says 2019) and confirm the cover note's promise (D's item 7). Sending it is the
    user's action, and P3.2 un-parks only on an answer.
@@ -7615,13 +7615,13 @@ Agent worktrees removed; their branches remain locally (merged).
   older-source s.55 link; the cover note's promise.
 - C's (f4), P2.5's contradicting currency clause (27 stored footers).
 - Whether the hedged sequence reading at 6338 turn 3 (a reading offered beside the right one)
-  should fail, as booked, or be re-scoped once a lawyer confirms the reading (the pack asks it).
+  should fail, as booked, or be re-scoped once a legal professional confirms the reading (the pack asks it).
 
 **Hazards met this session:** the pin file is in `server_py/tools/`, not `server_py/`; a
 `$`-anchored grep on CRLF lines finds nothing (the revert script's anchor assertion caught it);
 the harness blocked agent A from writing outside its worktree (scratch copied out by the
 integrator before the worktree was removed: check each worktree's `evidence/seam/batch3/` before
-removing it); the lawyer pack's folder was not gitignored until `b35035b`; every worktree again
+removing it); the legal professional pack's folder was not gitignored until `b35035b`; every worktree again
 came up on `main`.
 
 **Carried, open with the user (unchanged):** deploying `v2026.09.3` to the target (`pg_dump`
@@ -7653,8 +7653,8 @@ any pertinent information", then "update the tracker").**
   the saved file): P4.15 Fixed (`fixed: "2026-10-01"`, `ver: "Next release"`, its label no longer
   limited to turns with no legislation search, since the sentence is on every case-law line); the
   lede names three rows waiting for the next release (P3.16, P4.16, P4.15); four plain-language
-  Session 35 paragraphs for Thomas naming no lawyer's topic (P4.15 fixed; P3.17 re-run, not yet
-  fixed; P3.2 and P3.3 re-checked; questions for a lawyer prepared, P4.17 measured); "Next"
+  Session 35 paragraphs for Thomas naming no legal professional's topic (P4.15 fixed; P3.17 re-run, not yet
+  fixed; P3.2 and P3.3 re-checked; questions for a legal professional prepared, P4.17 measured); "Next"
   rewritten. 39 of 61 fixed. Render-checked once (`.playwright-mcp/tracker_v30.png`; the only
   console error is the local favicon 404).
 - Preserved: the session scratchpad re-copied to `evidence/seam/batch3/scratchpad_s35/` after this
@@ -7730,7 +7730,7 @@ matter text into it. The FIX_PLAN recommended-order line's *Take next* now point
   only.** The turn-3 hedged sequence reading is added by the Manager (4 of 9 answers since P3.3's
   clause; the Worker report neutral 9 of 9), always as "on one reading"; before the clause it was
   an unhedged conclusion 3 of 3. Turn 2's alternative regime first appears in the Manager's
-  answer. Recommends option (1), waiting for the lawyer with one supplementary question, and
+  answer. Recommends option (1), waiting for the legal professional with one supplementary question, and
   booking a new row for the change-record pinpoint loss (`_slim_amendment_results` drops the
   pairing of changed and effecting provisions). **s.35ZA: the 2024 Act inserted the whole section
   (its s.6(2)); the 2019 Act did not.** Re-checked by the integrator from D's recorded responses.
@@ -7841,7 +7841,7 @@ a figure first.
 1. **P3.19** ($0, deterministic, a batch-sized row): make `_slim_amendment_results` keep each
    relation's changed/effecting pair; measure first over every stored change-record result (how
    many groups lose a pairing that matters; output size per call), as the row says.
-2. **Send the lawyer pack** (`evidence/lawyer_pack/confirmation_pack.md`, sha1 recorded in the
+2. **Send the legal professional pack** (`evidence/lawyer_pack/confirmation_pack.md`, sha1 recorded in the
    hand-read; four readings, a correction note on s.35ZA, a supplementary question on Reading 2).
    Sending it is the user's action; P3.2 un-parks and P3.17's option (1) resolves only on an answer.
    Confirm the cover note's promise first (batch 3 D's item 7).
@@ -7856,7 +7856,7 @@ a figure first.
 
 **Decisions open with the user (new this session):**
 - Agent A's two grader decisions (above).
-- P4.17's line exposes a substitution on p37_6373 (a UK SI searched for the Scottish SI the lawyer
+- P4.17's line exposes a substitution on p37_6373 (a UK SI searched for the Scottish SI the legal professional
   cited; batch 4 B's note section 4): book or not.
 - The control turn's conflict on what Annex XIV Chapter V lists (`wave4_b4_post` r1 against r2),
   unresolved; it bears on P3.2's control criterion.
@@ -7901,7 +7901,7 @@ any pertinent information", then "update the tracker").**
   and Thomas's action-6 row "Order case-law results by relevance" is now P3.22 (To be verified to
   Verified, P3 to P2, since the review found every case-law search returned the newest 50, not the
   most relevant). The lede names five rows waiting for the next release; four plain-language
-  Session 36 paragraphs for Thomas naming no lawyer's topic; "Next" rewritten. 41 of 68 fixed.
+  Session 36 paragraphs for Thomas naming no legal professional's topic; "Next" rewritten. 41 of 68 fixed.
   Render-checked once over a local server (`.playwright-mcp/tracker_v31.png`; the only console
   error is the local favicon 404).
 **Second addendum to Session 36 (2026-10-02, at the user's request: "is it worth reviewing the plan
@@ -7917,7 +7917,7 @@ multi-agent batch). This addendum supersedes the handover's "Take next".**
   recommended-order lines.
 - **Semantic inconsistencies, known from this session:** P3.3's booked 6338 turn-3 criterion fails
   the hedged reading P3.3's own clause produces (batch 4 D), and P3.17 inherits it; P3.2, P3.3 and
-  P3.17 all wait on the lawyer pack, stated nowhere in one place; the six rows booked on 2026-10-02
+  P3.17 all wait on the legal professional pack, stated nowhere in one place; the six rows booked on 2026-10-02
   overlap existing rows with no stated relationship (P3.20 and P5.2; P3.21 and P2.5/P4.18; P3.23 and
   P1.3/P2.2; and P3.12 against P4.17).
 - **User decision: review the plan for consistency first, in Session 37, as a $0 parallel batch.**
@@ -7984,11 +7984,11 @@ multi-agent batch). This addendum supersedes the handover's "Take next".**
 - **Twenty-three decisions put to the user in six questions, every one taken as recommended:**
   - A1 every ticked row carries a done mark; A2 a byte fold of the stray pipes; A3 P2.10 and P4.5
     named as entries; A4 ticked-ahead reasons on P3.16, P3.18 and P4.13.
-  - B1 P3.3's 6338 turn-3 criterion held until the lawyer answers, with a second supplementary
+  - B1 P3.3's 6338 turn-3 criterion held until the legal professional answers, with a second supplementary
     question (turn 2's newer Act offered as one reading) added to the pack; on Yes to both, a $0
     re-grade with a narrow "on one/another reading" rubric change (by command and by hand-read
     `wave4_b2_post` 6338 goes 1 to 3 of 3, which meets P3.17's criteria; nothing else moves).
-  - B2 the lawyer-pack sentence above the Ledger and in the three rows' Depends on; B3 P0.4 dropped,
+  - B2 the legal-professional-pack sentence above the Ledger and in the three rows' Depends on; B3 P0.4 dropped,
     P0.7 widened to the 15 no-reply turns; B4 P3.12 a dependency of P3.2 (criterion (v)); B5 P3.4's
     acceptance widened (a deterministic prompt test, a before-column, reach to the quick-lookup
     Worker); B6 P3.21's measure-first and P5.4 (c)'s probe run together; B's M4 and M9 applied.
@@ -8007,9 +8007,9 @@ multi-agent batch). This addendum supersedes the handover's "Take next".**
   `[-]`, still in the denominator). CLAUDE.md X1-X5, `docs/TODO.md` D19 and D23,
   `docs/LEGAL_DATA_SOURCES.md` X10, and CHANGELOG *Unreleased* (plan_lint and D's grader changes, as
   tooling). Suite 2162.
-- **Gitignored evidence:** the lawyer pack's second supplementary question (`10da6f9d…` to
+- **Gitignored evidence:** the legal professional pack's second supplementary question (`10da6f9d…` to
   `d26bb016…`, 15,941 bytes; `verify_pack_quotes.py` output identical to Session 36's, so it quotes
-  no lawyer's text; the before copy is in `seam/batch5/integrator/`); the hand-read's gap-2 line
+  no legal professional's text; the before copy is in `seam/batch5/integrator/`); the hand-read's gap-2 line
   corrected (D's item 5). Agents' scratch in `evidence/seam/batch5/{A,B,C,D}/` (41, 49, 22 and 572
   files, each identical to its worktree's copy before removal).
 
@@ -8051,7 +8051,7 @@ multi-agent batch). This addendum supersedes the handover's "Take next".**
 2. **P4.8's strip** ($0, deterministic, user decision C5): strip the result label at the Manager
    return in `agent_core.py` (never a router), unit test failing with the change reverted; the bar
    is 0 in every replay directory taken after the build.
-3. **Send the lawyer pack** (the user's action): `evidence/lawyer_pack/confirmation_pack.md`, sha1
+3. **Send the legal professional pack** (the user's action): `evidence/lawyer_pack/confirmation_pack.md`, sha1
    `d26bb016…`, now with two supplementary questions on Reading 2. Confirm the cover note's promise
    first (batch 3 D's item 7). On an answer: P3.2 un-parks; a Yes to both supplementaries is applied
    as a $0 re-grade of the stored 6338 columns.
@@ -8095,19 +8095,19 @@ pertinent information", then "update the tracker").**
   and that the build is P3.20); the lede names six rows waiting for the next release; the Fixed
   status note no longer says every Fixed row is on `main` (C's X6) and the In-progress note no
   longer says P5.2 waits on an external decision (X7; no row is in progress now); three
-  plain-language Session 37 paragraphs for Thomas naming no lawyer's topic; "Next" rewritten (P3.19,
-  P4.8, the lawyer pack); P0.4 recorded as dropped in the "Not listed" line; the stamp. 42 of 68
+  plain-language Session 37 paragraphs for Thomas naming no legal professional's topic; "Next" rewritten (P3.19,
+  P4.8, the legal professional pack); P0.4 recorded as dropped in the "Not listed" line; the stamp. 42 of 68
   fixed. Script syntax-checked with Node; no render check (data and text only).
 **Second addendum to Session 37 (2026-10-05, at the user's request: "tackle things in order of
-priority, unless there's dependencies", then "park items with dependencies on the lawyer pack; note
+priority, unless there's dependencies", then "park items with dependencies on the legal professional pack; note
 them as blocked, state the reason as part of the description"). This supersedes the Session 38
 handover's "Take next".**
 - The open P1 rows are P3.2, P3.17 and P3.19 (tracker `ROWS`, against the FIX_PLAN ledger). P3.17
-  and P3.2 wait on the lawyer pack (P3.2 also on P3.12, a P2 row, for its criterion (v)); P3.19 waits
+  and P3.2 wait on the legal professional pack (P3.2 also on P3.12, a P2 row, for its criterion (v)); P3.19 waits
   on nothing.
-- **P3.2, P3.3 and P3.17 parked as BLOCKED on the lawyer pack** (`blocked_s37.py`, each anchor
+- **P3.2, P3.3 and P3.17 parked as BLOCKED on the legal professional pack** (`blocked_s37.py`, each anchor
   asserted once): a BLOCKED note with the reason at the head of each row, a sentence added to the
-  lawyer-pack paragraph above the Ledger, the tracker's Blocked status recorded in "How to use this
+  legal-professional-pack paragraph above the Ledger, the tracker's Blocked status recorded in "How to use this
   file" step 7, and a new top order line. `plan_lint` 0 errors, 0 warnings; `plan_status` 47 of 69
   rows, 8 of 14 buckets (unchanged: the rows stay `[ ]`).
 - **Take next, by severity:** P3.19 (P1, $0); then P3.12 (P2, ahead of other P2 rows because P3.2
@@ -8161,7 +8161,7 @@ items according to the severity"). This supersedes the second addendum's "Take n
   (measure first). **P2:** P3.12 (P3.2 needs it); P4.21 and P3.25; the case-law build (P4.19, P3.23,
   P3.9, then P3.22); P3.21 with P5.4 (c); P3.4; P3.6; P4.3, P3.10, P4.12; P3.20 last (SCTS).
   **P3:** P4.8, P4.20, P4.22, P3.26, P3.14, P4.9, P5.4's other leads, P0.7, TODO B6. P3.2, P3.3
-  and P3.17 stay Blocked on the lawyer pack.
+  and P3.17 stay Blocked on the legal professional pack.
 - **Fix Tracker v35:** the six rows (source T, Thomas ref "30 Sep", explained in References), a
   dated note for Thomas, "Next" in severity order, the stamp. 74 tracker rows: 42 Fixed, 26
   Verified, 3 Blocked, 3 To be verified. Script syntax-checked with Node.
@@ -8284,7 +8284,7 @@ items according to the severity"). This supersedes the second addendum's "Take n
 **Before the next after-column:** count change records summarised (P3.19's long tail, user decision);
 enrol 6370's five hedged readings in `p33.json` (batch 5 D2); hand-read `negcurrency`'s matches.
 
-**Decisions open with the user (carried):** sending the lawyer pack (unblocks P3.2, P3.3, P3.17);
+**Decisions open with the user (carried):** sending the legal professional pack (unblocks P3.2, P3.3, P3.17);
 sending SCTS the note (P3.20); D23 (the National Archives licence); deploying `v2026.09.3` to the
 target; telling the eval-harness owner about schema v6; D19; which rows go in the next cut
 (`v2026.10.1`: P3.16, P4.16, P4.15, P4.18, P4.17, P5.2, and now P3.19 and P4.21); P4.12, D20,
@@ -8313,7 +8313,7 @@ pointing at the brief; its content stands.**
   Artifact read, then a Read of all 1,268 lines of the saved file): P3.19 and P4.21 Fixed
   (`fixed: "2026-10-05"`, `ver: "Next release"`); P3.27 (P1) and P3.28 (P3) added as Verified; the lede
   names eight rows waiting for the next release; three plain-language notes for Thomas (the two
-  fixes, P3.24's measurement, P3.12/P3.25 and the schedule gap) naming no lawyer's topic; the P3.7 note
+  fixes, P3.24's measurement, P3.12/P3.25 and the schedule gap) naming no legal professional's topic; the P3.7 note
   points to P4.21's rewording; "Next" and the stamp. 76 rows: 44 Fixed, 26 Verified, 3 Blocked, 3 To
   be verified. Script syntax-checked with Node; no render check (data and text only).
 - **`docs/prepilot-fixes/PARALLEL_BATCH_7.md` written: the brief for Session 39.** Four agents in
@@ -8469,7 +8469,7 @@ pointing at the brief; its content stands.**
 and the Worker's block, but `provisions_commenced` and P2.5's `_currency_support` still count self
 relations (unchanged, not booked).
 
-**Decisions open with the user (carried):** sending the lawyer pack (unblocks P3.2, P3.3, P3.17);
+**Decisions open with the user (carried):** sending the legal professional pack (unblocks P3.2, P3.3, P3.17);
 sending SCTS the note (P3.20); D23 (the National Archives licence); deploying `v2026.09.3` to the
 target; telling the eval-harness owner about schema v6; D19; which rows go in the next cut
 (`v2026.10.1`: P3.16, P4.16, P4.15, P4.18, P4.17, P5.2, P3.19, P4.21, and now P3.24, P4.19, P3.23,
@@ -8505,7 +8505,7 @@ pointing at the brief; its content stands.**
   Fixed (`fixed: "2026-10-05"`, the date `5778b28` first shows them ticked; `ver: "Next release"`);
   P3.25 In progress; the lede names twelve rows waiting for the next release; the In-progress note
   names P3.25; four plain-language notes for Thomas (P3.24; the three case-law fixes; P3.25; P3.27
-  and P3.12 measured and chosen), naming no lawyer's topic; "Next" and the stamp. 76 rows: 48 Fixed,
+  and P3.12 measured and chosen), naming no legal professional's topic; "Next" and the stamp. 76 rows: 48 Fixed,
   1 In progress, 21 Verified, 3 Blocked, 3 To be verified. Script syntax-checked with Node; no
   render check (data and text only).
 - **`docs/prepilot-fixes/PARALLEL_BATCH_8.md` written: the brief for Session 40.** Four agents in
@@ -8592,7 +8592,7 @@ pointing at the brief; its content stands.**
   wordings approved; the trigger extension; no Manager limb before the sweep; the audit records sizes;
   **two sweep-found fixes built now, re-run next session**; **P3.25 ticked with 6340's criterion
   amended to suppression**; P3.22 relevance with the note flipped, the before-column n=3, the rubric
-  adopted and 6363's Tier 1 added to the lawyer pack, P3.29 booked; one GET of the published spec; P3.21
+  adopted and 6363's Tier 1 added to the legal professional pack, P3.29 booked; one GET of the published spec; P3.21
   the feed through LEX's proxy, one feed per change record, 6411 on the negative branch, self-commencing
   Acts out; P5.4 (c) no new row; A2's route bound fixed next session, P3.27's line not yet treated as
   established, the ascending-only paragraph run.
@@ -8601,7 +8601,7 @@ pointing at the brief; its content stands.**
 - **A2 (the two fixes):** grep clean; revert 290 lines, 25 fail; of the integrator's three mutants two
   caught, one survivor (the refusal's own bracket cleaning: harmless in a JSON tool result); merged
   (`342ab50`, 2482), pushed. The parser reads the sweep's query as 42, 43, 44 on the merged tree.
-- **The lawyer pack** gained a further question after Reading 4 (reference 6363: the proposed list of
+- **The legal professional pack** gained a further question after Reading 4 (reference 6363: the proposed list of
   authorities, the three the corpus lacks named, Scottish authority invited); the cover note says so.
 - **Applied** (`e499232`): `fold_s40.py` (P3.25 ticked; P3.27, P3.12, P3.22, P3.21, P5.4 annotated;
   new P3.29; two index entries; the top order line; 68 bold markers added). **`plan_lint` 0 errors, 0
@@ -8658,7 +8658,7 @@ pointing at the brief; its content stands.**
 `p37r_6383` t2 (one rep); the research-shaped echo on 6406 (2 of 67); 6409's lost SSI date (P3.21);
 `commencements` blind to scripted runs.
 
-**Decisions open with the user (carried):** sending the lawyer pack (now five questions; unblocks
+**Decisions open with the user (carried):** sending the legal professional pack (now five questions; unblocks
 P3.2, P3.3, P3.17, and confirms P3.22's 6363 list); sending SCTS the note (P3.20); D23; deploying
 `v2026.09.3`; telling the eval-harness owner about schema v6; D19; the next cut (`v2026.10.1`: P3.16,
 P4.16, P4.15, P4.18, P4.17, P5.2, P3.19, P4.21, P3.24, P4.19, P3.23, P3.9, and now P3.25); P4.12,
@@ -8679,7 +8679,7 @@ pointing at the brief; its content stands.**
   gitignored `evidence/seam/batch8/{A,A2,B,B2,C,D}/`, the session scratchpad in
   `batch8/scratchpad_s40/` (109 files, including `sweep_total.py`, `route_trace.py`,
   `screen_A_wording.py` and the three mutant runners); the hand-read
-  `evidence/rubrics/handread_wave4_b8_sweep.md`; B's rubric `evidence/rubrics/p327.json`; the lawyer
+  `evidence/rubrics/handread_wave4_b8_sweep.md`; B's rubric `evidence/rubrics/p327.json`; the legal professional
   pack's new 6363 question. Findings that lived in no committed file were written where the next
   session reads them: **CLAUDE.md** gained three additions (P3.27/P3.12 built and the lesson that a
   code-stated fact loses to a contradicting code text about the same instrument; P3.22's decision;
@@ -8694,7 +8694,7 @@ pointing at the brief; its content stands.**
   "2026-10-06"`, the date `e499232` first shows it ticked; `ver: "Next release"`); P3.27 and P3.12 In
   progress; new row P3.29 (P3, Verified); the lede names thirteen rows waiting for the next release;
   the In-progress note; three plain-language notes for Thomas (P3.25; P3.27 and P3.12 built, not yet
-  passed, and the two causes fixed; P3.22 and P3.21 chosen, P3.29), naming no lawyer's topic; "Next"
+  passed, and the two causes fixed; P3.22 and P3.21 chosen, P3.29), naming no legal professional's topic; "Next"
   and the stamp. 77 rows: 49 Fixed, 2 In progress, 20 Verified, 3 Blocked, 3 To be verified. Script
   syntax-checked with Node; no render check (data and text only).
 - **`docs/prepilot-fixes/PARALLEL_BATCH_9.md` written: the brief for Session 41.** Five agents in
@@ -8829,7 +8829,7 @@ pointing at the brief; its content stands.**
 a description's date beside the feed's (book a row only on a contradiction); P3.4's lost 6378 rep; the
 research-shaped formatting in 2a (7 of 39); P3.24's three; `commencements` blind to scripted runs.
 
-**Decisions open with the user (carried):** sending the lawyer pack (unblocks P3.2, P3.3, P3.17; confirms
+**Decisions open with the user (carried):** sending the legal professional pack (unblocks P3.2, P3.3, P3.17; confirms
 P3.22's 6363 list); sending SCTS the note (P3.20); D23; deploying `v2026.09.3`; telling the eval-harness
 owner about schema v6 and the new `api_calls` (P3.27/P3.12, P3.21) and request keys (P3.22) in
 `AUDIT_TRACE.md`; D19; the next cut (`v2026.10.1`: the thirteen rows already "Next release" plus P3.27,
@@ -8863,7 +8863,7 @@ its content stands.**
   and P3.6 Fixed (`fixed: "2026-10-08"`, the date `7daed79` first shows them ticked; `ver: "Next release"`);
   P3.22 In progress; new row P3.30 (P3, Verified, `added: "2026-10-08"`); the lede names seventeen rows
   waiting for the next release; the In-progress note; two plain-language notes for Thomas (four fixes; P3.12 and
-  P3.22 built and not yet passed, P3.30), naming no lawyer's topic; "Next"; `AS_AT` "8th Oct 2026, 11:45am" and
+  P3.22 built and not yet passed, P3.30), naming no legal professional's topic; "Next"; `AS_AT` "8th Oct 2026, 11:45am" and
   `UPDATED`. 78 rows: 54 Fixed, 2 In progress, 16 Verified, 3 Blocked, 3 To be verified. Script syntax-checked
   with Node; no render check (data and text only).
 - **`docs/prepilot-fixes/PARALLEL_BATCH_10.md` written: the brief for Session 42.** Five agents in worktrees at
@@ -8981,7 +8981,7 @@ out of the first three on 6 of 14 queries; the failed-turn rail (P4.5); `commenc
 export turn 7 by hand); `negcurrency`'s definitional false positive (`wave0_conv` 6341 r1 t8); and Session 41's
 (P3.27's conjoined limit clause, P3.21's omitted "wholly", P3.4's lost 6378 rep, P3.24's three).
 
-**Decisions open with the user (carried):** sending the lawyer pack (unblocks P3.2, P3.3, P3.17; confirms
+**Decisions open with the user (carried):** sending the legal professional pack (unblocks P3.2, P3.3, P3.17; confirms
 P3.22's 6363 list); sending SCTS the note (P3.20); D23; deploying `v2026.09.3`; telling the eval-harness owner
 about schema v6 and the new `api_calls` and request keys; D19; the next cut (`v2026.10.1`: the seventeen rows
 already "Next release"); D20, D21/D22; batch 1's three items; the p37_6373 substitution; the Fix Tracker when
@@ -9016,13 +9016,13 @@ information" and "update the tracker"). The handover above stands.**
   T & R, Thomas ref 7, `added: "2026-09-18"`, the day his action 7 was first listed here, by the T & R rule) and
   **P4.24** (P3, Verified, `added: "2026-10-08"`); **P4.3** re-labelled to the rail half (src R, no Thomas ref,
   since action 7 moved to P4.23); **P3.10** and **P4.12** re-labelled to their re-booked levers; the In-progress
-  note; three plain-language Session 42 notes for Thomas, naming no lawyer's topic; "Next"; `AS_AT` "8th Oct
+  note; three plain-language Session 42 notes for Thomas, naming no legal professional's topic; "Next"; `AS_AT` "8th Oct
   2026, 3:05pm" and `UPDATED`. 80 rows: 54 Fixed, 2 In progress, 18 Verified, 3 Blocked, 3 To be verified. The
   script passes `node --check` (no layout change, so no render check). Source edited by `tracker_v43.py`.
 
 **Second addendum to Session 42 (2026-10-08): SCTS's permission.** The user reports that SCTS agreed, by phone, to our use of its judgments search; no conditions were given, and none of the other questions (rate or volume, change notice, attribution, date reliability) was answered. So P3.20's note-to-SCTS prerequisite is met and the carried decision "sending SCTS the note" is closed. **User decisions:** P3.20's measure-first step runs in Session 43 as a $0 parallel agent beside P3.12's seam check (a few capped live SCTS calls only if agreed at launch), the build after it; the whitelist request for `api.pa.web.scotcourts.gov.uk` and `www.scotcourts.gov.uk` was drafted for the user to send. Recorded on P3.20, FIX_PLAN's top order line and `docs/LEGAL_DATA_SOURCES.md` §3. The Fix Tracker's P3.20 and "Next" still say it waits on SCTS: correct them at the next tracker update.
 
-**Third addendum to Session 42 (2026-10-08): the user's actions carried into Session 43.** (1) Ask SCTS for a one-line email confirming the permission given by phone (only the user's account records it today); save it under the gitignored evidence and cite it on P3.20 when it arrives. (2) Send the whitelist request for `api.pa.web.scotcourts.gov.uk` and `www.scotcourts.gov.uk` (HTTPS 443 outbound) to the target's administrator; the draft is `evidence/seam/batch10/scratchpad_s42/whitelist_request_scts.md` (gitignored, local). When the hosts are open, P3.20's build adds them to `NETWORK_AND_DEPENDENCIES.md` and `server_py/test_apis.ps1`. Carried as before: the lawyer pack; D23 (the National Archives licence); deploying `v2026.09.3`; telling the eval-harness owner; D19; the next cut. **Fix Tracker v44** (same URL, at the user's request): P3.20's row says SCTS has agreed; a dated note; "Next" now runs P3.20's first measurement beside P3.12; the stamp. 80 rows, no status change.
+**Third addendum to Session 42 (2026-10-08): the user's actions carried into Session 43.** (1) Ask SCTS for a one-line email confirming the permission given by phone (only the user's account records it today); save it under the gitignored evidence and cite it on P3.20 when it arrives. (2) Send the whitelist request for `api.pa.web.scotcourts.gov.uk` and `www.scotcourts.gov.uk` (HTTPS 443 outbound) to the target's administrator; the draft is `evidence/seam/batch10/scratchpad_s42/whitelist_request_scts.md` (gitignored, local). When the hosts are open, P3.20's build adds them to `NETWORK_AND_DEPENDENCIES.md` and `server_py/test_apis.ps1`. Carried as before: the legal professional pack; D23 (the National Archives licence); deploying `v2026.09.3`; telling the eval-harness owner; D19; the next cut. **Fix Tracker v44** (same URL, at the user's request): P3.20's row says SCTS has agreed; a dated note; "Next" now runs P3.20's first measurement beside P3.12; the stamp. 80 rows, no status change.
 
 **Fourth addendum to Session 42 (2026-10-08, at the user's request: "provide a prompt to kick off the next piece of work ... a safe, multi-agent approach").** `docs/prepilot-fixes/PARALLEL_BATCH_11.md` written: the brief for Session 43. Five $0 agents in worktrees: **A** P3.12 (why rep 1's Worker wrote 43(6) alone; a candidate lever only if the integrator's seam draw on rep 1's payload points at the payload); **B** P4.12 built (L1 + L2' + L3, gated; deterministic); **C** P4.3's V4 and the `rail` grader (deterministic; merged after the sweep, since V4 changes `sources_kept`); **D** P3.20 measured (SCTS calls only if agreed, cap 150, at least 1 s apart); **E** P3.10's ids line, its two turn-4 scripts, the grading script and the sweep priced. Paid steps, each priced to the user first: P3.12's seam draw at the start, and one sweep (6335 n=3 and P3.10's scripts n=3) after B, A and E merge. FIX_PLAN's top order line points at the brief. `plan_lint` 0, 0.
 
@@ -9145,7 +9145,7 @@ the next sweep (P4.3); and Session 42's (P3.22's carrier, the failed-turn rail, 
 `negcurrency`'s definitional false positive, P3.27, P3.21, P3.4, P3.24).
 
 **Decisions open with the user (carried):** the written confirmation from SCTS; the whitelist request for
-`api.pa.web.scotcourts.gov.uk` and `www.scotcourts.gov.uk`; the lawyer pack (unblocks P3.2, P3.3, P3.17); D23;
+`api.pa.web.scotcourts.gov.uk` and `www.scotcourts.gov.uk`; the legal professional pack (unblocks P3.2, P3.3, P3.17); D23;
 deploying `v2026.09.3`; telling the eval-harness owner about schema v6, the new `api_calls` and request keys,
 and P4.12's Manager records; D19; the next cut (`v2026.10.1`); D20, D21/D22; batch 1's three items; the
 p37_6373 substitution; the Fix Tracker when asked (if asked: P4.12 Fixed, `fixed` 2026-10-08, "Next release";
@@ -9177,7 +9177,7 @@ in `batch11/scratchpad_s43/` (integrator tools: `review_branch.sh`, `grade_b8.sh
 
 **State:** branch `fix/prepilot-defects` pushed; `main` at `a6b4a76`; `plan_status` 61 of 97, 4 in progress, 9 of 14; `plan_lint` 0; 3,017 tests; 66 replay directories; no server, no pin, no worktree but the main checkout. **Fix Tracker v47** (P5.4 Fixed, P4.22 at P2, the re-plan note, Next = batch 12). **The second session's working scripts** (harvest, re-parse, title, snapshot, smoke, tracker and plan scripts; the Lex Graph probes) are in the gitignored `evidence/seam/madeunder_s42b/`; the harvest files in `evidence/madeunder/`. **Lasting docs updated for P3.31:** CHANGELOG *Unreleased*, CLAUDE.md (the Worker notes), `docs/LEGAL_DATA_SOURCES.md` (the enabling-power gap), and the local `external-apis` (legislation.gov.uk routes) and `repo-map` skills.
 
-**Carried, the user's:** SCTS's written confirmation and whitelist request; the lawyer pack; D23; P5.5 (the National Archives' bulk data); deploying `v2026.09.3`; the eval-harness owner; D19; the next cut (`v2026.10.1`, which would now also carry P3.31 and P4.12); Tesseract (P3.35); and Session 43's other carried items.
+**Carried, the user's:** SCTS's written confirmation and whitelist request; the legal professional pack; D23; P5.5 (the National Archives' bulk data); deploying `v2026.09.3`; the eval-harness owner; D19; the next cut (`v2026.10.1`, which would now also carry P3.31 and P4.12); Tesseract (P3.35); and Session 43's other carried items.
 
 ## Session 44 — 2026-10-09 — parallel batch 12: P3.10, P3.20, P3.22, P4.3, P4.22 and P4.24 done; P3.12 built, not met; the data rows sized ($14.11)
 
@@ -9303,7 +9303,7 @@ set after it.
 
 **Carried, the user's:** the SCTS whitelist request (P3.20 is built but off until both hosts are whitelisted;
 then `NETWORK_AND_DEPENDENCIES.md`, `test_apis.ps1`, the offline bundle's pdfplumber and the lasting docs) and
-SCTS's written confirmation; the lawyer pack (P3.2, P3.3, P3.17); D23; P5.5; deploying `v2026.09.3`; the
+SCTS's written confirmation; the legal professional pack (P3.2, P3.3, P3.17); D23; P5.5; deploying `v2026.09.3`; the
 eval-harness owner; D19; the next cut (`v2026.10.1`, which would now carry P3.31, P4.12 and this batch); Tesseract
 (P3.35); the Fix Tracker (v47 is the base; not updated this session).
 
@@ -9426,7 +9426,7 @@ P4.23 re-graded on the next sweep; reps 2 and 3 of `wave4_b13_p312` attribute Pa
 administration moratorium (outside P3.12's criterion).
 
 **Carried, the user's:** pushing the branch; the SCTS whitelist request (P3.20 built, off until both hosts are
-whitelisted) and SCTS's written confirmation; the lawyer pack (P3.2, P3.3, P3.17); D23; P5.5; deploying
+whitelisted) and SCTS's written confirmation; the legal professional pack (P3.2, P3.3, P3.17); D23; P5.5; deploying
 `v2026.09.3`; the eval-harness owner; D19 (now with P3.45's audit field); the next cut (`v2026.10.1`, which would
 carry P3.31, P4.12, batch 12's six rows and this batch's three); Tesseract (P3.35); P3.12's tracker severity (P2
 on the tracker, P1 in the briefs); P3.47's tracker severity; the Fix Tracker (v48 is the base; not updated this
@@ -9604,7 +9604,7 @@ the handover's "`main` at `a6b4a76`" and "confirm the push": both are done. Next
 **Take next (user decision, 2026-10-13, after the fold: Thomas's list first, his P2s ahead of the other P1s):**
 P3.52's next lever (the Manager's brief framing, or (b), the question's own words as a second query; the research
 and hybrid prompts after reconciling P3.1's combined query); then P3.51; then P3.50; only then P3.12 and P3.47,
-then the rest of the Session 46 order. P3.3 (his Q9) stays blocked on the lawyer pack.
+then the rest of the Session 46 order. P3.3 (his Q9) stays blocked on the legal professional pack.
 
 **State:** branch `fix/prepilot-defects` at this handover's commit; `main` at `397bee9` (B6; not a release, the
 target runs `v2026.10.4` until a cut); 72 of 107, 5 in progress, 8 of 14; `plan_lint` 0; **4,005 tests**; **75
@@ -9617,7 +9617,7 @@ restored. Session scripts and probe logs are in the gitignored `evidence/seam/s4
 - **Order:** Thomas's list first, his P2s ahead of the other open P1s: P3.52's next lever, then P3.51, then P3.50;
   only then P3.12 and P3.47 (`685bf26`; FIX_PLAN's order line, the handover above, memory's
   `feedback_priority_order` exception).
-- **P3.52 lever (c), found at $0:** the Worker's only user message is the Manager's brief, and the lawyer's own
+- **P3.52 lever (c), found at $0:** the Worker's only user message is the Manager's brief, and the legal professional's own
   words sit unused on `_cache_key_query`. (c) appends them after the brief, in code. Detail, seam plan and prices
   are on P3.52's row. **This replaces "(the Manager's brief framing, or (b))" as the next step;** (b) stays open.
 - **Scripts moved out of the session scratchpad** to the gitignored `evidence/seam/s47/scratchpad_s47/`:
@@ -9633,7 +9633,7 @@ restored. Session scripts and probe logs are in the gitignored `evidence/seam/s4
   `main` one docs-only commit past what it said (`6810043`, "bring the documentation up to date with
   v2026.10.4", on `origin`); the tree clean and pushed; suite **4,005**, `plan_lint` 0, `plan_status` 72 of 107,
   5 in progress, 8 of 14.
-- **P3.52 lever (c)** (`dbbc718`): `utils/lawyer_words.with_lawyer_words` appends the lawyer's latest message
+- **P3.52 lever (c)** (`dbbc718`): `utils/lawyer_words.with_lawyer_words` appends the legal professional's latest message
   after the Manager's brief in the Worker's user message only (legislation research types; never Deep Research,
   drafting, a consult or a script; cut past 4,000 characters). The log line, the audit's brief, P3.7's routed
   lookup and the summariser keep the brief; P3.7 stays on the brief by measurement (1,916 stored delegations: the
@@ -9690,7 +9690,7 @@ restored. Session scripts and probe logs are in the gitignored `evidence/seam/s4
 the Session 46 order (P3.38, P3.46, P3.34, P3.28's instruction, P3.48). **Open, and the user's to order:** a
 selection or synthesis lever for P3.50, P3.51 and P3.52, which now hold the right text and state the wrong
 conclusion; measure at $0 first on `wave5_p350`, `wave5_p351` and `wave5_p352b`/`c`. P3.3 (his Q9), P3.2 and P3.17
-stay blocked on the lawyer pack.
+stay blocked on the legal professional pack.
 
 **State:** branch `fix/prepilot-defects` at this handover's commit; `main` at `6810043` (B6 plus a docs commit;
 not a release, the target runs `v2026.10.4` until a cut); 72 of 107, 7 in progress, 8 of 14; `plan_lint` 0;
@@ -9798,7 +9798,7 @@ SSI 2026/170) and the scope note's "NOT ... unavailable" for such an instrument;
 P3.7's `lookup` bar accepts the footer once the text is read. Then the rest of the Session 46 order: P3.46's priced
 re-run (6359 and 6363 n=3, about $9.50 up to $13.50, more now judgments go whole), P3.34, P3.28's instruction,
 P3.48. **Open, the user's to time:** the selection/synthesis lever for P3.50, P3.51 and P3.52 (Session 48's
-addendum). P3.3, P3.2 and P3.17 stay blocked on the lawyer pack.
+addendum). P3.3, P3.2 and P3.17 stay blocked on the legal professional pack.
 
 **State:** branch `fix/prepilot-defects` at this handover's commit; `main` at `6810043` (not a release; the target
 runs `v2026.10.4` until a cut); 74 of 107, 6 in progress, 8 of 14; `plan_lint` 0; **4,131 tests**; **81 replay
@@ -9955,7 +9955,7 @@ P3.46's acceptance (6359 and 6363 n=3, cap $17.00; its case note was invisible u
 user; then P3.53 and P3.54 (measure first), P3.34, P3.28's instruction, P3.48. Re-measure every Worker-side
 lever kept in progress (P3.51, P3.52, P3.50) on top of P1.7 before building another. **Open, the user's to
 time:** the selection/synthesis lever for P3.50, P3.51 and P3.52. P3.3, P3.2 and P3.17 stay blocked on the
-lawyer pack.
+legal professional pack.
 
 **State:** branch `fix/prepilot-defects` at this handover's commit; `main` at `6810043` (not a release; the
 target runs `v2026.10.4` until a cut, and does NOT have P1.7); 75 of 110, 6 in progress, 8 of 14; `plan_lint`

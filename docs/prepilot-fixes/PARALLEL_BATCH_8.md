@@ -12,7 +12,7 @@ their go-ahead** (stored estimate about $5.50 to $7; nothing is authorised yet).
 This file is the brief. The integrator reads it whole. Each agent is given its own section, plus
 **Rules for every agent**, **Lessons from batches 1-7** and **Shared setup**, verbatim. Nothing here
 should need re-deriving; if something does, the agent says so in its note rather than guessing.
-Matter-specific detail (lawyers' wording, rubric patterns, hand-reads, ground-truth text, live
+Matter-specific detail (legal professionals' wording, rubric patterns, hand-reads, ground-truth text, live
 payloads) is NOT in this file; it is in the gitignored files named below.
 
 **What the user has already decided (do not re-open):**
@@ -49,11 +49,11 @@ payloads) is NOT in this file; it is in the gitignored files named below.
    both sets of numbers. **This batch measures; it builds nothing for P3.21.**
 6. **P3.24's watch items stay watch items** (the row lists them); `negcurrency`'s known gap ("now
    apply", "still applies") is accepted with a hand-read of every after-column (batch 6 decision 5).
-7. **P3.2, P3.3 and P3.17 are BLOCKED on the lawyer pack.** Nothing here touches them.
+7. **P3.2, P3.3 and P3.17 are BLOCKED on the legal professional pack.** Nothing here touches them.
 8. **Agents propose; the integrator applies; the user approves anything not mechanical**, including
-   any wording a lawyer will read. No agent edits FIX_PLAN.md, SESSION_LOG.md, CHANGELOG.md,
+   any wording a legal professional will read. No agent edits FIX_PLAN.md, SESSION_LOG.md, CHANGELOG.md,
    CLAUDE.md, `summary-table.html`, `docs/TODO.md`, `docs/LEGAL_DATA_SOURCES.md`, a rubric, the
-   lawyer pack or a memory file.
+   legal professional pack or a memory file.
 9. **Never merge or push to `main`**; the next cut (`v2026.10.1`) goes only when the user asks.
    Branch pushes are allowed; if the permission classifier refuses one, ask the user.
 10. **The Fix Tracker is updated only when the user asks.**
@@ -118,7 +118,7 @@ payloads) is NOT in this file; it is in the gitignored files named below.
     `seam/batch3/scratchpad_s35/matter_words.txt`.
   - Replay scripts in `evidence/scripts/` (tracked: base session and turn indices only, never turn
     text). **There is no `p32_6406` script cut after export turn 5 yet**; agent B writes it.
-  - The raw transcript export (lawyers' questions; never in the repo):
+  - The raw transcript export (legal professionals' questions; never in the repo):
     `C:/Temp/aila-prepilot/pre-pilot sessions/session-transcripts-all-time-2026-09-14.csv`.
 - **Test databases** `lexchat_test_a` to `lexchat_test_d` exist, one per agent.
 - **Machine:** no uvicorn, no pin file (`server_py/tools/.replay_pin_state.json`), no worktrees. 24
@@ -167,12 +167,12 @@ but **never commit while a replay is running**; merge them after `replay restore
 
 1. **Read first:** `docs/prepilot-fixes/FIX_PLAN.md` ("How to use this file", Invariants 1-6, "Data
    handling", "Re-planning protocol", the top recommended-order line, the paragraph above the Ledger
-   on what waits on the lawyer pack, and your rows in full); in `docs/prepilot-fixes/SESSION_LOG.md`,
+   on what waits on the legal professional pack, and your rows in full); in `docs/prepilot-fixes/SESSION_LOG.md`,
    everything from "Session 39 — 2026-10-05 — parallel batch 7" to the end of the file; and the
    batch 7 note your brief names. Do not re-derive what they establish.
 2. **Stay in your worktree and on your files.** Do not edit `FIX_PLAN.md`, `SESSION_LOG.md`,
    `summary-table.html`, `CLAUDE.md`, `CHANGELOG.md`, `VERSION`, `docs/TODO.md`,
-   `docs/LEGAL_DATA_SOURCES.md`, any `PARALLEL_BATCH_*.md`, any rubric, the lawyer pack or any memory
+   `docs/LEGAL_DATA_SOURCES.md`, any `PARALLEL_BATCH_*.md`, any rubric, the legal professional pack or any memory
    file: the integrator folds your results in. Commit on your worktree's branch; **do not push, do
    not merge, never touch `main`.**
 3. **Write your note** as `docs/prepilot-fixes/notes/batch8_<A|B|C|D>.md` and commit it. Put in it:
@@ -193,7 +193,7 @@ but **never commit while a replay is running**; merge them after `replay restore
    missing key, also stub each new function or put each half of the old defect back one at a time
    (single-site mutants), so the tests are shown to check behaviour. Run the full suite on your own
    test database before your last commit, and report the count.
-6. **Data handling:** never commit lawyers' question or answer text, search terms, case names, or
+6. **Data handling:** never commit legal professionals' question or answer text, search terms, case names, or
    instrument ids and titles from a session. Tests and fixtures use synthetic text ("Widget Order
    1901", `ssi/1901/3`, "Widget Co v Example Ltd"). Grep your staged diff for session ids,
    instrument ids and matter words before every commit (with Python: see the lessons). Rubric
@@ -333,7 +333,7 @@ line, never more. Pass the text on as today. Append, after summarisation, a code
 two raw responses naming which schedules and annexes the text carries (headings in either form,
 "SCHEDULE 2" or "SECOND SCHEDULE", and annexes), or saying that the index holds none for this
 instrument; say nothing about anything else. Record what the line needs in the step's scope record if
-the footer must speak of it (decide, and say why, in the note; a lawyer-facing change is put to the
+the footer must speak of it (decide, and say why, in the note; a legal-professional-facing change is put to the
 user). Screen every variant of the wording (`test_footer_trips_no_detector`), with no bracket inside
 the block. **Dry run with the built code:** the line over the 60 saved live payloads in
 `seam/batch7/B/raw/` (every line listed), and the change in summariser input over the stored reads
@@ -379,7 +379,7 @@ turn 5); `server_py/tools/replay_report.py` (`DepthReq`, `DEPTH_TRUTH`, `depth`,
    the statutory words of paragraphs 42-44 (`seam/batch7/B/p312_truth.txt`), like the existing
    live-verified entries. Check the run files' turn numbering for 6335 (the export turn and the run
    turn can differ). **Grade every stored 6335 directory** with it and hand-read each verdict: the
-   before-column must FAIL where the lawyer did not get the paragraphs (P3.12's row: reps 2 and 3 of
+   before-column must FAIL where the legal professional did not get the paragraphs (P3.12's row: reps 2 and 3 of
    `wave3_p38_pre` say the text was not retrieved).
 2. **The `p32_6406` script cut after export turn 5** (`evidence/scripts/`, base session and turn
    indices only), so the control turn is the last turn run; confirm from the stored `p32_6406` reps
@@ -424,7 +424,7 @@ it; and whether `detect_appellate_decisions`' nudges change for the worse. Re-ch
 `order=relevance` still works and is still absent from the published spec. **Then propose the ground
 truth** P3.22's row asks for before its build: the authorities the 6363 and 6359 answers need, read
 from the transcripts and the stored answers, as a gitignored rubric file with each authority's
-neutral citation, why it is needed (the lawyer's own words cited by turn, not quoted in any
+neutral citation, why it is needed (the legal professional's own words cited by turn, not quoted in any
 committed file), and whether each ordering returns it. If the user did not agree to live calls, do
 the stored measurement only and say what the probe would settle. **Build nothing in the product;**
 a probe added to `tools/caselaw_probe.py` is allowed, with tests on synthetic feeds. **Decisions:**
@@ -489,7 +489,7 @@ P5.4 (c)'s answer warrants a new row.
      before-column `depth` verdict and the price; C and D: two figures from their stored
      measurement);
    - copy the agent's scratch out of its worktree before removing it, and compare file counts.
-   Put any wording a lawyer could read to the user before its merge.
+   Put any wording a legal professional could read to the user before its merge.
 5. **Merge A, then B**, each `--no-ff`, the suite after each, the branch pushed after each clean
    merge (never `main`).
 6. **The acceptance sweep, only on the user's go-ahead.** Put B's priced table to the user
@@ -524,7 +524,7 @@ P5.4 (c)'s answer warrants a new row.
      call, recommendation first): anything A raised on the line's wording or the footer; the sweep's
      outcome where it is a judgement call; P3.22's ordering and its before-column; P3.21's date
      source, cap and acceptance; whether P5.4 (c) warrants a row. Record each answer on its row;
-   - CHANGELOG *Unreleased*: each product change in plain words (what a lawyer or the model now
+   - CHANGELOG *Unreleased*: each product change in plain words (what a legal professional or the model now
      sees); tooling separately. Add an even number of `**`. Correct `docs/LEGAL_DATA_SOURCES.md`
      where a finding changes it.
 9. **Hand over:** a Session 40 entry and a handover for Session 41 in SESSION_LOG.md (next by
@@ -534,7 +534,7 @@ P5.4 (c)'s answer warrants a new row.
    the user asks (FIX_PLAN "How to use this file" step 7: Artifact `read` the live URL and Read every
    line of the saved file first; a newly ticked row gets `fixed` and `ver: "Next release"`).
 
-**Open with the user, carried (do not act on them yourself):** sending the lawyer pack (unblocks
+**Open with the user, carried (do not act on them yourself):** sending the legal professional pack (unblocks
 P3.2, P3.3, P3.17; confirm the cover note's promise first); sending SCTS the note (P3.20's
 prerequisite); applying for the National Archives licence (`docs/TODO.md` D23); deploying
 `v2026.09.3` to the target (`pg_dump` first, then pull, restart and `test_apis.ps1`); telling the

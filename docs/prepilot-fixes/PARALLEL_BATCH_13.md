@@ -59,7 +59,7 @@ file path).
    waits for P3.28.
 8. **P3.34:** re-scoped to definition-list questions; measure a corpus-wide definition search first.
 9. **Agents propose; the integrator applies; the user approves anything not mechanical**, including any wording a
-   lawyer or the Worker will read. Never merge or push to `main`. The Fix Tracker only when the user asks.
+   legal professional or the Worker will read. Never merge or push to `main`. The Fix Tracker only when the user asks.
 
 ---
 
@@ -105,7 +105,7 @@ replay runs.**
 - **`tools/replay_report.py`:** B (`depth`), E (`authorities`): different subcommands.
 - **`search_scope.py`:** F (`_currency_limb`, the extent rule) and C (C's scope wording, if any): different functions.
 - **`executor.py` / `schemas.py`:** C only.
-- **Wording to the user before merge:** A's flag (if any text reaches a lawyer or the Worker), C's tool-result and
+- **Wording to the user before merge:** A's flag (if any text reaches a legal professional or the Worker), C's tool-result and
   scope wording, E's note, F's "text amended" and removal wording. Screen each with the BUILT code against every
   detector and render it for every value class.
 
@@ -248,6 +248,6 @@ and at what precision. **Propose:** go or no-go, the lever (a tool, a query form
 
 **Carried, the user's:** the SCTS whitelist request (P3.20 built, off until both hosts are whitelisted; then
 `NETWORK_AND_DEPENDENCIES.md`, `test_apis.ps1`, the offline bundle's pdfplumber) and SCTS's written confirmation;
-the lawyer pack (P3.2, P3.3, P3.17); D23; P5.5; deploying `v2026.09.3`; the eval-harness owner; D19; the next cut
+the legal professional pack (P3.2, P3.3, P3.17); D23; P5.5; deploying `v2026.09.3`; the eval-harness owner; D19; the next cut
 (`v2026.10.1`, which would carry P3.31, P4.12 and batch 12's six rows); Tesseract (P3.35); **P3.12's tracker severity
 (P2 on the tracker, P1 in the briefs since batch 11: the user's call)**.

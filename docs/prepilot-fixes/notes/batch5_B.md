@@ -11,7 +11,7 @@ rubric or plan file edited; the only commit is this note. Full suite on `lexchat
 **2135 passed** (`TEST_DATABASE_URL=postgresql://lexuser:lexpassword@localhost:5432/lexchat_test_b
 python -m pytest -q -p no:cacheprovider`, from `server_py/`).
 
-This note quotes no lawyer's question or answer, no search term and no instrument id or title from
+This note quotes no legal professional's question or answer, no search term and no instrument id or title from
 a session. Rubric variants, outputs that print matter text and the amendment script are in the
 gitignored scratch (see the end). Commands run from `server_py/` with
 `PREPILOT_EVIDENCE=C:/Projects/LexChat/docs/prepilot-fixes/evidence`, `PYTHONIOENCODING=utf-8`, and
@@ -90,20 +90,20 @@ for v in base b_t3n b_t23n; do for d in wave4_p33_pre wave4_p33_post wave4_b1_po
 
 Decision **B1** below.
 
-### 2.2 The lawyer-blocked chain
+### 2.2 The legal-professional-blocked chain
 
 Proposed sentence (decision **B2** says where it goes):
 
-> **What waits on the lawyer pack (2026-10-02):** P3.2 (Reading 1, which also settles its control
+> **What waits on the legal professional pack (2026-10-02):** P3.2 (Reading 1, which also settles its control
 > turn's open conflict), P3.3 (Readings 2 to 4, and P3.2's acceptance, which its own includes) and
-> P3.17 (Reading 2 and its supplementary question) cannot be ticked until a lawyer answers
+> P3.17 (Reading 2 and its supplementary question) cannot be ticked until a legal professional answers
 > `evidence/lawyer_pack/confirmation_pack.md` (ready, not sent; sending it is the user's action),
 > and P3.2 alone is parked for new levers; nothing else waits on it: levers and measurements for
 > P3.3's 6370 and 6375 criteria, the grader gaps, and every other open row (P3.12 and P3.19
 > among them) can proceed, and an answer is applied first as a $0 re-grade of the stored columns.
 
 It adds no `|` and two `**` (even). "Readings 2 to 4" makes the confirmation of P3.3's 6370 and
-6375 readings a tick condition; P3.3's row says "The readings are to be confirmed by a lawyer" but
+6375 readings a tick condition; P3.3's row says "The readings are to be confirmed by a legal professional" but
 does not say it gates the tick. If the user does not want that, the phrase becomes "P3.2's
 acceptance, which its own includes".
 
@@ -145,7 +145,7 @@ nothing reachable; its own row says passing it does not tick P3.12, but P3.12's 
 (M7). The larger relationship is with **P3.2**: its control criterion (v) has failed on P3.12's
 shape in all five measured columns (`wave4_p32_pre`, `wave4_p33_post`, `wave4_b1_post`,
 `wave4_b2_post`, `wave4_b4_post`, each recorded on P3.2's row as "P3.12's shape"), so P3.12 stands
-between P3.2 and its acceptance whatever the lawyer answers (decision **B4**).
+between P3.2 and its acceptance whatever the legal professional answers (decision **B4**).
 
 ### 2.5 P0.4 and P0.7
 
@@ -257,7 +257,7 @@ the filter is currently the only lever a user has and ~~it does not work~~ it wo
 Replacement:
 
 ```text
-**Evidence:** 6335. **Depends on:** P3.1 **Related (batch 5 B, 2026-10-02):** P4.17 (ticked) puts a line on a section-search-only turn saying a provision missing from the results may still be in the instrument, which explains this shape's negative and does not make the paragraph reachable (P4.17's own row: passing it does not tick this one). P3.2's control criterion (v) has failed on this shape (a sub-unit of a provision LEX holds whole, called not held or not retrievable) in each of its five measured columns (P3.2's row), so this row stands between P3.2 and its acceptance whatever the lawyer answers. P5.4 (d) probes legislation.gov.uk's paragraph-level markup, and `tools/provision_hints.py` already cuts such sub-units in dev tooling (`docs/LEGAL_DATA_SOURCES.md` 2.2), a third candidate lever.
+**Evidence:** 6335. **Depends on:** P3.1 **Related (batch 5 B, 2026-10-02):** P4.17 (ticked) puts a line on a section-search-only turn saying a provision missing from the results may still be in the instrument, which explains this shape's negative and does not make the paragraph reachable (P4.17's own row: passing it does not tick this one). P3.2's control criterion (v) has failed on this shape (a sub-unit of a provision LEX holds whole, called not held or not retrievable) in each of its five measured columns (P3.2's row), so this row stands between P3.2 and its acceptance whatever the legal professional answers. P5.4 (d) probes legislation.gov.uk's paragraph-level markup, and `tools/provision_hints.py` already cuts such sub-units in dev tooling (`docs/LEGAL_DATA_SOURCES.md` 2.2), a third candidate lever.
 ```
 
 **M8 (P3.19).** Anchor (occurs once):
@@ -336,7 +336,7 @@ Replacement:
 
 **B1. P3.3's 6338 turn-3 criterion fails the hedged reading P3.3's own clause asks for; P3.17
 inherits it. What now?**
-1. **(Recommended) Hold both until the lawyer answers, and pre-register the re-grade now.** Before
+1. **(Recommended) Hold both until the legal professional answers, and pre-register the re-grade now.** Before
    the pack goes, add a second supplementary question for turn 2 (may the newer Act be offered as
    one reading beside the right one?); on Yes, apply option 2 as a narrow-hedge rubric change and
    re-grade the stored columns at $0 (`wave4_b2_post` 6338 to 3 of 3, which meets P3.17); on No,
@@ -350,11 +350,11 @@ inherits it. What now?**
    seam A/B and then an after-column; no recorded verdict moves. It risks 6370, whose criterion
    wants exactly these readings.
 
-**B2. Where does the "what waits on the lawyer pack" sentence (section 2.2) go?**
+**B2. Where does the "what waits on the legal professional pack" sentence (section 2.2) go?**
 1. **(Recommended) At the top of the Ledger, plus matching `Depends on` entries:** P3.2 adds "the
-   lawyer pack (Reading 1)"; P3.3 adds "P3.2 (its acceptance includes P3.2's), the lawyer pack
+   legal professional pack (Reading 1)"; P3.3 adds "P3.2 (its acceptance includes P3.2's), the legal professional pack
    (Readings 2 to 4)"; P3.17 replaces "P3.3" with "P3.3's lever (built); P3.3 in turn cannot be
-   ticked until this row's criteria pass; the lawyer pack (Reading 2 and its supplementary)".
+   ticked until this row's criteria pass; the legal professional pack (Reading 2 and its supplementary)".
 2. **At the top of the Ledger only**, with no row edits.
 3. **On each of the three rows only**, with nothing at the top.
 

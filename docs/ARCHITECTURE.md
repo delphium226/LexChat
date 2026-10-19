@@ -23,13 +23,13 @@ detail see [DESIGN.md](DESIGN.md); for the authoritative endpoint list see
 ## 1. System context
 
 Who and what the system talks to. The organisation runs one or more **bot processes**; each serves
-qualified-lawyer users and reaches out to LLM providers and research APIs. Bots can consult each
+qualified legal professional users and reaches out to LLM providers and research APIs. Bots can consult each
 other via federation.
 
 ```mermaid
 graph TB
     subgraph org["UK Gov organisation (internet-restricted Windows Server 2022)"]
-        user["Qualified lawyer<br/>(browser, HTTPS:443)"]
+        user["Qualified legal professional<br/>(browser, HTTPS:443)"]
         legbot["Legislation bot<br/>uvicorn + PostgreSQL(lexchat)"]
         parlbot["Holyrood bot<br/>uvicorn + PostgreSQL(lexchat_parliament)"]
         westbot["Westminster bot<br/>uvicorn + PostgreSQL(lexchat_westminster)"]
@@ -361,7 +361,7 @@ silently.
 
 ## 6. Deep Research (plan → approve → execute)
 
-An opt-in `chat_mode = "deep_research"` that drafts an **editable** plan, lets the lawyer change it,
+An opt-in `chat_mode = "deep_research"` that drafts an **editable** plan, lets the legal professional change it,
 then executes it autonomously. Plan-first is what makes the run steerable and leaves an auditable
 approved-plan artefact. **L2 only** — there is no pause-and-review between steps.
 
@@ -782,7 +782,7 @@ graph TB
     uvicorn -.-> openrouter["openrouter.ai (if active)"]
     uvicorn --> research["LEX / TNA / SP / Hansard research APIs"]
 
-    user["Lawyer (browser)"] -->|HTTPS :443| uvicorn
+    user["Legal professional (browser)"] -->|HTTPS :443| uvicorn
 ```
 
 **Lifecycle**

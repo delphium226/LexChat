@@ -9,7 +9,7 @@ right text for exactly the same question.
 
 **Motivation** (from the D7 discussion): LEX documents are static, and at ~200
 users on one deployment, query demand over the same Acts/sections will be heavily
-correlated — the second lawyer asking the same question of the same section should
+correlated — the second legal professional asking the same question of the same section should
 skip the summarisation LLM call (the only expensive step; the LEX fetch itself is
 free and stays). The saving is mostly latency (tens of seconds on large docs) plus
 one flash-model call per hit.

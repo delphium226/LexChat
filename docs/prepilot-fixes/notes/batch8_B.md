@@ -71,14 +71,14 @@ turn Conversational, turns 6-7 under `legislation_and_case_law` (P0.6's reviewer
 | Directory | Mode | Verdict | Para 42 / 43 / 44 | Hand-read |
 |---|---|---|---|---|
 | `baseline` r1 | research | SHALLOW | coarse / coarse / coarse | a clarifying question naming the Schedule; nothing delivered. Agrees. |
-| `wave0_conv` r1 | conversational | PARTIAL | coarse / coarse / **deep** | para 44's trigger stated correctly; 42 and 43 named, then "the search ... was cut short by a system limit". Agrees: the lawyer did not get 42-43. |
+| `wave0_conv` r1 | conversational | PARTIAL | coarse / coarse / **deep** | para 44's trigger stated correctly; 42 and 43 named, then "the search ... was cut short by a system limit". Agrees: the legal professional did not get 42-43. |
 | `wave1` r1 | research | SHALLOW | coarse x3 | "unable to retrieve"; the citing sentence says the search "returned no results" (disqualified by `unless`). Agrees. |
 | `wave2` r1 | research | MISSED | missed x3 | the step-cap halt notice (1,234 characters); no Schedule named. Agrees. |
 | `wave3_p38_pre` r1 | research | PARTIAL | coarse / coarse / **deep** | para 44 reached as a cross-reference inside Part A1 (the notice-of-intention limb). Agrees with P3.12's row ("only as a cross-reference"). |
 | `wave3_p38_pre` r2 | research | SHALLOW | coarse x3 | "paragraphs 42, 43, and 44 ... were not retrieved because searching ... was cut short by a limit"; para 44 named without its trigger. Agrees. |
 | `wave3_p38_pre` r3 | research | SHALLOW | coarse x3 | the same negative as r2. Agrees. |
 
-**DELIVERED 0 of 7: the before-column fails everywhere the lawyer did not get the paragraphs**,
+**DELIVERED 0 of 7: the before-column fails everywhere the legal professional did not get the paragraphs**,
 including reps 2 and 3 of `wave3_p38_pre`. I read every `--drops` sentence (77 lines,
 `$S/depth_6335_drops.txt`): none states paragraph 42's or 43's substance.
 
@@ -292,7 +292,7 @@ P3.12's Act inside `DEPTH_TRUTH` (the standing exception). Session ids only othe
   under-read; if A's cut-block label carries "not retrieved" or a limit word, an echo would read as a
   FAIL on a held unit.
 - I did not copy the rubric into `evidence/rubrics/` (outside my folder); it is `$S/p327.json`.
-- I did not edit FIX_PLAN, SESSION_LOG, the tracker, CHANGELOG, any existing rubric, the lawyer pack
+- I did not edit FIX_PLAN, SESSION_LOG, the tracker, CHANGELOG, any existing rubric, the legal professional pack
   or memory; I did not run `plan_status` or `plan_lint` (nothing they read changed).
 - I did not push or merge.
 
@@ -328,7 +328,7 @@ also for the three later Orders (live). C's P3.25 prices: `p37_6409` median $0.4
       symptom.
    2. **n=3** (+$1.02 at medians).
 4. **How strict `depth` is on 6335 turn 7.**
-   1. **(Recommended) As built: each paragraph cited by number, with its facts nearby.** Lawyers
+   1. **(Recommended) As built: each paragraph cited by number, with its facts nearby.** Legal professionals
       cite; the existing `DEPTH_TRUTH` entries require the provision at depth plus its facts.
    2. **The facts alone suffice** (an answer delivering all three paragraphs' substance under "Schedule
       B1" with no paragraph numbers would pass). Kinder to a prose answer; weaker as a citation check.

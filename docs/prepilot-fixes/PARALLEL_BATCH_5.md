@@ -9,7 +9,7 @@ expensive serialised, run by the integrator only, and put to the user with a fig
 This file is the brief. The integrator reads it whole. Each agent is given its own section, plus
 **Rules for every agent**, **Lessons from batches 1-4** and **Shared setup**, verbatim. Nothing
 here should need re-deriving; if something does, the agent says so in its note rather than
-guessing. Matter-specific detail (lawyers' wording, rubric patterns, hand-reads) is NOT in this
+guessing. Matter-specific detail (legal professionals' wording, rubric patterns, hand-reads) is NOT in this
 file; it is in the gitignored files named below.
 
 **Why this batch (user decision, 2026-10-02).** FIX_PLAN.md has grown to about 470 KB over 36
@@ -26,7 +26,7 @@ the open rows and the cross-references, not a re-read of the history.
 2. **Agents propose, the integrator applies, the user approves anything that is not mechanical.**
    No agent edits FIX_PLAN.md, SESSION_LOG.md, CHANGELOG.md, CLAUDE.md, summary-table.html or a
    memory file.
-3. **P3.2 stays PARKED** until a lawyer answers the confirmation pack; P3.3 cannot be ticked while
+3. **P3.2 stays PARKED** until a legal professional answers the confirmation pack; P3.3 cannot be ticked while
    P3.2 is parked. The pack (`evidence/lawyer_pack/confirmation_pack.md`, sha1 `10da6f9d…`) is
    ready; sending it is the user's action.
 4. From Session 36: the grader gaps found in `wave4_b4_post` are fixed before any further
@@ -85,10 +85,10 @@ the open rows and the cross-references, not a re-read of the history.
    turn-3 criterion fails "a hedged conclusion that they must be sequential", and batch 4 D showed
    the turn-3 hedged sequence reading is produced by that clause (4 of 9 answers since it, always
    "on one reading", always beside the correct statement; `notes/batch4_D.md`). P3.17's acceptance
-   is P3.3's 6338 criteria, so it inherits the conflict. The lawyer pack's supplementary question
+   is P3.3's 6338 criteria, so it inherits the conflict. The legal professional pack's supplementary question
    (Reading 2) asks exactly this.
 2. **A chain blocked on one external event, stated nowhere in one place:** P3.2 parked on the
-   lawyer; P3.3 not tickable while P3.2 is parked; P3.17 graded on P3.3's criteria.
+   legal professional; P3.3 not tickable while P3.2 is parked; P3.17 graded on P3.3's criteria.
 3. **New rows overlapping existing ones with no stated relationship:** P3.20 and P5.2; P3.21 and
    P2.5/P4.18 (whose footer says no date was retrieved); P3.23 and P1.3/P2.2 (the legislation
    windowing fix); P3.12 and P4.17 (which explains that negative, not fixes it).
@@ -110,7 +110,7 @@ grader changes next; the two notes last). **Collision points:** A touches only n
 relationship (for example P3.21 against P4.18); the integrator reconciles duplicates.
 
 **Not in this batch:** any product code; any replay or seam draw; any FIX_PLAN edit by an agent;
-P3.19's build (wait until B confirms its premise and acceptance); sending the lawyer pack.
+P3.19's build (wait until B confirms its premise and acceptance); sending the legal professional pack.
 
 ---
 
@@ -141,7 +141,7 @@ P3.19's build (wait until B confirms its premise and acceptance); sending the la
    change reverted on a scratch copy, **and the note says how many lines the revert removed** (a
    revert that removed nothing proves nothing). Run the full suite on your own test database before
    your last commit, and report the count.
-6. **Data handling:** never commit lawyers' question or answer text, search terms, case names, or
+6. **Data handling:** never commit legal professionals' question or answer text, search terms, case names, or
    instrument ids and titles from a session. Tests and fixtures use synthetic text ("Widget Order
    1901"). Grep your staged diff for session ids, instrument ids and matter words before every
    commit. Rubric patterns, draws and anything quoting a matter stay in the gitignored evidence.
@@ -282,9 +282,9 @@ each row in full, then `notes/batch4_{B,C,D}.md` and `docs/LEGAL_DATA_SOURCES.md
 1. **P3.3's acceptance against its own lever** (known inconsistency 1 above) and P3.17's inherited
    criterion: options include (a) keep the booked criterion and change the lever's wording, (b)
    re-book the criterion to accept a hedged reading offered beside the correct statement, (c) hold
-   both until the lawyer answers the pack's supplementary question. Say what each does to the
+   both until the legal professional answers the pack's supplementary question. Say what each does to the
    recorded verdicts (`wave4_b2_post`, `wave4_b4_post`), by command and by the recorded hand-reads.
-2. **The lawyer-blocked chain** (P3.2, P3.3, P3.17): propose one sentence, for the top of the
+2. **The legal-professional-blocked chain** (P3.2, P3.3, P3.17): propose one sentence, for the top of the
    ledger or the rows, that states what waits on the pack and what does not.
 3. **P3.19:** confirm its premise in `_slim_amendment_results` (`agent/tools/lex.py`) and that its
    acceptance is buildable as booked; say whether it can be built next at $0.
@@ -397,7 +397,7 @@ change reverted. Report 6370's unhedged count by command against the hand-read's
    (FIX_PLAN "How to use this file" step 7: read the live artifact and every line of the saved file
    first).
 
-**Open with the user, carried (do not act on the target yourself):** sending the lawyer pack
+**Open with the user, carried (do not act on the target yourself):** sending the legal professional pack
 (`evidence/lawyer_pack/confirmation_pack.md`; confirm the cover note's promise first); deploying
 `v2026.09.3` to the target (`pg_dump` first, then pull, restart and `test_apis.ps1`; the local prompt
 cache moves to v3 there, so cached summaries empty, which is intended); telling the eval-harness

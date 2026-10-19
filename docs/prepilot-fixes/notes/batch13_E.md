@@ -125,8 +125,8 @@ matches word prefixes), "did not return" (`NEG_ASSERTED`'s search-did-not-return
 
 ### 1.4 Who reads it, and the other code texts that speak of the same case
 
-- **Read by the Worker only** (it is in the tool result). It reaches a lawyer only if a Worker echoes it, and
-  `_TOOL_BLOCK` strips that. `worker_scope_block` and the lawyer's footer are unchanged.
+- **Read by the Worker only** (it is in the tool result). It reaches a legal professional only if a Worker echoes it, and
+  `_TOOL_BLOCK` strips that. `worker_scope_block` and the legal professional's footer are unchanged.
 - **Graders that read `search_case_law` results** (`authorities`, `caselaw`, `scts`, `discovery`, `commencements`)
   read `raw_result`, or `final_result` only as JSON; the note makes `final_result` non-JSON exactly as the existing
   notes already do. `authorities`' fallback reads `final_result` for citations in square brackets; the note shows

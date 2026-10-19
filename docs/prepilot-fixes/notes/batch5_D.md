@@ -9,7 +9,7 @@ and `INTERP_HEDGE`); the rest are rubric data (`p33.json` for 6338 and 6370, `p3
 **Spend: $0.** No model call, no server, no `replay pin|run|restore`, no API call.
 
 This note gives counts and locations only. The moved sentences and the rubric patterns name
-lawyers' matters, so they stay in the gitignored evidence.
+legal professionals' matters, so they stay in the gitignored evidence.
 
 **Base:** the worktree came up on `main` at `a6b4a76`, not on the integrator's head. It had no
 commits, so I ran `git reset --hard dde8b41` before any work. Everything here is based on

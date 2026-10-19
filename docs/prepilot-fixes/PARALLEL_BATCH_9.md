@@ -12,7 +12,7 @@ third, P3.4's after-column, priced the same way). Nothing is authorised yet.
 This file is the brief. The integrator reads it whole. Each agent is given its own section, plus
 **Rules for every agent**, **Lessons from batches 1-8** and **Shared setup**, verbatim. Nothing here
 should need re-deriving; if something does, the agent says so in its note rather than guessing.
-Matter-specific detail (lawyers' wording, case names, rubric patterns, hand-reads, ground-truth text,
+Matter-specific detail (legal professionals' wording, case names, rubric patterns, hand-reads, ground-truth text,
 live payloads) is NOT in this file; it is in the gitignored files named below.
 
 **What the user has already decided (do not re-open):**
@@ -34,7 +34,7 @@ live payloads) is NOT in this file; it is in the gitignored files named below.
    the window note's three order statements flipped in the same commit, without the word "ranked",
    re-screened; the Phase-2 nudge's "most relevant" left as it is (it becomes true). **The before-column
    is 6363 and 6359, n=3 each, recorded modes, at a head WITHOUT P3.22**, graded on batch 8 C's rubric
-   (adopted as the bar; 6363's list also sent to a lawyer in the pack). The published spec was
+   (adopted as the bar; 6363's list also sent to a legal professional in the pack). The published spec was
    re-checked (`public_api.yml` v0.6.0: `order` enum `date`, `updated`, `transformation`; no
    `relevance`); say so in a code comment, and `check_order` guards it.
 5. **P3.21 (P2):** the date from legislation.gov.uk's dated effects feed read through LEX's
@@ -45,11 +45,11 @@ live payloads) is NOT in this file; it is in the gitignored files named below.
    qualification) and **6411 n=3 on the negative branch only** (no commencement date stated: neither
    source has one). Self-commencing Acts are out (a follow-up). P5.4 (c) needs no new row.
 6. **P3.29 (P3)** is booked (appellate detector false positives); not in this batch.
-7. **P3.2, P3.3 and P3.17 are BLOCKED on the lawyer pack** (now five questions, ready, not sent).
+7. **P3.2, P3.3 and P3.17 are BLOCKED on the legal professional pack** (now five questions, ready, not sent).
 8. **Agents propose; the integrator applies; the user approves anything not mechanical**, including
-   any wording a lawyer will read. No agent edits FIX_PLAN.md, SESSION_LOG.md, CHANGELOG.md,
+   any wording a legal professional will read. No agent edits FIX_PLAN.md, SESSION_LOG.md, CHANGELOG.md,
    CLAUDE.md, `summary-table.html`, `docs/TODO.md`, `docs/LEGAL_DATA_SOURCES.md`, a rubric, the
-   lawyer pack or a memory file.
+   legal professional pack or a memory file.
 9. **Never merge or push to `main`**; the next cut (`v2026.10.1`) goes only when the user asks.
    Branch pushes are allowed; if the permission classifier refuses one, ask the user (it refused once
    in Session 40 and the user approved).
@@ -93,7 +93,7 @@ live payloads) is NOT in this file; it is in the gitignored files named below.
   - Rubrics `rubrics/p32.json` (sha1 `31379ecf…`), `p33.json` (`0031831b…`), `p327.json` (`5a14e273…`);
     hand-reads `handread_wave4_b7_p324.md`, `handread_wave4_b8_sweep.md`.
   - **Batch 8 scratch** `seam/batch8/{A,A2,B,B2,C,D,scratchpad_s40}/`:
-    - **C (P3.22):** `rubric_p322_6363_6359.md` (the ground truth, gitignored: case names, the lawyers'
+    - **C (P3.22):** `rubric_p322_6363_6359.md` (the ground truth, gitignored: case names, the legal professionals'
       words by turn, the proposed bar's four items), `live.jsonl` and the gzipped raw feeds (**both
       orderings for every stored tuple**: B's dry run uses them, no live call needed), `tna.py` (the
       capped, paced, logged National Archives caller), `census.py`, `analyze.py`, `rubric_check.py`,
@@ -114,7 +114,7 @@ live payloads) is NOT in this file; it is in the gitignored files named below.
       `dump_answers.py`, `text_calls.py`, `recitals.py`, `b8_mutA.py`/`b8_mutB.py`/`b8_mutA2.py`
       (CRLF-safe mutant runners), `fold_s40.py`, `docs_s40.py`, `preserve_s40.py`, `tracker_v39.py`.
   - Replay scripts in `evidence/scripts/` (tracked: base session and turn indices only).
-  - The raw transcript export (lawyers' questions; never in the repo):
+  - The raw transcript export (legal professionals' questions; never in the repo):
     `C:/Temp/aila-prepilot/pre-pilot sessions/session-transcripts-all-time-2026-09-14.csv`.
 - **Test databases** `lexchat_test_a` to `lexchat_test_d` exist; **create `lexchat_test_e`** for agent E
   at step 1 (`CREATE DATABASE lexchat_test_e OWNER lexuser;` with psql), or give E `lexchat_test_d`
@@ -182,12 +182,12 @@ Session 42).**
 
 1. **Read first:** `docs/prepilot-fixes/FIX_PLAN.md` ("How to use this file", Invariants 1-6, "Data
    handling", "Re-planning protocol", the top recommended-order line, the paragraph above the Ledger
-   on what waits on the lawyer pack, and your rows in full); in `docs/prepilot-fixes/SESSION_LOG.md`,
+   on what waits on the legal professional pack, and your rows in full); in `docs/prepilot-fixes/SESSION_LOG.md`,
    everything from "Session 40 — 2026-10-06 — parallel batch 8" to the end of the file; and the
    batch 8 notes your brief names. Do not re-derive what they establish.
 2. **Stay in your worktree and on your files.** Do not edit `FIX_PLAN.md`, `SESSION_LOG.md`,
    `summary-table.html`, `CLAUDE.md`, `CHANGELOG.md`, `VERSION`, `docs/TODO.md`,
-   `docs/LEGAL_DATA_SOURCES.md`, any `PARALLEL_BATCH_*.md`, any rubric, the lawyer pack or any memory
+   `docs/LEGAL_DATA_SOURCES.md`, any `PARALLEL_BATCH_*.md`, any rubric, the legal professional pack or any memory
    file: the integrator folds your results in. Commit on your worktree's branch; **do not push, do
    not merge, never touch `main`.**
 3. **Write your note** as `docs/prepilot-fixes/notes/batch9_<A|B|C|D|E>.md` and commit it. Put in it:
@@ -212,7 +212,7 @@ Session 42).**
    and every cleaning step** (bracket cleaning, uniqueness checks, completeness checks): in Session 40
    the integrator's mutants found two untested guards in agent A's build, and one hid a real defect.
    Run the full suite on your own test database before your last commit, and report the count.
-6. **Data handling:** never commit lawyers' question or answer text, search terms, case names, or
+6. **Data handling:** never commit legal professionals' question or answer text, search terms, case names, or
    instrument ids and titles from a session. Tests and fixtures use synthetic text ("Widget Order
    1901", `ssi/1901/3`, "Widget Co v Example Ltd"). Grep your staged diff for session ids,
    instrument ids and matter words before every commit (with Python: see the lessons). Rubric
@@ -545,7 +545,7 @@ mutants.
      **Do not remove an agent's worktree before its branch is merged** (a removed worktree cannot be
      resumed: Session 40 had to launch B2 in B's place). Run `git worktree remove` from the main
      checkout, never from inside.
-   Put any wording a lawyer could read to the user before its merge (B's, C's and D's).
+   Put any wording a legal professional could read to the user before its merge (B's, C's and D's).
 5. **Merge A, then E**, each `--no-ff`, the suite after each, the branch pushed after each clean
    merge (never `main`; if the classifier refuses, ask the user). Copy E's rubrics to
    `evidence/rubrics/` (check `git check-ignore -v` first) and record their sha1s.
@@ -590,7 +590,7 @@ mutants.
       (0 errors) and `plan_status`;
     - **put the agents' decisions to the user**, grouped (AskUserQuestion, at most four questions per
       call, recommendation first). Record each answer on its row;
-    - CHANGELOG *Unreleased*: each product change in plain words (what a lawyer or the model now
+    - CHANGELOG *Unreleased*: each product change in plain words (what a legal professional or the model now
       sees); tooling separately. Add an even number of `**`. Correct `docs/LEGAL_DATA_SOURCES.md`,
       `docs/api/AUDIT_TRACE.md` (any new `api_calls` or result keys: C adds feed calls and keys) and
       CLAUDE.md where a finding changes them.
@@ -603,7 +603,7 @@ mutants.
     `AS_AT` to the local date and time of the update, e.g. "7th Oct 2026, 4:05pm", and `UPDATED`; a new
     row gets `added`, the day it is added; the table sorts unfinished rows first, P1 at the top).
 
-**Open with the user, carried (do not act on them yourself):** sending the lawyer pack (five
+**Open with the user, carried (do not act on them yourself):** sending the legal professional pack (five
 questions now; unblocks P3.2, P3.3, P3.17, and confirms P3.22's 6363 list; confirm the cover note's
 promise first); sending SCTS the note (P3.20's prerequisite); applying for the National Archives
 licence (`docs/TODO.md` D23); deploying `v2026.09.3` to the target (`pg_dump` first, then pull,

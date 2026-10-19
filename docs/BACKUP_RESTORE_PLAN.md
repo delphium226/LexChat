@@ -279,7 +279,7 @@ Matching conventions already in the codebase:
   disclose the cascade rather than let it be discovered afterwards.
 - **Confirm phrase `RESTORE`,** matching `_CONFIRM_PHRASE = "DELETE"`.
 - **Log to `activity_log`** — who restored what, from which dump, how many rows.
-  Given government-lawyer users and an audit trail that already exists, a
+  Given government legal professional users and an audit trail that already exists, a
   restore belongs on it.
 - **Endpoints go on `admin_router`** (`developer.py:44`), which carries
   `Depends(get_admin_user)` at router level.

@@ -14,7 +14,7 @@ scripted turn-4 runs n=3 each (agent E prices it). Nothing is authorised yet.
 This file is the brief. The integrator reads it whole. Each agent is given its own section, plus **Rules for
 every agent**, **Lessons from batches 1-10** and **Shared setup**, verbatim. Nothing here should need
 re-deriving; if something does, the agent says so in its note rather than guessing. Matter-specific detail
-(lawyers' wording, case names, rubric patterns, hand-reads, ground-truth text, live payloads) is NOT in this
+(legal professionals' wording, case names, rubric patterns, hand-reads, ground-truth text, live payloads) is NOT in this
 file; it is in the gitignored files named below.
 
 **What the user has already decided (do not re-open):**
@@ -53,11 +53,11 @@ file; it is in the gitignored files named below.
 8. **P4.23** (the Manager drops report links; a code linker, measure first) and **P4.24** (rail entries with a
    bare-id title or no URL) are booked, not in this batch. **P3.4's research-mode follow-up** and **P3.30** are
    booked, not in this batch.
-9. **P3.2, P3.3 and P3.17 are BLOCKED on the lawyer pack** (five questions, ready, not sent).
+9. **P3.2, P3.3 and P3.17 are BLOCKED on the legal professional pack** (five questions, ready, not sent).
 10. **Agents propose; the integrator applies; the user approves anything not mechanical**, including any wording
-    a lawyer or the Worker will read. No agent edits FIX_PLAN.md, SESSION_LOG.md, CHANGELOG.md, CLAUDE.md,
+    a legal professional or the Worker will read. No agent edits FIX_PLAN.md, SESSION_LOG.md, CHANGELOG.md, CLAUDE.md,
     `summary-table.html`, `docs/TODO.md`, `docs/LEGAL_DATA_SOURCES.md`, `docs/NETWORK_AND_DEPENDENCIES.md`, a
-    rubric, the lawyer pack or a memory file.
+    rubric, the legal professional pack or a memory file.
 11. **Never merge or push to `main`**; the next cut (`v2026.10.1`) goes only when the user asks. **Branch pushes
     were approved after every clean merge in Session 42; ask again at Session 43's start.**
 12. **The Fix Tracker is updated only when the user asks.**
@@ -137,7 +137,7 @@ file; it is in the gitignored files named below.
 | **D** | **P3.20** (P2) | Measure first: the SCTS search against the stored Scots-law case-law turns, date reliability, PDF text, the gated wording sites; propose the design and acceptance | measurement, no product code | $0; SCTS calls only if agreed (up to 150) | its scratch only (plus its note) |
 | **E** | **P3.10** (P2), and the sweep | The ids line in `_build_step_brief` (wording to the user); two turn-4 scripts; the list-match grading script; the sweep priced | product + scripts | $0, no external call | `agent_core.run_deep_research` / `_build_step_brief`, tests, `evidence/scripts/p310_*.json` |
 
-**Why these five.** By severity: P3.12 is the only open P1 work not blocked on the lawyer pack (its paid seam
+**Why these five.** By severity: P3.12 is the only open P1 work not blocked on the legal professional pack (its paid seam
 draw is the integrator's first step). The P2 rows ready to build are P4.12 and P4.3 (deterministic, $0, levers
 decided) and P3.10 (lever decided, wording to approve, replay priced); P3.20 is unblocked by SCTS's permission
 and is measure-first by the user's decision. **Not in this batch:** P3.22's item 3, P4.23, P3.4's research-mode
@@ -165,14 +165,14 @@ approved), then the sweep (on the user's go-ahead), then C, then D.** **Never co
 
 1. **Read first:** `docs/prepilot-fixes/FIX_PLAN.md` ("How to use this file", Invariants 1-6, "Data
    handling", "Verification protocol" (incl. "Iterate on a seam before you pay for a replay"), "Re-planning
-   protocol", the top recommended-order line, the paragraph above the Ledger on what waits on the lawyer pack,
+   protocol", the top recommended-order line, the paragraph above the Ledger on what waits on the legal professional pack,
    and your rows in full); in `docs/prepilot-fixes/SESSION_LOG.md`, everything from "Session 42 — 2026-10-08 —
    parallel batch 10" to the end of the file (incl. its three addenda); and the batch 10 notes your brief names.
    Do not re-derive what they establish.
 2. **Stay in your worktree and on your files.** Do not edit `FIX_PLAN.md`, `SESSION_LOG.md`,
    `summary-table.html`, `CLAUDE.md`, `CHANGELOG.md`, `VERSION`, `docs/TODO.md`,
    `docs/LEGAL_DATA_SOURCES.md`, `docs/NETWORK_AND_DEPENDENCIES.md`, any `PARALLEL_BATCH_*.md`, any rubric, the
-   lawyer pack or any memory file: the integrator folds your results in. Commit on your worktree's branch; **do
+   legal professional pack or any memory file: the integrator folds your results in. Commit on your worktree's branch; **do
    not push, do not merge, never touch `main`.**
 3. **Write your note** as `docs/prepilot-fixes/notes/batch11_<A|B|C|D|E>.md` and commit it. Put in it:
    - what you changed or found, and why;
@@ -196,7 +196,7 @@ approved), then the sweep (on the user's go-ahead), then C, then D.** **Never co
    and every cleaning step** (bracket cleaning, uniqueness checks, completeness checks, length and
    emptiness thresholds): in Sessions 40, 41 and 42 the integrator's own mutants found an untested guard in
    every batch. Run the full suite on your own test database before your last commit, and report the count.
-6. **Data handling:** never commit lawyers' question or answer text, search terms, case names, or
+6. **Data handling:** never commit legal professionals' question or answer text, search terms, case names, or
    instrument ids and titles from a session. Tests and fixtures use synthetic text ("Widget Order
    1901", `ssi/1901/3`, "Widget Co v Example Ltd"). Grep your staged diff for session ids,
    instrument ids and matter words before every commit (with Python: see the lessons). Rubric
@@ -398,7 +398,7 @@ with a Manager flag for each mechanism (a), (b) attempt 1 and 2, (c), (d); both 
 Manager call; the cap on the Manager payload only; a heavy empty reaching P4.2's fallback after one attempt; the
 gate with and without a report in hand), each failing with its change reverted (lines removed), single-site
 mutants for every guard. **Check what the audit trace records** (`empty_completions[]`'s `attempt`/`retried`)
-and say whether `AUDIT_TRACE.md` needs a sentence (the integrator edits it). No new lawyer-facing text is
+and say whether `AUDIT_TRACE.md` needs a sentence (the integrator edits it). No new legal-professional-facing text is
 expected; if any arises, screen it and list it for the user.
 
 ## Agent C: P4.3 built, V4 and the `rail` grader ($0, product + tooling, deterministic acceptance)
@@ -441,7 +441,7 @@ hosts, `api.pa.web.scotcourts.gov.uk` (POST search) and `www.scotcourts.gov.uk` 
 1. Over every stored directory (say how many), the case-law turns that ask a Scots-law question (classify by
    the question and the answer; read every one you count), and for each, what an SCTS search for the query the
    Worker issued (quoted as the tool would quote it) returns: the total, the first five, and whether it holds
-   the authority the lawyer named or the answer needed (6375 is the acceptance session; 6359's out-of-corpus
+   the authority the legal professional named or the answer needed (6375 is the acceptance session; 6359's out-of-corpus
    key case is an English EAT judgment, so say whether SCTS can matter there).
 2. Re-probe the search's behaviour (quoted phrases, unquoted OR, paging, the exact total, the court values
    from `/web/definition/1414`) and say what changed since 2026-10-02.
@@ -571,7 +571,7 @@ the two scripts n=3 each (turn-4 costs from the stored runs), each command with 
 **Open with the user, carried (do not act on them yourself):** asking SCTS for a written confirmation of the
 permission (save it to the gitignored evidence and cite it on P3.20 when it arrives); sending the whitelist request
 for `api.pa.web.scotcourts.gov.uk` and `www.scotcourts.gov.uk` (draft:
-`evidence/seam/batch10/scratchpad_s42/whitelist_request_scts.md`); sending the lawyer pack (unblocks P3.2, P3.3,
+`evidence/seam/batch10/scratchpad_s42/whitelist_request_scts.md`); sending the legal professional pack (unblocks P3.2, P3.3,
 P3.17); applying for the National Archives licence (`docs/TODO.md` D23); deploying `v2026.09.3` to the target
 (`pg_dump` first, then pull, restart and `test_apis.ps1`); telling the eval-harness owner about schema v6 and the
 new `api_calls` and request keys in `AUDIT_TRACE.md`; D19's remaining items; which rows go in the next cut

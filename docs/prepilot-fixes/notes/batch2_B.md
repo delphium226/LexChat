@@ -44,7 +44,7 @@ them.
   a party's legal "right to" something (export 6350, not agreement).
 - **"Thank you for <verb>": 21 openers, all in 6409 runs**: "providing" (10), "the
   citation / full citation / full title / clarification" (10), "confirming" (1). Every one
-  thanks the lawyer for a citation or a title. None is a challenge-thanks, so the `thanks`
+  thanks the legal professional for a citation or a title. None is a challenge-thanks, so the `thanks`
   formula's verb list needs nothing (the same finding as batch 1's P4.13 scan).
 - `openers --drops` filtered to "you are/you're ... right/correct": 2 uncounted sentences,
   the retraction above and "On one reading, you are correct:" (it does not open with the

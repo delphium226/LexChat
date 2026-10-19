@@ -117,7 +117,7 @@ DEBUG on the target without a code change → commit → push → pull cycle.
 
 ## Item 4 — Redact sensitive data
 
-**Problem.** For OFFICIAL-SENSITIVE / government-lawyer users, several INFO lines write
+**Problem.** For OFFICIAL-SENSITIVE / government legal professional users, several INFO lines write
 user content and PII to disk (14-day retention):
 - `agent/agent_core.py:58` — full user `query`.
 - `routers/learning.py:145` — full `body.query`.

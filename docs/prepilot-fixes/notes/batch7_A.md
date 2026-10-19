@@ -9,7 +9,7 @@ based on `6011b4f`.
 Full suite on `lexchat_test_a`: **2216 passed** (2195 + 21 new), from `server_py/`:
 `TEST_DATABASE_URL=postgresql://lexuser:lexpassword@localhost:5432/lexchat_test_a python -m pytest -q -p no:cacheprovider`.
 
-This note quotes no lawyer's text, search term, instrument id or title from a session. Commands run
+This note quotes no legal professional's text, search term, instrument id or title from a session. Commands run
 from `server_py/` with `PREPILOT_EVIDENCE=C:/Projects/LexChat/docs/prepilot-fixes/evidence` and
 `PYTHONIOENCODING=utf-8`; `$S` is the gitignored scratch `docs/prepilot-fixes/evidence/seam/batch7/A`.
 
@@ -214,7 +214,7 @@ Revert proofs on scratch copies of `server_py` (`python $S/revert_a.py <server_p
   what the Manager's line now says the record cannot show. The new prompt sentence contradicts that
   block in the Worker's own context. Decision 1.
 - **F-A2:** `_currency_footer_clause` names a record as "checked" from `commenced`, self relations
-  included (F3 in the lawyer's footer). P4.20's territory; not touched.
+  included (F3 in the legal professional's footer). P4.20's territory; not touched.
 - **F-A3:** the `not consulted` and overflow cases forbid stating any commencement, which also covers
   a date the instrument's own text fixes (P2.5's limb already limits currency to what it lists; B's
   grader reads such a date as UNCLEAR, not supported). Decision 3.
@@ -384,4 +384,4 @@ Revert proofs on scratch copies (`python $S/revert_ext.py <server_py> bc82672`,
 
 **Still not done:** no replay, no model or external call, no change to the `Commencement Order` or
 repeal branches, the closing sentence, the slimmer, the footer clauses or any prompt. F-A2 (the
-lawyer footer counting self relations) remains P4.20's.
+legal professional footer counting self relations) remains P4.20's.

@@ -206,9 +206,9 @@ cleanly; if none is added, an inline `useState`-based error banner is sufficient
 component split; locations above are current.)
 
 ### B2. Matters: AI proactive research gap detection (feature; was issue #17)
-After multiple research chats on a matter, lawyers may not know what angles they have
+After multiple research chats on a matter, legal professionals may not know what angles they have
 missed. Adds a "Find research gaps" action that analyses all research done on a matter
-and suggests specific queries the lawyer has not yet investigated. Conceptually
+and suggests specific queries the legal professional has not yet investigated. Conceptually
 similar to the research brief (issue #15) but forward-looking: instead of summarising
 what was found, it identifies what was *not* asked. Output is a ranked list of
 suggested next research queries, actionable enough to paste directly into a new chat.
@@ -221,7 +221,7 @@ suggested next research queries, actionable enough to paste directly into a new 
    prompt size down).
 3. Build a structured prompt:
    ```
-   You are a senior UK government lawyer reviewing research conducted on a legal matter.
+   You are a senior UK government legal professional reviewing research conducted on a legal matter.
 
    MATTER: {matter.title}
    DESCRIPTION: {matter.description or "(none)"}
@@ -243,7 +243,7 @@ suggested next research queries, actionable enough to paste directly into a new 
    - Any pending legislation or recent amendments
 
    Based on what has been researched so far, list up to 8 specific research queries
-   the lawyer should run next. For each:
+   the legal professional should run next. For each:
    - Write the query as a complete question, ready to paste into a research chat
    - Add a one-line explanation of why this gap matters
 
@@ -339,7 +339,7 @@ unchanged and still advises a retry on a 402.
 
 `routers/research.py::draft_plan` catches `ConnectionError` (503, which is right) and then
 any other exception as `502 "The planner failed. Please try again."`. So a provider HTTP 402
-(credit exhausted) or 429 (rate limited) reaches the lawyer as a generic failure with advice
+(credit exhausted) or 429 (rate limited) reaches the legal professional as a generic failure with advice
 to retry, and support staff go looking for a LexChat fault. The chat path already renders
 provider errors through `agent_shared.describe_agent_error`.
 
@@ -376,10 +376,10 @@ still alerted). Synthesis prompt includes a Key-findings bullet block in the BLU
 material gaps surfaced in the summary. Awaiting review/commit; rebuild `client/dist`
 + force-add at ship time. Original scope below.
 New opt-in `chat_mode = "deep_research"` that drafts an editable research plan, lets
-the lawyer add/remove/reorder/edit steps, then on approval executes the plan
+the legal professional add/remove/reorder/edit steps, then on approval executes the plan
 autonomously (code-orchestrated: one worker run per step + a synthesis call) and
 returns an integrated report. Plan-first improves scoping/steerability and yields an
-auditable approved-plan artifact — a good fit for the government-lawyer users. **L2
+auditable approved-plan artifact — a good fit for the government legal professional users. **L2
 only** (plan → approve → run); L3 (pause-and-review between steps) explicitly excluded.
 Two-phase flow: new `POST /api/research/plan` (JSON, planner-only agent) → editable
 plan card → existing `POST /api/chat` with an added `deep_research_plan` field for
@@ -514,7 +514,7 @@ Admin Portal Cache stats tab. Plan: `docs/CACHE_ADMIN_UI_PLAN.md`.**
 
 ### D7. "Local prompt caching" — cross-user/cross-provider summary cache, exact-match (BUILT 2026-07-18 on feature/local-prompt-cache, live-verified)
 Cross-user cache of Worker document summaries (LEX text is static; at ~200 users
-query demand over the same Acts will be heavily correlated — the second lawyer
+query demand over the same Acts will be heavily correlated — the second legal professional
 asking the same question of the same section skips the summarisation LLM call).
 **No embeddings** — the earlier embedding-based variant (discussed 2026-07-17) was
 rejected because semantic near-miss reuse risks silent incompleteness; this design
@@ -575,7 +575,7 @@ Problem/Change/Files/Verify and PR slicing: `docs/LOGGING_IMPROVEMENTS_PLAN.md`.
 - **PR C — DEFERRED.** Sensitive-data redaction (Item 4): full user query text is
   logged at INFO (`agent_core.py:58`, `learning.py:145`) and email addresses at
   `auth.py:174` + `email_service.py` — a concern for OFFICIAL-SENSITIVE / government-
-  lawyer users given 14-day log retention. Plan adds `redact_text()`/`redact_email()`
+  legal professional users given 14-day log retention. Plan adds `redact_text()`/`redact_email()`
   helpers, redact at INFO, full text only at DEBUG. **Open decision for the deploying
   org:** whether query text may appear even at DEBUG. Record the decision in
   `CLAUDE.md` when built.
@@ -773,13 +773,13 @@ writes a `Message` row (the frontend persists the answer after the `result` even
 Making runs survive needs a client-supplied `run_id`, a detached job registry, a
 replay-buffered re-attach endpoint, server-side persistence, and a schema change
 (`Message.content` is NOT NULL). **Full design: `docs/CONCURRENT_RUNS_DURABILITY.md`.**
-Signal to act on: lawyers losing long Deep Research runs to accidental refreshes.
+Signal to act on: legal professionals losing long Deep Research runs to accidental refreshes.
 
 ### D13. Per-message filter history, if the submit-time snapshot proves too coarse (deferred 2026-08-13)
 `session_feedback.filters` now records the research filter panel's state **at the
 moment the form was submitted** (added 2026-08-13, so the pre-pilot has it from the
 13th onward and rows before that are NULL). That is a snapshot, not a history: a
-lawyer who researched under `jurisdiction=scotland` and then switched to England &
+legal professional who researched under `jurisdiction=scotland` and then switched to England &
 Wales before pressing "Finished session" is recorded at the second setting, and
 nothing marks that the filters changed mid-thread.
 
@@ -899,7 +899,7 @@ Until this is answered the regime is not disaster recovery. Blocks nothing in D1
 > freeze, and the bucket list reconciles against it rather than replacing it.
 
 Source: `session-transcripts-prepilot-2026-08-19.csv` (Developer tab export) — **41 sessions,
-12 lawyers, 251 messages, 119 assistant turns, $20.22 total spend**, 2026-08-11 → 08-19.
+12 legal professionals, 251 messages, 119 assistant turns, $20.22 total spend**, 2026-08-11 → 08-19.
 
 Headline: **ease of use 4.17/5, confidence 3.37/5**; ease exceeded confidence in 22 of 41
 sessions. Confidence tracks accuracy almost exactly (mean 4.40 where the right law was found,
@@ -922,7 +922,7 @@ message 7 (conversational) and fully retrieved at s.85 at message 11 (research m
 6373 (FrankieH) is the same shape against SSI 2026/170 and scored **1/5**.
 
 **Why it ranks first.** A wrong answer is checkable; *"this is not in the database"* is not —
-the lawyer stops looking. Worse, the behaviour is being **rewarded**: CambeulW gave 5/5
+the legal professional stops looking. Worse, the behaviour is being **rewarded**: CambeulW gave 5/5
 confidence explicitly because AILA said it could not find something (*"I am confident in the
 answer because it correctly identified it was unable to answer the question"*). We are
 collecting positive signal for negatives we cannot substantiate.
@@ -1001,7 +1001,7 @@ step's findings and hands it to synthesis, which faithfully reports it as a gap.
 behaves correctly and the composite is bad.
 
 **Two separable problems.** *Presentation* — an internal budget exhaustion is narrated to a
-government lawyer as if it were a fact about the law; synthesis should receive the halt as
+government legal professional as if it were a fact about the law; synthesis should receive the halt as
 metadata and the UI should mark the step incomplete, rather than the halt string entering
 report prose. *The budget itself* — in 6374 the halted step was precisely the one that would
 have found the Orders in Council under s.126(8) the user came for; `max_turns=20` is shared
@@ -1116,7 +1116,7 @@ Fixes to the measurement instrument, ordered by what they cost the analysis:
   billed LLM calls, unattributed in any cost-by-model breakdown.
 - **One message rating in 251 rows.** Thumbs are effectively unused and the exit survey is
   carrying the entire feedback load. Either drive the thumbs or stop counting on them.
-- **3 sessions hit the 14,400s cap** (raw 91,445 / 57,665 / 53,245s). Lawyers leave tabs open,
+- **3 sessions hit the 14,400s cap** (raw 91,445 / 57,665 / 53,245s). Legal professionals leave tabs open,
   so session length is not a usable engagement metric without an idle timeout.
 
 ### What is working — protect it in any of the above
@@ -1231,13 +1231,13 @@ without the harness.
 `docs/evals/GOLDEN_QUESTIONS_LEGISLATION.md`: **31 questions (L01–L31)**, not the ~60 the
 size suggests. Provenance checked 2026-08-17: authored by Claude in `fb88b41` (2026-07-15)
 *while diagnosing* the completeness regression, self-declared 26 High / 5 Medium
-confidence, several `[VERIFY]` markers, and **never verified by a lawyer** despite the
+confidence, several `[VERIFY]` markers, and **never verified by a legal professional** despite the
 header requiring it. Consequences for using it as an accuracy baseline:
 - At 31 items, one question flipping grade moves the headline %A/B by ~3 points, so small
   differences between prompt variants are not separable.
 - `trap` (correct answer is "no such source exists") has only **2** entries — that is the
   category testing hallucination resistance, i.e. the Grade D class reported separately
-  because it matters most to government lawyers. Two data points cannot support a
+  because it matters most to government legal professionals. Two data points cannot support a
   published %D.
 - **L31 is a regression test, not a probe.** It is the XL Bully question that drove
   `fb88b41` and the only entry with an `Automatic fail conditions` block, listing the four
@@ -1245,7 +1245,7 @@ header requiring it. Consequences for using it as an accuracy baseline:
   tautological.
 So the set is a usable **regression harness** today (it would have caught the A2 dead
 nudge) but not an **accuracy baseline** — a disagreement between bot and answer key cannot
-be attributed to either side. Before quoting accuracy numbers: get a lawyer through the
+be attributed to either side. Before quoting accuracy numbers: get a legal professional through the
 `[VERIFY]` and Medium-confidence entries, and expand `trap` and `caselaw` (3 entries).
 
 **Order when this is unparked (post-pilot):** defects 1–3 (self-contained, information-only)
@@ -1295,7 +1295,7 @@ which needs moving to or importing into `prompts.py`). **No signature change nee
 `_get_cfg().get("_research_mode", "legislation_only")` gets the mode for free.
 
 **Why parked rather than shipped:** it is a prompt change to report output, so it moves what
-the pilot lawyers read even though it does not touch retrieval. Same freeze rationale as D16.
+the pilot legal professionals read even though it does not touch retrieval. Same freeze rationale as D16.
 
 ### D18. The worker's four "trip limits" as startup settings (deferred 2026-09-21, after P3.8)
 
@@ -1310,7 +1310,7 @@ P2.7's **8 search rounds** and P3.1's **3 section-search rounds per instrument**
   looping, not starved; more rounds buy more of the same and mask the failure the notice
   exposes). A live toggle invites the reflexive raise that decision warned against.
 - **Precondition:** every measurement must record the value. `halted.limit` already travels
-  in the audit trace (and the lawyer's notice reads it), but only on halted runs; the replay
+  in the audit trace (and the legal professional's notice reads it), but only on halted runs; the replay
   run files' `runtime_state` and `replay check` must stamp it, or two sweeps at different caps
   can be compared by accident. A per-bot DB setting would make the per-bot efficiency
   dashboards incomparable.
@@ -1360,7 +1360,7 @@ Since P4.5 the `tool_end` progress event names each worker's outcome ("Step comp
 "Step incomplete: stopped at the step limit", "Step incomplete: no reply returned", and
 "Research …" for a Manager delegation). The chat UI ignores the field
 (`client/src/hooks/useChat.js`, about line 213, shows "Analysing findings…"), so only the
-SystemChat developer page and an eval harness see it. The lawyer is told in the answer's own
+SystemChat developer page and an eval harness see it. The legal professional is told in the answer's own
 notice, so nothing is hidden; showing the outcome live is a client change and a
 `client/dist` rebuild, and was out of P4.5's scope. The user's call.
 
@@ -1373,12 +1373,12 @@ is and what was found, so the next person does not re-derive it:
 - **The mechanism.** `agent/learning.py`, called from `process_user_request`
   (`agent/agent_core.py`, the "Learning mechanism injection" block) on **every** Manager call,
   from `/api/chat`, `/api/system/chat` and `/api/consult`, with **no feature flag**. It takes the
-  words over 3 characters from the lawyer's latest message, OR-matches them by full-text search
+  words over 3 characters from the legal professional's latest message, OR-matches them by full-text search
   against **every user's** past questions, and appends to the Manager's system prompt up to 3
   answers rated 4 or more ("SUCCESSFUL EXAMPLES ... Emulate their style and depth") and up to 3
   comments on answers rated 3 or less ("CRITICAL FEEDBACK ... AVOID these mistakes"). Only the
   Manager sees it; the Workers, the Deep Research planner and the synthesis do not.
-- **The lawyer's side.** Thumbs up (saves rating 5) and thumbs down (rating 1 plus a comment)
+- **The legal professional's side.** Thumbs up (saves rating 5) and thumbs down (rating 1 plus a comment)
   on each answer (`client/src/components/ChatMessage.jsx`), through `PUT` on the message rating
   endpoint (`routers/chats.py`). The older 5-star "Rate & Feedback" box
   (`client/src/components/CommentModal.jsx`) is orphaned: nothing imports it.
@@ -1391,8 +1391,8 @@ is and what was found, so the next person does not re-derive it:
   2. **The pairing is wrong.** The query joins each user message to ANY later assistant message
      in the same chat (`m2.id > m1.id`), not to its own reply, so a question can be shown with
      another turn's answer.
-  3. **Cross-user exposure.** Other lawyers' question text (300 characters) and answers
-     (2,000 characters) reach a different lawyer's prompt. There is no exclusion for a consulted
+  3. **Cross-user exposure.** Other legal professionals' question text (300 characters) and answers
+     (2,000 characters) reach a different legal professional's prompt. There is no exclusion for a consulted
      peer either.
   4. **It treats an unverified comment as ground truth** ("AVOID these mistakes"), broadcast to
      every user whose question shares a word. That runs against Invariant 1 and against B6's own
@@ -1407,11 +1407,11 @@ is and what was found, so the next person does not re-derive it:
 
 ### D22. Standing instructions per AILA user — a "CLAUDE.md per user" (idea, user, 2026-09-28)
 
-The user's idea: each lawyer keeps a short set of standing instructions that AILA reads on
+The user's idea: each legal professional keeps a short set of standing instructions that AILA reads on
 every request, as Claude Code reads a CLAUDE.md. Not scoped or decided; noted so it is not lost.
 
 - **Why it fits the evidence.** CambeulW's own feedback on 6370 asks for interpretive points
-  to be presented neutrally ("for aspects which require a legal analysis"); a lawyer who could
+  to be presented neutrally ("for aspects which require a legal analysis"); a legal professional who could
   say that once, for all her sessions, would not have to push the bot turn by turn (B6, B11).
   Other plausible content: default jurisdiction, citation style, "always give the section text",
   "never suggest switching mode".

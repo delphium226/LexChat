@@ -170,7 +170,7 @@ The per-call detail is from `python p412_manager.py` → `p412_manager.out`. It 
   the Manager's retry answered 2 of 15 (`lostcost`, "manager after (b): 15 retries; answered 2; 2 on an inferred
   site"). No Manager (b) call has been added since batch 5 C's count over 57 directories.
 
-| directory / session / rep / turn | mode | attempts (tokens) | react_turn | window | s per attempt | lawyer got | turn $ (slot) | excess $ | excess s |
+| directory / session / rep / turn | mode | attempts (tokens) | react_turn | window | s per attempt | legal professional got | turn $ (slot) | excess $ | excess s |
 |---|---|---|---|---|---|---|---|---|---|
 | `wave2` 6343 r1 t2 | research | b (138), then answered | 1 | 138 s | ~69 | answer | 0.04 (0.06) | -0.01 | 117 |
 | `wave2_p24_final` 6385 r2 t3 | conv. | bbb (134-158) | 2 | 395 s | ~132 | P4.2 fallback + reports | 0.05 (0.04) | 0.01 | 779 |
@@ -201,7 +201,7 @@ How to read the table:
 
 **Every Manager empty came after a delegation (`react_turn` ≥ 1 in 10 of 10).** So all 8 unrecovered calls were served
 P4.2's fallback **with the worker reports** (8 of 8, read off the answer's opening line). None was served the bare
-`LOST_ANSWER_NOTICE`. Retrying cost the lawyer 6 to 18 minutes, and in the end gave them the same fallback.
+`LOST_ANSWER_NOTICE`. Retrying cost the legal professional 6 to 18 minutes, and in the end gave them the same fallback.
 
 **Stalled but answered.** A runaway that ends in an answer leaves no empty record (P4.10's watch item). On clean turns
 at schema v3 or later, the longest Manager window is:
@@ -256,7 +256,7 @@ removes about 58% of the dollars and 45% of the seconds, and changes no outcome 
 seconds are summed by hand from the script's per-attempt figures: L1's 1,102 s, plus L2''s 776 s on the six `bbb`
 calls, plus L3's half of the two remaining (a) attempts (about 178 s for 6363 and about 104 s for 6370, using that
 call's average attempt length). Each episode keeps
-its first attempt, so the lawyer gets the same fallback sooner.
+its first attempt, so the legal professional gets the same fallback sooner.
 
 **Can L3 bind on a healthy Manager call?** Not on any stored clean turn.
 - The longest clean Manager window, 42 s, is about 7,600 tokens at the ~181 tokens/s the stored runaways ran at

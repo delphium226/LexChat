@@ -4,7 +4,7 @@
 
 ## What shipped, and what it does not cover
 
-Concurrent per-chat research runs are **in-tab only**. A lawyer can launch a query in one chat, switch to any other chat (new or historic) and work there, with up to `MAX_CONCURRENT_RUNS = 3` running at once (`client/src/hooks/useChatRuns.js`). That works because the `fetch` in `services/api.js` lives in JS and is entirely independent of what React renders — the fix was to stop aborting on chat switch and to route each run's output into its own bucket.
+Concurrent per-chat research runs are **in-tab only**. A legal professional can launch a query in one chat, switch to any other chat (new or historic) and work there, with up to `MAX_CONCURRENT_RUNS = 3` running at once (`client/src/hooks/useChatRuns.js`). That works because the `fetch` in `services/api.js` lives in JS and is entirely independent of what React renders — the fix was to stop aborting on chat switch and to route each run's output into its own bucket.
 
 **A page refresh, a tab close, or a browser crash still destroys the run**, for two independent reasons:
 
@@ -29,4 +29,4 @@ A `beforeunload` warning now fires while any run is active, which is a mitigatio
 
 ## Why it was deferred
 
-The in-tab version delivers the actual request (switch chats without interrupting research) as a frontend-only change with no schema migration and no new failure modes on an internet-restricted production server. The durable version touches the request lifecycle, the queue, the schema, and two SSE endpoints. It is worth doing if lawyers start losing long Deep Research runs to accidental refreshes — that is the signal to watch for.
+The in-tab version delivers the actual request (switch chats without interrupting research) as a frontend-only change with no schema migration and no new failure modes on an internet-restricted production server. The durable version touches the request lifecycle, the queue, the schema, and two SSE endpoints. It is worth doing if legal professionals start losing long Deep Research runs to accidental refreshes — that is the signal to watch for.

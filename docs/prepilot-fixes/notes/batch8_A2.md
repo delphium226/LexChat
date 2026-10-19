@@ -118,7 +118,7 @@ the refusal, "Provisions this step did not retrieve may still be in it" in the l
 
 **Who reads what.** The Worker reads the refusal (its tool result). The Manager and the Deep
 Research synthesis read the limb (`worker_scope_block`, appended after the Worker writes). The
-lawyer reads the footer. All three are changed, each for its reader.
+legal professional reads the footer. All three are changed, each for its reader.
 
 **The condition.** An instrument whose provision list code has read **in this worker run, in
 full**: A's per-run `provision_fetches` holds an outcome with `status` "ok", `complete` true and
@@ -187,7 +187,7 @@ instrument was stopped by a limit before it finished.`
 - With other refused instruments in the same step, P3.1's sentence for them comes first,
   unchanged, and names only them.
 
-**The footer** (lawyer-facing), after P3.1's clause, which is unchanged, per instrument:
+**The footer** (legal-professional-facing), after P3.1's clause, which is unchanged, per instrument:
 
 ` For <id>, the index's complete list of provisions had been read before that cap was reached: the
 index holds <N> provisions for <id>, and <held>, so the cap did not cause any provision outside
@@ -333,10 +333,10 @@ fixed here: it is outside my two fixes (decision 2).
 
 ## 5. Decisions for the user
 
-1. **Fix 2's wording** (section 2.2; the footer sentence is lawyer-facing).
+1. **Fix 2's wording** (section 2.2; the footer sentence is legal-professional-facing).
    1. **(Recommended) Approve as built.** All three readers get the code-established fact, and
       P3.1's limit text stays for listed provisions the step did not reach.
-   2. **Approve the refusal and the limb, drop the footer sentence.** The lawyer then sees only
+   2. **Approve the refusal and the limb, drop the footer sentence.** The legal professional then sees only
       P3.1's clause, which is true but does not say the list was read in full.
 2. **The route's per-run bound under batching** (section 3).
    1. **(Recommended) Fix it in a small commit next session:** reserve the instrument's slot

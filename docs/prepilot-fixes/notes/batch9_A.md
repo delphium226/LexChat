@@ -369,7 +369,7 @@ to keep the call the same as before.
    2. **Keep 5 as built,** and in sweep 1 run `bound_refusals.py` on the 6374 runs and say whether the
       refused instrument was the guard's. That risks a confound in the P1 re-run.
    3. **Keep 5 and have code say on a refused call that the per-run limit stopped the fetch.** That is
-      new lawyer-reachable wording, a "limit" sentence beside a schedule, which `SCHED_LIMIT` reads; it
+      new legal-professional-reachable wording, a "limit" sentence beside a schedule, which `SCHED_LIMIT` reads; it
       needs the detector screen and the user's approval.
 2. **The audit trace documentation.**
    1. **(Recommended) At the fold, add one sentence to `docs/api/AUDIT_TRACE.md`'s P3.27/P3.12 note:**

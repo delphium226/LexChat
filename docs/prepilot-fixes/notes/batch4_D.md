@@ -1,4 +1,4 @@
-# Parallel batch 4, agent D: P3.17 measured with options, and the inserting-Act point for the lawyer pack
+# Parallel batch 4, agent D: P3.17 measured with options, and the inserting-Act point for the legal professional pack
 
 Session 36, 2026-10-02. Branch `worktree-agent-aa20b622696a1c647`. **The worktree came up on `main`
 (`a6b4a76`), not the integrator's HEAD; with no commits of mine I ran
@@ -24,7 +24,7 @@ file. **The pack edit is not applied** (same reason): the edited copy is
 
 ## The row's acceptance, and whether it is met
 
-**Acceptance (FIX_PLAN P3.17):** P3.3's 6338 criteria, n=3, in the lawyer's configuration. Per rep:
+**Acceptance (FIX_PLAN P3.17):** P3.3's 6338 criteria, n=3, in the legal professional's configuration. Per rep:
 turns 1 and 2 name R; no turn asserts that N governs the Act or the inserted section; turn 3 says
 the Act sets no order and does not conclude, hedged or not, that the two must run in sequence.
 
@@ -33,7 +33,7 @@ locates the two failure shapes and sets out options; nothing was built.
 
 ## Part 1: where the two readings first appear
 
-Method: every stored 6338 rep in the lawyer's configuration (`wave4_p33_pre`, `wave4_p33_post`,
+Method: every stored 6338 rep in the legal professional's configuration (`wave4_p33_pre`, `wave4_p33_post`,
 `wave4_b1_post`, `wave4_b2_post`; 3 reps each; 12 turn-2 and 12 turn-3 turns). For each turn, each
 stage was read by hand:
 - the raw tool results;
@@ -78,8 +78,8 @@ brief, report and answer was then printed (`scratch/scripts/reports6338.py 2`, `
     be told apart from sampling.
 - **Is P3.3's clause what turns the structural argument into a hedged reading? The evidence says
   yes.**
-  - Before the clause, the argument reached the lawyer as a conclusion in 3 of 3.
-  - After it, it never did. When it reached the lawyer at all (4 of 9), it came as "on one reading",
+  - Before the clause, the argument reached the legal professional as a conclusion in 3 of 3.
+  - After it, it never did. When it reached the legal professional at all (4 of 9), it came as "on one reading",
     always in the Manager's answer.
   - The clause did what it was written to do: an interpretation became a reading. The booked
     criterion was written to fail this exact form.
@@ -138,7 +138,7 @@ brief, report and answer was then printed (`scratch/scripts/reports6338.py 2`, `
 
 ### Options for P3.17, with consequences
 
-1. **Wait for the lawyer's answer to the pack (parts 2 and 3), and ask one more thing first.**
+1. **Wait for the legal professional's answer to the pack (parts 2 and 3), and ask one more thing first.**
    - **Cost:** $0, nothing built. P3.17 stays not met.
    - **What part 3 asks:** whether the Act imposes no order. A Yes does not say whether an answer
      that says so may also offer the other order as one reading. Part 2, similarly, does not ask
@@ -146,7 +146,7 @@ brief, report and answer was then printed (`scratch/scripts/reports6338.py 2`, `
    - **So add a supplementary question** before sending: is it acceptable, beside a correct
      statement, to offer the other reading, flagged as one reading? The pack's question is not mine
      to edit; this is the user's decision.
-   - **If a lawyer says the readings are acceptable:** `wave4_b2_post` re-grades on the evidence
+   - **If a legal professional says the readings are acceptable:** `wave4_b2_post` re-grades on the evidence
      already stored. r2 fails only at turn 3 and r3 only at turns 2 and 3, so it could reach 3 of 3
      with no spend. P3.3's acceptance would also still need P3.2.
 2. **A sharper clause in the conversational Manager** (not the Worker: the Worker is already neutral
@@ -164,14 +164,14 @@ brief, report and answer was then printed (`scratch/scripts/reports6338.py 2`, `
        analysis.
    - **A weak test at n=3:** the base rate is 4 of 9, and 0 of 3 has about a 1 in 6 chance even
      with no effect. So the seam evidence has to carry the decision.
-   - **Booking:** build only if the lawyer says the readings are wrong to offer.
+   - **Booking:** build only if the legal professional says the readings are wrong to offer.
 3. **Retrieve explanatory notes** (a worker tool on the endpoint the skill documents; same host, so
    no whitelist change).
    - **What it buys:** the only route by which the product could state the rubric's turn-2 answer
      from a retrieved source rather than from training (Invariant 1).
    - **Costs:** a new tool, tests, a `CACHEABLE_TOOLS` decision, more calls a turn. And an
      explanatory note is not law; answers would have to say so.
-   - **Booking:** its own row; the user's decision, after the lawyer answers part 2.
+   - **Booking:** its own row; the user's decision, after the legal professional answers part 2.
 4. **A code-side check at the Manager seam** that removes or flags a reading which supplies an
    order or a regime. **Not recommended.**
    - There is no generic deterministic trigger.
@@ -181,13 +181,13 @@ brief, report and answer was then printed (`scratch/scripts/reports6338.py 2`, `
    `wave4_b2_post` answers.
 
 **Recommendation: option 1, and book option 5 as its own row.**
-- Build nothing for P3.17 until a lawyer answers. Both failing shapes are readings that the
+- Build nothing for P3.17 until a legal professional answers. Both failing shapes are readings that the
   product's own P3.3 rule asks for, placed beside the right statement. One of them has a textual
   footing in what was retrieved.
-- If the lawyer says they are wrong to offer, option 2 is the lever, with seam evidence before any
+- If the legal professional says they are wrong to offer, option 2 is the lever, with seam evidence before any
   after-column. Option 3 follows only if the user wants turn 2 stated firmly.
 
-**What an after-column would need to measure** (6338 x3 in the lawyer's configuration, about $1.50
+**What an after-column would need to measure** (6338 x3 in the legal professional's configuration, about $1.50
 at the recorded $0.50 a rep):
 - **Turn 1:** R named; guards PHASE 2c's gain.
 - **Turn 2:**
@@ -240,7 +240,7 @@ any later insertion of text into it.
   forward is therefore not one.
 
 **Whether this changes the reading's conclusion** (that the inserted section follows R) is for the
-lawyer. The pack note says so and restates nothing.
+legal professional. The pack note says so and restates nothing.
 
 **Two API traps found, for the skill:**
 - `/amendment/section/search` matches the exact provision URL and nothing coarser: a section id

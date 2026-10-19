@@ -1,4 +1,4 @@
-# Parallel batch 3, agent D: a confirmation pack for a lawyer
+# Parallel batch 3, agent D: a confirmation pack for a legal professional
 
 Agent D, Session 35 batch 3, 2026-10-01. Spend **$0**: no model call of any kind, no server, no
 replay. **No code changed**, so the test suite was not run (no product, tool or test file is
@@ -16,7 +16,7 @@ Wrote the confirmation pack the brief asks for, at
 below: that directory is **not** in fact gitignored). It holds:
 
 - a one-paragraph cover note in plain language (what is being checked, why it matters, that no
-  answer from the tool is attributed to the lawyer), plus two short paragraphs on how to answer
+  answer from the tool is attributed to the legal professional), plus two short paragraphs on how to answer
   and what the links are;
 - **4 readings**, one section each: the P3.2 reading and the three P3.3 readings;
 - **4 yes/no questions**, one per reading, each with space for the answer and a comment. Two
@@ -49,14 +49,14 @@ All commands from `docs/prepilot-fixes/evidence/seam/batch3/D/` in the main chec
 | **18 of 18 links located** (file, turn, delegation, tool, api_call, JSON path) | `python link_table.py` | `link_locations.md` |
 | **18 of 18 links resolve**, HTTP 200 after a redirect (2026-10-01); 2 open at the instrument's made version | `curl -s -o /dev/null -L -w "%{http_code} %{url_effective}" <url>` per link | `link_check.txt` |
 | **25 of 25 quoted fragments occur verbatim** in the cited record (rubric `_note`, FIX_PLAN, `classification.json`) or provision text, and in the pack | `python quotes.py ../../../lawyer_pack/confirmation_pack.md` | `quotes_check.txt` |
-| Five-word runs shared with lawyer-authored text (user messages, rating comments and the feedback free-text columns of the export, plus the run files' questions): **24** (1, 3, 16, 4 across the four readings), URLs excluded; **0** pack links outside the located set | `python check_pack.py ../../../lawyer_pack/confirmation_pack.md` | `overlap_check.txt` |
-| 0 of 13 lawyer usernames in `classification.json` appear in the pack | inline check over `classification.json` `user` fields | (stdout) |
+| Five-word runs shared with legal-professional-authored text (user messages, rating comments and the feedback free-text columns of the export, plus the run files' questions): **24** (1, 3, 16, 4 across the four readings), URLs excluded; **0** pack links outside the located set | `python check_pack.py ../../../lawyer_pack/confirmation_pack.md` | `overlap_check.txt` |
+| 0 of 13 legal professional usernames in `classification.json` appear in the pack | inline check over `classification.json` `user` fields | (stdout) |
 
 **Every one of the 24 shared runs was read:** all are an instrument's title (22), the wording of
-a provision that a lawyer had also quoted (1), or a bare citation form (1). None is a lawyer's
+a provision that a legal professional had also quoted (1), or a bare citation form (1). None is a legal professional's
 own phrasing. Before that, the check found runs from three of my sentences that followed a
-lawyer's word order (a pair of defined terms in the same order; one question's framing, which
-reused a provision's wording the lawyer had quoted; two titles joined the same way); I reworded
+legal professional's word order (a pair of defined terms in the same order; one question's framing, which
+reused a provision's wording the legal professional had quoted; two titles joined the same way); I reworded
 all three and re-ran.
 
 ## What I did NOT do
@@ -64,7 +64,7 @@ all three and re-ran.
 - No model call, no seam draw, no server, no replay; no rubric, FIX_PLAN, SESSION_LOG or memory
   file edited; nobody contacted (the user sends the pack).
 - Did not include the P3.2 stubbornness-guard session: the brief lists four readings, and that
-  session's check is a retrieval criterion, not a reading marked for a lawyer.
+  session's check is a retrieval criterion, not a reading marked for a legal professional.
 - Did not give a link for the explanatory notes the P3.3 reading cites: no stored tool result
   carries an address for them, and the brief allows only tool-returned links.
 - Did not restate any reading in my own words beyond the one-sentence session summaries and the
@@ -82,7 +82,7 @@ all three and re-ran.
 | Provisions with legislation.gov.uk links, every one tool-returned | Yes, 18 of 18 located; the uncited explanatory notes and the case-law reading say why no link |
 | One yes/no question with space for answer and comment | Yes, 4 |
 | Cover note in plain language | Yes |
-| Quote no lawyer's question or answer; name no lawyer | Yes (checks above) |
+| Quote no legal professional's question or answer; name no legal professional | Yes (checks above) |
 | No reading the records do not already record | Yes; the unclear points describe the text and the records, and resolve nothing |
 | Unclear sources said to be unclear | Yes, 3 points |
 | Pack gitignored | **No: the directory is not covered by `.gitignore`** (decision 1) |
@@ -100,7 +100,7 @@ all three and re-ran.
      provision the reading relies on most speaks of one category; another processing route, for
      other categories, does not obviously name the subject; and the rubric counts as contradicted
      a statement that this other route is closed to it, for which the records cite no provision.
-     If the lawyer's answer turns on the category, the rubric's `contradicted` list may need
+     If the legal professional's answer turns on the category, the rubric's `contradicted` list may need
      re-scoping. This bears directly on why P3.2 is parked.
    - One P3.3 reading: a paragraph of the instrument's interpretation provision says where the
      instrument applies to one kind of application; the records treat it as text and do not

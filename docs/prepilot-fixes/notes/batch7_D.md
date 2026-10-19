@@ -156,7 +156,7 @@ blanking the query are queries holding an inner double quote, so the blanking st
 
 **Changed.** `caselaw.case_law_date_window(args, cfg)` builds `from_date_0/1/2` and
 `to_date_0/1/2` (day, month, year, unpadded, as verified live) from the INTERSECTION of the
-model's `date_from`/`date_to` and the lawyer's `_date_from`/`_date_to` (later start, earlier end;
+model's `date_from`/`date_to` and the legal professional's `_date_from`/`_date_to` (later start, earlier end;
 now on parsed dates, not strings; `YYYY` and `YYYY-MM` widen to their span). An empty window (a
 start after its end, including one emptied by the intersection, whose message says so) or a
 malformed date returns an `error` result with **no request made**. `date_from`/`date_to` are no
@@ -166,7 +166,7 @@ and at the call site). The result carries the applied window as `dates`; the P3.
 adopted.
 
 **Tests** (`tests/test_caselaw_dates.py`, 10): the params built (and the ignored names gone); no
-date sent when none is set; the intersection; the lawyer's dates alone; a start after the end, an
+date sent when none is set; the intersection; the legal professional's dates alone; a start after the end, an
 intersection-emptied window and two malformed dates each refused with no request; year and month
 widening; the note naming the dates; the three refusal messages and the dated notes screened
 against every detector (as above).
@@ -233,7 +233,7 @@ about", max 525) to a result whose median is 2,583.
    three newest; the new window note now says, in the same tool result, that the list is by date
    rather than by relevance. P3.22 resolves both (it is the next step in this build). D4.
 2. **A refused window is recorded as an errored search** (`record_case_law_search`, `ok: False`),
-   so the lawyer-facing case-law line says a search "was attempted … and returned an error". True
+   so the legal-professional-facing case-law line says a search "was attempted … and returned an error". True
    enough (no search ran), not precise; 0 stored calls would be refused. D5.
 3. **`docs/LEGAL_DATA_SOURCES.md` section 4, the local `external-apis` skill, and P3.23's and
    P3.22's rows state the `last` link's page size wrongly** (section 2). Not edited (not my files).
@@ -276,7 +276,7 @@ contains it nowhere.
 - No edit to `FIX_PLAN.md`, `SESSION_LOG.md`, `summary-table.html`, `CLAUDE.md`, `CHANGELOG.md`,
   `VERSION`, `docs/TODO.md`, `LEGAL_DATA_SOURCES.md`, any `PARALLEL_BATCH_*.md`, any skill, rubric
   or memory file. Nothing pushed or merged; `main` untouched.
-- No live call with a stored (lawyer's) query: every GET used a public test query. So the dated
+- No live call with a stored (legal professional's) query: every GET used a public test query. So the dated
   calls' new results and the full pages' real totals are not measured (section 4).
 - P3.22 not started (`order=relevance` not sent; the nudge's "most relevant" left).
 - `test_footer_trips_no_detector` not extended (my screening is in my own test files, D6).
@@ -312,7 +312,7 @@ list is by date.**
 - (b) Reword the nudge now ("the first 1-3 listed that bear on the question"); model-facing text,
   so screened again.
 
-**D5. A refused date window reaches the lawyer's case-law line as a search that "returned an
+**D5. A refused date window reaches the legal professional's case-law line as a search that "returned an
 error".**
 - **(a) Recommended: leave it** (true, and 0 stored calls would be refused).
 - (b) Record a refused window as its own state and word it in the footer.

@@ -7,7 +7,7 @@ $0 model spend, 0 live calls of any kind.
 **Built shape, for the integrator to relay:** a new module `server_py/src/utils/summary_citations.py`
 and one wrapper, `summarisation.check_summary_citations`, called at every return of
 `summarise_for_query` that carries a model-written summary and on the local-cache-hit branch of
-`run_worker_tool`. It only removes text; it writes no word a lawyer or the Worker reads, so there
+`run_worker_tool`. It only removes text; it writes no word a legal professional or the Worker reads, so there
 is no wording to approve (decision 1 is about the action, not words).
 
 ## 1. What I found (measure first, $0)

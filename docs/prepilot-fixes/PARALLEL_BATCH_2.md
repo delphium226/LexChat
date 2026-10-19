@@ -10,7 +10,7 @@ before any money is spent.**
 This file is the brief. The integrator reads it whole. Each agent is given its own section, plus
 **Rules for every agent** and **Batch 1 lessons**, verbatim. Nothing here should need
 re-deriving. If something does, the agent says so in its note rather than guessing. The
-matter-specific detail (lawyers' wording, rubric patterns) is NOT in this file. It is in the
+matter-specific detail (legal professionals' wording, rubric patterns) is NOT in this file. It is in the
 gitignored files named below.
 
 ---
@@ -85,7 +85,7 @@ the user before it is spent (see the integrator's step 6).
    FAIL with the change reverted on a scratch copy, **and the note says how many lines the
    revert removed** (a revert that removed nothing proves nothing: batch 1 lesson). Run the full
    suite on your own test database before your last commit, and report the count.
-6. **Data handling:** never commit lawyers' question or answer text, search terms, case names,
+6. **Data handling:** never commit legal professionals' question or answer text, search terms, case names,
    or instrument ids and titles from a session. Tests and fixtures use synthetic text ("Widget
    Order 1901"). Grep your staged diff for session ids, instrument ids and matter words before
    every commit. Rubric patterns and draws stay in the gitignored evidence.
@@ -149,7 +149,7 @@ the user before it is spent (see the integrator's step 6).
 - **Model settings for seam draws:** the dev box's (`google/gemini-3.1-pro-preview`, summariser
   `google/gemini-3-flash-preview`), the same that the replays pin.
 - **Where draws go:** `$PREPILOT_EVIDENCE/seam/batch2/<agent>/<before|after>/<slot>/`
-  (gitignored: draws contain lawyers' matters).
+  (gitignored: draws contain legal professionals' matters).
 
 ---
 
@@ -234,7 +234,7 @@ The state in `wave4_b1_post` (hand-read, `handread_wave4_b1_post.md`):
 - In `wave4_p33_post`, r2 and r3 retrieved the 2010 Act's Schedule 1 (the definitions) and not
   its s.1 (the provision saying which Acts it applies to).
 
-**Step 1, free: locate the seam.** Over every stored 6338 rep in its lawyer's configuration
+**Step 1, free: locate the seam.** Over every stored 6338 rep in its legal professional's configuration
 (Conversational, legislation and case law: `wave4_p33_pre`, `wave4_p33_post`, `wave4_b1_post`),
 split turn 1 and turn 2 into:
 - what the Worker searched and retrieved;
@@ -333,7 +333,7 @@ consequence the regulation contradicts while the decisive passage is in its own 
      script that asserts each row is found once.
    - `plan_status` must count 60 once P4.16 is booked.
 6. **Before any replay:** put the plan and a dollar figure to the user.
-   - If C's lever is supported, the minimum is **6338 x3 in its lawyer's configuration**
+   - If C's lever is supported, the minimum is **6338 x3 in its legal professional's configuration**
      (Conversational, legislation and case law; about $1.20 at `wave4_b1_post`'s $0.34 a rep).
    - If C edited a Manager or Worker prompt, also the rest of P3.3's set (6370, 6375 x3, about $8)
      and P3.2's (`p32_6406` script x3 plus 6345 x3, about $8).
@@ -365,7 +365,7 @@ consequence the regulation contradicts while the decisive passage is in its own 
   intended);
 - telling the eval-harness owner about schema v6 and the earlier items;
 - D19's remaining items (deploy by tag; stamp the version on the audit event, now unblocked);
-- the legal readings behind the rubrics, to be confirmed by a lawyer;
+- the legal readings behind the rubrics, to be confirmed by a legal professional;
 - P4.12, D20, D21/D22, P5.2, Thomas's document;
 - from batch 1:
   - whether to book the research Worker's jurisdiction line as a row (P3.18's origin);

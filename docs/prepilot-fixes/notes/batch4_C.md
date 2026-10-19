@@ -93,7 +93,7 @@ strings for choosing only, the measurement after uses the built function):
   legacy counter `summary` reads) and `_CUR_DISCLOSED`;
 - naming the instruments ("consulted for ssi/…") adds `LK_ANY_NUMBER`, `LK_PRIMARY_LID`,
   `LK_ACT_REF` and `_DERIV_NUMBERED` hits; `derivation_claims` stays empty, but the ids add
-  nothing a lawyer lacks, because P3.5's clause just before this one names the same records;
+  nothing a legal professional lacks, because P3.5's clause just before this one names the same records;
 - "list neither a commencement nor a repeal, so they do not answer that question either" adds
   nothing. Built.
 
@@ -157,7 +157,7 @@ this change: **all 41 stored `get_legislation_changes` results in `wave3_p35` pr
 counts** (`provisions_commenced` absent; every other directory has it on every call,
 `python $C/p418_rawkeys.py`), so the recorder reads 0 commencements for records holding about
 1,600 `coming into force` rows. Rebuilt with OLD they said "no change record was consulted";
-rebuilt with NEW they say the records list neither. Neither text ever reached a lawyer, and the
+rebuilt with NEW they say the records list neither. Neither text ever reached a legal professional, and the
 product writes those counts today, so it cannot arise live. It is a limit of rebuilding from
 that directory's raw results.
 

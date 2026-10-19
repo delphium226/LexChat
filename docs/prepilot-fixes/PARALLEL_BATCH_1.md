@@ -53,7 +53,7 @@ to the user with a figure before it is spent**. Session total about $27.
   (`google/gemini-3.1-pro-preview`, summariser `google/gemini-3-flash-preview`), the same the
   replays pin. **No agent starts uvicorn, runs `replay pin`, `replay run` or `replay restore`.**
 - **Where draws go:** `$PREPILOT_EVIDENCE/seam/batch1/<agent>/<before|after>/<slot>/`
-  (gitignored: draws contain lawyers' matters). Grade composition draws with
+  (gitignored: draws contain legal professionals' matters). Grade composition draws with
   `python -m tools.replay_report --dir <side> interpret --drafts --session <id>`
   (and `--rubric $PREPILOT_EVIDENCE/rubrics/p33.json`).
 - **Commands (run from `server_py/`, with `PYTHONIOENCODING=utf-8`; the console is cp1252):**
@@ -85,7 +85,7 @@ to the user with a figure before it is spent**. Session total about $27.
 5. **Tests:** each product change gets a unit test at its seam, and each test is proven to FAIL
    with the change reverted on a scratch copy (say so in the note). Run the full suite on your
    own test database before your last commit; report the count.
-6. **Data handling:** never commit lawyers' question or answer text, search terms, case names, or
+6. **Data handling:** never commit legal professionals' question or answer text, search terms, case names, or
    instrument ids and titles from a session. Tests and fixtures use synthetic text ("Widget
    Order 1901"). Grep your staged diff for session ids, instrument ids and matter words before
    every commit. Rubric patterns and draws stay in the gitignored evidence.
@@ -123,11 +123,11 @@ Manager path of `src/agent/agent_core.py`: `enforce_provision_links(clean, retri
 text; later `final["content"] = strip_answer_footer(...) + _footer` (near line 1086).
 `strip_answer_footer` (`src/utils/search_scope.py`, `_ECHOED_FOOTER` near line 1936) removes
 only a TRAILING echoed `*Search scope:*` line, so an echo followed by the † note survives and
-the lawyer sees two scope lines. Seen in `wave4_p33_post` 6338_rep2 turn 2 and 6345_rep1 turn 2
+the legal professional sees two scope lines. Seen in `wave4_p33_post` 6338_rep2 turn 2 and 6345_rep1 turn 2
 (`replay_report --dir .../wave4_p33_post caselaw` reports `TWO_LINES 2`; every other directory
 0). The Deep Research path (near lines 1337-1410) has the same shape; check it. **Constraints
 already pinned by tests (`tests/test_case_law_gap.py`):** exactly ONE scope line reaches the
-lawyer; P2.8's `_earlier_footers` parses only the LAST line of the trailing footer block; the
+legal professional; P2.8's `_earlier_footers` parses only the LAST line of the trailing footer block; the
 case-law clause stays last. **Measure first:** count answers with two or more `*Search scope:`
 lines over every stored directory, then dry-run your fix over every stored answer and list
 every answer it changes. **Acceptance (the row):** deterministic; `TWO_LINES` 0 when the two
@@ -139,7 +139,7 @@ unexpectedly.
 ## Agent B — the grader gaps ($0)
 
 **Why now:** these must be closed BEFORE the next after-column, never during one (Session 29's
-rule; Session 32's handover). The specifics quote lawyers' matters, so they are in the
+rule; Session 32's handover). The specifics quote legal professionals' matters, so they are in the
 gitignored `$PREPILOT_EVIDENCE/rubrics/batch1_B_rubric_gaps.md`: six items (three in
 `p33.json`, one in `INTERP_HEDGE` in code, two in `p32.json`, and one explicitly NOT to fix).
 **You are the only agent that edits the rubric files**, which live in the main checkout and are
@@ -163,7 +163,7 @@ results after, 10 before: `python -m tools.summary_probe count`) but not a GLOSS
 instance:** `$PREPILOT_EVIDENCE/replay/wave4_p33_post/p32_6406_rep1.json`, run-file turn 6
 (export turn 7), tool `search_legislation_sections`: its `final_result` carries a parenthetical
 interpretation that is not in its `raw_result` (nor anywhere in either regulation, checked in LEX
-over every provision), and the same turn's answer quoted it to the lawyer as the Annex's text.
+over every provision), and the same turn's answer quoted it to the legal professional as the Annex's text.
 Also evidence (SESSION_LOG Session 32 addendum, item 5): change-record summaries that expand an
 id to the wrong title or year.
 
@@ -258,7 +258,7 @@ after-column; your seam result decides whether the change goes into it.
    the live artifact and every line of the saved file first).
 
 **Open with the user, carried (do not act on the target yourself):** the legal readings behind
-the rubrics (to be confirmed by a lawyer); release tags and deploy by tag (TODO D19); which rows
+the rubrics (to be confirmed by a legal professional); release tags and deploy by tag (TODO D19); which rows
 go in the next cut (v2026.10.1); deploying both cuts (`pg_dump` first; note the local prompt
 cache version is now v2 on the branch, so every cached summary becomes unreachable when it
 reaches the target, which is intended); telling the eval-harness owner (schema v6 etc., see the

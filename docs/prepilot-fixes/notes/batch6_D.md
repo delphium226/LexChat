@@ -121,7 +121,7 @@ and P3.2's rubric. It covers the 15 reps in `wave4_p32_pre`, `wave4_p33_post`, `
 `wave4_b2_post` and `wave4_b4_post`, all in Conversational mode.
 
 - **What the Worker searched for.** In 15 of 15 reps it searched the regulation for the annex
-  chapter the lawyer named: 20 queries name it, usually alongside the article that points to it.
+  chapter the legal professional named: 20 queries name it, usually alongside the article that points to it.
 - **What it was given.**
   - **The annex** (one 89K provision) came back from a section search in **2 of 15** reps, never on
     the first call. In 1 of those 2, the summary the Worker saw still carried the chapter's heading.
@@ -248,14 +248,14 @@ Command: `python $D/p325_measure.py $E [--list]`. Built code is imported from th
 **Whether the answer used it** (all hand-read in `$D/p325_handread.txt`).
 
 - **The recital.** Its words reached the answer in **1 turn**: P2.3's permitted-branch session
-  (6340), in `wave0_conv`, the mode its lawyer used.
+  (6340), in `wave0_conv`, the mode its legal professional used.
 - **The valid date.** The answer states it in **2 turns**, both P3.2's control turn, as "the held
   text is up to date to …".
   - My first draft counted 55 calls. On reading them, 55 of 57 hits were the product's own
     code-written currency limb in the Worker report (*"The held text is stated to be up to date to:
     …"*), not the model.
   - The report test now strips scope blocks with the built `strip_scope_blocks`, and the date test
-    reads the answer only. The lawyer's footer clause does not name the date.
+    reads the answer only. The legal professional's footer clause does not name the date.
 - **Text only `get_legislation_text` supplied.** I took 8-word runs of the answer that occur in that
   call's text and in no other tool result in the turn, with the instrument's own title removed. They
   occur in **48 turns** (61 calls). By hand:
@@ -363,7 +363,7 @@ pinned model's maximum after P3.7 is 17.
   - the 674-against-1,161 provision count is unreconciled;
   - P3.12's ground truth for paragraphs 42-44 is unread.
 - No seam draw or replay. There is no replay figure here beyond prices taken from stored reps.
-- I did not edit FIX_PLAN, SESSION_LOG, the tracker, the rubrics or the lawyer pack.
+- I did not edit FIX_PLAN, SESSION_LOG, the tracker, the rubrics or the legal professional pack.
 - I did not run `plan_status` or `plan_lint`; nothing they read changed.
 - I did not chase the citation-only matches (16 turns, 12 of them 6383 citing its Act's section)
   as a P2.3 matter. They are citations, not derivations.

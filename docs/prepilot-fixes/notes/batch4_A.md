@@ -7,7 +7,7 @@ the rest are rubric data (`p33.json` for 6338 and 6370, `p32.json` for 6406). **
 model call, no server, no `replay pin|run|restore`.
 
 This note gives counts and locations only. The moved sentences and the rubric patterns name
-lawyers' matters, so they stay in the gitignored evidence (grader output per step under
+legal professionals' matters, so they stay in the gitignored evidence (grader output per step under
 `evidence/seam/batch4/A/out/`: `before`, `item1`, `item2`, `item3code`, `item3`, `item3b`,
 `item4code`, `item4`, `item4b`, `installed`).
 

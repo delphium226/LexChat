@@ -79,7 +79,7 @@ then `python dry_diff.py`.
   P3.24's commencement lines are untouched): old repeal line to provision and words-only lines 455, to all
   three 91, to provision only 4, to words-only only 7; no old line to provision and words-only 31, to provision
   only 16, to words-only only 9.
-- **Lawyer footers (per turn):** 74 of 2,299 move: 22 go from P4.18's "the recorded changes consulted list
+- **Legal professional footers (per turn):** 74 of 2,299 move: 22 go from P4.18's "the recorded changes consulted list
   neither a commencement nor a repeal" (false for each: the record removed something) to the sourced branch,
   52 stay sourced with a different instrument list. No wording changed in the footer, only its gate.
 - **Re-run after commit `7756fe0`:** `dry_new.jsonl` byte-identical to the first built run (`cmp`), so the
@@ -168,7 +168,7 @@ listed up to 6 per line):
 Replaced: "Repeal or revocation relations were retrieved for X — a statement that those provisions are no longer
 in force is supported, again without a date."
 
-**Lawyer-facing:** no new wording. The footer's sourced branch ("what was checked is the recorded changes for
+**Legal-professional-facing:** no new wording. The footer's sourced branch ("what was checked is the recorded changes for
 X, which name the instruments involved provision by provision but carry no dates.") now also takes a record
 whose only removals are words-only or qualified, and no longer takes one whose only "repeal" is a power
 conferred, which gets P4.18's "the recorded changes consulted list neither a commencement nor a repeal".

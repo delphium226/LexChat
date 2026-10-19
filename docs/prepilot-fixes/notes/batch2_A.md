@@ -7,7 +7,7 @@ note filter in `tools/summary_probe.py`). **Spend: $0.** No paid call, no server
 `replay pin|run|restore`.
 
 This note gives counts and locations only. The moved sentences and the rubric patterns name
-lawyers' matters, so they stay in the gitignored evidence (`evidence/seam/batch2/A/out/`, one
+legal professionals' matters, so they stay in the gitignored evidence (`evidence/seam/batch2/A/out/`, one
 directory of grader output per step: `before`, `item1` ... `item7`).
 
 **Base:** the worktree came up on `main` at `a6b4a76`, not on the integrator's head. It had no

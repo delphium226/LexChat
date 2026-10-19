@@ -1,6 +1,6 @@
 # AILA — AI Legal Research Assistants
 
-A locally-hosted, multi-bot AI research platform for UK government legal departments. Users are qualified lawyers; every answer is grounded in retrieved primary sources with citations.
+A locally-hosted, multi-bot AI research platform for UK government legal departments. Users are qualified legal professionals; every answer is grounded in retrieved primary sources with citations.
 
 The product name is **AILA (AI Legal Assistant)**; the repository and its directories are still named *LexChat* for historical reasons.
 
@@ -21,7 +21,7 @@ Each bot's config lives in `bots/<id>/` — a `bot_config.json` (identity, logo,
 ### Shared platform — every bot gets these
 - **Manager-Worker agent architecture** — the Manager handles conversation, triage and clarification; it delegates a self-contained research brief to a Worker that performs multi-phase retrieval against that bot's sources. The Worker has no chat history, so the brief must stand alone.
 - **Federation** — with at least one enabled peer registered, the Manager gains a `consult_peer` tool and can ask a sibling bot (legislation ↔ parliament ↔ Westminster) via `POST /api/consult`. With zero peers the tool is simply absent and behaviour is unchanged.
-- **Deep Research mode** — an opt-in plan-first mode: the bot drafts an **editable research plan**, the lawyer adds/removes/reorders/edits steps, and on approval the plan is executed step by step in code (one Worker run per step) and composed into an integrated report. The approved plan is persisted on the assistant message as an audit artefact.
+- **Deep Research mode** — an opt-in plan-first mode: the bot drafts an **editable research plan**, the legal professional adds/removes/reorders/edits steps, and on approval the plan is executed step by step in code (one Worker run per step) and composed into an integrated report. The approved plan is persisted on the assistant message as an audit artefact.
 - **Dual LLM provider support** — switch between Ollama (local process proxying cloud-hosted models) and OpenRouter at runtime via the Admin Portal; per-provider settings live in the database, no restart required. A separate cheaper `summarisation_model` can be configured per provider.
 - **Sources rail** — per-response citation panel with excerpts and direct links to the authoritative source (legislation.gov.uk, the National Archives, parliament.scot, hansard.parliament.uk).
 - **Suggested question chips** — the Manager's follow-up questions and clarification options are rendered as one-click buttons rather than prose.

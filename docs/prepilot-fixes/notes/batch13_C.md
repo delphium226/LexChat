@@ -39,7 +39,7 @@ When one fires, code reads the instrument from legislation.gov.uk through LEX's 
 - **Hand-over:** the text goes to the Worker in a block after the not-held note. It goes verbatim when it fits the
   same threshold and context budget as any tool result. Otherwise it is summarised for the query, never through
   the shared local cache.
-- **Records:** the outcome is recorded in the step's scope log, for the Manager's limb and the lawyer's footer.
+- **Records:** the outcome is recorded in the step's scope log, for the Manager's limb and the legal professional's footer.
 
 **Bounds** (in `agent/tools/published_text.py`):
 - one document per route, at most 2 routes, so at most **2 calls per instrument**;
@@ -57,7 +57,7 @@ When one fires, code reads the instrument from legislation.gov.uk through LEX's 
 - the quick-lookup Worker's suffix, which carries the block;
 - P2.4's not-held note on a text read. Only its last clause changes, and only when text was read;
 - a Manager-facing limb in `worker_scope_block`;
-- one lawyer-facing footer sentence.
+- one legal-professional-facing footer sentence.
 
 **Functions changed or added** (batch 13's lesson). Every one of these is mine alone in this batch:
 - `src/utils/published_text.py` (new): `normalise_id`, `trigger`, `routes`, `page_url`, `parse_published`
@@ -151,7 +151,7 @@ That bears on the acceptance (§7, decision 3).
 For a routed lookup, the brief carries it too. The other changes:
 - the lookup brief's two sentences on those turns;
 - P2.4's note on 50 text reads;
-- the Manager's limb and the lawyer's footer on 178 run-turns;
+- the Manager's limb and the legal professional's footer on 178 run-turns;
 - and, where the preamble states a power and no other record does, P2.3's forbidding block becomes the permitting
   block. That happens for every triggered SSI read whose recital `recital_window` finds.
 
@@ -305,7 +305,7 @@ the source named "legislation.gov.uk's text of ssi/1901/3, read by code" (P3.31'
 > no later amendment or revocation and says nothing about an instrument's status today. Asked legislation.gov.uk for
 > the text, and none was read: SSI 1901/4. Its text could not be checked here.
 
-**G. The lawyer's footer** (one sentence, after P3.7's lookup clause, in every footer that carries that clause):
+**G. The legal professional's footer** (one sentence, after P3.7's lookup clause, in every footer that carries that clause):
 
 > *Search scope: no ranked search of the legislation index was run for this reply. SSI 1901/3 was looked up by its
 > number and is not held in this index, which is incomplete; that does not show whether the number is accurate.
@@ -411,7 +411,7 @@ condensed for the question. 6409's two instruments (2.6 K and 5.8 K) go whole.
    grader already handles it, and its lead never matches P3.12's.
    (b) A new marker (`[TEXT FROM LEGISLATION.GOV.UK — …]`). Clearer to read, but `_TOOL_BLOCK`, `_FETCHED_BLOCK`,
    `_BARE_TAG`, `CORPUS_LEAK_MARKERS` and `depth --seams` would each need widening, and a missed one leaks the block
-   to a lawyer.
+   to a legal professional.
 3. **Size: what goes whole.**
    (a) **Recommended, built:** the same threshold and context budget as any tool result. At a warm cache (200 K)
    13 of 15 stored instruments go whole; at the 8,000 fallback 5 of 15 do, and the rest are summarised for the
