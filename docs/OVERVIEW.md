@@ -40,7 +40,6 @@ same way and can talk to each other.
 | **AILA** (legislation) | UK legislation — Acts and statutory instruments — and UK case law (judgments from the National Archives), including whether a decision was appealed |
 | **ParliChat** (Scottish Parliament) | Holyrood proceedings — chamber debates and committee sessions, word for word — plus Scottish bills, MSPs and written answers |
 | **HansardChat** (Westminster) | UK Parliament proceedings — Commons, Lords, Westminster Hall and Public Bill Committees — plus MPs, members of the Lords and UK bills |
-| **Drafting assistant** | Legislative drafting guidance and precedent. **Currently in development, not yet released.** |
 
 **They can consult each other.** If you ask the legislation assistant what was said in Parliament
 about a clause, it can put the question to its parliamentary sibling and fold the answer into its
@@ -174,7 +173,6 @@ Administrators have a portal covering:
   covering 2021 onwards in full text; older sessions are available only as short excerpts.
 - **Video timestamps are partial** — roughly half of recent Scottish sittings, and none of the older
   ones, have the subtitles the feature depends on.
-- **The drafting assistant is not released yet.**
 - **Answer quality depends on the model in use.** A capable model researches efficiently and follows
   the required structure; a weaker one is markedly worse on identical infrastructure. Administrators
   choose the model.

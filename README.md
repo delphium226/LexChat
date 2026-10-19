@@ -13,7 +13,6 @@ The product name is **AILA (AI Legal Assistant)**; the repository and its direct
 | **Legislation** | AILA | `legislation_only` (also `case_law_only`, `legislation_and_case_law`) | LEX API (UK legislation) + National Archives case law | `lexchat` | 8000 | Live |
 | **Parliament (Holyrood)** | ParliChat | `parliamentary_records` | Scottish Parliament plenary & committee Official Report (locally crawled FTS), SP Bills, TheyWorkForYou, SP TV video | `lexchat_parliament` | 8001 | Live |
 | **Westminster** | HansardChat | `westminster_records` | UK Parliament Hansard API, Members API, Bills API | `lexchat_westminster` | 8002 | Live |
-| **Drafting** | — | `drafting` | Drafting guidance corpus + legislation precedent | — | — | In build on `feature/drafting-bot` ([BUILD_PLAN](docs/drafting/BUILD_PLAN.md)) |
 
 Each bot's config lives in `bots/<id>/` — a `bot_config.json` (identity, logo, brand colour, optional peer-registry seed) and a `.env` (its own `DATABASE_URL`, `PORT`, `RESEARCH_MODE`, feature flags). Provision a new bot by copying `bots/legislation/` as a template (`shared/scripts/new_bot.ps1`); see [docs/deployment/LOCAL_SETUP.md](docs/deployment/LOCAL_SETUP.md) for running several bots on one machine.
 
@@ -72,8 +71,6 @@ All project documentation lives under [`docs/`](docs/). `CLAUDE.md` (agent/contr
 | [docs/CACHE_ADMIN_UI_PLAN.md](docs/CACHE_ADMIN_UI_PLAN.md) | Feature flags + Admin Portal Cache tab (D6) |
 | [docs/LOGGING_IMPROVEMENTS_PLAN.md](docs/LOGGING_IMPROVEMENTS_PLAN.md) | Logging & log-redaction plan (PII at INFO vs DEBUG) |
 | [docs/LOGGING_PR_D_PLAN.md](docs/LOGGING_PR_D_PLAN.md) | Logging PR D — remaining log work |
-| [docs/drafting/BUILD_PLAN.md](docs/drafting/BUILD_PLAN.md) | Drafting bot — build spec and session ledger (in build) |
-| [docs/drafting/SESSION_LOG.md](docs/drafting/SESSION_LOG.md) | Drafting bot — what each build session actually did |
 | **Parliament bots** | |
 | [docs/parliament/PARLIAMENTARY_DATA.md](docs/parliament/PARLIAMENTARY_DATA.md) | Scottish Parliament data model — sessions, transcript hierarchy, availability matrix |
 | [docs/parliament/SEMANTIC_RETRIEVAL_PLAN.md](docs/parliament/SEMANTIC_RETRIEVAL_PLAN.md) | Semantic (embedding) retrieval plan — **deferred / NO-GO** |
