@@ -54,7 +54,7 @@ Session 43 entry did not change, and:
 6. **Data improvements are measured, not built, in this batch** (F and G): each go row is re-slotted by measured
    value after the fold. P3.35, P3.36 (Blocked) and P3.37 (not recommended) are not in it.
 7. **Agents propose; the integrator applies; the user approves anything not mechanical**, including any wording a
-   lawyer or the Worker will read. Never merge or push to `main`. The Fix Tracker only when the user asks.
+   legal professional or the Worker will read. Never merge or push to `main`. The Fix Tracker only when the user asks.
 
 ---
 
@@ -98,7 +98,7 @@ filter changes `sources_kept`, Invariant 3), then F and G (notes only).** **Neve
   functions; each agent names the functions it changed.
 - **`tools/replay_report.py`** is touched by C (its own subcommand) and D (`rail`, `lookup`): different
   subcommands; the integrator merges C before D and re-runs both.
-- **A's, B's and E's wording is Worker- or lawyer-facing:** put to the user before merge, screened with the BUILT
+- **A's, B's and E's wording is Worker- or legal-professional-facing:** put to the user before merge, screened with the BUILT
   code against every detector, rendered for every value class.
 - **G's live reads and A's share legislation.gov.uk:** keep the combined rate under the site's fair-use limit
   (1,500 requests per 5 minutes); each at least 0.5 s apart.
@@ -199,6 +199,6 @@ decided" and "Where things stand" sections apply. Notes to `notes/batch12_F.md` 
 7. **Hand over:** a Session 44 entry and a handover for Session 45 (one session at a time); the memory entry
    `project_prepilot_freeze.md`; the Fix Tracker only if the user asks (v47 is the base).
 
-**Carried, the user's:** SCTS's written confirmation; the SCTS whitelist request; the lawyer pack (P3.2, P3.3,
+**Carried, the user's:** SCTS's written confirmation; the SCTS whitelist request; the legal professional pack (P3.2, P3.3,
 P3.17); D23; P5.5 (the National Archives' bulk data); deploying `v2026.09.3`; the eval-harness owner (schema v6,
 `api_calls`, P4.12's Manager records); D19; the next cut (`v2026.10.1`); Tesseract (P3.35).

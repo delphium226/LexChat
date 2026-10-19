@@ -6,7 +6,7 @@ Session 34, 2026-10-01. Branch `worktree-agent-a89da829c6948c974`. The worktree 
 and no tool was changed or added.** This note is the only file committed.
 
 This note gives counts, directories, reps and turns. It quotes no question, answer, search term,
-case name or instrument, because they name a lawyer's matter. The reading scripts and the rubric
+case name or instrument, because they name a legal professional's matter. The reading scripts and the rubric
 snapshot they used are in the gitignored `evidence/seam/batch2/D/` (copied from my scratchpad;
 every one is $0 and guarded by `if __name__ == "__main__":`). Every command below is run from
 `server_py/` with `PREPILOT_EVIDENCE=C:/Projects/LexChat/docs/prepilot-fixes/evidence` and
@@ -84,7 +84,7 @@ not P4.15's shape (they reached no legislation), each failing on `index` alone:
   about the world drawn from a search**: that a decision has no later appeal and no later judicial
   treatment, "no record of" either. That is B5's own failure shape, and nothing attributes it.
 
-These 4 matter for the choice below: they are real negatives that reach a lawyer with no statement
+These 4 matter for the choice below: they are real negatives that reach a legal professional with no statement
 that the search could have missed something.
 
 ### 1.5 Found, not booked: a section search never reaches the footer
@@ -115,7 +115,7 @@ as with the doctrine sentence):
 > A search can miss a judgment the database holds, so one missing from its results may still
 > exist, in this database or elsewhere: that is not proof of absence.
 
-What a lawyer would read on a case-law-only turn (synthetic terms):
+What a legal professional would read on a case-law-only turn (synthetic terms):
 
 > *Search scope: for this reply the case-law database (the National Archives' Find Case Law) was
 > searched for "Widget Order 1901". It holds Scottish appeals decided by the UK Supreme Court, but
@@ -145,7 +145,7 @@ What a lawyer would read on a case-law-only turn (synthetic terms):
   sends no `order` to the TNA feed (`executor.py`, `search_case_law`). The wording above avoids
   both.
 - **Consequences.** It is true on every turn whose case-law search ran, and it is the only option
-  that changes what a lawyer reads, including on the 4 turns of 1.4, one of which is B5's shape.
+  that changes what a legal professional reads, including on the 4 turns of 1.4, one of which is B5's shape.
   It satisfies `index` by construction on every case-law turn, the circularity P2.2 accepted for
   legislation and why `negatives` prints a model column. **Hazard:** a hybrid turn that ran no
   `search_legislation`, wrote a legislation negative, and got the case-law line, would have that
@@ -160,7 +160,7 @@ What a lawyer would read on a case-law-only turn (synthetic terms):
 which Scottish courts the database holds, whatever the negative is about. For 1.4's 4 turns (an
 English line of decisions, an English decision's later history) that sentence is irrelevant to the
 miss, so (b) moves the grader **away** from the hand-read on 4 turns and toward it on 9. It tells
-the lawyer nothing new.
+the legal professional nothing new.
 
 **(c) The grader reads the model's own sentence (what the evidence shows).** `NEG_BLAMED_INDEX`
 extended by one alternative: `a search of <the|this|our> ... <database|index|corpus|collection>
@@ -173,7 +173,7 @@ extended by one alternative: `a search of <the|this|our> ... <database|index|cor
 `wave4_b1_post` 17; 62 about case law and 2 about legislation; every one reports what a named
 search returned, and none states a conclusion about the law. `wave2_p22_final`, P2.2's acceptance
 directory, does not move. Nothing else in the 1,155 outputs moves (`commencements`, the other
-reader of `NEG_BLAMED_INDEX`, is unchanged everywhere). It changes nothing a lawyer reads.
+reader of `NEG_BLAMED_INDEX`, is unchanged everywhere). It changes nothing a legal professional reads.
 
 **(d) A footer that states the turn's section searches** (1.5). Possible, and it would also put
 "not found in this index" wording on the 13 shape turns; but it is a P2.8 decision, needs its own
@@ -183,9 +183,9 @@ before/after, and is not needed for this row.
 
 Taking the four in turn:
 
-- **(a)** is the only option that changes what a lawyer reads, and Invariant 2 points to it. P2.2
+- **(a)** is the only option that changes what a legal professional reads, and Invariant 2 points to it. P2.2
   built its legislation footer for the same reason: prose alone attributed about half of the
-  negatives. Here the 4 turns of 1.4 reach a lawyer with no attribution in prose or footer.
+  negatives. Here the 4 turns of 1.4 reach a legal professional with no attribution in prose or footer.
 - **(a)'s dry run moves only the verdicts it is meant to move**, and every one of them was read.
 - **(c) is a correct grader fix for the 9**, but it would leave P4.15's real residual, 1.4's 4,
   unaddressed.
@@ -281,8 +281,8 @@ Same scripts. **Challenge turns** are the rubric's 5, 8, 9, 11 and 12.
 - **All 15 contradicted-consequence turns delegated**, including the 13 on challenge turns.
 - **Position changes by command:** 31 in 14 reps (15 in `p32_6406`). 4 were made on a
   no-delegation turn (1 in `p32_6406`: `wave4_b1_post` r3 t11), and each fails criterion (ii) for
-  no re-retrieval. All 4 moved toward the lawyer's reading, which the rubric holds is the better
-  supported (to be confirmed by a lawyer). The other 27 delegated, and 6 of those still fail (ii)
+  no re-retrieval. All 4 moved toward the legal professional's reading, which the rubric holds is the better
+  supported (to be confirmed by a legal professional). The other 27 delegated, and 6 of those still fail (ii)
   by citing nothing new.
 
 **So the rule would have reached at most 4 of the 10 criterion-(ii) failures and none of the 15

@@ -16,7 +16,7 @@ feedback scores. Per session:
 | `diag` | One-line diagnosis of what actually went wrong |
 | `user`, `q5a`, `q8`, `mode`, `rmode`, `thread` | As recorded in the export |
 
-`q5a` and `q8` are the lawyer's own answers and are a **reading order, not a verdict** —
+`q5a` and `q8` are the legal professional's own answers and are a **reading order, not a verdict** —
 sessions 6376 and 6361 carry `Q7a = yes` with free text saying the opposite.
 
 `rmode` is blank for 20 sessions because the export's filter snapshot predates the column.
@@ -31,15 +31,15 @@ and 1-based user-turn index. Each read has `value`, `source: reviewer`, `basis` 
 `mechanism` fields define the terms and give the pre-pilot facts the reads rest on.
 `replay_set.load_research_reads` validates the file and `replay_set.py` sends each read.
 
-**Never quote a lawyer's question in a note.** `test_replay_research_reads.py` fails if any
+**Never quote a legal professional's question in a note.** `test_replay_research_reads.py` fails if any
 five-word run from a session's questions appears in its notes. That rule covers public case
-names too, when they are typed the way the lawyer typed them. The file is meant to be
+names too, when they are typed the way the legal professional typed them. The file is meant to be
 superseded: the target's `request_timings.research_mode` recorded the real value for each
 request (FIX_PLAN P0.7).
 
 ## Not committed
 
-The raw transcript export is not in this repo. It contains the lawyers' live research
+The raw transcript export is not in this repo. It contains the legal professionals' live research
 questions. Regenerate from **Admin Portal → Developer → Session transcripts export** (all
 time), or use the local copy at:
 

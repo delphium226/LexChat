@@ -5,7 +5,7 @@ AILA. Last updated 13 October 2026, for release 2026.10.4.*
 
 ## 1. Executive Summary
 AILA (AI Legal Assistant) is an AI legal research assistant for UK government legal departments,
-built as a proof of concept. Its users are qualified lawyers researching UK legislation, case law and
+built as a proof of concept. Its users are qualified legal professionals researching UK legislation, case law and
 parliamentary proceedings. It uses a Manager-Worker agent architecture: the Manager holds the
 conversation, and a Worker performs the research against official sources and writes it up with
 citations.
@@ -56,7 +56,7 @@ Both agents share the same underlying ReAct (Reason + Act) loop. Two provider cl
 3. Appends the tool results to the message history and recurses
 4. When the model produces a plain text response with no tool calls, returns it
 
-The loop is capped at 20 rounds. A Worker that reaches the cap gets one further call with no tools, so the material already retrieved becomes a partial report; the halt is still disclosed to the lawyer as a limit, not a finding. A streaming request that fails before anything has been emitted is retried a bounded number of times. Worker and Manager calls carry an output cap on OpenRouter, and a Worker reply that comes back empty after heavy reasoning is not retried: it is reported to the Manager as lost, so the Manager can re-delegate.
+The loop is capped at 20 rounds. A Worker that reaches the cap gets one further call with no tools, so the material already retrieved becomes a partial report; the halt is still disclosed to the legal professional as a limit, not a finding. A streaming request that fails before anything has been emitted is retried a bounded number of times. Worker and Manager calls carry an output cap on OpenRouter, and a Worker reply that comes back empty after heavy reasoning is not retried: it is reported to the Manager as lost, so the Manager can re-delegate.
 
 ---
 
@@ -130,7 +130,7 @@ Code acts around the model at fixed points:
 - **A schedule or annex** a section search names but does not return is fetched by its provision URI and cut to the part named.
 - **The reverse made-under question** ("which instruments were made under s.N of Act X") is answered from a stored record of instrument preambles: Scottish SIs from 1999 and UK SIs from 1987 (86,744 instruments), with each instrument's revocation status as recorded by legislation.gov.uk. The forward question (what one instrument was made under) is stated only from the instrument's own recital.
 - **Nudges** after each discovery result tell the model the next retrieval step and list the ids to use.
-- **Budgets**: 8 ReAct rounds in which `search_legislation` may run and 3 section-search rounds per instrument (a refused legislation search is recorded and disclosed to the lawyer as a limit), and a search budget of 3 calls per Worker run on the parliamentary bots, after which searches are hard-stopped so the Worker moves on to retrieval.
+- **Budgets**: 8 ReAct rounds in which `search_legislation` may run and 3 section-search rounds per instrument (a refused legislation search is recorded and disclosed to the legal professional as a limit), and a search budget of 3 calls per Worker run on the parliamentary bots, after which searches are hard-stopped so the Worker moves on to retrieval.
 - **Case law**: results are requested most relevant first, date ranges are applied, the true match count is reported, a case named in the query but not returned is flagged so its holding is not stated as read, and where a case and its appeal both appear the Worker is nudged to retrieve the higher-court decision.
 
 After the Worker writes, its report is checked for structure (one no-tools reformat retry if malformed), and a code-written scope block is appended for the Manager and the Deep Research synthesis to read.
@@ -183,7 +183,7 @@ Elapsed time depends mainly on the model and on how much text is summarised. Ove
 | Tool results capped after summarisation | A ceiling of the summarisation threshold + 4,000 chars, plus a per-run context budget, prevents context overflow regardless of summarisation outcome |
 | Parallel tool execution within a turn | All tool calls in a single turn run via `asyncio.gather` |
 | Summarisation concurrency bounded per provider | The Ollama cloud endpoint cannot reliably handle concurrent large-context jobs; the semaphore prevents HTTP 500s |
-| Failures contained | A failed or lost research step is reported as such to the Manager and the lawyer, never as a search that found nothing |
+| Failures contained | A failed or lost research step is reported as such to the Manager and the legal professional, never as a search that found nothing |
 
 ## 3. Key Features
 

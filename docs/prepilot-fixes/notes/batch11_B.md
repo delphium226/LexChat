@@ -75,7 +75,7 @@ fails when a mutant makes it pass the flag.
   - `tests/test_research_halt.py`: one explicit-signature fake (`_halting_chat_loop`) takes the two new arguments.
     It was the only fake in the suite that broke.
 
-**No new lawyer-facing text.** The fallback header and `LOST_ANSWER_NOTICE` are unchanged. The only new string is
+**No new legal-professional-facing text.** The fallback header and `LOST_ANSWER_NOTICE` are unchanged. The only new string is
 a log warning. The gate keeps the notice's own claim true: it says the model was empty "on every attempt", and it is
 shown only when no report is in hand, which is exactly when all three attempts are still made. So nothing needed
 screening against the detectors.

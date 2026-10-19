@@ -9,7 +9,7 @@ user with a figure before any money is spent.** Every agent in this batch is $0.
 This file is the brief. The integrator reads it whole. Each agent is given its own section, plus
 **Rules for every agent** and **Lessons from batches 1-3**, verbatim. Nothing here should need
 re-deriving; if something does, the agent says so in its note rather than guessing. The
-matter-specific detail (lawyers' wording, rubric patterns, the hand-read) is NOT in this file. It
+matter-specific detail (legal professionals' wording, rubric patterns, the hand-read) is NOT in this file. It
 is in the gitignored files named below.
 
 **What the user has already decided (2026-10-02; do not re-open):**
@@ -23,7 +23,7 @@ is in the gitignored files named below.
    gitignored rubrics, with backups first** (as batch 2's agent A did).
 4. **P4.18 is booked and fixed in this batch ($0, deterministic):** P2.5's currency clause
    contradicting P3.5's change-record clause on 27 stored footers. Booking it reopened bucket B4.
-5. Unchanged from Session 34: **P3.2 stays PARKED** until a lawyer answers the confirmation pack;
+5. Unchanged from Session 34: **P3.2 stays PARKED** until a legal professional answers the confirmation pack;
    P3.3 cannot be ticked while P3.2 is parked (its booked acceptance includes P3.2's).
 
 ---
@@ -82,7 +82,7 @@ is in the gitignored files named below.
 | **A** | **The four grader gaps** found in `wave4_b2_post`'s hand-read | tooling + gitignored rubrics | $0 | `tools/replay_report.py` (`interpret`, `stance`, `INTERP_HEDGE`), `tests/test_replay_tooling.py`, `evidence/rubrics/p32.json`, `p33.json` |
 | **B** | **P4.17 (d)**: the section-search scope line, full clause set | deterministic product code | $0 | `src/utils/search_scope.py` (a new builder), `src/agent/agent_core.py` (two assembly sites), a new test file, one new grader line in `tools/replay_report.py` |
 | **C** | **P4.18**: the currency clause's contradiction | deterministic product code | $0 | `src/utils/search_scope.py` (`_currency_footer_clause` only), `tests/test_search_scope.py` |
-| **D** | **P3.17 measured with options**, plus the **s.35ZA insertion point** for the lawyer pack. **No product code.** | analysis | $0 (plus free read-only LEX GETs) | a note; the gitignored pack |
+| **D** | **P3.17 measured with options**, plus the **s.35ZA insertion point** for the legal professional pack. **No product code.** | analysis | $0 (plus free read-only LEX GETs) | a note; the gitignored pack |
 
 **Merge order: A, then C, then B, then D** (graders before the product they grade; C's small
 change before B's larger one in the same file). **Collision points, by design:** B and C both
@@ -121,7 +121,7 @@ P3.2 lever (parked); any P3.17 lever (measure only); any rubric edit except by a
    FAIL with the change reverted on a scratch copy, **and the note says how many lines the
    revert removed** (a revert that removed nothing proves nothing). Run the full suite on your
    own test database before your last commit, and report the count.
-6. **Data handling:** never commit lawyers' question or answer text, search terms, case names,
+6. **Data handling:** never commit legal professionals' question or answer text, search terms, case names,
    or instrument ids and titles from a session. Tests and fixtures use synthetic text ("Widget
    Order 1901"). Grep your staged diff for session ids, instrument ids and matter words before
    every commit. Rubric patterns, draws and anything quoting a matter stay in the gitignored
@@ -325,7 +325,7 @@ merge if it is (deterministic, n=1).
 offers the newer interpretation Act as one of two readings for the inserted section, and r2 and
 r3 turn 3 offer a hedged "the consultation must precede" reading (new: no earlier stored rep
 does). For each of these turns, and for the clean ones as contrast, over every stored 6338 rep in
-its lawyer's configuration (`wave4_p33_pre`, `wave4_p33_post`, `wave4_b1_post`,
+its legal professional's configuration (`wave4_p33_pre`, `wave4_p33_post`, `wave4_b1_post`,
 `wave4_b2_post`):
 - trace where the reading first appears: the raw tool results, the summaries the Worker saw,
   the Worker's report, or only the Manager's answer;
@@ -335,8 +335,8 @@ its lawyer's configuration (`wave4_p33_pre`, `wave4_p33_post`, `wave4_b1_post`,
   a structural argument into a hedged reading at turn 3;
 - then set out options with their consequences (for example: a sharper clause in the
   quick-lookup Worker or conversational Manager prompt, with the drift probe it would need; a
-  code-side check; waiting for the lawyer's answer to the pack's question, part 3, since the
-  booked criterion itself is one of the readings the pack asks a lawyer to confirm), recommend
+  code-side check; waiting for the legal professional's answer to the pack's question, part 3, since the
+  booked criterion itself is one of the readings the pack asks a legal professional to confirm), recommend
   one, and state what an after-column would need to measure. **Do not build anything, and draw
   no seam.**
 
@@ -349,7 +349,7 @@ the `external-apis` skill describe them, including the http/https duplicate and 
 traps), which Act inserted the section and which inserted text into it. Record every URL and
 response you rely on in your scratch folder. Then:
 - add one short "A point our records leave unclear" note to Reading 2 of the pack (gitignored;
-  keep its style: plain language, no lawyer quoted, no reading restated beyond what is recorded),
+  keep its style: plain language, no legal professional quoted, no reading restated beyond what is recorded),
   citing only URLs a tool returned or that you fetched and recorded;
 - if the evidence shows the rubric's or FIX_PLAN's "inserted by" statement is wrong, say so in
   your note for the integrator and the user. Do not edit the rubric (agent A owns it) or the
@@ -397,7 +397,7 @@ lists the options.
 
    For A, re-run `interpret` and `stance` over the five directories in its acceptance and confirm
    the verdicts. For D, open the pack edit: every link must be one a tool returned or D fetched
-   and recorded, and it must quote no lawyer (`verify_pack_links.py`, `verify_pack_quotes.py`).
+   and recorded, and it must quote no legal professional (`verify_pack_links.py`, `verify_pack_quotes.py`).
 
    **Merge in the order A, C, B, D**, each with `git merge --no-ff`, the suite after each, and
    push the branch after each clean merge.
@@ -461,7 +461,7 @@ lists the options.
      ticked, become Fixed "Next release").
 
 **Open with the user, carried (do not act on the target yourself):**
-- sending the lawyer confirmation pack (after D's s.35ZA note), which is how P3.2 un-parks and how
+- sending the legal professional confirmation pack (after D's s.35ZA note), which is how P3.2 un-parks and how
   P3.3's readings are settled; confirm the cover note's promise first;
 - deploying `v2026.09.3` to the target (`pg_dump` first, then pull, restart and
   `test_apis.ps1`; the local prompt cache moves to v3 there, so cached summaries empty, which is

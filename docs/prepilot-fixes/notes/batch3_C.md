@@ -93,7 +93,7 @@ that something is missing, unretrievable or not made.
 - The Worker's scope block (agent-facing, stripped before rendering) told the Manager it had
   "searched within 2 instrument(s) … (ranked extracts, not the full contents of any of them)".
   The Manager still wrote that the annex could not be retrieved from the index, and named no
-  search terms. The lawyer saw no footer.
+  search terms. The legal professional saw no footer.
 - That is P3.12's shape (a part of a schedule or annex asked for by name does not rank, though the
   index holds the instrument; D's 1.5 records it as held). **A footer can make this negative
   explained; it cannot make it true.** Correcting it belongs to P3.12.
@@ -209,7 +209,7 @@ Read, each of the moves:
 - **The 2 legislation-only passes are what the row asks for**, and each is circular by
   construction, as P2.2's were: the line names the terms and attributes the miss. The model column
   stays `no` on both. One of them (`wave4_p33_post`) is P3.12's false negative (section 3). The
-  line tells the lawyer the provision "may still be in the instrument and in this index", which is
+  line tells the legal professional the provision "may still be in the instrument and in this index", which is
   true and is the qualification that turn lacked, but the negative stays false.
 - **The 9 6370 passes are a sentence about legislation crediting a negative about case law**:
   D's hazard for (a), in reverse. It is moot once (a) is in (the right column), because (a)'s own
@@ -248,12 +248,12 @@ Three ways, none recommended:
   r1 t4, which the hand-read says is a real unexplained negative. It moves the grader away from
   the hand-read.
 - **Credit the Worker's scope block** ("Searched within N instrument(s) …") as attribution. That
-  grades text the lawyer never reads.
+  grades text the legal professional never reads.
 - **A report-only listing of the shape for hand-reading.** This is honest, but it changes nothing
-  the lawyer reads. Four of the six absence statements in section 2 are invisible to every grader,
+  the legal professional reads. Four of the six absence statements in section 2 are invisible to every grader,
   and the three clauses of section 4 stay dropped.
 
-None of the three changes what a lawyer reads, and Invariant 2 points away from all of them.
+None of the three changes what a legal professional reads, and Invariant 2 points away from all of them.
 
 ## 7. Option (f): what else the evidence shows
 
@@ -279,7 +279,7 @@ None of the three changes what a lawyer reads, and Invariant 2 points away from 
 
 ## 8. Recommendation: (d), built after P4.15 (a)
 
-- It is the only option that changes what a lawyer reads, and Invariant 2 points there.
+- It is the only option that changes what a legal professional reads, and Invariant 2 points there.
 - It qualifies all six absence statements of section 2, the four no grader sees included. For
   the three "does not mention" claims it states the exact limit `section_search_note` already
   gives the Worker.

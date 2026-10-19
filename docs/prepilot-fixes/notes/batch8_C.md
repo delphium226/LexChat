@@ -121,21 +121,21 @@ kept flags genuine): a pre-existing defect, not P3.22's (Decision 5).
 
 ## 3. The ground truth for 6363 and 6359 (P3.22's row asks for it first). PROPOSED
 
-In the gitignored `$C/rubric_p322_6363_6359.md` (case names, neutral citations, the lawyers' words by
+In the gitignored `$C/rubric_p322_6363_6359.md` (case names, neutral citations, the legal professionals' words by
 turn; per-turn table `$C/rubric_check.txt`, from `python $C/rubric_check.py`). 6363 and 6359 are
 stored only in `baseline`, `wave1` and `wave2` (one run each). Seven presence GETs
 (`python $C/presence.py SP`, `$C/presence.json`) checked whether each authority is in the corpus at
 all: one relevance-ordered query on the party names, reading the whole matching set (14 to 50 rows).
 
-- **6359:** three authorities the lawyer named (one key case, one expected Supreme Court case, one the
-  lawyer accepts as a substitute) and the EAT judgment that carries the key case second-hand. **The
+- **6359:** three authorities the legal professional named (one key case, one expected Supreme Court case, one the
+  legal professional accepts as a substitute) and the EAT judgment that carries the key case second-hand. **The
   key case is not in the corpus**; the two Supreme Court cases are, but no stored query reached them
   under either order (the model searched phrases, not names); the carrier is returned by both orders
   in all 8 turns that return it (in the first three in 8 today, 6 under relevance).
-- **6363:** the lawyer named no case (the feedback says the fundamental cases were missing and the
+- **6363:** the legal professional named no case (the feedback says the fundamental cases were missing and the
   results looked recent; FIX_PLAN's P3.22 row records the latter as recency bias).
   Proposed: the three authorities the stored answers themselves call foundational, cited
-  second-hand, **all three not in the corpus** (so the lawyer's own guess about the dataset is right
+  second-hand, **all three not in the corpus** (so the legal professional's own guess about the dataset is right
   for them and no ordering fixes it), four Supreme Court and three Court of Appeal judgments on
   occupation, all in the corpus. **Relevance returns every in-corpus authority wherever today's order
   does (0 of 33 cells lost)**, adds the leading Supreme Court judgment in 4 more turns (9 against 5)
@@ -143,7 +143,7 @@ all: one relevance-ordered query on the party names, reading the whole matching 
 - The proposed bar for the acceptance is at the end of the rubric: no in-corpus authority retrieved in
   fewer runs after than before; the leading Supreme Court judgment in at least as many 6363 runs; an
   answer naming an out-of-corpus authority does so second-hand (Invariant 1); the EAT carrier still
-  retrieved in 6359. **6363's Tier 1 is our proposal and needs a lawyer** (Decision 4).
+  retrieved in 6359. **6363's Tier 1 is our proposal and needs a legal professional** (Decision 4).
 
 ## 4. What a build would move (for the integrator, not done here)
 
@@ -211,12 +211,12 @@ citations outside 1899-1902, and 27 matter and case words from this batch): 0 hi
 
 - No product change: `order` is not sent, `CASE_LAW_RESULT_ORDER`, the window note and the nudge are
   unchanged. No replay, no before-column.
-- No fetch of the published spec (Decision 6). No call with a lawyer's query to any host but the
+- No fetch of the published spec (Decision 6). No call with a legal professional's query to any host but the
   National Archives, and none outside the cap.
 - The appellate hand-read is a sample (60 of 455 flags), not every flag.
 - No edit to `FIX_PLAN.md`, `SESSION_LOG.md`, `summary-table.html`, `CLAUDE.md`, `CHANGELOG.md`,
   `VERSION`, `docs/TODO.md`, `LEGAL_DATA_SOURCES.md`, any `PARALLEL_BATCH_*.md`, any existing rubric,
-  the lawyer pack, a skill or a memory file. Nothing pushed or merged; `main` untouched.
+  the legal professional pack, a skill or a memory file. Nothing pushed or merged; `main` untouched.
 
 ## 9. Decisions for the user or the integrator
 
@@ -250,8 +250,8 @@ citations outside 1899-1902, and 27 matter and case words from this batch): 0 hi
 
 **4. The ground truth.**
 - **(a) Recommended: adopt the proposed rubric as P3.22's bar, and add 6363's Tier 1 (our proposal:
-  the lawyer named no case) to the lawyer pack as a supplementary question**; 6359's rests on the
-  lawyer's own words.
+  the legal professional named no case) to the legal professional pack as a supplementary question**; 6359's rests on the
+  legal professional's own words.
 - (b) Adopt only 6359's items and 6363's in-corpus judgments, as non-regression only.
 
 **5. `detect_appellate_decisions` is mostly false positives** (25% of kept flags genuine in the

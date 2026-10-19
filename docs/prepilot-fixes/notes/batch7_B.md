@@ -87,7 +87,7 @@ live whether LEX holds the unit.
 | "not held in this index" (**false**: LEX holds it, as one provision, and the flagged text carries it) | **7** |
 | "could not be retrieved from the index / the tool is unable to retrieve it" (reads as unavailable; LEX holds it) | **5** |
 | "not retrieved because searching was cut short by a limit" (true of the run) | 2 |
-| reasoned on the lawyer's premise about the unread content, with no negative | 3 |
+| reasoned on the legal professional's premise about the unread content, with no negative | 3 |
 | stated the content of a schedule or annex the turn never retrieved | 2 |
 | the named unit not addressed at all | 1 |
 | no delivery: a clarifying question (1) or the step-cap halt notice (1) | 2 |
@@ -99,7 +99,7 @@ live whether LEX holds the unit.
   - In one, a Deep Research summary of a sections-only text carries a schedule's classification
     words, although the raw text it summarised has none of them. That is the summariser writing
     from training (P3.16's class), and the omitted schedule is what made room for it.
-  - In the other, the report adopted the lawyer's premise as fact. The live text happens to agree
+  - In the other, the report adopted the legal professional's premise as fact. The live text happens to agree
     with it.
 - **The report was accurate where the answer was not.** On two of P3.2's turns the Worker report
   said, correctly, that the retrieved text "does not contain the Annexes". The answer then said the
@@ -246,7 +246,7 @@ legislation.gov.uk page (18 of 20 lines verbatim). P3.2's annex chapter is in
 - No probe of `/amendment/*`, the explanatory-note endpoints or legislation.gov.uk directly.
 - The proxy was compared with LEX on one paragraph only.
 - I did not reconcile `number_of_provisions` beyond showing the lookup is complete.
-- I did not edit FIX_PLAN, SESSION_LOG, the tracker, `DEPTH_TRUTH`, a rubric or the lawyer pack.
+- I did not edit FIX_PLAN, SESSION_LOG, the tracker, `DEPTH_TRUTH`, a rubric or the legal professional pack.
 - I did not run `plan_status` or `plan_lint`, because nothing they read changed.
 
 **Checks.**
@@ -314,7 +314,7 @@ legislation.gov.uk page (18 of 20 lines verbatim). P3.2's annex chapter is in
 4. **Where P3.12's ground truth goes.**
    1. **(Recommended) A `DepthReq` for 6335 turn 7 in `DEPTH_TRUTH`**, with `facts` regexes over the
       paragraphs' statutory words, like the existing entries. The statute text is public and holds no
-      lawyer's words; the cut text stays in the gitignored scratch.
+      legal professional's words; the cut text stays in the gitignored scratch.
    2. **Gitignored `evidence/rubrics/`, loaded by `depth` at run time.**
    3. **Grade that turn by hand only.**
 5. **Invariant 1 guard for the true negative.**

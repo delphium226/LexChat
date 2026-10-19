@@ -218,7 +218,7 @@ not in the answer" is a condition (FIX_PLAN) is not product text. The P2.2 comme
 says the scope block is appended AFTER filtering so that it does not suppress "P4.3's
 `turns_source_fallback` signal". V1 and V4 remove the fall-back that this signal counts, so
 `replay_report`'s `turns_source_fallback` would then count only turns whose rail the answer never
-names. No lawyer-facing text names the rail.
+names. No legal-professional-facing text names the rail.
 
 ## 5. Thomas's prompt rule: what a seam A/B would cost, and which payloads
 
@@ -289,10 +289,10 @@ $0.03 each) and "about $0.4" for 48 first-round draws (about $0.008 each):
 - (c) The row's original cited/consulted flag at the answer seam (V3). It needs `_lid` carried to the
   answer seam, `sub` dropped, a title test, and a client change (a `client/dist` rebuild; the client
   has no test runner). As built it mislabels 28% of what it flags.
-- (d) (a) now, and (c) later as its own row, if the lawyers want "consulted" sources shown.
+- (d) (a) now, and (c) later as its own row, if the legal professionals want "consulted" sources shown.
 
 In every option, an empty rail falls on a negative answer whose rail the answer never names, and the
-code scope line still states what was searched. Whether that is acceptable to the lawyers is the
+code scope line still states what was searched. Whether that is acceptable to the legal professionals is the
 user's call (Invariant 1: it does not lower any evidence bar).
 
 **3. The link half (Thomas's action 7).**

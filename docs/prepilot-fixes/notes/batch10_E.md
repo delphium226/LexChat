@@ -142,7 +142,7 @@ verdict); `{"results": null}`, a missing key, a string, a non-dict row, a number
   21 of 21 names the first. **Hand-read: no denial in any of the 42; I agree with every export-t1 verdict.
   Export t7 is a trap the grader shares with the full sessions:** its question names the first commencing
   instrument by its title, which `_names_instrument` (ids and citations only) does not see, so the turn is
-  in scope and its "DELIVERED" is the lawyer's own instrument repeated back (the full-session `6409` t7 rows
+  in scope and its "DELIVERED" is the legal professional's own instrument repeated back (the full-session `6409` t7 rows
   are in scope the same way, graded NONE there). Not changed (decision 3).
 
 ## 5. Item 5: P3.12's re-run priced (6335 n=3, Conversational as recorded)
@@ -248,7 +248,7 @@ sweep will be too, which is the condition under which the 92K Schedule reaches t
 ## 9. What I did NOT do
 
 - No product code; no model call, server, replay or external call.
-- No edit to FIX_PLAN, SESSION_LOG, the tracker, CHANGELOG, CLAUDE.md, any rubric, the lawyer pack or memory.
+- No edit to FIX_PLAN, SESSION_LOG, the tracker, CHANGELOG, CLAUDE.md, any rubric, the legal professional pack or memory.
 - No edit to `sched_clause_class`, `depth` or anything that reads A's block (section 6).
 - Not fixed: the definitional `negcurrency` false positive; `commencements`' title-blind scope.
 - Not pushed, not merged.

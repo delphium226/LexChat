@@ -16,7 +16,7 @@ branch.
 | **Repetitions** | n=1 over all 41, then n=3 on the 12 sessions the first pass did not settle — **complete** |
 | **Spend** | **$61.28** total: $37.62 for the n=1 pass (6.0 h) + $23.66 for 24 targeted reps |
 | **Harness** | `server_py/tools/replay.py` → `/api/system/chat`, `audit` trace captured per turn |
-| **Raw output** | `evidence/replay/baseline/` (gitignored — lawyers' verbatim casework questions) |
+| **Raw output** | `evidence/replay/baseline/` (gitignored — legal professionals' verbatim casework questions) |
 
 Reproduce this file's numbers with:
 
@@ -208,7 +208,7 @@ non-answer, then a bare negative, then a halt), so "which failure" is stochastic
 "fails" is not.
 
 The three defects Wave 1 targets are all confirmed present and measurable, and two of them are
-**worse than the transcripts suggested**, because the transcripts could only show what the lawyer
+**worse than the transcripts suggested**, because the transcripts could only show what the legal professional
 saw. The trace shows what the tool did.
 
 | Bucket | Row | Baseline | Verdict |
@@ -216,7 +216,7 @@ saw. The trace shows what the tool did.
 | **B2** jurisdiction filter | P1.1 | **351 of 974** searches under a jurisdiction filter returned **nothing** to the model (36%); **478** (49%) demonstrably lost rows; **0 of 557** searches lost anything with the filter off | **Confirmed, cause isolated** |
 | **B5** count destroyed | P1.3 | **1,010 of 1,531** searches reported a `total` that was not the API's | **Confirmed, and independent of the filters** |
 | **B14** provision links | P1.4 | ~~88 of 376 (23.4%)~~ **20 of 376** provision-labelled links (5.3%) miss their provision — see *Correction* below. Separately, **29 of 327 cited provision URLs (9%) were returned by no tool at all** (~~327 of 327~~ — see the second *Correction*); Wave 1 takes that to **0** | **Confirmed, but six-fold smaller than first published; the provenance half is closed** |
-| **B1** research halt | P2.1 | **10 of 41** runs had a halted worker; ~~7~~ **9** showed halt text (the detector was blind to a third of the wordings — see *Halt detector* below); **2 halted silently**, telling the lawyer nothing | **Confirmed, and worse than counted** |
+| **B1** research halt | P2.1 | **10 of 41** runs had a halted worker; ~~7~~ **9** showed halt text (the detector was blind to a third of the wordings — see *Halt detector* below); **2 halted silently**, telling the legal professional nothing | **Confirmed, and worse than counted** |
 | **B4** in-force claims | P2.5 | **27** unsupported in-force assertions across 41 runs | **Confirmed** |
 | **B8** sources rail | P4.3 | 1,222 of 1,387 kept sources (88%) never cited; 62 turns cited none of theirs — but **more than half of that is a shadow of B1/B3**, see *B8 split* below. On turns that actually produced a report: **489 of 622 (79%), 9 turns** | **Confirmed, but two conditions were being counted as one** |
 | **B13** lost/blank turns | P4.2 | **5 turns** billed >$0 and returned an empty body (a fifth appeared in 6406 rep3) | **Confirmed** |
@@ -337,7 +337,7 @@ added beside it.
 
 Three conditions, each a distinct failure in the corpus: does the answer say
 **what was searched**, does it name the **limits** it ran under, is the miss
-attributed to the **index** rather than to the law or to the lawyer.
+attributed to the **index** rather than to the law or to the legal professional.
 
 | condition | turns satisfying it, of 44 |
 |---|---|
@@ -345,14 +345,14 @@ attributed to the **index** rather than to the law or to the lawyer.
 | names a filter, a year window, or that the search was ranked | **5** |
 | attributes the miss to the index/search | 31 |
 | **all three, and blames nobody's citation** | **0** |
-| blames the *lawyer's* citation (an outright fail) | **3** |
+| blames the *legal professional's* citation (an outright fail) | **3** |
 
 Each condition is individually reachable, so 0/44 on the conjunction is a
-property of the product and not a dead detector. The three that blame the lawyer
+property of the product and not a dead detector. The three that blame the legal professional
 are the worst of the set and are all now verifiable as wrong at source: 6373
 questioned FrankieH's `SSI 2026/170` and 6409 questioned `SSI 2025/377` three
 times — **both citations are correct and both instruments are a 404 in LEX**
-(checked 2026-09-15). The tool asked the lawyer to disprove a gap in its own
+(checked 2026-09-15). The tool asked the legal professional to disprove a gap in its own
 index.
 
 **6373 turn 2 is the whole bucket in one screen** (`negatives --answers`). Seven
@@ -378,7 +378,7 @@ Could you confirm the year or the SI number?
 Every one of those seven searches came back with rows — LEX ranks the whole
 corpus against the wording, so a query for a non-existent statute still returns
 185 results — and none held the instrument. The research was diligent, the
-conclusion was right, and the sentence the lawyer got was wrong in the only way
+conclusion was right, and the sentence the legal professional got was wrong in the only way
 that matters: it put the doubt on their citation instead of on the index. **Note
 also what no tool could do here.** `POST /legislation/lookup` answers "is
 `ssi/2026/170` held?" with a 200 or a 404 and we never call it — P3.7.
@@ -402,14 +402,14 @@ Search shape: 790 search_legislation call(s); 4 returned ZERO results;
 | **explained — the row's bar** | **2 (20%)** | 13 (56%) | **19 (90%)** |
 | names its search terms | 20% | 82% | 90% |
 | attributes the miss to the index | 40% | 60% | 95% |
-| **blames the lawyer's citation** | **2 of 10** | **0** | **0** |
+| **blames the legal professional's citation** | **2 of 10** | **0** | **0** |
 | model's own prose explains it | 20% | 56% | 4% |
 
 **The middle column is the interesting one, because it is the fix the row asked
 for and it was not enough.** Carrying the scope to the agent that writes the
 answer — the Manager and the Deep Research synthesis, neither of which had ever
 seen a tool result — took explained negatives from 20% to 56%. The other 44% told
-a lawyer something was not found without saying what had been looked for. That is
+a legal professional something was not found without saying what had been looked for. That is
 Invariant 2 arriving on schedule: the instruction reached the right reader and
 was still only sometimes obeyed, so the disclosure became code.
 
@@ -425,7 +425,7 @@ because restating the full scope on every follow-up would be noise.
 was the footer, which is appended after the model has finished writing. n=3
 cannot produce that swing legitimately, so the column is unstable — a reading of
 the prose (`negatives --answers`) is the real check. What it does not affect is
-the verdict column, which is what the lawyer actually sees.
+the verdict column, which is what the legal professional actually sees.
 
 **Two more instrument errors, and one of them was self-inflicted.** The footer's
 own words — *"anything reported above as not found was not found in this
@@ -443,9 +443,9 @@ that it was not tuned to pass.
 
 ## B1 — the halt is not confined to Deep Research
 
-**10 of 41 runs** hit the 20-step cap; **7 showed halt text to the lawyer.**
+**10 of 41 runs** hit the 20-step cap; **7 showed halt text to the legal professional.**
 
-The purest case is **6383 turn 1**, a *conversational* turn whose entire answer to the lawyer was:
+The purest case is **6383 turn 1**, a *conversational* turn whose entire answer to the legal professional was:
 
 ```
 [Research halted: exceeded 20 tool-call steps]
@@ -456,7 +456,7 @@ the worker's assistant content, so it escapes through a plain Manager delegation
 through `run_deep_research` — **a fix at the `run_deep_research` site alone leaves that path
 open.** See the amended P2.1.
 
-Where the halt does *not* surface raw, it surfaces as invention. 6340 told the lawyer the agent
+Where the halt does *not* surface raw, it surfaces as invention. 6340 told the legal professional the agent
 "exceeded its operational limits (timed out)" — it hit a step cap, not a timeout — and supplied a
 cause: *"a broad enabling power has generated a very large volume of statutory instruments over
 several decades."* The Act in question is a 404 in LEX. **Invariant 1 bites here:** this reads as
@@ -496,7 +496,7 @@ On the rep-1 pass the corrected count is **9 runs showing halt text, not 7**.
 
 **2 turns in the rep-1 pass (3 across all 65 runs) halted a worker, returned a normal-looking
 report, and never mentioned it.** 6396 rep1 halted **four** workers and the answer says nothing.
-The lawyer is handed an incomplete answer with no signal that it is incomplete — which under
+The legal professional is handed an incomplete answer with no signal that it is incomplete — which under
 Invariant 1 is worse than the halt text leaking, because a visible halt at least tells them to
 distrust it. Counted separately as `halts_undisclosed`; a turn with an *empty* body is B13 and
 is deliberately not double-booked here.
@@ -598,14 +598,14 @@ one turn of four, and a run-level total hides which.
 |   … of which printed the **raw marker** as the answer | 1 | 6383 turn 1, 46 characters |
 | carried the halt as **structured metadata** | 0 | no field existed |
 
-The two wrong disclosures are not cosmetic. 6340 told the lawyer the agent had
+The two wrong disclosures are not cosmetic. 6340 told the legal professional the agent had
 *"exceeded its operational limits (timed out)"* and then supplied a cause for the
 missing findings — *"a broad enabling power has generated a very large volume of
 statutory instruments over several decades"* — about an Act that **404s in LEX**.
 A step cap had become a finding about the state of the statute book.
 
 **The starkest case is 6409 turn 7, and it is worse than 6340.** The worker ran
-**25 Phase-1 searches and 0 retrievals**, hit the cap, and the lawyer was told:
+**25 Phase-1 searches and 0 retrievals**, hit the cap, and the legal professional was told:
 
 > *"The research agent could not locate 'The Social Security (Amendment)
 > (Scotland) Act 2025 (Commencement No. 1 and Saving and Transitional
@@ -613,7 +613,7 @@ A step cap had become a finding about the state of the statute book.
 
 That is the whole answer. A step cap rendered as a **negative retrieval
 finding**, with no hint the research was cut off — an *untrue* honest failure,
-which is the one thing Invariant 1 cannot survive. A lawyer who has learned to
+which is the one thing Invariant 1 cannot survive. A legal professional who has learned to
 trust this tool's negatives takes it at face value. It is why the code-emitted
 notice denies the reading explicitly ("it is **not** a finding that the material
 does not exist") rather than merely describing the cap.
@@ -707,7 +707,7 @@ Two things about the notice are deliberate and were argued over:
 
 **The sources rail is untouched by this row and still disagrees.** 6340's halted
 turn shows **16 sources** behind an answer with no findings — real retrievals,
-kept by the excerpt branch of `_source_is_used`, not a fallback list. The lawyer
+kept by the excerpt branch of `_source_is_used`, not a fallback list. The legal professional
 is now told the answer is partial, which is an improvement on the Wave 0 reading
 (*"6341 turn 5 shows 40 sources behind a 333-char 'timed out' message"*), but the
 rail still implies those sources were used. That is **B8 / P4.3**, and P2.1
@@ -942,7 +942,7 @@ For the residual, two fallbacks: Deep Research to the step findings (6383 had th
 intact reports of 4,836 / 5,777 / 7,190 chars sitting behind its empty body), the
 Manager to the worker reports it already holds, or a plain notice where there are
 none. **Both are labelled as fallbacks.** Research the answering step never used is
-not an answer, and the entire complaint in this bucket is that the lawyer could not
+not an answer, and the entire complaint in this bucket is that the legal professional could not
 tell a lost answer from a finished one — so the fallback opens by naming the
 failure, says what has and has not been done to the material below, and reorders
 nothing.
@@ -951,7 +951,7 @@ nothing.
 
 **Since P2.2 a blank turn is not an empty string.** 6383 rep 1 turn 4's `answer` is
 **1,293 characters** — entirely the code-emitted scope footer, with nothing above
-it. That is what the lawyer saw. A detector grading `answer` scores it as fine;
+it. That is what the legal professional saw. A detector grading `answer` scores it as fine;
 `blank_verdict` grades `_without_footer(answer)`.
 
 Validated in both directions across all ten directories. It finds exactly the 8
@@ -992,7 +992,7 @@ three times because a single draw does not settle them (Invariant 4).
 | 6341 | FAIL | B4 | R | 3 unsupported in-force claims; halt text shown |
 | 6343 | FAIL | B7 | R | Invented UI again: *"via the mode selection or settings menu in your interface"* |
 | 6345 | FAIL | B3 | R | Same wrong Act (Transport (Scotland) Act 2005 s.40) three times. Did **not** capitulate when challenged — halted instead |
-| 6346 | FAIL | B7 | R | Refused four more times after the lawyer said she had changed the mode. The corpus's worst session, intact |
+| 6346 | FAIL | B7 | R | Refused four more times after the legal professional said she had changed the mode. The corpus's worst session, intact |
 | 6347 | DEFECT | B7 | R | Mode deflection on turn 1 |
 | 6348 | DEFECT | B10 | R | s.36(2) surfaced only when asked for by name |
 | 6350 | DEFECT | B7 | **R — worse** | Pre-pilot recovered once the filter was reset; this time *"I have reset the filter"* still produced nothing |
@@ -1005,10 +1005,10 @@ three times because a single draw does not settle them (Invariant 4).
 | 6367 | FAIL | B5 | **R** *(n=3)* | rep3 states outright that *"the legislation does not prescribe fixed calendar dates for these duties"* — the original defect verbatim in substance. All three reps answer from the Water Industry (Scotland) Act 2002 rather than the Public Finance and Accountability (Scotland) Act 2000, where the deadlines are |
 | 6369 | DEFECT | B10 | R | Purpose test still surfaced only after repeated prompting |
 | 6370 | DEFECT | B11 | R **+ B13** | Two blank billed turns; *"You are entirely correct"* capitulation openers intact |
-| 6372 | DEFECT | B8 | **N** *(n=3)* | Clean on every mechanical signal in all three reps, and all three open by asking which jurisdiction is meant rather than guessing. **Caveat: the misattribution itself is not machine-checkable** — confirming it needs a lawyer to check Rule 35.8 against the instrument cited |
-| 6373 | FAIL | B12 | R | Questioned the lawyer's citation twice — *"Could you verify the citation?"*, *"Could you check if the year or the SI number might be different?"* — rather than stating an index limit |
+| 6372 | DEFECT | B8 | **N** *(n=3)* | Clean on every mechanical signal in all three reps, and all three open by asking which jurisdiction is meant rather than guessing. **Caveat: the misattribution itself is not machine-checkable** — confirming it needs a legal professional to check Rule 35.8 against the instrument cited |
+| 6373 | FAIL | B12 | R | Questioned the legal professional's citation twice — *"Could you verify the citation?"*, *"Could you check if the year or the SI number might be different?"* — rather than stating an index limit |
 | 6374 | FAIL | B3 | R | Orders in Council under s.126(8) still not retrieved; halt text shown |
-| 6375 | FAIL | B11 | **R** *(n=3)* | Bad provision links in every rep — ~~11/15, 10/19, 15/16~~ **3/15, 3/19, 9/16** (corrected detector). The B11 doctrine question (English common interest privilege analysed as Scots law) still needs a lawyer's read, but the session fails on B14 regardless |
+| 6375 | FAIL | B11 | **R** *(n=3)* | Bad provision links in every rep — ~~11/15, 10/19, 15/16~~ **3/15, 3/19, 9/16** (corrected detector). The B11 doctrine question (English common interest privilege analysed as Scots law) still needs a legal professional's read, but the session fails on B14 regardless |
 | 6378 | FAIL | B8 | R | A UK question answered England-only; SSI 2008/216 still absent from the answer |
 | 6380 | DEFECT | B10 | R | Legitimate expectations reached only after a clarifying exchange |
 | 6381 | FAIL | B5 | **N** *(n=3)* | **Improved** — now says plainly *"I am unable to locate the Victims and Witnesses (Scotland) Act 2014"* three times instead of answering silently from adjacent statutes. But the non-retrieval is now caused by the filter: 30 of 80 searches emptied |
@@ -1021,7 +1021,7 @@ three times because a single draw does not settle them (Invariant 4).
 | 6396 | FAIL | B10 | **R** *(n=3, 2/3)* | **n=1 said it answered and was wrong.** rep1 halted **four** workers, rep3 halted two; filters emptied 32/172, 6/23 and 16/73 searches across the three. rep2 answered cleanly, which is what a single draw would have recorded |
 | 6406 | FAIL | B1 | **N** *(n=3)* | **0 of 4 steps halted** on both Deep Research turns, against 4 of 4 in the pre-pilot. $0.72 and 14,090 chars against $2.36 and a report with no findings |
 | 6407 | DEFECT | B1 | R **+ B13** | Two blank billed turns; halt text shown. The most expensive run in the sweep at $5.99 / 50 min |
-| 6408 | FAIL | B1 | R | 52 of 92 searches emptied by filters; turn 3 explains the step cap to the lawyer |
+| 6408 | FAIL | B1 | R | 52 of 92 searches emptied by filters; turn 3 explains the step cap to the legal professional |
 | 6409 | FAIL | B3 | R | Commencement SSIs still invisible — *"No commencement regulations have been made yet"* |
 | 6410 | FAIL | B3 | R | Same false negative, verbatim. The Care Reform (Scotland) Act 2025 (Commencement No.1) Regulations 2025 exist |
 | 6411 | FAIL | B4 | R | Unsupported in-force assertion |
@@ -1046,7 +1046,7 @@ Three are **not** improvements, and reading the headline count alone would get t
 - **6381** now discloses plainly that it cannot find the Victims and Witnesses (Scotland) Act 2014
   — in all three reps, which is exactly the honest failure Invariant 1 protects. But the
   underlying retrieval got **worse**, not better: the filter emptied 30 of 80, 26 of 49 and 31 of
-  66 searches across the reps. The lawyer is told the truth about a failure that B2 caused.
+  66 searches across the reps. The legal professional is told the truth about a failure that B2 caused.
 - **6372** is clean on every signal this harness can compute, but the defect it was classified for
   — provisions attributed to the wrong instrument — is not machine-checkable. It is recorded as
   does-not-reproduce on mechanical grounds only.
@@ -1142,7 +1142,7 @@ is why the product checks both: a rule that misses a real recital forbids a clai
 the material supports, and nothing downstream would flag that.
 
 So the permitted branch of P2.3's rule is **live**, and for the Scottish corpus
-these lawyers work in it is **empty**. The rule is a near-total prohibition, and
+these legal professionals work in it is **empty**. The rule is a near-total prohibition, and
 the product says so rather than dressing it as a conditional. Over the whole
 post-Wave-1 replay corpus — **38.8M characters of raw retrieval across 2,504
 tool results** — only **12 results carried an instrument preamble**, covering
@@ -1287,7 +1287,7 @@ now phrased *"explicitly states it was made under …"*, which is the attributio
 the block asks for.
 
 **The best answers explain the mechanism, not just the limit.** Several now tell
-the lawyer what to do next:
+the legal professional what to do next:
 
 > *"The reason it did not appear in the initial search is that our legislation
 > index does not record the enabling powers (the 'made under' relationship) for
@@ -1311,7 +1311,7 @@ verified"* statements, plus statements of law about a class (*"regulations made
 under section 95 are subject to the affirmative procedure"*). Nothing in the
 after-column is a claim the detector missed.
 
-**One known gap, measured rather than asserted.** The lawyer-facing clause is
+**One known gap, measured rather than asserted.** The legal-professional-facing clause is
 gated on the turn having retrieved an instrument. **12 of the 13 before-column
 claim-turns did**, so the gate covers the bucket — but a turn that names
 instruments from search rows alone and retrieves none of them gets no clause
@@ -1321,7 +1321,7 @@ for an 8% gain. Left as a limitation.
 
 **A P2.2 defect this sweep exposed, and fixed.** `answer_scope_footer` stripped
 only the OUTER quotes from a query, so the model's own field syntax rendered to
-the lawyer as `"Education (Scotland) Act 1962" 117"` — unbalanced, and reading as
+the legal professional as `"Education (Scotland) Act 1962" 117"` — unbalanced, and reading as
 two searches where there was one. Every quote character is removed before
 re-quoting now; the exact queries are in the audit trace.
 
@@ -1334,7 +1334,7 @@ ground truth is re-printed live by `python -m tools.lex_probe --commencement`.
 
 **This row is graded against an external fact, and that is unusual here on
 purpose.** Every other acceptance in this plan grades what an answer says about
-its own limits. P3.5 grades whether a specific true thing reached the lawyer, and
+its own limits. P3.5 grades whether a specific true thing reached the legal professional, and
 it can, because the thing is small, checkable and independent of the model:
 `asp/2025/2` has eight provisions commenced by SSI and `asp/2025/9` has twenty,
 and both sessions were told *"No commencement regulations have been made yet."*
@@ -1379,7 +1379,7 @@ The denominator is structural: a turn is in scope when its **question** asks
 about commencement and does not itself name one of the instruments being graded.
 Picking it was the hard part. The first draft graded every answered turn and
 scored six of `wave1`'s eighteen as correct — including 6409 turn 8, whose entire
-question is *"SSI 2025/119"*. Repeating back an instrument the lawyer supplied is
+question is *"SSI 2025/119"*. Repeating back an instrument the legal professional supplied is
 not a retrieved relation, and counting it would have shown a before-column that
 already half-passes.
 
@@ -1753,7 +1753,7 @@ On 6341 rep 1 against `wave1` rep 1: cost $2.09 → $2.24 (+7%), tool calls
 
 ### A blank Deep Research report, and it is not this fix
 
-6383 rep 1 turn 4 returned a report whose **body was empty** — the lawyer saw
+6383 rep 1 turn 4 returned a report whose **body was empty** — the legal professional saw
 the scope footer and nothing else — with `status: ok`, no error, 30 tool calls,
 three intact step reports (4,836 / 5,777 / 7,190 chars) and 219 commencement
 relations retrieved. **First blank in 218 answered turns across eight replay
@@ -1983,7 +1983,7 @@ All 14 (B) turns are case-law questions asked under `legislation_only`. The
 transcript export records **no research mode** for these sessions: `Filter:
 Research mode` and `Session mode` are blank on every row. `replay_set.py` reads
 the mode once per session and falls back to `legislation_only`. So in the replay
-the mode never changed, even on turns where the lawyer says *"I have changed the
+the mode never changed, even on turns where the legal professional says *"I have changed the
 mode, please proceed"*. Those refusals are correct about the tool set, and none of
 them shows the anchoring P4.1 describes.
 
@@ -2055,11 +2055,11 @@ Manager path only: the Deep Research synthesis never sees the conversation.
 | no-search turns after a searched turn carrying the line | — | **15 of 15** |
 
 The defect's shape still occurs, in 1 of 3 reps of each session (6409 r1 t11,
-6341 r2 t2), and now reaches the lawyer qualified. **The `model` column is
+6341 r2 t2), and now reaches the legal professional qualified. **The `model` column is
 "no" on both**, so the pass is the code's, exactly as with P2.2: 1 of 29
 negatives is explained by the prose alone.
 
-6409 r1 t11, as the lawyer now sees it:
+6409 r1 t11, as the legal professional now sees it:
 
 > As I mentioned previously, the full text of The Social Security (Amendment)
 > (Scotland) Act 2025 (Commencement No. 2) Regulations 2025 (SSI 2025/377) is
@@ -2155,7 +2155,7 @@ The false case-law claim is P4.1's, handover item (5).
     reasoning-token mechanism P4.2 could not rule out.
   - That turn cost $0.86, in a $1.44 run.
   - The worker handed the Manager a report consisting only of its scope block.
-    The Manager re-delegated, so the lawyer's answer was sound, but the
+    The Manager re-delegated, so the legal professional's answer was sound, but the
     mechanism is a false-negative trap. It is now row **P4.5**.
 
 - **`halts` exits 1: 5 halted turns, 1 failing, all in 6341.** Rep 1 turn 7
@@ -2225,7 +2225,7 @@ note the code already emitted fired only on an empty result.
 
 It is left unchanged, because `summary` and `compare` publish its count. **From
 P2.4 on, `compare`'s `scots_gap_disclosures` counts the code's line.** That is
-true to what the lawyer sees, but it is not a measurement of the model.
+true to what the legal professional sees, but it is not a measurement of the model.
 
 **`replay_report caselaw` is the acceptance.** It grades with
 `caselaw_gap_statements`, which needs three things in one sentence: a named
@@ -2418,7 +2418,7 @@ P2.8 trade: the product never gates on reading the question.
 
 ### Free observations
 
-- **P4.5 closed its trap on a lawyer.**
+- **P4.5 closed its trap on a legal professional.**
   - In `wave2_p24_pre/6375 r3 t2`, Deep Research step 1 ran three case-law
     searches that returned 4, 43 and 31 judgments.
   - Its final completion was then empty three times, so the step report was
@@ -2551,7 +2551,7 @@ was drafted differently (3 steps per rep before, 4 after; 34 searches -> 12,
 36 section searches -> 23), which is the planner stochasticity the replay
 configuration already records as a confound for every replayed DR turn.
 
-### What the lawyer is told, and what the model then said
+### What the legal professional is told, and what the model then said
 
 The clause fired on **7 of 7** stopped turns, with the right count in each
 ("one research step ... 1 further search"; "2 research steps ... 2 further
@@ -2600,7 +2600,7 @@ Two exit 1, and neither is this row's:
   new instance is `wave2_p27_pre/6374 rep 3 turn 4`, a Deep Research step whose
   report is its scope block alone. The synthesis covered the gap from the other
   steps and asserted nothing false about it, so the trap did not close on the
-  lawyer this time.
+  legal professional this time.
 - **A model sentence about a budget stop trips `HALT_PARAPHRASE`** ("a system
   limit"), which `summary` and `compare` count as halt language. Those run only
   over full sweeps; `halts` is unaffected, because a halted turn always carries
@@ -2656,7 +2656,7 @@ was bought by shortening answers (Invariant 1).
 ### Three numbers not to quote as printed
 
 - **`compare`'s "unsupported in-force claims 30 -> 61" is circular.** It runs
-  the old `IN_FORCE_CLAIM` over the whole answer, and P2.5's own lawyer-facing
+  the old `IN_FORCE_CLAIM` over the whole answer, and P2.5's own legal-professional-facing
   disclaimer trips it. P2.5's grader, `currency`, reads the model's prose:
   UNSUPPORTED 43 -> 3, assertion sentences 66 -> 4, the old detector on the
   prose alone 30 -> 6 turns. The same shape as the `HALT_PARAPHRASE` hazard
@@ -2690,17 +2690,17 @@ and neither is a Wave 2 regression:
 ### The instrument, built and validated before any sweep
 
 `replay_report depth` grades each turn against a ground truth checked against
-the live LEX text on 2026-09-18, with each bar taken from the lawyer's own
+the live LEX text on 2026-09-18, with each bar taken from the legal professional's own
 feedback: 6396 needs SSI 2007/174 Sch 1 para 1(2) (36 hours / 20 days); 6365
 needs Water Industry (Scotland) Act 2002 ss.45 and 57 and Public Finance and
 Accountability (Scotland) Act 2000 ss.21 and 22 each cited at subsection depth;
-6348 needs FOISA s.36(2) with its substance before the lawyer asked for it (turn
+6348 needs FOISA s.36(2) with its substance before the legal professional asked for it (turn
 1). Verdicts DELIVERED / PARTIAL / SHALLOW / MISSED, on the answer with the scope
 footer stripped (the footer quotes search terms and would otherwise satisfy
 6348 by construction).
 
 Validated both ways: the **original pre-pilot answers** grade MISSED / SHALLOW /
-SHALLOW, exactly as the three lawyers described them, and `--drops` over
+SHALLOW, exactly as the three legal professionals described them, and `--drops` over
 `baseline` and `wave1` shows no under-read. HEAD then showed the verdict's
 "at least once" bar is lenient (two of 6365's anchors were met only by amendment
 notes), so a strict per-requirement readout ("N of M references at depth") is
@@ -2821,10 +2821,10 @@ halts 0, `halts` 0 failing.)
 
 **`sources_kept` fell in 3 of 7 turn slots against a noise floor of 3 of 8,
 and none of the three is a researched turn.** They are turns 4-6, where the
-lawyer repeats one case-law question in legislation-only mode: at `wave2` the
+legal professional repeats one case-law question in legislation-only mode: at `wave2` the
 Manager delegated every repeat (a Worker searched statute for case law and
 reported the database holds none), at HEAD it answers two of the three repeats
-without re-delegating and tells the lawyer to switch mode. Worker runs per rep
+without re-delegating and tells the legal professional to switch mode. Worker runs per rep
 7 -> 5 is the same fact. That is B7's shape (P4.1), not this row's.
 
 ### How much of the halt problem the first half ever was
@@ -2854,7 +2854,7 @@ section search returned Part A1 sections (A16, A20, A21, 233B) every time.
 provisions, of which Schedule B1 is ONE** (`.../schedule/B1`): the index has no
 paragraph rows to return, and the paragraph query never ranks the Schedule into
 the top 10 (a topical query at `size` 20 does). The model was asking for a
-granularity the index does not have. The cap now stops it; the lawyer still
+granularity the index does not have. The cap now stops it; the legal professional still
 does not get paragraphs 42-44 (all three HEAD reps reach paragraph 44 only as a
 cross-reference inside the Part A1 sections). New row **P3.12**.
 
@@ -2866,7 +2866,7 @@ returned, both stating the Schedule B1 paragraphs were not retrieved. Then
 built: at the cap `chat_loop` makes ONE more call with no tools and
 `halt_writeup_instruction` appended; `halted.written_up` (audit v4) says whether
 it produced anything; the worker keeps the findings under P2.1's header, which
-now says PARTIAL; the lawyer's notice is unchanged.
+now says PARTIAL; the legal professional's notice is unchanged.
 
 **Seam acceptance** (the product's instruction, via `seam_replay worker` on a
 halted fixture):
@@ -2926,7 +2926,7 @@ complete; `nosearch` 0/0; `caselaw` 0 TWO_LINES. On the before-column
   turns 3 and 5): 7 turns in 1,088 across every directory, 5 of them in
   `baseline`/`wave1`, then 0 in 930 until these. **P4.8.**
 - One seam draw wrote "limit of 20 tool calls" where the limit is rounds — the
-  model's paraphrase; the lawyer-facing notice says rounds and is code-emitted.
+  model's paraphrase; the legal-professional-facing notice says rounds and is code-emitted.
 - **Two P4.2 events in six runs, both handled by the existing retry.** 6374
   rep 1 turn 1: three empty completions with `finish_reason=error`, answered
   by the report fallback (an unrecovered call, P4.5's eighth). 6383 rep 1
@@ -2941,7 +2941,7 @@ complete; `nosearch` 0/0; `caselaw` 0 TWO_LINES. On the before-column
   across both sweeps.
 - **The section budget fired 2 times in 3 reps of 6335** (reps 2 and 3, a
   fourth search of the Insolvency Act) and its footer clause reached the
-  lawyer both times; in `wave3_p38` no run had an instrument above 3
+  legal professional both times; in `wave3_p38` no run had an instrument above 3
   section rounds (0 of 53), so it never fired there.
 
 ### Spend
@@ -2955,7 +2955,7 @@ complete; `nosearch` 0/0; `caselaw` 0 TWO_LINES. On the before-column
 
 ## B10 residual — one subsection cited without its siblings (P3.11)
 
-6348's lawyer: the answer *"did not initially elaborate on the full provision,
+6348's legal professional: the answer *"did not initially elaborate on the full provision,
 only referring to s36(1) and not s36(2)"*. P3.1's prompt rule (*"When you cite
 one subsection of a section, say in a line what that section's other
 subsections provide"*) moved turn 1 from 0 of 3 to 1 of 3 (`wave3_p31`), and
@@ -3080,9 +3080,9 @@ references at depth, $0.08): the loss is in how the live ReAct loop's final
 write-up round reads its context, not in what the context holds.
 
 Rep 3's turn 2 is a different thing and not this row's: the Manager answered
-the lawyer's follow-up (*what is the test for exemption*) with a clarifying
+the legal professional's follow-up (*what is the test for exemption*) with a clarifying
 question and no delegation (685 chars, 0 sources), which the grader marks
-MISSED; when the lawyer named s.36(2) at turn 3 the run delivered it in full.
+MISSED; when the legal professional named s.36(2) at turn 3 the run delivered it in full.
 That is why `by turn 2` reads 2 of 3 and why `sources_kept` fell in the t2 slot.
 
 **What would close it, not built (a user decision).** Invariant 2's next step
@@ -3132,7 +3132,7 @@ Twelve of the 41 replayed sessions were replayed in Research mode in every
 sweep from `baseline` on, because the export's `Session mode` is blank for the
 sessions run on 11–13 August (before the field existed), the feedback snapshot
 is blank for them too, and `replay_set.py` filled the gap with
-`DEFAULT_CHAT_MODE = "research"`. The lawyers ran them in Conversational mode
+`DEFAULT_CHAT_MODE = "research"`. The legal professionals ran them in Conversational mode
 with the Research flag off. The recorded answers show which Worker wrote them:
 the research Worker's report headings (Summary Answer, Detailed Analysis,
 Jurisdiction & Status, Statutory Framework, a References heading) pass through
@@ -3184,7 +3184,7 @@ question.** Every count below therefore stands.
 ### The Conversational-mode replay (`wave0_conv`, P0.5 step 2)
 
 `wave0_conv` is the missing before-column: the twelve sessions replayed in the
-mode their lawyers used. Head `223293e`, n=1, 50 turns (48 conversational, 2
+mode their legal professionals used. Head `223293e`, n=1, 50 turns (48 conversational, 2
 Deep Research), **$3.84** against a $6 estimate.
 
 | directory | mode the twelve ran in | research-shaped answers |
@@ -3213,7 +3213,7 @@ its own row:
 
 The middle two rows are the same finding seen twice: **B5's false negative and
 B7's deflection are one defect in two modes**, and only the second reached a
-lawyer. `negatives` exits 0 on `wave0_conv`, where every full sweep has exited 1
+legal professional. `negatives` exits 0 on `wave0_conv`, where every full sweep has exited 1
 on 6346/6347.
 
 ## B7 — the research-mode dead-end, scripted (P4.1, 2026-09-22)
@@ -3226,7 +3226,7 @@ which builds a sequence from an exported session's turns by index (no question
 text in the repo). Two sequences: 6346 — its turn 1 under 'Legislation only',
 then its own turn 3 and turn 1 again under 'Legislation & case law' — and 6343
 (turn 1, then turn 4 under the new type). Run in Conversational mode on both
-sessions and, for 6346, in Deep Research, the mode its lawyer actually used
+sessions and, for 6346, in Deep Research, the mode its legal professional actually used
 (all three of her answers are planner clarifications: blank `Message model`,
 the planner's signature — see *The chat-mode default* below).
 
@@ -3252,7 +3252,7 @@ answered from case law before any fix, the refusal still in the history and no
 marker present. The row's diagnosis of 6346 — the model anchoring on its own
 refusal over a system prompt that already carried the new type — was an
 inference, and the replay contradicts it. What the transcript's own words
-record is bug (b): the planner called the research type a "mode", the lawyer
+record is bug (b): the planner called the research type a "mode", the legal professional
 said she would "change the research mode", and her turn 4 says "It is in deep
 research mode" — the chat-mode control, which does not add case law. The
 marker is kept as defence in depth and is verified to fire; the wording fix is
@@ -3264,7 +3264,7 @@ turns each side** (`deadend --dir wave4_p41_conv --session 6343 6346 6347 6350
 
 | | `wave2` (Research, wrong mode) | `wave0_conv` (`223293e`) | `wave4_p41_conv` (`9aa6d63`) |
 |---|---|---|---|
-| turns telling the lawyer to switch or restart | 5 | 14 | **0** |
+| turns telling the legal professional to switch or restart | 5 | 14 | **0** |
 | turns naming a control the UI does not have | 5 | 15 | **0** |
 | turns describing the interface | 2 | 2 | **0** |
 | `negatives` exit | 1 | 0 | 0 |
@@ -3483,7 +3483,7 @@ The restore's 15 notes on 14 of 623 turns is the same with
 and for 50 of their turns the harness sent `legislation_only`, labelled
 `default`. A human read of the transcripts, committed as
 `evidence/research_mode_reads.json`, says that was wrong on **16** of those
-turns. On each of them the lawyer had case law in the tool set, and the
+turns. On each of them the legal professional had case law in the tool set, and the
 replay did not.
 
 | read (50 turns) | turns | sessions and turns |
@@ -3496,19 +3496,19 @@ replay did not.
 **Why a read is possible at all.** At the pre-pilot the research type was one
 saved preference per user (`users.research_mode`, default `legislation_only`,
 set through the Research filters modal). It carried across chats and logins,
-so a change is an event, and a turn between two equal reads of the same lawyer
+so a change is an event, and a turn between two equal reads of the same legal professional
 is bracketed. Each type also left behaviour in the answers. The legislation-only
 Manager declined every case-law question in these sessions. The hybrid Manager
 briefed its Worker to ALSO search case law, so its answers report case-law
 results nobody asked for, in the case-law tool's own coverage wording. A 2026
 judgment can only have come from the tool. A neutral citation alone is not
-evidence, because a refusal quotes the case the lawyer named.
+evidence, because a refusal quotes the case the legal professional named.
 
 **What the default did to the sweeps.**
 `python -m tools.replay_report --dir <D> modes` now grades every turn against
 the read:
 
-| directories | holding a turn sent without the case-law tool its lawyer had | turn-runs | rep 1 |
+| directories | holding a turn sent without the case-law tool its legal professional had | turn-runs | rep 1 |
 |---|---|---|---|
 | 39 | 14 | 153 | 16 each in `baseline`, `wave1`, `wave2`, `wave0_conv` |
 
@@ -3816,7 +3816,7 @@ Over the 18 lost research-worker reports in all directories, a later
 delegation in the same turn returned a body in **15**, and none did in 3
 (`baseline`/6340 r1 t1, `wave2`/6385 r1 t4, `wave2_p24`/6373 r1 t3). That
 decided two things: the label permits one more `delegate_research` (the
-halt's forbids it), and the lawyer notice on the Manager path is kept for a
+halt's forbids it), and the legal professional notice on the Manager path is kept for a
 lost step nothing made good.
 
 **Acceptance (deterministic).** (a) `tests/test_lost_step.py`, 29 tests,
@@ -3838,7 +3838,7 @@ builder):
 
 **The first wording failed on the seam, and the redraw caught it.** At
 `4dfce68`, all 4 after-draws on 6373 said the cause was "a lost reply from
-the database": false, and it points a lawyer at the index. `ba04d7c` says
+the database": false, and it points a legal professional at the index. `ba04d7c` says
 whose reply was lost, and the after column above was redrawn in full at that
 commit. 6374's sentence that a Schedule's text is missing from the database
 is on both sides: it comes from a completed step, not from the lost one.

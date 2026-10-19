@@ -26,13 +26,13 @@ which carries each change's evidence.
 ## 1. System context
 
 Who and what the system talks to. The organisation runs one or more **bot processes**; each serves
-qualified-lawyer users and reaches out to LLM providers and research APIs. Bots can consult each
+qualified legal professional users and reaches out to LLM providers and research APIs. Bots can consult each
 other via federation.
 
 ```mermaid
 graph TB
     subgraph org["UK Gov organisation (internet-restricted Windows Server 2022)"]
-        user["Qualified lawyer<br/>(browser, HTTPS:443)"]
+        user["Qualified legal professional<br/>(browser, HTTPS:443)"]
         legbot["Legislation bot (AILA)<br/>uvicorn + PostgreSQL(lexchat)"]
         parlbot["Holyrood bot (ParliChat)<br/>uvicorn + PostgreSQL(lexchat_parliament)"]
         westbot["Westminster bot (HansardChat)<br/>uvicorn + PostgreSQL(lexchat_westminster)"]
@@ -269,7 +269,7 @@ graph LR
 
 Modes: `legislation_only`, `case_law_only`, `legislation_and_case_law`, `parliamentary_records`,
 `westminster_records`. On the legislation bot `RESEARCH_MODE` is blank, so the mode is the
-**research type** the lawyer picks per request under Filters → Research type (Legislation only /
+**research type** the legal professional picks per request under Filters → Research type (Legislation only /
 Case law only / Legislation & case law), defaulting to `legislation_only`. A set `RESEARCH_MODE` is
 absolute (`resolve_research_mode`): a request body cannot talk a parliament bot into legislation
 mode, because its database, tools and crawler are mode-specific.
@@ -380,7 +380,7 @@ answer is cleaned the same way before it reaches the calling bot.
    (`filter_worker_sources`, by token, title or instrument number); a source the turn retrieved that
    the answer names is re-admitted (`readmit_answer_sources`); a bare-id entry is titled from the
    turn's own results or the made-under record (`utils/rail_titles.py`).
-6. Append the lawyer-facing **scope footer** (`utils/search_scope.py`): what was searched and under
+6. Append the legal-professional-facing **scope footer** (`utils/search_scope.py`): what was searched and under
    what limits, the case-law corpus disclosure, and lookup outcomes. A reply that ran no search,
    after one that did, says so and restates the earlier searches, labelled as earlier in the
    conversation (gated on structure, never on the answer's wording).
@@ -388,7 +388,7 @@ answer is cleaned the same way before it reaches the calling bot.
 **Caps and resilience**
 - **Step cap** — `chat_loop` is capped at 20 ReAct rounds. At the cap it makes one more call with
   no tools (`utils/research_halt.py`), so the retrievals already in context become partial
-  findings; the halt keeps its status, the report says the findings are partial, and the lawyer is
+  findings; the halt keeps its status, the report says the findings are partial, and the legal professional is
   told in code. Tool results are hard-capped to `summarise_threshold + 4,000` chars *after*
   summarisation.
 - **Summarisation threshold scales with the model** — 10% of the model's context in chars, clamped
@@ -401,7 +401,7 @@ answer is cleaned the same way before it reaches the calling bot.
   any one instrument in at most **3**; a parliamentary Worker gets **3** discovery searches. The
   legislation budgets count *rounds*, not calls, because the model batches. A refused call returns a
   stop result instead of running, is recorded as a limit (stated in the Worker's scope block and the
-  lawyer's footer) and counts in `search_budget_blocked`.
+  legal professional's footer) and counts in `search_budget_blocked`.
 - **Graceful failure in three layers** — a failed worker run returns an `[Research Agent Error]`
   *tool result* to the Manager rather than killing the SSE request; `describe_agent_error` gives
   every user-facing failure real text (httpx timeouts stringify to `""`); `/api/chat` wraps that in
@@ -503,7 +503,7 @@ every search issued (memo hits included), budget stops, lookups and their outcom
 results, enabling-power evidence, change-record relations, currency evidence and case-law searches.
 `utils/search_scope.py` renders it at four seams: a note on each tool result for the Worker; the
 `worker_scope_block` appended to the Worker's report *after* it writes, read only by the Manager or
-the Deep Research synthesis; the lawyer-facing footer appended in code to the answer (§4); and an
+the Deep Research synthesis; the legal-professional-facing footer appended in code to the answer (§4); and an
 unconditional strip so the agent-addressed blocks never reach the screen. A negative is therefore
 stated with the searches and limits it was reached under, whatever the model chose to say.
 
@@ -525,7 +525,7 @@ silently.
 
 ## 6. Deep Research (plan → approve → execute)
 
-An opt-in `chat_mode = "deep_research"` that drafts an **editable** plan, lets the lawyer change it,
+An opt-in `chat_mode = "deep_research"` that drafts an **editable** plan, lets the legal professional change it,
 then executes it autonomously. Plan-first is what makes the run steerable and leaves an auditable
 approved-plan artefact. **L2 only** — there is no pause-and-review between steps.
 
@@ -568,7 +568,7 @@ sequenceDiagram
 - **Each step is a full worker run** — its own discovery, section and context budgets and its own
   search record. A step that halted or whose report was lost reaches the synthesis as partial or
   missing (`incomplete_steps_note`), never as a step that found nothing, and is disclosed to the
-  lawyer in code.
+  legal professional in code.
 - **Synthesis inputs** — the step findings, plus `citation_links.pinpoint_block` (the pinpoint
   labels the steps linked per section URL), so the integrated report keeps subsection-level
   citations. The report then passes through the same link enforcement, scope-block strip, sources
@@ -1098,7 +1098,7 @@ graph TB
     uvicorn -.-> openrouter["openrouter.ai (if active)"]
     uvicorn --> research["LEX / TNA / SP / Hansard research APIs<br/>(SCTS when switched on)"]
 
-    user["Lawyer (browser)"] -->|HTTPS :443| uvicorn
+    user["Legal professional (browser)"] -->|HTTPS :443| uvicorn
 ```
 
 **Lifecycle**

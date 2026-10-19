@@ -44,7 +44,7 @@ Read these first — the design leans on how they already work:
   (`bg-brand` for primary CTAs, `bg-accent` only for focus/active, `text-ink-*`, `font-ui`). Do not use
   raw Tailwind palette classes.
 
-**Users:** qualified UK government lawyers. High-stakes, audit-sensitive. The plan step is a feature
+**Users:** qualified UK government legal professionals. High-stakes, audit-sensitive. The plan step is a feature
 *because* it makes research steerable and the approved plan is a defensible artifact.
 
 **Provider note:** everything must work for **both** Ollama and OpenRouter (bind both `chat_loop`s).
@@ -172,7 +172,7 @@ async def run_deep_research(
 - Add a nullable **`research_plan JSON`** column to `Message` (additive; follow the existing
   `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` migration pattern used elsewhere — check how the schema is
   created/migrated on startup and match it). Store the **approved** plan on the assistant result message
-  (or the user message — pick one and be consistent). This gives "here is the plan the lawyer approved"
+  (or the user message — pick one and be consistent). This gives "here is the plan the legal professional approved"
   for compliance.
 
 ### 3.7 Prompts (`prompts.py`)

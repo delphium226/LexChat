@@ -13,7 +13,7 @@
 
 ## 1. What we're building & why
 
-Users (lawyers) have asked that when the parliament bot cites a Scottish Parliament source, it also
+Users (legal professionals) have asked that when the parliament bot cites a Scottish Parliament source, it also
 link to the **exact moment in the Scottish Parliament TV video** where the words were spoken — e.g.
 *"the Cabinet Secretary said X — [watch from 14:56:52](…)"*. This turns an Official Report citation
 into a verifiable, watchable source (useful for *Pepper v Hart*-style reliance on a minister's exact

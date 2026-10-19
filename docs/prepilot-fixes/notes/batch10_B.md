@@ -186,7 +186,7 @@ part in either. This is batch 10 E's file, and I have not edited it (Decision 3)
   1/3; the lead is 3/3 to 3/3 and the carrier 3/3 to 3/3.
 - No edit to `FIX_PLAN.md`, `SESSION_LOG.md`, `summary-table.html`, `CLAUDE.md`, `CHANGELOG.md`,
   `VERSION`, `docs/TODO.md`, `LEGAL_DATA_SOURCES.md`, any `PARALLEL_BATCH_*.md`, any rubric, the
-  hand-reads, the lawyer pack or any memory file. Nothing pushed or merged; `main` untouched.
+  hand-reads, the legal professional pack or any memory file. Nothing pushed or merged; `main` untouched.
 
 ## 5. Matches and edits read; data handling
 
@@ -198,7 +198,7 @@ part in either. This is batch 10 E's file, and I have not edited it (Decision 3)
 - The 14 query strings behind the two drops (by query id, in scratch).
 - The 3 links in section 3.
 
-**Kept out of the committed note:** every per-query detail, which holds the lawyers' search terms
+**Kept out of the committed note:** every per-query detail, which holds the legal professionals' search terms
 (`calls.jsonl`, `plan.json`, `live_b10.jsonl`, `analyze.out`). Those stay in `$B`. This note names no
 query, case, citation or matter word. The only session ids it names are 6363 and 6359, which are
 P3.22's acceptance sessions.
@@ -269,4 +269,4 @@ per-query retrieval check").
 - **(a) Recommended: a watch line on P3.22 (no bar change).** It is still returned by every query and
   was read in 3 of 3 runs in 2a. It matters only if a Worker comes to read just the first three.
 - (b) Add "the carrier in the first three of at least one query per run" to item 4. That is stricter
-  than the lawyer's need, which is that the guidance is reached.
+  than the legal professional's need, which is that the guidance is reached.

@@ -18,7 +18,7 @@ All draws and the scratch scripts that made them are in the gitignored
 
 ## The row's acceptance, and whether it is met
 
-**Acceptance (FIX_PLAN P3.17):** P3.3's 6338 criteria, n=3, in the lawyer's configuration
+**Acceptance (FIX_PLAN P3.17):** P3.3's 6338 criteria, n=3, in the legal professional's configuration
 (Conversational, legislation and case law). Per rep: turns 1 and 2 name R; no turn asserts that N or
 U governs the Act asked about or the inserted section; turn 3 says the Act sets no order.
 
@@ -28,7 +28,7 @@ cost noted under "What the lever costs".
 
 ## Step 1 (free): where the regime is lost at turn 1
 
-Over every stored 6338 rep in the lawyer's configuration (`wave4_p33_pre`, `wave4_p33_post`,
+Over every stored 6338 rep in the legal professional's configuration (`wave4_p33_pre`, `wave4_p33_post`,
 `wave4_b1_post`, 3 reps each), turns 1 and 2, split by stage. Produced by
 `python scripts/seam_locate.py` (tags each brief, tool call, raw result, summary, report and answer
 for R/N/U), the provisions listing in this note's last section, and
@@ -88,7 +88,7 @@ a regime would also have to know which regime applies to which instrument and da
 written into code. The row offered the prompt sentence as its second candidate.
 
 **`server_py/src/prompts.py`:** one new phase in `WORKER_SYSTEM_PROMPT_CONVERSATIONAL` (the
-quick-lookup Worker, which the lawyer's configuration uses at every turn), held in a new constant
+quick-lookup Worker, which the legal professional's configuration uses at every turn), held in a new constant
 `_GENERAL_RULE_APPLICATION_PHASE` (+18 lines), and one changed line:
 
 - **PHASE 2c**, conditional: "only when the brief asks what a word or phrase means in an instrument

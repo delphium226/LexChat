@@ -122,7 +122,7 @@ on 5 tuples, for which no live feed exists. For those 10 the mock serves a feed 
 call's own stored result (batch 7 D's method) to both trees, so their params and notes are checked
 but their order cannot move (Decision 3). **The other 1,257 are exactly C's:** under the base every
 one was served C's default-order feed (1,253, plus 4 from C's retry), under the build every one C's
-relevance feed (1,253 plus 4); 0 unmatched, 0 lawyer date filters in any stored turn.
+relevance feed (1,253 plus 4); 0 unmatched, 0 legal professional date filters in any stored turn.
 
 **What moved, call by call** (every call is listed, with its moves, in the gitignored
 `$B/moved_calls.jsonl`; no query in it):
@@ -138,7 +138,7 @@ relevance feed (1,253 plus 4); 0 unmatched, 0 lawyer date filters in any stored 
 | zero-result note | 495 identical |
 | the nudge's text (all but its url lines) | 772 identical |
 | sources (the accumulator) | 673 identical, 512 same set reordered, 82 follow the different set |
-| search log (the lawyer-facing footer's input) | 1,267 identical |
+| search log (the legal-professional-facing footer's input) | 1,267 identical |
 | every other JSON key (`shown`, `total`, `total_exact`, `total_min`, `total_max`, `dates`, `query`) | identical on every call |
 | **UNEXPECTED moves** (any other params, keys, row count, note text, nudge text, sources, log; a call served a saved feed under one tree and not the other) | **0** |
 
@@ -174,7 +174,7 @@ and 10 bracketed queries.
 
 ## 4. Other code texts that speak of the same thing (batch 8's lesson)
 
-Every text the model or the lawyer reads about case-law order, checked against the change: the nudge
+Every text the model or the legal professional reads about case-law order, checked against the change: the nudge
 ("the 1–3 most relevant cases below", `agent_shared.py`), `prompts.py`'s three "1–3 / 1–2 most
 relevant cases" lines and `get_case_law_text`'s schema description ("the 1–3 most relevant cases
 found in Phase 1") all become true; `CASE_LAW_ABSENCE_SENTENCE` ("A search can miss a judgment the
@@ -246,7 +246,7 @@ probe), not part of this build.
 - **Graders keyed on the note's wording:** none. `grep` over `SP/tools` and `SP/tests` for "newest",
   "most recent", `CASE_LAW_RESULT_ORDER` and `case_law_search_note` finds only the case-law tests I
   updated (and two unrelated `newest` hits). `replay_report` is untouched (E's file).
-- The note sits in a tool result, read by the Worker; the Manager and the lawyer never see it unless
+- The note sits in a tool result, read by the Worker; the Manager and the legal professional never see it unless
   a Worker echoes it, and then `_TOOL_BLOCK` strips it (tested on every variant).
 
 ## 8. For the integrator (documents this build makes stale; I edited none)
@@ -281,7 +281,7 @@ which are allowed).
 - No re-read of C's appellate sample; no read of the published spec.
 - No edit to `FIX_PLAN.md`, `SESSION_LOG.md`, `summary-table.html`, `CLAUDE.md`, `CHANGELOG.md`,
   `VERSION`, `docs/TODO.md`, `LEGAL_DATA_SOURCES.md`, any `PARALLEL_BATCH_*.md`, any rubric, the
-  lawyer pack, a skill or a memory file. Nothing pushed or merged; `main` untouched.
+  legal professional pack, a skill or a memory file. Nothing pushed or merged; `main` untouched.
 
 ## 11. Numbers and commands
 
@@ -299,7 +299,7 @@ which are allowed).
 
 ## 12. Decisions for the user or the integrator
 
-**1. The note's new wording** (section 2; a lawyer reads it only if a Worker's echo survives the strip,
+**1. The note's new wording** (section 2; a legal professional reads it only if a Worker's echo survives the strip,
 but the Worker reads it on every search).
 - **(a) Recommended: as built.** "listed most relevant first, by relevance to the search words rather
   than by date"; "the first N of about T"; "Another judgment that matches can sit outside these N".

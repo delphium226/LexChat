@@ -125,7 +125,7 @@ Conversational at or below 15%: 8.1%), passes. **P4.3's deterministic acceptance
 
 ### 2.5 Code texts beside it, and what I simplified
 
-No prompt, tool result or lawyer-facing text names the rail (batch 11 C's grep, unchanged). R writes no text,
+No prompt, tool result or legal-professional-facing text names the rail (batch 11 C's grep, unchanged). R writes no text,
 so the detector screens do not apply. The scope footer names searched instruments in code's words: R reads
 the answer before the footer goes on, pinned by `test_the_manager_path_does_not_read_the_scope_footer` (a
 mutant passing the footer in is caught). **`diagnose_suggestions`** (a log-only heuristic) reads

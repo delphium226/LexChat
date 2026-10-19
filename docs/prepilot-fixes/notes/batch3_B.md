@@ -73,7 +73,7 @@ This is not P4.15's row acceptance (`negatives` 0 on 6370 n=3), which needs the 
   the sentence is present once, before the doctrine sentence.
 - **New `test_an_echo_of_the_longer_case_law_line_is_stripped`** (2 cases: a fresh legislation
   line with the clause, and the standalone case-law line, each now longer by the sentence): the
-  echo is one line carrying the sentence; through the Manager path the lawyer gets one scope line,
+  echo is one line carrying the sentence; through the Manager path the legal professional gets one scope line,
   this turn's, with the sentence once and the doctrine sentence last; `strip_answer_footer`
   (P4.14's `_ECHOED_FOOTER`), `replay_report._without_footer` and `tools/footer_echo`'s
   `split_answer`/`rebuild` each take the longer line whole.

@@ -346,7 +346,7 @@ $10.83, 2b $1.45 / $1.96, 3 $0.69 / $1.13), more at the allowance for 6363 and 6
 ## 9. What I did NOT do
 
 - No product code; no model call, server, replay or external call.
-- No edit to FIX_PLAN, SESSION_LOG, the tracker, CHANGELOG, CLAUDE.md, any existing rubric, the lawyer
+- No edit to FIX_PLAN, SESSION_LOG, the tracker, CHANGELOG, CLAUDE.md, any existing rubric, the legal professional
   pack, `test_search_scope.py` or memory; the rubrics are in my scratch for the integrator to copy.
 - No change to `commencements`' blind spot for scripted runs, `negcurrency`, or `cmd_corpus`.
 - Not pushed, not merged.

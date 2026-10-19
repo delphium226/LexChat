@@ -240,7 +240,7 @@ which changed. Batch 5 B's reading holds.
 - Nothing of P3.21 (the commencement-date hop on the same slimmer).
 - No replay, no seam draw, no live call; nothing re-read from the API.
 - No edit to FIX_PLAN.md, SESSION_LOG.md, CHANGELOG.md, CLAUDE.md, docs/TODO.md, the tracker, a
-  batch brief, a rubric, the lawyer pack or a memory file. The row's count correction (section 2)
+  batch brief, a rubric, the legal professional pack or a memory file. The row's count correction (section 2)
   and the tick are the integrator's to fold.
 - `lex_probe` (it calls the API) and the `external-apis` skill were not touched; the skill's
   `/amendment/search` traps are unchanged by this row.

@@ -10,7 +10,7 @@ run by the integrator only, and put to the user with a figure first.
 This file is the brief. The integrator reads it whole. Each agent is given its own section, plus
 **Rules for every agent**, **Lessons from batches 1-5** and **Shared setup**, verbatim. Nothing here
 should need re-deriving; if something does, the agent says so in its note rather than guessing.
-Matter-specific detail (lawyers' wording, rubric patterns, hand-reads, Thomas's report) is NOT in
+Matter-specific detail (legal professionals' wording, rubric patterns, hand-reads, Thomas's report) is NOT in
 this file; it is in the gitignored files named below.
 
 **What the user has already decided (do not re-open):**
@@ -18,15 +18,15 @@ this file; it is in the gitignored files named below.
    can't be** (2026-10-05). Within a severity: first a row a higher-severity row needs, then $0
    deterministic work before a paid replay, and rows waiting on an outside party last. The order is
    FIX_PLAN's top recommended-order line ("as at 2026-10-05, after Thomas's 30 September retest").
-2. **P3.2, P3.3 and P3.17 are BLOCKED on the lawyer pack** (parked; a BLOCKED note heads each row,
+2. **P3.2, P3.3 and P3.17 are BLOCKED on the legal professional pack** (parked; a BLOCKED note heads each row,
    Blocked on the tracker). Nothing in this batch touches them. Sending the pack is the user's
    action (`evidence/lawyer_pack/confirmation_pack.md`, sha1 `d26bb016…`, not sent).
 3. **Thomas's 30 September retest is booked** as P3.24-P3.26 and P4.20-P4.22 (FIX_PLAN section
    "External review — Thomas, 30 September 2026"). Their rows are the spec.
 4. **P4.8's strip is to be built** (batch 5 C5), but it is P3, so it waits behind the P1 and P2 rows.
 5. **Agents propose; the integrator applies; the user approves anything not mechanical**, including
-   any wording a lawyer will read. No agent edits FIX_PLAN.md, SESSION_LOG.md, CHANGELOG.md,
-   CLAUDE.md, `summary-table.html`, `docs/TODO.md`, a rubric, the lawyer pack or a memory file.
+   any wording a legal professional will read. No agent edits FIX_PLAN.md, SESSION_LOG.md, CHANGELOG.md,
+   CLAUDE.md, `summary-table.html`, `docs/TODO.md`, a rubric, the legal professional pack or a memory file.
 6. **Never merge or push to `main`**; the next cut (`v2026.10.1`) goes only when the user asks.
    Branch pushes are allowed; if the permission classifier refuses one, ask the user.
 7. **The Fix Tracker is updated only when the user asks.**
@@ -94,12 +94,12 @@ counts (`by_other_legislation`, `provisions_commenced`), as batch 5 B checked.
 
 1. **Read first:** `docs/prepilot-fixes/FIX_PLAN.md` ("How to use this file", Invariants 1-6, "Data
    handling", "Re-planning protocol", the top recommended-order line, the paragraph above the Ledger
-   on what waits on the lawyer pack, and your rows in full); in `docs/prepilot-fixes/SESSION_LOG.md`,
+   on what waits on the legal professional pack, and your rows in full); in `docs/prepilot-fixes/SESSION_LOG.md`,
    everything from "Session 37 — 2026-10-02 — parallel batch 5" to the end of the file. Do not
    re-derive what they establish.
 2. **Stay in your worktree and on your files.** Do not edit `FIX_PLAN.md`, `SESSION_LOG.md`,
    `summary-table.html`, `CLAUDE.md`, `CHANGELOG.md`, `VERSION`, `docs/TODO.md`, any
-   `PARALLEL_BATCH_*.md`, any rubric, the lawyer pack or any memory file: the integrator folds your
+   `PARALLEL_BATCH_*.md`, any rubric, the legal professional pack or any memory file: the integrator folds your
    results in. Commit on your worktree's branch; **do not push, do not merge, never touch `main`.**
 3. **Write your note** as `docs/prepilot-fixes/notes/batch6_<A|B|C|D>.md` and commit it. Put in it:
    - what you changed or found, and why;
@@ -117,7 +117,7 @@ counts (`by_other_legislation`, `provisions_commenced`), as batch 5 B checked.
    change reverted on a scratch copy, **and the note says how many lines the revert removed** (a
    revert that removed nothing proves nothing). Run the full suite on your own test database before
    your last commit, and report the count.
-6. **Data handling:** never commit lawyers' question or answer text, search terms, case names, or
+6. **Data handling:** never commit legal professionals' question or answer text, search terms, case names, or
    instrument ids and titles from a session. Tests and fixtures use synthetic text ("Widget Order
    1901", `ssi/1901/3`). Grep your staged diff for session ids, instrument ids and matter words before
    every commit. Rubric patterns, draws, hand-reads and anything quoting a matter stay in the
@@ -291,12 +291,12 @@ description, which also says a not-held result is "not evidence that the citatio
 **The defect:** a lookup that finds an instrument not held cannot tell a missing instrument from a
 mistyped number, so "that is a gap in the index, not a sign that the citation is wrong" is a default,
 not a finding. 69 stored answers carry it. The fix must not go back to the defect P2.4 fixed (the
-model telling the lawyer to check a correct citation).
+model telling the legal professional to check a correct citation).
 
-**Do:** (1) list every product site that tells the lawyer or the model that a not-held result says
+**Do:** (1) list every product site that tells the legal professional or the model that a not-held result says
 anything about the citation (grep `src` for "citation"); (2) draft two or three replacement wordings
 for the footer clause that state only what the lookup established (looked up by its number; not held
-in this index) and that this does not show whether the number is right, without inviting the lawyer
+in this index) and that this does not show whether the number is right, without inviting the legal professional
 to doubt a correct citation; (3) screen each against every detector (`test_footer_trips_no_detector`,
 and the exit-1 `replay_report` set over a dry run of every stored footer rebuilt with the new
 wording); (4) build your recommended wording, with tests failing with the change reverted; (5) for the
@@ -307,7 +307,7 @@ not-held result is not evidence the citation is wrong, which is true) and leave 
 reverted; every stored footer rebuilt and re-screened against every detector; P3.7's and P2.4's
 citation-blame readouts unchanged (`replay_report lookup` before and after over the directories that
 hold 6373 and 6409). **Put the exact sentence, and the alternatives you screened, at the top of your
-note: the integrator puts it to the user before merging, because a lawyer reads it.**
+note: the integrator puts it to the user before merging, because a legal professional reads it.**
 
 ## Agent D: P3.12 and P3.25 measured, with options ($0, a note only)
 
@@ -386,7 +386,7 @@ acceptance would be tested.
    - **Put B's and D's decisions to the user**, grouped (AskUserQuestion, at most four questions per
      call, recommendation first): P3.24's lever, acceptance and replay figure; P3.12's option and
      replay figure; P3.25's option; anything A or C raised. Record each answer on its row.
-   - CHANGELOG *Unreleased*: P3.19 and P4.21 as product changes (plain words: what a lawyer or the
+   - CHANGELOG *Unreleased*: P3.19 and P4.21 as product changes (plain words: what a legal professional or the
      model now sees); B's detector as tooling. Add an even number of `**`.
 6. **No replay in this batch.** If the user wants an after-column (for example P3.19's effect on a
    change-record session, or P3.24's acceptance), price it first and put it to them.
@@ -397,7 +397,7 @@ acceptance would be tested.
    (FIX_PLAN "How to use this file" step 7: read the live artifact and every line of the saved file
    first; a newly ticked row gets `fixed` and `ver: "Next release"`).
 
-**Open with the user, carried (do not act on them yourself):** sending the lawyer pack (unblocks
+**Open with the user, carried (do not act on them yourself):** sending the legal professional pack (unblocks
 P3.2, P3.3, P3.17; confirm the cover note's promise first); sending SCTS the note (P3.20's
 prerequisite); applying for the National Archives licence (`docs/TODO.md` D23); deploying
 `v2026.09.3` to the target (`pg_dump` first, then pull, restart and `test_apis.ps1`); telling the

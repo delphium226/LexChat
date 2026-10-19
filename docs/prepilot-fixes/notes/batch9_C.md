@@ -236,11 +236,11 @@ where, only when they apply: {refused} = " For relations made by {ids} no date i
 
 **`_currency_limb`, dated:** "... is supported, again without a date." becomes "... is supported, without a date."
 
-**Lawyer-facing footer, `_relations_footer_clause`, dated** (replaces "; those records carry no dates, so any date given above was read from the instrument itself and not from the relation."):
+**Legal-professional-facing footer, `_relations_footer_clause`, dated** (replaces "; those records carry no dates, so any date given above was read from the instrument itself and not from the relation."):
 
 > ; those records carry no dates of their own, so a commencement date given above for a provision commenced by another instrument is the date legislation.gov.uk's Changes to Legislation record gives for that commencement, read through the LEX API, with its qualification. It says when the provision was brought into force, not whether it has been amended or repealed since; any other date was read from the instrument itself.
 
-**Lawyer-facing footer, `_currency_footer_clause`, dated** (the sourced branch; P4.18's branch and the no-record branch unchanged):
+**Legal-professional-facing footer, `_currency_footer_clause`, dated** (the sourced branch; P4.18's branch and the no-record branch unchanged):
 
 > Whether legislation is in force is not something this index reports; what was checked is the recorded changes for {sourced}, which name the instruments involved provision by provision, and, for the commencements of {dated} made by another instrument, the date legislation.gov.uk's Changes to Legislation record gives for each. Neither is a check of whether a provision has since been amended or repealed.
 

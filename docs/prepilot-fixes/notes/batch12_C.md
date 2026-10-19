@@ -43,7 +43,7 @@ To the design on P3.20's row and batch 11 D's section 5, behind a new setting **
     (`asyncio.to_thread`); 15 MB and 300-page caps, a `%PDF` check, an empty text is an error. No pypdf.
 - **`search_case_law`** (executor): with the setting on and a case-law research type, Find Case Law and SCTS run
   together and the result gains **`scottish_results`** and a **`scottish`** block (`status`: ok, error, capped,
-  not_searched; `shown`, `total`, `match`: all/any, `query_sent`, `dates`). The lawyer's and the model's dates
+  not_searched; `shown`, `total`, `match`: all/any, `query_sent`, `dates`). The legal professional's and the model's dates
   (`case_law_date_window`, intersected) go to SCTS as `AdditionalDate`; the `court` code is Find Case Law's and
   is not sent. **Either half failing leaves the other**: a Find Case Law failure becomes an `error` beside the
   Scottish list instead of the whole call's error string.
@@ -133,7 +133,7 @@ queries, among them a bracketed citation, a quoted phrase with OR, and an empty 
   (`$C/p28_check_c.py` → `p28_check_c.out`: identical for today's, SCTS-ok and SCTS-errored clauses, with and
   without a Scotland filter).
 
-**The three footer variants a lawyer can now read** (synthetic term; for Decision 1):
+**The three footer variants a legal professional can now read** (synthetic term; for Decision 1):
 
 > *Search scope: for this reply the case-law databases (the National Archives' Find Case Law, and the Scottish
 > Courts and Tribunals Service's published judgments) were searched for "widget duty". Between them they hold
@@ -295,7 +295,7 @@ bundle (pdfplumber with pdfminer.six, Pillow and pypdfium2; TODO T3).
 
 ## Decisions for the user
 
-1. **The lawyer-facing footer wording (section 3).** (a) *Recommended:* approve as built; every variant was screened
+1. **The legal-professional-facing footer wording (section 3).** (a) *Recommended:* approve as built; every variant was screened
    (0 new trips on any footer) and still says what SCTS does not hold. (b) Add to the both-ran variant one sentence
    from today's ("Find Case Law's results for a Scottish question may come from courts outside Scotland"): today's
    line had it and the doctrine sentence only implies it, at the cost of a longer line. (c) Reword "from 1998, of

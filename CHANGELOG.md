@@ -21,7 +21,7 @@ where each row carries its evidence and acceptance.
 On `fix/prepilot-defects` since 2026.10.4, waiting for the next cut.
 
 Errors (on `main`, outside the fix plan; `docs/TODO.md` B6):
-- When the AI provider refuses a Deep Research plan request, the lawyer is told
+- When the AI provider refuses a Deep Research plan request, the legal professional is told
   why instead of "The planner failed. Please try again.": a rate limit or an
   outage says to try again later, and an account or credit problem says that
   retrying will not help and to tell the administrator. The provider's own
@@ -136,7 +136,7 @@ Change records:
 - When listing the changes made to or by an instrument, keep each change with
   the provision that made it, and say how many changes a long list leaves out.
   The changed provisions and the provisions that changed them used to be two
-  separate lists, which lost which made which (one lawyer was given the wrong
+  separate lists, which lost which made which (one legal professional was given the wrong
   provision for an insertion), and the second list was cut at six with no
   count (P3.19).
 - Say a provision is "not recorded as commenced" only where the change record

@@ -217,7 +217,7 @@ under a jurisdiction filter (48 turns, all `scotland`) was read (4 more contents
 **199 section citations, 0 outside Scotland's territory.** Without the filter condition (`p342_turns.py`), 14
 turns cite a section whose extent differs from its Act's; in 6 (one session and its scripted variant) the
 section is England and Wales only and my heuristic called the jurisdiction Scotland from the answer's own words.
-By hand: that session ran with no filter, asks what a UK Act's term means, and the lawyer marked jurisdiction
+By hand: that session ran with no filter, asks what a UK Act's term means, and the legal professional marked jurisdiction
 "yes"; **none turned on the extent**, though 0 of 31 runs say those sections are England and Wales only
 (`p342_read_answers.py`).
 

@@ -4,7 +4,7 @@
 
 **Goal.** Make the three released bots — **AILA** (legislation and case law), **ParliChat** (Holyrood)
 and **HansardChat** (Westminster) — callable as MCP servers by outside AI clients (Claude, Copilot and
-others), so a lawyer can use them from inside those tools.
+others), so a legal professional can use them from inside those tools.
 
 **Out of scope for now (user decision, 2026-10-19): network reachability.** Whether a given client's
 requests can reach the target (client-side vs vendor-cloud origin, firewall rules, published vendor IP
@@ -185,7 +185,7 @@ makes authorization optional, so a PAT in a header is permitted, just non-standa
 2. **Chat mode** for Tier 1: Research or Conversational.
 3. **History:** save each MCP call as a chat in the user's AILA history (marked "via MCP"), or keep only
    the timing row. Saving it makes it visible in the Activity Log (QUERY rows are derived from messages)
-   and lets the lawyer rate it.
+   and lets the legal professional rate it.
 4. **Licences.** Each one needs an attribution line in every result (§2). Two of them are larger than
    MCP:
    - **Find Case Law, Open Justice Licence v2.0.** The licence excludes "computational analysis of the
@@ -206,7 +206,7 @@ makes authorization optional, so a PAT in a header is permitted, just non-standa
      the Scottish Parliament Copyright Licence". Legislation itself is Crown copyright under the OGL.
 5. **Who may use it:** every user, or users an admin enables.
 6. **Data handling:** the question and our answer pass through the outside client's vendor. Whether
-   lawyers may do that is the organisation's policy, but exposing the bots makes it easier; the bots'
+   legal professionals may do that is the organisation's policy, but exposing the bots makes it easier; the bots'
    OFFICIAL-SENSITIVE guidance (`LOG_LEVEL`, logging plan Item 4) should say so.
 
 ## 8. Build order

@@ -57,7 +57,7 @@ anyway (its name survives in one shared tool description, decision 3) is answere
   True`, for a secondary instrument whose description carries a recital). A lookup is not a read of
   the instrument, so a lookup with no recital records nothing; the section search, which is the
   read, already records the instrument as looked at. Kept, a not-stated row would have added P2.3's
-  lawyer clause to turns that only looked an SI up.
+  legal professional clause to turns that only looked an SI up.
 - `lookup_enabling_note` builds the permitting `[ENABLING POWER …]` block from a lookup, naming its
   source as "the index record lookup_legislation returned for <id>" (because it can arrive appended
   to a section search, where "this record" would read as the ranked sections). The block for a whole
@@ -163,7 +163,7 @@ calls, which returned no record); no network call.
 
 Same two commands; the before side is `--code $S/head/server_py --out $S/dry_head.jsonl`. Per
 delegation, the product's recorders are run over each stored raw result in recorded order and the
-built `worker_scope_block` is compared; per turn, the lawyer footer (fresh, else section-only, else
+built `worker_scope_block` is compared; per turn, the legal professional footer (fresh, else section-only, else
 lookup-only, else case-law; P2.8's carried line needs the history and is not rebuilt). Every stored
 lookup is rebuilt through each side's own executor. **Fidelity check:** the head's executor rebuilds
 all **333 of 333** stored lookup results byte for byte, and the built one differs from them only by
@@ -171,18 +171,18 @@ all **333 of 333** stored lookup results byte for byte, and the built one differ
 
 | Population | Delegations / turns | What moves |
 |---|---|---|
-| Research (every non-conversational) | 1,040 / 630 | Worker-visible: **0**. Manager-facing block: the currency limb gains a `valid_date` in **3** delegations (a lookup the Worker or P3.7 ran). Lawyer footer: **0 of 630**. |
-| Quick-lookup, no whole-text call | 1,169 / 1,178 (1,171 answered) | 382 code lookups in 285 delegations (131 of them with no stored record, in 93 delegations). Worker-visible recital blocks: **0** measured. Block: the currency limb gains a `valid_date` in **325**; "Looked up by number": **0** (HELD pruned). Lawyer footer: **254 turns (252 answered) gain P2.5's existing currency clause**, nothing else moves. |
+| Research (every non-conversational) | 1,040 / 630 | Worker-visible: **0**. Manager-facing block: the currency limb gains a `valid_date` in **3** delegations (a lookup the Worker or P3.7 ran). Legal professional footer: **0 of 630**. |
+| Quick-lookup, no whole-text call | 1,169 / 1,178 (1,171 answered) | 382 code lookups in 285 delegations (131 of them with no stored record, in 93 delegations). Worker-visible recital blocks: **0** measured. Block: the currency limb gains a `valid_date` in **325**; "Looked up by number": **0** (HELD pruned). Legal professional footer: **254 turns (252 answered) gain P2.5's existing currency clause**, nothing else moves. |
 | Quick-lookup turns that called the tool | 196 / 143 | Counterfactual only (each call replaced by a lookup of its id, since what the Worker would do instead cannot be known at $0): 3 recital blocks shown; footers: 60 lose P2.3's "not verified" enabling clause (19 of them while gaining P3.7's stub clause) and 5 more gain the stub clause alone, 65 in all. The 60 are an artefact of the counterfactual: a Worker that searches within the SI instead records it as looked at, and the clause stays. |
 
-- **The lawyer-facing move is one existing clause on more answers.** The added text is, verbatim,
+- **The legal-professional-facing move is one existing clause on more answers.** The added text is, verbatim,
   P2.5/P4.18's " Whether legislation is in force is not something this index reports, so nothing
   above has been checked against a commencement date and no change record was consulted for this
   answer." It appears because the clause's gate is "any currency row in the turn", and a
   `valid_date` from a code lookup is one. **Checked by byte comparison: in all 254 the built footer
   is the head footer with exactly that clause inserted**, and in no other way different (the 65
   other moved footers are all in the counterfactual row); the `--list` output is in
-  `$S/compare_list.txt`. No new wording reaches a lawyer. **Upper bound:** a further **75** quick-lookup turns made a code
+  `$S/compare_list.txt`. No new wording reaches a legal professional. **Upper bound:** a further **75** quick-lookup turns made a code
   lookup with no stored record and have no currency clause today, so 254 to 329 of 1,178 (decision
   1).
 - **What could not be measured:** 49 distinct SIs were section-searched in stored quick-lookup turns
@@ -283,7 +283,7 @@ code lookup on an SI the Worker's search rows return as well (decision 2, option
   no stored record are unmeasured, and so is the first-round effect of naming `lookup_legislation`.
 - I did not edit `_IN_FORCE_RULE`, `_currency_limb` or the `get_legislation_changes` branch of
   `record_currency` (agent A's), nor `executor.py`'s `search_case_law` branch (agent D's), nor
-  FIX_PLAN, SESSION_LOG, the tracker, any rubric, the lawyer pack, CHANGELOG or memory.
+  FIX_PLAN, SESSION_LOG, the tracker, any rubric, the legal professional pack, CHANGELOG or memory.
 - I did not change the shared `search_legislation_sections` description, which says "Use this
   INSTEAD of get_legislation_text", nor P2.7's discovery-budget stop message, which names the tool;
   both reach the quick-lookup Worker (decision 3).
@@ -301,7 +301,7 @@ record carries `valid_date`" (held: 11 of 11 revised records, 244 of 333 stored 
 
 ## 6. Decisions for the user
 
-1. **The lawyer's footer gains P2.5's existing currency clause on more Conversational answers.**
+1. **The legal professional's footer gains P2.5's existing currency clause on more Conversational answers.**
    Routing `valid_date` through the lookup makes the clause's gate ("any currency evidence in the
    turn") fire on 254 to 329 of 1,178 stored quick-lookup turns that never called the whole text.
    The wording is unchanged and true there; the turns that did call it keep it.
@@ -311,7 +311,7 @@ record carries `valid_date`" (held: 11 of 11 revised records, 244 of 333 stored 
       turns, but the 61 stored turns that had the clause through the whole text's `valid_date` lose
       it (measured: `optB_` lines of `p325_compare.py`).
    3. **Do not record `valid_date` from the code lookup at all** (only from a lookup the Worker
-      asks for). Nothing moves for a lawyer, and the Manager loses the date on 325 delegations.
+      asks for). Nothing moves for a legal professional, and the Manager loses the date on 325 delegations.
 2. **P3.25's acceptance.**
    1. **(Recommended) As in section 4, in one sweep with P3.12's**: about $3.80 for P3.25's part (up
       to about $6.50), the 6406 cut shared.

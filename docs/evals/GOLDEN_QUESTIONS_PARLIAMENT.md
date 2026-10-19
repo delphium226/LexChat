@@ -1,6 +1,6 @@
 # Golden Question Set — Parliament Bot (DRAFT)
 
-**Status: DRAFT — answers are Claude's best attempt and MUST be verified/replaced by a qualified lawyer before use.**
+**Status: DRAFT — answers are Claude's best attempt and MUST be verified/replaced by a qualified legal professional before use.**
 
 ## How to use this document
 
@@ -107,7 +107,7 @@ For search-style questions (e.g. written answers), a single "correct answer" doe
 
 ## P17 — committee — Confidence: Medium
 **Q:** What evidence did the Criminal Justice Committee hear about the proposed juryless rape trials pilot in the Victims, Witnesses, and Justice Reform (Scotland) Bill?
-**Draft answer:** During Stage 1 (2023–24) the Committee heard sharply divided evidence: support citing research on rape myths affecting juries, and strong opposition from defence lawyers (including bar associations threatening boycott) on fair-trial grounds. The pilot was later dropped from the Bill. **Acceptance criteria:** cites actual Criminal Justice Committee sessions and witnesses; correct characterisation of both positions.
+**Draft answer:** During Stage 1 (2023–24) the Committee heard sharply divided evidence: support citing research on rape myths affecting juries, and strong opposition from defence legal professionals (including bar associations threatening boycott) on fair-trial grounds. The pilot was later dropped from the Bill. **Acceptance criteria:** cites actual Criminal Justice Committee sessions and witnesses; correct characterisation of both positions.
 **Required citation(s):** Criminal Justice Committee Official Report, Stage 1 evidence on the Bill, 2023–24.
 
 ## P18 — committee — Confidence: Medium

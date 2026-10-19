@@ -10,7 +10,7 @@ spend, 0 live calls.** No server, no replay, no seam draw.
   (`an [ENABLING POWER] block`) becomes its own words without brackets or backticks
   (`an enabling power block`); a bare tag used as a label is still deleted (now with its backticks
   and one following space); every code-written block and closer is stripped exactly as before. The
-  words the lawyer would now read are the model's own, unbracketed: decision 1.
+  words the legal professional would now read are the model's own, unbracketed: decision 1.
 - **P3.22 item 3 measured a defect the item does not name:** the summariser writes case citations
   its source does not hold, and some reach answers (section 2.4). Proposed as a new row (decision 4).
 
@@ -150,7 +150,7 @@ answer in the run did that; FAIL otherwise, or LINKED (its name on another judgm
 **By column:** `wave4_b9_sweep1` (before, default order): 1 FAIL by hand (grader 0). `wave4_b9_sweep2a`
 (after, relevance): 3 FAIL by hand (grader 2). The stored `wave1` has 2 and `wave2` 3. **Item 3 is
 not an ordering effect:** the carrier is retrieved in 9 of 9 runs of 6359. In 6359 the out-of-corpus
-authority comes in through the lawyer's own question ("are you familiar with …"). In 6363 it comes
+authority comes in through the legal professional's own question ("are you familiar with …"). In 6363 it comes
 through retrieved judgments that cite it, and through summaries (2.4). None of the 18 answers in 6359
 says the database does not hold the judgment. One says what it does hold. Eight open "Yes, both
 cases …" or "I am familiar with both cases".
@@ -159,7 +159,7 @@ cases …" or "I am familiar with both cases".
 
 `cd server_py; python ../E/p322_lawreports.py . <RP> ../E/p322_lawreports.txt`: of 2,226 answers, 51
 answer-turns name an authority by a law report only (no neutral citation, no Find Case Law link), in
-8 sessions. By hand, outside 6359 and 6363: 6343's is an in-corpus judgment the lawyer named by its
+8 sessions. By hand, outside 6359 and 6363: 6343's is an in-corpus judgment the legal professional named by its
 report (not an instance); 6375's are tied to a retrieved tribunal decision in 6 of 7; **6411 names a
 Court of Session case (which the National Archives' collection does not hold), 6341 three authorities
 and 6348 one, none of which appears in any tool's raw result in its run** (`python E/p322_provenance.py <RP>`).
@@ -186,7 +186,7 @@ the case:
 
 The sessions are 6341, 6343, 6346, 6348, 6359, 6363, 6370, 6375 and 6411, on the summariser
 `google/gemini-3-flash-preview` and at the 8,000-character fallback. **Reached answers in 6341, 6348,
-6411 and 6363.** A lawyer cannot tell, which is P1 on the tracker's scale. It is a summariser defect,
+6411 and 6363.** A legal professional cannot tell, which is P1 on the tracker's scale. It is a summariser defect,
 so the case law the Worker reports can come from no tool at all. Decision 4.
 
 ### 2.5 Sizing a code lever
@@ -234,7 +234,7 @@ extent, mostly in the older runs.
 ### 3.3 The UI's description of the jurisdiction filter (read, not changed)
 
 `client/src/constants/research.js` `JURISDICTION_OPTIONS` gives labels only. `ResearchFiltersModal.jsx`
-shows one note, the case-law coverage note (true). **Nothing tells the lawyer** (a) that the filter
+shows one note, the case-law coverage note (true). **Nothing tells the legal professional** (a) that the filter
 keeps law that *applies in* the nation, UK-wide law included (`lex._JURISDICTION_ACCEPTS`); (b) that
 it keeps the rows with no stated extent (57.8% of stored API rows), except "UK-wide only", which
 removes them; (c) that it narrows legislation searches only. Separately, `DataSourcesModal.jsx` says
@@ -259,7 +259,7 @@ the scope footer ("an index that is known to be incomplete …").
    - (a) **The model's own words, unbracketed and in lower case** ("an enabling power block"; as
      built). We add no words, and the model already writes it this way in 10 stored answers.
    - (b) A phrase per tag ("enabling power statement", "change record", …), absorbing a following
-     "block"/"note". Reads better to a lawyer, but we would be writing words into its sentence.
+     "block"/"note". Reads better to a legal professional, but we would be writing words into its sentence.
    - (c) Delete as before, but take the backticks and the double space with the tag. No jargon,
      but "contain an block" is still a hole.
 2. **The prompt that teaches the bracketed name.**

@@ -2,7 +2,7 @@
 
 ## The sentence, for the user before merge
 
-A lawyer reads this. It is the clause P3.7's code appends to the answer's `*Search scope: …*`
+A legal professional reads this. It is the clause P3.7's code appends to the answer's `*Search scope: …*`
 footer whenever a lookup finds that an instrument named by number is not held. Shown with a
 synthetic id.
 
@@ -38,10 +38,10 @@ Choosing "accurate" means the claim of "no new match" holds without relying on t
 **Why R1:** it states only what the lookup established (looked up by its number; not held in this
 index). It gives the one true general fact, that the index is incomplete (`LEX_COVERAGE_SENTENCE`),
 without saying that this is why this instrument is missing. It also says the result settles nothing
-about the number. So it neither vouches for the citation (Thomas's point) nor asks the lawyer to
-check it (P2.4's defect). R2 is shorter, but without "which is incomplete" a lawyer is left with
+about the number. So it neither vouches for the citation (Thomas's point) nor asks the legal professional to
+check it (P2.4's defect). R2 is shorter, but without "which is incomplete" a legal professional is left with
 only the doubt. R3 adds "recent instruments least of all", a house phrase that is true in
-aggregate. It is also a second claim the lawyer cannot check from the answer.
+aggregate. It is also a second claim the legal professional cannot check from the answer.
 
 **Base:** the worktree came up on `main` at `a6b4a76`, not on the integrator's head. It had no
 commits, so I ran `git reset --hard 995ef34` before any work. Everything here is based on `995ef34`.
@@ -164,7 +164,7 @@ case NCNs, not about a not-held result.
 
 | Site | Reader | What it says | Accurate? |
 |---|---|---|---|
-| `search_scope.py` `_lookup_footer_clause` | **lawyer** (footer) | was: "a gap in the index, not a sign that the citation is wrong" | **No.** It is a default, not a finding. **Changed.** |
+| `search_scope.py` `_lookup_footer_clause` | **legal professional** (footer) | was: "a gap in the index, not a sign that the citation is wrong" | **No.** It is a default, not a finding. **Changed.** |
 | `agent/tools/schemas.py:117-118` (`lookup_legislation` description) | model | "'not_held' (… say it is not held in this index; that is a gap in the index, not evidence that the citation is wrong)" | "not evidence that the citation is wrong" is **true**: no lookup result is evidence of that. "that is a gap in the index" asserts the cause, which is the same default in a milder form. **Left (step 5),** see decision 2. |
 | `utils/instrument_lookup.py:260-261` (routed lookup block, appended to the Worker's brief) | model | "That is a gap in the index: it does not mean the instrument does not exist, and **it is not an error in the citation**." | The last clause is the **same default** as the footer, model-facing. **Left,** see decision 2. |
 | `search_scope.py:2273-2276` `_not_held_limb` (worker block) | model (Manager, synthesis) | "That is the index's gap, not an error in the user's citation: do not ask the user to check …" | Same default, model-facing. **Left,** see decision 2. |
@@ -172,7 +172,7 @@ case NCNs, not about a not-held result.
 | `search_scope.py:2345-2351` `_lookup_limb`; `:1848-1852` worker-block rule; `:152-159` `_REPORTING_RULE` | model | "Never suggest an error in the user's citation"; "attribute the miss to the search or the index, never to the user's citation" | Instructions, not claims. Left. |
 | `prompts.py:85`, `:440` (NOT HELD IS NOT A WRONG CITATION), `:236`, `:519` | model | "never ask the user to check… a correct citation is often not held" | The rule's **title** asserts; its body is an instruction plus a true base rate. Left. |
 
-**Has the model-facing default reached the lawyer?** I checked with `… p421_prose.py`. It runs a
+**Has the model-facing default reached the legal professional?** I checked with `… p421_prose.py`. It runs a
 6-alternative pattern over the footer-stripped prose of every stored answer in all 57 directories:
 "not an error in the citation", "not a sign that", "citation is correct/accurate/…", "does not mean
 the citation", "no evidence that the citation", "gap in the index, not".
@@ -190,7 +190,7 @@ the citation", "no evidence that the citation", "gap in the index, not".
 - I did not change the held-without-text clause, P2.4's `not_held_note` or any grader.
 - No replay, no seam draw, and no live call.
 - I did not edit FIX_PLAN, SESSION_LOG, CHANGELOG, CLAUDE.md, TODO, the tracker, the batch brief, any
-  rubric, the lawyer pack or memory. P4.21's row is left `[ ]` for the integrator, after the user
+  rubric, the legal professional pack or memory. P4.21's row is left `[ ]` for the integrator, after the user
   decides on the sentence.
 - I did not measure Thomas's glm-5.2 answers.
 
@@ -213,12 +213,12 @@ the citation", "no evidence that the citation", "gap in the index, not".
 
 ## Decisions for the user
 
-1. **The sentence a lawyer reads when a lookup finds an instrument not held.**
+1. **The sentence a legal professional reads when a lookup finds an instrument not held.**
    - **(a) R1, as built (recommended):** "…is not held in this index, which is incomplete; that does
      not show whether the number is accurate." It is neutral both ways and gives the true general
      reason.
    - (b) R2: "…is not held in this index; a lookup cannot show whether the number is accurate."
-     This is the shortest, but with no context for the lawyer's doubt.
+     This is the shortest, but with no context for the legal professional's doubt.
    - (c) R3: R1 plus "recent instruments least of all". It is more informative and adds a second
      claim.
    - (d) Keep the old wording. That leaves Thomas's point (P4.21) open.
@@ -231,4 +231,4 @@ the citation", "no evidence that the citation", "gap in the index, not".
    - (b) Reword them now to R1's standard ("does not show an error in the citation") and price a
      Worker seam A/B on the two sessions before merge.
    - (c) Book them as a new measure-first row (a P4.21 residual), leaving this merge
-     lawyer-facing only.
+     legal-professional-facing only.

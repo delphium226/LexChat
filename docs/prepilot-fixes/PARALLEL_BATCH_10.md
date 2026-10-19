@@ -11,7 +11,7 @@ the user first from agent E's table and run only on the user's go-ahead.** Nothi
 This file is the brief. The integrator reads it whole. Each agent is given its own section, plus **Rules for
 every agent**, **Lessons from batches 1-9** and **Shared setup**, verbatim. Nothing here should need
 re-deriving; if something does, the agent says so in its note rather than guessing. Matter-specific detail
-(lawyers' wording, case names, rubric patterns, hand-reads, ground-truth text, live payloads) is NOT in this
+(legal professionals' wording, case names, rubric patterns, hand-reads, ground-truth text, live payloads) is NOT in this
 file; it is in the gitignored files named below.
 
 **What the user has already decided (do not re-open):**
@@ -36,10 +36,10 @@ file; it is in the gitignored files named below.
 6. **P3.4's research-mode follow-up** (the research Manager and the Deep Research planner, with their own
    Research-mode before-column) is booked, not in this batch.
 7. **P3.30 (P3)** is booked (a code-built ENABLING POWER block from a search row's recital); not in this batch.
-8. **P3.2, P3.3 and P3.17 are BLOCKED on the lawyer pack** (five questions, ready, not sent).
+8. **P3.2, P3.3 and P3.17 are BLOCKED on the legal professional pack** (five questions, ready, not sent).
 9. **Agents propose; the integrator applies; the user approves anything not mechanical**, including any
-   wording a lawyer or the Worker will read. No agent edits FIX_PLAN.md, SESSION_LOG.md, CHANGELOG.md,
-   CLAUDE.md, `summary-table.html`, `docs/TODO.md`, `docs/LEGAL_DATA_SOURCES.md`, a rubric, the lawyer pack or
+   wording a legal professional or the Worker will read. No agent edits FIX_PLAN.md, SESSION_LOG.md, CHANGELOG.md,
+   CLAUDE.md, `summary-table.html`, `docs/TODO.md`, `docs/LEGAL_DATA_SOURCES.md`, a rubric, the legal professional pack or
    a memory file.
 10. **Never merge or push to `main`**; the next cut (`v2026.10.1`) goes only when the user asks. **Branch pushes
     were approved by the user after every clean merge in Session 41; ask again at Session 42's start** (the
@@ -133,7 +133,7 @@ file; it is in the gitignored files named below.
 | **D** | **P3.10** (P2) and **P4.12** (P2) | Re-book P3.10's acceptance on what a dependent step costs and whether its list matches; recount P4.12's episodes (incl. Session 41's Manager runaway) and its candidate levers | measurement, no product code | $0, no external call | its scratch only (plus its note) |
 | **E** | tooling, and the sweep priced | `authorities`' surname match; `negcurrency`'s section-search shape (identity run); `cmd_corpus`'s stale label; `commencements` grading scripted runs (optional); the P3.12 re-run priced | tooling only, no product code | $0, no external call | `server_py/tools/replay_report.py`, tests |
 
-**Why these five.** By severity: P3.12 is the only open P1 work not blocked on the lawyer pack. The P2 rows in
+**Why these five.** By severity: P3.12 is the only open P1 work not blocked on the legal professional pack. The P2 rows in
 the order line are P3.22 (its per-query check), P4.3 and P3.10 (each to be re-booked before any build), P4.12
 (measure-first) and P3.20 (last, waiting on SCTS's reply), with P3.4's research-mode follow-up booked. B, C and
 D are measure-only so their results can be decided by the user at the end of the session and built next. E's
@@ -161,12 +161,12 @@ scratch only; merge in any order once read). **Never commit while a replay runs.
 
 1. **Read first:** `docs/prepilot-fixes/FIX_PLAN.md` ("How to use this file", Invariants 1-6, "Data
    handling", "Re-planning protocol", the top recommended-order line, the paragraph above the Ledger
-   on what waits on the lawyer pack, and your rows in full); in `docs/prepilot-fixes/SESSION_LOG.md`,
+   on what waits on the legal professional pack, and your rows in full); in `docs/prepilot-fixes/SESSION_LOG.md`,
    everything from "Session 41 — 2026-10-06 to 2026-10-08 — parallel batch 9" to the end of the file; and the
    batch 8 notes your brief names. Do not re-derive what they establish.
 2. **Stay in your worktree and on your files.** Do not edit `FIX_PLAN.md`, `SESSION_LOG.md`,
    `summary-table.html`, `CLAUDE.md`, `CHANGELOG.md`, `VERSION`, `docs/TODO.md`,
-   `docs/LEGAL_DATA_SOURCES.md`, any `PARALLEL_BATCH_*.md`, any rubric, the lawyer pack or any memory
+   `docs/LEGAL_DATA_SOURCES.md`, any `PARALLEL_BATCH_*.md`, any rubric, the legal professional pack or any memory
    file: the integrator folds your results in. Commit on your worktree's branch; **do not push, do
    not merge, never touch `main`.**
 3. **Write your note** as `docs/prepilot-fixes/notes/batch10_<A|B|C|D|E>.md` and commit it. Put in it:
@@ -191,7 +191,7 @@ scratch only; merge in any order once read). **Never commit while a replay runs.
    and every cleaning step** (bracket cleaning, uniqueness checks, completeness checks): in Session 40
    the integrator's mutants found two untested guards in agent A's build, and one hid a real defect.
    Run the full suite on your own test database before your last commit, and report the count.
-6. **Data handling:** never commit lawyers' question or answer text, search terms, case names, or
+6. **Data handling:** never commit legal professionals' question or answer text, search terms, case names, or
    instrument ids and titles from a session. Tests and fixtures use synthetic text ("Widget Order
    1901", `ssi/1901/3`, "Widget Co v Example Ltd"). Grep your staged diff for session ids,
    instrument ids and matter words before every commit (with Python: see the lessons). Rubric
@@ -524,7 +524,7 @@ exit-1 graders' output unchanged on every directory except where a fix is meant 
    URL and Read every line of the saved file first; set `AS_AT` and `UPDATED`; a newly ticked row gets `fixed`
    and `ver: "Next release"`; a new row gets `added`).
 
-**Open with the user, carried (do not act on them yourself):** sending the lawyer pack (five questions; unblocks
+**Open with the user, carried (do not act on them yourself):** sending the legal professional pack (five questions; unblocks
 P3.2, P3.3, P3.17, and confirms P3.22's 6363 list); sending SCTS the note (P3.20's prerequisite); applying for
 the National Archives licence (`docs/TODO.md` D23); deploying `v2026.09.3` to the target (`pg_dump` first, then
 pull, restart and `test_apis.ps1`); telling the eval-harness owner about schema v6 and the new `api_calls`

@@ -50,7 +50,7 @@ Find Acts and SIs by title, content or metadata.
 ```json
 {
   "query": "string",       // the model's query (required)
-  "year_from": 1998,       // the lawyer's filter intersected with the model's argument, or null
+  "year_from": 1998,       // the legal professional's filter intersected with the model's argument, or null
   "year_to": 2024,         // likewise
   "limit": 5,              // 20 when a jurisdiction or legislation-type filter is set, else 5
   "include_text": false

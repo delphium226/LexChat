@@ -1,6 +1,6 @@
 # Golden Question Set — Legislation Bot (DRAFT)
 
-**Status: DRAFT — answers are Claude's best attempt and MUST be verified/replaced by a qualified lawyer before use.**
+**Status: DRAFT — answers are Claude's best attempt and MUST be verified/replaced by a qualified legal professional before use.**
 
 ## How to use this document
 

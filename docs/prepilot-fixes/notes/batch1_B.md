@@ -6,7 +6,7 @@ all misreadings found by the Session 32 hand-read of `wave4_p33_post`. **Spend: 
 paid call of any kind). No server, no `replay pin|run|restore`.
 
 This note gives counts and file/rep/turn locations only. The sentences and the rubric
-patterns name lawyers' matters, so they stay in the gitignored evidence. Every sentence that
+patterns name legal professionals' matters, so they stay in the gitignored evidence. Every sentence that
 moved was read by hand from the grader's `--sentences --drops` output in the session
 scratchpad.
 

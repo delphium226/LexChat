@@ -244,7 +244,7 @@ path: to re-run on the merged tree, repoint `WT` (do not edit in place).
 **2. Class B's "beside": the 100-character window, or the mention's own sentence?** 20 of the 23 class-B links name
 the provision in the mention's sentence; 3 only in the window (6381 t3 and 6375 rep 1 t1 in `wave2_p24_smoke`, both
 read in batch 12; 6338 rep 3 t1, new): the next sentence or the next list item names the provision.
-- **(a) Recommended:** keep the window, as decided and hand-read (each names the provision the lawyer reads next).
+- **(a) Recommended:** keep the window, as decided and hand-read (each names the provision the legal professional reads next).
 - (b) The same sentence only: 76 links; the 3 become drops.
 
 **3. The parliamentary bots.**

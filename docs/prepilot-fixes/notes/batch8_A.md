@@ -57,12 +57,12 @@ the merged tree, repoint `WT` in the script (do not edit the code paths in place
 - **`search_scope._TOOL_BLOCK`** strips `[SCHEDULES AND ANNEXES — …]`. It does not match the bare
   word: the pattern is case-insensitive, and an answer's citation link can open with "[Schedules 1
   and 2](…)" (a test pins this).
-- **Footer: no change.** I decided the lawyer-facing footer need not speak of this, and recorded
+- **Footer: no change.** I decided the legal-professional-facing footer need not speak of this, and recorded
   nothing in the scope record, for three reasons:
   - the line is a statement about what the Worker was handed;
   - its one negative ("the index holds no schedule or annex text for X") is already true and
     code-stated where the Worker reads it;
-  - a footer change is lawyer-facing and would need the user.
+  - a footer change is legal-professional-facing and would need the user.
 
   Decision 2 offers a Manager-facing limb instead.
 
@@ -581,7 +581,7 @@ plural "Schedules" still names nothing. The new wording is added to `test_footer
 2. **A Manager-facing limb for P3.27.** The line is Worker-facing; batch 7 B found the report right
    and the answer wrong on two P3.2 turns.
    1. **(Recommended) Wait for the sweep.** Add a limb to `worker_scope_block` (stripped, never
-      lawyer-facing) only if the answers still paraphrase "not included" as "unable to retrieve".
+      legal-professional-facing) only if the answers still paraphrase "not included" as "unable to retrieve".
    2. **Add it now**, so that the sweep measures both seams at once.
 3. **The grader leak list.**
    1. **(Recommended) The integrator adds `[SCHEDULES AND ANNEXES` and `[PROVISION FETCHED BY CODE`

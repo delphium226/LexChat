@@ -12,7 +12,7 @@ legislation.gov.uk), no server, no replay pin/run/restore. **No product code cha
 passed** (2162 + 21 new), `TEST_DATABASE_URL=postgresql://lexuser:lexpassword@localhost:5432/lexchat_test_b
 python -m pytest -q -p no:cacheprovider` from `server_py/`.
 
-This note quotes no lawyer's question or answer, no search term and no instrument id or title from a
+This note quotes no legal professional's question or answer, no search term and no instrument id or title from a
 session. Matches are cited by directory, session, rep and turn. The hand-read, which quotes matter
 text, is in the gitignored scratch. Commands run from `server_py/` with
 `PREPILOT_EVIDENCE=C:/Projects/LexChat/docs/prepilot-fixes/evidence` and `PYTHONIOENCODING=utf-8`;

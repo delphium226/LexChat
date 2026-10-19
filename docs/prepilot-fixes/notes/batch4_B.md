@@ -165,8 +165,8 @@ should know:
   r1 t2) no change record was consulted, so it is true there.
 - **On 5 lines in one session (p37_6373: `wave4_p315_pre` r1 t3, r2 t3; `wave4_p37` r1 t3, r3 t3;
   `wave4_p37b` r1 t3) the instrument whose text was searched is a UK SI of the same year and
-  number as the Scottish SI the lawyer cited**, which the lookup reported not held (3 of the 5
-  lines also carry that lookup clause). The line states it truthfully, so it now shows the lawyer
+  number as the Scottish SI the legal professional cited**, which the lookup reported not held (3 of the 5
+  lines also carry that lookup clause). The line states it truthfully, so it now shows the legal professional
   a substitution the answer may not have disclosed. That is B5's silent substitution made visible,
   not a defect of the line; worth a look in the after-column if p37_6373 is replayed.
 - One 6370 line (`wave4_b2_post` r1 t3) quotes the model's own query syntax (its `OR`s), as the

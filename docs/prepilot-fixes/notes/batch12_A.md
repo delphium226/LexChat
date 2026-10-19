@@ -246,7 +246,7 @@ and the all-or-nothing summary. It is P3.38's route and P5.4 (d)'s fallback.
 |---|---|
 | **The exact paragraph through the proxy** | Probed and sound (section 5), but **not the failing step here**: the row's three paragraphs already reach the Worker exactly, and the failures are what the Worker writes from them. Worth building for retrieval elsewhere; not for this acceptance. |
 | **The concision rule relaxed for a code-fetched unit** (Worker prompt) | Not indicated at the seam: the delivering draw fits in 6 sentences and the failing draws chose the Scots limbs, not ran out of room (section 2, point 4). It is a Worker-facing wording lever, the kind that has twice moved the composition seam and not the live run. Unmeasured on the as-sent seam. |
-| **Code-written paragraph lines at the answer seam** (P3.13's pattern) | The only candidate that does not depend on what the Worker composes, which is where every live failure sits: in 4 of 4 live answers with the paragraphs verbatim, at least one was left out (section 4.1), and the one wrong pinpoint a code check found (2 of 2, 0 false, section 4.2). But its design is open and a lawyer reads it (decision 2), and the as-sent draws would say first whether the Worker's composition is really the gap. |
+| **Code-written paragraph lines at the answer seam** (P3.13's pattern) | The only candidate that does not depend on what the Worker composes, which is where every live failure sits: in 4 of 4 live answers with the paragraphs verbatim, at least one was left out (section 4.1), and the one wrong pinpoint a code check found (2 of 2, 0 false, section 4.2). But its design is open and a legal professional reads it (decision 2), and the as-sent draws would say first whether the Worker's composition is really the gap. |
 | (not on the list) **the brief's jurisdiction phrase** | The clearest pattern in the draws (section 2, point 2), on the Manager's side or the Worker prompt's Jurisdiction line; confounded with narrowing at n=1-2. |
 
 So the four draws narrow the field (not the block, not the retrieval, probably not the budget) but do not pick one
@@ -297,7 +297,7 @@ pattern).
       instrument question, not the brief.
    3. **Skip the draws and go to a 6335 n=3 re-run** with whatever lever is chosen. Not recommended: three live
       reps have not moved on two Worker-facing levers, and a rep has cost up to $0.99.
-2. **Which lever to build after the draws** (each wording a lawyer or the Worker reads goes to the user before
+2. **Which lever to build after the draws** (each wording a legal professional or the Worker reads goes to the user before
    merge).
    1. **(Recommended, if the as-sent draws reproduce the shortfall) Code-written lines at the answer seam**, P3.13's
       pattern: after the answer is written, for each paragraph code cut and handed over in that turn whose number
@@ -597,7 +597,7 @@ only; every statutory word is the route's cut, never generated.
 **The three content options for the user (how much statutory text a line carries).** Each is the one constant
 `MAX_EXCERPT_CHARS`; rendered on the stored payload's three paragraphs (`screen_restore.txt`):
 
-| Option | Constant | Paragraph 42 | 43 | 44 | What it gives the lawyer |
+| Option | Constant | Paragraph 42 | 43 | 44 | What it gives the legal professional |
 |---|---|---|---|---|---|
 | **B (recommended, built)**: heading + opening operative sub-paragraphs, whole, within 450 | 450 | 559 chars, (2)-(4) | 492, (2)-(3) | 376, (1) | the paragraph's operative rule in its own words; `depth` reads 42 and 44 at depth |
 | A: the heading only (a pointer) | 0 | 132 | 129 | 114 | where to look, no content; `depth` would not read the paragraph as delivered |
@@ -716,7 +716,7 @@ The user's decision of relay 3 stands: the lever is code-written lines at the an
       not give the paragraph's content, so P3.12's acceptance (each paragraph "with its facts") cannot be met by it.
    3. **Merge with option C** (the whole paragraph, `MAX_EXCERPT_CHARS` 2,500): every limb, up to 2,007
       characters a line on this turn, three such lines in a conversational answer.
-2. **The line's template words** (Worker-free, lawyer-facing): "Also in <unit>, paragraph <N> (<heading>):
+2. **The line's template words** (Worker-free, legal-professional-facing): "Also in <unit>, paragraph <N> (<heading>):
    "<statutory text>"" (or "...(<heading>)." with no excerpt).
    1. **(Recommended) As built**, P3.13's "Also in" form, so the two restore lines read alike.
    2. **Say where it came from**, e.g. "Also retrieved, <unit>, paragraph <N> ...". Clearer provenance, one more
@@ -729,7 +729,7 @@ The user's decision of relay 3 stands: the lever is code-written lines at the an
    2. **Leave it**, and judge P3.12 on 42 and 44 restored, 43 as the Manager wrote it.
 4. **The wrong pinpoint.**
    1. **(Recommended) Report only, as built** (a log warning per sentence): 1 true case in the stored answers, 0
-      false, but one case and one Schedule are not enough to put a correction in front of a lawyer. Count it over
+      false, but one case and one Schedule are not enough to put a correction in front of a legal professional. Count it over
       the next sweep.
    2. **Add a line** ("Paragraph N of <unit> is <heading>; the words above are in paragraph M") where it fires. A
       false positive would put a wrong correction in an answer.

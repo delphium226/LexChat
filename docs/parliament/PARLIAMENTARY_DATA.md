@@ -300,13 +300,13 @@ on the Efficiency tab. This forces weaker models to stop searching and synthesis
 
 ## 6. Known gaps — data a researcher may expect but the bot does not (yet) provide
 
-Prioritised by impact for the bot's audience (lawyers doing statutory-interpretation and
+Prioritised by impact for the bot's audience (legal professionals doing statutory-interpretation and
 scrutiny research). None of these are bugs — they are coverage boundaries.
 
 ### Tier 1 — undercuts the core legal use case
 
 - **Bills are metadata-only.** `search_bills` returns title, current stage, and a link.
-  Missing the material lawyers reason from: bill text, how a provision changed
+  Missing the material legal professionals reason from: bill text, how a provision changed
   Stage 1→2→3, amendments/marshalled lists, and — importantly — the **Explanatory Notes,
   Policy Memorandum, and Financial Memorandum** that accompany a bill and are heavily used
   in statutory interpretation. No Royal Assent date either.

@@ -84,16 +84,16 @@ identical SCTS query reused with no call). Each Worker query was sent **through 
 the all-required rule (`stats.out`). **2 turns (6375 t1, t2) have a Scottish judgment that bears on the
 question confirmed by reading its text; 4 (6380 t2, 6370 t3, t4, t6) plausibly do by title (unread); 8 have
 none.** Whether a judgment "bears on" a point of law is a legal reading; these are mine and should go to a
-lawyer with the pack if they are to be relied on.
+legal professional with the pack if they are to be relied on.
 
 **6375, the acceptance session, in more detail** (4 more calls, `python item1b.py` → `$D/item1b.out`, shorter
 forms a Worker reaches after a narrow first query, `$D/item1b.json`): 2, 3, 13 and 1 hits; the first two
 hold the 2011 judgment above (and its first-instance decision), the third puts the 2026 FOISA appeal first.
 **So SCTS holds what P3.3's rubric says our tools could not verify: Scottish judgments discussing the
-doctrine 6375 turns on, and Court of Session FOISA authority on the privilege the question asks about.** It does not settle P3.3 (BLOCKED on the lawyer pack), but it changes what a 6375 answer can
+doctrine 6375 turns on, and Court of Session FOISA authority on the privilege the question asks about.** It does not settle P3.3 (BLOCKED on the legal professional pack), but it changes what a 6375 answer can
 cite.
 
-**6359.** Both authorities the lawyer named are English Employment Appeal Tribunal judgments: SCTS returns
+**6359.** Both authorities the legal professional named are English Employment Appeal Tribunal judgments: SCTS returns
 0 for each by party names (`6359:t6` keys). SCTS does not publish EAT decisions (the EAT is a GB tribunal
 outside SCTS), so **SCTS cannot help 6359's named authorities**. A Court of Session appeal from the EAT in
 Scotland could be held, but the 18 hits for the turn's stored query are, by title,
@@ -232,7 +232,7 @@ SCTS half mirrors today's.
 retried, a 400 returned at once), as P4.19 did for Find Case Law; counts as P3.23 (above). **Rate (Decision
 4):** SCTS gave no limit; recommended a per-request cap on SCTS calls and a small process-wide concurrency
 limit, both in code. **Dates (Decision 3):** the `AdditionalDate` filter is sound (section 3); recommended to
-expose it as the date of decision, intersected with the lawyer's dates as `case_law_date_window` does.
+expose it as the date of decision, intersected with the legal professional's dates as `case_law_date_window` does.
 
 **Caching:** SCTS is Crown copyright under the Open Government Licence, a public source, so the results of
 `search_case_law` and `get_case_law_text` stay in `CACHEABLE_TOOLS` with SCTS content in them (same names; the
@@ -299,7 +299,7 @@ the date filter live, so a change to the search is seen. `docs/api/AUDIT_TRACE.m
    cleaning, the zero fallback, the gate).
 2. *Replay, 6375 n=3:* every rep's answer cites at least one judgment that an SCTS search or text fetch
    returned that turn (a `scotcourts.gov.uk` URL from the audit), and presents no English authority as Scots
-   law (P3.3's 6375 criterion; P3.3 itself stays BLOCKED on the lawyer pack).
+   law (P3.3's 6375 criterion; P3.3 itself stays BLOCKED on the legal professional pack).
 3. *Replay, the same reps:* no footer on a turn with an ok SCTS search carries `CASE_LAW_CODE`.
 4. *Controls, n=1 each (proposed):* 6370 (the Scottish planning turns that section 1 shows SCTS can reach; P3.3's
    6370 criteria must not regress) and 6380 (a Scotland filter).

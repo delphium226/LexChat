@@ -27,7 +27,7 @@ the conversation history or the code scope block, none named by the Worker's rep
 
 New module `server_py/src/utils/source_naming.py` (`token_in`, `norm_text`, `norm_title`, `title_named`,
 `named_in`, `is_legislation`, the case-appeal guard `_names_other_judgment`, the number forms `_number_named`).
-Nothing else under `server_py/src` changed (no prompt, no tool result, no lawyer-facing text, no stored shape).
+Nothing else under `server_py/src` changed (no prompt, no tool result, no legal-professional-facing text, no stored shape).
 
 **Where the built shape differs from the brief (relay these):**
 1. **The fall-back is dropped on the legislation bot only.** `parliamentary_records` and `westminster_records`
@@ -215,7 +215,7 @@ will appear here as the research agent cites legislation and case law." So a tur
 the previous turn's sources, highlighted against the previous answer, as a no-delegation turn already does.
 V4 adds 68 such report turns in the stored set (decision 5). Nothing crashes on an empty list.
 
-**Code texts beside the change.** No prompt, tool result or lawyer-facing text names the rail (grep of `src`).
+**Code texts beside the change.** No prompt, tool result or legal-professional-facing text names the rail (grep of `src`).
 The halt and lost reports say "N source(s) had been retrieved": agent-facing, counted from the accumulator,
 unchanged. `worker_scope_block` still lists the instruments section-searched and is still appended after the
 filter, so it cannot vouch for a source (pinned by `test_the_block_does_not_mark_a_source_as_cited`, which

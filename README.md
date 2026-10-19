@@ -1,6 +1,6 @@
 # AILA — AI Legal Research Assistants
 
-A locally-hosted, multi-bot AI research platform for UK government legal departments. Users are qualified lawyers; every answer is grounded in retrieved primary sources with citations.
+A locally-hosted, multi-bot AI research platform for UK government legal departments. Users are qualified legal professionals; every answer is grounded in retrieved primary sources with citations.
 
 The product name is **AILA (AI Legal Assistant)**; the repository and its directories are still named *LexChat* for historical reasons. The current release is in [`VERSION`](VERSION); what each release changed is in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -24,7 +24,7 @@ Each bot's config lives in `bots/<id>/` — a `bot_config.json` (identity, logo,
 - **Three chat modes** (sidebar **Mode** menu):
   - **Conversational** — quick answers; the Manager delegates a narrow lookup when it needs a source.
   - **Research** — a full Worker research run per question, with a structured report (summary first, then the detail and references).
-  - **Deep Research** — the bot drafts an **editable research plan**; the lawyer adds, removes, reorders or edits the steps, and on approval each step is run in code (one Worker per step, each handed what the earlier steps found) and composed into one integrated report. The approved plan is saved on the answer as an audit record.
+  - **Deep Research** — the bot drafts an **editable research plan**; the legal professional adds, removes, reorders or edits the steps, and on approval each step is run in code (one Worker per step, each handed what the earlier steps found) and composed into one integrated report. The approved plan is saved on the answer as an audit record.
 - **Manager-Worker agents** — the Manager handles the conversation, triage and clarifying questions, and delegates a self-contained brief to a Worker that retrieves from that bot's sources. The Worker has no chat history, so the brief must stand alone.
 - **Research filters** (the **Filters** button) — scope a query by that bot's own dimensions (listed per bot below). Filters are enforced in code on the Worker's tools, not left to the prompt.
 - **Suggested question buttons** — follow-up questions and clarification options appear as one-click buttons rather than prose. A button never offers to change a setting, since it can only send text.
@@ -126,7 +126,7 @@ Each bot's config lives in `bots/<id>/` — a `bot_config.json` (identity, logo,
 
 ### The bots as MCP servers
 
-AILA, ParliChat and HansardChat will be callable from outside AI clients such as Claude and Microsoft Copilot over the **Model Context Protocol (MCP)**, so a lawyer can put a question to them from inside those tools. Proposed, not built; the plan is [docs/mcp/MCP_SERVER_PLAN.md](docs/mcp/MCP_SERVER_PLAN.md).
+AILA, ParliChat and HansardChat will be callable from outside AI clients such as Claude and Microsoft Copilot over the **Model Context Protocol (MCP)**, so a legal professional can put a question to them from inside those tools. Proposed, not built; the plan is [docs/mcp/MCP_SERVER_PLAN.md](docs/mcp/MCP_SERVER_PLAN.md).
 
 - **One endpoint per bot.** Each bot serves `/mcp` from one shared module, with its tools chosen by `RESEARCH_MODE`.
 - **Ask the bot.** `ask_aila`, `ask_parlichat` and `ask_hansardchat` run the bot's full research pipeline, so every guard the product applies also applies to the outside client. Each returns the cited answer, a References list and the data-licence attributions. A run that outlasts the client's tool timeout returns a job id, which the client collects with `get_answer`. Deep Research is not offered.
