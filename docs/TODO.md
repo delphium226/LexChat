@@ -1306,8 +1306,7 @@ P2.7's **8 search rounds** and P3.1's **3 section-search rounds per instrument**
 
 - **Why not a portal toggle:** P2.1 decided the cap on evidence (the runs that hit it were
   looping, not starved; more rounds buy more of the same and mask the failure the notice
-  exposes). A live toggle invites the reflexive raise that decision warned against — the same
-  reasoning that kept the drafting bot's cache override out of the portal.
+  exposes). A live toggle invites the reflexive raise that decision warned against.
 - **Precondition:** every measurement must record the value. `halted.limit` already travels
   in the audit trace (and the lawyer's notice reads it), but only on halted runs; the replay
   run files' `runtime_state` and `replay check` must stamp it, or two sweeps at different caps
@@ -1391,9 +1390,8 @@ is and what was found, so the next person does not re-derive it:
      in the same chat (`m2.id > m1.id`), not to its own reply, so a question can be shown with
      another turn's answer.
   3. **Cross-user exposure.** Other lawyers' question text (300 characters) and answers
-     (2,000 characters) reach a different lawyer's prompt. That is the exposure the local prompt
-     cache was forced off for on the drafting bot, and there is **no drafting-mode exclusion**
-     here, nor one for a consulted peer.
+     (2,000 characters) reach a different lawyer's prompt. There is no exclusion for a consulted
+     peer either.
   4. **It treats an unverified comment as ground truth** ("AVOID these mistakes"), broadcast to
      every user whose question shares a word. That runs against Invariant 1 and against B6's own
      finding: the tool should check the text, not adopt the pushback.
@@ -1401,7 +1399,7 @@ is and what was found, so the next person does not re-derive it:
      replay directory has ever exercised it: every sweep measured the product with this block
      empty. The target may not be empty.
 - **Options when unparked:** a feature flag defaulting OFF (the house pattern, Developer tab);
-  off in drafting mode and for `/api/consult` at minimum; fix the pairing; or remove it. First,
+  off for `/api/consult` at minimum; fix the pairing; or remove it. First,
   a read-only check of the target's `messages` for rated rows. See also D22, which is the
   per-user shape of the same idea without the cross-user half.
 
@@ -1427,7 +1425,7 @@ every request, as Claude Code reads a CLAUDE.md. Not scoped or decided; noted so
   - Session 22's lesson: any text added to the Manager prompt can move its FIRST delegation
     brief. Measure with the first-delegation drift probe (`seam_replay manager --first-round
     --date recorded`) and compare links and citations before shipping.
-  - The drafting bot's data rules (its user input is unpublished text) and log redaction.
+  - Log redaction: it is free text the user wrote.
   - A UI for writing and viewing it, and the admin's view of it.
 
 ### D23. The National Archives case-law licence (booked 2026-10-02, user decision, Session 37)

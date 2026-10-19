@@ -417,7 +417,7 @@ Returns the flag set, merged over the defaults so a flag saved before it existed
 | `weekly_survey_enabled` | `false` | Whether the client shows the weekly survey |
 | `session_feedback_enabled` | `false` | Whether the client shows the end-of-session feedback form |
 | `scts_caselaw_enabled` | the `SCTS_CASELAW_ENABLED` setting until first saved | Scottish judgments (SCTS) searched alongside Find Case Law |
-| `drafting_mode_enabled` | `true` | Reserved for the legislative drafting bot, which is not part of this build: stored and passed to the request config, read by nothing |
+| `drafting_mode_enabled` | `true` | Unused: stored and passed to the request config, read by nothing |
 
 The server does not refuse requests on `research_mode_enabled`, `deep_research_mode_enabled`, `weekly_survey_enabled` or `session_feedback_enabled`; they decide what the client offers.
 

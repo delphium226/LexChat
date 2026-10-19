@@ -27,10 +27,6 @@ Each bot serves `/mcp` itself (MCP Streamable HTTP), from one shared module
 Public URLs follow hosting: AILA at `/mcp`, ParliChat at `/parlichat/mcp` under the co-hosting plan
 (`docs/deployment/PARLICHAT_COHOSTING_PLAN.md`). HansardChat has no deployment on the target yet.
 
-**Never on the drafting bot.** Its input is unpublished legislative text. `RESEARCH_MODE=drafting`
-refuses to mount `/mcp` **in code**, the same way the local prompt cache is forced off there
-(`build_request_config`), not by an admin toggle. Pinned by a test next to `test_drafting_security.py`.
-
 ## 2. Tools
 
 ### Tier 1 — ask the bot (built first)

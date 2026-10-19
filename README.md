@@ -128,7 +128,7 @@ Each bot's config lives in `bots/<id>/` — a `bot_config.json` (identity, logo,
 
 AILA, ParliChat and HansardChat will be callable from outside AI clients such as Claude and Microsoft Copilot over the **Model Context Protocol (MCP)**, so a lawyer can put a question to them from inside those tools. Proposed, not built; the plan is [docs/mcp/MCP_SERVER_PLAN.md](docs/mcp/MCP_SERVER_PLAN.md).
 
-- **One endpoint per bot.** Each bot serves `/mcp` from one shared module, with its tools chosen by `RESEARCH_MODE`. The drafting bot never serves one: its input is unpublished legislative text.
+- **One endpoint per bot.** Each bot serves `/mcp` from one shared module, with its tools chosen by `RESEARCH_MODE`.
 - **Ask the bot.** `ask_aila`, `ask_parlichat` and `ask_hansardchat` run the bot's full research pipeline, so every guard the product applies also applies to the outside client. Each returns the cited answer, a References list and the data-licence attributions. A run that outlasts the client's tool timeout returns a job id, which the client collects with `get_answer`. Deep Research is not offered.
 - **Later, if wanted:** direct tools for the data only these bots hold, namely the made-under record and ParliChat's full-text Official Report archive. They need no LLM spend on our side.
 - **Auth:** personal access tokens first, scoped to `/mcp` only, expiring and revocable. They work in Claude Code, VS Code Copilot and Copilot Studio. Entra ID OAuth follows for claude.ai and Microsoft 365 Copilot.

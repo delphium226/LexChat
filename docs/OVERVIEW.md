@@ -296,7 +296,5 @@ Administrators have a portal covering:
   Sheriff Appeal Court, published sheriff court decisions and Scottish tribunals, from 1998. It is
   built and its use has been agreed; it will be switched on once the server can reach the Scottish
   Courts site. Until then, answers say which Scottish courts are not covered.
-- **A drafting assistant** for legislative drafting guidance and precedent is in development. It is
-  not part of AILA today and is not available.
 - **Further improvements** from the analysis of the pre-pilot continue to arrive in releases, listed
   in Settings, then Release notes.

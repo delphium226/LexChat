@@ -269,8 +269,6 @@ Calendar versions, `vYYYY.MM.N`: each release is an annotated tag on `main`, a d
 -   **Per-message filter history** (D13), and surfacing silent client-side errors (B1).
 -   **Operations** — install the nightly backup task, arrange off-box backups (D15), regenerate the offline bundle (T3), and credential hardening (T4).
 
-**In development, not available**: a legislative drafting bot, built on its own branch and not part of the product until it is complete and merged.
-
 **Decided against for now**: semantic (embedding) retrieval for the parliament bot (full-text search with an any-term fallback and query reformulation proved sufficient; `docs/parliament/SEMANTIC_RETRIEVAL_PLAN.md`); a YouTube caption fetcher for SP TV video links (D10); a LEX/case-law response cache (A5, unless target traffic shows the shared rate limit binding).
 
 **Ideas from the original draft, not scheduled**: a "Barrister Agent" tier for court strategy; voice input.

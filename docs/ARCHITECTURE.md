@@ -19,9 +19,7 @@ which carries each change's evidence.
 > differentiated by **configuration, not forked code**.
 
 **The fleet as built:** legislation (AILA, `legislation_only`), Holyrood parliament (ParliChat,
-`parliamentary_records`) and Westminster (HansardChat, `westminster_records`) are live. A
-legislative-drafting bot (`drafting`) is in build on the long-lived `feature/drafting-bot` branch and
-is deliberately *not* on `main` — see [drafting/BUILD_PLAN.md](drafting/BUILD_PLAN.md).
+`parliamentary_records`) and Westminster (HansardChat, `westminster_records`) are live.
 
 ---
 
@@ -664,9 +662,6 @@ kept *out* of the key, which is what makes it cross-provider.
   (`utils/summary_citations.py`): a case citation the source text does not hold is removed.
 - The key query is the **raw user question** in standard mode (not the Manager's per-model
   paraphrase, which would make cross-user hits luck) and the approved step text in Deep Research.
-- The cache is **forced off in code** for `research_mode == "drafting"`, in `build_request_config()`
-  — a drafting bot's input is unpublished legislative text and must never reach a shared plaintext
-  column. Consequence: a drafting bot's Cache tab shows "Local cache: ON". That is expected.
 - The query hash carries a canonicalisation version prefix (`_CANON_VERSION`, now `v3`). Bump it on
   any change to the canonicalisation *or* to the summariser's prompt (neither half of the key sees
   the prompt); bumping invalidates the whole cache.
@@ -1153,7 +1148,6 @@ graph TB
 | Caching stack design | [LOCAL_PROMPT_CACHE_PLAN.md](LOCAL_PROMPT_CACHE_PLAN.md), [CACHE_REVIEW_FIXES_PLAN.md](CACHE_REVIEW_FIXES_PLAN.md) |
 | Backup & scoped restore design | [BACKUP_RESTORE_PLAN.md](BACKUP_RESTORE_PLAN.md) |
 | Holyrood data model | [parliament/PARLIAMENTARY_DATA.md](parliament/PARLIAMENTARY_DATA.md) |
-| Drafting bot (in build, off `main`) | [drafting/BUILD_PLAN.md](drafting/BUILD_PLAN.md) |
 | Deferred run durability | [CONCURRENT_RUNS_DURABILITY.md](CONCURRENT_RUNS_DURABILITY.md) |
 | Frontend design tokens | [frontend/design-system.md](frontend/design-system.md) |
 | Canonical todo list | [TODO.md](TODO.md) |

@@ -159,7 +159,6 @@ Know which database you are restoring. They are separate, one per bot:
 | `lexchat` | legislation |
 | `lexchat_parliament` | parliament (Holyrood) - the big one, ~305 MB |
 | `lexchat_westminster` | Westminster |
-| `lexchat_drafting` | drafting |
 
 `lexchat_test` is pytest's target and is **not** backed up. That is deliberate.
 
