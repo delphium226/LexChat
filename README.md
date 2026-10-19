@@ -122,6 +122,19 @@ Each bot's config lives in `bots/<id>/` — a `bot_config.json` (identity, logo,
 - The same search budget and per-retrieval contribution cap as the Holyrood bot.
 - Westminster only: select committee oral evidence is not covered. For Holyrood proceedings it consults the parliament bot, and for the text of legislation the legislation bot, when those peers are registered.
 
+## Coming soon
+
+### The bots as MCP servers
+
+AILA, ParliChat and HansardChat will be callable from outside AI clients such as Claude and Microsoft Copilot over the **Model Context Protocol (MCP)**, so a lawyer can put a question to them from inside those tools. Proposed, not built; the plan is [docs/mcp/MCP_SERVER_PLAN.md](docs/mcp/MCP_SERVER_PLAN.md).
+
+- **One endpoint per bot.** Each bot serves `/mcp` from one shared module, with its tools chosen by `RESEARCH_MODE`. The drafting bot never serves one: its input is unpublished legislative text.
+- **Ask the bot.** `ask_aila`, `ask_parlichat` and `ask_hansardchat` run the bot's full research pipeline, so every guard the product applies also applies to the outside client. Each returns the cited answer, a References list and the data-licence attributions. A run that outlasts the client's tool timeout returns a job id, which the client collects with `get_answer`. Deep Research is not offered.
+- **Later, if wanted:** direct tools for the data only these bots hold, namely the made-under record and ParliChat's full-text Official Report archive. They need no LLM spend on our side.
+- **Auth:** personal access tokens first, scoped to `/mcp` only, expiring and revocable. They work in Claude Code, VS Code Copilot and Copilot Studio. Entra ID OAuth follows for claude.ai and Microsoft 365 Copilot.
+- **Controls:** off by default behind a Developer-tab feature flag, with per-user limits. Calls go through the same request queue as the UI and are logged as `source = "mcp"`.
+- **Before it ships:** the path-traversal fix and token scope checks; licence questions to TNA (case law) and TheyWorkForYou; network reachability from each client, deferred for now.
+
 ## Documents
 
 All project documentation lives under [`docs/`](docs/). `CLAUDE.md` (agent/contributor context), `CHANGELOG.md` and this `README.md` remain at the repository root.
@@ -157,6 +170,7 @@ All project documentation lives under [`docs/`](docs/). `CLAUDE.md` (agent/contr
 | [docs/CACHE_ADMIN_UI_PLAN.md](docs/CACHE_ADMIN_UI_PLAN.md) | Feature flags + Admin Portal Cache tab (D6) |
 | [docs/LOGGING_IMPROVEMENTS_PLAN.md](docs/LOGGING_IMPROVEMENTS_PLAN.md) | Logging & log-redaction plan (PII at INFO vs DEBUG) |
 | [docs/LOGGING_PR_D_PLAN.md](docs/LOGGING_PR_D_PLAN.md) | Logging PR D — remaining log work |
+| [docs/mcp/MCP_SERVER_PLAN.md](docs/mcp/MCP_SERVER_PLAN.md) | The bots as MCP servers for outside AI clients (Claude, Copilot) — proposed, not built |
 | **Pre-pilot defect fixes** | |
 | [docs/prepilot-fixes/FIX_PLAN.md](docs/prepilot-fixes/FIX_PLAN.md) | The fix plan, invariants and tickable ledger for the defects found in the pre-pilot sessions |
 | [docs/prepilot-fixes/SESSION_LOG.md](docs/prepilot-fixes/SESSION_LOG.md) | What each fix session actually did |
