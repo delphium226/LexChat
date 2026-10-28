@@ -1481,3 +1481,52 @@ The feasibility study should answer:
    the A5 response cache generalised to both LEX and SCTS.
 
 Output: a short note with the measurements and a GO / NO-GO recommendation for the user.
+
+### D25. Engineering findings from the business-rules review (booked 2026-10-28, user)
+
+The review that produced `docs/BUSINESS_RULES.md` found these. They are engineering issues, so they
+are not in that document. Each was checked against the code on 2026-10-28. None is fixed. The
+legal-content inconsistencies are in its section 15. The cross-user learning injection is D21,
+which stays parked.
+
+**Access and transport (raise first, alongside the open SPA path-traversal finding):**
+1. **`/api/system/chat` needs only a login, not an admin.** It depends on `get_current_user`
+   (`routers/system.py`), so any logged-in user can call it. It returns the full audit trace:
+   every brief, raw tool result and API call. Decide whether it should be `get_admin_user`, or
+   a dedicated eval credential.
+2. **The role is read from the token, not the database** (`dependencies.py`, `get_current_user`).
+   A demoted or deleted user keeps their access until the token expires: 7 days, or 30 with
+   "remember me" (`routers/auth.py`). Options: re-read the role per request, or a shorter
+   token with refresh.
+3. **Outbound TLS verification is off.** There are 23 `verify=False` calls: the OpenRouter and
+   Ollama clients, the LEX executor, case law, commencement dates, the legislation.gov.uk text
+   read, the made-under store, the federation client, and the parliament and Westminster tools and
+   crawler. Find out whether the target's proxy requires this. If it does, point httpx at the
+   organisation's CA bundle instead.
+4. **User text logged in full at INFO** (extends D9 Item 4, which named only the first and
+   last of these):
+   - the Manager's delegation brief (`agent/agent_core.py`, `[Worker] Starting research on:`);
+   - the learning keywords taken from every question (`agent/learning.py`,
+     `[Learning] Searching with keywords:`);
+   - Deep Research step titles (`agent/agent_core.py`);
+   - a new user's full email address (`routers/users.py`, `[EMAIL] Welcome email would be sent to`);
+   - the admin learning test query (`routers/learning.py`).
+
+**Configuration:**
+5. **The default Ollama model is `MODEL_LIST[0]`, `deepseek-v3.2:cloud`.** This was recorded in
+   July as returning HTTP 410; re-check it, then reorder or remove it. Also: `settings.max_concurrent_requests`
+   (5) is never read (the real defaults are 3 for Ollama and 10 for OpenRouter), and
+   `access_token_expire_minutes` (1 day) is not what login uses.
+
+**Stale documentation (CLAUDE.md and comments):**
+6. The cache purge is `DELETE /api/stats/cache/local`, not a POST.
+7. `request_timings.source` is NULL for `/api/chat` rows, never `"app"`: only `/api/system/chat`
+   sets it (`"eval"`). Either set `"app"` in `routers/ai.py`, or correct the docs. The dashboards
+   do not filter on it yet, so nothing reads it wrongly today.
+8. SCTS's 2 calls in flight is a process-wide semaphore (`agent/tools/scts.py`, `SCTS_CONCURRENCY`),
+   not a per-request limit.
+9. The local cache prunes never-hit rows after 90 days and any row idle for 365 days, and only
+   once it holds more than 20,000 rows (on 2% of stores). CLAUDE.md says "365-day retention for hit rows".
+10. The A4 reformat keeps any non-empty retry. It does not check that the retry is better, which
+    is what CLAUDE.md says.
+11. The comment in `routers/agent_request.py` says `AUDIT_SCHEMA_VERSION` "stays at 1"; it is 6.

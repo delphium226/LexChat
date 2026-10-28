@@ -4,8 +4,6 @@
 
 **Scope.** This covers the legislation bot only. The Scottish Parliament and Westminster bots share the code but follow different rules, and are not covered.
 
-**Version described.** This describes branch `fix/prepilot-defects` at commit `e671bac` (28 October 2026). The live release is `v2026.10.4`. Rules marked **[not yet live]** are on the branch but are not yet in the live release.
-
 ---
 
 ## How to read the rules
@@ -181,7 +179,7 @@ A brief must not:
 - turn a bare citation into a case name;
 - add any fact that did not come from the user or from a tool.
 
-**BR-3.4 The user's own words reach the research agent.** *System.* **[not yet live]**
+**BR-3.4 The user's own words reach the research agent.** *System.*
 With a legislation research type in Conversational or Research mode, the user's latest message is passed to the research agent alongside the brief, cut at a word to at most 4,000 characters. Where the two differ, the brief governs. This does not happen in Deep Research, or under *Case law only*.
 
 **BR-3.5 Pass-through in Research mode.** *Instruction.*
@@ -349,7 +347,7 @@ Each repeal or revocation relation is classified. A removal is any effect that r
 
 No removal carries a date. The answering agent is given up to 6 instruments for each class.
 
-**BR-5.14 Legislation made before 1963.** *System.* **[not yet live]**
+**BR-5.14 Legislation made before 1963.** *System.*
 The index's change record holds nothing for an instrument made before 1963, on either side of a relation. This covers an identifier with a year before 1963 and any regnal-year identifier. EU legislation is excluded. For such an instrument an empty record means the position is **unknown**. The bot must not write "no change is recorded" or "not amended". Where the answer relies on such a provision, it says whether it has since been amended or repealed is not known from this research. The scope footer names each such instrument, up to 8, then gives a count, and advises checking the revised text on legislation.gov.uk.
 
 **BR-5.15 The change record carries no enabling power and no dates.** *System + Instruction.*
@@ -386,9 +384,9 @@ AILA holds its own record of the enabling powers recited in instrument preambles
 |---|---|
 | Coverage | SSIs 1999 to 2026; UK SIs 1987 to 2026 |
 | Size | 86,744 instruments, of which 68,780 recite a power |
-| Snapshot | `2026-10-10.1`, harvested 9 October 2026 |
+| Harvested | 9 October 2026 |
 | New instruments | Added by a daily refresh from legislation.gov.uk's new SSI and UK SI lists: 5 pages, 120 reads at most, 20 seconds each, half a second apart |
-| Revocation flags | From the snapshot only. An instrument added by the daily refresh reads as revocation *not checked*. |
+| Revocation flags | From the harvest only. An instrument added by the daily refresh reads as revocation *not checked*. |
 
 The record does not cover:
 - SIs made before 1987, which are image scans;
@@ -430,7 +428,7 @@ What the bot must and must not do:
 
 If more than 40 instruments are found, those not revoked in whole are listed first, oldest first. Otherwise the list is oldest first. Counts cover every instrument found.
 
-**BR-6.7 Made-under record after a section search.** *System.* **[not yet live]**
+**BR-6.7 Made-under record after a section search.** *System.*
 After each section search, the system gives the research agent the record's instruments for each section of an Act the search returned. It covers the section together with its lettered neighbours, so s.33 comes with s.33A.
 
 | Rule | Detail |
@@ -466,7 +464,7 @@ A lookup of an instrument by type, year and number returns one of five outcomes:
   - *Held:* check that the title is the instrument the question is about.
   - The same year and number under two types are two different instruments.
 - **Conversational mode:** before the first section search of each SI, up to 5 per step.
-- **After a section search that returns nothing**, up to 8 per step **[not yet live]**. Where the instrument is not held, or held without text, the research agent is told there was nothing to search. It must not report the instrument as lacking what it was searched for.
+- **After a section search that returns nothing**, up to 8 per step. Where the instrument is not held, or held without text, the research agent is told there was nothing to search. It must not report the instrument as lacking what it was searched for.
 
 **BR-7.3 "Not held" is not a wrong citation.** *System + Instruction.*
 If an instrument or case the user cited is not found, the bot says the index does not hold it. It must never:
@@ -518,7 +516,7 @@ Every full-text read includes the instrument's schedules and annexes. A line nam
 - **When the list is incomplete or failed:** the question is left open.
 
 **BR-7.8 Query wording.** *Instruction.*
-- **Conversational mode:** the research agent writes legislation searches as plain sentences in the question's own words, not as lists of quoted terms. It also says which kind of power each cited provision is. **[not yet live]**
+- **Conversational mode:** the research agent writes legislation searches as plain sentences in the question's own words, not as lists of quoted terms. It also says which kind of power each cited provision is.
 - **Research mode:** to find a named instrument, the research agent searches by its exact short title, limited to its year.
 
 **BR-7.9 Further research instructions.** *Instruction.*
@@ -554,7 +552,7 @@ The user's date range and the research agent's own dates are intersected. A year
 | | Rule |
 |---|---|
 | Reading | The research agent must read a judgment before relying on it, not answer from titles (Instruction). After a search with results, it is told to read 1 to 3 judgments, and the first 3 addresses are listed (System). |
-| Size | A judgment is passed whole up to **60,000 characters**, or the summarisation threshold if that is higher (BR-11.1). The 250,000-character step allowance still applies. **[not yet live]** |
+| Size | A judgment is passed whole up to **60,000 characters**, or the summarisation threshold if that is higher (BR-11.1). The 250,000-character step allowance still applies. |
 | Sources | Only Find Case Law addresses, and SCTS documents where enabled (BR-8.8), are fetched. Anything else is refused. 15 seconds per read. |
 
 **BR-8.5 Searches and courts.** *Instruction.*
@@ -589,7 +587,7 @@ If the question names a case (a "X v Y" name or a neutral citation) and the resu
 The test leans towards treating the case as returned. A law-report citation on its own cannot be matched. See BR-15.4.
 
 **BR-8.8 Scottish judgments (SCTS). Switched off.** *System.*
-An administrator can switch on searches of the Scottish Courts and Tribunals Service's published judgments. The *Scottish judgments (SCTS)* feature flag is off by default and stays off until the target network can reach SCTS. With it off, nothing changes. With it on, under a research type that includes case law:
+An administrator can switch on searches of the Scottish Courts and Tribunals Service's published judgments. The *Scottish judgments (SCTS)* feature flag is off by default until the SCTS service can be reached. With it off, nothing changes. With it on, under a research type that includes case law:
 
 | Rule | Value |
 |---|---|
@@ -648,7 +646,7 @@ In Conversational mode the answering agent shortens the report, and can drop cit
 |---|---|---|
 | Neighbouring subsections linked | Before the answering agent reads the report, a subsection the research agent mentioned in plain words, e.g. "s.36(2) exempts…", is linked to the section address the same paragraph already cites. | Skipped where the paragraph cites more than one address for the section, the subsection belongs to another instrument, or it is a schedule reference. |
 | Dropped subsection restored | If the answer cites one subsection of a section, the report linked another, and the answer mentions the second nowhere, the research agent's own sentence about it is added after the paragraph as "Also in s.N: …". | At most 3 per answer. Each at most 450 characters and at least 4 words. Skipped if 60% of its words already appear in one sentence of the answer. |
-| Schedule paragraph restored | For a schedule paragraph the system handed over exactly, a line "Also in Schedule N, paragraph N (heading): "…"" is added, quoting its operative words. This happens where the answer cites a neighbouring paragraph but not this one, or cites only some of its sub-paragraphs, or **[not yet live]** cites it by number only, without its words. | At most 3 per answer, each paragraph once. Each quotation at most 450 characters of whole sub-paragraphs: the rule first, then its conditions of application. A sentence that seems to cite the wrong paragraph is logged, never changed. |
+| Schedule paragraph restored | For a schedule paragraph the system handed over exactly, a line "Also in Schedule N, paragraph N (heading): "…"" is added, quoting its operative words. This happens where the answer cites a neighbouring paragraph but not this one, or cites only some of its sub-paragraphs, or cites it by number only, without its words. | At most 3 per answer, each paragraph once. Each quotation at most 450 characters of whole sub-paragraphs: the rule first, then its conditions of application. A sentence that seems to cite the wrong paragraph is logged, never changed. |
 | Instrument linked | An instrument the report linked, which the answer names in words but links nowhere, gets the report's address at its first mention. A provision address is used only where the answer names that provision within 100 characters. | Never inside a quotation, a code span or a bracketed block, or where two instruments claim the same words. |
 
 The Research and Deep Research answers do not get these four repairs. They get only BR-9.7, and Deep Research also gets BR-9.6.
@@ -712,7 +710,7 @@ The summariser is told to summarise only what the text contains. It must add no 
 
 **BR-11.4 Invented case citations are removed.** *System.*
 - **Citations:** a case citation in a summary that is not in the source text or the question is removed. If the source names the case, only the citation goes. Otherwise the list item, short heading block or sentence goes. Neutral citations, English and Scottish law reports and Find Case Law addresses are all recognised.
-- **Bare names [not yet live]:** a bare "X v Y" name with no citation within 40 characters, which neither the source nor the question names, is removed in the same way.
+- **Bare names:** a bare "X v Y" name with no citation within 40 characters, which neither the source nor the question names, is removed in the same way.
 - **What is kept:** a name with no distinctive word, a placeholder, and any passage that also carries a citation the source holds.
 - **Nothing is added.**
 - **Cached summaries:** this check also runs on summaries taken from the shared cache (BR-14.2).
@@ -797,7 +795,7 @@ If a research step fails, the answering agent is told:
 - not to invent findings or answer from memory.
 
 **BR-12.8 Error messages.** *System.*
-A failed request tells the user: "This request could not be completed: <reason>. Please try again, or narrow the question if it was a broad one." The reason is given in plain words, for example "the AI provider did not respond in time". A Deep Research plan the provider refuses produces one of these **[not yet live]**:
+A failed request tells the user: "This request could not be completed: <reason>. Please try again, or narrow the question if it was a broad one." The reason is given in plain words, for example "the AI provider did not respond in time". A Deep Research plan the provider refuses produces one of these:
 - a refusal on account grounds: "trying again will not help. Please tell your administrator";
 - a rate limit: "try again in a few minutes";
 - other failures: "try again later".
@@ -953,7 +951,7 @@ These are places where an instruction and the system disagree, or where a rule d
 
 The instruction can therefore license an over-statement. Examples are "repealed" for "words repealed", or for "repealed (prosp.)". The Deep Research rules also treat repeal as a single class. A change to the instruction is pending a test.
 
-**BR-15.2 Pre-1963 legislation is not in the instructions.** The research agent's general instruction says an empty change record means "no such change is recorded". For an instrument made before 1963, the system's note says the opposite: the position is unknown (BR-5.14). Only the system note carries the exception. **[not yet live]**
+**BR-15.2 Pre-1963 legislation is not in the instructions.** The research agent's general instruction says an empty change record means "no such change is recorded". For an instrument made before 1963, the system's note says the opposite: the position is unknown (BR-5.14). Only the system note carries the exception.
 
 **BR-15.3 Enabling power: a permission can be followed by a refusal.** This finding comes from reading the code and has not been tested. Suppose an SI's enabling power has already been permitted earlier in a step, from the made-under record or from text read from legislation.gov.uk. A later full-text read of the same SI with no recital in the index can then carry a note forbidding the claim. That note says the record holds no preamble either. The same note appears whenever the made-under record is not loaded, or the SI is outside its coverage.
 
@@ -971,7 +969,7 @@ The instruction can therefore license an over-statement. Examples are "repealed"
 
 **BR-15.10 Hidden modes are not refused.** Hiding Research or Deep Research mode (BR-1.10) only removes it from the sidebar. The server still runs it if asked.
 
-**BR-15.11 Cross-user material in the prompt.** BR-14.3 places other users' questions, answers and feedback comments into the instructions. It has no switch. It is not limited to public-source material, unlike the shared cache (BR-14.2).
+**BR-15.11 Cross-user material in the prompt.** BR-14.3 places other users' questions, answers and feedback comments into the instructions. It has no switch. It is not limited to public-source material, unlike the shared cache (BR-14.2). This is a known item, deliberately left unchanged for now.
 
 **BR-15.12 User text in logs.** The redaction in BR-14.4 does not cover these:
 - the answering agent's brief to the research agent, which restates the question;
