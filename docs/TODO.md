@@ -1530,3 +1530,65 @@ which stays parked.
 10. The A4 reformat keeps any non-empty retry. It does not check that the retry is better, which
     is what CLAUDE.md says.
 11. The comment in `routers/agent_request.py` says `AUDIT_SCHEMA_VERSION` "stays at 1"; it is 6.
+
+### D26. An Amazon Bedrock LLM provider (booked 2026-10-28, user)
+
+**Why.** If AILA moves to AWS, inference will go through the organisation's existing Amazon
+Bedrock (user, 2026-10-06), not OpenRouter. That keeps model traffic inside the organisation's
+AWS account and region. AILA supports only `ollama` and `openrouter` today
+(`agent/provider_factory.py`, `_SUPPORTED_PROVIDERS`). Nothing in `server_py/src` mentions Bedrock.
+
+**Shape.** A third provider, `bedrock`, built the way the other two are:
+- a `bedrock_client.py` with its own `chat_loop`, using the Converse / ConverseStream API (streaming
+  and tool use);
+- its settings stored in `AppSetting provider.bedrock`;
+- selected from the Admin Portal like the others, with no restart;
+- resolved through the same `ContextVar`, `RequestQueue` and summarisation semaphore.
+
+Every `if provider == "openrouter"` branch in `provider_factory.py` needs a Bedrock decision.
+
+**Decisions and questions for the user and the organisation's AWS owners:**
+1. **Authentication.** Use the EC2 instance role (no keys stored in AILA; preferred), or access
+   keys in the provider settings? The existing `api_key` field would then mean nothing for this
+   provider.
+2. **Region and data residency.** The region is eu-west-2. Which models are enabled there?
+   Cross-region inference profiles (EU or global) can process a request outside the UK. Confirm
+   which profiles, if any, are acceptable before choosing model IDs.
+3. **Which models.** These need a `BEDROCK_MODEL_LIST` with context lengths, because the
+   summarisation threshold and the case-law and cap thresholds scale from them. A model missing
+   from the list falls back to the 8,000-character threshold. A separate summarisation model is
+   needed as well.
+4. **Cost recording.** OpenRouter returns a cost per call; Bedrock returns token counts only. Cost
+   (`cost_usd`, `request_timings`, the Efficiency and Cache tabs) would need a price table per model,
+   or would be recorded as unknown.
+
+**Provider-specific behaviour to carry across (each is an `openrouter` branch today):**
+- **Output cap.** The 32,000-token cap on Worker and Manager calls (P4.10, P4.12), as `maxTokens`.
+- **Empty-reply handling.** The heavy-empty and idle-timeout rules (`utils/empty_completion.py`)
+  read completion tokens and reasoning characters. Map Bedrock's usage and stop reasons onto them,
+  or they fail open.
+- **Stream retry.** The rule of retrying only while nothing has been emitted (`_MAX_STREAM_ATTEMPTS`),
+  and the 180-second read timeout. Throttling becomes Bedrock's `ThrottlingException`.
+- **Prompt caching.** Prompt caching uses Bedrock `cachePoint` blocks for the models that support
+  them, in place of `_apply_anthropic_cache_control`, under the same `prompt_caching_enabled` flag.
+- **Tool results whole (P1.7).** Check, before any lever is measured, that the model receives
+  text beside JSON in a tool result. P1.7 found the pinned Gemini on OpenRouter did not;
+  `evidence/seam/s50/f1_truncation.py` is the probe to repeat.
+- **Message format.** Converse uses `toolUse` / `toolResult` blocks, not OpenAI-style
+  `tool_calls`. Every seam that reads or rewrites the message list (the audit trace, `seam_replay`,
+  the mode-change marker, the halt write-up round) must still see the same shape.
+
+**Deployment.**
+- A new dependency (`boto3`, or a signed httpx call) must go into the offline bundle.
+- On the current internet-restricted target, `bedrock-runtime.<region>.amazonaws.com` would need
+  whitelisting. Add a reachability test to `test_apis.ps1`, and the host to
+  `NETWORK_AND_DEPENDENCIES.md` and the `external-apis` skill.
+
+**Acceptance.** These must hold under Bedrock as they do under OpenRouter:
+- the unit tests;
+- a seam replay;
+- a small priced panel of stored questions, compared against the OpenRouter answers on the same
+  graders (`replay_report`).
+
+Model quality dominates everything else in this product (CLAUDE.md, Worker Agent Optimisations),
+so the model chosen on Bedrock matters more than the layer itself.
