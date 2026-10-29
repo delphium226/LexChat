@@ -9993,7 +9993,7 @@ P1 the target lacks).
 - **An untracked `docs/deployment/PARLICHAT_COHOSTING_PLAN.md`** is still in the tree, not this work's; left
   untouched and unstaged.
 
-## Session 51 — 2026-10-29 — P1.7 done on its regression panel; the SPA traversal fixed on `main` ($9.11)
+## Session 51 — 2026-10-29 — P1.7 and P3.46 done; P3.55, P3.56 booked; the SPA traversal fixed on `main` ($25.96)
 
 - **On `main`, outside the plan: the SPA path traversal fixed** (`2e7811d`, pushed). `serve_frontend` serves a
   file only if its resolved path lies inside `client/dist`; 18 tests in `tests/test_spa_traversal.py`, 5 of
@@ -10018,8 +10018,26 @@ P1 the target lacks).
   (9308) by `Start-Process -PassThru`; `replay restore`; all stopped, port 8000 free, no pin file.
 - **Folded:** FIX_PLAN (P1.7 ticked, P3.53 extended, a new top order line; `plan_lint` 0; `plan_status` 76 of
   110, 5 in progress, 8 of 14); CHANGELOG *Unreleased*; CLAUDE.md; memory.
-- **Spend: $9.11** (the sweep; the preflight probe under $0.01).
+- **P3.46's acceptance (user-agreed, cap $17.00): `wave5_p346`, $16.85** (served by `f98ebd4`, settings
+  pinned): 6359 and 6363 n=3. Before-column: 6359 and 6363 from `wave4_b9_sweep2a`, copied to
+  `evidence/seam/s51/p346_before`. `authorities` 0 failing (before 3: Clark in 6359 r2 t6 and r3 t7, Wheat in
+  6363 r1 t1). 6359: the note fired in all 3 runs; each answer first says Clark was not found or not held, then
+  attributes it to *Bank of Africa v Hassani* [2026] EAT 27 (3 of 3 retrieved, read, cited); r1 t6 later says
+  '*Clark* establishes ...' unattributed (passed by the first-statement rule). 6363: no run named Wheat, so the
+  note never fired; Cornerstone 3 of 3 as before. Every other grader as before (`grade_all_p346_before.txt`,
+  `grade_all_wave5_p346.txt`; `scts` and `rail` exit 1 on both sides). **P3.46 ticked (user decision).**
+- **E3 answered:** the Worker follows the note ('was not among the judgments returned'); the conversational
+  Manager still writes the prompts' NOT HELD wording ('the database does not hold' Clark, t6 3 of 3). **Booked
+  as P3.55 (user decision).**
+- **The rail, corrected:** `rail` unused 15.0% to 30.0% here (sources 140 to 170), as on P1.7's panel (13.3% to
+  23.2%), so this session's earlier attribution of the panel's rise to 6382 alone was too narrow. Unused
+  entries are mostly parent Acts and commencement orders; fall-back turns 0. **Booked as P3.56, a $0
+  measurement against P4.3 (user decision).**
+- **Sweep 2:** uvicorn (PID 14296) and keep-awake (2724); `replay restore`; both stopped, no pin file.
+- **Folded:** FIX_PLAN (P3.46 ticked, P3.55 and P3.56 booked, P3.53 pointed at P3.56, a new top order line;
+  `plan_lint` 0; `plan_status` 77 of 112, 4 in progress, 8 of 14); CHANGELOG *Unreleased*; CLAUDE.md; memory.
+- **Spend: $25.96** ($9.11 the panel, $16.85 P3.46's acceptance; the preflight probe under $0.01).
 
-**Take next:** P3.46's acceptance (6359 and 6363 n=3, cap $17.00), priced to the user; then P3.53, P3.54,
-P3.34, P3.28's instruction, P3.48, and the re-measure of P3.51, P3.52 and P3.50 on top of P1.7. **The user's:**
-the next cut (the target lacks P1.7 and, on `main`, the traversal fix), the Fix Tracker (v54).
+**Take next:** P3.56's $0 measurement; then P3.53, P3.54, P3.55's seam draw, P3.34, P3.28's instruction, P3.48,
+and the re-measure of P3.51, P3.52 and P3.50 on top of P1.7. **The user's:** the next cut (the target lacks P1.7
+and P3.46's note in use and, on `main`, the traversal fix), the Fix Tracker (v54).

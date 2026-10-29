@@ -73,6 +73,13 @@ Research results (P1.7):
   text read from legislation.gov.uk. About three results in five carried
   such text. Each result is now sent whole.
 
+Case law (P3.46):
+- When a case-law search names a case and the results do not include it,
+  the research step is told so, and that what the case decided must not be
+  stated as if its judgment had been read. Answers now say such a case was
+  not found and attribute its principle to a retrieved judgment that cites
+  it.
+
 Recent instruments (P3.38):
 - Where this index holds an instrument's record but not its text, the text
   read from legislation.gov.uk is now used to answer: the saving and
