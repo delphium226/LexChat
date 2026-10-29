@@ -20,6 +20,14 @@ where each row carries its evidence and acceptance.
 
 On `fix/prepilot-defects` since 2026.10.4, waiting for the next cut.
 
+Security (on `main`, outside the fix plan):
+- The web server no longer serves files from outside the built frontend. A
+  request with an encoded `..` (`/%2e%2e/%2e%2e/VERSION`), a backslash
+  (`/..%5c..%5c...`) or an absolute path (`/C:/...`) used to return any file
+  the server could read, without signing in: on the target that includes the
+  `.env` secrets, the TLS key and the database backups. Such a request now
+  gets the app's start page, as any unknown address does.
+
 Errors (on `main`, outside the fix plan; `docs/TODO.md` B6):
 - When the AI provider refuses a Deep Research plan request, the legal professional is told
   why instead of "The planner failed. Please try again.": a rate limit or an

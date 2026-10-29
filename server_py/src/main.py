@@ -286,6 +286,9 @@ if os.path.isdir(frontend_dist):
     # Serve assets like JS/CSS directly
     app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
     
+    # Resolved once: serve_frontend serves only files that resolve inside it.
+    frontend_dist_real = os.path.realpath(frontend_dist)
+
     # Catch-all route to serve React index.html for unknown paths (SPA routing)
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
@@ -293,9 +296,18 @@ if os.path.isdir(frontend_dist):
         if full_path.startswith("api/"):
             return JSONResponse({"detail": "Not Found"}, status_code=404)
             
-        file_path = os.path.join(frontend_dist, full_path)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
+        # uvicorn percent-decodes the path before routing, so `/%2e%2e/...`,
+        # `/..%5c...` and an absolute `/C:/...` (which makes os.path.join drop
+        # the dist directory) arrive here as real traversal. Serve a file only
+        # if its resolved path lies inside dist; a path that cannot be resolved
+        # or compared (another drive, a NUL byte) counts as outside.
+        try:
+            file_path = os.path.realpath(os.path.join(frontend_dist_real, full_path))
+            inside = os.path.commonpath([frontend_dist_real, file_path]) == frontend_dist_real
+            if inside and os.path.isfile(file_path):
+                return FileResponse(file_path)
+        except (OSError, ValueError):
+            pass
         
         # Fall back to index.html for SPA
         return FileResponse(os.path.join(frontend_dist, "index.html"))
